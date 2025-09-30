@@ -737,15 +737,8 @@ class TrainingArguments:
             Refer to the PyTorch doc for possible values and note that they may change across PyTorch versions.
 
             This flag is experimental and subject to change in future releases.
-        include_tokens_per_second (`bool`, *optional*, defaults to `False`):
-            Whether or not to compute the number of tokens per second per device for training speed metrics.
-
-            This will iterate over the entire training dataloader once beforehand,
-            and will slow down the entire process.
-
-        include_num_input_tokens_seen (`bool`, *optional*):
-            Whether or not to track the number of input tokens seen throughout training.
-
+        include_num_input_tokens_seen (`Optional[Union[str, bool]]`, *optional*, defaults to "no"):
+            Whether to track the number of input tokens seen. Must be one of ["all", "non_padding", "no"] or a boolean value which map to "all" or "no".
             May be slower in distributed training as gather operations must be called.
 
         neftune_noise_alpha (`Optional[float]`):
@@ -1368,18 +1361,19 @@ class TrainingArguments:
         },
     )
 
-    include_tokens_per_second: bool = field(
-        default=False,
-        metadata={"help": "If set to `True`, the speed metrics will include `tgs` (tokens per second per device)."},
+    include_tokens_per_second: Optional[bool] = field(
+        default=None,
+        metadata={
+            "help": "This arg is deprecated and will be removed in v5 , use `include_num_input_tokens_seen` instead."
+        },
     )
 
     include_num_input_tokens_seen: Union[str, bool] = field(
-        default=False,
+        default="no",
         metadata={
             "help": (
                 "Whether to track the number of input tokens seen. "
-                "Can be `'all'` to count all tokens, `'non_padding'` to count only non-padding tokens, "
-                "or a boolean (`True` maps to `'all'`, `False` to `'no'`)."
+                "Must be one of [`all`, `non_padding`, `no`] or a boolean value which map to `all` or `no`"
             )
         },
     )
@@ -1890,10 +1884,14 @@ class TrainingArguments:
                     "This is not supported and we recommend you to update your version."
                 )
 
-        if self.include_num_input_tokens_seen is True:
-            self.include_num_input_tokens_seen = "all"
-        elif self.include_num_input_tokens_seen is False:
-            self.include_num_input_tokens_seen = "no"
+        if self.include_tokens_per_second is not None:
+            logger.warning(
+                "include_tokens_per_second is deprecated and will be removed in v5. Use `include_num_input_tokens_seen` instead. "
+            )
+            self.include_num_input_tokens_seen = self.include_tokens_per_second
+
+        if isinstance(self.include_num_input_tokens_seen, bool):
+            self.include_num_input_tokens_seen = "all" if self.include_num_input_tokens_seen else "no"
 
     def __str__(self):
         self_as_dict = asdict(self)
