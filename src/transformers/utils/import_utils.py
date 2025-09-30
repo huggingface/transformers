@@ -400,11 +400,7 @@ def is_torchvision_available() -> bool:
 
 
 def is_torchvision_v2_available() -> bool:
-    if not is_torchvision_available():
-        return False
-
-    # NOTE: We require torchvision>=0.15 as v2 transforms are available from this version: https://pytorch.org/vision/stable/transforms.html#v1-or-v2-which-one-should-i-use
-    return version.parse(_torchvision_version) >= version.parse("0.15")
+    return is_torchvision_available()
 
 
 def is_galore_torch_available() -> Union[tuple[bool, str], bool]:
