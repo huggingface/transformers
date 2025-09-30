@@ -28,6 +28,7 @@ from ..llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaModel,
+    LlamaPreTrainedModel,
 )
 
 
@@ -233,6 +234,20 @@ class CwmDecoderLayer(LlamaDecoderLayer):
         return hidden_states
 
 
+class CwmPreTrainedModel(LlamaPreTrainedModel):
+    config_class = CwmConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["CwmDecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+
+    _can_compile_fullgraph = True
+    _supports_attention_backend = True
+
+
 class CwmModelOutputWithPast(BaseModelOutputWithPast):
     pass
 
@@ -318,6 +333,7 @@ class CwmForCausalLM(LlamaForCausalLM):
 
 __all__ = [
     "CwmConfig",
+    "CwmPreTrainedModel",
     "CwmModel",
     "CwmForCausalLM",
 ]

@@ -280,6 +280,26 @@ class CwmDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+@auto_docstring
+class CwmPreTrainedModel(PreTrainedModel):
+    config: CwmConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["CwmDecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+
+    _can_compile_fullgraph = True
+    _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": CwmDecoderLayer,
+        "attentions": CwmAttention,
+    }
+    config_class = CwmConfig
+
+
 class CwmModelOutputWithPast(BaseModelOutputWithPast):
     pass
 
@@ -318,25 +338,6 @@ class CwmRotaryEmbedding(nn.Module):
             sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
-
-@auto_docstring
-class CwmPreTrainedModel(PreTrainedModel):
-    config: CwmConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["CwmDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-
-    _can_compile_fullgraph = True
-    _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": CwmDecoderLayer,
-        "attentions": CwmAttention,
-    }
 
 
 @auto_docstring
@@ -503,4 +504,4 @@ class CwmForCausalLM(CwmPreTrainedModel, GenerationMixin):
         )
 
 
-__all__ = ["CwmModel", "CwmForCausalLM"]
+__all__ = ["CwmPreTrainedModel", "CwmModel", "CwmForCausalLM"]
