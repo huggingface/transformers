@@ -197,26 +197,18 @@ class CwmConfig(CwmTextConfig):
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         pretraining_tp (`int`, *optional*, defaults to 1):
-            Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this
-            document](https://huggingface.co/docs/transformers/parallelism) to understand more about it. This value is
-            necessary to ensure exact reproducibility of the pretraining results. Please refer to [this
+            Tensor parallelism degree used during pretraining. See [this
+            document](https://huggingface.co/docs/transformers/parallelism) and [this
             issue](https://github.com/pytorch/pytorch/issues/76232).
         mlp_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
         rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports two scaling
-            strategies: linear and dynamic. Their scaling factor must be a float greater than 1. The expected format is
-            `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
-            `max_position_embeddings` to the expected new maximum. See the following thread for more information on how
-            these scaling strategies behave:
-            https://www.reddit.com/r/LocalLLaMA/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This is an
-            experimental feature, subject to breaking API changes in future versions.
+            Dictionary containing the scaling configuration for the RoPE embeddings
         sliding_window (`int`, *optional*, defaults to 8192):
             Sliding window attention window size.
         layer_types (`List[str]`, *optional*):
             List of layer types for each layer. Each element should be either "full_attention" or "sliding_attention".
             If not specified, will default to alternating pattern based on the provided window pattern.
-
     """
 
     pass

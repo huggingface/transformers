@@ -197,6 +197,7 @@ class CwmConfig(CwmTextConfig):
             List of layer types for each layer. Each element should be either "full_attention" or "sliding_attention".
             If not specified, will default to alternating pattern based on the provided window pattern.
     """
+
     pass
 
 
