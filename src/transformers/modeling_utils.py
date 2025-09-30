@@ -129,10 +129,7 @@ if is_accelerate_available():
         offload_weight,
         save_offload_index,
     )
-
-    accelerate_version = version.parse(importlib.metadata.version("accelerate"))
-    if accelerate_version >= version.parse("0.31"):
-        from accelerate.utils.modeling import get_state_dict_from_offload
+    from accelerate.utils.modeling import get_state_dict_from_offload
 
 if is_safetensors_available():
     from safetensors import safe_open
@@ -4026,11 +4023,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
             # remake shard with onloaded parameters if necessary
             if module_map:
-                if accelerate_version < version.parse("0.31"):
-                    raise ImportError(
-                        f"You need accelerate version to be greater or equal than 0.31 to save models with offloaded parameters. Detected version {accelerate_version}. "
-                        f"Please upgrade accelerate with `pip install -U accelerate`"
-                    )
                 # init state_dict for this shard
                 shard_state_dict = dict.fromkeys(shard, "")
                 for module_name in shard:
@@ -5777,12 +5769,7 @@ def unwrap_model(model: nn.Module, recursive: bool = False) -> nn.Module:
     if is_accelerate_available():
         kwargs = {}
         if recursive:
-            if not is_accelerate_available("0.29.0"):
-                raise RuntimeError(
-                    "Setting `recursive=True` to `unwrap_model` requires `accelerate` v0.29.0. Please upgrade your version of accelerate"
-                )
-            else:
-                kwargs["recursive"] = recursive
+            kwargs["recursive"] = recursive
         return extract_model_from_parallel(model, **kwargs)
     else:
         # since there could be multiple levels of wrapping, unwrap recursively

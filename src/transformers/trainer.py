@@ -226,21 +226,11 @@ if is_accelerate_available():
         load_fsdp_optimizer,
         save_fsdp_model,
         save_fsdp_optimizer,
+        DataLoaderConfiguration
     )
-
-    DATA_SAMPLERS = [RandomSampler]
-    if version.parse(accelerate_version) > version.parse("1.3.0"):
-        from accelerate.utils import TorchTensorParallelPlugin
-    from accelerate.data_loader import SeedableRandomSampler
-
-    DATA_SAMPLERS += [SeedableRandomSampler]
-
+    
     if is_deepspeed_available():
         from accelerate.utils import DeepSpeedSchedulerWrapper
-
-if is_accelerate_available("0.28.0"):
-    from accelerate.utils import DataLoaderConfiguration
-
 
 def _is_peft_model(model):
     if is_peft_available():
@@ -255,8 +245,7 @@ def _is_peft_model(model):
 
 
 def _get_fsdp_ckpt_kwargs():
-    # TODO: @AjayP13, @younesbelkada replace this check with version check at the next `accelerate` release
-    if is_accelerate_available() and "adapter_only" in list(inspect.signature(save_fsdp_model).parameters):
+    if "adapter_only" in list(inspect.signature(save_fsdp_model).parameters):
         return {"adapter_only": True}
     else:
         return {}
@@ -1630,8 +1619,6 @@ class Trainer:
                     "You need to install `lomo_optim` in order to use LOMO optimizers"
                     " install it with `pip install lomo-optim`"
                 )
-            if not is_accelerate_available("0.30.0"):
-                raise ImportError("You need to have `accelerate>=0.30.0` to be able to use LOMO optimizers")
 
             if model is None:
                 raise ValueError("You need to pass a `model` in order to correctly initialize a LOMO optimizer.")
@@ -1698,8 +1685,6 @@ class Trainer:
                     "You need to install `schedulefree` in order to use schedulefree optimizers. "
                     "Install it with `pip install schedulefree.`"
                 )
-            if not is_accelerate_available("0.30.0"):
-                raise ImportError("You need to have `accelerate>=0.30.0` to be able to use schedulefree optimizers")
             from schedulefree import AdamWScheduleFree, SGDScheduleFree
 
             additional_optim_kwargs = {}
@@ -2601,10 +2586,7 @@ class Trainer:
                                         args.max_grad_norm,
                                     )
 
-                            if (
-                                is_accelerate_available()
-                                and self.accelerator.distributed_type == DistributedType.DEEPSPEED
-                            ):
+                            if self.accelerator.distributed_type == DistributedType.DEEPSPEED:
                                 grad_norm = model.get_global_grad_norm()
                                 # In some cases the grad norm may not return a float
                                 if hasattr(grad_norm, "item"):
@@ -5063,7 +5045,7 @@ class Trainer:
     def create_accelerator_and_postprocess(self):
         # We explicitly don't rely on the `Accelerator` to do gradient accumulation
         grad_acc_kwargs = {}
-        if is_accelerate_available("0.28.0") and self.args.accelerator_config.gradient_accumulation_kwargs is not None:
+        if self.args.accelerator_config.gradient_accumulation_kwargs is not None:
             grad_acc_kwargs = self.args.accelerator_config.gradient_accumulation_kwargs
 
         # check if num_steps is attempted to be passed in gradient_accumulation_kwargs
@@ -5079,32 +5061,26 @@ class Trainer:
 
         accelerator_config = self.args.accelerator_config.to_dict()
 
-        if is_accelerate_available("0.28.0"):
-            # Extract dataloader config params from accelerator config
-            dataloader_params = ["split_batches", "dispatch_batches", "even_batches", "use_seedable_sampler"]
-            dataloader_config = DataLoaderConfiguration(
-                **{param: accelerator_config.pop(param) for param in dataloader_params}
-            )
-            if is_accelerate_available("1.1.0"):
-                dataloader_config.data_seed = self.args.data_seed
-
+        # Extract dataloader config params from accelerator config
+        dataloader_params = ["split_batches", "dispatch_batches", "even_batches", "use_seedable_sampler"]
+        dataloader_config = DataLoaderConfiguration(
+            **{param: accelerator_config.pop(param) for param in dataloader_params}
+        )
+        dataloader_config.data_seed = self.args.data_seed
+        
         non_blocking = accelerator_config.pop("non_blocking")
-        if not is_accelerate_available("0.30.0"):
-            if non_blocking:
-                raise ImportError(
-                    "`non_blocking` is only supported in accelerate v0.30.0 and above. Please upgrade accelerate to use this feature."
-                )
-        else:
-            if non_blocking and not self.args.dataloader_pin_memory:
-                logger.warning(
-                    "`non_blocking` is enabled but `dataloader_pin_memory` is not. For the best performance, it's recommended to enable both."
-                )
-            dataloader_config.non_blocking = non_blocking
+
+        if non_blocking and not self.args.dataloader_pin_memory:
+            logger.warning(
+                "`non_blocking` is enabled but `dataloader_pin_memory` is not. For the best performance, it's recommended to enable both."
+            )
+        dataloader_config.non_blocking = non_blocking
         # this would have been updated above, no need for it anymore
         accelerator_config.pop("gradient_accumulation_kwargs")
 
         args = {
             "deepspeed_plugin": self.args.deepspeed_plugin,
+            "dataloader_config": dataloader_config
         }
 
         # We defer compatibility checks to accelerator
@@ -5113,21 +5089,18 @@ class Trainer:
                 raise ImportError(
                     "ParallelismConfig requires accelerate v1.10.1 and above. Please upgrade accelerate to use this feature."
                 )
-
             args["parallelism_config"] = self.args.parallelism_config
 
-        if is_accelerate_available("0.28.0"):
-            args["dataloader_config"] = dataloader_config
-        else:
-            args.update(accelerator_config)
-        # tp is initialized at Accelerator init phase so
-        # args should be prepared here
-        if hasattr(self.model, "tp_size") and self.model.tp_size is not None and self.model.tp_size > 1:
+        self.is_tp_enabled = False
+        if getattr(self.model, "tp_size") is not None and self.model.tp_size > 1:
             self.is_tp_enabled = True
-            if version.parse(accelerate_version) > version.parse("1.3.0"):
-                args["torch_tp_plugin"] = TorchTensorParallelPlugin(tp_size=self.model.tp_size)
-            else:
-                raise ValueError("Requires accelerate>1.3.0 to use Tensor Parallelism.")
+            if self.args.parallelism_config is not None:
+                if version.parse(accelerate_version) > version.parse("1.10.1"):
+                    if self.args.parallelism_config is not None:
+                        from accelerate import ParallelismConfig
+                        args["parallelism_config"] = ParallelismConfig(tp_size=self.model.tp_size)
+                else:
+                    raise ValueError("Requires accelerate>1.10.1 to use Tensor Parallelism.")
 
         # create accelerator object
         self.accelerator = Accelerator(**args)
@@ -5142,7 +5115,7 @@ class Trainer:
         # deepspeed and accelerate flags covering both trainer args and accelerate launcher
         self.is_deepspeed_enabled = getattr(self.accelerator.state, "deepspeed_plugin", None) is not None
         self.is_fsdp_enabled = getattr(self.accelerator.state, "fsdp_plugin", None) is not None
-        self.is_tp_enabled = getattr(self.accelerator.state, "torch_tp_plugin", None) is not None
+
         # post accelerator creation setup
         if self.is_fsdp_enabled:
             fsdp_plugin = self.accelerator.state.fsdp_plugin
@@ -5205,7 +5178,6 @@ class Trainer:
             if (
                 getattr(self.model, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES
                 and self.model.hf_quantizer.quantization_config.bnb_4bit_quant_storage.is_floating_point
-                and version.parse(accelerate_version) > version.parse("0.27.0")
             ):
                 self.accelerator.state.fsdp_plugin.set_mixed_precision(
                     self.model.hf_quantizer.quantization_config.bnb_4bit_quant_storage, override=True
