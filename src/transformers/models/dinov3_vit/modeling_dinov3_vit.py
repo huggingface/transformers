@@ -28,12 +28,12 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import check_model_inputs
+from ...utils.generic import can_return_tuple, check_model_inputs
 from .configuration_dinov3_vit import DINOv3ViTConfig
 
 
@@ -530,4 +530,64 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
         )
 
 
-__all__ = ["DINOv3ViTModel", "DINOv3ViTPreTrainedModel"]
+@auto_docstring(
+    custom_intro="""
+    DINOv3ViT Model transformer with an image classification head on top (a linear layer on top of the final hidden state
+    of the [CLS] token) e.g. for ImageNet.
+    """
+)
+class DINOv3ViTForImageClassification(DINOv3ViTPreTrainedModel):
+    def __init__(self, config: DINOv3ViTConfig) -> None:
+        super().__init__(config)
+
+        self.num_labels = config.num_labels
+        self.dinov3 = DINOv3ViTModel(config)
+
+        # Classifier head
+        self.classifier = (
+            nn.Linear(config.hidden_size * 2, config.num_labels) if config.num_labels > 0 else nn.Identity()
+        )
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.dinov3.embeddings.patch_embeddings
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> ImageClassifierOutput:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
+        outputs: BaseModelOutputWithPooling = self.dinov3(pixel_values, head_mask=head_mask, **kwargs)
+
+        sequence_output = outputs.last_hidden_state  # batch_size, sequence_length, hidden_size
+        cls_token = sequence_output[:, 0]
+        patch_tokens = sequence_output[:, 1:]
+
+        linear_input = torch.cat([cls_token, patch_tokens.mean(dim=1)], dim=1)
+        logits = self.classifier(linear_input)
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(labels, logits, self.config, **kwargs)
+
+        return ImageClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+__all__ = ["DINOv3ViTForImageClassification", "DINOv3ViTModel", "DINOv3ViTPreTrainedModel"]
