@@ -203,9 +203,6 @@ class LwDetrConfig(PretrainedConfig):
             The dropout ratio for activations inside the fully connected layer.
         position_embedding_type (`str`, *optional*, defaults to `"sine"`):
             Type of position embeddings to be used on top of the image features. One of `"sine"` or `"learned"`.
-        two_stage (`bool`, *optional*, defaults to `True`):
-            Whether to apply a two-stage detection approach, where region proposals are generated first
-            and then refined by the decoder.
         group_detr (`int`, *optional*, defaults to 13):
             Number of groups for Group DETR attention mechanism, which helps reduce computational complexity.
         init_std (`float`, *optional*, defaults to 0.02):
@@ -213,8 +210,6 @@ class LwDetrConfig(PretrainedConfig):
         disable_custom_kernels (`bool`, *optional*, defaults to `True`):
             Disable the use of custom CUDA and CPU kernels. This option is necessary for the ONNX export, as custom
             kernels are not supported by PyTorch ONNX export.
-        bbox_reparam (`bool`, *optional*, defaults to `True`):
-            Whether to use bounding box reparameterization for better training stability.
         class_cost (`float`, *optional*, defaults to 2):
             Relative weight of the classification error in the Hungarian matching cost.
         bbox_cost (`float`, *optional*, defaults to 5):
@@ -286,11 +281,9 @@ class LwDetrConfig(PretrainedConfig):
         attention_dropout=0.0,
         activation_dropout=0.0,
         position_embedding_type="sine",
-        two_stage=True,
         group_detr: int = 13,
         init_std=0.02,
         disable_custom_kernels=True,
-        bbox_reparam=True,
         # loss
         class_cost=2,
         bbox_cost=5,
@@ -363,9 +356,7 @@ class LwDetrConfig(PretrainedConfig):
         self.activation_dropout = activation_dropout
         # model
         self.position_embedding_type = position_embedding_type
-        self.two_stage = two_stage
         self.init_std = init_std
-        self.bbox_reparam = bbox_reparam
         self.group_detr = group_detr
         # Loss
         self.auxiliary_loss = auxiliary_loss
@@ -784,9 +775,6 @@ class LwDetrPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        if hasattr(module, "reference_points") and not self.config.two_stage:
-            nn.init.xavier_uniform_(module.reference_points.weight.data, gain=1.0)
-            nn.init.constant_(module.reference_points.bias.data, 0.0)
         if hasattr(module, "level_embed"):
             nn.init.normal_(module.level_embed)
         if hasattr(module, "refpoint_embed") and module.refpoint_embed is not None:
@@ -800,13 +788,10 @@ class LwDetrPreTrainedModel(PreTrainedModel):
             nn.init.constant_(module.bbox_embed.layers[-1].bias.data, 0)
 
 
-def refine_bboxes(reference_points, deltas, bbox_reparam):
-    if bbox_reparam:
-        new_reference_points_cxcy = deltas[..., :2] * reference_points[..., 2:] + reference_points[..., :2]
-        new_reference_points_wh = deltas[..., 2:].exp() * reference_points[..., 2:]
-        new_reference_points = torch.cat((new_reference_points_cxcy, new_reference_points_wh), -1)
-    else:
-        new_reference_points = deltas + reference_points
+def refine_bboxes(reference_points, deltas):
+    new_reference_points_cxcy = deltas[..., :2] * reference_points[..., 2:] + reference_points[..., :2]
+    new_reference_points_wh = deltas[..., 2:].exp() * reference_points[..., 2:]
+    new_reference_points = torch.cat((new_reference_points_cxcy, new_reference_points_wh), -1)
     return new_reference_points
 
 
@@ -855,12 +840,8 @@ class LwDetrDecoder(LwDetrPreTrainedModel):
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
 
-        if self.config.bbox_reparam:
-            get_reference_points_input = reference_points
-        else:
-            get_reference_points_input = reference_points.sigmoid()
         obj_center, reference_points_inputs, query_pos, query_sine_embed = self.get_reference(
-            get_reference_points_input, valid_ratios
+            reference_points, valid_ratios
         )
 
         for idx, decoder_layer in enumerate(self.layers):
@@ -906,19 +887,18 @@ class LwDetrModel(DeformableDetrModel):
 
         self.decoder = LwDetrDecoder(config)
 
-        if config.two_stage:
-            self.enc_output = nn.ModuleList([nn.Linear(hidden_dim, hidden_dim) for _ in range(self.group_detr)])
-            self.enc_output_norm = nn.ModuleList([nn.LayerNorm(hidden_dim) for _ in range(self.group_detr)])
-            # Should normally be None and then instantiated in the ForObjectDetection class
-            self.enc_out_bbox_embed = nn.ModuleList(
-                [
-                    LwDetrMLPPredictionHead(config.d_model, config.d_model, 4, num_layers=3)
-                    for _ in range(self.group_detr)
-                ]
-            )
-            self.enc_out_class_embed = nn.ModuleList(
-                [nn.Linear(config.d_model, config.num_labels) for _ in range(self.group_detr)]
-            )
+        self.enc_output = nn.ModuleList([nn.Linear(hidden_dim, hidden_dim) for _ in range(self.group_detr)])
+        self.enc_output_norm = nn.ModuleList([nn.LayerNorm(hidden_dim) for _ in range(self.group_detr)])
+        # Should normally be None and then instantiated in the ForObjectDetection class
+        self.enc_out_bbox_embed = nn.ModuleList(
+            [
+                LwDetrMLPPredictionHead(config.d_model, config.d_model, 4, num_layers=3)
+                for _ in range(self.group_detr)
+            ]
+        )
+        self.enc_out_class_embed = nn.ModuleList(
+            [nn.Linear(config.d_model, config.num_labels) for _ in range(self.group_detr)]
+        )
 
         self.post_init()
 
@@ -1064,50 +1044,48 @@ class LwDetrModel(DeformableDetrModel):
 
         enc_outputs_class = None
         enc_outputs_coord_logits = None
-        if self.config.two_stage:
-            object_query_embedding, output_proposals = self.gen_encoder_output_proposals(
-                source_flatten, ~mask_flatten, spatial_shapes_list
+        object_query_embedding, output_proposals = self.gen_encoder_output_proposals(
+            source_flatten, ~mask_flatten, spatial_shapes_list
+        )
+
+        group_detr = self.group_detr if self.training else 1
+        topk = self.num_queries
+        topk_coords_logits = []
+        topk_coords_logits_undetach = []
+        object_query_undetach = []
+
+        for group_id in range(group_detr):
+            group_object_query = self.enc_output[group_id](object_query_embedding)
+            group_object_query = self.enc_output_norm[group_id](group_object_query)
+
+            group_enc_outputs_class = self.enc_out_class_embed[group_id](group_object_query)
+            group_delta_bbox = self.enc_out_bbox_embed[group_id](group_object_query)
+            group_enc_outputs_coord = refine_bboxes(output_proposals, group_delta_bbox)
+
+            group_topk_proposals = torch.topk(group_enc_outputs_class.max(-1)[0], topk, dim=1)[1]
+            group_topk_coords_logits_undetach = torch.gather(
+                group_enc_outputs_coord,
+                1,
+                group_topk_proposals.unsqueeze(-1).repeat(1, 1, 4),
+            )
+            group_topk_coords_logits = group_topk_coords_logits_undetach.detach()
+            group_object_query_undetach = torch.gather(
+                group_object_query, 1, group_topk_proposals.unsqueeze(-1).repeat(1, 1, self.config.d_model)
             )
 
-            group_detr = self.group_detr if self.training else 1
-            topk = self.num_queries
-            topk_coords_logits = []
-            topk_coords_logits_undetach = []
-            object_query_undetach = []
+            topk_coords_logits.append(group_topk_coords_logits)
+            topk_coords_logits_undetach.append(group_topk_coords_logits_undetach)
+            object_query_undetach.append(group_object_query_undetach)
 
-            for group_id in range(group_detr):
-                group_object_query = self.enc_output[group_id](object_query_embedding)
-                group_object_query = self.enc_output_norm[group_id](group_object_query)
+        topk_coords_logits = torch.cat(topk_coords_logits, 1)
+        topk_coords_logits_undetach = torch.cat(topk_coords_logits_undetach, 1)
+        object_query_undetach = torch.cat(object_query_undetach, 1)
 
-                group_enc_outputs_class = self.enc_out_class_embed[group_id](group_object_query)
-                group_delta_bbox = self.enc_out_bbox_embed[group_id](group_object_query)
-                group_enc_outputs_coord = refine_bboxes(output_proposals, group_delta_bbox, self.config.bbox_reparam)
+        topk_coords_logits = topk_coords_logits.sigmoid()
+        enc_outputs_class = object_query_undetach
+        enc_outputs_coord_logits = topk_coords_logits
 
-                group_topk_proposals = torch.topk(group_enc_outputs_class.max(-1)[0], topk, dim=1)[1]
-                group_topk_coords_logits_undetach = torch.gather(
-                    group_enc_outputs_coord,
-                    1,
-                    group_topk_proposals.unsqueeze(-1).repeat(1, 1, 4),
-                )
-                group_topk_coords_logits = group_topk_coords_logits_undetach.detach()
-                group_object_query_undetach = torch.gather(
-                    group_object_query, 1, group_topk_proposals.unsqueeze(-1).repeat(1, 1, self.config.d_model)
-                )
-
-                topk_coords_logits.append(group_topk_coords_logits)
-                topk_coords_logits_undetach.append(group_topk_coords_logits_undetach)
-                object_query_undetach.append(group_object_query_undetach)
-
-            topk_coords_logits = torch.cat(topk_coords_logits, 1)
-            topk_coords_logits_undetach = torch.cat(topk_coords_logits_undetach, 1)
-            object_query_undetach = torch.cat(object_query_undetach, 1)
-
-            if not self.config.bbox_reparam:
-                topk_coords_logits = topk_coords_logits.sigmoid()
-            enc_outputs_class = object_query_undetach
-            enc_outputs_coord_logits = topk_coords_logits
-
-            reference_points = refine_bboxes(topk_coords_logits_undetach, reference_points, self.config.bbox_reparam)
+        reference_points = refine_bboxes(topk_coords_logits_undetach, reference_points)
 
         init_reference_points = reference_points
         decoder_outputs = self.decoder(
@@ -1145,9 +1123,8 @@ class LwDetrForObjectDetection(DeformableDetrForObjectDetection):
         self.class_embed = nn.Linear(config.d_model, config.num_labels)
         self.bbox_embed = LwDetrMLPPredictionHead(config.d_model, config.d_model, 4, num_layers=3)
 
-        if config.two_stage:
-            self.model.enc_out_bbox_embed = _get_clones(self.bbox_embed, config.group_detr)
-            self.model.enc_out_class_embed = _get_clones(self.class_embed, config.group_detr)
+        self.model.enc_out_bbox_embed = _get_clones(self.bbox_embed, config.group_detr)
+        self.model.enc_out_class_embed = _get_clones(self.class_embed, config.group_detr)
 
         self.post_init()
 
@@ -1173,25 +1150,23 @@ class LwDetrForObjectDetection(DeformableDetrForObjectDetection):
         enc_outputs_boxes_logits = outputs.enc_outputs_coord_logits
 
         outputs_coord_delta = self.bbox_embed(hidden_states)
-        outputs_coord = refine_bboxes(reference_points, outputs_coord_delta, self.config.bbox_reparam)
-        if not self.config.bbox_reparam:
-            outputs_coord = outputs_coord.sigmoid()
+        outputs_coord = refine_bboxes(reference_points, outputs_coord_delta)
+        outputs_coord = outputs_coord.sigmoid()
 
         outputs_class = self.class_embed(hidden_states)
 
         logits = outputs_class[-1]
         pred_boxes = outputs_coord[-1]
 
-        if self.config.two_stage:
-            enc_outputs_class_logits_list = enc_outputs_class_logits.split(self.config.num_queries, dim=1)
-            pred_class = []
-            group_detr = self.config.group_detr if self.training else 1
-            for group_index in range(group_detr):
-                group_pred_class = self.model.enc_out_class_embed[group_index](
-                    enc_outputs_class_logits_list[group_index]
-                )
-                pred_class.append(group_pred_class)
-            enc_outputs_class_logits = torch.cat(pred_class, dim=1)
+        enc_outputs_class_logits_list = enc_outputs_class_logits.split(self.config.num_queries, dim=1)
+        pred_class = []
+        group_detr = self.config.group_detr if self.training else 1
+        for group_index in range(group_detr):
+            group_pred_class = self.model.enc_out_class_embed[group_index](
+                enc_outputs_class_logits_list[group_index]
+            )
+            pred_class.append(group_pred_class)
+        enc_outputs_class_logits = torch.cat(pred_class, dim=1)
 
         loss, loss_dict, auxiliary_outputs = None, None, None
         if labels is not None:
