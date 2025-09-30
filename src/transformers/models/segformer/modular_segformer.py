@@ -17,6 +17,7 @@
 from typing import Optional, Union
 
 import torch
+from torchvision.transforms.v2 import functional as F
 
 from transformers.models.beit.image_processing_beit_fast import BeitFastImageProcessorKwargs, BeitImageProcessorFast
 
@@ -36,14 +37,7 @@ from ...image_utils import (
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
-    is_torchvision_v2_available,
 )
-
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
 
 
 class SegformerFastImageProcessorKwargs(BeitFastImageProcessorKwargs):
@@ -96,9 +90,7 @@ class SegformerImageProcessorFast(BeitImageProcessorFast):
                     "do_normalize": False,
                     "do_rescale": False,
                     # Nearest interpolation is used for segmentation maps instead of BILINEAR.
-                    "interpolation": F.InterpolationMode.NEAREST_EXACT
-                    if is_torchvision_v2_available()
-                    else F.InterpolationMode.NEAREST,
+                    "interpolation": F.InterpolationMode.NEAREST_EXACT,
                 }
             )
             processed_segmentation_maps = self._preprocess(
