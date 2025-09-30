@@ -1688,8 +1688,13 @@ class TrainingArguments:
                         torch.backends.cudnn.allow_tf32 = False
                 # no need to assert on else
 
-        # NOTE: Mixed precision environment variable setting moved to after DeepSpeed processing
-        # to ensure DeepSpeed config can override TrainingArguments defaults
+        # if training args is specified, it will override the one specified in the accelerate config
+        mixed_precision_dtype = os.environ.get("ACCELERATE_MIXED_PRECISION", "no")
+        if self.fp16:
+            mixed_precision_dtype = "fp16"
+        elif self.bf16:
+            mixed_precision_dtype = "bf16"
+        os.environ["ACCELERATE_MIXED_PRECISION"] = mixed_precision_dtype
 
         if self.report_to is None:
             logger.info(
@@ -1875,15 +1880,6 @@ class TrainingArguments:
             mixed_precision = os.environ.get("ACCELERATE_MIXED_PRECISION", "no")
             self.deepspeed_plugin.set_mixed_precision(mixed_precision)
             self.deepspeed_plugin.set_deepspeed_weakref()
-
-        # Set mixed precision environment variable after DeepSpeed processing
-        # This ensures DeepSpeed config overrides have been applied to fp16/bf16 settings
-        mixed_precision_dtype = os.environ.get("ACCELERATE_MIXED_PRECISION", "no")
-        if self.fp16:
-            mixed_precision_dtype = "fp16"
-        elif self.bf16:
-            mixed_precision_dtype = "bf16"
-        os.environ["ACCELERATE_MIXED_PRECISION"] = mixed_precision_dtype
 
         if self.use_cpu:
             self.dataloader_pin_memory = False
