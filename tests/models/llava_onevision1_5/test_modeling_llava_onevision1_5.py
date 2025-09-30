@@ -304,7 +304,9 @@ class LlavaOnevision1_5ForConditionalGenerationModelTest(ModelTesterMixin, Gener
 @require_torch
 class LlavaOnevision1_5ForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("Deep-VLM/LLaVA-OneVision-1.5-8B-Instruct-hf")
+        self.processor = AutoProcessor.from_pretrained(
+            "Deep-VLM/LLaVA-OneVision-1.5-4B-Instruct-hf", padding_side="left"
+        )
         self.messages = [
             {
                 "role": "user",
@@ -325,7 +327,7 @@ class LlavaOnevision1_5ForConditionalGenerationIntegrationTest(unittest.TestCase
     @slow
     def test_small_model_integration_test(self):
         model = LlavaOnevision1_5ForConditionalGeneration.from_pretrained(
-            "Deep-VLM/LLaVA-OneVision-1.5-8B-Instruct-hf", dtype="auto", device_map="auto"
+            "Deep-VLM/LLaVA-OneVision-1.5-4B-Instruct-hf", dtype="auto", device_map="auto"
         )
 
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
@@ -352,9 +354,7 @@ class LlavaOnevision1_5ForConditionalGenerationIntegrationTest(unittest.TestCase
         inputs = inputs.to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=30)
-        EXPECTED_DECODED_TEXT = (
-            "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nGolden Retriever"
-        )
+        EXPECTED_DECODED_TEXT = "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThis appears to be a Labrador Retriever, identifiable by its medium size, short coat, and friendly demeanor. Labradors are known for their"
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
@@ -364,7 +364,7 @@ class LlavaOnevision1_5ForConditionalGenerationIntegrationTest(unittest.TestCase
     @slow
     def test_small_model_integration_test_batch(self):
         model = LlavaOnevision1_5ForConditionalGeneration.from_pretrained(
-            "Deep-VLM/LLaVA-OneVision-1.5-8B-Instruct-hf", dtype="auto", device_map="auto"
+            "Deep-VLM/LLaVA-OneVision-1.5-4B-Instruct-hf", dtype="auto", device_map="auto"
         )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(text=[text, text], images=[self.image, self.image], return_tensors="pt").to(
@@ -375,8 +375,8 @@ class LlavaOnevision1_5ForConditionalGenerationIntegrationTest(unittest.TestCase
         output = model.generate(**inputs, max_new_tokens=30)
 
         EXPECTED_DECODED_TEXT = [
-            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nGolden Retriever',
-            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nGolden Retriever',
+            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThis appears to be a Labrador Retriever, identifiable by its medium size, short coat, and friendly demeanor. Labradors are known for their',
+            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThis appears to be a Labrador Retriever, identifiable by its medium size, short coat, and friendly demeanor. Labradors are known for their',
         ]  # fmt: skip
 
         self.assertEqual(
@@ -387,7 +387,7 @@ class LlavaOnevision1_5ForConditionalGenerationIntegrationTest(unittest.TestCase
     @slow
     def test_small_model_integration_test_expand(self):
         model = LlavaOnevision1_5ForConditionalGeneration.from_pretrained(
-            "Deep-VLM/LLaVA-OneVision-1.5-8B-Instruct-hf", dtype="auto", device_map="auto"
+            "Deep-VLM/LLaVA-OneVision-1.5-4B-Instruct-hf", dtype="auto", device_map="auto"
         )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(text=[text], images=[self.image], return_tensors="pt").to(torch_device)
@@ -395,9 +395,9 @@ class LlavaOnevision1_5ForConditionalGenerationIntegrationTest(unittest.TestCase
         output = model.generate(**inputs, max_new_tokens=30, num_return_sequences=3)
 
         EXPECTED_DECODED_TEXT = [
-            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nGolden Retriever',
-            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nGolden Retriever',
-            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nGolden Retriever',
+            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThis appears to be a Labrador Retriever, identifiable by its medium size, short coat, and friendly demeanor. Labradors are known for their',
+            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThis appears to be a Labrador Retriever, identifiable by its medium size, short coat, and friendly demeanor. Labradors are known for their',
+            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThis appears to be a Labrador Retriever, identifiable by its medium size, short coat, and friendly demeanor. Labradors are known for their',
         ]  # fmt: skip
 
         self.assertEqual(
@@ -408,7 +408,7 @@ class LlavaOnevision1_5ForConditionalGenerationIntegrationTest(unittest.TestCase
     @slow
     def test_small_model_integration_test_batch_wo_image(self):
         model = LlavaOnevision1_5ForConditionalGeneration.from_pretrained(
-            "Deep-VLM/LLaVA-OneVision-1.5-8B-Instruct-hf", dtype="auto", device_map="auto"
+            "Deep-VLM/LLaVA-OneVision-1.5-4B-Instruct-hf", dtype="auto", device_map="auto"
         )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         messages2 = [
@@ -424,8 +424,8 @@ class LlavaOnevision1_5ForConditionalGenerationIntegrationTest(unittest.TestCase
         output = model.generate(**inputs, max_new_tokens=30)
 
         EXPECTED_DECODED_TEXT = [
-            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nGolden Retriever',
-            'system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\nHuman',
+            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThis appears to be a Labrador Retriever, identifiable by its medium size, short coat, and friendly demeanor. Labradors are known for their',
+            'system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\nI am an AI language model developed by OpenAI, designed to assist and communicate with users in various tasks and conversations.',
         ]  # fmt: skip
 
         self.assertEqual(
@@ -436,7 +436,7 @@ class LlavaOnevision1_5ForConditionalGenerationIntegrationTest(unittest.TestCase
     @slow
     def test_small_model_integration_test_batch_different_resolutions(self):
         model = LlavaOnevision1_5ForConditionalGeneration.from_pretrained(
-            "Deep-VLM/LLaVA-OneVision-1.5-8B-Instruct-hf", dtype="auto", device_map="auto"
+            "Deep-VLM/LLaVA-OneVision-1.5-4B-Instruct-hf", dtype="auto", device_map="auto"
         )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         text2 = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
@@ -454,16 +454,16 @@ class LlavaOnevision1_5ForConditionalGenerationIntegrationTest(unittest.TestCase
         expected_decoded_texts = Expectations(
             {
                 (None, None): [
-                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nGolden Retriever',
-                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nGolden Retriever',
+                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThis appears to be a Labrador Retriever, identifiable by its medium size, short coat, and friendly demeanor. Labradors are known for their',
+                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThis appears to be a Labrador Retriever, identifiable by its medium size, short coat, and friendly demeanor. Labradors are known for their',
                 ],
                 ("cuda", (8, 6)): [
-                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nGolden Retriever',
-                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nGolden Retriever',
+                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThis appears to be a Labrador Retriever, identifiable by its medium size, short coat, and friendly demeanor. Labradors are known for their',
+                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThis appears to be a Labrador Retriever, identifiable by its medium size, short coat, and friendly demeanor. Labradors are known for their',
                 ],
                 ("rocm", None): [
-                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nGolden Retriever',
-                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nGolden Retriever',
+                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThis appears to be a Labrador Retriever, identifiable by its medium size, short coat, and friendly demeanor. Labradors are known for their',
+                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThis appears to be a Labrador Retriever, identifiable by its medium size, short coat, and friendly demeanor. Labradors are known for their',
                 ],
             }
         ).get_expectation()  # fmt: skip
@@ -481,7 +481,7 @@ class LlavaOnevision1_5ForConditionalGenerationIntegrationTest(unittest.TestCase
     @require_torch_gpu
     def test_small_model_integration_test_batch_flashatt2(self):
         model = LlavaOnevision1_5ForConditionalGeneration.from_pretrained(
-            "Deep-VLM/LLaVA-OneVision-1.5-8B-Instruct-hf",
+            "Deep-VLM/LLaVA-OneVision-1.5-4B-Instruct-hf",
             dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
             device_map="auto",
@@ -495,8 +495,8 @@ class LlavaOnevision1_5ForConditionalGenerationIntegrationTest(unittest.TestCase
         output = model.generate(**inputs, max_new_tokens=30)
 
         expected_decoded_text = Expectations({
-            ("cuda", None): 'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nGolden Retriever',
-            ("rocm", (9, 4)): 'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nGolden Retriever'
+            ("cuda", None): 'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThis appears to be a Labrador Retriever, identifiable by its medium size, short coat, and friendly demeanor. Labradors are known for their',
+            ("rocm", (9, 4)): 'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThis appears to be a Labrador Retriever, identifiable by its medium size, short coat, and friendly demeanor. Labradors are known for their'
         }).get_expectation()  # fmt: skip
 
         # Since the test is to generate twice the same text, we just test twice against the expected decoded text
@@ -509,7 +509,7 @@ class LlavaOnevision1_5ForConditionalGenerationIntegrationTest(unittest.TestCase
     @require_torch_gpu
     def test_small_model_integration_test_batch_wo_image_flashatt2(self):
         model = LlavaOnevision1_5ForConditionalGeneration.from_pretrained(
-            "Deep-VLM/LLaVA-OneVision-1.5-8B-Instruct-hf",
+            "Deep-VLM/LLaVA-OneVision-1.5-4B-Instruct-hf",
             dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
             device_map="auto",
@@ -531,12 +531,12 @@ class LlavaOnevision1_5ForConditionalGenerationIntegrationTest(unittest.TestCase
         # on the ROCm expectation that was the correct one. Either model changed or code is buggy.
         EXPECTED_DECODED_TEXT = Expectations({
             ("cuda", None): [
-                'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nGolden Retriever',
-                'system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\nHuman',
+                'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThis appears to be a Labrador Retriever, identifiable by its medium size, short coat, and friendly demeanor. Labradors are known for their',
+                'system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\nI am an AI language model developed by OpenAI, designed to assist and communicate with users in various tasks and conversations.',
             ],
             ("rocm", (9, 4)): [
-                'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nGolden Retriever',
-                'system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\nHuman',
+                'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThis appears to be a Labrador Retriever, identifiable by its medium size, short coat, and friendly demeanor. Labradors are known for their',
+                'system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\nI am an AI language model developed by OpenAI, designed to assist and communicate with users in various tasks and conversations.',
             ],
         }).get_expectation()  # fmt: skip
 
