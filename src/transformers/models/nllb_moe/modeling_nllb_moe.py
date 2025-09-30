@@ -521,7 +521,7 @@ class NllbMoeAttention(nn.Module):
 
 
 class NllbMoeEncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: NllbMoeConfig, is_sparse: bool = False):
+    def __init__(self, config: NllbMoeConfig, is_sparse: bool = False, layer_idx: int = 0):
         super().__init__()
         self.embed_dim = config.d_model
         self.is_sparse = is_sparse
@@ -530,6 +530,7 @@ class NllbMoeEncoderLayer(GradientCheckpointingLayer):
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
             config=config,
+            layer_idx=layer_idx,
         )
         self.attn_dropout = nn.Dropout(config.dropout)
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
@@ -720,7 +721,7 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
         self.layers = nn.ModuleList()
         for i in range(config.encoder_layers):
             is_sparse = (i + 1) % sparse_step == 0 if sparse_step > 0 else False
-            self.layers.append(NllbMoeEncoderLayer(config, is_sparse))
+            self.layers.append(NllbMoeEncoderLayer(config, is_sparse, i))
 
         self.layer_norm = nn.LayerNorm(config.d_model)
         self.gradient_checkpointing = False
