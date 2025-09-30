@@ -51,7 +51,7 @@ class TimingResult:
         self,
         wall_time_start: float,
         e2e_latency: float,
-        t_tokens: list[float],
+        dt_tokens: list[float],
         batch_size: int,
         sequence_length: int,
         new_tokens: int,
@@ -59,15 +59,15 @@ class TimingResult:
     ) -> None:
         self.wall_time_start = wall_time_start
         self.e2e_latency = e2e_latency
-        self.t_tokens = t_tokens
+        self.dt_tokens = dt_tokens
         self.batch_size = batch_size
         self.sequence_length = sequence_length
         self.new_tokens = new_tokens
         self.gpu_metrics = gpu_metrics
 
-        self.time_to_first_token = self.t_tokens[0] - self.wall_time_start
-        if len(self.t_tokens) > 1:
-            self.inter_token_latency = (self.t_tokens[1] - self.t_tokens[-1]) / (len(self.t_tokens) - 1)
+        self.time_to_first_token = self.dt_tokens[0]
+        if len(self.dt_tokens) > 1:
+            self.inter_token_latency = (self.dt_tokens[0] - self.dt_tokens[-1]) / (self.new_tokens - 1)
         else:
             self.inter_token_latency = None
 
@@ -75,7 +75,7 @@ class TimingResult:
         return {
             "wall_time_start": self.wall_time_start,
             "e2e_latency": self.e2e_latency,
-            "t_tokens": self.t_tokens,
+            "dt_tokens": self.dt_tokens,
             "batch_size": self.batch_size,
             "new_tokens": self.new_tokens,
             "gpu_metrics": self.gpu_metrics.to_dict() if self.gpu_metrics is not None else None,
@@ -86,7 +86,7 @@ class TimingResult:
         return cls(
             wall_time_start=data["wall_time_start"],
             e2e_latency=data["e2e_latency"],
-            t_tokens=data["t_tokens"],
+            dt_tokens=data["dt_tokens"],
             batch_size=data["batch_size"],
             new_tokens=data["new_tokens"],
             gpu_metrics=None if data["gpu_metrics"] is None else GPURawMetrics(data["gpu_metrics"]),

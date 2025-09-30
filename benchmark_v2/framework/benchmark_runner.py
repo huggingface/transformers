@@ -124,7 +124,7 @@ def time_generate(
     return TimingResult(
         wall_time_start=wall_time_0,
         e2e_latency=wall_time_1 - wall_time_0,
-        t_tokens=streamer.timestamps[1:],
+        dt_tokens=[t - wall_time_0 for t in streamer.timestamps[1:]],
         batch_size=batch_size,
         sequence_length=inputs["input_ids"].size(-1),
         new_tokens=new_tokens,
