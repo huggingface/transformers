@@ -177,7 +177,6 @@ from .utils import (
     logging,
     strtobool,
 )
-from .utils.deprecation import deprecate_kwarg
 from .utils.import_utils import requires
 from .utils.quantization_config import QuantizationMethod
 
@@ -406,7 +405,6 @@ class Trainer:
     # Those are used as methods of the Trainer in examples.
     from .trainer_pt_utils import _get_learning_rate, log_metrics, metrics_format, save_metrics, save_state
 
-    @deprecate_kwarg("tokenizer", new_name="processing_class", version="5.0.0", raise_if_both_names=True)
     def __init__(
         self,
         model: Union[PreTrainedModel, nn.Module, None] = None,
@@ -773,18 +771,6 @@ class Trainer:
             num_devices = xr.global_runtime_device_count()
             xs.set_global_mesh(xs.Mesh(np.array(range(num_devices)), (num_devices, 1), axis_names=("fsdp", "tensor")))
         self.is_fsdp_xla_v1_enabled = self.is_fsdp_xla_enabled and not self.is_fsdp_xla_v2_enabled
-
-    @property
-    def tokenizer(self) -> Optional[PreTrainedTokenizerBase]:
-        logger.warning("Trainer.tokenizer is now deprecated. You should use Trainer.processing_class instead.")
-        return self.processing_class
-
-    @tokenizer.setter
-    def tokenizer(self, processing_class) -> None:
-        logger.warning(
-            "Trainer.tokenizer is now deprecated. You should use `Trainer.processing_class = processing_class` instead."
-        )
-        self.processing_class = processing_class
 
     def _activate_neftune(self, model):
         r"""
