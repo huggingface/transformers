@@ -28,6 +28,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 You can find all the original MobileViT checkpoints under the [Apple](https://huggingface.co/apple/models?search=mobilevit) organization.
 
 > [!TIP]
+>
 > - This model was contributed by [matthijs](https://huggingface.co/Matthijs).
 >
 > Click on the MobileViT models in the right sidebar for more examples of how to apply MobileViT to different vision tasks.
