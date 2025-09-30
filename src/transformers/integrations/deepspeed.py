@@ -217,12 +217,6 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         self.fill_match("scheduler.params.warmup_max_lr", args.learning_rate, "learning_rate")
         # total_num_steps - will get set in trainer_config_finalize
 
-        # fp16
-        if args.fp16 or args.fp16_full_eval:
-            fp16_backend = "apex" if args.fp16_backend == "apex" else "amp"
-        else:
-            fp16_backend = None
-
         if args.save_on_each_node:
             # deepspeed uses shared storage by default. Let's override this setting if save_on_each_node == True
             self.config["checkpoint"] = self.config.get("checkpoint", {})
@@ -230,26 +224,16 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
 
         # amp: similar to the pytorch native amp - it has a bunch of optional params but we won't set
         # any here unless the user did the work
-        self.fill_match(
-            "fp16.enabled",
-            ((args.fp16 or args.fp16_full_eval) and fp16_backend == "amp"),
-            "fp16|fp16_full_eval+fp16_backend(amp)",
-        )
-
-        # apex: delegates amp work to apex (which needs to be available), but it cannot be used with any
-        # ZeRO features
-        self.fill_match("amp.enabled", fp16_backend == "apex", "fp16+fp16_backend(apex)")
-        self.fill_match("amp.opt_level", args.fp16_opt_level, "fp16_opt_level")
-
+        self.fill_match("fp16.enabled", (args.fp16 or args.fp16_full_eval), "fp16|fp16_full_eval")
         self.fill_match("bf16.enabled", (args.bf16 or args.bf16_full_eval), "bf16|bf16_full_eval")
 
         # deepspeed's default mode is fp16 unless there is a config that says differently
         if self.is_true("bf16.enabled"):
             self._dtype = torch.bfloat16
-        elif self.is_false("fp16.enabled"):
-            self._dtype = torch.float32
-        else:
+        elif self.is_true("fp16.enabled"):
             self._dtype = torch.float16
+        else:
+            self._dtype = torch.float32
 
     def trainer_config_finalize(self, args, model, num_training_steps):
         """
@@ -268,17 +252,20 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         hidden_size_auto_keys = [x for x in hidden_size_based_keys if self.is_auto(x)]
 
         if len(hidden_size_auto_keys) > 0:
-            if hasattr(model.config, "hidden_size"):
-                hidden_size = model.config.hidden_size
-            elif hasattr(model.config, "hidden_sizes"):
-                # if there are many hidden sizes pick the largest one
-                hidden_size = max(model.config.hidden_sizes)
-            elif hasattr(model.config, "text_config") and hasattr(model.config.text_config, "hidden_size"):
-                hidden_size = model.config.text_config.hidden_size
-            elif hasattr(model.config, "text_config") and hasattr(model.config.text_config, "hidden_sizes"):
-                # if there are many hidden sizes pick the largest one
-                hidden_size = max(model.config.text_config.hidden_sizes)
-            else:
+            hidden_size = None
+            if hasattr(model, "config"):
+                if hasattr(model.config, "hidden_size"):
+                    hidden_size = model.config.hidden_size
+                elif hasattr(model.config, "hidden_sizes"):
+                    # if there are many hidden sizes pick the largest one
+                    hidden_size = max(model.config.hidden_sizes)
+                elif hasattr(model.config, "text_config") and hasattr(model.config.text_config, "hidden_size"):
+                    hidden_size = model.config.text_config.hidden_size
+                elif hasattr(model.config, "text_config") and hasattr(model.config.text_config, "hidden_sizes"):
+                    # if there are many hidden sizes pick the largest one
+                    hidden_size = max(model.config.text_config.hidden_sizes)
+
+            if hidden_size is None:
                 raise ValueError(
                     "The model's config file has neither `hidden_size` nor `hidden_sizes` entry, "
                     "therefore it's not possible to automatically fill out the following `auto` entries "

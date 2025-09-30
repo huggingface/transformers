@@ -681,7 +681,7 @@ class TensorBoardCallback(TrainerCallback):
             )
         if has_tensorboard:
             try:
-                from torch.utils.tensorboard import SummaryWriter  # noqa: F401
+                from torch.utils.tensorboard import SummaryWriter
 
                 self._SummaryWriter = SummaryWriter
             except ImportError:

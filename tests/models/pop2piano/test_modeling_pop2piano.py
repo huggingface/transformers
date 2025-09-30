@@ -491,11 +491,9 @@ class Pop2PianoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     pipeline_model_mapping = (
         {"automatic-speech-recognition": Pop2PianoForConditionalGeneration} if is_torch_available() else {}
     )
-    all_parallelizable_model_classes = ()
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True
-    test_model_parallel = False
     is_encoder_decoder = True
 
     def setUp(self):

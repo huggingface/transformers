@@ -1285,7 +1285,7 @@ class AcceleratorConfig:
         },
     )
 
-    non_blocking: Optional[bool] = field(
+    non_blocking: bool = field(
         default=False,
         metadata={
             "help": "Whether to use non-blocking CUDA calls to help minimize synchronization during "
