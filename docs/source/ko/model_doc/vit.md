@@ -63,7 +63,7 @@ SDPA는 `torch>=2.1.1`에서 구현이 가능한 경우 기본적으로 사용�
 
 ```
 from transformers import ViTForImageClassification
-model = ViTForImageClassification.from_pretrained("google/vit-base-patch16-224", attn_implementation="sdpa", torch_dtype=torch.float16)
+model = ViTForImageClassification.from_pretrained("google/vit-base-patch16-224", attn_implementation="sdpa", dtype=torch.float16)
 ...
 ```
 
@@ -124,8 +124,6 @@ ViT의 추론 및 커스텀 데이터에 대한 미세 조정과 관련된 데�
 [[autodoc]] ViTImageProcessorFast
     - preprocess
 
-<frameworkcontent>
-<pt>
 
 ## ViTModel [[transformers.ViTModel]]
 
@@ -142,31 +140,3 @@ ViT의 추론 및 커스텀 데이터에 대한 미세 조정과 관련된 데�
 [[autodoc]] ViTForImageClassification
     - forward
 
-</pt>
-<tf>
-
-## TFViTModel [[transformers.TFViTModel]]
-
-[[autodoc]] TFViTModel
-    - call
-
-## TFViTForImageClassification [[transformers.TFViTForImageClassification]]
-
-[[autodoc]] TFViTForImageClassification
-    - call
-
-</tf>
-<jax>
-
-## FlaxVitModel [[transformers.FlaxViTModel]]
-
-[[autodoc]] FlaxViTModel
-    - __call__
-
-## FlaxViTForImageClassification [[transformers.FlaxViTForImageClassification]]
-
-[[autodoc]] FlaxViTForImageClassification
-    - __call__
-
-</jax>
-</frameworkcontent>

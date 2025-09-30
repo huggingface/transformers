@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-04-17 and added to Hugging Face Transformers on 2024-06-22.*
 
 # RT-DETR
 
@@ -21,7 +22,6 @@ rendered properly in your Markdown viewer.
 </div>
 
 ## Overview
-
 
 The RT-DETR model was proposed in [DETRs Beat YOLOs on Real-time Object Detection](https://huggingface.co/papers/2304.08069) by Wenyu Lv, Yian Zhao, Shangliang Xu, Jinman Wei, Guanzhong Wang, Cheng Cui, Yuning Du, Qingqing Dang, Yi Liu.
 
@@ -37,7 +37,6 @@ alt="drawing" width="600"/>
 <small> RT-DETR performance relative to YOLO models. Taken from the <a href="https://huggingface.co/papers/2304.08069">original paper.</a> </small>
 
 The model version was contributed by [rafaelpadilla](https://huggingface.co/rafaelpadilla) and [sangbumchoi](https://github.com/SangbumChoi). The original code can be found [here](https://github.com/lyuwenyu/RT-DETR/).
-
 
 ## Usage tips
 

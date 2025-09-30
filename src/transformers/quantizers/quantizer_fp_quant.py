@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Optional
 
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
@@ -78,16 +78,14 @@ class FPQuantHfQuantizer(HfQuantizer):
                 " This is not supported. Please remove the CPU or disk device from the device_map."
             )
 
-    def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
-        if torch_dtype is None:
-            logger.info("`torch_dtype` is None. Setting `torch_dtype=torch.bfloat16` for qutlass compatibility.")
-            torch_dtype = torch.bfloat16
-        elif torch_dtype != torch.bfloat16:
-            raise ValueError(
-                f"Invalid `torch_dtype` {torch_dtype}. fp_quant quantization only supports `torch_dtype=torch.bfloat16`."
-            )
+    def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
+        if dtype is None:
+            logger.info("`dtype` is None. Setting `dtype=torch.bfloat16` for qutlass compatibility.")
+            dtype = torch.bfloat16
+        elif dtype != torch.bfloat16:
+            raise ValueError(f"Invalid `dtype` {dtype}. fp_quant quantization only supports `dtype=torch.bfloat16`.")
 
-        return torch_dtype
+        return dtype
 
     def create_quantized_param(
         self,
@@ -95,8 +93,7 @@ class FPQuantHfQuantizer(HfQuantizer):
         param_value: "torch.Tensor",
         param_name: str,
         target_device: "torch.device",
-        state_dict: dict[str, Any],
-        unexpected_keys: Optional[list[str]] = None,
+        **kwargs,
     ):
         module, _ = get_module_from_name(model, param_name)
 
@@ -127,9 +124,6 @@ class FPQuantHfQuantizer(HfQuantizer):
         module.weight = torch.nn.Parameter(param_value.to(target_device))
         # Let pre-forward handle the quantization and set None where necessary
         module.pre_forward()
-
-        if unexpected_keys is not None and param_name in unexpected_keys:
-            unexpected_keys.remove(param_name)
 
     def _process_model_before_weight_loading(
         self,
@@ -174,14 +168,7 @@ class FPQuantHfQuantizer(HfQuantizer):
     def is_serializable(self, safe_serialization=None):
         return True
 
-    def check_quantized_param(
-        self,
-        model: "PreTrainedModel",
-        param_value: "torch.Tensor",
-        param_name: str,
-        state_dict: dict[str, Any],
-        **kwargs,
-    ) -> bool:
+    def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         from fp_quant import FPQuantLinear
 
         module, tensor_name = get_module_from_name(model, param_name)

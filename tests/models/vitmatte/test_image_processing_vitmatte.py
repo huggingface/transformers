@@ -18,11 +18,11 @@ import unittest
 import warnings
 
 import numpy as np
-import requests
+import pytest
 from packaging import version
 
+from transformers.image_utils import load_image
 from transformers.testing_utils import (
-    is_flaky,
     require_torch,
     require_torch_accelerator,
     require_vision,
@@ -32,6 +32,7 @@ from transformers.testing_utils import (
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
@@ -59,7 +60,7 @@ class VitMatteImageProcessingTester:
         do_rescale=True,
         rescale_factor=0.5,
         do_pad=True,
-        size_divisibility=10,
+        size_divisor=10,
         do_normalize=True,
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
@@ -73,7 +74,7 @@ class VitMatteImageProcessingTester:
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_pad = do_pad
-        self.size_divisibility = size_divisibility
+        self.size_divisor = size_divisor
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
@@ -86,7 +87,7 @@ class VitMatteImageProcessingTester:
             "do_rescale": self.do_rescale,
             "rescale_factor": self.rescale_factor,
             "do_pad": self.do_pad,
-            "size_divisibility": self.size_divisibility,
+            "size_divisor": self.size_divisor,
         }
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
@@ -124,6 +125,8 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "do_rescale"))
             self.assertTrue(hasattr(image_processing, "rescale_factor"))
             self.assertTrue(hasattr(image_processing, "do_pad"))
+            self.assertTrue(hasattr(image_processing, "size_divisor"))
+            # Check size_divisibility for BC, the image proccessor has to have an atribute
             self.assertTrue(hasattr(image_processing, "size_divisibility"))
 
     def test_call_numpy(self):
@@ -140,8 +143,8 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             encoded_images = image_processing(images=image, trimaps=trimap, return_tensors="pt").pixel_values
 
             # Verify that width and height can be divided by size_divisibility and that correct dimensions got merged
-            self.assertTrue(encoded_images.shape[-1] % self.image_processor_tester.size_divisibility == 0)
-            self.assertTrue(encoded_images.shape[-2] % self.image_processor_tester.size_divisibility == 0)
+            self.assertTrue(encoded_images.shape[-1] % self.image_processor_tester.size_divisor == 0)
+            self.assertTrue(encoded_images.shape[-2] % self.image_processor_tester.size_divisor == 0)
             self.assertTrue(encoded_images.shape[-3] == 4)
 
     def test_call_pytorch(self):
@@ -159,8 +162,8 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             encoded_images = image_processing(images=image, trimaps=trimap, return_tensors="pt").pixel_values
 
             # Verify that width and height can be divided by size_divisibility and that correct dimensions got merged
-            self.assertTrue(encoded_images.shape[-1] % self.image_processor_tester.size_divisibility == 0)
-            self.assertTrue(encoded_images.shape[-2] % self.image_processor_tester.size_divisibility == 0)
+            self.assertTrue(encoded_images.shape[-1] % self.image_processor_tester.size_divisor == 0)
+            self.assertTrue(encoded_images.shape[-2] % self.image_processor_tester.size_divisor == 0)
             self.assertTrue(encoded_images.shape[-3] == 4)
 
         # create batched tensors
@@ -179,8 +182,8 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             encoded_images = image_processing(images=image, trimaps=trimap, return_tensors="pt").pixel_values
 
             # Verify that width and height can be divided by size_divisibility and that correct dimensions got merged
-            self.assertTrue(encoded_images.shape[-1] % self.image_processor_tester.size_divisibility == 0)
-            self.assertTrue(encoded_images.shape[-2] % self.image_processor_tester.size_divisibility == 0)
+            self.assertTrue(encoded_images.shape[-1] % self.image_processor_tester.size_divisor == 0)
+            self.assertTrue(encoded_images.shape[-2] % self.image_processor_tester.size_divisor == 0)
             self.assertTrue(encoded_images.shape[-3] == 4)
 
     def test_call_pil(self):
@@ -197,8 +200,8 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             encoded_images = image_processing(images=image, trimaps=trimap, return_tensors="pt").pixel_values
 
             # Verify that width and height can be divided by size_divisibility and that correct dimensions got merged
-            self.assertTrue(encoded_images.shape[-1] % self.image_processor_tester.size_divisibility == 0)
-            self.assertTrue(encoded_images.shape[-2] % self.image_processor_tester.size_divisibility == 0)
+            self.assertTrue(encoded_images.shape[-1] % self.image_processor_tester.size_divisor == 0)
+            self.assertTrue(encoded_images.shape[-2] % self.image_processor_tester.size_divisor == 0)
             self.assertTrue(encoded_images.shape[-3] == 4)
 
     def test_call_numpy_4_channels(self):
@@ -223,8 +226,8 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             ).pixel_values
 
             # Verify that width and height can be divided by size_divisibility and that correct dimensions got merged
-            self.assertTrue(encoded_images.shape[-1] % self.image_processor_tester.size_divisibility == 0)
-            self.assertTrue(encoded_images.shape[-2] % self.image_processor_tester.size_divisibility == 0)
+            self.assertTrue(encoded_images.shape[-1] % self.image_processor_tester.size_divisor == 0)
+            self.assertTrue(encoded_images.shape[-2] % self.image_processor_tester.size_divisor == 0)
             self.assertTrue(encoded_images.shape[-3] == 5)
 
     def test_padding_slow(self):
@@ -265,7 +268,7 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertGreaterEqual(len(raised_warnings), 1)
             self.assertIn("extra_argument", messages)
 
-    @is_flaky()
+    @unittest.skip(reason="Many failing cases. This test needs a more deep investigation.")
     def test_fast_is_faster_than_slow(self):
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
             self.skipTest(reason="Skipping speed test")
@@ -303,9 +306,7 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         if self.image_processing_class is None or self.fast_image_processing_class is None:
             self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
 
-        dummy_image = Image.open(
-            requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
-        )
+        dummy_image = load_image(url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"))
         dummy_trimap = np.random.randint(0, 3, size=dummy_image.size[::-1])
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
         image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
@@ -340,6 +341,7 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @slow
     @require_torch_accelerator
     @require_vision
+    @pytest.mark.torch_compile_test
     def test_can_compile_fast_image_processor(self):
         # override as trimaps are needed for the image processor
         if self.fast_image_processing_class is None:

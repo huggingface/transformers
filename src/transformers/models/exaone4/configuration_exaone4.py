@@ -26,8 +26,7 @@ class Exaone4Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Exaone4Model`]. It is used to
     instantiate a EXAONE 4.0 model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the EXAONE-4.0-Instruct [LGAI-EXAONE/EXAONE-4.0-Instruct](https://huggingface.co/LGAI-EXAONE/EXAONE-4.0-Instruct)
-    NOTE: `EXAONE-4.0-Instruct` is a placeholder model ID. The exact model ID will be updated in the future.
+    configuration with the defaults will yield a similar configuration to that of the EXAONE-4.0-32B [LGAI-EXAONE/EXAONE-4.0-32B](https://huggingface.co/LGAI-EXAONE/EXAONE-4.0-32B)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
     outputs. Read the documentation from [`PretrainedConfig`] for more information.
@@ -50,7 +49,7 @@ class Exaone4Config(PretrainedConfig):
             `num_key_value_heads=1 the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
             `num_attention_heads`.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
@@ -212,8 +211,8 @@ class Exaone4Config(PretrainedConfig):
                 for i in range(self.num_hidden_layers)
             ]
         if "sliding_window" in self.layer_types:
-            self._attn_implementation = "hybrid"
-        layer_type_validation(self.layer_types)
+            self.cache_implementation = "hybrid"
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         super().__init__(
             bos_token_id=bos_token_id, eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs

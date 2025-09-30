@@ -105,6 +105,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("blip", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
         ("blip-2", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
         ("bloom", (None, "BloomTokenizerFast" if is_tokenizers_available() else None)),
+        ("blt", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("bridgetower", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
         ("bros", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
         ("byt5", ("ByT5Tokenizer", None)),
@@ -167,6 +168,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
             ),
         ),
         ("cpmant", ("CpmAntTokenizer", None)),
+        ("csm", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("ctrl", ("CTRLTokenizer", None)),
         ("data2vec-audio", ("Wav2Vec2CTCTokenizer", None)),
         ("data2vec-text", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
@@ -244,6 +246,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
             ("FastSpeech2ConformerTokenizer" if is_g2p_en_available() else None, None),
         ),
         ("flaubert", ("FlaubertTokenizer", None)),
+        ("flex_olmo", (None, "GPT2TokenizerFast" if is_tokenizers_available() else None)),
         ("fnet", ("FNetTokenizer", "FNetTokenizerFast" if is_tokenizers_available() else None)),
         ("fsmt", ("FSMTTokenizer", None)),
         ("funnel", ("FunnelTokenizer", "FunnelTokenizerFast" if is_tokenizers_available() else None)),
@@ -294,12 +297,14 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("glm4", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("glm4_moe", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("glm4v", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
+        ("glm4v_moe", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("gpt-sw3", ("GPTSw3Tokenizer" if is_sentencepiece_available() else None, None)),
         ("gpt2", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
         ("gpt_bigcode", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
         ("gpt_neo", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
         ("gpt_neox", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
         ("gpt_neox_japanese", ("GPTNeoXJapaneseTokenizer", None)),
+        ("gpt_oss", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("gptj", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
         ("gptsan-japanese", ("GPTSanJapaneseTokenizer", None)),
         ("granite", ("GPT2Tokenizer", None)),
@@ -341,6 +346,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
                 "XLMRobertaTokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
+        ("kosmos-2.5", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("layoutlm", ("LayoutLMTokenizer", "LayoutLMTokenizerFast" if is_tokenizers_available() else None)),
         ("layoutlmv2", ("LayoutLMv2Tokenizer", "LayoutLMv2TokenizerFast" if is_tokenizers_available() else None)),
         ("layoutlmv3", ("LayoutLMv3Tokenizer", "LayoutLMv3TokenizerFast" if is_tokenizers_available() else None)),
@@ -402,6 +408,13 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ),
         ("mega", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
         ("megatron-bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+        (
+            "metaclip_2",
+            (
+                "XLMRobertaTokenizer",
+                "XLMRobertaTokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
         ("mgp-str", ("MgpstrTokenizer", None)),
         (
             "minimax",
@@ -474,6 +487,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ),
         ("olmo", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
         ("olmo2", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
+        ("olmo3", (None, "GPT2TokenizerFast" if is_tokenizers_available() else None)),
         ("olmoe", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
         (
             "omdet-turbo",
@@ -488,6 +502,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("owlv2", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
         ("owlvit", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
         ("paligemma", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
+        ("parakeet", ("ParakeetCTCTokenizer", None)),
         (
             "pegasus",
             (
@@ -565,6 +580,16 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
                 "Qwen2TokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
+        (
+            "qwen3_next",
+            (
+                "Qwen2Tokenizer",
+                "Qwen2TokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
+        ("qwen3_omni_moe", ("Qwen2Tokenizer", "Qwen2TokenizerFast" if is_tokenizers_available() else None)),
+        ("qwen3_vl", ("Qwen2Tokenizer", "Qwen2TokenizerFast" if is_tokenizers_available() else None)),
+        ("qwen3_vl_moe", ("Qwen2Tokenizer", "Qwen2TokenizerFast" if is_tokenizers_available() else None)),
         ("rag", ("RagTokenizer", None)),
         ("realm", ("RealmTokenizer", "RealmTokenizerFast" if is_tokenizers_available() else None)),
         (
@@ -770,7 +795,7 @@ def tokenizer_class_from_name(class_name: str) -> Union[type[Any], None]:
     for module_name, tokenizers in TOKENIZER_MAPPING_NAMES.items():
         if class_name in tokenizers:
             module_name = model_type_to_module_name(module_name)
-            if module_name in ["mistral", "mixtral"] and class_name == "MistralCommonTokenizer":
+            if module_name in ["mistral", "mixtral", "ministral"] and class_name == "MistralCommonTokenizer":
                 module = importlib.import_module(".tokenization_mistral_common", "transformers")
             else:
                 module = importlib.import_module(f".{module_name}", "transformers.models")
@@ -1117,7 +1142,7 @@ class AutoTokenizer:
         # Otherwise we have to be creative.
         # if model is an encoder decoder, the encoder tokenizer class is used by default
         if isinstance(config, EncoderDecoderConfig):
-            if type(config.decoder) is not type(config.encoder):  # noqa: E721
+            if type(config.decoder) is not type(config.encoder):
                 logger.warning(
                     f"The encoder model config class: {config.encoder.__class__} is different from the decoder model "
                     f"config class: {config.decoder.__class__}. It is not recommended to use the "

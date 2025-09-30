@@ -27,8 +27,8 @@ from typing import Optional, Union
 from urllib.parse import urlparse
 from uuid import uuid4
 
+import httpx
 import huggingface_hub
-import requests
 from huggingface_hub import (
     _CACHED_NO_EXIST,
     CommitOperationAdd,
@@ -56,17 +56,13 @@ from huggingface_hub.utils import (
     build_hf_headers,
     get_session,
     hf_raise_for_status,
-    send_telemetry,
 )
-from requests.exceptions import HTTPError
 
 from . import __version__, logging
 from .generic import working_or_temp_dir
 from .import_utils import (
     ENV_VARS_TRUE_VALUES,
-    _tf_version,
     _torch_version,
-    is_tf_available,
     is_torch_available,
     is_training_run_on_sagemaker,
 )
@@ -155,6 +151,7 @@ def list_repo_templates(
     local_files_only: bool,
     revision: Optional[str] = None,
     cache_dir: Optional[str] = None,
+    token: Union[bool, str, None] = None,
 ) -> list[str]:
     """List template files from a repo.
 
@@ -171,12 +168,13 @@ def list_repo_templates(
                     revision=revision,
                     path_in_repo=CHAT_TEMPLATE_DIR,
                     recursive=False,
+                    token=token,
                 )
                 if entry.path.endswith(".jinja")
             ]
         except (GatedRepoError, RepositoryNotFoundError, RevisionNotFoundError):
             raise  # valid errors => do not catch
-        except (ConnectionError, HTTPError):
+        except (HfHubHTTPError, OfflineModeIsEnabled, httpx.NetworkError):
             pass  # offline mode, internet down, etc. => try local files
 
     # check local files
@@ -199,7 +197,7 @@ def is_remote_url(url_or_filename):
 
 def define_sagemaker_information():
     try:
-        instance_data = requests.get(os.environ["ECS_CONTAINER_METADATA_URI"]).json()
+        instance_data = httpx.get(os.environ["ECS_CONTAINER_METADATA_URI"]).json()
         dlc_container_used = instance_data["Image"]
         dlc_tag = instance_data["Image"].split(":")[1]
     except Exception:
@@ -213,8 +211,8 @@ def define_sagemaker_information():
     sagemaker_object = {
         "sm_framework": os.getenv("SM_FRAMEWORK_MODULE", None),
         "sm_region": os.getenv("AWS_REGION", None),
-        "sm_number_gpu": os.getenv("SM_NUM_GPUS", 0),
-        "sm_number_cpu": os.getenv("SM_NUM_CPUS", 0),
+        "sm_number_gpu": os.getenv("SM_NUM_GPUS", "0"),
+        "sm_number_cpu": os.getenv("SM_NUM_CPUS", "0"),
         "sm_distributed_training": runs_distributed_training,
         "sm_deep_learning_container": dlc_container_used,
         "sm_deep_learning_container_tag": dlc_tag,
@@ -230,8 +228,6 @@ def http_user_agent(user_agent: Union[dict, str, None] = None) -> str:
     ua = f"transformers/{__version__}; python/{sys.version.split()[0]}; session_id/{SESSION_ID}"
     if is_torch_available():
         ua += f"; torch/{_torch_version}"
-    if is_tf_available():
-        ua += f"; tensorflow/{_tf_version}"
     if constants.HF_HUB_DISABLE_TELEMETRY:
         return ua + "; telemetry/off"
     if is_training_run_on_sagemaker():
@@ -438,12 +434,11 @@ def cached_files(
                         f"'https://huggingface.co/{path_or_repo_id}/tree/{revision_}' for available files."
                     )
                 else:
-                    return None
+                    continue
             existing_files.append(resolved_file)
 
-    # All files exist
-    if len(existing_files) == len(full_filenames):
-        return existing_files
+    if os.path.isdir(path_or_repo_id):
+        return existing_files if existing_files else None
 
     if cache_dir is None:
         cache_dir = TRANSFORMERS_CACHE
@@ -557,7 +552,7 @@ def cached_files(
                 ) from e
         # snapshot_download will not raise EntryNotFoundError, but hf_hub_download can. If this is the case, it will be treated
         # later on anyway and re-raised if needed
-        elif isinstance(e, HTTPError) and not isinstance(e, EntryNotFoundError):
+        elif isinstance(e, HfHubHTTPError) and not isinstance(e, EntryNotFoundError):
             if not _raise_exceptions_for_connection_errors:
                 return None
             raise OSError(f"There was a specific connection error when trying to load {path_or_repo_id}:\n{e}") from e
@@ -680,18 +675,13 @@ def has_file(
         response = get_session().head(
             hf_hub_url(path_or_repo, filename=filename, revision=revision, repo_type=repo_type),
             headers=build_hf_headers(token=token, user_agent=http_user_agent()),
-            allow_redirects=False,
-            proxies=proxies,
+            follow_redirects=False,
             timeout=10,
         )
-    except (requests.exceptions.SSLError, requests.exceptions.ProxyError):
+    except httpx.ProxyError:
         # Actually raise for those subclasses of ConnectionError
         raise
-    except (
-        requests.exceptions.ConnectionError,
-        requests.exceptions.Timeout,
-        OfflineModeIsEnabled,
-    ):
+    except (httpx.ConnectError, httpx.TimeoutException, OfflineModeIsEnabled):
         return has_file_in_cache
 
     try:
@@ -715,7 +705,7 @@ def has_file(
         ) from e
     except EntryNotFoundError:
         return False  # File does not exist
-    except requests.HTTPError:
+    except HfHubHTTPError:
         # Any authentication/authorization error will be caught here => default to cache
         return has_file_in_cache
 
@@ -994,41 +984,6 @@ class PushToHubMixin:
             )
 
 
-def send_example_telemetry(example_name, *example_args, framework="pytorch"):
-    """
-    Sends telemetry that helps tracking the examples use.
-
-    Args:
-        example_name (`str`): The name of the example.
-        *example_args (dataclasses or `argparse.ArgumentParser`): The arguments to the script. This function will only
-            try to extract the model and dataset name from those. Nothing else is tracked.
-        framework (`str`, *optional*, defaults to `"pytorch"`): The framework for the example.
-    """
-    if is_offline_mode():
-        return
-
-    data = {"example": example_name, "framework": framework}
-    for args in example_args:
-        args_as_dict = {k: v for k, v in args.__dict__.items() if not k.startswith("_") and v is not None}
-        if "model_name_or_path" in args_as_dict:
-            model_name = args_as_dict["model_name_or_path"]
-            # Filter out local paths
-            if not os.path.isdir(model_name):
-                data["model_name"] = args_as_dict["model_name_or_path"]
-        if "dataset_name" in args_as_dict:
-            data["dataset_name"] = args_as_dict["dataset_name"]
-        elif "task_name" in args_as_dict:
-            # Extract script name from the example_name
-            script_name = example_name.replace("tf_", "").replace("flax_", "").replace("run_", "")
-            script_name = script_name.replace("_no_trainer", "")
-            data["dataset_name"] = f"{script_name}-{args_as_dict['task_name']}"
-
-    # Send telemetry in the background
-    send_telemetry(
-        topic="examples", library_name="transformers", library_version=__version__, user_agent=http_user_agent(data)
-    )
-
-
 def convert_file_size_to_int(size: Union[int, str]):
     """
     Converts a size expressed as a string with digits an unit (like `"5MB"`) to an integer (in bytes).
@@ -1087,7 +1042,6 @@ def get_checkpoint_shard_files(
     For the description of each arg, see [`PreTrainedModel.from_pretrained`]. `index_filename` is the full path to the
     index (downloaded and cached if `pretrained_model_name_or_path` is a model ID on the Hub).
     """
-    import json
 
     use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
     if use_auth_token is not None:

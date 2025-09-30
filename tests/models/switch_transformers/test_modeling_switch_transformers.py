@@ -571,7 +571,6 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True
-    test_model_parallel = False
     is_encoder_decoder = True
     test_torchscript = False
     # The small SWITCH_TRANSFORMERS model needs higher percentages for CPU/MP tests
@@ -820,7 +819,6 @@ class SwitchTransformersEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase
     all_model_classes = (SwitchTransformersEncoderModel,) if is_torch_available() else ()
     test_pruning = False
     test_resize_embeddings = False
-    test_model_parallel = False
     test_torchscript = False
 
     def setUp(self):
@@ -1029,9 +1027,7 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
         and `transformers` implementation of Switch-C transformers. We only check the logits
         of the first batch.
         """
-        model = SwitchTransformersModel.from_pretrained("google/switch-base-8", torch_dtype=torch.bfloat16).to(
-            torch_device
-        )
+        model = SwitchTransformersModel.from_pretrained("google/switch-base-8", dtype=torch.bfloat16).to(torch_device)
         input_ids = torch.ones((32, 64), dtype=torch.long).to(torch_device)
         decoder_input_ids = torch.ones((32, 64), dtype=torch.long).to(torch_device)
 
@@ -1069,7 +1065,7 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
         # Generate test using the smalled switch-C model.
 
         model = SwitchTransformersForConditionalGeneration.from_pretrained(
-            "google/switch-base-8", torch_dtype=torch.bfloat16
+            "google/switch-base-8", dtype=torch.bfloat16
         ).eval()
         tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-small", use_fast=False, legacy=False)
         model = model.to(torch_device)
@@ -1097,7 +1093,7 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
     def test_small_batch_generate(self):
         BATCH_SIZE = 4
         model = SwitchTransformersForConditionalGeneration.from_pretrained(
-            "google/switch-base-8", torch_dtype=torch.bfloat16
+            "google/switch-base-8", dtype=torch.bfloat16
         ).eval()
         tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-small", use_fast=False, legacy=False)
 

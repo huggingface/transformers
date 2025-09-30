@@ -46,12 +46,13 @@ class ImageToImagePipeline(Pipeline):
 
     ```python
     >>> from PIL import Image
-    >>> import requests
+    >>> import httpx
+    >>> import io
 
     >>> from transformers import pipeline
 
     >>> upscaler = pipeline("image-to-image", model="caidas/swin2SR-classical-sr-x2-64")
-    >>> img = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+    >>> img = Image.open(io.BytesIO(httpx.get("http://images.cocodataset.org/val2017/000000039769.jpg").content))
     >>> img = img.resize((64, 64))
     >>> upscaled_img = upscaler(img)
     >>> img.size
@@ -130,8 +131,7 @@ class ImageToImagePipeline(Pipeline):
     def preprocess(self, image, timeout=None):
         image = load_image(image, timeout=timeout)
         inputs = self.image_processor(images=[image], return_tensors="pt")
-        if self.framework == "pt":
-            inputs = inputs.to(self.torch_dtype)
+        inputs = inputs.to(self.dtype)
         return inputs
 
     def postprocess(self, model_outputs):

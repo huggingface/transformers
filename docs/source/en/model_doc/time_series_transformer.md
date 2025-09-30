@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2022-12-01 and added to Hugging Face Transformers on 2022-09-30.*
 
 # Time Series Transformer
 
@@ -59,7 +60,6 @@ which is then fed to the decoder in order to make the next prediction (also call
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
 - Check out the Time Series Transformer blog-post in HuggingFace blog: [Probabilistic Time Series Forecasting with 🤗 Transformers](https://huggingface.co/blog/time-series-transformers)
-
 
 ## TimeSeriesTransformerConfig
 

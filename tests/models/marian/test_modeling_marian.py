@@ -15,6 +15,7 @@
 
 import tempfile
 import unittest
+from functools import cached_property
 
 from transformers import MarianConfig, is_torch_available
 from transformers.testing_utils import (
@@ -25,7 +26,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -597,7 +597,7 @@ class TestMarian_en_ROMANCE(MarianIntegrationTest):
     @slow
     @require_torch
     def test_pipeline(self):
-        pipeline = TranslationPipeline(self.model, self.tokenizer, framework="pt", device=torch_device)
+        pipeline = TranslationPipeline(self.model, self.tokenizer, device=torch_device)
         output = pipeline(self.src_text)
         self.assertEqual(self.expected_text, [x["translation_text"] for x in output])
 
@@ -694,6 +694,7 @@ class MarianStandaloneDecoderModelTester:
             vocab_size=self.vocab_size,
             d_model=self.d_model,
             decoder_layers=self.decoder_layers,
+            num_hidden_layers=self.decoder_layers,
             decoder_ffn_dim=self.decoder_ffn_dim,
             encoder_attention_heads=self.encoder_attention_heads,
             decoder_attention_heads=self.decoder_attention_heads,

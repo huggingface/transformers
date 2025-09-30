@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 [[open-in-colab]]
 
-Image-to-Image task is the task where an application receives an image and outputs another image. This has various subtasks, including image enhancement (super resolution, low light enhancement, deraining and so on), image inpainting, and more. 
+Image-to-Image task is the task where an application receives an image and outputs another image. This has various subtasks, including image enhancement (super resolution, low light enhancement, deraining and so on), image inpainting, and more.
 
 This guide will show you how to:
 - Use an image-to-image pipeline for super resolution task,
@@ -32,14 +32,13 @@ Let's begin by installing the necessary libraries.
 pip install transformers
 ```
 
-We can now initialize the pipeline with a [Swin2SR model](https://huggingface.co/caidas/swin2SR-lightweight-x2-64). We can then infer with the pipeline by calling it with an image. As of now, only [Swin2SR models](https://huggingface.co/models?sort=trending&search=swin2sr) are supported in this pipeline. 
+We can now initialize the pipeline with a [Swin2SR model](https://huggingface.co/caidas/swin2SR-lightweight-x2-64). We can then infer with the pipeline by calling it with an image. As of now, only [Swin2SR models](https://huggingface.co/models?sort=trending&search=swin2sr) are supported in this pipeline.
 
 ```python
-from transformers import pipeline
+from transformers import pipeline, infer_device
 import torch
-from accelerate.test_utils.testing import get_backend
 # automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
-device, _, _ = get_backend()
+device = infer_device()
 pipe = pipeline(task="image-to-image", model="caidas/swin2SR-lightweight-x2-64", device=device)
 ```
 
@@ -54,19 +53,22 @@ image = Image.open(requests.get(url, stream=True).raw)
 
 print(image.size)
 ```
+
 ```bash
 # (532, 432)
 ```
+
 <div class="flex justify-center">
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/cat.jpg" alt="Photo of a cat"/>
 </div>
 
-We can now do inference with the pipeline. We will get an upscaled version of the cat image. 
+We can now do inference with the pipeline. We will get an upscaled version of the cat image.
 
 ```python
 upscaled = pipe(image)
 print(upscaled.size)
 ```
+
 ```bash
 # (1072, 880)
 ```
@@ -80,7 +82,7 @@ model = Swin2SRForImageSuperResolution.from_pretrained("caidas/swin2SR-lightweig
 processor = Swin2SRImageProcessor("caidas/swin2SR-lightweight-x2-64")
 ```
 
-`pipeline` abstracts away the preprocessing and postprocessing steps that we have to do ourselves, so let's preprocess the image. We will pass the image to the processor and then move the pixel values to GPU. 
+`pipeline` abstracts away the preprocessing and postprocessing steps that we have to do ourselves, so let's preprocess the image. We will pass the image to the processor and then move the pixel values to GPU.
 
 ```python
 pixel_values = processor(image, return_tensors="pt").pixel_values
@@ -97,9 +99,10 @@ import torch
 with torch.no_grad():
   outputs = model(pixel_values)
 ```
-Output is an object of type `ImageSuperResolutionOutput` that looks like below 👇 
 
-```
+Output is an object of type `ImageSuperResolutionOutput` that looks like below 👇
+
+```text
 (loss=None, reconstruction=tensor([[[[0.8270, 0.8269, 0.8275,  ..., 0.7463, 0.7446, 0.7453],
           [0.8287, 0.8278, 0.8283,  ..., 0.7451, 0.7448, 0.7457],
           [0.8280, 0.8273, 0.8269,  ..., 0.7447, 0.7446, 0.7452],
@@ -109,6 +112,7 @@ Output is an object of type `ImageSuperResolutionOutput` that looks like below �
           [0.5927, 0.5914, 0.5922,  ..., 0.0664, 0.0694, 0.0718]]]],
        device='cuda:0'), hidden_states=None, attentions=None)
 ```
+
 We need to get the `reconstruction` and post-process it for visualization. Let's see how it looks like.
 
 ```python
@@ -129,6 +133,7 @@ output = np.moveaxis(output, source=0, destination=-1)
 output = (output * 255.0).round().astype(np.uint8)
 Image.fromarray(output)
 ```
+
 <div class="flex justify-center">
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/cat_upscaled.png" alt="Upscaled photo of a cat"/>
 </div>

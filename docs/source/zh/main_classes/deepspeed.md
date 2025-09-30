@@ -236,7 +236,7 @@ deepspeed --num_gpus=1 examples/pytorch/translation/run_translation.py \
 }
 ```
 
-这会启用`optimizer offload `和一些其他重要功能。您可以尝试不同的buffer大小，有关详细信息，请参见下面的讨论。
+这会启用`optimizer offload`和一些其他重要功能。您可以尝试不同的buffer大小，有关详细信息，请参见下面的讨论。
 
 关于这种启用类型的实际使用示例，请参阅 [此帖](https://github.com/huggingface/transformers/issues/8771#issuecomment-759176685)。
 
@@ -1293,8 +1293,6 @@ DeepSpeed支持完整的fp32和fp16混合精度。
 
 ### 自动混合精度
 
-您可以使用自动混合精度，可以选择使用类似 PyTorch AMP 的方式，也可以选择使用类似 Apex 的方式：
-
 ### fp16
 
 要配置PyTorch AMP-like 的 fp16（float16） 模式，请设置：
@@ -1392,38 +1390,6 @@ bf16具有与fp32相同的动态范围，因此不需要损失缩放。
 根据这个信息，有效的值包括"fp16"、"bfp16"和"fp32"。
 
 注意：在stage zero 3中，bf16通信数据类型存在一个bug，该问题已在`deepspeed==0.8.1`版本中得到修复。
-
-
-### apex
-
-配置apex AMP-like模式：
-
-```json
-"amp": {
-    "enabled": "auto",
-    "opt_level": "auto"
-}
-```
-
-并且，[`Trainer`]将根据`args.fp16_backend`和`args.fp16_opt_level`的值自动配置它。
-
-当传递`--fp16 --fp16_backend apex --fp16_opt_level 01`命令行参数时，此模式将被启用。
-
-您还可以显式配置此模式：
-
-```json
-{
-    "amp": {
-        "enabled": true,
-        "opt_level": "O1"
-    }
-}
-```
-
-但是，您需要自己同步[`Trainer`]命令行参数和DeepSpeed配置。
-
-这里是[文档](https://www.deepspeed.ai/docs/config-json/#automatic-mixed-precision-amp-training-options)
-
 
 <a id='deepspeed-bs'></a>
 
@@ -1650,7 +1616,7 @@ trainer = Trainer(model=model, args=training_args, ...)
 
 有关此方法和其他相关功能的完整详细信息，请参阅[构建大模型](https://deepspeed.readthedocs.io/en/latest/zero3.html#constructing-massive-models)。
 
-此外，在加载fp16预训练模型时，您希望`from_pretrained`使用`torch_dtype=torch.float16`。详情请参见[from_pretrained-torch-dtype](#from_pretrained-torch-dtype)。
+此外，在加载fp16预训练模型时，您希望`from_pretrained`使用`dtype=torch.float16`。详情请参见[from_pretrained-torch-dtype](#from_pretrained-torch-dtype)。
 
 
 #### 参数收集

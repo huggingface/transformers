@@ -21,7 +21,7 @@ from typing import Optional, Union
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, is_valid_image, make_flat_list_of_images
+from ...image_utils import ImageInput, is_valid_image
 from ...processing_utils import (
     ImagesKwargs,
     MultiModalData,
@@ -125,10 +125,6 @@ class PaliGemmaProcessor(ProcessorMixin):
         chat_template=None,
         **kwargs,
     ):
-        if image_processor is None:
-            raise ValueError("You need to specify an `image_processor`.")
-        if tokenizer is None:
-            raise ValueError("You need to specify a `tokenizer`.")
         if not hasattr(image_processor, "image_seq_length"):
             raise ValueError("Image processor is missing an `image_seq_length` attribute.")
 
@@ -152,7 +148,7 @@ class PaliGemmaProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio=None,
         videos=None,
@@ -161,7 +157,7 @@ class PaliGemmaProcessor(ProcessorMixin):
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to GemmaTokenizerFast's [`~GemmaTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
+        the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
         SiglipImageProcessor's [`~SiglipImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
@@ -196,10 +192,8 @@ class PaliGemmaProcessor(ProcessorMixin):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
             suffix (`str`, `list[str]`, `list[list[str]]`):
                 The suffixes or batch of suffixes to be encoded. Only necessary for finetuning. See https://github.com/google-research/big_vision/blob/main/big_vision/configs/proj/paligemma/README.md
                 for more information. If your prompt is "<image> What is on the image", the suffix corresponds to the expected prediction "a cow sitting on a bench".
@@ -223,7 +217,7 @@ class PaliGemmaProcessor(ProcessorMixin):
         )
         suffix = output_kwargs["text_kwargs"].pop("suffix", None)
 
-        return_token_type_ids = suffix is not None
+        return_token_type_ids = True
 
         if images is None:
             raise ValueError("`images` are expected as arguments to a `PaliGemmaProcessor` instance.")
@@ -275,7 +269,6 @@ class PaliGemmaProcessor(ProcessorMixin):
                     )
                     for prompt, image_list in zip(text, images)
                 ]
-                images = make_flat_list_of_images(images)
             else:
                 expanded_samples = []
                 for sample in text:
@@ -306,6 +299,7 @@ class PaliGemmaProcessor(ProcessorMixin):
 
         return_data = {**inputs, "pixel_values": pixel_values}
 
+        # TODO: ideally we would control label generation separately, now that we always return token_type_ids.
         if return_token_type_ids:
             labels = np.array(inputs["input_ids"])
             labels[np.array(inputs["token_type_ids"]) == 0] = -100
@@ -337,28 +331,11 @@ class PaliGemmaProcessor(ProcessorMixin):
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
         return MultiModalData(**vision_data)
 
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Gemma
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to GemmaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.decode with CLIP->Gemma
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to GemmaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
     @property
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.model_input_names with CLIP->PaliGemma
     def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
+        tokenizer_input_names = self.tokenizer.model_input_names + ["token_type_ids", "labels"]
         image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+        return list(tokenizer_input_names + image_processor_input_names)
 
 
 __all__ = ["PaliGemmaProcessor"]

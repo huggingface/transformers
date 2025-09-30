@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-01-11 and added to Hugging Face Transformers on 2022-11-15.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -25,7 +26,6 @@ rendered properly in your Markdown viewer.
 [Switch Transformers](https://huggingface.co/papers/2101.03961) is a sparse T5 model where the MLP layer is replaced by a Mixture-of-Experts (MoE). A routing mechanism associates each token with an expert and each expert is a dense MLP. Sparsity enables better scaling and the routing mechanism allows the model to select relevant weights on the fly which increases model capacity.
 
 You can find all the original Switch Transformers checkpoints under the [Switch Transformer](https://huggingface.co/collections/google/switch-transformers-release-6548c35c6507968374b56d1f) collection.
-
 
 > [!TIP]
 > This model was contributed by [ybelkada](https://huggingface.co/ybelkada) and [ArthurZ](https://huggingface.co/ArthurZ).
@@ -44,7 +44,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="text2text-generation", 
     model="google/switch-base-8",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 print(pipeline("The capital of France is <extra_id_0>."))
@@ -58,7 +58,7 @@ import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("google/switch-base-8")
-model = AutoModelForSeq2SeqLM.from_pretrained("google/switch-base-8", device_map="auto", torch_dtype=torch.float16)
+model = AutoModelForSeq2SeqLM.from_pretrained("google/switch-base-8", device_map="auto", dtype=torch.float16)
 
 input_text = "The capital of France is <extra_id_0>."
 input_ids = tokenizer(input_text, return_tensors="pt").input_ids.to(0)
@@ -97,7 +97,6 @@ input_ids = tokenizer(input_text, return_tensors="pt").input_ids.to(0)
 outputs = model.generate(input_ids)
 print(tokenizer.decode(outputs[0]))
 ```
-
 
 ## SwitchTransformersConfig
 

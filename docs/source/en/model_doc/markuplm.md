@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-10-16 and added to Hugging Face Transformers on 2022-09-30.*
 
 # MarkupLM
 
@@ -53,7 +54,7 @@ These are the XPATH tags and subscripts respectively for each token in the input
 - One can use [`MarkupLMProcessor`] to prepare all data for the model. Refer to the [usage guide](#usage-markuplmprocessor) for more info.
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/markuplm_architecture.jpg"
-alt="drawing" width="600"/> 
+alt="drawing" width="600"/>
 
 <small> MarkupLM architecture. Taken from the <a href="https://huggingface.co/papers/2110.08518">original paper.</a> </small>
 

@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2022-09-21 and added to Hugging Face Transformers on 2023-06-20.*
 
 # MEGA
 
@@ -43,18 +44,15 @@ The abstract from the paper is the following:
 This model was contributed by [mnaylor](https://huggingface.co/mnaylor).
 The original code can be found [here](https://github.com/facebookresearch/mega).
 
-
 ## Usage tips
 
 - MEGA can perform quite well with relatively few parameters. See Appendix D in the MEGA paper for examples of architectural specs which perform well in various settings. If using MEGA as a decoder, be sure to set `bidirectional=False` to avoid errors with default bidirectional.
 - Mega-chunk is a variant of mega that reduces time and spaces complexity from quadratic to linear. Utilize chunking with MegaConfig.use_chunking and control chunk size with MegaConfig.chunk_size
 
-
 ## Implementation Notes
 
 - The original implementation of MEGA had an inconsistent expectation of attention masks for padding and causal self-attention between the softmax attention and Laplace/squared ReLU method. This implementation addresses that inconsistency.
 - The original implementation did not include token type embeddings; this implementation adds support for these, with the option controlled by MegaConfig.add_token_type_embeddings
-
 
 ## MegaConfig
 

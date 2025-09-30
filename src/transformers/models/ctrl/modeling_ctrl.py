@@ -216,8 +216,6 @@ class CTRLPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, (nn.Linear, Conv1D)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -271,7 +269,7 @@ class CTRLModel(CTRLPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -338,14 +336,14 @@ class CTRLModel(CTRLPreTrainedModel):
 
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
-        return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache(config=self.config)
+        if use_cache and isinstance(past_key_values, tuple):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
                 "You should pass an instance of `DynamicCache` instead, e.g. "
                 "`past_key_values=DynamicCache.from_legacy_cache(past_key_values)`."
             )
-            return_legacy_cache = True
             past_key_values = DynamicCache.from_legacy_cache(past_key_values)
 
         past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -422,9 +420,6 @@ class CTRLModel(CTRLPreTrainedModel):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        if return_legacy_cache:
-            past_key_values = past_key_values.to_legacy_cache()
-
         if not return_dict:
             return tuple(
                 v for v in [hidden_states, past_key_values, all_hidden_states, all_attentions] if v is not None
@@ -459,7 +454,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -573,7 +568,17 @@ class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
 
             input_ids = input_ids[:, remove_prefix_length:]
 
-        return {"input_ids": input_ids, "past_key_values": past_key_values, "use_cache": use_cache}
+        model_inputs = {"input_ids": input_ids, "past_key_values": past_key_values, "use_cache": use_cache}
+
+        # token_type_ids are computed on CTRLModel.forward()
+        kwargs.pop("token_type_ids", None)
+        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
+        for key, value in kwargs.items():
+            if key not in model_inputs:
+                print(f"Warning: {key} is not a recognized input.")
+                model_inputs[key] = value
+
+        return model_inputs
 
 
 @auto_docstring(
@@ -601,7 +606,7 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,

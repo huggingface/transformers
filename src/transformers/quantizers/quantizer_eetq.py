@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Optional
 
 from .base import HfQuantizer
 
@@ -70,12 +70,6 @@ class EetqHfQuantizer(HfQuantizer):
         if not is_accelerate_available():
             raise ImportError("Loading an EETQ quantized model requires accelerate (`pip install accelerate`)")
 
-        if kwargs.get("from_tf", False) or kwargs.get("from_flax", False):
-            raise ValueError(
-                "Converting into 8-bit weights from tf/flax weights is currently not supported, please make"
-                " sure the weights are in PyTorch format."
-            )
-
         if not torch.cuda.is_available():
             raise RuntimeError("No GPU found. A GPU is needed for quantization.")
 
@@ -92,40 +86,29 @@ class EetqHfQuantizer(HfQuantizer):
                     " This is not supported. Please remove the CPU or disk device from the device_map."
                 )
 
-    def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
-        if torch_dtype is None:
-            torch_dtype = torch.float16
+    def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
+        if dtype is None:
+            dtype = torch.float16
             logger.info(
-                "Overriding torch_dtype=%s with `torch_dtype=torch.float16` due to "
+                "Overriding dtype=%s with `dtype=torch.float16` due to "
                 "requirements of `eetq` to enable model loading in 8-bit. "
-                "Pass your own torch_dtype to specify the dtype of the remaining non-linear layers or pass"
-                " torch_dtype=torch.float16 to remove this warning.",
-                torch_dtype,
+                "Pass your own dtype to specify the dtype of the remaining non-linear layers or pass"
+                " dtype=torch.float16 to remove this warning.",
+                dtype,
             )
-        elif torch_dtype != torch.float16:
-            logger.info("We suggest you to set `torch_dtype=torch.float16` for better efficiency with EETQ.")
-        return torch_dtype
+        elif dtype != torch.float16:
+            logger.info("We suggest you to set `dtype=torch.float16` for better efficiency with EETQ.")
+        return dtype
 
-    def check_quantized_param(
-        self,
-        model: "PreTrainedModel",
-        param_value: "torch.Tensor",
-        param_name: str,
-        state_dict: dict[str, Any],
-        **kwargs,
-    ):
+    def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         from eetq import EetqLinear
 
         module, tensor_name = get_module_from_name(model, param_name)
 
         if isinstance(module, EetqLinear):
             if self.pre_quantized or tensor_name == "bias":
-                if tensor_name == "weight" and param_value.dtype != torch.int8:
-                    raise ValueError("Expect quantized weights but got an unquantized weight")
                 return False
             else:
-                if tensor_name == "weight_scale":
-                    raise ValueError("Expect unquantized weights but got a quantized weight_scale")
                 return True
         return False
 
@@ -135,16 +118,21 @@ class EetqHfQuantizer(HfQuantizer):
         param_value: "torch.Tensor",
         param_name: str,
         target_device: "torch.device",
-        state_dict: dict[str, Any],
-        unexpected_keys: Optional[list[str]] = None,
+        **kwargs,
     ):
-        """
-        quantizes weights into qweight and weight_scales
-        """
-        from eetq import quantize_and_preprocess_weights
+        from eetq import EetqLinear, quantize_and_preprocess_weights
 
         module, tensor_name = get_module_from_name(model, param_name)
         new_value, weight_scale = quantize_and_preprocess_weights(param_value)
+
+        # Samity check
+        if isinstance(module, EetqLinear):
+            if self.pre_quantized or tensor_name == "bias":
+                if tensor_name == "weight" and param_value.dtype != torch.int8:
+                    raise ValueError("Expect quantized weights but got an unquantized weight")
+            else:
+                if tensor_name == "weight_scale":
+                    raise ValueError("Expect unquantized weights but got a quantized weight_scale")
 
         module._buffers[tensor_name] = new_value.to(target_device)
         module.register("weight_scales", weight_scale.to(target_device))

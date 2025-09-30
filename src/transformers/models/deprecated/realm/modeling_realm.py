@@ -15,7 +15,6 @@
 """PyTorch REALM model."""
 
 import math
-import os
 from dataclasses import dataclass
 from typing import Optional, Union
 
@@ -24,6 +23,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ....activations import ACT2FN
+from ....cache_utils import Cache
 from ....modeling_layers import GradientCheckpointingLayer
 from ....modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -34,6 +34,7 @@ from ....modeling_outputs import (
 from ....modeling_utils import PreTrainedModel
 from ....pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ....utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ....utils.deprecation import deprecate_kwarg
 from .configuration_realm import RealmConfig
 
 
@@ -42,113 +43,6 @@ _EMBEDDER_CHECKPOINT_FOR_DOC = "google/realm-cc-news-pretrained-embedder"
 _ENCODER_CHECKPOINT_FOR_DOC = "google/realm-cc-news-pretrained-encoder"
 _SCORER_CHECKPOINT_FOR_DOC = "google/realm-cc-news-pretrained-scorer"
 _CONFIG_FOR_DOC = "RealmConfig"
-
-
-def load_tf_weights_in_realm(model, config, tf_checkpoint_path):
-    """Load tf checkpoints in a pytorch model."""
-    try:
-        import re
-
-        import numpy as np
-        import tensorflow as tf
-    except ImportError:
-        logger.error(
-            "Loading a TensorFlow model in PyTorch, requires TensorFlow to be installed. Please see "
-            "https://www.tensorflow.org/install/ for installation instructions."
-        )
-        raise
-    tf_path = os.path.abspath(tf_checkpoint_path)
-    logger.info(f"Converting TensorFlow checkpoint from {tf_path}")
-    # Load weights from TF model
-    init_vars = tf.train.list_variables(tf_path)
-    names = []
-    arrays = []
-
-    for name, shape in init_vars:
-        logger.info(f"Loading TF weight {name} with shape {shape}")
-        array = tf.train.load_variable(tf_path, name)
-        names.append(name)
-        arrays.append(array)
-
-    for name, array in zip(names, arrays):
-        if isinstance(model, RealmReader) and "reader" not in name:
-            logger.info(f"Skipping {name} as it is not {model.__class__.__name__}'s parameter")
-            continue
-
-        # For pretrained openqa reader
-        if (name.startswith("bert") or name.startswith("cls")) and isinstance(model, RealmForOpenQA):
-            name = name.replace("bert/", "reader/realm/")
-            name = name.replace("cls/", "reader/cls/")
-
-        # For pretrained encoder
-        if (name.startswith("bert") or name.startswith("cls")) and isinstance(model, RealmKnowledgeAugEncoder):
-            name = name.replace("bert/", "realm/")
-
-        # For finetuned reader
-        if name.startswith("reader"):
-            reader_prefix = "" if isinstance(model, RealmReader) else "reader/"
-            name = name.replace("reader/module/bert/", f"{reader_prefix}realm/")
-            name = name.replace("reader/module/cls/", f"{reader_prefix}cls/")
-            name = name.replace("reader/dense/", f"{reader_prefix}qa_outputs/dense_intermediate/")
-            name = name.replace("reader/dense_1/", f"{reader_prefix}qa_outputs/dense_output/")
-            name = name.replace("reader/layer_normalization", f"{reader_prefix}qa_outputs/layer_normalization")
-
-        # For embedder and scorer
-        if name.startswith("module/module/module/"):  # finetuned
-            embedder_prefix = "" if isinstance(model, RealmEmbedder) else "embedder/"
-            name = name.replace("module/module/module/module/bert/", f"{embedder_prefix}realm/")
-            name = name.replace("module/module/module/LayerNorm/", f"{embedder_prefix}cls/LayerNorm/")
-            name = name.replace("module/module/module/dense/", f"{embedder_prefix}cls/dense/")
-            name = name.replace("module/module/module/module/cls/predictions/", f"{embedder_prefix}cls/predictions/")
-            name = name.replace("module/module/module/bert/", f"{embedder_prefix}realm/")
-            name = name.replace("module/module/module/cls/predictions/", f"{embedder_prefix}cls/predictions/")
-        elif name.startswith("module/module/"):  # pretrained
-            embedder_prefix = "" if isinstance(model, RealmEmbedder) else "embedder/"
-            name = name.replace("module/module/LayerNorm/", f"{embedder_prefix}cls/LayerNorm/")
-            name = name.replace("module/module/dense/", f"{embedder_prefix}cls/dense/")
-
-        name = name.split("/")
-        # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
-        # which are not required for using pretrained model
-        if any(
-            n in ["adam_v", "adam_m", "AdamWeightDecayOptimizer", "AdamWeightDecayOptimizer_1", "global_step"]
-            for n in name
-        ):
-            logger.info(f"Skipping {'/'.join(name)}")
-            continue
-        pointer = model
-        for m_name in name:
-            if re.fullmatch(r"[A-Za-z]+_\d+", m_name):
-                scope_names = re.split(r"_(\d+)", m_name)
-            else:
-                scope_names = [m_name]
-            if scope_names[0] == "kernel" or scope_names[0] == "gamma":
-                pointer = getattr(pointer, "weight")
-            elif scope_names[0] == "output_bias" or scope_names[0] == "beta":
-                pointer = getattr(pointer, "bias")
-            else:
-                try:
-                    pointer = getattr(pointer, scope_names[0])
-                except AttributeError:
-                    logger.info(f"Skipping {'/'.join(name)}")
-                    continue
-            if len(scope_names) >= 2:
-                num = int(scope_names[1])
-                pointer = pointer[num]
-        if m_name[-11:] == "_embeddings":
-            pointer = getattr(pointer, "weight")
-        elif m_name == "kernel":
-            array = np.transpose(array)
-        try:
-            assert pointer.shape == array.shape, (
-                f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
-            )
-        except AssertionError as e:
-            e.args += (pointer.shape, array.shape)
-            raise
-        logger.info(f"Initialize PyTorch weight {name}")
-        pointer.data = torch.from_numpy(array)
-    return model
 
 
 class RealmEmbeddings(nn.Module):
@@ -160,8 +54,6 @@ class RealmEmbeddings(nn.Module):
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
-        # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
-        # any TensorFlow checkpoint file
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
@@ -247,6 +139,7 @@ class RealmSelfAttention(nn.Module):
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -254,7 +147,7 @@ class RealmSelfAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
         mixed_query_layer = self.query(hidden_states)
@@ -264,27 +157,27 @@ class RealmSelfAttention(nn.Module):
         # such that the encoder's padding tokens are not attended to.
         is_cross_attention = encoder_hidden_states is not None
 
-        if is_cross_attention and past_key_value is not None:
+        if is_cross_attention and past_key_values is not None:
             # reuse k,v, cross_attentions
-            key_layer = past_key_value[0]
-            value_layer = past_key_value[1]
+            key_layer = past_key_values[0]
+            value_layer = past_key_values[1]
             attention_mask = encoder_attention_mask
         elif is_cross_attention:
             key_layer = self.transpose_for_scores(self.key(encoder_hidden_states))
             value_layer = self.transpose_for_scores(self.value(encoder_hidden_states))
             attention_mask = encoder_attention_mask
-        elif past_key_value is not None:
+        elif past_key_values is not None:
             key_layer = self.transpose_for_scores(self.key(hidden_states))
             value_layer = self.transpose_for_scores(self.value(hidden_states))
-            key_layer = torch.cat([past_key_value[0], key_layer], dim=2)
-            value_layer = torch.cat([past_key_value[1], value_layer], dim=2)
+            key_layer = torch.cat([past_key_values[0], key_layer], dim=2)
+            value_layer = torch.cat([past_key_values[1], value_layer], dim=2)
         else:
             key_layer = self.transpose_for_scores(self.key(hidden_states))
             value_layer = self.transpose_for_scores(self.value(hidden_states))
 
         query_layer = self.transpose_for_scores(mixed_query_layer)
 
-        use_cache = past_key_value is not None
+        use_cache = past_key_values is not None
         if self.is_decoder:
             # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
             # Further calls to cross_attention layer can then reuse all cross-attention
@@ -292,8 +185,8 @@ class RealmSelfAttention(nn.Module):
             # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
             # all previous decoder key/value_states. Further calls to uni-directional self-attention
             # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
-            # if encoder bi-directional self-attention `past_key_value` is always `None`
-            past_key_value = (key_layer, value_layer)
+            # if encoder bi-directional self-attention `past_key_values` is always `None`
+            past_key_values = (key_layer, value_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -345,7 +238,7 @@ class RealmSelfAttention(nn.Module):
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
         if self.is_decoder:
-            outputs = outputs + (past_key_value,)
+            outputs = outputs + (past_key_values,)
         return outputs
 
 
@@ -395,6 +288,7 @@ class RealmAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -402,7 +296,7 @@ class RealmAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
         self_outputs = self.self(
@@ -411,7 +305,7 @@ class RealmAttention(nn.Module):
             head_mask,
             encoder_hidden_states,
             encoder_attention_mask,
-            past_key_value,
+            past_key_values,
             output_attentions,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
@@ -463,6 +357,7 @@ class RealmLayer(GradientCheckpointingLayer):
         self.intermediate = RealmIntermediate(config)
         self.output = RealmOutput(config)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -470,17 +365,17 @@ class RealmLayer(GradientCheckpointingLayer):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
+        self_attn_past_key_value = past_key_values[:2] if past_key_values is not None else None
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask,
             head_mask,
             output_attentions=output_attentions,
-            past_key_value=self_attn_past_key_value,
+            past_key_values=self_attn_past_key_value,
         )
         attention_output = self_attention_outputs[0]
 
@@ -499,8 +394,8 @@ class RealmLayer(GradientCheckpointingLayer):
                     " by setting `config.add_cross_attention=True`"
                 )
 
-            # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
-            cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
+            # cross_attn cached key/values tuple is at positions 3,4 of past_key_values tuple
+            cross_attn_past_key_value = past_key_values[-2:] if past_key_values is not None else None
             cross_attention_outputs = self.crossattention(
                 attention_output,
                 attention_mask,
@@ -548,7 +443,7 @@ class RealmEncoder(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
@@ -571,7 +466,6 @@ class RealmEncoder(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
-            past_key_value = past_key_values[i] if past_key_values is not None else None
 
             layer_outputs = layer_module(
                 hidden_states,
@@ -579,7 +473,7 @@ class RealmEncoder(nn.Module):
                 layer_head_mask,
                 encoder_hidden_states,
                 encoder_attention_mask,
-                past_key_value,
+                past_key_values[i] if past_key_values is not None else None,
                 output_attentions,
             )
 
@@ -716,12 +610,12 @@ class RealmReaderOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     retriever_loss: Optional[torch.FloatTensor] = None
     reader_loss: Optional[torch.FloatTensor] = None
-    retriever_correct: torch.BoolTensor = None
-    reader_correct: torch.BoolTensor = None
+    retriever_correct: Optional[torch.BoolTensor] = None
+    reader_correct: Optional[torch.BoolTensor] = None
     block_idx: Optional[torch.LongTensor] = None
     candidate: Optional[torch.LongTensor] = None
-    start_pos: torch.int32 = None
-    end_pos: torch.int32 = None
+    start_pos: Optional[torch.IntTensor] = None
+    end_pos: Optional[torch.IntTensor] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
 
@@ -739,7 +633,7 @@ class RealmForOpenQAOutput(ModelOutput):
             Predicted answer ids.
     """
 
-    reader_output: dict = None
+    reader_output: Optional[dict] = None
     predicted_answer_ids: Optional[torch.LongTensor] = None
 
 
@@ -941,14 +835,11 @@ class RealmPreTrainedModel(PreTrainedModel):
     """
 
     config: RealmConfig
-    load_tf_weights = load_tf_weights_in_realm
     base_model_prefix = "realm"
 
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -1847,5 +1738,4 @@ __all__ = [
     "RealmPreTrainedModel",
     "RealmReader",
     "RealmScorer",
-    "load_tf_weights_in_realm",
 ]

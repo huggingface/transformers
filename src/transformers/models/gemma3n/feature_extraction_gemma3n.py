@@ -108,7 +108,7 @@ def _unfold(array: np.ndarray, dimension: int, size: int, step: int) -> np.ndarr
 
 
 class Gemma3nAudioFeatureExtractor(SequenceFeatureExtractor):
-    """An audio feature extractor Universal Speech Models https://arxiv.org/abs/2303.01037.
+    """An audio feature extractor Universal Speech Models https://huggingface.co/papers/2303.01037.
 
     Args:
         feature_size (`int`, *optional*, defaults to 128):
@@ -261,7 +261,7 @@ class Gemma3nAudioFeatureExtractor(SequenceFeatureExtractor):
         if self.per_bin_stddev is not None:
             log_mel_spec = log_mel_spec / self.per_bin_stddev  # Broadcasting
 
-        mel_spectrogram = log_mel_spec.squeeze()
+        mel_spectrogram = log_mel_spec.squeeze(0)
         mask = attention_mask[:: self.hop_length].astype(bool)
         # TODO: The filtered mask is always exactly 3 elements longer than the mel_spectrogram. Why???
         return mel_spectrogram, mask[: mel_spectrogram.shape[0]]
@@ -281,7 +281,7 @@ class Gemma3nAudioFeatureExtractor(SequenceFeatureExtractor):
 
         This implementation uses a different algorithm for windowing and preemphasis compared to the built-in
         `transformers.audio_utils.spectrogram()` function that _will_ result in different outputs. Consider this
-        carefully when selecting an audio feature extactor, especially with pre-trained models.
+        carefully when selecting an audio feature extractor, especially with pre-trained models.
 
         Args:
             raw_speech:
@@ -296,7 +296,7 @@ class Gemma3nAudioFeatureExtractor(SequenceFeatureExtractor):
             pad_to_multiple_of (`int`, *optional*, defaults to 128):
                 When padding, pad to a multiple of this value. The default value is defined for optimal TPU support.
             return_tensors (`Union[str, TensorType]`, *optional*, defaults to `None`):
-                The type of tensors to return (e.g., NumPy, Torch, JAX, TensorFlow).
+                The type of tensors to return (e.g., NumPy, or Torch).
             return_attention_mask (`bool`, *optional*, defaults to `True`):
                 Whether to return the attention mask for the generated MEL spectrograms.
         """

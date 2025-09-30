@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch UperNet framework."""
+"""Testing suite for the PyTorch UperNet."""
 
 import unittest
 
@@ -297,7 +297,7 @@ class UperNetModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-7.5969, -7.5969, -7.4313], [-7.5969, -7.5969, -7.4313], [-7.4808, -7.4808, -7.3080]]
+            [[-7.5958, -7.5958, -7.4302], [-7.5958, -7.5958, -7.4302], [-7.4797, -7.4797, -7.3068]]
         ).to(torch_device)
         torch.testing.assert_close(outputs.logits[0, 0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 

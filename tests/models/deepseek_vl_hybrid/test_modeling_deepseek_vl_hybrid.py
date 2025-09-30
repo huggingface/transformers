@@ -28,7 +28,6 @@ from transformers import (
 from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -219,12 +218,11 @@ class DeepseekVLHybridModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
             torch.testing.assert_close(out_embeds, out_ids)
 
-    @unittest.skip(reason="Siglip uses the same initialization scheme as the Flax original implementation")
+    @unittest.skip(reason="Siglip uses a non-standard initialization scheme")
     # Copied from tests.models.siglip.test_modeling_siglip.SiglipVisionModelTest.test_initialization
     def test_initialization(self):
         pass
 
-    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -289,7 +287,7 @@ class DeepseekVLHybridIntegrationTest(unittest.TestCase):
 
     def test_model_text_generation(self):
         model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
-            self.model_id, torch_dtype="auto", device_map="auto"
+            self.model_id, dtype="auto", device_map="auto"
         )
         model.to(torch_device)
         model.eval()
@@ -323,7 +321,7 @@ class DeepseekVLHybridIntegrationTest(unittest.TestCase):
 
     def test_model_text_generation_batched(self):
         model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
-            self.model_id, torch_dtype="auto", device_map="auto"
+            self.model_id, dtype="auto", device_map="auto"
         )
         model.to(torch_device)
         model.eval()
@@ -371,7 +369,7 @@ class DeepseekVLHybridIntegrationTest(unittest.TestCase):
 
     def test_model_text_generation_with_multi_image(self):
         model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
-            self.model_id, torch_dtype="auto", device_map="auto"
+            self.model_id, dtype="auto", device_map="auto"
         )
         model.to(torch_device)
         model.eval()
@@ -384,7 +382,10 @@ class DeepseekVLHybridIntegrationTest(unittest.TestCase):
                     {"type": "text", "text": "What's the difference between"},
                     {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
                     {"type": "text", "text": " and "},
-                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                    {
+                        "type": "image",
+                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                    },
                 ],
             }
         ]

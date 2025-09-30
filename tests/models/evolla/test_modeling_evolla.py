@@ -15,6 +15,7 @@
 """Testing suite for the PyTorch Evolla model."""
 
 import unittest
+from functools import cached_property
 
 from parameterized import parameterized
 
@@ -23,12 +24,8 @@ from transformers.testing_utils import (
     TestCasePlus,
     require_bitsandbytes,
     require_torch,
-    require_torch_sdpa,
     slow,
     torch_device,
-)
-from transformers.utils import (
-    cached_property,
 )
 
 from ...test_configuration_common import ConfigTester
@@ -260,7 +257,7 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_saprot_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
-        protein_informations = {
+        protein_information = {
             "input_ids": inputs_dict["protein_input_ids"],
             "attention_mask": inputs_dict["protein_attention_mask"],
         }
@@ -270,13 +267,13 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             model = model_class(config)
             model.to(torch_device)
             model.eval()
-            protein_encoder_outputs = model.protein_encoder.model(**protein_informations, return_dict=True)
+            protein_encoder_outputs = model.protein_encoder.model(**protein_information, return_dict=True)
             print(model_class, protein_encoder_outputs)
 
     def test_protein_encoder_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
-        protein_informations = {
+        protein_information = {
             "input_ids": inputs_dict["protein_input_ids"],
             "attention_mask": inputs_dict["protein_attention_mask"],
         }
@@ -286,7 +283,7 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             model = model_class(config)
             model.to(torch_device)
             model.eval()
-            protein_encoder_outputs = model.protein_encoder(**protein_informations, return_dict=True)
+            protein_encoder_outputs = model.protein_encoder(**protein_information, return_dict=True)
             print(model_class, protein_encoder_outputs)
 
     def test_single_forward(self):
@@ -324,7 +321,6 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     )
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    @require_torch_sdpa
     @unittest.skip("Evolla requires both text and protein inputs which is currently not done in this test.")
     def test_eager_matches_sdpa_inference(self):
         pass

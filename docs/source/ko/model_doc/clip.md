@@ -85,13 +85,13 @@ pip install -U flash-attn --no-build-isolation
 >>> from transformers import CLIPProcessor, CLIPModel
 
 >>> device = "cuda"
->>> torch_dtype = torch.float16
+>>> dtype = torch.float16
 
 >>> model = CLIPModel.from_pretrained(
 ...     "openai/clip-vit-base-patch32",
 ...     attn_implementation="flash_attention_2",
 ...     device_map=device,
-...     torch_dtype=torch_dtype,
+...     dtype=dtype,
 ... )
 >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
@@ -121,7 +121,7 @@ tensor([[0.9946, 0.0052]], device='cuda:0', dtype=torch.float16)
 ```python
 from transformers import CLIPModel
 
-model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32", torch_dtype=torch.float16, attn_implementation="sdpa")
+model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32", dtype=torch.float16, attn_implementation="sdpa")
 ```
 
 최고의 속도향상을 위해서, 반정밀도로 모델을 로드하는 것을 추천합니다. (예를들면 `torch.float16` 또는 `torch.bfloat16`).
@@ -234,8 +234,6 @@ CLIP을 시작하는 데 도움이 되는 Hugging Face와 community 자료 목�
 
 [[autodoc]] CLIPProcessor
 
-<frameworkcontent>
-<pt>
 
 ## CLIPModel[[transformers.CLIPModel]]
 
@@ -269,50 +267,3 @@ CLIP을 시작하는 데 도움이 되는 Hugging Face와 community 자료 목�
 [[autodoc]] CLIPForImageClassification
     - forward
 
-</pt>
-<tf>
-
-## TFCLIPModel[[transformers.TFCLIPModel]]
-
-[[autodoc]] TFCLIPModel
-    - call
-    - get_text_features
-    - get_image_features
-
-## TFCLIPTextModel[[transformers.TFCLIPTextModel]]
-
-[[autodoc]] TFCLIPTextModel
-    - call
-
-## TFCLIPVisionModel[[transformers.TFCLIPVisionModel]]
-
-[[autodoc]] TFCLIPVisionModel
-    - call
-
-</tf>
-<jax>
-
-## FlaxCLIPModel[[transformers.FlaxCLIPModel]]
-
-[[autodoc]] FlaxCLIPModel
-    - __call__
-    - get_text_features
-    - get_image_features
-
-## FlaxCLIPTextModel[[transformers.FlaxCLIPTextModel]]
-
-[[autodoc]] FlaxCLIPTextModel
-    - __call__
-
-## FlaxCLIPTextModelWithProjection[[transformers.FlaxCLIPTextModelWithProjection]]
-
-[[autodoc]] FlaxCLIPTextModelWithProjection
-    - __call__
-
-## FlaxCLIPVisionModel[[transformers.FlaxCLIPVisionModel]]
-
-[[autodoc]] FlaxCLIPVisionModel
-    - __call__
-
-</jax>
-</frameworkcontent>

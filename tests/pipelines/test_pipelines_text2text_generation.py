@@ -16,7 +16,6 @@ import unittest
 
 from transformers import (
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
-    TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     Text2TextGenerationPipeline,
     pipeline,
 )
@@ -33,7 +32,6 @@ if is_torch_available():
 @is_pipeline_test
 class Text2TextGenerationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
-    tf_model_mapping = TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
 
     def get_test_pipeline(
         self,
@@ -42,7 +40,7 @@ class Text2TextGenerationPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        torch_dtype="float32",
+        dtype="float32",
     ):
         generator = Text2TextGenerationPipeline(
             model=model,
@@ -50,7 +48,7 @@ class Text2TextGenerationPipelineTests(unittest.TestCase):
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             processor=processor,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
             max_new_tokens=20,
         )
         return generator, ["Something to write", "Something else"]
@@ -89,7 +87,6 @@ class Text2TextGenerationPipelineTests(unittest.TestCase):
         generator = pipeline(
             "text2text-generation",
             model="patrickvonplaten/t5-tiny-random",
-            framework="pt",
             num_beams=1,
             max_new_tokens=9,
         )

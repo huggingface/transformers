@@ -152,7 +152,6 @@ class CsmProcessor(ProcessorMixin):
                 padding_left = padding_total
                 padding_right = extra_padding
             else:
-                padding_left = padding_left
                 padding_right = padding_right + extra_padding
 
             cur_length = cur_length + padding_left + padding_right
@@ -226,10 +225,8 @@ class CsmProcessor(ProcessorMixin):
                 The ratio of audio frames to keep for the depth decoder labels.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
-                    - `'tf'`: Return TensorFlow `tf.constant` objects.
                     - `'pt'`: Return PyTorch `torch.Tensor` objects.
                     - `'np'`: Return NumPy `np.ndarray` objects.
-                    - `'jax'`: Return JAX `jnp.ndarray` objects.
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
@@ -359,6 +356,16 @@ class CsmProcessor(ProcessorMixin):
             data["labels"] = labels
 
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+    @property
+    def model_input_names(self):
+        tokenizer_input_names = self.tokenizer.model_input_names
+        feature_extractor_input_names = self.feature_extractor.model_input_names
+
+        # Remove `padding_mask`, it is popped and not used when processing. Make a copy of list when removing
+        # otherwise `self.feature_extractor.model_input_names` is also modified
+        feature_extractor_input_names = [name for name in feature_extractor_input_names if name != "padding_mask"]
+        return list(tokenizer_input_names + feature_extractor_input_names + ["input_values_cutoffs"])
 
 
 __all__ = ["CsmProcessor"]

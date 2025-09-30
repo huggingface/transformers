@@ -26,7 +26,7 @@ Call [`~PreTrainedModel.from_pretrained`] to download and load a model's weights
 ```py
 from transformers import AutoModelForCausalLM
 
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", torch_dtype="auto", device_map="auto")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", dtype="auto", device_map="auto")
 ```
 
 This guide explains how models are loaded, the different ways you can load a model, how to overcome memory issues for really big models, and how to load custom models.
@@ -44,44 +44,6 @@ There are two general types of models you can load:
 
 1. A barebones model, like [`AutoModel`] or [`LlamaModel`], that outputs hidden states.
 2. A model with a specific *head* attached, like [`AutoModelForCausalLM`] or [`LlamaForCausalLM`], for performing specific tasks.
-
-For each model type, there is a separate class for each machine learning framework (PyTorch, TensorFlow, Flax). Pick the corresponding prefix for the framework you're using.
-
-<hfoptions id="backend">
-<hfoption id="PyTorch">
-
-```py
-from transformers import AutoModelForCausalLM, MistralForCausalLM
-
-# load with AutoClass or model-specific class
-model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", torch_dtype="auto", device_map="auto")
-model = MistralForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", torch_dtype="auto", device_map="auto")
-```
-
-</hfoption>
-<hfoption id="TensorFlow">
-
-```py
-from transformers import TFAutoModelForCausalLM, TFMistralForCausalLM
-
-# load with AutoClass or model-specific class
-model = TFAutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1")
-model = TFMistralForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1")
-```
-
-</hfoption>
-<hfoption id="Flax">
-
-```py
-from transformers import FlaxAutoModelForCausalLM, FlaxMistralForCausalLM
-
-# load with AutoClass or model-specific class
-model = FlaxAutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1")
-model = FlaxMistralForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1")
-```
-
-</hfoption>
-</hfoptions>
 
 ## Model classes
 
@@ -147,7 +109,6 @@ Large pretrained models require a lot of memory to load. The loading process inv
 You need enough memory to hold two copies of the model weights (random and pretrained) which may not be possible depending on your hardware. In distributed training environments, this is even more challenging because each process loads a pretrained model.
 
 Transformers reduces some of these memory-related challenges with fast initialization, sharded checkpoints, Accelerate's [Big Model Inference](https://hf.co/docs/accelerate/usage_guides/big_modeling) feature, and supporting lower bit data types.
-
 
 ### Sharded checkpoints
 
@@ -261,7 +222,7 @@ model.hf_device_map
 
 PyTorch model weights are initialized in `torch.float32` by default. Loading a model in a different data type, like `torch.float16`, requires additional memory because the model is loaded again in the desired data type.
 
-Explicitly set the [torch_dtype](https://pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) parameter to directly initialize the model in the desired data type instead of loading the weights twice (`torch.float32` then `torch.float16`). You could also set `torch_dtype="auto"` to automatically load the weights in the data type they are stored in.
+Explicitly set the [dtype](https://pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) parameter to directly initialize the model in the desired data type instead of loading the weights twice (`torch.float32` then `torch.float16`). You could also set `dtype="auto"` to automatically load the weights in the data type they are stored in.
 
 <hfoptions id="dtype">
 <hfoption id="specific dtype">
@@ -270,7 +231,7 @@ Explicitly set the [torch_dtype](https://pytorch.org/docs/stable/tensor_attribut
 import torch
 from transformers import AutoModelForCausalLM
 
-gemma = AutoModelForCausalLM.from_pretrained("google/gemma-7b", torch_dtype=torch.float16)
+gemma = AutoModelForCausalLM.from_pretrained("google/gemma-7b", dtype=torch.float16)
 ```
 
 </hfoption>
@@ -279,19 +240,19 @@ gemma = AutoModelForCausalLM.from_pretrained("google/gemma-7b", torch_dtype=torc
 ```py
 from transformers import AutoModelForCausalLM
 
-gemma = AutoModelForCausalLM.from_pretrained("google/gemma-7b", torch_dtype="auto")
+gemma = AutoModelForCausalLM.from_pretrained("google/gemma-7b", dtype="auto")
 ```
 
 </hfoption>
 </hfoptions>
 
-The `torch_dtype` parameter can also be configured in [`AutoConfig`] for models instantiated from scratch.
+The `dtype` parameter can also be configured in [`AutoConfig`] for models instantiated from scratch.
 
 ```py
 import torch
 from transformers import AutoConfig, AutoModel
 
-my_config = AutoConfig.from_pretrained("google/gemma-2b", torch_dtype=torch.float16)
+my_config = AutoConfig.from_pretrained("google/gemma-2b", dtype=torch.float16)
 model = AutoModel.from_config(my_config)
 ```
 

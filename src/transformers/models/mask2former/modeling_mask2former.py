@@ -28,6 +28,7 @@ from ...file_utils import ModelOutput, is_scipy_available, requires_backends
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import auto_docstring, is_accelerate_available, logging
 from ...utils.backbone_utils import load_backbone
 from .configuration_mask2former import Mask2FormerConfig
@@ -64,7 +65,7 @@ class Mask2FormerPixelDecoderOutput(ModelOutput):
         or when `config.output_attentions=True`
     """
 
-    multi_scale_features: tuple[torch.FloatTensor] = None
+    multi_scale_features: Optional[tuple[torch.FloatTensor]] = None
     mask_features: Optional[torch.FloatTensor] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
 
@@ -97,8 +98,8 @@ class Mask2FormerMaskedAttentionDecoderOutput(BaseModelOutputWithCrossAttentions
     last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[torch.FloatTensor] = None
-    masks_queries_logits: tuple[torch.FloatTensor] = None
-    intermediate_hidden_states: tuple[torch.FloatTensor] = None
+    masks_queries_logits: Optional[tuple[torch.FloatTensor]] = None
+    intermediate_hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -131,7 +132,7 @@ class Mask2FormerPixelLevelModuleOutput(ModelOutput):
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
     decoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    decoder_hidden_states: tuple[torch.FloatTensor] = None
+    decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -177,8 +178,8 @@ class Mask2FormerModelOutput(ModelOutput):
     encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
     pixel_decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
     transformer_decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    transformer_decoder_intermediate_states: tuple[torch.FloatTensor] = None
-    masks_queries_logits: tuple[torch.FloatTensor] = None
+    transformer_decoder_intermediate_states: Optional[tuple[torch.FloatTensor]] = None
+    masks_queries_logits: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
@@ -855,10 +856,17 @@ class Mask2FormerSinePositionEmbedding(nn.Module):
         self.normalize = normalize
         self.scale = 2 * math.pi if scale is None else scale
 
-    def forward(self, x: Tensor, mask: Optional[Tensor] = None) -> Tensor:
+    @compile_compatible_method_lru_cache(maxsize=1)
+    def forward(
+        self,
+        shape: torch.Size,
+        device: Union[torch.device, str],
+        dtype: torch.dtype,
+        mask: Optional[Tensor] = None,
+    ) -> Tensor:
         if mask is None:
-            mask = torch.zeros((x.size(0), x.size(2), x.size(3)), device=x.device, dtype=torch.bool)
-        not_mask = (~mask).to(x.dtype)
+            mask = torch.zeros((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
+        not_mask = (~mask).to(dtype)
         y_embed = not_mask.cumsum(1)
         x_embed = not_mask.cumsum(2)
         if self.normalize:
@@ -866,7 +874,7 @@ class Mask2FormerSinePositionEmbedding(nn.Module):
             y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
             x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
 
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=x.device).type_as(x)
+        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=device).to(dtype)
         dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_pos_feats)
 
         pos_x = x_embed[:, :, :, None] / dim_t
@@ -1295,7 +1303,7 @@ class Mask2FormerPixelDecoder(nn.Module):
         position_embeddings = []
         for level, x in enumerate(features[::-1][: self.num_feature_levels]):
             input_embeds.append(self.input_projections[level](x))
-            position_embeddings.append(self.position_embedding(x))
+            position_embeddings.append(self.position_embedding(x.shape, x.device, x.dtype))
 
         masks = [
             torch.zeros((x.size(0), x.size(2), x.size(3)), device=x.device, dtype=torch.bool) for x in input_embeds
@@ -2052,7 +2060,11 @@ class Mask2FormerTransformerModule(nn.Module):
 
         for i in range(self.num_feature_levels):
             size_list.append(multi_scale_features[i].shape[-2:])
-            multi_stage_positional_embeddings.append(self.position_embedder(multi_scale_features[i], None).flatten(2))
+            multi_stage_positional_embeddings.append(
+                self.position_embedder(
+                    multi_scale_features[i].shape, multi_scale_features[i].device, multi_scale_features[i].dtype, None
+                ).flatten(2)
+            )
             multi_stage_features.append(
                 self.input_projections[i](multi_scale_features[i]).flatten(2)
                 + self.level_embed.weight[i][None, :, None]

@@ -171,6 +171,12 @@ if __name__ == "__main__":
     print(f"start_commit: {args.start_commit}")
     print(f"end_commit: {args.end_commit}")
 
+    # `get_commit_info` uses `requests.get()` to request info. via `api.github.com` without using token.
+    # If there are many new failed tests in a workflow run, this script may fail at some point with `KeyError` at
+    # `pr_number = pr_info_for_commit[0]["number"]` due to the rate limit.
+    # Let's cache the commit info. and reuse them whenever possible.
+    commit_info_cache = {}
+
     if len({args.test is None, args.file is None}) != 2:
         raise ValueError("Exactly one argument `test` or `file` must be specified.")
 
@@ -191,7 +197,14 @@ if __name__ == "__main__":
             for test in failed_tests:
                 commit = find_bad_commit(target_test=test, start_commit=args.start_commit, end_commit=args.end_commit)
                 info = {"test": test, "commit": commit}
-                info.update(get_commit_info(commit))
+
+                if commit in commit_info_cache:
+                    commit_info = commit_info_cache[commit]
+                else:
+                    commit_info = get_commit_info(commit)
+                    commit_info_cache[commit] = commit_info
+
+                info.update(commit_info)
                 failed_tests_with_bad_commits.append(info)
 
             # If no single-gpu test failures, remove the key

@@ -27,7 +27,6 @@ from transformers import (
 from transformers.testing_utils import (
     cleanup,
     require_torch,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -128,7 +127,7 @@ class GraniteSpeechForConditionalGenerationModelTester:
         self.audio_token_index = audio_token_index
         self.tie_word_embeddings = tie_word_embeddings
         self.initializer_range = initializer_range
-        self.has_lora_adapater = has_lora_adapter
+        self.has_lora_adapter = has_lora_adapter
         self.downsample_rate = downsample_rate
         self.window_size = window_size
         self.is_training = is_training
@@ -153,7 +152,7 @@ class GraniteSpeechForConditionalGenerationModelTester:
             audio_token_index=self.audio_token_index,
             tie_word_embeddings=self.tie_word_embeddings,
             initializer_range=self.initializer_range,
-            has_lora_adapter=self.has_lora_adapater,
+            has_lora_adapter=self.has_lora_adapter,
         )
 
     def prepare_config_and_inputs(self):
@@ -199,7 +198,7 @@ class GraniteSpeechForConditionalGenerationModelTester:
         input_features,
         attention_mask,
     ):
-        config.torch_dtype = torch.float16
+        config.dtype = torch.float16
         model = GraniteSpeechForConditionalGeneration(config=config)
         model.to(torch_device)
         model.eval()
@@ -269,7 +268,6 @@ class GraniteSpeechForConditionalGenerationModelTest(ModelTesterMixin, Generatio
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
 
-    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         # overwrite because Granite Speech is audio+text model (not vision+text)
         if not self.has_attentions:
@@ -308,7 +306,6 @@ class GraniteSpeechForConditionalGenerationModelTest(ModelTesterMixin, Generatio
                         raise ValueError("The eager model should not have SDPA attention layers")
 
     @pytest.mark.generate
-    @require_torch_sdpa
     @slow
     @unittest.skip(reason="Granite Speech doesn't support SDPA for all backbones")
     def test_eager_matches_sdpa_generate(self):

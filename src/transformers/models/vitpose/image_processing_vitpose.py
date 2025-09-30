@@ -29,7 +29,7 @@ from ...image_utils import (
     ImageInput,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
 )
@@ -373,19 +373,19 @@ class VitPoseImageProcessor(BaseImageProcessor):
 
     def affine_transform(
         self,
-        image: np.array,
+        image: np.ndarray,
         center: tuple[float],
         scale: tuple[float],
         rotation: float,
         size: dict[str, int],
         data_format: Optional[ChannelDimension] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> np.array:
+    ) -> np.ndarray:
         """
         Apply an affine transformation to an image.
 
         Args:
-            image (`np.array`):
+            image (`np.ndarray`):
                 Image to transform.
             center (`tuple[float]`):
                 Center of the bounding box (x, y).
@@ -465,10 +465,8 @@ class VitPoseImageProcessor(BaseImageProcessor):
             return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to `'np'`):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -484,13 +482,10 @@ class VitPoseImageProcessor(BaseImageProcessor):
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
 
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         if isinstance(boxes, list) and len(images) != len(boxes):
             raise ValueError(f"Batch of images and boxes mismatch : {len(images)} != {len(boxes)}")

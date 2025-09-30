@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-10-02 and added to Hugging Face Transformers on 2025-02-10.*
 
 # DepthPro
 
@@ -45,9 +46,9 @@ The DepthPro model processes an input image by first downsampling it at multiple
 >>> import requests
 >>> from PIL import Image
 >>> import torch
->>> from transformers import DepthProImageProcessorFast, DepthProForDepthEstimation
+>>> from transformers import DepthProImageProcessorFast, DepthProForDepthEstimation, infer_device
 
->>> device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+>>> device = infer_device()
 
 >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
 >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -55,7 +56,7 @@ The DepthPro model processes an input image by first downsampling it at multiple
 >>> image_processor = DepthProImageProcessorFast.from_pretrained("apple/DepthPro-hf")
 >>> model = DepthProForDepthEstimation.from_pretrained("apple/DepthPro-hf").to(device)
 
->>> inputs = image_processor(images=image, return_tensors="pt").to(device)
+>>> inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 
 >>> with torch.no_grad():
 ...     outputs = model(**inputs)
@@ -101,12 +102,14 @@ The network is supplemented with a focal length estimation head. A small convolu
 The `use_fov_model` parameter in `DepthProConfig` controls whether **FOV prediction** is enabled. By default, it is set to `False` to conserve memory and computation. When enabled, the **FOV encoder** is instantiated based on the `fov_model_config` parameter, which defaults to a `Dinov2Model`. The `use_fov_model` parameter can also be passed when initializing the `DepthProForDepthEstimation` model.
 
 The pretrained model at checkpoint `apple/DepthPro-hf` uses the FOV encoder. To use the pretrained-model without FOV encoder, set `use_fov_model=False` when loading the model, which saves computation.
+
 ```py
 >>> from transformers import DepthProForDepthEstimation
 >>> model = DepthProForDepthEstimation.from_pretrained("apple/DepthPro-hf", use_fov_model=False)
 ```
 
 To instantiate a new model with FOV encoder, set `use_fov_model=True` in the config.
+
 ```py
 >>> from transformers import DepthProConfig, DepthProForDepthEstimation
 >>> config = DepthProConfig(use_fov_model=True)
@@ -114,6 +117,7 @@ To instantiate a new model with FOV encoder, set `use_fov_model=True` in the con
 ```
 
 Or set `use_fov_model=True` when initializing the model, which overrides the value in config.
+
 ```py
 >>> from transformers import DepthProConfig, DepthProForDepthEstimation
 >>> config = DepthProConfig()
@@ -122,18 +126,18 @@ Or set `use_fov_model=True` when initializing the model, which overrides the val
 
 ### Using Scaled Dot Product Attention (SDPA)
 
-PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function 
-encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the 
-[official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) 
+PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function
+encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the
+[official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html)
 or the [GPU Inference](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention)
 page for more information.
 
-SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set 
+SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set
 `attn_implementation="sdpa"` in `from_pretrained()` to explicitly request SDPA to be used.
 
 ```py
 from transformers import DepthProForDepthEstimation
-model = DepthProForDepthEstimation.from_pretrained("apple/DepthPro-hf", attn_implementation="sdpa", torch_dtype=torch.float16)
+model = DepthProForDepthEstimation.from_pretrained("apple/DepthPro-hf", attn_implementation="sdpa", dtype=torch.float16)
 ```
 
 For the best speedups, we recommend loading the model in half-precision (e.g. `torch.float16` or `torch.bfloat16`).

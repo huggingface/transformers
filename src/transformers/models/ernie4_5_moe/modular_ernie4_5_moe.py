@@ -22,6 +22,7 @@ from torch import nn
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import MoeModelOutputWithPast
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import OutputRecorder, check_model_inputs
@@ -167,8 +168,8 @@ class Ernie4_5_MoeSparseMoeBlock(nn.Module):
         expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
 
         # Loop over all available experts in the model and perform the computation on each expert
-        expert_hitted = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-        for expert_idx in expert_hitted:
+        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+        for expert_idx in expert_hit:
             expert_layer = self.experts[expert_idx]
             idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
 
@@ -190,9 +191,9 @@ class Ernie4_5_MoeSparseMoeBlock(nn.Module):
         return final_hidden_states, router_logits
 
 
-class Ernie4_5_MoeDecoderLayer(Qwen3MoeDecoderLayer, nn.Module):
+class Ernie4_5_MoeDecoderLayer(Qwen3MoeDecoderLayer):
     def __init__(self, config, layer_idx):
-        nn.Module().__init__()
+        nn.Module.__init__(self)
         self.hidden_size = config.hidden_size
 
         self.self_attn = Ernie4_5_MoeAttention(config, layer_idx)
@@ -224,7 +225,7 @@ class Ernie4_5_MoePreTrainedModel(MixtralPreTrainedModel):
     }
 
     def _init_weights(self, module):
-        MixtralPreTrainedModel._init_weights(module)
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, Ernie4_5_MoeStatics):
             module.e_score_correction_bias.data.zero_()
 
@@ -264,7 +265,7 @@ class Ernie4_5_MoeModel(Ernie4_5_MoePreTrainedModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -297,7 +298,7 @@ class Ernie4_5_MoeModel(Ernie4_5_MoePreTrainedModel):
                 position_embeddings=position_embeddings,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
-                past_key_value=past_key_values,
+                past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
                 **kwargs,
@@ -312,9 +313,9 @@ class Ernie4_5_MoeModel(Ernie4_5_MoePreTrainedModel):
 
 
 @auto_docstring
-class Ernie4_5_MoeForCausalLM(MixtralForCausalLM, Ernie4_5_MoePreTrainedModel):
+class Ernie4_5_MoeForCausalLM(MixtralForCausalLM):
     def __init__(self, config):
-        Ernie4_5_MoePreTrainedModel().__init__(config)
+        PreTrainedModel.__init__(self, config)
         self.model = Ernie4_5_MoeModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=config.use_bias)

@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-12-18 and added to Hugging Face Transformers on 2022-11-08.*
 
 # CLIPSeg
 
@@ -46,7 +47,7 @@ can be formulated. Finally, we find our system to adapt well
 to generalized queries involving affordances or properties*
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/clipseg_architecture.png"
-alt="drawing" width="600"/> 
+alt="drawing" width="600"/>
 
 <small> CLIPSeg overview. Taken from the <a href="https://huggingface.co/papers/2112.10003">original paper.</a> </small>
 

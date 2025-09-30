@@ -18,6 +18,10 @@ Processor class for CLVP
 """
 
 from ...processing_utils import ProcessorMixin
+from ...utils import logging
+
+
+logger = logging.get_logger(__name__)
 
 
 class ClvpProcessor(ProcessorMixin):
@@ -36,11 +40,6 @@ class ClvpProcessor(ProcessorMixin):
 
     feature_extractor_class = "ClvpFeatureExtractor"
     tokenizer_class = "ClvpTokenizer"
-    model_input_names = [
-        "input_ids",
-        "input_features",
-        "attention_mask",
-    ]
 
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
@@ -51,43 +50,13 @@ class ClvpProcessor(ProcessorMixin):
         argument to [`~ClvpTokenizer.__call__`]. Please refer to the docstring of the above two methods for more
         information.
         """
-
         raw_speech = kwargs.pop("raw_speech", None)
-        sampling_rate = kwargs.pop("sampling_rate", None)
-        text = kwargs.pop("text", None)
-
-        if raw_speech is None and text is None:
-            raise ValueError("You need to specify either an `raw_speech` or `text` input to process.")
-
         if raw_speech is not None:
-            inputs = self.feature_extractor(raw_speech, sampling_rate=sampling_rate, **kwargs)
-        if text is not None:
-            encodings = self.tokenizer(text, **kwargs)
-
-        if text is None:
-            return inputs
-        elif raw_speech is None:
-            return encodings
-        else:
-            inputs["input_ids"] = encodings["input_ids"]
-            inputs["attention_mask"] = encodings["attention_mask"]
-            return inputs
-
-    # Copied from transformers.models.whisper.processing_whisper.WhisperProcessor.batch_decode with Whisper->Clvp
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to ClvpTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    # Copied from transformers.models.whisper.processing_whisper.WhisperProcessor.decode with Whisper->Clvp
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to ClvpTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
+            logger.warning(
+                "Using `raw_speech` keyword argument is deprecated when calling ClvpProcessor, instead use `audio`."
+            )
+        kwargs["audio"] = raw_speech
+        return super().__call__(*args, **kwargs)
 
 
 __all__ = ["ClvpProcessor"]

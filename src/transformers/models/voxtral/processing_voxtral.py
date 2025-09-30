@@ -14,7 +14,6 @@
 # limitations under the License.
 
 import io
-import warnings
 from typing import Optional, Union
 
 from ...utils import is_mistral_common_available, is_soundfile_available, is_torch_available, logging
@@ -89,7 +88,7 @@ class VoxtralProcessor(ProcessorMixin):
 
         super().__init__(feature_extractor, tokenizer)
 
-    def _retreive_input_features(self, audio, max_source_positions, **kwargs):
+    def _retrieve_input_features(self, audio, max_source_positions, **kwargs):
         """
         Handles specific logic of Voxtral expected input features: audio arrays should be padded to next multiple of 480000 (duration is a multiple of 30s), see VoxtralProcessorKwargs' default audio_kwargs.
         Then mel input features are extracted and stacked along batch dimension, splitting into chunks of max_source_positions.
@@ -223,7 +222,7 @@ class VoxtralProcessor(ProcessorMixin):
                 data = dict(encoded_instruct_inputs)
                 if audio is not None:
                     max_source_positions = audio_kwargs.pop("max_source_positions")
-                    data["input_features"] = self._retreive_input_features(audio, max_source_positions, **audio_kwargs)
+                    data["input_features"] = self._retrieve_input_features(audio, max_source_positions, **audio_kwargs)
 
                 return BatchFeature(data=data, tensor_type=return_tensors)
 
@@ -252,10 +251,8 @@ class VoxtralProcessor(ProcessorMixin):
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
-                    - `'tf'`: Return TensorFlow `tf.constant` objects.
                     - `'pt'`: Return PyTorch `torch.Tensor` objects.
                     - `'np'`: Return NumPy `np.ndarray` objects.
-                    - `'jax'`: Return JAX `jnp.ndarray` objects.
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
@@ -424,38 +421,13 @@ class VoxtralProcessor(ProcessorMixin):
 
                 # extract the input features
                 max_source_positions = audio_kwargs.pop("max_source_positions")
-                data["input_features"] = self._retreive_input_features(
+                data["input_features"] = self._retrieve_input_features(
                     audio_arrays, max_source_positions, **audio_kwargs
                 )
 
                 return BatchFeature(data=data, tensor_type=return_tensors)
 
         return texts
-
-    # Deprecated typo'd method for backward compatibility
-    def apply_transcrition_request(self, *args, **kwargs):
-        """
-        Deprecated typo'd method. Use `apply_transcription_request` instead.
-        """
-        warnings.warn(
-            "`apply_transcrition_request` is deprecated due to a typo and will be removed in a future release. Please use `apply_transcription_request` instead.",
-            FutureWarning,
-        )
-        return self.apply_transcription_request(*args, **kwargs)
-
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to MistralCommonTokenizer's [`~MistralCommonTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to MistralCommonTokenizer's [`~MistralCommonTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
 
 
 __all__ = ["VoxtralProcessor"]

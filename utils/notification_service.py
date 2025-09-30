@@ -37,7 +37,6 @@ job_to_test_map = {
     "run_models_gpu": "Models",
     "run_trainer_and_fsdp_gpu": "Trainer & FSDP",
     "run_pipelines_torch_gpu": "PyTorch pipelines",
-    "run_pipelines_tf_gpu": "TensorFlow pipelines",
     "run_examples_gpu": "Examples directory",
     "run_torch_cuda_extensions_gpu": "DeepSpeed",
     "run_quantization_torch_gpu": "Quantization",
@@ -48,7 +47,6 @@ test_to_result_name = {
     "Models": "model",
     "Trainer & FSDP": "trainer_and_fsdp",
     "PyTorch pipelines": "torch_pipeline",
-    "TensorFlow pipelines": "tf_pipeline",
     "Examples directory": "example",
     "DeepSpeed": "deepspeed",
     "Quantization": "quantization",
@@ -80,7 +78,13 @@ def handle_test_results(test_results):
 
     # When the output is short enough, the output is surrounded by = signs: "== OUTPUT =="
     # When it is too long, those signs are not present.
-    time_spent = expressions[-2] if "=" in expressions[-1] else expressions[-1]
+    # It could be `'71.60s', '(0:01:11)', '====\n'` or `'in', '35.01s', '================\n'`.
+    # Let always select the one with `s`.
+    time_spent = expressions[-1]
+    if "=" in time_spent:
+        time_spent = expressions[-2]
+    if "(" in time_spent:
+        time_spent = expressions[-3]
 
     for i, expression in enumerate(expressions):
         if "failed" in expression:
@@ -152,9 +156,11 @@ class Message:
         self.n_model_failures = (
             self.n_model_single_gpu_failures + self.n_model_multi_gpu_failures + self.n_model_unknown_failures
         )
+        self.n_model_jobs_errored_out = sum(r["error"] for r in model_results.values())
 
         # Failures and success of the additional tests
         self.n_additional_success = sum(r["success"] for r in additional_results.values())
+        self.n_additional_jobs_errored_out = sum(r["error"] for r in additional_results.values())
 
         if len(additional_results) > 0:
             # `dicts_to_sum` uses `dicts_to_sum` which requires a non empty dictionary. Let's just add an empty entry.
@@ -177,6 +183,7 @@ class Message:
         self.n_failures = self.n_model_failures + self.n_additional_failures
         self.n_success = self.n_model_success + self.n_additional_success
         self.n_tests = self.n_failures + self.n_success
+        self.n_jobs_errored_out = self.n_model_jobs_errored_out + self.n_additional_jobs_errored_out
 
         self.model_results = model_results
         self.additional_results = additional_results
@@ -193,18 +200,12 @@ class Message:
     @property
     def time(self) -> str:
         all_results = [*self.model_results.values(), *self.additional_results.values()]
-        time_spent = [r["time_spent"].split(", ")[0] for r in all_results if len(r["time_spent"])]
-        total_secs = 0
 
-        for time in time_spent:
-            time_parts = time.split(":")
-
-            # Time can be formatted as xx:xx:xx, as .xx, or as x.xx if the time spent was less than a minute.
-            if len(time_parts) == 1:
-                time_parts = [0, 0, time_parts[0]]
-
-            hours, minutes, seconds = int(time_parts[0]), int(time_parts[1]), float(time_parts[2])
-            total_secs += hours * 3600 + minutes * 60 + seconds
+        time_spent = []
+        for r in all_results:
+            if len(r["time_spent"]):
+                time_spent.extend(r["time_spent"])
+        total_secs = sum(time_spent)
 
         hours, minutes, seconds = total_secs // 3600, (total_secs % 3600) // 60, total_secs % 60
         return f"{int(hours)}h{int(minutes)}m{int(seconds)}s"
@@ -241,6 +242,7 @@ class Message:
                 "type": "plain_text",
                 "text": (
                     f"There were {self.n_failures} failures, out of {self.n_tests} tests.\n"
+                    f"🚨 There were {self.n_jobs_errored_out} jobs errored out (not producing test output files).\n"
                     f"The suite ran in {self.time}."
                 ),
                 "emoji": True,
@@ -390,12 +392,10 @@ class Message:
                 # Model job has a special form for reporting
                 if job_name == "run_models_gpu":
                     pytorch_specific_failures = dict_failed.pop("PyTorch")
-                    tensorflow_specific_failures = dict_failed.pop("TensorFlow")
                     other_failures = dicts_to_sum(dict_failed.values())
 
                     failures[k] = {
                         "PyTorch": pytorch_specific_failures,
-                        "TensorFlow": tensorflow_specific_failures,
                         "other": other_failures,
                     }
 
@@ -429,8 +429,6 @@ class Message:
                 device_report_values = [
                     value["PyTorch"]["single"],
                     value["PyTorch"]["multi"],
-                    value["TensorFlow"]["single"],
-                    value["TensorFlow"]["multi"],
                     sum(value["other"].values()),
                 ]
 
@@ -451,7 +449,7 @@ class Message:
 
         # (Possibly truncated) reports for the current workflow run - to be sent to Slack channels
         if job_name == "run_models_gpu":
-            model_header = "Single PT |  Multi PT | Single TF |  Multi TF |     Other | Category\n"
+            model_header = "Single PT |  Multi PT |     Other | Category\n"
         else:
             model_header = "Single |  Multi | Category\n"
 
@@ -561,7 +559,7 @@ class Message:
         if self.ci_title:
             blocks.append(self.ci_title_section)
 
-        if self.n_model_failures > 0 or self.n_additional_failures > 0:
+        if self.n_model_failures > 0 or self.n_additional_failures > 0 or self.n_jobs_errored_out > 0:
             blocks.append(self.failures)
 
         if self.n_model_failures > 0:
@@ -669,7 +667,7 @@ class Message:
                         "text": {
                             "type": "mrkdwn",
                             # TODO: We should NOT assume it's always Nvidia CI, but it's the case at this moment.
-                            "text": f"*There are {nb_new_failed_tests} failed tests unique to {'this run' if not is_amd_daily_ci_workflow else 'AMD'}*\n\n(compared to Nvidia CI: <https://github.com/huggingface/transformers/actions/runs/{prev_workflow_run_id}|{prev_workflow_run_id}>)",
+                            "text": f"*There are {nb_new_failed_tests} failed tests unique to this run*\n\n(compared to{' Nvidia CI ' if is_scheduled_ci_run else ' '}run: <https://github.com/huggingface/transformers/actions/runs/{prev_workflow_run_id}|{prev_workflow_run_id}>)",
                         },
                         "accessory": {
                             "type": "button",
@@ -1072,18 +1070,14 @@ if __name__ == "__main__":
     pr_number_re = re.compile(r"\(#(\d+)\)$")
 
     # Add Commit/PR title with a link for push CI
-    # (check the title in 2 env. variables - depending on the CI is triggered via `push` or `workflow_run` event)
-    ci_title_push = os.environ.get("CI_TITLE_PUSH")
-    ci_title_workflow_run = os.environ.get("CI_TITLE_WORKFLOW_RUN")
-    ci_title = ci_title_push if ci_title_push else ci_title_workflow_run
-
+    ci_title = os.environ.get("CI_TITLE", "")
     ci_sha = os.environ.get("CI_SHA")
 
     ci_url = None
     if ci_sha:
         ci_url = f"https://github.com/{repository_full_name}/commit/{ci_sha}"
 
-    if ci_title is not None:
+    if ci_title:
         if ci_url is None:
             raise ValueError(
                 "When a title is found (`ci_title`), it means a `push` event or a `workflow_run` even (triggered by "
@@ -1112,9 +1106,9 @@ if __name__ == "__main__":
             merged_by = ci_details["merged_by"]["login"]
 
         if merged_by is None:
-            ci_title = f"<{ci_url}|{ci_title}>\nAuthor: {ci_author}"
+            ci_title = f"<{ci_url}|{ci_title}>\nAuthor: GH_{ci_author}"
         else:
-            ci_title = f"<{ci_url}|{ci_title}>\nAuthor: {ci_author} | Merged by: {merged_by}"
+            ci_title = f"<{ci_url}|{ci_title}>\nAuthor: GH_{ci_author} | Merged by: GH_{merged_by}"
 
     elif ci_sha:
         ci_title = f"<{ci_url}|commit: {ci_sha}>"
@@ -1172,8 +1166,6 @@ if __name__ == "__main__":
 
     test_categories = [
         "PyTorch",
-        "TensorFlow",
-        "Flax",
         "Tokenizers",
         "Pipelines",
         "Trainer",
@@ -1197,9 +1189,19 @@ if __name__ == "__main__":
             "errors": 0,
             "success": 0,
             "skipped": 0,
-            "time_spent": "",
+            "time_spent": [],
+            "error": False,
             "failures": {},
             "job_link": {},
+            "captured_info": {},
+        }
+        for matrix_name in job_matrix
+        if f"{report_name_prefix}_{matrix_name}_test_reports" in available_artifacts
+    }
+
+    matrix_job_results_extra = {
+        matrix_name: {
+            "captured_info": {},
         }
         for matrix_name in job_matrix
         if f"{report_name_prefix}_{matrix_name}_test_reports" in available_artifacts
@@ -1217,6 +1219,11 @@ if __name__ == "__main__":
                 continue
 
             artifact = retrieve_artifact(path, artifact_gpu)
+
+            if "summary_short" not in artifact:
+                # The process might be killed (for example, CPU OOM), or the job is canceled for some reason), etc.
+                matrix_job_results[matrix_name]["error"] = True
+
             if "stats" in artifact:
                 # Link to the GitHub Action job
                 job = artifact_name_to_job_map[path]
@@ -1225,11 +1232,25 @@ if __name__ == "__main__":
                 matrix_job_results[matrix_name]["success"] += success
                 matrix_job_results[matrix_name]["errors"] += errors
                 matrix_job_results[matrix_name]["skipped"] += skipped
-                matrix_job_results[matrix_name]["time_spent"] += time_spent[1:-1] + ", "
+                matrix_job_results[matrix_name]["time_spent"].append(float(time_spent[:-1]))
 
                 stacktraces = handle_stacktraces(artifact["failures_line"])
 
-                # TODO: ???
+                # Add the captured actual outputs for patched methods (`torch.testing.assert_close`, `assertEqual` etc.)
+                if "captured_info" in artifact:
+                    step_number = None
+                    for step in job.get("steps", []):
+                        if step["name"] == "Captured information":
+                            step_number = step["number"]
+                            break
+                    if step_number is not None:
+                        step_link = f"{job['html_url']}#step:{step_number}:1"
+                        matrix_job_results[matrix_name]["captured_info"][artifact_gpu] = step_link
+                        matrix_job_results_extra[matrix_name]["captured_info"][artifact_gpu] = {
+                            "link": step_link,
+                            "captured_info": artifact["captured_info"],
+                        }
+
                 for line in artifact["summary_short"].split("\n"):
                     if line.startswith("FAILED "):
                         # Avoid the extra `FAILED` entry given by `run_test_using_subprocess` causing issue when calling
@@ -1252,12 +1273,6 @@ if __name__ == "__main__":
 
                         if re.search("tests/quantization", line):
                             matrix_job_results[matrix_name]["failed"]["Quantization"][artifact_gpu] += 1
-
-                        elif re.search("test_modeling_tf_", line):
-                            matrix_job_results[matrix_name]["failed"]["TensorFlow"][artifact_gpu] += 1
-
-                        elif re.search("test_modeling_flax_", line):
-                            matrix_job_results[matrix_name]["failed"]["Flax"][artifact_gpu] += 1
 
                         elif re.search("test_modeling", line):
                             matrix_job_results[matrix_name]["failed"]["PyTorch"][artifact_gpu] += 1
@@ -1284,7 +1299,6 @@ if __name__ == "__main__":
     # Additional runs
     additional_files = {
         "PyTorch pipelines": "run_pipelines_torch_gpu_test_reports",
-        "TensorFlow pipelines": "run_pipelines_tf_gpu_test_reports",
         "Examples directory": "run_examples_gpu_test_reports",
         "DeepSpeed": "run_torch_cuda_extensions_gpu_test_reports",
     }
@@ -1292,9 +1306,7 @@ if __name__ == "__main__":
     if ci_event in ["push", "Nightly CI"] or ci_event.startswith("Past CI"):
         del additional_files["Examples directory"]
         del additional_files["PyTorch pipelines"]
-        del additional_files["TensorFlow pipelines"]
     elif ci_event.startswith("Scheduled CI (AMD)"):
-        del additional_files["TensorFlow pipelines"]
         del additional_files["DeepSpeed"]
     elif ci_event.startswith("Push CI (AMD)"):
         additional_files = {}
@@ -1330,7 +1342,7 @@ if __name__ == "__main__":
             "errors": 0,
             "success": 0,
             "skipped": 0,
-            "time_spent": "",
+            "time_spent": [],
             "error": False,
             "failures": {},
             "job_link": {},
@@ -1360,7 +1372,7 @@ if __name__ == "__main__":
             additional_results[key]["success"] += success
             additional_results[key]["errors"] += errors
             additional_results[key]["skipped"] += skipped
-            additional_results[key]["time_spent"] += time_spent[1:-1] + ", "
+            additional_results[key]["time_spent"].append(float(time_spent[:-1]))
 
             if len(artifact["errors"]):
                 additional_results[key]["error"] = True
@@ -1397,8 +1409,8 @@ if __name__ == "__main__":
 
     nvidia_daily_ci_workflow = "huggingface/transformers/.github/workflows/self-scheduled-caller.yml"
     amd_daily_ci_workflows = (
-        "huggingface/transformers/.github/workflows/self-scheduled-amd-mi250-caller.yml",
-        "huggingface/transformers/.github/workflows/self-scheduled-amd-mi300-caller.yml",
+        "huggingface/transformers/.github/workflows/self-scheduled-amd-mi325-caller.yml",
+        "huggingface/transformers/.github/workflows/self-scheduled-amd-mi355-caller.yml",
     )
     is_nvidia_daily_ci_workflow = os.environ.get("GITHUB_WORKFLOW_REF").startswith(nvidia_daily_ci_workflow)
     is_amd_daily_ci_workflow = os.environ.get("GITHUB_WORKFLOW_REF").startswith(amd_daily_ci_workflows)
@@ -1406,13 +1418,13 @@ if __name__ == "__main__":
     is_scheduled_ci_run = os.environ.get("GITHUB_EVENT_NAME") == "schedule"
     # For AMD workflow runs: the different AMD CI callers (MI210/MI250/MI300, etc.) are triggered by `workflow_run`
     #  event of `.github/workflows/self-scheduled-amd-caller.yml`.
-    if is_amd_daily_ci_workflow:
+    if os.environ.get("GITHUB_EVENT_NAME") == "workflow_run":
         # Get the path to the file on the runner that contains the full event webhook payload.
         event_payload_path = os.environ.get("GITHUB_EVENT_PATH")
         # Load the event payload
         with open(event_payload_path) as fp:
             event_payload = json.load(fp)
-            # The event that triggers the `workflow_run` event.
+            # The event that triggers the original `workflow_run`.
             if "workflow_run" in event_payload:
                 is_scheduled_ci_run = event_payload["workflow_run"]["event"] == "schedule"
 
@@ -1436,6 +1448,20 @@ if __name__ == "__main__":
             token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
         )
 
+    if len(matrix_job_results_extra) > 0:
+        with open(
+            f"ci_results_{job_name}/{test_to_result_name[test_name]}_results_extra.json", "w", encoding="UTF-8"
+        ) as fp:
+            json.dump(matrix_job_results_extra, fp, indent=4, ensure_ascii=False)
+
+        api.upload_file(
+            path_or_fileobj=f"ci_results_{job_name}/{test_to_result_name[test_name]}_results_extra.json",
+            path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/{test_to_result_name[test_name]}_results_extra.json",
+            repo_id=report_repo_id,
+            repo_type="dataset",
+            token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
+        )
+
     # Let's create a file contain job --> job link
     if len(matrix_job_results) > 0:
         target_results = matrix_job_results
@@ -1443,7 +1469,7 @@ if __name__ == "__main__":
         default_result = {
             "failed": {"unclassified": 0, "single": 0, "multi": 0},
             "success": 0,
-            "time_spent": "",
+            "time_spent": [],
             "error": False,
             "failures": {},
             "job_link": {},
