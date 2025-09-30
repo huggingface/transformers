@@ -76,7 +76,7 @@ class CohereTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             [5, 82, 332, 88, 91, 544, 206, 257, 930, 97, 239, 435, 8],
         ]
 
-        computed_tokens = tokenizer.batch_encode_plus(INPUT_SENTENCES)["input_ids"]
+        computed_tokens = tokenizer(INPUT_SENTENCES)["input_ids"]
         self.assertListEqual(TARGET_TOKENS, computed_tokens)
 
         INPUT_SENTENCES_W_BOS = [
@@ -105,9 +105,9 @@ class CohereTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     tokenizer_r.encode(s, max_length=max_length)
                     tokenizer_r.encode_plus(s, max_length=max_length)
 
-                    tokenizer_r.batch_encode_plus(s2, max_length=max_length)
+                    tokenizer_r(s2, max_length=max_length)
                     tokenizer_r.encode(p, max_length=max_length)
-                    tokenizer_r.batch_encode_plus(p2, max_length=max_length)
+                    tokenizer_r(p2, max_length=max_length)
                 except ValueError:
                     self.fail("Cohere Tokenizer should be able to deal with padding")
 
@@ -120,7 +120,7 @@ class CohereTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # Simple input
                 self.assertRaises(
                     ValueError,
-                    tokenizer_r.batch_encode_plus,
+                    tokenizer_r,
                     s2,
                     max_length=max_length,
                     padding="max_length",
@@ -135,7 +135,7 @@ class CohereTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # Pair input
                 self.assertRaises(
                     ValueError,
-                    tokenizer_r.batch_encode_plus,
+                    tokenizer_r,
                     p2,
                     max_length=max_length,
                     padding="max_length",

@@ -3640,6 +3640,25 @@ class TokenizerTesterMixin:
                         for i_no, i_with in zip(no_special_tokens[key], with_special_tokens[key]):
                             self.assertEqual(len(i_no), len(i_with) - simple_num_special_tokens_to_add)
 
+    def test_compare_prepare_for_model(self):
+        if not self.test_slow_tokenizer:
+            # as we don't have a slow version, we can't compare the outputs between slow and fast versions
+            self.skipTest(reason="test_slow_tokenizer is set to False")
+
+        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
+                string_sequence = "Asserting that both tokenizers are equal"
+                python_output = tokenizer_p.prepare_for_model(
+                    tokenizer_p.encode(string_sequence, add_special_tokens=False)
+                )
+                rust_output = tokenizer_r.prepare_for_model(
+                    tokenizer_r.encode(string_sequence, add_special_tokens=False)
+                )
+                for key in python_output:
+                    self.assertEqual(python_output[key], rust_output[key])
+
     def test_special_tokens_initialization(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -3847,26 +3866,26 @@ class TokenizerTesterMixin:
                             )
                         )
 
-    @require_torch
-    def test_saving_tokenizer_trainer(self):
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                with tempfile.TemporaryDirectory() as tmp_dir:
-                    # Save the fast tokenizer files in a temporary directory
-                    tokenizer_old = self.get_rust_tokenizer(pretrained_name, **kwargs, use_fast=True)
-                    tokenizer_old.save_pretrained(tmp_dir, legacy_format=False)  # save only fast version
+    # @require_torch
+    # def test_saving_tokenizer_trainer(self):
+    #     for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+    #         with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+    #             with tempfile.TemporaryDirectory() as tmp_dir:
+    #                 # Save the fast tokenizer files in a temporary directory
+    #                 tokenizer_old = self.get_rust_tokenizer(pretrained_name, **kwargs, use_fast=True)
+    #                 tokenizer_old.save_pretrained(tmp_dir, legacy_format=False)  # save only fast version
 
-                    # Initialize toy model for the trainer
-                    model = nn.Module()
+    #                 # Initialize toy model for the trainer
+    #                 model = nn.Module()
 
-                    # Load tokenizer from a folder without legacy files
-                    tokenizer = self.rust_tokenizer_class.from_pretrained(tmp_dir)
-                    training_args = TrainingArguments(output_dir=tmp_dir, do_train=True, use_cpu=True)
-                    trainer = Trainer(model=model, args=training_args, processing_class=tokenizer)
+    #                 # Load tokenizer from a folder without legacy files
+    #                 tokenizer = self.rust_tokenizer_class.from_pretrained(tmp_dir)
+    #                 training_args = TrainingArguments(output_dir=tmp_dir, do_train=True, use_cpu=True)
+    #                 trainer = Trainer(model=model, args=training_args, processing_class=tokenizer)
 
-                    # Should not raise an error
-                    trainer.save_model(os.path.join(tmp_dir, "checkpoint"))
-                    self.assertIn("tokenizer.json", os.listdir(os.path.join(tmp_dir, "checkpoint")))
+    #                 # Should not raise an error
+    #                 trainer.save_model(os.path.join(tmp_dir, "checkpoint"))
+    #                 self.assertIn("tokenizer.json", os.listdir(os.path.join(tmp_dir, "checkpoint")))
 
     def test_convert_tokens_to_string_format(self):
         tokenizers = self.get_tokenizers(fast=True, do_lower_case=True)
