@@ -52,10 +52,10 @@ if is_accelerate_available():
     custom_intro="""
     Class for outputs of [`EomtDinov3ForUniversalSegmentationOutput`].
 
-    This output can be directly passed to [`~EomtDinov3ImageProcessor.post_process_semantic_segmentation`] or
-    [`~EomtDinov3ImageProcessor.post_process_instance_segmentation`] or
-    [`~EomtDinov3ImageProcessor.post_process_panoptic_segmentation`] to compute final segmentation maps. Please, see
-    [`~EomtDinov3ImageProcessor] for details regarding usage.
+    This output can be directly passed to [`~EomtImageProcessor.post_process_semantic_segmentation`] or
+    [`~EomtImageProcessor.post_process_instance_segmentation`] or
+    [`~EomtImageProcessor.post_process_panoptic_segmentation`] to compute final segmentation maps. Please, see
+    [`~EomtImageProcessor] for details regarding usage.
     """
 )
 class EomtDinov3ForUniversalSegmentationOutput(ModelOutput):

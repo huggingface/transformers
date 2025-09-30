@@ -47,7 +47,7 @@ from huggingface_hub import hf_hub_download
 from safetensors.torch import load_file
 from PIL import Image
 
-from transformers import EomtDinov3Config, EomtDinov3ForUniversalSegmentation, EomtDinov3ImageProcessorFast
+from transformers import EomtDinov3Config, EomtDinov3ForUniversalSegmentation, EomtImageProcessorFast
 
 
 CAT_URL = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -352,7 +352,7 @@ def convert_model(
 
     model.load_state_dict(merged_state, strict=True, assign=True)
 
-    processor = EomtDinov3ImageProcessorFast(
+    processor = EomtImageProcessorFast(
         size={"shortest_edge": image_size, "longest_edge": image_size},
         do_split_image=False,
         do_pad=True,
@@ -379,7 +379,7 @@ def convert_model(
         processor.push_to_hub(repo_id=f"nielsr/{model_name}")
 
 
-def _prepare_image(processor: EomtDinov3ImageProcessorFast) -> torch.Tensor:
+def _prepare_image(processor: EomtImageProcessorFast) -> torch.Tensor:
     image = Image.open(requests.get(CAT_URL, stream=True).raw).convert("RGB")
     inputs = processor(images=image, do_normalize=False, return_tensors="pt")
     return inputs.pixel_values
@@ -586,7 +586,7 @@ def _assert_allclose(reference: Iterable[torch.Tensor], actual: Iterable[torch.T
 def verify_conversion(
     *,
     hf_model: EomtDinov3ForUniversalSegmentation,
-    processor: EomtDinov3ImageProcessorFast,
+    processor: EomtImageProcessorFast,
     delta_state: dict[str, torch.Tensor],
     backbone_repo_id: str,
     token: Optional[str],

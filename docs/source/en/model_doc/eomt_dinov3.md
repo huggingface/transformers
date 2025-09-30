@@ -91,11 +91,3 @@ plt.show()
 ## EomtDinov3ForUniversalSegmentation
 
 [[autodoc]] EomtDinov3ForUniversalSegmentation
-
-## EomtDinov3ImageProcessor
-
-[[autodoc]] EomtDinov3ImageProcessor
-
-## EomtDinov3ImageProcessorFast
-
-[[autodoc]] EomtDinov3ImageProcessorFast
