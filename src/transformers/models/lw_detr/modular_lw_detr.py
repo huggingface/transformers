@@ -17,7 +17,7 @@ from ...utils.generic import check_model_inputs
 from ..conditional_detr.modeling_conditional_detr import (
     ConditionalDetrConvEncoder,
     ConditionalDetrConvModel,
-    build_position_encoding,
+    ConditionalDetrSinePositionEmbedding,
 )
 from ..convnext.modeling_convnext import ConvNextLayerNorm
 from ..dab_detr.modeling_dab_detr import gen_sine_position_embeddings
@@ -879,6 +879,8 @@ class LwDetrDecoder(LwDetrPreTrainedModel):
             intermediate_reference_points=intermediate_reference_points,
         )
 
+class LwDetrSinePositionEmbedding(ConditionalDetrSinePositionEmbedding):
+    pass
 
 class LwDetrModel(DeformableDetrModel):
     def __init__(self, config: LwDetrConfig):
@@ -886,7 +888,7 @@ class LwDetrModel(DeformableDetrModel):
 
         # Create backbone + positional encoding
         backbone = LwDetrConvEncoder(config)
-        position_embeddings = build_position_encoding(config)
+        position_embeddings = LwDetrSinePositionEmbedding(config.d_model // 2, normalize=True)
         self.backbone = LwDetrConvModel(backbone, position_embeddings)
 
         self.group_detr = config.group_detr
