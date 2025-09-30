@@ -1,0 +1,2277 @@
+{
+    "xlm_roberta_xl": {
+        "commit_hash": "e09473a817c5e5871e11cc81004355ef30250502",
+        "first_commit_datetime": "2022-01-29T13:42:37+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/xlm_roberta_xl/modeling_xlm_roberta_xl.py",
+        "downloads": 38170,
+        "tags": [
+            "xlm_roberta_xl",
+            "xlm-roberta-xl"
+        ]
+    },
+    "wav2vec2": {
+        "commit_hash": "d6217fb30ce1bab03cd3b313038a8d68e7159033",
+        "first_commit_datetime": "2021-02-02T15:52:10+03:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/wav2vec2/modeling_wav2vec2.py",
+        "downloads": 3075411,
+        "tags": [
+            "wav2vec2"
+        ]
+    },
+    "speech_to_text": {
+        "commit_hash": "d26b37e744ea980977e266adf48736451b73c583",
+        "first_commit_datetime": "2021-03-10T21:30:04+05:18",
+        "model_path": "/home/joao/transformers/src/transformers/models/speech_to_text/modeling_speech_to_text.py",
+        "downloads": 54252,
+        "tags": [
+            "speech_to_text",
+            "speech-to-text"
+        ]
+    },
+    "owlvit": {
+        "commit_hash": "12d66b47012c9258f9557e6d3a0c13bcd1c72871",
+        "first_commit_datetime": "2022-07-22T13:35:32+03:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/owlvit/modeling_owlvit.py",
+        "downloads": 131066,
+        "tags": [
+            "owlvit"
+        ]
+    },
+    "git": {
+        "commit_hash": "9c6f7485a6ab2364f04df5893ab0e09f3c889b5d",
+        "first_commit_datetime": "2023-01-03T14:17:18+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/git/modeling_git.py",
+        "downloads": 50278,
+        "tags": [
+            "git"
+        ]
+    },
+    "ibert": {
+        "commit_hash": "63645b3b11e38c31c7fe1a8c9bdb34875a37b841",
+        "first_commit_datetime": "2021-02-25T10:06:42-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/ibert/modeling_ibert.py",
+        "downloads": 80842,
+        "tags": [
+            "ibert"
+        ]
+    },
+    "xlnet": {
+        "commit_hash": "c89bdfbe720bc8f41c7dc6db5473a2cb0955f224",
+        "first_commit_datetime": "2020-11-16T21:43:42-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/xlnet/modeling_xlnet.py",
+        "downloads": 163180,
+        "tags": [
+            "xlnet"
+        ]
+    },
+    "univnet": {
+        "commit_hash": "7f6a804d3028b97142a83d768b9576ed7a4a7d84",
+        "first_commit_datetime": "2023-11-22T17:21:36+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/univnet/modeling_univnet.py",
+        "downloads": 894,
+        "tags": [
+            "univnet"
+        ]
+    },
+    "mllama": {
+        "commit_hash": "19d58d31f19049e8280ccb62a5b098d89909bf5a",
+        "first_commit_datetime": "2024-09-25T19:56:25+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/mllama/modeling_mllama.py",
+        "downloads": 926481,
+        "tags": [
+            "mllama"
+        ]
+    },
+    "mobilevitv2": {
+        "commit_hash": "07c54413ac24f891fc37920f6c61ad8b7b035dc3",
+        "first_commit_datetime": "2023-06-02T10:37:02+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/mobilevitv2/modeling_mobilevitv2.py",
+        "downloads": 14524,
+        "tags": [
+            "mobilevitv2"
+        ]
+    },
+    "depth_anything": {
+        "commit_hash": "963db81a5afc5c31edafa0c9fb0390956a78cf2a",
+        "first_commit_datetime": "2024-01-25T09:34:50+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/depth_anything/modeling_depth_anything.py",
+        "downloads": 215159,
+        "tags": [
+            "depth_anything",
+            "depth-anything"
+        ]
+    },
+    "prophetnet": {
+        "commit_hash": "c89bdfbe720bc8f41c7dc6db5473a2cb0955f224",
+        "first_commit_datetime": "2020-11-16T21:43:42-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/prophetnet/modeling_prophetnet.py",
+        "downloads": 9159,
+        "tags": [
+            "prophetnet"
+        ]
+    },
+    "focalnet": {
+        "commit_hash": "3d3204c025b6b5de013e07dd364208e28b4d9589",
+        "first_commit_datetime": "2023-04-23T20:03:05+03:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/focalnet/modeling_focalnet.py",
+        "downloads": 20451,
+        "tags": [
+            "focalnet"
+        ]
+    },
+    "gemma2": {
+        "commit_hash": "0cf60f13ab1c857c17fc3fb127129048c93bf06c",
+        "first_commit_datetime": "2024-06-27T17:36:19+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/gemma2/modeling_gemma2.py",
+        "downloads": 702286,
+        "tags": [
+            "gemma2"
+        ]
+    },
+    "openai": {
+        "commit_hash": "c89bdfbe720bc8f41c7dc6db5473a2cb0955f224",
+        "first_commit_datetime": "2020-11-16T21:43:42-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/openai/modeling_openai.py",
+        "downloads": 223895,
+        "tags": [
+            "openai"
+        ]
+    },
+    "zoedepth": {
+        "commit_hash": "06fd7972acbc6a5e9cd75b4d482583c060ac2ed0",
+        "first_commit_datetime": "2024-07-08T11:43:33+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/zoedepth/modeling_zoedepth.py",
+        "downloads": 93206,
+        "tags": [
+            "zoedepth"
+        ]
+    },
+    "ernie": {
+        "commit_hash": "22f72185601d5167a747104b4aca102d0e92524c",
+        "first_commit_datetime": "2022-09-09T07:36:46-04:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/ernie/modeling_ernie.py",
+        "downloads": 57157,
+        "tags": [
+            "ernie"
+        ]
+    },
+    "gpt_neo": {
+        "commit_hash": "860264379f2c1b86f7f0fd5bbd5cb63619b773e0",
+        "first_commit_datetime": "2021-03-30T09:42:30-04:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/gpt_neo/modeling_gpt_neo.py",
+        "downloads": 66525,
+        "tags": [
+            "gpt_neo",
+            "gpt-neo"
+        ]
+    },
+    "siglip": {
+        "commit_hash": "3b742ea84cfc32432d60c0b65c886576ef736833",
+        "first_commit_datetime": "2024-01-08T18:17:16+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/siglip/modeling_siglip.py",
+        "downloads": 2664601,
+        "tags": [
+            "siglip"
+        ]
+    },
+    "ctrl": {
+        "commit_hash": "c89bdfbe720bc8f41c7dc6db5473a2cb0955f224",
+        "first_commit_datetime": "2020-11-16T21:43:42-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/ctrl/modeling_ctrl.py",
+        "downloads": 20457,
+        "tags": [
+            "ctrl"
+        ]
+    },
+    "speech_encoder_decoder": {
+        "commit_hash": "0b8c84e110bf9012f30a85c40b9ff8ea868689fd",
+        "first_commit_datetime": "2021-09-01T13:33:31+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/speech_encoder_decoder/modeling_speech_encoder_decoder.py",
+        "downloads": 22266,
+        "tags": [
+            "speech_encoder_decoder",
+            "speech-encoder-decoder"
+        ]
+    },
+    "vitdet": {
+        "commit_hash": "4c21da5e347bfc53ee4ec5b71a23721fefe6822c",
+        "first_commit_datetime": "2023-08-29T10:03:52+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/vitdet/modeling_vitdet.py",
+        "downloads": 0,
+        "tags": [
+            "vitdet"
+        ]
+    },
+    "layoutlmv2": {
+        "commit_hash": "b6ddb08a664565848c4741e0ff949a4d12989e83",
+        "first_commit_datetime": "2021-08-30T12:35:42+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/layoutlmv2/modeling_layoutlmv2.py",
+        "downloads": 511347,
+        "tags": [
+            "layoutlmv2"
+        ]
+    },
+    "layoutlm": {
+        "commit_hash": "c89bdfbe720bc8f41c7dc6db5473a2cb0955f224",
+        "first_commit_datetime": "2020-11-16T21:43:42-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/layoutlm/modeling_layoutlm.py",
+        "downloads": 149517,
+        "tags": [
+            "layoutlm"
+        ]
+    },
+    "deformable_detr": {
+        "commit_hash": "59407bbeb31fff8340938768051c9daabd38d7a7",
+        "first_commit_datetime": "2022-09-14T11:45:21+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/deformable_detr/modeling_deformable_detr.py",
+        "downloads": 52154,
+        "tags": [
+            "deformable_detr",
+            "deformable-detr"
+        ]
+    },
+    "table_transformer": {
+        "commit_hash": "dd523da577f3d1471d570f0bc388af55d026ce95",
+        "first_commit_datetime": "2022-10-18T15:20:09+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/table_transformer/modeling_table_transformer.py",
+        "downloads": 2171531,
+        "tags": [
+            "table_transformer",
+            "table-transformer"
+        ]
+    },
+    "mobilevit": {
+        "commit_hash": "fbc7598babd06a49797db7142016f0029cdc41b2",
+        "first_commit_datetime": "2022-06-29T16:07:51-04:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/mobilevit/modeling_mobilevit.py",
+        "downloads": 1462807,
+        "tags": [
+            "mobilevit"
+        ]
+    },
+    "perceiver": {
+        "commit_hash": "65b20b739b69cc13a10a6b10351ba31f4ecbef8c",
+        "first_commit_datetime": "2021-12-08T14:20:34+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/perceiver/modeling_perceiver.py",
+        "downloads": 96539,
+        "tags": [
+            "perceiver"
+        ]
+    },
+    "deit": {
+        "commit_hash": "9f1260971f041f4dcabf063ca2964847c3e5fc2a",
+        "first_commit_datetime": "2021-04-12T18:07:10-04:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/deit/modeling_deit.py",
+        "downloads": 63484,
+        "tags": [
+            "deit"
+        ]
+    },
+    "vits": {
+        "commit_hash": "4ece3b9433ea0bedff0d64fe00623c35766d7d44",
+        "first_commit_datetime": "2023-09-01T10:50:06+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/vits/modeling_vits.py",
+        "downloads": 50267,
+        "tags": [
+            "vits"
+        ]
+    },
+    "mask2former": {
+        "commit_hash": "2411f0e465e761790879e605a4256f3d4afb7f82",
+        "first_commit_datetime": "2023-01-16T20:37:07+03:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/mask2former/modeling_mask2former.py",
+        "downloads": 97538,
+        "tags": [
+            "mask2former"
+        ]
+    },
+    "groupvit": {
+        "commit_hash": "6c8f4c9a938a09749ea1b19a5fa2a8dd27e99a29",
+        "first_commit_datetime": "2022-06-28T20:51:47+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/groupvit/modeling_groupvit.py",
+        "downloads": 5250,
+        "tags": [
+            "groupvit"
+        ]
+    },
+    "dbrx": {
+        "commit_hash": "005b957fb851607115800f50e594b77662a771ba",
+        "first_commit_datetime": "2024-04-18T15:18:52+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/dbrx/modeling_dbrx.py",
+        "downloads": 78229,
+        "tags": [
+            "dbrx"
+        ]
+    },
+    "beit": {
+        "commit_hash": "83e5a10603ca902c266e40fc98a01dd8a9b04ac4",
+        "first_commit_datetime": "2021-08-04T18:29:23+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/beit/modeling_beit.py",
+        "downloads": 510209,
+        "tags": [
+            "beit"
+        ]
+    },
+    "bark": {
+        "commit_hash": "f42a35e611ae3916cfb5b1e8a0540606abb31466",
+        "first_commit_datetime": "2023-07-17T17:53:24+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/bark/modeling_bark.py",
+        "downloads": 59206,
+        "tags": [
+            "bark"
+        ]
+    },
+    "reformer": {
+        "commit_hash": "c89bdfbe720bc8f41c7dc6db5473a2cb0955f224",
+        "first_commit_datetime": "2020-11-16T21:43:42-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/reformer/modeling_reformer.py",
+        "downloads": 18759,
+        "tags": [
+            "reformer"
+        ]
+    },
+    "paligemma": {
+        "commit_hash": "1360801a69c0b169e3efdbb0cd05d9a0e72bfb70",
+        "first_commit_datetime": "2024-05-14T22:07:15+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/paligemma/modeling_paligemma.py",
+        "downloads": 659892,
+        "tags": [
+            "paligemma"
+        ]
+    },
+    "fsmt": {
+        "commit_hash": "c89bdfbe720bc8f41c7dc6db5473a2cb0955f224",
+        "first_commit_datetime": "2020-11-16T21:43:42-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/fsmt/modeling_fsmt.py",
+        "downloads": 48723,
+        "tags": [
+            "fsmt"
+        ]
+    },
+    "convnext": {
+        "commit_hash": "84eec9e6ba55c5aceee2a92fd820fcca4b67c510",
+        "first_commit_datetime": "2022-02-07T16:11:37+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/convnext/modeling_convnext.py",
+        "downloads": 61688,
+        "tags": [
+            "convnext"
+        ]
+    },
+    "big_bird": {
+        "commit_hash": "6dfd0272797c53ad925375d3dae85054716905bc",
+        "first_commit_datetime": "2021-03-30T08:51:34+03:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/big_bird/modeling_big_bird.py",
+        "downloads": 63499,
+        "tags": [
+            "big_bird",
+            "big-bird"
+        ]
+    },
+    "deberta_v2": {
+        "commit_hash": "9a7e63729f3ff6ddf065fd0d443421e46b1a2ffb",
+        "first_commit_datetime": "2021-02-19T18:34:44-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/deberta_v2/modeling_deberta_v2.py",
+        "downloads": 1874059,
+        "tags": [
+            "deberta_v2",
+            "deberta-v2"
+        ]
+    },
+    "camembert": {
+        "commit_hash": "c89bdfbe720bc8f41c7dc6db5473a2cb0955f224",
+        "first_commit_datetime": "2020-11-16T21:43:42-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/camembert/modeling_camembert.py",
+        "downloads": 306599,
+        "tags": [
+            "camembert"
+        ]
+    },
+    "mamba2": {
+        "commit_hash": "80b90e7b2f7466ffb1d9036986e0699880d34284",
+        "first_commit_datetime": "2024-08-06T16:39:52+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/mamba2/modeling_mamba2.py",
+        "downloads": 10157,
+        "tags": [
+            "mamba2"
+        ]
+    },
+    "convnextv2": {
+        "commit_hash": "cdddfbffa1206958c0fabf60a87561b5704727a8",
+        "first_commit_datetime": "2023-03-14T12:08:14+03:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/convnextv2/modeling_convnextv2.py",
+        "downloads": 136668,
+        "tags": [
+            "convnextv2"
+        ]
+    },
+    "mpt": {
+        "commit_hash": "dcb183f4bdcd9491efb68b3c28d51614a11e59dc",
+        "first_commit_datetime": "2023-07-25T14:32:40+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/mpt/modeling_mpt.py",
+        "downloads": 87810,
+        "tags": [
+            "mpt"
+        ]
+    },
+    "mgp_str": {
+        "commit_hash": "102b5ff4a813eea848bb82ff2f451e0f6b17b30c",
+        "first_commit_datetime": "2023-03-13T10:11:31+00:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/mgp_str/modeling_mgp_str.py",
+        "downloads": 6816,
+        "tags": [
+            "mgp_str",
+            "mgp-str"
+        ]
+    },
+    "starcoder2": {
+        "commit_hash": "63caa370e6c618dbe7d3fd4cbf545cc32eca1a15",
+        "first_commit_datetime": "2024-02-28T01:24:34+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/starcoder2/modeling_starcoder2.py",
+        "downloads": 271927,
+        "tags": [
+            "starcoder2"
+        ]
+    },
+    "seamless_m4t_v2": {
+        "commit_hash": "29f1aee3b6c560182415fcb9e2238125e2f5b29c",
+        "first_commit_datetime": "2023-11-30T20:24:43+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/seamless_m4t_v2/modeling_seamless_m4t_v2.py",
+        "downloads": 64594,
+        "tags": [
+            "seamless_m4t_v2",
+            "seamless-m4t-v2"
+        ]
+    },
+    "dinov2": {
+        "commit_hash": "3ec10e6c76362191b61260300fe1d6173a8dd7e1",
+        "first_commit_datetime": "2023-07-18T15:34:06+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/dinov2/modeling_dinov2.py",
+        "downloads": 100981,
+        "tags": [
+            "dinov2"
+        ]
+    },
+    "falcon_mamba": {
+        "commit_hash": "7c1149120829eb58e42a1ba4dbd2a9fa98864707",
+        "first_commit_datetime": "2024-08-12T08:22:47+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/falcon_mamba/modeling_falcon_mamba.py",
+        "downloads": 57119,
+        "tags": [
+            "falcon_mamba",
+            "falcon-mamba"
+        ]
+    },
+    "flava": {
+        "commit_hash": "a10f61834dbae03975d06ccba8ce34f02b44a0cd",
+        "first_commit_datetime": "2022-05-11T14:56:48-07:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/flava/modeling_flava.py",
+        "downloads": 803897,
+        "tags": [
+            "flava"
+        ]
+    },
+    "albert": {
+        "commit_hash": "c89bdfbe720bc8f41c7dc6db5473a2cb0955f224",
+        "first_commit_datetime": "2020-11-16T21:43:42-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/albert/modeling_albert.py",
+        "downloads": 1136989,
+        "tags": [
+            "albert"
+        ]
+    },
+    "patchtsmixer": {
+        "commit_hash": "b242d0f297aa87a0c8d99657a53691ece2dfe492",
+        "first_commit_datetime": "2023-12-05T15:31:35+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/patchtsmixer/modeling_patchtsmixer.py",
+        "downloads": 4943,
+        "tags": [
+            "patchtsmixer"
+        ]
+    },
+    "encoder_decoder": {
+        "commit_hash": "c89bdfbe720bc8f41c7dc6db5473a2cb0955f224",
+        "first_commit_datetime": "2020-11-16T21:43:42-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/encoder_decoder/modeling_encoder_decoder.py",
+        "downloads": 57225,
+        "tags": [
+            "encoder_decoder",
+            "encoder-decoder"
+        ]
+    },
+    "mixtral": {
+        "commit_hash": "accccdd0087263a1e494e9c9ec30a43043ff3905",
+        "first_commit_datetime": "2023-12-11T12:50:27+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/mixtral/modeling_mixtral.py",
+        "downloads": 300883,
+        "tags": [
+            "mixtral"
+        ]
+    },
+    "bridgetower": {
+        "commit_hash": "3a6e4a221c8532a446ea551f0a907d22033aa15f",
+        "first_commit_datetime": "2023-01-25T14:04:32-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/bridgetower/modeling_bridgetower.py",
+        "downloads": 9070,
+        "tags": [
+            "bridgetower"
+        ]
+    },
+    "qwen2_audio": {
+        "commit_hash": "16ed0640be71cd38208eed87bdcf39be29a83b5d",
+        "first_commit_datetime": "2024-08-08T15:47:24+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/qwen2_audio/modeling_qwen2_audio.py",
+        "downloads": 309643,
+        "tags": [
+            "qwen2_audio",
+            "qwen2-audio"
+        ]
+    },
+    "markuplm": {
+        "commit_hash": "f3d2f7a6e08efe18debf59512325f02128394b43",
+        "first_commit_datetime": "2022-09-30T08:25:43+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/markuplm/modeling_markuplm.py",
+        "downloads": 7272,
+        "tags": [
+            "markuplm"
+        ]
+    },
+    "gpt_neox_japanese": {
+        "commit_hash": "f5f430e5c80b85b57bb910435e45d84746210133",
+        "first_commit_datetime": "2022-09-14T10:17:40-04:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/gpt_neox_japanese/modeling_gpt_neox_japanese.py",
+        "downloads": 39591,
+        "tags": [
+            "gpt_neox_japanese",
+            "gpt-neox-japanese"
+        ]
+    },
+    "cvt": {
+        "commit_hash": "adc0ff25028d29af30386f2d7d3f85e290fbef57",
+        "first_commit_datetime": "2022-05-18T17:47:18+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/cvt/modeling_cvt.py",
+        "downloads": 23412,
+        "tags": [
+            "cvt"
+        ]
+    },
+    "layoutlmv3": {
+        "commit_hash": "31ee80d55673f32c0f5d50936f371e661b74b21a",
+        "first_commit_datetime": "2022-05-24T09:53:45+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/layoutlmv3/modeling_layoutlmv3.py",
+        "downloads": 775167,
+        "tags": [
+            "layoutlmv3"
+        ]
+    },
+    "vit": {
+        "commit_hash": "30677dc743bae5485f755392adf4d543f71db6e4",
+        "first_commit_datetime": "2021-04-01T11:16:05-04:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/vit/modeling_vit.py",
+        "downloads": 103654700,
+        "tags": [
+            "vit"
+        ]
+    },
+    "rembert": {
+        "commit_hash": "434022adac8a06f74a9adc4d110301c417d6424b",
+        "first_commit_datetime": "2021-07-24T11:31:42-04:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/rembert/modeling_rembert.py",
+        "downloads": 50078,
+        "tags": [
+            "rembert"
+        ]
+    },
+    "umt5": {
+        "commit_hash": "799df10aef3abfe6158c83daf0a9eacf8f6f0a1f",
+        "first_commit_datetime": "2023-07-03T07:38:21+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/umt5/modeling_umt5.py",
+        "downloads": 46637,
+        "tags": [
+            "umt5"
+        ]
+    },
+    "jamba": {
+        "commit_hash": "3f20877da96bd9a14aeccf30f1399bd913ff74cf",
+        "first_commit_datetime": "2024-04-18T11:04:02+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/jamba/modeling_jamba.py",
+        "downloads": 181515,
+        "tags": [
+            "jamba"
+        ]
+    },
+    "cpmant": {
+        "commit_hash": "523ca4e01674cee314cea128c1a9c0fd4bb0fcd2",
+        "first_commit_datetime": "2023-04-12T07:33:20-04:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/cpmant/modeling_cpmant.py",
+        "downloads": 228,
+        "tags": [
+            "cpmant"
+        ]
+    },
+    "chinese_clip": {
+        "commit_hash": "721764028e7aa58e5166a29fe417e309b5e8a449",
+        "first_commit_datetime": "2022-11-30T19:22:23+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/chinese_clip/modeling_chinese_clip.py",
+        "downloads": 82968,
+        "tags": [
+            "chinese_clip",
+            "chinese-clip"
+        ]
+    },
+    "audio_spectrogram_transformer": {
+        "commit_hash": "4973d2a04c4745bda0c6973055789097e64b067f",
+        "first_commit_datetime": "2022-11-21T18:58:54+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/audio_spectrogram_transformer/modeling_audio_spectrogram_transformer.py",
+        "downloads": 479065,
+        "tags": [
+            "audio_spectrogram_transformer",
+            "audio-spectrogram-transformer"
+        ]
+    },
+    "gpt_bigcode": {
+        "commit_hash": "e0921c6b53310a47b10f01633809b2b9f785a465",
+        "first_commit_datetime": "2023-04-10T10:57:21+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/gpt_bigcode/modeling_gpt_bigcode.py",
+        "downloads": 89425,
+        "tags": [
+            "gpt_bigcode",
+            "gpt-bigcode"
+        ]
+    },
+    "idefics2": {
+        "commit_hash": "6b78360e6d686b316360334f5109b46c39ff5ed8",
+        "first_commit_datetime": "2024-04-15T17:03:03+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/idefics2/modeling_idefics2.py",
+        "downloads": 64166,
+        "tags": [
+            "idefics2"
+        ]
+    },
+    "yoso": {
+        "commit_hash": "99a2771189321c826ff55d161a7cfedadd4023c7",
+        "first_commit_datetime": "2022-01-26T19:18:29+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/yoso/modeling_yoso.py",
+        "downloads": 15413,
+        "tags": [
+            "yoso"
+        ]
+    },
+    "mpnet": {
+        "commit_hash": "df2af6d8b8765b1ac2cda12d2ece09bf7240fba8",
+        "first_commit_datetime": "2020-12-09T10:32:43-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/mpnet/modeling_mpnet.py",
+        "downloads": 17162587,
+        "tags": [
+            "mpnet"
+        ]
+    },
+    "mvp": {
+        "commit_hash": "3cff4cc58730409c68f8afa2f3b9c61efa0e85c6",
+        "first_commit_datetime": "2022-06-29T09:30:55-04:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/mvp/modeling_mvp.py",
+        "downloads": 24354,
+        "tags": [
+            "mvp"
+        ]
+    },
+    "omdet_turbo": {
+        "commit_hash": "94f18cf23c128055a984ffbe9c57df133c1f6cc7",
+        "first_commit_datetime": "2024-09-25T13:26:28-04:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/omdet_turbo/modeling_omdet_turbo.py",
+        "downloads": 6443,
+        "tags": [
+            "omdet_turbo",
+            "omdet-turbo"
+        ]
+    },
+    "gpt_neox": {
+        "commit_hash": "71e602725b90f63f404109bae9f72cbdf755477b",
+        "first_commit_datetime": "2022-05-24T09:31:10-04:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/gpt_neox/modeling_gpt_neox.py",
+        "downloads": 196169,
+        "tags": [
+            "gpt_neox",
+            "gpt-neox"
+        ]
+    },
+    "roc_bert": {
+        "commit_hash": "efa889d2e4ba0605baa77d3c364735d0caaa9463",
+        "first_commit_datetime": "2022-11-08T10:03:43-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/roc_bert/modeling_roc_bert.py",
+        "downloads": 7438,
+        "tags": [
+            "roc_bert",
+            "roc-bert"
+        ]
+    },
+    "luke": {
+        "commit_hash": "f3cf8ae7b3b432cd875d34096c9ab69e43a10809",
+        "first_commit_datetime": "2021-05-03T09:07:29-04:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/luke/modeling_luke.py",
+        "downloads": 50993,
+        "tags": [
+            "luke"
+        ]
+    },
+    "blip": {
+        "commit_hash": "0d284bd574f845adb812930f68b8746fa171bc2e",
+        "first_commit_datetime": "2022-12-21T09:39:10+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/blip/modeling_blip.py",
+        "downloads": 1762235,
+        "tags": [
+            "blip"
+        ]
+    },
+    "distilbert": {
+        "commit_hash": "c89bdfbe720bc8f41c7dc6db5473a2cb0955f224",
+        "first_commit_datetime": "2020-11-16T21:43:42-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/distilbert/modeling_distilbert.py",
+        "downloads": 448593,
+        "tags": [
+            "distilbert"
+        ]
+    },
+    "pixtral": {
+        "commit_hash": "8bd2b1e8c23234cd607ca8d63f53c1edfea27462",
+        "first_commit_datetime": "2024-09-14T12:28:39+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/pixtral/modeling_pixtral.py",
+        "downloads": 6611,
+        "tags": [
+            "pixtral"
+        ]
+    },
+    "rag": {
+        "commit_hash": "c89bdfbe720bc8f41c7dc6db5473a2cb0955f224",
+        "first_commit_datetime": "2020-11-16T21:43:42-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/rag/modeling_rag.py",
+        "downloads": 47503,
+        "tags": [
+            "rag"
+        ]
+    },
+    "seamless_m4t": {
+        "commit_hash": "cb45f71c4dfb28613f8348716de821df7db68799",
+        "first_commit_datetime": "2023-10-23T14:49:48+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/seamless_m4t/modeling_seamless_m4t.py",
+        "downloads": 13618,
+        "tags": [
+            "seamless_m4t",
+            "seamless-m4t"
+        ]
+    },
+    "llama": {
+        "commit_hash": "0041be5b3d1b9a5e1443e1825d7d80f6dfadcdaa",
+        "first_commit_datetime": "2023-03-16T09:00:53-04:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/llama/modeling_llama.py",
+        "downloads": 7192139,
+        "tags": [
+            "llama"
+        ]
+    },
+    "patchtst": {
+        "commit_hash": "af8acc4760d44e48f953e075e3b13a43843d5f91",
+        "first_commit_datetime": "2023-11-29T13:36:38+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/patchtst/modeling_patchtst.py",
+        "downloads": 11728,
+        "tags": [
+            "patchtst"
+        ]
+    },
+    "lxmert": {
+        "commit_hash": "c89bdfbe720bc8f41c7dc6db5473a2cb0955f224",
+        "first_commit_datetime": "2020-11-16T21:43:42-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/lxmert/modeling_lxmert.py",
+        "downloads": 10575,
+        "tags": [
+            "lxmert"
+        ]
+    },
+    "electra": {
+        "commit_hash": "c89bdfbe720bc8f41c7dc6db5473a2cb0955f224",
+        "first_commit_datetime": "2020-11-16T21:43:42-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/electra/modeling_electra.py",
+        "downloads": 165223,
+        "tags": [
+            "electra"
+        ]
+    },
+    "bit": {
+        "commit_hash": "d151a8c55032d5a21800ea0813c4304af8b8e9f7",
+        "first_commit_datetime": "2022-12-07T11:03:39+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/bit/modeling_bit.py",
+        "downloads": 8321,
+        "tags": [
+            "bit"
+        ]
+    },
+    "altclip": {
+        "commit_hash": "ce85686a1f425c8e60d9104522d8626395dd507d",
+        "first_commit_datetime": "2023-01-04T09:18:57+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/altclip/modeling_altclip.py",
+        "downloads": 2703,
+        "tags": [
+            "altclip"
+        ]
+    },
+    "gptj": {
+        "commit_hash": "c02cd95c56249e9bd38ecb3e4ebcce6d9eebd4a4",
+        "first_commit_datetime": "2021-08-31T17:53:02+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/gptj/modeling_gptj.py",
+        "downloads": 70381,
+        "tags": [
+            "gptj"
+        ]
+    },
+    "x_clip": {
+        "commit_hash": "bb6f6d53386bf2340eead6a8f9320ce61add3e96",
+        "first_commit_datetime": "2022-09-08T14:50:30+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/x_clip/modeling_x_clip.py",
+        "downloads": 0,
+        "tags": [
+            "x_clip",
+            "x-clip"
+        ]
+    },
+    "whisper": {
+        "commit_hash": "45e14038f20d7f04574af4ce8356bab11e3d6741",
+        "first_commit_datetime": "2022-10-05T22:28:31+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/whisper/modeling_whisper.py",
+        "downloads": 4304821,
+        "tags": [
+            "whisper"
+        ]
+    },
+    "mobilenet_v2": {
+        "commit_hash": "f711d683b50e20f52778110e55e5a0894c2c8466",
+        "first_commit_datetime": "2022-11-14T01:00:10-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/mobilenet_v2/modeling_mobilenet_v2.py",
+        "downloads": 50574,
+        "tags": [
+            "mobilenet_v2",
+            "mobilenet-v2"
+        ]
+    },
+    "swinv2": {
+        "commit_hash": "e87ac9d18b5a07a52c3c8ad9ab5ea78c114fc919",
+        "first_commit_datetime": "2022-07-27T11:14:47-04:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/swinv2/modeling_swinv2.py",
+        "downloads": 408368,
+        "tags": [
+            "swinv2"
+        ]
+    },
+    "imagegpt": {
+        "commit_hash": "da36c557f763cb4e515f71ba7c49191fede8966f",
+        "first_commit_datetime": "2021-11-18T16:24:34+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/imagegpt/modeling_imagegpt.py",
+        "downloads": 24317,
+        "tags": [
+            "imagegpt"
+        ]
+    },
+    "fnet": {
+        "commit_hash": "d8049331dc087f4afeafce2be8e34d4222bcc9f2",
+        "first_commit_datetime": "2021-09-20T13:24:30+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/fnet/modeling_fnet.py",
+        "downloads": 1074157,
+        "tags": [
+            "fnet"
+        ]
+    },
+    "mobilebert": {
+        "commit_hash": "c89bdfbe720bc8f41c7dc6db5473a2cb0955f224",
+        "first_commit_datetime": "2020-11-16T21:43:42-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/mobilebert/modeling_mobilebert.py",
+        "downloads": 301641,
+        "tags": [
+            "mobilebert"
+        ]
+    },
+    "poolformer": {
+        "commit_hash": "f84e0dbd2afa580a1a1c3d8643144b43b2ec654a",
+        "first_commit_datetime": "2022-02-17T13:16:37+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/poolformer/modeling_poolformer.py",
+        "downloads": 45289,
+        "tags": [
+            "poolformer"
+        ]
+    },
+    "oneformer": {
+        "commit_hash": "5b949623c7f2db3188ba0a65c17b9b9b437cb4ea",
+        "first_commit_datetime": "2023-01-19T09:31:07+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/oneformer/modeling_oneformer.py",
+        "downloads": 123017,
+        "tags": [
+            "oneformer"
+        ]
+    },
+    "granite": {
+        "commit_hash": "c35d2ccf5a5ebcab24a0b9da3cb2527b3ae565a0",
+        "first_commit_datetime": "2024-08-27T21:27:21+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/granite/modeling_granite.py",
+        "downloads": 117133,
+        "tags": [
+            "granite"
+        ]
+    },
+    "align": {
+        "commit_hash": "269b05493917af2f7e86bafc735576a1a22caf4f",
+        "first_commit_datetime": "2023-03-01T21:23:31+03:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/align/modeling_align.py",
+        "downloads": 12007,
+        "tags": [
+            "align"
+        ]
+    },
+    "superpoint": {
+        "commit_hash": "56baa03380fc17d85705240ebbc57c075a9b3f23",
+        "first_commit_datetime": "2024-03-19T14:43:02+00:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/superpoint/modeling_superpoint.py",
+        "downloads": 5741,
+        "tags": [
+            "superpoint"
+        ]
+    },
+    "blip_2": {
+        "commit_hash": "d7f1e7c0096399f0e709e32206546c4afaf33b75",
+        "first_commit_datetime": "2023-02-09T16:52:11+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/blip_2/modeling_blip_2.py",
+        "downloads": 597810,
+        "tags": [
+            "blip_2",
+            "blip-2"
+        ]
+    },
+    "mobilenet_v1": {
+        "commit_hash": "d21c97cc0faa955a933b8123d53b452bd3ee93d9",
+        "first_commit_datetime": "2022-11-21T10:21:28-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/mobilenet_v1/modeling_mobilenet_v1.py",
+        "downloads": 47950,
+        "tags": [
+            "mobilenet_v1",
+            "mobilenet-v1"
+        ]
+    },
+    "mbart": {
+        "commit_hash": "c89bdfbe720bc8f41c7dc6db5473a2cb0955f224",
+        "first_commit_datetime": "2020-11-16T21:43:42-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/mbart/modeling_mbart.py",
+        "downloads": 121849,
+        "tags": [
+            "mbart"
+        ]
+    },
+    "dinat": {
+        "commit_hash": "fc4a993e1b3ee1730fb6e25905422f75876befc2",
+        "first_commit_datetime": "2022-11-18T13:08:26-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/dinat/modeling_dinat.py",
+        "downloads": 146,
+        "tags": [
+            "dinat"
+        ]
+    },
+    "esm": {
+        "commit_hash": "7f9b7b3f0e181e2393fc5b5c70ad2da2a190aa08",
+        "first_commit_datetime": "2022-10-31T21:32:58-04:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/esm/modeling_esmfold.py",
+        "downloads": 3372644,
+        "tags": [
+            "esm"
+        ]
+    },
+    "musicgen": {
+        "commit_hash": "1c1c90756db082a0e997eaa24e71f5f6d25ff315",
+        "first_commit_datetime": "2023-06-29T14:48:59+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/musicgen/modeling_musicgen.py",
+        "downloads": 62082,
+        "tags": [
+            "musicgen"
+        ]
+    },
+    "llava_next": {
+        "commit_hash": "d91fd7f92c76be2b128d3a7b4b0e2d7435723af1",
+        "first_commit_datetime": "2024-03-20T15:51:12+00:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/llava_next/modeling_llava_next.py",
+        "downloads": 501712,
+        "tags": [
+            "llava_next",
+            "llava-next"
+        ]
+    },
+    "nllb_moe": {
+        "commit_hash": "19ade2426a6ec12cfbec2779f32573e7b02d49a0",
+        "first_commit_datetime": "2023-03-27T19:42:00+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/nllb_moe/modeling_nllb_moe.py",
+        "downloads": 513,
+        "tags": [
+            "nllb_moe",
+            "nllb-moe"
+        ]
+    },
+    "lilt": {
+        "commit_hash": "4d367a3c8101bd72a711445d305005133ad15e73",
+        "first_commit_datetime": "2022-10-12T10:11:20+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/lilt/modeling_lilt.py",
+        "downloads": 34024,
+        "tags": [
+            "lilt"
+        ]
+    },
+    "longformer": {
+        "commit_hash": "c89bdfbe720bc8f41c7dc6db5473a2cb0955f224",
+        "first_commit_datetime": "2020-11-16T21:43:42-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/longformer/modeling_longformer.py",
+        "downloads": 1664751,
+        "tags": [
+            "longformer"
+        ]
+    },
+    "sew_d": {
+        "commit_hash": "cd3166a8ed612ace5c6ee2f70fb41943974ee49c",
+        "first_commit_datetime": "2021-10-15T18:26:26+03:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/sew_d/modeling_sew_d.py",
+        "downloads": 38665,
+        "tags": [
+            "sew_d",
+            "sew-d"
+        ]
+    },
+    "bigbird_pegasus": {
+        "commit_hash": "dc3f6758cfe84a29fa87e9ce05b9b45e10cdb155",
+        "first_commit_datetime": "2021-05-07T09:27:43+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/bigbird_pegasus/modeling_bigbird_pegasus.py",
+        "downloads": 89485,
+        "tags": [
+            "bigbird_pegasus",
+            "bigbird-pegasus"
+        ]
+    },
+    "timesformer": {
+        "commit_hash": "cc3d0e1b017dbb8dcbba1eb01be77aef7bacee1a",
+        "first_commit_datetime": "2022-12-02T09:13:25+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/timesformer/modeling_timesformer.py",
+        "downloads": 30351,
+        "tags": [
+            "timesformer"
+        ]
+    },
+    "maskformer": {
+        "commit_hash": "6dc884abc85c7f9b3b46f536a541d34d9f513d54",
+        "first_commit_datetime": "2022-11-28T20:33:49+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/maskformer/modeling_maskformer_swin.py",
+        "downloads": 18250,
+        "tags": [
+            "maskformer"
+        ]
+    },
+    "llava_next_video": {
+        "commit_hash": "e71f2863d75f936256729bb7456dfb022e3d419a",
+        "first_commit_datetime": "2024-06-26T21:52:28+05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/llava_next_video/modeling_llava_next_video.py",
+        "downloads": 129542,
+        "tags": [
+            "llava_next_video",
+            "llava-next-video"
+        ]
+    },
+    "glpn": {
+        "commit_hash": "0c55d47cded0c711a4359afb04d73ffb86b7d913",
+        "first_commit_datetime": "2022-03-22T08:51:13+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/glpn/modeling_glpn.py",
+        "downloads": 12412,
+        "tags": [
+            "glpn"
+        ]
+    },
+    "timm_backbone": {
+        "commit_hash": "a717e0318ce4b4973cfebee44d1747f5ca828ac2",
+        "first_commit_datetime": "2023-06-06T17:11:30+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/timm_backbone/modeling_timm_backbone.py",
+        "downloads": 4,
+        "tags": [
+            "timm_backbone",
+            "timm-backbone"
+        ]
+    },
+    "xglm": {
+        "commit_hash": "d25e25ee2b63ebfcd099deb689a5a7272574a10f",
+        "first_commit_datetime": "2022-01-28T18:55:23+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/xglm/modeling_xglm.py",
+        "downloads": 83579,
+        "tags": [
+            "xglm"
+        ]
+    },
+    "videomae": {
+        "commit_hash": "f9a0008d2d3082a665f711b24f5314e4a8205fab",
+        "first_commit_datetime": "2022-08-04T18:02:55+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/videomae/modeling_videomae.py",
+        "downloads": 242432,
+        "tags": [
+            "videomae"
+        ]
+    },
+    "sew": {
+        "commit_hash": "cd3166a8ed612ace5c6ee2f70fb41943974ee49c",
+        "first_commit_datetime": "2021-10-15T18:26:26+03:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/sew/modeling_sew.py",
+        "downloads": 38926,
+        "tags": [
+            "sew"
+        ]
+    },
+    "bros": {
+        "commit_hash": "17fdd35481e6b462989c1c600e6cc0987dc88621",
+        "first_commit_datetime": "2023-09-14T18:02:37+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/bros/modeling_bros.py",
+        "downloads": 99989,
+        "tags": [
+            "bros"
+        ]
+    },
+    "pix2struct": {
+        "commit_hash": "0f68a7f4088cac3a97b28e339d8b8d72c0edf93b",
+        "first_commit_datetime": "2023-03-22T16:53:52+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/pix2struct/modeling_pix2struct.py",
+        "downloads": 96816,
+        "tags": [
+            "pix2struct"
+        ]
+    },
+    "hiera": {
+        "commit_hash": "c1e139c2b0ea6417b7306b3bff742f59b16f84e7",
+        "first_commit_datetime": "2024-07-11T22:13:56+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/hiera/modeling_hiera.py",
+        "downloads": 9845,
+        "tags": [
+            "hiera"
+        ]
+    },
+    "dpr": {
+        "commit_hash": "c89bdfbe720bc8f41c7dc6db5473a2cb0955f224",
+        "first_commit_datetime": "2020-11-16T21:43:42-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/dpr/modeling_dpr.py",
+        "downloads": 75289,
+        "tags": [
+            "dpr"
+        ]
+    },
+    "funnel": {
+        "commit_hash": "c89bdfbe720bc8f41c7dc6db5473a2cb0955f224",
+        "first_commit_datetime": "2020-11-16T21:43:42-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/funnel/modeling_funnel.py",
+        "downloads": 30482,
+        "tags": [
+            "funnel"
+        ]
+    },
+    "vision_encoder_decoder": {
+        "commit_hash": "408b2d2bd08f667cf4154730cc323c4e49657eed",
+        "first_commit_datetime": "2021-10-13T10:28:56+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/vision_encoder_decoder/modeling_vision_encoder_decoder.py",
+        "downloads": 385881,
+        "tags": [
+            "vision_encoder_decoder",
+            "vision-encoder-decoder"
+        ]
+    },
+    "biogpt": {
+        "commit_hash": "13e736685ac3482c7a1454800947912835f297eb",
+        "first_commit_datetime": "2022-12-05T10:12:03-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/biogpt/modeling_biogpt.py",
+        "downloads": 105364,
+        "tags": [
+            "biogpt"
+        ]
+    },
+    "data2vec": {
+        "commit_hash": "8d3f952adb8c98cec2ea1f59bb7acfbc08232381",
+        "first_commit_datetime": "2022-04-18T17:52:13+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/data2vec/modeling_data2vec_vision.py",
+        "downloads": 31,
+        "tags": [
+            "data2vec"
+        ]
+    },
+    "xlm": {
+        "commit_hash": "c89bdfbe720bc8f41c7dc6db5473a2cb0955f224",
+        "first_commit_datetime": "2020-11-16T21:43:42-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/xlm/modeling_xlm.py",
+        "downloads": 51140,
+        "tags": [
+            "xlm"
+        ]
+    },
+    "detr": {
+        "commit_hash": "d3eacbb8299161d21e007e7e3d42505dae741282",
+        "first_commit_datetime": "2021-06-09T11:51:13-04:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/detr/modeling_detr.py",
+        "downloads": 720374,
+        "tags": [
+            "detr"
+        ]
+    },
+    "olmoe": {
+        "commit_hash": "ecd61c62862f925a18b4f063dc17fcaf01826e25",
+        "first_commit_datetime": "2024-09-03T18:43:12+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/olmoe/modeling_olmoe.py",
+        "downloads": 54867,
+        "tags": [
+            "olmoe"
+        ]
+    },
+    "plbart": {
+        "commit_hash": "ae1f835028f89e13aea6181c93af8295946d9cf0",
+        "first_commit_datetime": "2022-02-18T14:17:09+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/plbart/modeling_plbart.py",
+        "downloads": 28139,
+        "tags": [
+            "plbart"
+        ]
+    },
+    "clip": {
+        "commit_hash": "8719afa1adc004011a34a34e374b819b5963f23b",
+        "first_commit_datetime": "2021-05-12T13:36:15+05:18",
+        "model_path": "/home/joao/transformers/src/transformers/models/clip/modeling_clip.py",
+        "downloads": 7459291,
+        "tags": [
+            "clip"
+        ]
+    },
+    "informer": {
+        "commit_hash": "8abe4930d39d9fb379fe89ee19327d371daee29f",
+        "first_commit_datetime": "2023-03-07T21:36:38+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/informer/modeling_informer.py",
+        "downloads": 7038,
+        "tags": [
+            "informer"
+        ]
+    },
+    "megatron_bert": {
+        "commit_hash": "02ec02d6d3580874b4a0b00d5b13ab0334114fd9",
+        "first_commit_datetime": "2021-04-08T14:09:11-04:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/megatron_bert/modeling_megatron_bert.py",
+        "downloads": 110825,
+        "tags": [
+            "megatron_bert",
+            "megatron-bert"
+        ]
+    },
+    "time_series_transformer": {
+        "commit_hash": "5cd16f01db3b5499d4665e8624801ed30ba87bdd",
+        "first_commit_datetime": "2022-09-30T15:32:59-04:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/time_series_transformer/modeling_time_series_transformer.py",
+        "downloads": 3583,
+        "tags": [
+            "time_series_transformer",
+            "time-series-transformer"
+        ]
+    },
+    "qwen2_vl": {
+        "commit_hash": "19e6e80e10118f855137b90740936c0b11ac397f",
+        "first_commit_datetime": "2024-08-26T15:16:44+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/qwen2_vl/modeling_qwen2_vl.py",
+        "downloads": 3962842,
+        "tags": [
+            "qwen2_vl",
+            "qwen2-vl"
+        ]
+    },
+    "blenderbot_small": {
+        "commit_hash": "eef66035a28b935b7823c9a7ddc8c569e077ce11",
+        "first_commit_datetime": "2021-01-05T22:00:05+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/blenderbot_small/modeling_blenderbot_small.py",
+        "downloads": 21891,
+        "tags": [
+            "blenderbot_small",
+            "blenderbot-small"
+        ]
+    },
+    "clvp": {
+        "commit_hash": "7e9f10ac94c626780cf9e17485e73aec2c644bf2",
+        "first_commit_datetime": "2023-11-10T13:49:10+00:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/clvp/modeling_clvp.py",
+        "downloads": 1513,
+        "tags": [
+            "clvp"
+        ]
+    },
+    "pvt": {
+        "commit_hash": "a03d13c83d402a6c13866a756ebfaceb43b8e8b6",
+        "first_commit_datetime": "2023-07-24T15:34:19+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/pvt/modeling_pvt.py",
+        "downloads": 11382,
+        "tags": [
+            "pvt"
+        ]
+    },
+    "instructblip": {
+        "commit_hash": "868363abb9e72a638b4710d1f5ef1199839b3eec",
+        "first_commit_datetime": "2023-06-26T11:23:57+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/instructblip/modeling_instructblip.py",
+        "downloads": 113360,
+        "tags": [
+            "instructblip"
+        ]
+    },
+    "llava": {
+        "commit_hash": "44b5506d29326c6f2ae672e78d2df78ec55939d9",
+        "first_commit_datetime": "2023-12-07T09:30:47+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/llava/modeling_llava.py",
+        "downloads": 327669,
+        "tags": [
+            "llava"
+        ]
+    },
+    "udop": {
+        "commit_hash": "836921fdeb498820b71dcc7b70e990e828f4c6bc",
+        "first_commit_datetime": "2024-03-04T18:49:02+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/udop/modeling_udop.py",
+        "downloads": 7323,
+        "tags": [
+            "udop"
+        ]
+    },
+    "pvt_v2": {
+        "commit_hash": "1fc505b8169f0306b6bd55a5c38ff41d7b4fc18f",
+        "first_commit_datetime": "2024-03-13T19:05:20+00:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/pvt_v2/modeling_pvt_v2.py",
+        "downloads": 17770,
+        "tags": [
+            "pvt_v2",
+            "pvt-v2"
+        ]
+    },
+    "flaubert": {
+        "commit_hash": "c89bdfbe720bc8f41c7dc6db5473a2cb0955f224",
+        "first_commit_datetime": "2020-11-16T21:43:42-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/flaubert/modeling_flaubert.py",
+        "downloads": 98828,
+        "tags": [
+            "flaubert"
+        ]
+    },
+    "pegasus_x": {
+        "commit_hash": "53e33e6f1be980353e8cd3f75c7cf1e58720f557",
+        "first_commit_datetime": "2022-09-02T19:54:02+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/pegasus_x/modeling_pegasus_x.py",
+        "downloads": 7045,
+        "tags": [
+            "pegasus_x",
+            "pegasus-x"
+        ]
+    },
+    "qwen2": {
+        "commit_hash": "d6ffe74dfa577b5e7d12e48aa1c686ad8d3ef557",
+        "first_commit_datetime": "2024-01-17T16:02:22+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/qwen2/modeling_qwen2.py",
+        "downloads": 7205859,
+        "tags": [
+            "qwen2"
+        ]
+    },
+    "instructblipvideo": {
+        "commit_hash": "fc689d75a04e846f63f8d7a4a420da0cf796f86b",
+        "first_commit_datetime": "2024-06-25T15:45:39+05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/instructblipvideo/modeling_instructblipvideo.py",
+        "downloads": 0,
+        "tags": [
+            "instructblipvideo"
+        ]
+    },
+    "wav2vec2_bert": {
+        "commit_hash": "d2cdefb9ec5080b78be302740a9cbaf48241b5c6",
+        "first_commit_datetime": "2024-01-18T13:37:34+00:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/wav2vec2_bert/modeling_wav2vec2_bert.py",
+        "downloads": 1089175,
+        "tags": [
+            "wav2vec2_bert",
+            "wav2vec2-bert"
+        ]
+    },
+    "mt5": {
+        "commit_hash": "86822a358bd74923d5a239bf8051f40d846c8fae",
+        "first_commit_datetime": "2020-11-17T12:23:09+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/mt5/modeling_mt5.py",
+        "downloads": 97329,
+        "tags": [
+            "mt5"
+        ]
+    },
+    "stablelm": {
+        "commit_hash": "de6029a0593d6ab73b4b0c6c71f5aa6e2520293f",
+        "first_commit_datetime": "2024-02-14T07:15:18+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/stablelm/modeling_stablelm.py",
+        "downloads": 50529,
+        "tags": [
+            "stablelm"
+        ]
+    },
+    "swin": {
+        "commit_hash": "d43e308e7f288157f9bc7f3ce0738c41890d3cf1",
+        "first_commit_datetime": "2022-01-21T12:10:41+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/swin/modeling_swin.py",
+        "downloads": 51169,
+        "tags": [
+            "swin"
+        ]
+    },
+    "splinter": {
+        "commit_hash": "439a43b6b403205eeda2d62645fc16c93627d30d",
+        "first_commit_datetime": "2021-08-17T08:29:01-04:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/splinter/modeling_splinter.py",
+        "downloads": 6824,
+        "tags": [
+            "splinter"
+        ]
+    },
+    "nystromformer": {
+        "commit_hash": "28e091430eea9e0d40839e56fd0d57aec262f5f9",
+        "first_commit_datetime": "2022-01-11T14:25:49+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/nystromformer/modeling_nystromformer.py",
+        "downloads": 35715,
+        "tags": [
+            "nystromformer"
+        ]
+    },
+    "dac": {
+        "commit_hash": "8260cb311efe9b2855f6ecb6d1d7724ea2d0dcc3",
+        "first_commit_datetime": "2024-08-19T10:21:51+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/dac/modeling_dac.py",
+        "downloads": 333903,
+        "tags": [
+            "dac"
+        ]
+    },
+    "convbert": {
+        "commit_hash": "f617490e718f5a5456764777f4960ea6c98cd1f1",
+        "first_commit_datetime": "2021-01-27T03:20:09-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/convbert/modeling_convbert.py",
+        "downloads": 1076683,
+        "tags": [
+            "convbert"
+        ]
+    },
+    "hubert": {
+        "commit_hash": "ccca510276c7a6b75f05a90150e2449bf1f8f286",
+        "first_commit_datetime": "2021-06-16T12:14:12+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/hubert/modeling_hubert.py",
+        "downloads": 281267,
+        "tags": [
+            "hubert"
+        ]
+    },
+    "pegasus": {
+        "commit_hash": "c89bdfbe720bc8f41c7dc6db5473a2cb0955f224",
+        "first_commit_datetime": "2020-11-16T21:43:42-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/pegasus/modeling_pegasus.py",
+        "downloads": 232723,
+        "tags": [
+            "pegasus"
+        ]
+    },
+    "bert": {
+        "commit_hash": "c89bdfbe720bc8f41c7dc6db5473a2cb0955f224",
+        "first_commit_datetime": "2020-11-16T21:43:42-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/bert/modeling_bert.py",
+        "downloads": 95569147,
+        "tags": [
+            "bert"
+        ]
+    },
+    "switch_transformers": {
+        "commit_hash": "163ac3d3eeb4537eb2f5381f1331cafe91bfe4c2",
+        "first_commit_datetime": "2022-11-15T13:06:45+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/switch_transformers/modeling_switch_transformers.py",
+        "downloads": 9834,
+        "tags": [
+            "switch_transformers",
+            "switch-transformers"
+        ]
+    },
+    "visual_bert": {
+        "commit_hash": "88ca6a231d29f7641e0c4945cf1a114f43cc2d61",
+        "first_commit_datetime": "2021-06-02T18:01:08+05:18",
+        "model_path": "/home/joao/transformers/src/transformers/models/visual_bert/modeling_visual_bert.py",
+        "downloads": 10989,
+        "tags": [
+            "visual_bert",
+            "visual-bert"
+        ]
+    },
+    "vision_text_dual_encoder": {
+        "commit_hash": "fc1d97f29d7b98e82ae17fc5ac49229e2859bcca",
+        "first_commit_datetime": "2021-11-30T22:09:48+05:18",
+        "model_path": "/home/joao/transformers/src/transformers/models/vision_text_dual_encoder/modeling_vision_text_dual_encoder.py",
+        "downloads": 1402,
+        "tags": [
+            "vision_text_dual_encoder",
+            "vision-text-dual-encoder"
+        ]
+    },
+    "m2m_100": {
+        "commit_hash": "f6e74a63cad7744b47d3ddcd1818f092bdbb6970",
+        "first_commit_datetime": "2021-03-06T22:02:16+05:18",
+        "model_path": "/home/joao/transformers/src/transformers/models/m2m_100/modeling_m2m_100.py",
+        "downloads": 268030,
+        "tags": [
+            "m2m_100",
+            "m2m-100"
+        ]
+    },
+    "xmod": {
+        "commit_hash": "b0d539ccad090c8949c1740a9758b4152fad5f72",
+        "first_commit_datetime": "2023-02-10T15:32:06+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/xmod/modeling_xmod.py",
+        "downloads": 42866,
+        "tags": [
+            "xmod"
+        ]
+    },
+    "conditional_detr": {
+        "commit_hash": "126a739058c501ca1a9d09637805494c4c1d1d0a",
+        "first_commit_datetime": "2022-09-22T09:45:04+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/conditional_detr/modeling_conditional_detr.py",
+        "downloads": 18884,
+        "tags": [
+            "conditional_detr",
+            "conditional-detr"
+        ]
+    },
+    "longt5": {
+        "commit_hash": "a72f1c9f5b907f96cbb7de3bbb02a1d431d34071",
+        "first_commit_datetime": "2022-06-13T22:36:58+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/longt5/modeling_longt5.py",
+        "downloads": 52770,
+        "tags": [
+            "longt5"
+        ]
+    },
+    "mimi": {
+        "commit_hash": "5af7d41e49bbfc8319f462eb45253dcb3863dfb7",
+        "first_commit_datetime": "2024-09-18T19:23:44+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/mimi/modeling_mimi.py",
+        "downloads": 382300,
+        "tags": [
+            "mimi"
+        ]
+    },
+    "mra": {
+        "commit_hash": "30ed3adf474aaf2972ab56f5624089bc24a6adf3",
+        "first_commit_datetime": "2023-07-10T10:50:43+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/mra/modeling_mra.py",
+        "downloads": 11984,
+        "tags": [
+            "mra"
+        ]
+    },
+    "persimmon": {
+        "commit_hash": "9cccb3a8381980c0ca94d494f07ca001cb6dd399",
+        "first_commit_datetime": "2023-09-12T11:33:27+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/persimmon/modeling_persimmon.py",
+        "downloads": 77171,
+        "tags": [
+            "persimmon"
+        ]
+    },
+    "donut": {
+        "commit_hash": "2ab790e82d0759b667cd848a4d49e6ad65e15d59",
+        "first_commit_datetime": "2022-08-12T16:40:58+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/donut/modeling_donut_swin.py",
+        "downloads": 479691,
+        "tags": [
+            "donut"
+        ]
+    },
+    "blenderbot": {
+        "commit_hash": "c89bdfbe720bc8f41c7dc6db5473a2cb0955f224",
+        "first_commit_datetime": "2020-11-16T21:43:42-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/blenderbot/modeling_blenderbot.py",
+        "downloads": 50653,
+        "tags": [
+            "blenderbot"
+        ]
+    },
+    "video_llava": {
+        "commit_hash": "bd9f4d79517a3ad2f9da999d090dc3bbfc506dc4",
+        "first_commit_datetime": "2024-05-15T16:42:29+05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/video_llava/modeling_video_llava.py",
+        "downloads": 10232,
+        "tags": [
+            "video_llava",
+            "video-llava"
+        ]
+    },
+    "vivit": {
+        "commit_hash": "8a5e8a9c2a4dc54b4485994311de6b839976828c",
+        "first_commit_datetime": "2023-07-11T14:04:04+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/vivit/modeling_vivit.py",
+        "downloads": 34243,
+        "tags": [
+            "vivit"
+        ]
+    },
+    "jetmoe": {
+        "commit_hash": "ccdabc5642bf84849af93f591e207dc625c8e1e1",
+        "first_commit_datetime": "2024-05-14T16:32:01+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/jetmoe/modeling_jetmoe.py",
+        "downloads": 1175,
+        "tags": [
+            "jetmoe"
+        ]
+    },
+    "roberta": {
+        "commit_hash": "c89bdfbe720bc8f41c7dc6db5473a2cb0955f224",
+        "first_commit_datetime": "2020-11-16T21:43:42-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/roberta/modeling_roberta.py",
+        "downloads": 1258437,
+        "tags": [
+            "roberta"
+        ]
+    },
+    "grounding_dino": {
+        "commit_hash": "b752ad3019afbea95605b743a5c278dfccbe701e",
+        "first_commit_datetime": "2024-04-11T08:32:16+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/grounding_dino/modeling_grounding_dino.py",
+        "downloads": 921836,
+        "tags": [
+            "grounding_dino",
+            "grounding-dino"
+        ]
+    },
+    "vipllava": {
+        "commit_hash": "c7f076a00ee54f777b3d3322c91bc11489a47950",
+        "first_commit_datetime": "2023-12-13T10:42:24+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/vipllava/modeling_vipllava.py",
+        "downloads": 11408,
+        "tags": [
+            "vipllava"
+        ]
+    },
+    "swiftformer": {
+        "commit_hash": "c045249049d6c3007dd08dd90dfca3ea5a764d8c",
+        "first_commit_datetime": "2023-05-12T11:52:31+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/swiftformer/modeling_swiftformer.py",
+        "downloads": 6381,
+        "tags": [
+            "swiftformer"
+        ]
+    },
+    "olmo": {
+        "commit_hash": "e4ea19b958c89d61e42461fac6ac8441787121f8",
+        "first_commit_datetime": "2024-04-17T17:59:07+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/olmo/modeling_olmo.py",
+        "downloads": 81334,
+        "tags": [
+            "olmo"
+        ]
+    },
+    "deberta": {
+        "commit_hash": "c89bdfbe720bc8f41c7dc6db5473a2cb0955f224",
+        "first_commit_datetime": "2020-11-16T21:43:42-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/deberta/modeling_deberta.py",
+        "downloads": 1874059,
+        "tags": [
+            "deberta"
+        ]
+    },
+    "dpt": {
+        "commit_hash": "979b039c893f771bc77c4089d841af89927759a1",
+        "first_commit_datetime": "2022-03-28T16:28:10+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/dpt/modeling_dpt.py",
+        "downloads": 221541,
+        "tags": [
+            "dpt"
+        ]
+    },
+    "qwen2_moe": {
+        "commit_hash": "1c39974a4c4036fd641bc1191cc32799f85715a4",
+        "first_commit_datetime": "2024-03-27T02:11:55+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/qwen2_moe/modeling_qwen2_moe.py",
+        "downloads": 81628,
+        "tags": [
+            "qwen2_moe",
+            "qwen2-moe"
+        ]
+    },
+    "idefics": {
+        "commit_hash": "6c811a322f06a4ce0f3dcf1d6be9e334ee69d8f7",
+        "first_commit_datetime": "2023-08-18T14:12:28-07:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/idefics/modeling_idefics.py",
+        "downloads": 13504,
+        "tags": [
+            "idefics"
+        ]
+    },
+    "efficientnet": {
+        "commit_hash": "49ab16239c74ccfca2298472868caadb1d2c3878",
+        "first_commit_datetime": "2023-02-20T16:37:11+03:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/efficientnet/modeling_efficientnet.py",
+        "downloads": 113984,
+        "tags": [
+            "efficientnet"
+        ]
+    },
+    "unispeech_sat": {
+        "commit_hash": "9f3aa46f45d10fde9c8b1514eaa383b69e78c180",
+        "first_commit_datetime": "2021-10-26T18:59:58+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/unispeech_sat/modeling_unispeech_sat.py",
+        "downloads": 376604,
+        "tags": [
+            "unispeech_sat",
+            "unispeech-sat"
+        ]
+    },
+    "bert_generation": {
+        "commit_hash": "c89bdfbe720bc8f41c7dc6db5473a2cb0955f224",
+        "first_commit_datetime": "2020-11-16T21:43:42-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/bert_generation/modeling_bert_generation.py",
+        "downloads": 1658,
+        "tags": [
+            "bert_generation",
+            "bert-generation"
+        ]
+    },
+    "tapas": {
+        "commit_hash": "1551e2dc6d27e7eba88d89fdfaf16bce82a3c573",
+        "first_commit_datetime": "2020-12-15T17:08:49-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/tapas/modeling_tapas.py",
+        "downloads": 50249,
+        "tags": [
+            "tapas"
+        ]
+    },
+    "granitemoe": {
+        "commit_hash": "e472e077c24d6f6f080f5535f01c48f09164ec62",
+        "first_commit_datetime": "2024-09-21T01:43:50+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/granitemoe/modeling_granitemoe.py",
+        "downloads": 512475,
+        "tags": [
+            "granitemoe"
+        ]
+    },
+    "led": {
+        "commit_hash": "189387e9b2e1d6d1a0fb8355fd01e9a89fdb3e4a",
+        "first_commit_datetime": "2021-01-05T13:14:30+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/led/modeling_led.py",
+        "downloads": 87617,
+        "tags": [
+            "led"
+        ]
+    },
+    "idefics3": {
+        "commit_hash": "f2c388e3f946862f657acc1e21b272ec946fc66c",
+        "first_commit_datetime": "2024-09-25T21:28:49+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/idefics3/modeling_idefics3.py",
+        "downloads": 117133,
+        "tags": [
+            "idefics3"
+        ]
+    },
+    "swin2sr": {
+        "commit_hash": "26dd041c6e45379141302e2d293ab4cd9cf805d4",
+        "first_commit_datetime": "2022-12-16T16:24:01+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/swin2sr/modeling_swin2sr.py",
+        "downloads": 50011,
+        "tags": [
+            "swin2sr"
+        ]
+    },
+    "gemma": {
+        "commit_hash": "594c1277b2fcc1c1aed252d320359101409e0407",
+        "first_commit_datetime": "2024-02-21T14:21:28+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/gemma/modeling_gemma.py",
+        "downloads": 155436,
+        "tags": [
+            "gemma"
+        ]
+    },
+    "roformer": {
+        "commit_hash": "206f06f2ddcb8ccfc52d13612a7d41219e41e932",
+        "first_commit_datetime": "2021-05-20T08:00:34-04:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/roformer/modeling_roformer.py",
+        "downloads": 50322,
+        "tags": [
+            "roformer"
+        ]
+    },
+    "gpt2": {
+        "commit_hash": "c89bdfbe720bc8f41c7dc6db5473a2cb0955f224",
+        "first_commit_datetime": "2020-11-16T21:43:42-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/gpt2/modeling_gpt2.py",
+        "downloads": 11567187,
+        "tags": [
+            "gpt2"
+        ]
+    },
+    "mistral": {
+        "commit_hash": "72958fcd3c98a7afdc61f953aa58c544ebda2f79",
+        "first_commit_datetime": "2023-09-27T18:30:46+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/mistral/modeling_mistral.py",
+        "downloads": 714156,
+        "tags": [
+            "mistral"
+        ]
+    },
+    "unispeech": {
+        "commit_hash": "9f3aa46f45d10fde9c8b1514eaa383b69e78c180",
+        "first_commit_datetime": "2021-10-26T18:59:58+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/unispeech/modeling_unispeech.py",
+        "downloads": 50349,
+        "tags": [
+            "unispeech"
+        ]
+    },
+    "encodec": {
+        "commit_hash": "0c3fdccf2f271fb7c44f6ea6e9f4ee234795f2c5",
+        "first_commit_datetime": "2023-06-14T18:57:23+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/encodec/modeling_encodec.py",
+        "downloads": 1504178,
+        "tags": [
+            "encodec"
+        ]
+    },
+    "squeezebert": {
+        "commit_hash": "c89bdfbe720bc8f41c7dc6db5473a2cb0955f224",
+        "first_commit_datetime": "2020-11-16T21:43:42-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/squeezebert/modeling_squeezebert.py",
+        "downloads": 51830,
+        "tags": [
+            "squeezebert"
+        ]
+    },
+    "xlm_roberta": {
+        "commit_hash": "c89bdfbe720bc8f41c7dc6db5473a2cb0955f224",
+        "first_commit_datetime": "2020-11-16T21:43:42-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/xlm_roberta/modeling_xlm_roberta.py",
+        "downloads": 5830045,
+        "tags": [
+            "xlm_roberta",
+            "xlm-roberta"
+        ]
+    },
+    "wavlm": {
+        "commit_hash": "bef1e3e4a00bd0863f804ba0a4e05dc77676a341",
+        "first_commit_datetime": "2021-12-16T18:57:05+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/wavlm/modeling_wavlm.py",
+        "downloads": 433454,
+        "tags": [
+            "wavlm"
+        ]
+    },
+    "autoformer": {
+        "commit_hash": "4b6a5a7caa1ea31a3321eb17e6dcc9baff4f55d9",
+        "first_commit_datetime": "2023-05-30T10:23:32+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/autoformer/modeling_autoformer.py",
+        "downloads": 7120,
+        "tags": [
+            "autoformer"
+        ]
+    },
+    "chameleon": {
+        "commit_hash": "24cfcc2114b5daf6ca1cce6e838ee9aa17096e62",
+        "first_commit_datetime": "2024-07-17T10:41:43+05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/chameleon/modeling_chameleon.py",
+        "downloads": 76652,
+        "tags": [
+            "chameleon"
+        ]
+    },
+    "sam": {
+        "commit_hash": "474bf508dfe0d46fc38585a1bb793e5ba74fddfd",
+        "first_commit_datetime": "2023-04-19T21:01:49+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/sam/modeling_sam.py",
+        "downloads": 156367,
+        "tags": [
+            "sam"
+        ]
+    },
+    "resnet": {
+        "commit_hash": "e3008c679f46fb0ae0c42107b2a5c471d96f9f29",
+        "first_commit_datetime": "2022-03-14T19:57:55+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/resnet/modeling_resnet.py",
+        "downloads": 129282,
+        "tags": [
+            "resnet"
+        ]
+    },
+    "codegen": {
+        "commit_hash": "d6b6fb9963e094216daa30ebf61224ca1c46921e",
+        "first_commit_datetime": "2022-06-24T17:10:38+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/codegen/modeling_codegen.py",
+        "downloads": 114376,
+        "tags": [
+            "codegen"
+        ]
+    },
+    "yolos": {
+        "commit_hash": "1ac698744c4dbdf1495d303246d08ffacdf4f5b8",
+        "first_commit_datetime": "2022-05-02T18:30:55+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/yolos/modeling_yolos.py",
+        "downloads": 117504,
+        "tags": [
+            "yolos"
+        ]
+    },
+    "canine": {
+        "commit_hash": "6e68597877247396dcea63a2f3393e3b09b90f3c",
+        "first_commit_datetime": "2021-06-30T08:05:44-04:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/canine/modeling_canine.py",
+        "downloads": 43948,
+        "tags": [
+            "canine"
+        ]
+    },
+    "trocr": {
+        "commit_hash": "408b2d2bd08f667cf4154730cc323c4e49657eed",
+        "first_commit_datetime": "2021-10-13T10:28:56+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/trocr/modeling_trocr.py",
+        "downloads": 375413,
+        "tags": [
+            "trocr"
+        ]
+    },
+    "musicgen_melody": {
+        "commit_hash": "c43b380e70136c65e4f2c0644fa50e1fb21b4fee",
+        "first_commit_datetime": "2024-03-18T13:06:12+00:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/musicgen_melody/modeling_musicgen_melody.py",
+        "downloads": 6141,
+        "tags": [
+            "musicgen_melody",
+            "musicgen-melody"
+        ]
+    },
+    "vit_msn": {
+        "commit_hash": "2d9853b22622e9c5017241a14cda415d6bca13a2",
+        "first_commit_datetime": "2022-09-22T07:15:03-04:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/vit_msn/modeling_vit_msn.py",
+        "downloads": 12020,
+        "tags": [
+            "vit_msn",
+            "vit-msn"
+        ]
+    },
+    "owlv2": {
+        "commit_hash": "762af3e3c7b2151adde24971fcaaf310b4d39027",
+        "first_commit_datetime": "2023-10-13T16:41:24+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/owlv2/modeling_owlv2.py",
+        "downloads": 432737,
+        "tags": [
+            "owlv2"
+        ]
+    },
+    "bloom": {
+        "commit_hash": "ca2a55e9dfb245527b5e1c954fec6ffbb7aef07b",
+        "first_commit_datetime": "2022-06-09T12:00:40+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/bloom/modeling_bloom.py",
+        "downloads": 2365628,
+        "tags": [
+            "bloom"
+        ]
+    },
+    "segformer": {
+        "commit_hash": "1dc96a760d86bba6e39b6963b49d99c72444e140",
+        "first_commit_datetime": "2021-10-28T08:23:52-04:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/segformer/modeling_segformer.py",
+        "downloads": 179695,
+        "tags": [
+            "segformer"
+        ]
+    },
+    "vilt": {
+        "commit_hash": "ac227093e41cecb07c7e0f2fc9a504850907bd06",
+        "first_commit_datetime": "2022-01-19T19:51:59+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/vilt/modeling_vilt.py",
+        "downloads": 753106,
+        "tags": [
+            "vilt"
+        ]
+    },
+    "phi": {
+        "commit_hash": "e1c3ac25515839146c93427e55941de9cee3401e",
+        "first_commit_datetime": "2023-11-10T15:28:30+00:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/phi/modeling_phi.py",
+        "downloads": 1273725,
+        "tags": [
+            "phi"
+        ]
+    },
+    "nemotron": {
+        "commit_hash": "6a03942db7c577f9db340270024ab86ba54f7f21",
+        "first_commit_datetime": "2024-08-06T15:42:05+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/nemotron/modeling_nemotron.py",
+        "downloads": 50221,
+        "tags": [
+            "nemotron"
+        ]
+    },
+    "roberta_prelayernorm": {
+        "commit_hash": "b4b613b1024af416ae7cc6a085e4cd5302c5218f",
+        "first_commit_datetime": "2022-12-19T09:30:17+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/roberta_prelayernorm/modeling_roberta_prelayernorm.py",
+        "downloads": 14360,
+        "tags": [
+            "roberta_prelayernorm",
+            "roberta-prelayernorm"
+        ]
+    },
+    "wav2vec2_conformer": {
+        "commit_hash": "5a9957358cebd616e58b2d1ab3b887c2f2793b45",
+        "first_commit_datetime": "2022-05-17T00:43:16+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/wav2vec2_conformer/modeling_wav2vec2_conformer.py",
+        "downloads": 72512,
+        "tags": [
+            "wav2vec2_conformer",
+            "wav2vec2-conformer"
+        ]
+    },
+    "bart": {
+        "commit_hash": "c89bdfbe720bc8f41c7dc6db5473a2cb0955f224",
+        "first_commit_datetime": "2020-11-16T21:43:42-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/bart/modeling_bart.py",
+        "downloads": 3590665,
+        "tags": [
+            "bart"
+        ]
+    },
+    "recurrent_gemma": {
+        "commit_hash": "0fe44059aed104b1a001b98fbf57332c866bf499",
+        "first_commit_datetime": "2024-04-10T16:59:13+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/recurrent_gemma/modeling_recurrent_gemma.py",
+        "downloads": 4660,
+        "tags": [
+            "recurrent_gemma",
+            "recurrent-gemma"
+        ]
+    },
+    "fastspeech2_conformer": {
+        "commit_hash": "d83ff5eeff1d5360052a66074dde1f87bd9f3a21",
+        "first_commit_datetime": "2024-01-03T18:01:06+00:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/fastspeech2_conformer/modeling_fastspeech2_conformer.py",
+        "downloads": 1476,
+        "tags": [
+            "fastspeech2_conformer",
+            "fastspeech2-conformer"
+        ]
+    },
+    "opt": {
+        "commit_hash": "b971c769e80fe85fb7dd35c7cf65f3ac97ea6421",
+        "first_commit_datetime": "2022-05-12T12:24:35+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/opt/modeling_opt.py",
+        "downloads": 8105874,
+        "tags": [
+            "opt"
+        ]
+    },
+    "kosmos2": {
+        "commit_hash": "691fd8fdded34497451bc638716eb8fbd484883a",
+        "first_commit_datetime": "2023-10-30T13:32:17+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/kosmos2/modeling_kosmos2.py",
+        "downloads": 0,
+        "tags": [
+            "kosmos2"
+        ]
+    },
+    "mamba": {
+        "commit_hash": "fb1c62e9731b0acd2ff4edc09af519ebc62dfd39",
+        "first_commit_datetime": "2024-03-05T20:01:06+09:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/mamba/modeling_mamba.py",
+        "downloads": 51426,
+        "tags": [
+            "mamba"
+        ]
+    },
+    "vitmatte": {
+        "commit_hash": "7d6354e04794f3246bf9a0faf4fead080edeebb6",
+        "first_commit_datetime": "2023-09-19T10:56:10-03:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/vitmatte/modeling_vitmatte.py",
+        "downloads": 4159841,
+        "tags": [
+            "vitmatte"
+        ]
+    },
+    "vit_mae": {
+        "commit_hash": "74bec9865c7fdd0321c372d7dee5accefe80ca35",
+        "first_commit_datetime": "2022-01-18T16:21:32+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/vit_mae/modeling_vit_mae.py",
+        "downloads": 63420,
+        "tags": [
+            "vit_mae",
+            "vit-mae"
+        ]
+    },
+    "llava_onevision": {
+        "commit_hash": "43df47d8e78238021a4273746fc469336f948314",
+        "first_commit_datetime": "2024-09-05T14:43:20+05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/llava_onevision/modeling_llava_onevision.py",
+        "downloads": 375279,
+        "tags": [
+            "llava_onevision",
+            "llava-onevision"
+        ]
+    },
+    "t5": {
+        "commit_hash": "c89bdfbe720bc8f41c7dc6db5473a2cb0955f224",
+        "first_commit_datetime": "2020-11-16T21:43:42-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/t5/modeling_t5.py",
+        "downloads": 1554866,
+        "tags": [
+            "t5"
+        ]
+    },
+    "falcon": {
+        "commit_hash": "b3ab3fac1df7c534be17f97c3584744a97599bfd",
+        "first_commit_datetime": "2023-07-11T13:36:31+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/falcon/modeling_falcon.py",
+        "downloads": 88318,
+        "tags": [
+            "falcon"
+        ]
+    },
+    "fuyu": {
+        "commit_hash": "caa0ff0bf104ee68ea46432b298a534e9a4a02a4",
+        "first_commit_datetime": "2023-10-18T15:24:11-07:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/fuyu/modeling_fuyu.py",
+        "downloads": 71851,
+        "tags": [
+            "fuyu"
+        ]
+    },
+    "decision_transformer": {
+        "commit_hash": "aff9bc405a3a6f6a96689fb3a66ad185b8e48363",
+        "first_commit_datetime": "2022-03-23T16:18:43-04:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/decision_transformer/modeling_decision_transformer.py",
+        "downloads": 9774,
+        "tags": [
+            "decision_transformer",
+            "decision-transformer"
+        ]
+    },
+    "levit": {
+        "commit_hash": "84aaadd8c5d53f665448a9d3d4f6fa4bfa4de93b",
+        "first_commit_datetime": "2022-06-01T17:06:20+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/levit/modeling_levit.py",
+        "downloads": 52266,
+        "tags": [
+            "levit"
+        ]
+    },
+    "clipseg": {
+        "commit_hash": "258963062bc09bb412dbbdbb777632b4057a1556",
+        "first_commit_datetime": "2022-11-08T10:55:47+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/clipseg/modeling_clipseg.py",
+        "downloads": 1782067,
+        "tags": [
+            "clipseg"
+        ]
+    },
+    "pop2piano": {
+        "commit_hash": "450a181d8b963b4e896be4aac701815aa554a6bb",
+        "first_commit_datetime": "2023-08-21T16:35:00+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/pop2piano/modeling_pop2piano.py",
+        "downloads": 304,
+        "tags": [
+            "pop2piano"
+        ]
+    },
+    "upernet": {
+        "commit_hash": "4ed89d48ab871e1c936b5ef4951e1f29d612ca14",
+        "first_commit_datetime": "2023-01-16T09:39:13+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/upernet/modeling_upernet.py",
+        "downloads": 68777,
+        "tags": [
+            "upernet"
+        ]
+    },
+    "cohere": {
+        "commit_hash": "0e4a1c3401421d3342938a183c7b021cdac6fd79",
+        "first_commit_datetime": "2024-03-15T14:29:11+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/cohere/modeling_cohere.py",
+        "downloads": 51837,
+        "tags": [
+            "cohere"
+        ]
+    },
+    "seggpt": {
+        "commit_hash": "3fcfbe7549d9694f96e1f19630add4adf99dd421",
+        "first_commit_datetime": "2024-02-26T18:17:19+00:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/seggpt/modeling_seggpt.py",
+        "downloads": 2405,
+        "tags": [
+            "seggpt"
+        ]
+    },
+    "rt_detr": {
+        "commit_hash": "74a207404e8d4524d1fdc4aa23789694f9eef347",
+        "first_commit_datetime": "2024-06-21T17:50:08+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/rt_detr/modeling_rt_detr_resnet.py",
+        "downloads": 106086,
+        "tags": [
+            "rt_detr",
+            "rt-detr"
+        ]
+    },
+    "tvp": {
+        "commit_hash": "c770600fde5be461d17e741827e082d0128f35c8",
+        "first_commit_datetime": "2023-11-21T16:41:55+00:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/tvp/modeling_tvp.py",
+        "downloads": 18921,
+        "tags": [
+            "tvp"
+        ]
+    },
+    "clap": {
+        "commit_hash": "c236a621729edb92dbb3e1dedd448be76cb82211",
+        "first_commit_datetime": "2023-02-16T20:59:27+01:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/clap/modeling_clap.py",
+        "downloads": 120941,
+        "tags": [
+            "clap"
+        ]
+    },
+    "marian": {
+        "commit_hash": "c89bdfbe720bc8f41c7dc6db5473a2cb0955f224",
+        "first_commit_datetime": "2020-11-16T21:43:42-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/marian/modeling_marian.py",
+        "downloads": 108430,
+        "tags": [
+            "marian"
+        ]
+    },
+    "speecht5": {
+        "commit_hash": "e4bacf6614744c7d5e637fea9498bdb0dcd61eb7",
+        "first_commit_datetime": "2023-02-03T12:43:46-05:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/speecht5/modeling_speecht5.py",
+        "downloads": 98462,
+        "tags": [
+            "speecht5"
+        ]
+    },
+    "regnet": {
+        "commit_hash": "af14c61973effd8b8077ac61b3f24bdd4a632f25",
+        "first_commit_datetime": "2022-04-07T21:58:00+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/regnet/modeling_regnet.py",
+        "downloads": 12285,
+        "tags": [
+            "regnet"
+        ]
+    },
+    "rwkv": {
+        "commit_hash": "b4d4d6fe87ffcd7508307970cdf8fa3eda288701",
+        "first_commit_datetime": "2023-05-09T13:04:10-04:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/rwkv/modeling_rwkv.py",
+        "downloads": 19676,
+        "tags": [
+            "rwkv"
+        ]
+    },
+    "phi3": {
+        "commit_hash": "c9693db2fcd6876bfc4b00dd9088808896fff94c",
+        "first_commit_datetime": "2024-04-24T17:32:09+02:00",
+        "model_path": "/home/joao/transformers/src/transformers/models/phi3/modeling_phi3.py",
+        "downloads": 971417,
+        "tags": [
+            "phi3"
+        ]
+    }
+}

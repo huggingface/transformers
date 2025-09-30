@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Script to find a candidate list of models to deprecate based on the number of downloads and the date of the last commit.
+Script to find a candidate list of models to deprecate based on the number of downloads and the date of the last
+commit.
 """
 
 import argparse
@@ -22,6 +23,7 @@ import os
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
+from tqdm import tqdm
 
 from git import Repo
 from huggingface_hub import HfApi
@@ -40,7 +42,7 @@ class HubModelLister:
 
     def __init__(self, tags):
         self.tags = tags
-        self.model_list = api.list_models(tags=tags)
+        self.model_list = api.list_models(filter=tags)
 
     def __iter__(self):
         try:
@@ -97,9 +99,11 @@ def get_list_of_models_to_deprecate(
             info["first_commit_datetime"] = datetime.fromisoformat(info["first_commit_datetime"])
 
     else:
-        # Build a dictionary of model info: first commit datetime, commit hash, model path
+        print("Building a dictionary of model info: first commit datetime, commit hash, model path")
         models_info = defaultdict(dict)
-        for model_path in model_paths:
+        for i, model_path in enumerate(tqdm(sorted(model_paths))):
+            if max_num_models != -1 and i > max_num_models:
+                break
             model = model_path.split("/")[-2]
             if model in models_info:
                 continue
@@ -124,19 +128,21 @@ def get_list_of_models_to_deprecate(
         }
 
         # We make successive calls to the hub, filtering based on the model tags
-        n_seen = 0
-        for model, model_info in models_info.items():
+        print("Making calls to the hub to find models below the threshold number of downloads")
+        num_models = len(models_info)
+        for i, (model, model_info) in enumerate(models_info.items()):
+            if max_num_models != -1 and i > max_num_models:
+                break
+            print(f"{i+1}/{num_models}: getting hub downloads for {model_info['tags']}")
             for model_tag in model_info["tags"]:
                 model_list = HubModelLister(tags=model_tag)
-                for i, hub_model in enumerate(model_list):
-                    n_seen += 1
-                    if i % 100 == 0:
-                        print(f"Processing model {i} for tag {model_tag}")
-                    if max_num_models != -1 and i > n_seen:
-                        break
+                for hub_model in model_list:
                     if hub_model.private:
                         continue
                     model_info["downloads"] += hub_model.downloads
+                    # No need to make further hub calls, it's above the set threshold
+                    if model_info["downloads"] > thresh_num_downloads:
+                        break
 
     if save_model_info and not (use_cache and os.path.exists("models_info.json")):
         # Make datetimes serializable
@@ -156,7 +162,11 @@ def get_list_of_models_to_deprecate(
             print(f"\nModel: {model}")
             print(f"Downloads: {n_downloads}")
             print(f"Date: {info['first_commit_datetime']}")
-    print("\nModels to deprecate: ", "\n" + "\n".join(models_to_deprecate.keys()))
+
+    # sort models to deprecate by downloads (lowest downloads first)
+    models_to_deprecate = sorted(models_to_deprecate.items(), key=lambda x: x[1]["downloads"])
+
+    print("\nModels to deprecate: ", "\n" + "\n".join([model[0] for model in models_to_deprecate]))
     print(f"\nNumber of models to deprecate: {n_models_to_deprecate}")
     print("Before deprecating make sure to verify the models, including if they're used as a module in other models.")
 
@@ -171,19 +181,25 @@ if __name__ == "__main__":
         "--thresh_num_downloads",
         type=int,
         default=5_000,
-        help="Threshold number of downloads below which a model should be deprecated. Default is 5,000.",
+        help=(
+            "Threshold number of downloads below which a model should be deprecated. Default is 5,000. If you are "
+            "considering a sweep and using a cache, set this to the highest number of the sweep."
+        ),
     )
     parser.add_argument(
         "--thresh_date",
         type=str,
         default=None,
-        help="Date to consider the first commit from. Format: YYYY-MM-DD. If unset, defaults to one year ago from today.",
+        help=(
+            "Date to consider the first commit from. Format: YYYY-MM-DD. If unset, defaults to one year ago from "
+            "today."
+        ),
     )
     parser.add_argument(
         "--max_num_models",
         type=int,
         default=-1,
-        help="Maximum number of models to consider from the hub. -1 means all models. Useful for testing.",
+        help="Maximum number of models architectures to consider. -1 means all models. Useful for testing.",
     )
     args = parser.parse_args()
 
