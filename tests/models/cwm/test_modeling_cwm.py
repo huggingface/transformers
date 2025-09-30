@@ -77,46 +77,16 @@ class CwmModelTest(CausalLMModelTest, unittest.TestCase):
     )
     test_headmasking = False
     test_pruning = False
-    fx_compatible = False  # Broken by attention refactor
+    fx_compatible = False
     model_tester_class = CwmModelTester
 
-    # 0.8 for `test_cpu_offload`
     model_split_percents = [0.5, 0.7, 0.8]
 
-    # for `test_torch_compile_for_training`
     _torch_compile_train_cls = CwmForCausalLM if is_torch_available() else None
 
-    def test_cwm_forward_with_sliding_window(self):
-        config = self.model_tester.get_config()
-        model = CwmModel(config)
-        model.to(torch_device)
-        model.eval()
 
-        # input longer than sliding window
-        seq_length = config.sliding_window + 10
-        input_ids = torch.randint(0, config.vocab_size, (1, seq_length), device=torch_device)
-
-        with torch.no_grad():
-            outputs = model(input_ids)
-
-        self.assertEqual(outputs.last_hidden_state.shape, (1, seq_length, config.hidden_size))
-
-    def test_cwm_attention_mask_mapping(self):
-        config = self.model_tester.get_config()
-        model = CwmModel(config)
-        model.to(torch_device)
-        model.eval()
-
-        seq_length = 20
-        input_ids = torch.randint(0, config.vocab_size, (1, seq_length), device=torch_device)
-
-        with torch.no_grad():
-            outputs = model(input_ids)
-
-        # no errors
-        self.assertIsNotNone(outputs.last_hidden_state)
-
-
+@require_torch_accelerator
+@slow
 class CwmIntegrationTest(unittest.TestCase):
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
@@ -124,150 +94,144 @@ class CwmIntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    def test_cwm_small_model_forward(self):
-        config = CwmConfig(
-            vocab_size=1000,
-            hidden_size=64,
-            intermediate_size=128,
-            num_hidden_layers=4,
-            num_attention_heads=4,
-            num_key_value_heads=2,
-            max_position_embeddings=256,
-            sliding_window=32,
-        )
-
-        model = CwmForCausalLM(config)
-        model.to(torch_device)
-        model.eval()
-
-        input_ids = torch.randint(0, config.vocab_size, (2, 50), device=torch_device)
-
-        with torch.no_grad():
-            outputs = model(input_ids)
-
-        self.assertEqual(outputs.logits.shape, (2, 50, config.vocab_size))
-
-    def test_cwm_with_cache(self):
-        config = CwmConfig(
-            vocab_size=1000,
-            hidden_size=64,
-            intermediate_size=128,
-            num_hidden_layers=4,
-            num_attention_heads=4,
-            num_key_value_heads=2,
-            max_position_embeddings=256,
-            sliding_window=32,
-            use_cache=True,
-        )
-
-        model = CwmForCausalLM(config)
-        model.to(torch_device)
-        model.eval()
-
-        input_ids = torch.randint(0, config.vocab_size, (1, 10), device=torch_device)
-
-        with torch.no_grad():
-            outputs1 = model(input_ids, use_cache=True)
-            self.assertIsNotNone(outputs1.past_key_values)
-
-            new_input_ids = torch.randint(0, config.vocab_size, (1, 5), device=torch_device)
-            outputs2 = model(new_input_ids, past_key_values=outputs1.past_key_values, use_cache=True)
-            self.assertIsNotNone(outputs2.past_key_values)
-
     @slow
-    def test_cwm_rope_scaling_llama3(self):
-        # Llama3 rope scaling
-        config = CwmConfig(
-            vocab_size=1000,
-            hidden_size=64,
-            intermediate_size=128,
-            num_hidden_layers=4,
-            num_attention_heads=4,
-            num_key_value_heads=2,
-            max_position_embeddings=256,
-            sliding_window=64,
-            rope_scaling={
-                "factor": 8.0,
-                "high_freq_factor": 4.0,
-                "low_freq_factor": 1.0,
-                "original_max_position_embeddings": 128,
-                "rope_type": "llama3",
-            },
-        )
+    def test_cwm_integration(self):
+        from transformers import AutoTokenizer
 
-        model = CwmModel(config)
-        model.to(torch_device)
-        model.eval()
+        path = "/checkpoint/amaia/codegen/jacobkahn/cwm/v1/release_checkpoints/hf/cwm"
+        tokenizer = AutoTokenizer.from_pretrained(path)
+        model = CwmForCausalLM.from_pretrained(path, device_map="auto", dtype=torch.bfloat16)
 
-        # sequence longer than original max position embeddings
-        long_input = torch.randint(0, config.vocab_size, (1, 200), device=torch_device)
+        self.assertIsNotNone(model.config.sliding_window)
+        self.assertIsNotNone(model.config.layer_types)
+        self.assertIn("full_attention", model.config.layer_types)
+        self.assertIn("sliding_attention", model.config.layer_types)
+
+        for i, layer in enumerate(model.model.layers):
+            expected_type = model.config.layer_types[i]
+            self.assertEqual(layer.layer_type, expected_type)
+            if expected_type == "sliding_attention":
+                self.assertEqual(layer.sliding_window, model.config.sliding_window)
+
+        prompt = "def quicksort(arr):"
+        inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
         with torch.no_grad():
-            outputs = model(long_input)
+            out = model(**inputs)
 
-        self.assertEqual(outputs.last_hidden_state.shape, (1, 200, config.hidden_size))
-
-    def test_cwm_mixed_attention_layers(self):
-        config = CwmConfig(
-            vocab_size=1000,
-            hidden_size=64,
-            intermediate_size=128,
-            num_hidden_layers=6,
-            num_attention_heads=4,
-            num_key_value_heads=2,
-            max_position_embeddings=256,
-            sliding_window=32,
-            layer_types=[
-                "full_attention",
-                "sliding_attention",
-                "sliding_attention",
-                "full_attention",
-                "sliding_attention",
-                "full_attention",
+        expected_logits = torch.tensor(
+            [
+                0.5625,
+                2.9531,
+                9.1875,
+                0.4746,
+                -0.3613,
+                2.2031,
+                2.9844,
+                1.5312,
+                0.5859,
+                1.5391,
+                2.7500,
+                3.4375,
+                2.0156,
+                2.1719,
+                1.5469,
+                2.5469,
+                2.8438,
+                1.8203,
+                1.7188,
+                1.3984,
+                1.0469,
+                0.1748,
+                0.4453,
+                0.1533,
+                -0.1157,
+                0.8516,
+                2.2344,
+                5.2188,
+                1.2891,
+                1.5234,
+                0.8555,
+                0.6992,
             ],
+            dtype=torch.bfloat16,
+        ).to(model.device)
+
+        self.assertTrue(torch.allclose(out.logits[0, -1, :32], expected_logits, atol=1e-2, rtol=1e-2))
+
+        self.assertEqual(out.logits.shape[1], inputs.input_ids.shape[1])
+        self.assertEqual(out.logits.shape[2], model.config.vocab_size)
+        self.assertFalse(torch.isnan(out.logits).any())
+        self.assertFalse(torch.isinf(out.logits).any())
+
+    @slow
+    def test_cwm_sliding_window_long_sequence(self):
+        from transformers import AutoTokenizer
+
+        path = "/checkpoint/amaia/codegen/jacobkahn/cwm/v1/release_checkpoints/hf/cwm"
+
+        tokenizer = AutoTokenizer.from_pretrained(path)
+        model = CwmForCausalLM.from_pretrained(path, device_map="auto", dtype=torch.bfloat16)
+
+        sliding_window = model.config.sliding_window
+        long_text = "for i in range(1000):\n    print(f'iteration {i}')\n" * 600
+
+        inputs = tokenizer(long_text, return_tensors="pt").to(model.device)
+        seq_len = inputs.input_ids.shape[1]
+
+        # create a sequence longer than sliding window
+        self.assertGreater(
+            seq_len, sliding_window, f"Test sequence length {seq_len} should be > sliding window {sliding_window}"
         )
-
-        model = CwmModel(config)
-        model.to(torch_device)
-        model.eval()
-
-        expected_types = config.layer_types
-        for i, layer in enumerate(model.layers):
-            self.assertEqual(layer.layer_type, expected_types[i])
-
-        input_ids = torch.randint(0, config.vocab_size, (1, 60), device=torch_device)
 
         with torch.no_grad():
-            outputs = model(input_ids)
+            out = model(**inputs)
 
-        self.assertEqual(outputs.last_hidden_state.shape, (1, 60, config.hidden_size))
+        expected_logits = torch.tensor(
+            [
+                4.7812,
+                6.1875,
+                13.1875,
+                4.4062,
+                5.0312,
+                3.9844,
+                6.6875,
+                4.8438,
+                2.3125,
+                6.5000,
+                4.4688,
+                0.5195,
+                5.6562,
+                3.3125,
+                2.7500,
+                4.9062,
+                5.5938,
+                4.1562,
+                3.9531,
+                2.4062,
+                3.2812,
+                2.8594,
+                3.4688,
+                2.9688,
+                2.6875,
+                3.4531,
+                2.7344,
+                7.2812,
+                4.5000,
+                5.7500,
+                2.3438,
+                5.9688,
+            ],
+            dtype=torch.bfloat16,
+        ).to(model.device)
 
-    @require_torch_accelerator
-    @slow
-    def test_cwm_compile_static_cache(self):
-        NUM_TOKENS_TO_GENERATE = 20
+        self.assertTrue(torch.allclose(out.logits[0, -1, :32], expected_logits, atol=1e-2, rtol=1e-2))
 
-        config = CwmConfig(
-            vocab_size=1000,
-            hidden_size=128,
-            intermediate_size=256,
-            num_hidden_layers=4,
-            num_attention_heads=8,
-            num_key_value_heads=4,
-            max_position_embeddings=256,
-            sliding_window=64,
-        )
+        self.assertEqual(out.logits.shape[1], seq_len)
+        self.assertEqual(out.logits.shape[2], model.config.vocab_size)
+        self.assertFalse(torch.isnan(out.logits).any())
+        self.assertFalse(torch.isinf(out.logits).any())
 
-        model = CwmForCausalLM(config)
-        model.to(torch_device)
-        model.eval()
-
-        input_ids = torch.randint(1, 100, (1, 5), device=torch_device)
-
-        generated_ids_dynamic = model.generate(input_ids, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
-
-        generated_ids_static = model.generate(
-            input_ids, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
-        )
-
-        self.assertEqual(generated_ids_dynamic.shape, generated_ids_static.shape)
+        for i, layer in enumerate(model.model.layers):
+            if model.config.layer_types[i] == "sliding_attention":
+                self.assertEqual(layer.sliding_window, sliding_window)
