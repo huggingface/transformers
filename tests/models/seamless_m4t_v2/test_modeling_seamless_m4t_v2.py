@@ -369,7 +369,6 @@ class SeamlessM4Tv2ModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase)
     test_missing_keys = False
     test_pruning = False
     test_resize_embeddings = False
-    test_headmasking = False
     test_torchscript = False
 
     all_model_classes = (
@@ -601,7 +600,6 @@ class SeamlessM4Tv2ModelWithTextInputTest(ModelTesterMixin, unittest.TestCase):
     test_missing_keys = False
     test_pruning = False
     test_resize_embeddings = True
-    test_headmasking = False
     test_torchscript = False
 
     all_model_classes = (
