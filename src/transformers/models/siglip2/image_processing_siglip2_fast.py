@@ -19,15 +19,8 @@ from typing import Optional, Union
 import torch
 
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
-    SizeDict,
-)
-from ...image_utils import (
-    ImageInput,
-    PILImageResampling,
-)
+from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict
+from ...image_utils import ImageInput, PILImageResampling
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
@@ -35,7 +28,7 @@ from ...utils import (
     is_torchvision_v2_available,
     logging,
 )
-from .image_processing_siglip2 import get_image_size_for_max_num_patches
+from .image_processing_siglip2 import Siglip2ImageProcessorKwargs, get_image_size_for_max_num_patches
 
 
 if is_torchvision_v2_available():
@@ -76,19 +69,6 @@ def pad_along_first_dim(
     return tensor, mask
 
 
-class Siglip2FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    patch_size (`int`, *optional*, defaults to 16):
-        The size (resolution) of each patch the image will be split to.
-    max_num_patches (`int`, *optional*, defaults to 256):
-        The image will be resized to have at most this number of patches,
-        and then padded in "patch" dimension to match this number exactly.
-    """
-
-    patch_size: Optional[int]
-    max_num_patches: Optional[int]
-
-
 @auto_docstring
 class Siglip2ImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
@@ -99,10 +79,10 @@ class Siglip2ImageProcessorFast(BaseImageProcessorFast):
     do_normalize = True
     patch_size = 16
     max_num_patches = 256
-    valid_kwargs = Siglip2FastImageProcessorKwargs
+    valid_kwargs = Siglip2ImageProcessorKwargs
     unused_kwargs = ["size", "do_center_crop", "crop_size"]
 
-    def __init__(self, **kwargs: Unpack[Siglip2FastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[Siglip2ImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     def _validate_preprocess_kwargs(self, **kwargs) -> tuple:
@@ -111,7 +91,7 @@ class Siglip2ImageProcessorFast(BaseImageProcessorFast):
         return super()._validate_preprocess_kwargs(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[Siglip2FastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[Siglip2ImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def _preprocess(

@@ -23,7 +23,6 @@ import numpy as np
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image
 from ...processing_utils import (
-    ImagesKwargs,
     MultiModalData,
     ProcessingKwargs,
     ProcessorMixin,
@@ -44,13 +43,8 @@ class PaliGemmaTextKwargs(TextKwargs):
     suffix: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]]
 
 
-class PaliGemmaImagesKwargs(ImagesKwargs):
-    do_convert_rgb: Optional[bool]
-
-
 class PaliGemmaProcessorKwargs(ProcessingKwargs, total=False):
     text_kwargs: PaliGemmaTextKwargs
-    images_kwargs: PaliGemmaImagesKwargs
     _defaults = {
         "text_kwargs": {
             "padding": False,
@@ -150,8 +144,6 @@ class PaliGemmaProcessor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[PaliGemmaProcessorKwargs],
     ) -> BatchFeature:
         """

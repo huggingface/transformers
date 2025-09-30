@@ -292,7 +292,7 @@ The `@auto_docstring` decorator automatically generates docstrings by:
 
 8. Unrolling kwargs typed with the unpack operator. For specific methods (defined in `UNROLL_KWARGS_METHODS`) or classes (defined in `UNROLL_KWARGS_CLASSES`), the decorator processes `**kwargs` parameters that are typed with `Unpack[KwargsTypedDict]`. It extracts the documentations from the `TypedDict` and adds each parameter to the function's docstring.
 
-    Currently only supported for [`FastImageProcessorKwargs`].
+    Currently only supported for [`ImagesKwargs`].
 
 ## Best practices
 

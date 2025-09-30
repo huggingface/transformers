@@ -48,7 +48,6 @@ class InternVLVideoProcessor(BaseVideoProcessor):
     initial_shift = True
     do_sample_frames = False  # Set to False for BC, recommended to set `True` in new models
     valid_kwargs = InternVLVideoProcessorInitKwargs
-    model_input_names = ["pixel_values_videos"]
 
     def __init__(self, **kwargs: Unpack[InternVLVideoProcessorInitKwargs]):
         super().__init__(**kwargs)

@@ -198,9 +198,8 @@ class VoxtralProcessor(ProcessorMixin):
         )
         text_kwargs = output_kwargs["text_kwargs"]
         audio_kwargs = output_kwargs["audio_kwargs"]
-        common_kwargs = output_kwargs["common_kwargs"]
+        return_tensors = text_kwargs.get("return_tensors", None)
 
-        return_tensors = common_kwargs.pop("return_tensors", None)
         if return_tensors != "pt":
             raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
 
@@ -270,16 +269,10 @@ class VoxtralProcessor(ProcessorMixin):
                 f"{self.audio_token} is present in the provided text which is not supported by VoxtralProcessor. Please use the `apply_chat_template` method instead."
             )
 
-        output_kwargs = self._merge_kwargs(
-            VoxtralProcessorKwargs,
-            **kwargs,
-        )
-        text_kwargs = output_kwargs["text_kwargs"]
-        common_kwargs = output_kwargs["common_kwargs"]
+        output_kwargs = self._merge_kwargs(VoxtralProcessorKwargs, **kwargs)
+        out = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
-        out = self.tokenizer(text, **text_kwargs)
-
-        return BatchFeature(data=out, tensor_type=common_kwargs.pop("return_tensors", None))
+        return BatchFeature(data=out, tensor_type=output_kwargs["text_kwargs"].get("return_tensors", None))
 
     # TODO: @eustlb, this should be moved to mistral_common + testing
     def apply_transcription_request(
@@ -327,7 +320,6 @@ class VoxtralProcessor(ProcessorMixin):
         )
         text_kwargs = output_kwargs["text_kwargs"]
         audio_kwargs = output_kwargs["audio_kwargs"]
-        common_kwargs = output_kwargs["common_kwargs"]
 
         is_str = isinstance(audio, str)
         is_list_of_str = all(isinstance(el, str) for el in audio)
@@ -344,15 +336,14 @@ class VoxtralProcessor(ProcessorMixin):
                 )
 
         sampling_rate = audio_kwargs["sampling_rate"]
-        return_dict = common_kwargs.pop("return_dict", False)
-        tokenize = common_kwargs.pop("tokenize", False)
 
         # make sure to remove from text_kwargs and audio_kwargs
-        for k in ("return_dict", "tokenize"):
-            text_kwargs.pop(k, None)
-            audio_kwargs.pop(k, None)
+        return_dict = text_kwargs.pop("return_dict", False)
+        tokenize = text_kwargs.pop("tokenize", False)
+        _ = audio_kwargs.pop("return_dict", False)
+        _ = audio_kwargs.pop("tokenize", False)
 
-        return_tensors = common_kwargs.pop("return_tensors", None)
+        return_tensors = text_kwargs.pop("return_tensors", None)
         if return_tensors != "pt":
             raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
 

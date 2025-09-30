@@ -23,7 +23,6 @@ import torch
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     BatchFeature,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -35,6 +34,7 @@ from ...utils import (
     is_torchvision_v2_available,
     logging,
 )
+from .image_processing_gemma3 import Gemma3ImageProcessorKwargs
 
 
 if is_torchvision_v2_available():
@@ -43,24 +43,6 @@ else:
     from torchvision.transforms import functional as F
 
 logger = logging.get_logger(__name__)
-
-
-class Gemma3FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    do_pan_and_scan (`bool`, *optional*):
-        Whether to apply `pan_and_scan` to images.
-    pan_and_scan_min_crop_size (`int`, *optional*):
-        Minimum size of each crop in pan and scan.
-    pan_and_scan_max_num_crops (`int`, *optional*):
-        Maximum number of crops per image in pan and scan.
-    pan_and_scan_min_ratio_to_activate (`float`, *optional*):
-        Minimum aspect ratio to activate pan and scan.
-    """
-
-    do_pan_and_scan: Optional[bool]
-    pan_and_scan_min_crop_size: Optional[int]
-    pan_and_scan_max_num_crops: Optional[int]
-    pan_and_scan_min_ratio_to_activate: Optional[float]
 
 
 @auto_docstring
@@ -78,9 +60,9 @@ class Gemma3ImageProcessorFast(BaseImageProcessorFast):
     pan_and_scan_min_crop_size = None
     pan_and_scan_max_num_crops = None
     pan_and_scan_min_ratio_to_activate = None
-    valid_kwargs = Gemma3FastImageProcessorKwargs
+    valid_kwargs = Gemma3ImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[Gemma3FastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[Gemma3ImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     def pan_and_scan_batched(
@@ -172,7 +154,7 @@ class Gemma3ImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        **kwargs: Unpack[Gemma3FastImageProcessorKwargs],
+        **kwargs: Unpack[Gemma3ImageProcessorKwargs],
     ) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 

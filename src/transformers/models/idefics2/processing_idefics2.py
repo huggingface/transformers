@@ -22,7 +22,6 @@ from typing import TYPE_CHECKING, Optional, Union
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image
 from ...processing_utils import (
-    ImagesKwargs,
     ProcessingKwargs,
     ProcessorMixin,
     Unpack,
@@ -46,20 +45,13 @@ def is_image_or_image_url(elem):
     return is_url(elem) or is_valid_image(elem)
 
 
-class Idefics2ImagesKwargs(ImagesKwargs, total=False):
-    image_seq_len: Optional[int]
-
-
 class Idefics2ProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: Idefics2ImagesKwargs
-
     _defaults = {
         "text_kwargs": {
             "add_special_tokens": True,
             "padding": False,
             "is_split_into_words": False,
         },
-        "images_kwargs": {},
     }
 
 
@@ -123,8 +115,6 @@ class Idefics2Processor(ProcessorMixin):
         self,
         images: Union[ImageInput, list[ImageInput], list[list[ImageInput]]] = None,
         text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[Idefics2ProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -181,8 +171,6 @@ class Idefics2Processor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        image_seq_len = output_kwargs["images_kwargs"].pop("image_seq_len", None)
-        image_seq_len = image_seq_len if image_seq_len is not None else self.image_seq_len
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
 
         n_images_in_text = []
@@ -197,12 +185,11 @@ class Idefics2Processor(ProcessorMixin):
             # Replace the image token with fake tokens around the expanded image token sequence of length `image_seq_len`
             fake_image_token = self.fake_image_token
             image_token = self.image_token
-            image_str = f"{fake_image_token}{image_token * image_seq_len}{fake_image_token}"
+            image_str = f"{fake_image_token}{image_token * self.image_seq_len}{fake_image_token}"
 
             if self.image_processor.do_image_splitting:
                 # A single image token is split into 4 patches + 1 original image
                 image_str = image_str * 5
-                image_seq_len *= 5
 
             prompt_strings = []
             for sample in text:

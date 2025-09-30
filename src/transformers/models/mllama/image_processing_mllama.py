@@ -38,6 +38,7 @@ from ...image_utils import (
     to_numpy_array,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, logging
 
 
@@ -47,6 +48,15 @@ if is_vision_available():
 
 
 logger = logging.get_logger(__name__)
+
+
+class MllamaImageProcessorKwargs(ImagesKwargs):
+    """
+    max_image_tiles (`int`, *optional*):
+        The maximum number of tiles allowed.
+    """
+
+    max_image_tiles: Optional[int]
 
 
 @lru_cache(maxsize=10)
@@ -567,6 +577,7 @@ class MllamaImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values", "num_tiles", "aspect_ratio_ids", "aspect_ratio_mask"]
+    valid_kwargs = MllamaImageProcessorKwargs
 
     def __init__(
         self,

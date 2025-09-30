@@ -22,7 +22,6 @@ from PIL import Image, ImageDraw
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -41,6 +40,7 @@ from ...utils import (
     auto_docstring,
     is_torchvision_v2_available,
 )
+from .image_processing_efficientloftr import EfficientLoFTRImageProcessorKwargs
 
 
 if TYPE_CHECKING:
@@ -112,15 +112,6 @@ def convert_to_grayscale(
     return F.rgb_to_grayscale(image, num_output_channels=3)
 
 
-class EfficientLoFTRFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    r"""
-    do_grayscale (`bool`, *optional*, defaults to `True`):
-        Whether to convert the image to grayscale. Can be overridden by `do_grayscale` in the `preprocess` method.
-    """
-
-    do_grayscale: Optional[bool] = True
-
-
 @auto_docstring
 class EfficientLoFTRImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
@@ -130,13 +121,13 @@ class EfficientLoFTRImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     rescale_factor = 1 / 255
     do_normalize = None
-    valid_kwargs = EfficientLoFTRFastImageProcessorKwargs
+    valid_kwargs = EfficientLoFTRImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[EfficientLoFTRFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[EfficientLoFTRImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[EfficientLoFTRFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[EfficientLoFTRImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def _prepare_images_structure(

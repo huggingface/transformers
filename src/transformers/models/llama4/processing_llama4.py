@@ -16,20 +16,14 @@
 
 from typing import Optional, Union
 
-from transformers.processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
+from transformers.processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, make_flat_list_of_images
 
 
-class Llama4ImagesKwargs(ImagesKwargs, total=False):
-    max_patches: Optional[int]
-    resize_to_max_canvas: Optional[bool]
-
-
 class Llama4ProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: Llama4ImagesKwargs
     _defaults = {
         "text_kwargs": {
             "padding_side": "left",
@@ -139,8 +133,6 @@ class Llama4Processor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[Llama4ProcessorKwargs],
     ) -> BatchFeature:
         """

@@ -36,6 +36,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -51,6 +52,21 @@ logger = logging.get_logger(__name__)
 if is_torch_available():
     import torch
     import torch.nn.functional as F
+
+
+class EomtImageProcessorKwargs(ImagesKwargs):
+    """
+    do_split_image (`bool`, *optional*, defaults to `False`):
+        Whether to split the input images into overlapping patches for semantic segmentation. If set to `True`, the
+        input images will be split into patches of size `size["shortest_edge"]` with an overlap between patches.
+        Otherwise, the input images will be padded to the target size.
+    ignore_index (`int`, *optional*):
+        Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels
+        denoted with 0 (background) will be replaced with `ignore_index`.
+    """
+
+    do_split_image: bool
+    ignore_index: Optional[int] = None
 
 
 # Adapted from transformers.models.maskformer.image_processing_maskformer.convert_segmentation_map_to_binary_masks

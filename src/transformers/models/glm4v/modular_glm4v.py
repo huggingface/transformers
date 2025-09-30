@@ -32,7 +32,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...processing_utils import ImagesKwargs, Unpack
+from ...processing_utils import Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 from ...utils.generic import check_model_inputs
@@ -52,7 +52,6 @@ from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLVisionAttention,
     Qwen2_5_VLVisionBlock,
 )
-from ..qwen2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLVideosProcessorKwargs
 from ..qwen2_vl.processing_qwen2_vl import (
     Qwen2_VLProcessor,
     Qwen2_VLProcessorKwargs,
@@ -1508,19 +1507,7 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
         return image_counts, video_counts
 
 
-class Glm4vVideosProcessorKwargs(Qwen2_5_VLVideosProcessorKwargs):
-    pass
-
-
-class Glm4vImagesKwargs(ImagesKwargs):
-    patch_size: Optional[int]
-    temporal_patch_size: Optional[int]
-    merge_size: Optional[int]
-
-
 class Glm4vProcessorKwargs(Qwen2_VLProcessorKwargs):
-    images_kwargs: Glm4vImagesKwargs
-    videos_kwargs: Glm4vVideosProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "padding": False,

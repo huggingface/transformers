@@ -31,7 +31,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update, rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...processing_utils import ProcessingKwargs, Unpack, VideosKwargs
+from ...processing_utils import ProcessingKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 from ...utils.generic import check_model_inputs
@@ -50,7 +50,7 @@ from ..qwen2_vl.modeling_qwen2_vl import (
     VisionAttention,
     VisionRotaryEmbedding,
 )
-from ..qwen2_vl.processing_qwen2_vl import Qwen2VLImagesKwargs, Qwen2VLProcessor
+from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from ..qwen3.modeling_qwen3 import (
     Qwen3Attention,
     Qwen3DecoderLayer,
@@ -1255,17 +1255,7 @@ class Qwen3VLForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
         return model_inputs
 
 
-class Qwen3VLVideosProcessorKwargs(VideosKwargs, total=False):
-    pass
-
-
-class Qwen3VLImagesKwargs(Qwen2VLImagesKwargs):
-    pass
-
-
 class Qwen3VLProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: Qwen3VLImagesKwargs
-    videos_kwargs: Qwen3VLVideosProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "padding": False,

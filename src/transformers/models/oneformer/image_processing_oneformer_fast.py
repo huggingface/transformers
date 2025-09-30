@@ -22,7 +22,6 @@ from torch import nn
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     BatchFeature,
-    DefaultFastImageProcessorKwargs,
     get_max_height_width,
     group_images_by_shape,
     reorder_images,
@@ -42,7 +41,7 @@ from ...utils import (
     is_torchvision_v2_available,
     logging,
 )
-from .image_processing_oneformer import load_metadata, prepare_metadata
+from .image_processing_oneformer import OneFormerImageProcessorKwargs, load_metadata, prepare_metadata
 
 
 if is_torchvision_v2_available():
@@ -305,30 +304,6 @@ def get_oneformer_resize_output_image_size(
     return (new_long, new_short) if width <= height else (new_short, new_long)
 
 
-class OneFormerFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    r"""
-    repo_path (`str`, *optional*, defaults to `shi-labs/oneformer_demo`):
-        Path to a local directory or Hugging Face Hub repository containing model metadata.
-    class_info_file (`str`, *optional*):
-        Path to the JSON file within the repository that contains class metadata.
-    num_text (`int`, *optional*):
-        Number of text queries for the text encoder, used as task-guiding prompts.
-    num_labels (`int`, *optional*):
-        Number of semantic classes for segmentation, determining the output layer's size.
-    ignore_index (`int`, *optional*):
-        Label to ignore in segmentation maps, often used for padding.
-    do_reduce_labels (`bool`, *optional*, defaults to `False`):
-        Whether to decrement all label values by 1, mapping the background class to `ignore_index`.
-    """
-
-    repo_path: Optional[str]
-    class_info_file: Optional[str]
-    num_text: Optional[int]
-    num_labels: Optional[int]
-    ignore_index: Optional[int]
-    do_reduce_labels: Optional[bool]
-
-
 @auto_docstring
 class OneFormerImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
@@ -349,10 +324,10 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
     class_info_file = None
     num_text = None
     num_labels = None
-    valid_kwargs = OneFormerFastImageProcessorKwargs
+    valid_kwargs = OneFormerImageProcessorKwargs
     model_input_names = ["pixel_values", "pixel_mask", "task_inputs"]
 
-    def __init__(self, **kwargs: Unpack[OneFormerFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[OneFormerImageProcessorKwargs]):
         super().__init__(**kwargs)
         if self.class_info_file:
             self.metadata = prepare_metadata(load_metadata(self.repo_path, self.class_info_file))
@@ -364,7 +339,7 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
         task_inputs: Optional[list[str]] = None,
         segmentation_maps: Optional[ImageInput] = None,
         instance_id_to_semantic_id: Optional[Union[list[dict[int, int]], dict[int, int]]] = None,
-        **kwargs: Unpack[OneFormerFastImageProcessorKwargs],
+        **kwargs: Unpack[OneFormerImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
         task_inputs (`list[str]`, *optional*):
@@ -391,7 +366,7 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         device: Optional[Union[str, "torch.device"]] = None,
-        **kwargs: Unpack[OneFormerFastImageProcessorKwargs],
+        **kwargs: Unpack[OneFormerImageProcessorKwargs],
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.

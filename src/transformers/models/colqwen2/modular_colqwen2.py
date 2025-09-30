@@ -93,8 +93,6 @@ class ColQwen2Processor(ColPaliProcessor):
         self,
         images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[ColQwen2ProcessorKwargs],
     ) -> BatchFeature:
         """

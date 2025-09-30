@@ -499,6 +499,7 @@ ALL_FILE_TYPES = (
     "configuration",
     "tokenization",
     "processing",
+    "image_processing.*_fast",
     "image_processing",
     "video_processing",
     "feature_extraction",
@@ -538,7 +539,7 @@ class ModuleMapper(CSTVisitor, ABC):
         to be added (because it will be part of the imports)"""
         import_module = self.python_module.code_for_node(node.module)
         import_statement = "." * len(node.relative) + import_module
-        if re.search(rf"^\.({self.match_patterns})_.*", import_statement):
+        if re.search(rf"^\.({self.match_patterns}).*", import_statement):
             for imported_object in node.names:
                 # If an alias is present, we record it and not the original name
                 if imported_object.evaluated_alias is not None:
@@ -1056,10 +1057,11 @@ TYPE_TO_FILE_TYPE = {
     "Tokenizer": "tokenization",
     "Processor": "processing",
     "ImageProcessor": "image_processing",
-    "ImageProcessorFast": "image_processing*_fast",  # "*" indicates where to insert the model name before the "_fast" suffix
+    "ImageProcessorFast": "image_processing.*_fast",  # "*" indicates where to insert the model name before the "_fast" suffix
     "VideoProcessor": "video_processing",
     "VideoProcessorInitKwargs": "video_processing",
-    "FastImageProcessorKwargs": "image_processing*_fast",
+    "FastImageProcessorKwargs": "image_processing.*_fast",
+    "ImageProcessorKwargs": "image_processing",
     "FeatureExtractor": "feature_extraction",
     "ProcessorKwargs": "processing",
     "VideosKwargs": "processing",
@@ -1208,7 +1210,7 @@ class ModularFileMapper(ModuleMapper):
         if m.matches(node.module, m.Attribute()):
             for imported_ in node.names:
                 _import = re.search(
-                    rf"(?:transformers\.models\.)|(?:\.\.\.models\.)|(?:\.\.)\w+\.({self.match_patterns})_.*",
+                    rf"(?:transformers\.models\.)|(?:\.\.\.models\.)|(?:\.\.)\w+\.({self.match_patterns}).*",
                     import_statement,
                 )
                 if _import:
@@ -1252,7 +1254,7 @@ class ModularFileMapper(ModuleMapper):
                 import_module = self.python_module.code_for_node(node.body[0].module)
                 import_statement = "." * len(node.body[0].relative) + import_module
                 if not (
-                    re.search(rf"(?:transformers\.models\.)|(?:\.\.)\w+\.({self.match_patterns})_.*", import_statement)
+                    re.search(rf"(?:transformers\.models\.)|(?:\.\.)\w+\.({self.match_patterns}).*", import_statement)
                     and not any(import_to_skip in import_statement for import_to_skip in IMPORTS_TO_SKIP_IN_MODULAR)
                 ):
                     self.imports.append(node)
@@ -1315,7 +1317,7 @@ class ModularFileMapper(ModuleMapper):
         # Note that we may visit several of the same file types, thus we save them per file type, not file
         self.imported_objects_per_file = defaultdict(set)
         for file, mapper in self.visited_modules.items():
-            file_type = re.search(rf"^transformers\.models\.\w+\.({self.match_patterns})_.*", file).group(1)
+            file_type = re.search(rf"^transformers\.models\.\w+\.({self.match_patterns})", file).group(1)
             self.imported_objects_per_file[file_type].update(mapper.objects_imported_from_modeling)
 
     def merge_model_specific_imports(self, visited_modules):
@@ -1711,8 +1713,8 @@ def convert_modular_file(modular_file: str) -> dict[str, str]:
 def save_modeling_files(modular_file: str, converted_files: dict[str, str]):
     """Save all the `converted_files` from the `modular_file`."""
     for file_type in converted_files:
-        file_name_prefix = file_type.split("*")[0]
-        file_name_suffix = file_type.split("*")[-1] if "*" in file_type else ""
+        file_name_prefix = file_type.split(".*")[0]
+        file_name_suffix = file_type.split(".*")[-1] if ".*" in file_type else ""
         new_file_name = modular_file.replace("modular_", f"{file_name_prefix}_").replace(
             ".py", f"{file_name_suffix}.py"
         )

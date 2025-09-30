@@ -73,8 +73,6 @@ class Wav2Vec2BertProcessor(ProcessorMixin):
         self,
         audio: Optional[AudioInput] = None,
         text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
-        images=None,
-        videos=None,
         **kwargs: Unpack[Wav2Vec2BertProcessorKwargs],
     ):
         """

@@ -38,6 +38,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
 
 
@@ -46,6 +47,24 @@ if is_vision_available():
 
 
 logger = logging.get_logger(__name__)
+
+
+class GotOcr2ImageProcessorKwargs(ImagesKwargs):
+    """
+    crop_to_patches (`bool`, *optional*, defaults to `False`):
+        Whether to crop the image to patches. Can be overridden by the `crop_to_patches` parameter in the
+        `preprocess` method.
+    min_patches (`int`, *optional*, defaults to 1):
+        The minimum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
+        set to `True`. Can be overridden by the `min_patches` parameter in the `preprocess` method.
+    max_patches (`int`, *optional*, defaults to 12):
+        The maximum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
+        set to `True`. Can be overridden by the `max_patches` parameter in the `preprocess` method.
+    """
+
+    crop_to_patches: Optional[bool]
+    min_patches: Optional[int]
+    max_patches: Optional[int]
 
 
 # Similar to image_processing_mllama.get_all_supported_aspect_ratios
@@ -168,6 +187,7 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
+    valid_kwargs = GotOcr2ImageProcessorKwargs
 
     def __init__(
         self,

@@ -21,7 +21,6 @@ import torch
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -38,26 +37,13 @@ from ...utils import (
     auto_docstring,
     is_torchvision_v2_available,
 )
+from .image_processing_mobilevit import MobileVitImageProcessorKwargs
 
 
 if is_torchvision_v2_available():
     from torchvision.transforms.v2 import functional as F
 else:
     from torchvision.transforms import functional as F
-
-
-class MobileVitFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    do_flip_channel_order (`bool`, *optional*, defaults to `self.do_flip_channel_order`):
-        Whether to flip the color channels from RGB to BGR or vice versa.
-    do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
-        Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
-        is used for background, and background itself is not included in all classes of a dataset (e.g.
-        ADE20k). The background label will be replaced by 255.
-    """
-
-    do_flip_channel_order: Optional[bool]
-    do_reduce_labels: Optional[bool]
 
 
 @auto_docstring
@@ -73,9 +59,9 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
     do_convert_rgb = None
     do_flip_channel_order = True
     do_reduce_labels = False
-    valid_kwargs = MobileVitFastImageProcessorKwargs
+    valid_kwargs = MobileVitImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[MobileVitFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[MobileVitImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     # Copied from transformers.models.beit.image_processing_beit_fast.BeitImageProcessorFast.reduce_label
@@ -94,7 +80,7 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
         self,
         images: ImageInput,
         segmentation_maps: Optional[ImageInput] = None,
-        **kwargs: Unpack[MobileVitFastImageProcessorKwargs],
+        **kwargs: Unpack[MobileVitImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
         segmentation_maps (`ImageInput`, *optional*):
@@ -109,7 +95,7 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         device: Optional[Union[str, "torch.device"]] = None,
-        **kwargs: Unpack[MobileVitFastImageProcessorKwargs],
+        **kwargs: Unpack[MobileVitImageProcessorKwargs],
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.

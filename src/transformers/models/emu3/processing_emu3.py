@@ -20,7 +20,7 @@ import numpy as np
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_vision_available
 
@@ -33,14 +33,8 @@ class Emu3TextKwargs(TextKwargs, total=False):
     return_for_image_generation: bool
 
 
-class Emu3ImagesKwargs(ImagesKwargs, total=False):
-    ratio: str
-    image_area: int
-
-
 class Emu3ProcessorKwargs(ProcessingKwargs, total=False):
     text_kwargs: Emu3TextKwargs
-    images_kwargs: Emu3ImagesKwargs
     _defaults = {
         "text_kwargs": {
             "return_for_image_generation": False,
@@ -95,8 +89,6 @@ class Emu3Processor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[Emu3ProcessorKwargs],
     ) -> BatchFeature:
         """

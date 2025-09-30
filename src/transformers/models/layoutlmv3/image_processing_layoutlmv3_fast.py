@@ -18,7 +18,7 @@ from typing import Optional, Union
 
 import torch
 
-from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature, DefaultFastImageProcessorKwargs
+from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature
 from ...image_transforms import ChannelDimension, group_images_by_shape, reorder_images
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
@@ -29,7 +29,7 @@ from ...utils import (
     logging,
     requires_backends,
 )
-from .image_processing_layoutlmv3 import apply_tesseract
+from .image_processing_layoutlmv3 import LayoutLMv3ImageProcessorKwargs, apply_tesseract
 
 
 if is_torchvision_v2_available():
@@ -38,26 +38,6 @@ else:
     from torchvision.transforms import functional as F
 
 logger = logging.get_logger(__name__)
-
-
-class LayoutLMv3FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    Args:
-        apply_ocr (`bool`, *optional*, defaults to `True`):
-            Whether to apply the Tesseract OCR engine to get words + normalized bounding boxes. Can be overridden by
-            the `apply_ocr` parameter in the `preprocess` method.
-        ocr_lang (`str`, *optional*):
-            The language, specified by its ISO code, to be used by the Tesseract OCR engine. By default, English is
-            used. Can be overridden by the `ocr_lang` parameter in the `preprocess` method.
-        tesseract_config (`str`, *optional*):
-            Any additional custom configuration flags that are forwarded to the `config` parameter when calling
-            Tesseract. For example: '--psm 6'. Can be overridden by the `tesseract_config` parameter in the
-            `preprocess` method.
-    """
-
-    apply_ocr: Optional[bool]
-    ocr_lang: Optional[str]
-    tesseract_config: Optional[str]
 
 
 @auto_docstring
@@ -72,13 +52,13 @@ class LayoutLMv3ImageProcessorFast(BaseImageProcessorFast):
     apply_ocr = True
     ocr_lang = None
     tesseract_config = ""
-    valid_kwargs = LayoutLMv3FastImageProcessorKwargs
+    valid_kwargs = LayoutLMv3ImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[LayoutLMv3FastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[LayoutLMv3ImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[LayoutLMv3FastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[LayoutLMv3ImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def _preprocess(

@@ -26,14 +26,9 @@ import numpy as np
 import torch
 
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
-    group_images_by_shape,
-    reorder_images,
-)
+from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_v2_available
 
 
@@ -43,7 +38,7 @@ else:
     from torchvision.transforms import functional as F
 
 
-class Cohere2VisionFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+class Cohere2VisionFastImageProcessorKwargs(ImagesKwargs):
     """
     crop_to_patches (`bool`, *optional*, defaults to `False`):
         Whether to crop the image to patches. Can be overridden by the `crop_to_patches` parameter in the

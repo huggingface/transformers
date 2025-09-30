@@ -24,12 +24,11 @@ import torch
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
@@ -315,8 +314,8 @@ def get_best_fit(
     return optimal_canvas
 
 
-class Llama4ImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
+class Llama4ImageProcessorKwargs(ImagesKwargs):
+    r"""
     max_patches (`int`, *optional*, defaults to 16):
         The maximum number of patches to be extracted from the image.
         Can be overridden by the `max_patches` parameter in the `preprocess` method.

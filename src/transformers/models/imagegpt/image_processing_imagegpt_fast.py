@@ -22,7 +22,6 @@ import torch
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
 )
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import PILImageResampling
@@ -32,6 +31,7 @@ from ...utils import (
     auto_docstring,
     is_torchvision_v2_available,
 )
+from .image_processing_imagegpt import ImageGPTImageProcessorKwargs
 
 
 if is_torchvision_v2_available():
@@ -74,20 +74,6 @@ def color_quantize_torch(x: torch.Tensor, clusters: torch.Tensor) -> torch.Tenso
     return torch.argmin(d, dim=1)
 
 
-class ImageGPTFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    clusters (`np.ndarray` or `list[list[int]]` or `torch.Tensor`, *optional*):
-        The color clusters to use, of shape `(n_clusters, 3)` when color quantizing. Can be overridden by `clusters`
-        in `preprocess`.
-    do_color_quantize (`bool`, *optional*, defaults to `True`):
-        Controls whether to apply color quantization to convert continuous pixel values to discrete cluster indices.
-        When True, each pixel is assigned to its nearest color cluster, enabling ImageGPT's discrete token modeling.
-    """
-
-    clusters: Optional[Union[np.ndarray, list[list[int]], torch.Tensor]]
-    do_color_quantize: Optional[bool]
-
-
 @auto_docstring
 class ImageGPTImageProcessorFast(BaseImageProcessorFast):
     model_input_names = ["input_ids"]
@@ -98,12 +84,12 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
     image_std = [0.5, 0.5, 0.5]
     do_rescale = True
     do_normalize = True
-    valid_kwargs = ImageGPTFastImageProcessorKwargs
+    valid_kwargs = ImageGPTImageProcessorKwargs
 
     def __init__(
         self,
         clusters: Optional[Union[list, np.ndarray, torch.Tensor]] = None,  # keep as arg for backwards compatibility
-        **kwargs: Unpack[ImageGPTFastImageProcessorKwargs],
+        **kwargs: Unpack[ImageGPTImageProcessorKwargs],
     ):
         r"""
         clusters (`np.ndarray` or `list[list[int]]` or `torch.Tensor`, *optional*):

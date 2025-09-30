@@ -19,16 +19,11 @@ import numpy as np
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 
-class Cohere2VisionImagesKwargs(ImagesKwargs, total=False):
-    max_patches: Optional[int]
-
-
 class Cohere2VisionProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: Cohere2VisionImagesKwargs
     _defaults = {
         "text_kwargs": {
             "padding_side": "left",

@@ -35,6 +35,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, is_vision_available, logging
 
 
@@ -44,6 +45,15 @@ logger = logging.get_logger(__name__)
 if is_vision_available():
     import PIL
     from PIL import Image
+
+
+class Idefics2ImageProcessorKwargs(ImagesKwargs):
+    """
+    do_image_splitting (`bool`, *optional*, defaults to `False`):
+        Whether to split the image into a sequence 4 equal sub-images concatenated with the original image.
+    """
+
+    do_image_splitting: Optional[bool]
 
 
 def get_resize_output_image_size(image, size, input_data_format) -> tuple[int, int]:
@@ -186,6 +196,7 @@ class Idefics2ImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values", "pixel_attention_mask"]
+    valid_kwargs = Idefics2ImageProcessorKwargs
 
     def __init__(
         self,
