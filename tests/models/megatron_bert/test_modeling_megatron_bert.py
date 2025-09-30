@@ -290,7 +290,6 @@ class MegatronBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     )
     fx_compatible = True
     # test_resize_embeddings = False
-    test_head_masking = False
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):

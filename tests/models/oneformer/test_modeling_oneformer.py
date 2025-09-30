@@ -234,7 +234,6 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     is_encoder_decoder = False
     test_pruning = False
-    test_head_masking = False
     test_missing_keys = False
 
     # TODO: Fix the failed tests when this model gets more usage
