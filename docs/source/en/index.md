@@ -35,7 +35,7 @@ There are over 1M+ Transformers [model checkpoints](https://huggingface.co/model
 
 Explore the [Hub](https://huggingface.com/) today to find a model and use Transformers to help you get started right away.
 
-Want to find the latest model architecture for your specific task or modality? Explore the [Models Timeline](./models_timeline) to discover what's new in text, vision, audio, and multimodal models supported by the Transformers library.
+Explore the [Models Timeline](./models_timeline) to discover the latest text, vision, audio and multimodal model architectures in Transformers.
 
 
 

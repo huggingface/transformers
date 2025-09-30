@@ -15,12 +15,9 @@ rendered properly in your Markdown viewer.
 
 # Models Timeline
 
-The Models Timeline is an interactive visualization that shows the evolution of model architectures in the Hugging Face Transformers library over time. Browse through models chronologically across different modalities, from text and vision to audio, video, and multimodal applications.
+The [Models Timeline](https://huggingface.co/spaces/yonigozlan/Transformers-Timeline) is an interactive chart of how architectures in Transformers have changed over time. You can scroll through models in order, spanning text, vision, audio, video, and multimodal use cases.
 
-> [!TIP]
-> Use the filter controls to narrow down models by modality type or specific tasks. You can also set custom date ranges to focus on models added during particular time periods. Click on any model card to expand it and see detailed information about the model's capabilities, supported tasks, and documentation links.
-
-Explore the timeline below ([or check it out on HF Spaces](https://huggingface.co/spaces/yonigozlan/Transformers-Timeline)):
+Use the filters to narrow models by modality or task. Set custom date ranges to focus on models added during specific periods. Click a model card to see its capabilities, supported tasks, and documentation.
 
 <iframe
 	src="https://yonigozlan-transformers-timeline.hf.space"
