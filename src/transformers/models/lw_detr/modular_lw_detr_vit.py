@@ -266,7 +266,6 @@ class LwDetrViTLayer(GradientCheckpointingLayer):
 
         self.window = layer_idx in config.window_block_indices
         self.num_windows = config.num_windows
-        self.num_windows_side = int(math.sqrt(self.num_windows))
 
     def forward(
         self,
@@ -315,8 +314,7 @@ class LwDetrViTEncoder(ViTEncoder):
         head_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
-        list_hidden_states = []
-        list_hidden_states.append(hidden_states)
+        list_hidden_states = [hidden_states]
         for i, layer_module in enumerate(self.layer):
             layer_head_mask = head_mask[i] if head_mask is not None else None
             hidden_states = layer_module(hidden_states, layer_head_mask, **kwargs)
@@ -343,7 +341,7 @@ class LwDetrViTPreTrainedModel(VitDetPreTrainedModel):
         "attentions": LwDetrViTSelfAttention,
     }
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
+    def _init_weights(self, module) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
