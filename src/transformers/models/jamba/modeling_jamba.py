@@ -136,13 +136,6 @@ class HybridMambaAttentionDynamicCache:
             device = self.ssm_states[layer_idx].device
             self.ssm_states[layer_idx] = self.ssm_states[layer_idx].index_select(0, beam_idx.to(device))
 
-    def get_mask_sizes(self, cache_position: torch.Tensor, layer_idx: int) -> tuple[int, int]:
-        """Return the length and offset of the cache, used to generate the mask"""
-        kv_offset = 0
-        query_length = cache_position.shape[0]
-        kv_length = self.get_seq_length(layer_idx) + query_length
-        return kv_length, kv_offset
-
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         # take any layer that contains cache and not empty tensor
@@ -794,45 +787,23 @@ class JambaModel(JambaPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
-            past_key_values = HybridMambaAttentionDynamicCache(
-                config=self.config,
-                batch_size=inputs_embeds.shape[0],
-                dtype=inputs_embeds.dtype,
-                device=inputs_embeds.device,
+            logger.warning_once(
+                "Jamba requires an initialized `HybridMambaAttentionDynamicCache` to return a cache. None was "
+                "provided, so no cache will be returned."
             )
 
         if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position: torch.Tensor = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
-
+            cache_position = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device)
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        if not isinstance(causal_mask_mapping := attention_mask, dict):
-            causal_mask_mapping = {
-                "full_attention": create_causal_mask(
-                    config=self.config,
-                    input_embeds=inputs_embeds,
-                    attention_mask=attention_mask,
-                    cache_position=cache_position,
-                    past_key_values=past_key_values,
-                    position_ids=position_ids,
-                ),
-                "mamba": self._update_mamba_mask(attention_mask, cache_position)
-                if self.config.use_mamba_kernels
-                else attention_mask,
-            }
+        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position)
+        mamba_mask = self._update_mamba_mask(attention_mask, cache_position)
 
         hidden_states = inputs_embeds
         for decoder_layer in self.layers:
             # Depending on the layer type we opt for 2D base attention mask (Mamba) or 4D causal mask (Attention)
-            layer_mask = (
-                causal_mask_mapping["mamba"]
-                if isinstance(decoder_layer, JambaMambaDecoderLayer)
-                else causal_mask_mapping["full_attention"]
-            )
+            layer_mask = mamba_mask if isinstance(decoder_layer, JambaMambaDecoderLayer) else causal_mask
 
             hidden_states = decoder_layer(
                 hidden_states,
@@ -850,7 +821,43 @@ class JambaModel(JambaPreTrainedModel):
 
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
+            past_key_values=past_key_values,
         )
+
+    def _update_causal_mask(self, attention_mask, input_tensor, cache_position):
+        if self.config._attn_implementation == "flash_attention_2":
+            if attention_mask is not None and 0.0 in attention_mask:
+                return attention_mask
+            return None
+
+        dtype, device = input_tensor.dtype, input_tensor.device
+        min_dtype = torch.finfo(dtype).min
+        sequence_length = input_tensor.shape[1]
+        target_length = cache_position[-1] + 1
+
+        causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
+        if sequence_length != 1:
+            causal_mask = torch.triu(causal_mask, diagonal=1)
+        causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+        causal_mask = causal_mask[None, None, :, :].expand(input_tensor.shape[0], 1, -1, -1)
+        if attention_mask is not None:
+            causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+            if attention_mask.dim() == 2:
+                mask_length = attention_mask.shape[-1]
+                padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
+                causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(padding_mask, min_dtype)
+
+        if (
+            self.config._attn_implementation == "sdpa"
+            and attention_mask is not None
+            and attention_mask.device.type in ["cuda", "xpu", "npu"]
+        ):
+            # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
+            # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
+            # Details: https://github.com/pytorch/pytorch/issues/110213
+            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
+
+        return causal_mask
 
     def _update_mamba_mask(self, attention_mask, cache_position):
         """
@@ -859,9 +866,7 @@ class JambaModel(JambaPreTrainedModel):
             2. Attending to all inputs
         """
         mamba_mask = attention_mask
-        if (cache_position is not None and cache_position[0] > 0) or (
-            attention_mask is not None and torch.all(attention_mask == 1)
-        ):
+        if cache_position[0] > 0 or (attention_mask is not None and torch.all(attention_mask == 1)):
             mamba_mask = None
         return mamba_mask
 
@@ -1059,25 +1064,38 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
         attention_mask=None,
         inputs_embeds=None,
         cache_position=None,
+        position_ids=None,
+        use_cache=True,
         **kwargs,
     ):
         # Overwritten -- has a unique cache type, `HybridMambaAttentionDynamicCache`
-        past_length = 0
-        if past_key_values is not None:
-            past_length = past_key_values.get_seq_length()
 
-        # create cache if necessary
-        if past_key_values is None:
+        empty_past_kv = past_key_values is None
+
+        # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
+        # Exception 1: when passing input_embeds, input_ids may be missing entries
+        # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
+        # Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
+        #              (we can't check exception 3 while compiling)
+        if not empty_past_kv:
+            if (
+                inputs_embeds is not None  # Exception 1
+                or cache_position[-1] >= input_ids.shape[1]  # Exception 3
+            ):
+                input_ids = input_ids[:, -cache_position.shape[0] :]
+            elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
+                input_ids = input_ids[:, cache_position]
+        else:
             past_key_values = HybridMambaAttentionDynamicCache(
                 self.config, input_ids.shape[0], self.dtype, device=self.device
             )
 
-        if cache_position is None:
-            cache_position = torch.arange(past_length, past_length + input_ids.shape[1], device=input_ids.device)
-        else:
-            # past_length in this case is close to the actual seq_len - 1
-            # and we want to add the new token to the cache
-            cache_position = torch.tensor([past_length], device=input_ids.device)
+        if attention_mask is not None and position_ids is None:
+            # create position_ids on the fly for batch generation
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 1)
+            if not empty_past_kv:
+                position_ids = position_ids[:, -input_ids.shape[1] :]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values.get_seq_length() == 0:
@@ -1087,10 +1105,12 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
 
         model_inputs.update(
             {
+                "position_ids": position_ids,
                 "past_key_values": past_key_values,
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
+                "logits_to_keep": self.config.num_logits_to_keep,
             }
         )
         return model_inputs
