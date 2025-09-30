@@ -18,7 +18,7 @@ import unittest
 
 import pytest
 
-from transformers import AutoTokenizer, JetMoeConfig, is_torch_available
+from transformers import AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     backend_empty_cache,
     require_flash_attn,
@@ -42,12 +42,8 @@ if is_torch_available():
 
 
 class JetMoeModelTester(CausalLMModelTester):
-    config_class = JetMoeConfig
-    forced_config_args = ["pad_token_id"]
     if is_torch_available():
         base_model_class = JetMoeModel
-        causal_lm_class = JetMoeForCausalLM
-        sequence_class = JetMoeForSequenceClassification
 
     def __init__(
         self,
@@ -106,11 +102,6 @@ class JetMoeModelTester(CausalLMModelTester):
 
 @require_torch
 class JetMoeModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (JetMoeModel, JetMoeForCausalLM, JetMoeForSequenceClassification) if is_torch_available() else ()
-    )
-    test_headmasking = False
-    test_pruning = False
     test_mismatched_shapes = False
     test_cpu_offload = False
     test_disk_offload_bin = False
