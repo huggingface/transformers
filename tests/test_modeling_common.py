@@ -1212,7 +1212,8 @@ class ModelTesterMixin:
                 if self.test_all_params_have_gradient:
                     for k, v in model.named_parameters():
                         if v.requires_grad:
-                            self.assertTrue(v.grad is not None, f"{k} in {model_class.__name__} has no gradient!")
+                            with self.subTest(f"{k}"):
+                                self.assertTrue(v.grad is not None, f"{k} in {model_class.__name__} has no gradient!")
 
     def test_training(self):
         if not self.model_tester.is_training:
