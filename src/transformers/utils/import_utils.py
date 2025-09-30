@@ -1327,7 +1327,7 @@ def is_fp_quant_available():
 
 
 def is_qutlass_available():
-    return _qutlass_available and version.parse(_qutlass_version) >= version.parse("0.0.1")
+    return _qutlass_available and version.parse(_qutlass_version) >= version.parse("0.1.0")
 
 
 def is_compressed_tensors_available():
