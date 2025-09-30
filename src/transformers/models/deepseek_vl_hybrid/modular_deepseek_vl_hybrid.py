@@ -16,6 +16,7 @@ from typing import Optional, Union
 
 import torch
 import torch.nn as nn
+from torchvision.transforms.v2 import functional as F
 
 from ...cache_utils import Cache
 from ...image_processing_utils_fast import (
@@ -53,7 +54,6 @@ from ...utils import (
     auto_docstring,
     can_return_tuple,
     filter_out_non_signature_kwargs,
-    is_torchvision_v2_available,
     logging,
 )
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
@@ -68,12 +68,6 @@ from ..deepseek_vl.modeling_deepseek_vl import (
 from ..deepseek_vl.processing_deepseek_vl import DeepseekVLProcessor, DeepseekVLProcessorKwargs
 from ..idefics.modeling_idefics import IdeficsBaseModelOutputWithPast, IdeficsCausalLMOutputWithPast
 from ..sam.modeling_sam import SamLayerNorm, SamVisionNeck
-
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
 
 
 logger = logging.get_logger(__name__)
