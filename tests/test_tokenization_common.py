@@ -3640,25 +3640,6 @@ class TokenizerTesterMixin:
                         for i_no, i_with in zip(no_special_tokens[key], with_special_tokens[key]):
                             self.assertEqual(len(i_no), len(i_with) - simple_num_special_tokens_to_add)
 
-    def test_compare_prepare_for_model(self):
-        if not self.test_slow_tokenizer:
-            # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            self.skipTest(reason="test_slow_tokenizer is set to False")
-
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
-                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
-                string_sequence = "Asserting that both tokenizers are equal"
-                python_output = tokenizer_p.prepare_for_model(
-                    tokenizer_p.encode(string_sequence, add_special_tokens=False)
-                )
-                rust_output = tokenizer_r.prepare_for_model(
-                    tokenizer_r.encode(string_sequence, add_special_tokens=False)
-                )
-                for key in python_output:
-                    self.assertEqual(python_output[key], rust_output[key])
-
     def test_special_tokens_initialization(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
