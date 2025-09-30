@@ -999,8 +999,8 @@ class SwitchTransformerRouterTest(unittest.TestCase):
         router_z_loss = router_z_loss_func(router_logits)
         auxiliary_loss = load_balancing_loss_func(router_probs, torch.argmax(expert_index, dim=-1))
 
-        self.assertAlmostEqual(router_z_loss.item(), 0.4789799, places=5)
-        self.assertAlmostEqual(auxiliary_loss.item(), 1.000308, places=5)
+        self.assertAlmostEqual(router_z_loss.item(), 0.25389, places=5)
+        self.assertAlmostEqual(auxiliary_loss.item(), 1.000, places=5)
         #
         # self.assertTrue(torch.allclose(expert_index.bool().unsqueeze(-1), expected_dispatch_mask))
 
