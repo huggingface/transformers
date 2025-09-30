@@ -43,9 +43,6 @@ There are two key differences with MusicGen:
 1. The audio prompt is used here as a conditional signal for the generated audio sample, whereas it's used for audio continuation in [MusicGen](https://huggingface.co/docs/transformers/main/en/model_doc/musicgen).
 2. Conditional text and audio signals are concatenated to the decoder's hidden states instead of being used as a cross-attention signal, as in MusicGen.
 
-> [!NOTE]
-> The `head_mask` argument is ignored when using all attention implementation other than "eager". If you have a `head_mask` and want it to have effect, load the model with `XXXModel.from_pretrained(model_id, attn_implementation="eager")`
-
 ## Generation
 
 MusicGen Melody is compatible with two generation modes: greedy and sampling. In practice, sampling leads to significantly better results than greedy, thus we encourage sampling mode to be used where possible. Sampling is enabled by default, and can be explicitly specified by setting `do_sample=True` in the call to [`MusicgenMelodyForConditionalGeneration.generate`], or by overriding the model's generation config (see below).
@@ -58,7 +55,7 @@ The model can generate an audio sample conditioned on a text and an audio prompt
 
 In the following examples, we load an audio file using the 🤗 Datasets library, which can be pip installed through the command below:
 
-```
+```bash
 pip install --upgrade pip
 pip install datasets[audio]
 ```

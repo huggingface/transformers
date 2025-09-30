@@ -304,9 +304,7 @@ class Gemma3nTextConfig(Gemma2Config, PretrainedConfig):
 
         if activation_sparsity_pattern is None:
             num_sparse_layers = 10 if num_hidden_layers > 10 else 0
-            activation_sparsity_pattern = (0.95,) * num_sparse_layers + (0.0,) * (
-                num_hidden_layers - num_sparse_layers
-            )
+            activation_sparsity_pattern = [0.95] * num_sparse_layers + [0.0] * (num_hidden_layers - num_sparse_layers)
 
         if (len_asp := len(activation_sparsity_pattern)) != num_hidden_layers:
             raise ValueError(
@@ -2676,7 +2674,7 @@ __all__ = [
     "Gemma3nForCausalLM",
     "Gemma3nForConditionalGeneration",
     "Gemma3nModel",
-    "Gemma3nPreTrainedModel",  # noqa: F822
+    "Gemma3nPreTrainedModel",
     "Gemma3nTextConfig",
     "Gemma3nTextModel",
     "Gemma3nVisionConfig",

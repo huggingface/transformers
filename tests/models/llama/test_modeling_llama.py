@@ -38,7 +38,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        LlamaConfig,
         LlamaForCausalLM,
         LlamaForQuestionAnswering,
         LlamaForSequenceClassification,
@@ -50,26 +49,11 @@ if is_torch_available():
 
 class LlamaModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = LlamaConfig
         base_model_class = LlamaModel
-        causal_lm_class = LlamaForCausalLM
-        sequence_class = LlamaForSequenceClassification
-        token_class = LlamaForTokenClassification
 
 
 @require_torch
 class LlamaModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            LlamaModel,
-            LlamaForCausalLM,
-            LlamaForSequenceClassification,
-            LlamaForQuestionAnswering,
-            LlamaForTokenClassification,
-        )
-        if is_torch_available()
-        else ()
-    )
     pipeline_model_mapping = (
         {
             "feature-extraction": LlamaModel,
@@ -82,8 +66,6 @@ class LlamaModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
-    test_pruning = False
     fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
     model_tester_class = LlamaModelTester
 

@@ -53,7 +53,6 @@ The original code for vision can be found [here](https://github.com/facebookrese
 - For Data2VecAudio, preprocessing is identical to [`Wav2Vec2Model`], including feature extraction
 - For Data2VecText, preprocessing is identical to [`RobertaModel`], including tokenization.
 - For Data2VecVision, preprocessing is identical to [`BeitModel`], including feature extraction.
-- The `head_mask` argument is ignored when using all attention implementation other than "eager". If you have a `head_mask` and want it to have effect, load the model with `XXXModel.from_pretrained(model_id, attn_implementation="eager")`
 
 ### Using Scaled Dot Product Attention (SDPA)
 
@@ -68,7 +67,7 @@ SDPA is used by default for `torch>=2.1.1` when an implementation is available, 
 
 The SDPA implementation is currently available for the Data2VecAudio and Data2VecVision models.
 
-```
+```py
 from transformers import Data2VecVisionForImageClassification
 model = Data2VecVisionForImageClassification.from_pretrained("facebook/data2vec-vision-base", attn_implementation="sdpa", dtype=torch.float16)
 ...

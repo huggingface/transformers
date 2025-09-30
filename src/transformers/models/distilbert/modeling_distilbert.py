@@ -134,7 +134,6 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: Optional[float] = None,
     dropout: float = 0.0,
-    head_mask: Optional[torch.Tensor] = None,
     **kwargs,
 ):
     if scaling is None:
@@ -145,9 +144,6 @@ def eager_attention_forward(
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-    if head_mask is not None:
-        attn_weights = attn_weights * head_mask.view(1, -1, 1, 1)
 
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value)
@@ -201,7 +197,6 @@ class DistilBertSelfAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -224,7 +219,6 @@ class DistilBertSelfAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.dropout.p,
             scaling=self.scaling,
-            head_mask=head_mask,
             **kwargs,
         )
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
@@ -271,14 +265,12 @@ class TransformerBlock(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, ...]:
         # Self-Attention
         attention_output, _ = self.attention(
             hidden_states,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             **kwargs,
         )
         attention_output = self.sa_layer_norm(attention_output + hidden_states)
@@ -301,14 +293,12 @@ class Transformer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[BaseModelOutput]:
-        for i, layer_module in enumerate(self.layer):
+        for layer_module in self.layer:
             hidden_states = layer_module(
                 hidden_states,
                 attention_mask,
-                head_mask[i],
                 **kwargs,
             )
 
@@ -428,7 +418,6 @@ class DistilBertModel(DistilBertPreTrainedModel):
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -456,12 +445,9 @@ class DistilBertModel(DistilBertPreTrainedModel):
             embeddings,
         )
 
-        head_mask = self.get_head_mask(head_mask, self.config.n_layers)
-
         return self.transformer(
             hidden_states=embeddings,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             **kwargs,
         )
 
@@ -475,8 +461,6 @@ class DistilBertModel(DistilBertPreTrainedModel):
             if "flash" in self.config._attn_implementation:
                 attention_mask = attention_mask if 0 in attention_mask else None
             elif self.config._attn_implementation == "sdpa":
-                # output_attentions=True & head_mask can not be supported when using SDPA, fall back to
-                # the manual implementation that requires a 4D causal mask in all cases.
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
                 attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
             elif self.config._attn_implementation == "flex_attention":
@@ -544,7 +528,6 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.Tensor] = None,
@@ -570,7 +553,6 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
         dlbrt_output = self.distilbert(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             position_ids=position_ids,
             return_dict=True,
@@ -640,7 +622,6 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.Tensor] = None,
@@ -655,7 +636,6 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
         distilbert_output = self.distilbert(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             position_ids=position_ids,
             return_dict=True,
@@ -740,7 +720,6 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         start_positions: Optional[torch.Tensor] = None,
         end_positions: Optional[torch.Tensor] = None,
@@ -763,7 +742,6 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
         distilbert_output = self.distilbert(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             position_ids=position_ids,
             return_dict=True,
@@ -842,7 +820,6 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.Tensor] = None,
@@ -855,7 +832,6 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
         outputs = self.distilbert(
             input_ids,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             position_ids=position_ids,
             return_dict=True,
@@ -919,7 +895,6 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.Tensor] = None,
@@ -976,7 +951,6 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
         outputs = self.distilbert(
             input_ids,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             position_ids=position_ids,
             return_dict=True,

@@ -273,9 +273,7 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     fx_compatible = False  # FIXME let's try to support this @ArthurZucker
     test_torchscript = False  # FIXME let's try to support this @ArthurZucker
     test_missing_keys = False
-    test_model_parallel = False
     test_pruning = False
-    test_head_masking = False  # FalconMamba does not have attention heads
     pipeline_model_mapping = (
         {"feature-extraction": FalconMambaModel, "text-generation": FalconMambaForCausalLM}
         if is_torch_available()
