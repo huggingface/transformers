@@ -1022,7 +1022,6 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
             loss_fct = CrossEntropyLoss()
 
             labels = labels.masked_fill(labels == self.config.audio_vocab_size, -100).reshape(-1)
-            # Enable model parallelism
             labels = labels.to(logits.device)
             loss = loss_fct(logits.reshape(-1, self.config.audio_vocab_size), labels)
 
@@ -1546,7 +1545,6 @@ class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
             # Flatten the tokens
             shift_logits = shift_logits.view(-1, self.config.vocab_size)
             shift_labels = shift_labels.view(-1)
-            # Enable model parallelism
             shift_labels = shift_labels.to(shift_logits.device)
             loss = self.loss_function(
                 shift_logits,

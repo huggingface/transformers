@@ -431,11 +431,8 @@ class Qwen3OmniMoeThinkerConfig(PretrainedConfig):
     ```"""
 
     model_type = "qwen3_omni_moe_thinker"
-    attribute_map = {
-        "image_token_id": "image_token_index",
-        "video_token_id": "video_token_index",
-        "audio_token_id": "audio_token_index",
-    }
+    # Override parent's attribute_map as we use audio_token_id directly, not audio_token_index
+    attribute_map = {}
     sub_configs = {
         "audio_config": Qwen3OmniMoeAudioEncoderConfig,
         "vision_config": Qwen3OmniMoeVisionEncoderConfig,

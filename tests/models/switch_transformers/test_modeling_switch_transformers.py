@@ -574,7 +574,6 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True
-    test_model_parallel = False
     is_encoder_decoder = True
     test_torchscript = False
     # The small SWITCH_TRANSFORMERS model needs higher percentages for CPU/MP tests

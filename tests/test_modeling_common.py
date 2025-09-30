@@ -13,7 +13,6 @@
 # limitations under the License.
 import collections
 import copy
-import gc
 import inspect
 import math
 import os
@@ -75,10 +74,6 @@ from transformers.models.auto.modeling_auto import (
 )
 from transformers.testing_utils import (
     CaptureLogger,
-    backend_device_count,
-    backend_empty_cache,
-    backend_memory_allocated,
-    backend_torch_accelerator_module,
     get_device_properties,
     hub_retry,
     is_flaky,
@@ -583,7 +578,6 @@ class ModelTesterMixin:
     test_head_masking = True
     test_mismatched_shapes = True
     test_missing_keys = True
-    test_model_parallel = False
     test_torch_exportable = False
     # Used in `check_training_gradient_checkpointing` to NOT check all params having gradient (e.g. for some MOE models)
     test_all_params_have_gradient = True
@@ -2880,104 +2874,6 @@ class ModelTesterMixin:
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
-    @require_torch_gpu
-    @require_torch_multi_gpu
-    def test_model_parallelization(self):
-        if not self.test_model_parallel:
-            self.skipTest(reason="test_model_parallel is set to False")
-
-        # a candidate for testing_utils
-        def get_current_gpu_memory_use():
-            """returns a list of VRAM allocations per GPU in MBs"""
-
-            per_device_memory = []
-            for id in range(backend_device_count(torch_device)):
-                with backend_torch_accelerator_module(torch_device).device(id):
-                    per_device_memory.append(backend_memory_allocated(torch_device) >> 20)
-
-            return per_device_memory
-
-        # Needs a large model to see the difference.
-        config = self.model_tester.get_large_model_config()
-
-        for model_class in self.all_parallelizable_model_classes:
-            backend_empty_cache(torch_device)
-
-            # 1. single gpu memory load + unload + memory measurements
-            # Retrieve initial memory usage (can easily be ~0.6-1.5GB if cuda-kernels have been preloaded by previous tests)
-            memory_at_start = get_current_gpu_memory_use()
-
-            # Put model on device 0 and take a memory snapshot
-            model = model_class(config)
-            model.to(f"{torch_device}:0")
-            memory_after_model_load = get_current_gpu_memory_use()
-
-            # The memory use on device 0 should be higher than it was initially.
-            self.assertGreater(memory_after_model_load[0], memory_at_start[0])
-
-            del model
-            gc.collect()
-            backend_empty_cache(torch_device)
-
-            # 2. MP test
-            # it's essential to re-calibrate the usage before the next stage
-            memory_at_start = get_current_gpu_memory_use()
-
-            # Spread model layers over multiple devices
-            model = model_class(config)
-            model.parallelize()
-            memory_after_parallelization = get_current_gpu_memory_use()
-
-            # Assert that the memory use on all devices is higher than it was when loaded only on CPU
-            for n in range(len(model.device_map.keys())):
-                self.assertGreater(memory_after_parallelization[n], memory_at_start[n])
-
-            # Assert that the memory use of device 0 is lower than it was when the entire model was loaded on it
-            self.assertLess(memory_after_parallelization[0], memory_after_model_load[0])
-
-            # Assert that the memory use of device 1 is higher than it was when the entire model was loaded
-            # on device 0 and device 1 wasn't used at all
-            self.assertGreater(memory_after_parallelization[1], memory_after_model_load[1])
-
-            del model
-            gc.collect()
-            backend_empty_cache(torch_device)
-
-    @require_torch_gpu
-    @require_torch_multi_gpu
-    def test_model_parallel_equal_results(self):
-        if not self.test_model_parallel:
-            self.skipTest(reason="test_model_parallel is set to False")
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_parallelizable_model_classes:
-            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-
-            def cast_to_device(dictionary, device):
-                output = {}
-                for k, v in dictionary.items():
-                    if isinstance(v, torch.Tensor):
-                        output[k] = v.to(device)
-                    else:
-                        output[k] = v
-
-                return output
-
-            model = model_class(config)
-            output = model(**cast_to_device(inputs_dict, "cpu"))
-
-            model.parallelize()
-
-            parallel_output = model(**cast_to_device(inputs_dict, f"{torch_device}:0"))
-
-            for value, parallel_value in zip(output, parallel_output):
-                if isinstance(value, torch.Tensor):
-                    torch.testing.assert_close(value, parallel_value.to("cpu"), rtol=1e-7, atol=1e-7)
-                elif isinstance(value, (tuple, list)):
-                    for value_, parallel_value_ in zip(value, parallel_value):
-                        torch.testing.assert_close(value_, parallel_value_.to("cpu"), rtol=1e-7, atol=1e-7)
-
     def check_device_map_is_respected(self, model, device_map):
         for param_name, param in model.named_parameters():
             # Find device in device_map
@@ -4319,7 +4215,7 @@ class ModelTesterMixin:
 
         return config
 
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_flex_attention_with_grads(self):
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
