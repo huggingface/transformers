@@ -380,20 +380,23 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         for prompt in continue_prompt:
             self.assertTrue(prompt.endswith("It is the sound of"))  # no `eos` token at the end
 
-    @parameterized.expand([(1, ), (2, )])
+    @parameterized.expand([(1,), (2,)])
     @require_torch
     def test_frames_binding(self, batch_size: int):
         texts = [
-            '<video>\nAre there any cyan objects that enter the scene?\nno',
-            '<video>\nAre there any red spheres that enter the scene?\nno',
+            "<video>\nAre there any cyan objects that enter the scene?\nno",
+            "<video>\nAre there any red spheres that enter the scene?\nno",
         ]
         frames = torch.ones((4, 448, 448, 3), dtype=torch.float32)
         videos = [frames, frames]
 
         processor = self.get_processor()
-        inputs = processor(text=texts[:batch_size], return_tensors='pt',
-                           videos=videos[:batch_size],
-                           videos_kwargs={'size': (448, 448)})
+        inputs = processor(
+            text=texts[:batch_size],
+            return_tensors="pt",
+            videos=videos[:batch_size],
+            videos_kwargs={"size": (448, 448)},
+        )
 
         actual_num_frames = inputs.pixel_values.pixel_values.shape[0]
         expected_num_frames = sum(x.shape[0] for x in videos[:batch_size])
