@@ -753,7 +753,7 @@ class JambaModel(JambaPreTrainedModel):
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`JambaDecoderLayer`]
 
     Args:
-        config: JambaConfig
+        config (`JambaConfig`): <fill_docstring>
     """
 
     def __init__(self, config: JambaConfig):
