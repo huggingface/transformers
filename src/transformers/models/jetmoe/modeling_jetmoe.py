@@ -25,8 +25,6 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from transformers.utils.generic import OutputRecorder
-
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -39,7 +37,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import check_model_inputs
+from ...utils.generic import OutputRecorder, check_model_inputs
 from .configuration_jetmoe import JetMoeConfig
 
 
@@ -564,7 +562,7 @@ class JetMoePreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
         elif isinstance(module, JetMoeParallelExperts):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, (JetMoeMoA, JetMoeMoE)):
+        elif isinstance(module, JetMoeMoA | JetMoeMoE):
             module.bias.data.zero_()
 
 

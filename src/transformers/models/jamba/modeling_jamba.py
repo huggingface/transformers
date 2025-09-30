@@ -658,8 +658,8 @@ class JambaAttentionDecoderLayer(GradientCheckpointingLayer):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor, Optional[torch.Tensor], Optional[HybridMambaAttentionDynamicCache]]:
-        hidden_states = self.input_layernorm(hidden_states)
         residual = hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
