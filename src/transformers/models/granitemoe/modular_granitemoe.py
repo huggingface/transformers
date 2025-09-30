@@ -160,6 +160,7 @@ class GraniteMoeModel(MixtralModel):
             [GraniteMoeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = GraniteMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.embedding_multiplier = config.embedding_multiplier
 
     @check_model_inputs
     @auto_docstring
@@ -199,7 +200,7 @@ class GraniteMoeModel(MixtralModel):
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
-
+        inputs_embeds = inputs_embeds * self.embedding_multiplier
         hidden_states = inputs_embeds
 
         # create position embeddings to be shared across the decoder layers

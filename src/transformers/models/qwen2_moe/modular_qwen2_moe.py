@@ -37,7 +37,7 @@ from ...modeling_layers import (
 from ...modeling_outputs import MoeModelOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import check_model_inputs
+from ...utils.generic import OutputRecorder, check_model_inputs
 from ..gemma.modeling_gemma import GemmaMLP
 from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaRMSNorm, LlamaRotaryEmbedding
 from ..mixtral.modeling_mixtral import (
@@ -47,8 +47,6 @@ from ..mixtral.modeling_mixtral import (
     MixtralPreTrainedModel,
 )
 from .configuration_qwen2_moe import Qwen2MoeConfig
-
-from ...utils.generic import OutputRecorder
 
 
 class Qwen2MoeRMSNorm(LlamaRMSNorm):

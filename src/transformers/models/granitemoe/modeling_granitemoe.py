@@ -455,7 +455,7 @@ class GraniteMoeModel(GraniteMoePreTrainedModel):
         self.norm = GraniteMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = GraniteMoeRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
-
+        self.embedding_multiplier = config.embedding_multiplier
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -481,6 +481,7 @@ class GraniteMoeModel(GraniteMoePreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
+        inputs_embeds = inputs_embeds * self.embedding_multiplier
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(

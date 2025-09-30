@@ -54,7 +54,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "expert_layer_period",
     ],
     "Qwen2Config": ["use_sliding_window", "max_window_layers"],
-    "Qwen2MoeConfig": ["use_sliding_window"],
+    "Qwen2MoeConfig": ["use_sliding_window", "max_window_layers"],
     "Qwen2VLTextConfig": ["use_sliding_window", "max_window_layers"],
     "Qwen2_5_VLTextConfig": ["use_sliding_window", "max_window_layers"],
     "Qwen2_5OmniTextConfig": ["use_sliding_window", "max_window_layers"],
@@ -65,6 +65,7 @@ SPECIAL_CASES_TO_ALLOW = {
     # generation configs (TODO joao)
     "Gemma2Config": ["tie_word_embeddings", "cache_implementation"],
     "Cohere2Config": ["cache_implementation"],
+    "JetMoeConfig": ["output_router_logits"],
     # Dropout with this value was declared but never used
     "Phi3Config": ["embd_pdrop"],
     # used to compute the property `self.chunk_length`

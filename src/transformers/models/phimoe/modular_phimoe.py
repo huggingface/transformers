@@ -24,6 +24,7 @@ from ...modeling_layers import (
     GenericForSequenceClassification,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
+from ...utils.generic import OutputRecorder
 from ..llama.modeling_llama import LlamaAttention
 from ..mixtral.modeling_mixtral import (
     MixtralDecoderLayer,
@@ -34,7 +35,6 @@ from ..mixtral.modeling_mixtral import (
     MixtralPreTrainedModel,
 )
 from .configuration_phimoe import PhimoeConfig
-from ...utils.generic import OutputRecorder
 
 
 class PhimoeRotaryEmbedding(nn.Module):
