@@ -18,6 +18,7 @@ from typing import Optional
 import torch
 
 from ...cache_utils import Cache, DynamicCache
+from ...configuration_utils import layer_type_validation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...processing_utils import Unpack
@@ -26,116 +27,18 @@ from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaForCausalLM,
-    LlamaMLP,
     LlamaModel,
-    LlamaPreTrainedModel,
-    LlamaRMSNorm,
-    LlamaRotaryEmbedding,
 )
 
 
 logger = logging.get_logger(__name__)
 
 
-def _validate_layer_types(layer_types: list[str], num_hidden_layers: int) -> None:
-    if len(layer_types) != num_hidden_layers:
-        raise ValueError(
-            f"layer_types must be a list of length {num_hidden_layers} for each "
-            f"hidden layer, got length {len(layer_types)}"
-        )
-    if any(t not in ("full_attention", "sliding_attention") for t in layer_types):
-        raise ValueError("Layer types must be either 'full_attention' or 'sliding_attention'")
-
-
-class CwmTextConfig(LlamaConfig):
+class CwmConfig(LlamaConfig):
     """
-    Llama3-compatible configuration with layer-interleaved sliding-window attention
-    """
-
-    model_type = "cwm"
-
-    def __init__(
-        self,
-        # Llama fields
-        vocab_size: int = 128256,
-        hidden_size: int = 6144,
-        intermediate_size: int = 21504,
-        num_hidden_layers: int = 64,
-        num_attention_heads: int = 48,
-        num_key_value_heads: int = 8,
-        head_dim: int = 128,
-        hidden_act: str = "silu",
-        max_position_embeddings: int = 131072,
-        initializer_range: float = 0.02,
-        rms_norm_eps: float = 1e-5,
-        use_cache: bool = True,
-        pad_token_id: Optional[int] = None,
-        eos_token_id=[128001, 128008, 128009],
-        bos_token_id: int = 128000,
-        tie_word_embeddings: bool = False,
-        rope_theta: float = 1_000_000.0,
-        attention_bias: bool = False,
-        attention_dropout: float = 0.0,
-        pretraining_tp: int = 1,
-        mlp_bias: bool = False,
-        rope_scaling: Optional[dict] = None,
-        # CWM interleaved sliding window fields
-        sliding_window: int = 8192,
-        layer_types: Optional[list[str]] = None,  # ["full_attention"|"sliding_attention"] per layer
-        **kwargs,
-    ):
-        if rope_scaling is None:
-            rope_scaling = {
-                "factor": 16.0,
-                "high_freq_factor": 4.0,
-                "low_freq_factor": 1.0,
-                "original_max_position_embeddings": 8192,
-                "rope_type": "llama3",
-            }
-
-        if layer_types is None:
-            # Default pattern: every 4th layer uses full attention, others use sliding attention
-            window_pattern = 4
-            layer_types = [
-                ("full_attention" if (i % window_pattern == 0) else "sliding_attention")
-                for i in range(num_hidden_layers)
-            ]
-        else:
-            _validate_layer_types(layer_types, num_hidden_layers)
-
-        super().__init__(
-            vocab_size=vocab_size,
-            hidden_size=hidden_size,
-            intermediate_size=intermediate_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            num_key_value_heads=num_key_value_heads,
-            head_dim=head_dim,
-            hidden_act=hidden_act,
-            max_position_embeddings=max_position_embeddings,
-            initializer_range=initializer_range,
-            rms_norm_eps=rms_norm_eps,
-            use_cache=use_cache,
-            pad_token_id=pad_token_id,
-            eos_token_id=list(eos_token_id),
-            bos_token_id=bos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            rope_theta=rope_theta,
-            attention_bias=attention_bias,
-            attention_dropout=attention_dropout,
-            rope_scaling=rope_scaling,
-            pretraining_tp=pretraining_tp,
-            mlp_bias=mlp_bias,
-            **kwargs,
-        )
-
-        self.sliding_window = int(sliding_window)
-        self.layer_types = list(layer_types)
-
-
-class CwmConfig(CwmTextConfig):
-    """
-    A configuration for a `CwmModel`. Designed to yield a configuartion mirroring the model in the
+    Configuration for Code World Model (CWM).
+    This is an inherited Llama3-compatible configuration with layer-interleaved
+    sliding-window attention. Configures a `CwmModel`. Designed to yield a configuartion mirroring the model in the
     [facebook/cwm](https://huggingface.co/facebook/cwm) architecture by default. Other models include:
     - [facebook/cwm-sft](https://huggingface.co/facebook/cwm-sft)
     - [facebook/cwm-pretrain](https://huggingface.co/facebook/cwm-pretrain)
@@ -198,7 +101,84 @@ class CwmConfig(CwmTextConfig):
             If not specified, will default to alternating pattern based on the provided window pattern.
     """
 
-    pass
+    model_type = "cwm"
+
+    def __init__(
+        self,
+        vocab_size: int = 128256,
+        hidden_size: int = 6144,
+        intermediate_size: int = 21504,
+        num_hidden_layers: int = 64,
+        num_attention_heads: int = 48,
+        num_key_value_heads: int = 8,
+        head_dim: int = 128,
+        hidden_act: str = "silu",
+        max_position_embeddings: int = 131072,
+        initializer_range: float = 0.02,
+        rms_norm_eps: float = 1e-5,
+        use_cache: bool = True,
+        pad_token_id: Optional[int] = None,
+        eos_token_id=[128001, 128008, 128009],
+        bos_token_id: int = 128000,
+        tie_word_embeddings: bool = False,
+        rope_theta: float = 1_000_000.0,
+        attention_bias: bool = False,
+        attention_dropout: float = 0.0,
+        pretraining_tp: int = 1,
+        mlp_bias: bool = False,
+        rope_scaling: Optional[dict] = None,
+        # CWM interleaved sliding window fields
+        sliding_window: int = 8192,
+        layer_types: Optional[list[str]] = None,  # ["full_attention"|"sliding_attention"] per layer
+        **kwargs,
+    ):
+        if rope_scaling is None:
+            rope_scaling = {
+                "factor": 16.0,
+                "high_freq_factor": 4.0,
+                "low_freq_factor": 1.0,
+                "original_max_position_embeddings": 8192,
+                "rope_type": "llama3",
+            }
+
+        if layer_types is None:
+            # Default pattern: every 4th layer uses full attention, others use sliding attention
+            window_pattern = 4
+            layer_types = [
+                ("full_attention" if (i % window_pattern == 0) else "sliding_attention")
+                for i in range(num_hidden_layers)
+            ]
+        else:
+            layer_type_validation(layer_types, num_hidden_layers)
+
+        super().__init__(
+            vocab_size=vocab_size,
+            hidden_size=hidden_size,
+            intermediate_size=intermediate_size,
+            num_hidden_layers=num_hidden_layers,
+            num_attention_heads=num_attention_heads,
+            num_key_value_heads=num_key_value_heads,
+            head_dim=head_dim,
+            hidden_act=hidden_act,
+            max_position_embeddings=max_position_embeddings,
+            initializer_range=initializer_range,
+            rms_norm_eps=rms_norm_eps,
+            use_cache=use_cache,
+            pad_token_id=pad_token_id,
+            eos_token_id=list(eos_token_id),
+            bos_token_id=bos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            rope_theta=rope_theta,
+            attention_bias=attention_bias,
+            attention_dropout=attention_dropout,
+            rope_scaling=rope_scaling,
+            pretraining_tp=pretraining_tp,
+            mlp_bias=mlp_bias,
+            **kwargs,
+        )
+
+        self.sliding_window = int(sliding_window) if sliding_window else None
+        self.layer_types = list(layer_types)
 
 
 class CwmDecoderLayer(LlamaDecoderLayer):
@@ -207,13 +187,10 @@ class CwmDecoderLayer(LlamaDecoderLayer):
     based on config.layer_types / sliding_window / global_window before calling attention
     """
 
-    def __init__(self, config: CwmTextConfig, layer_idx: int):
+    def __init__(self, config: CwmConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.layer_idx = layer_idx  # Ensure layer_idx is stored as instance attribute
-        self._cwm_layer_types = getattr(config, "layer_types", None)
-        self.layer_type = None
-        if self._cwm_layer_types is not None:
-            self.layer_type = self._cwm_layer_types[self.layer_idx]
+        self.layer_idx = layer_idx
+        self.layer_type = config.layer_types[self.layer_idx]
         self.sliding_window = int(getattr(config, "sliding_window", 0))
 
     def forward(
@@ -245,8 +222,6 @@ class CwmDecoderLayer(LlamaDecoderLayer):
         )
 
         attn_output = attn_outputs[0]
-        outputs = attn_outputs[1:]
-
         hidden_states = residual + attn_output
 
         residual = hidden_states
@@ -255,42 +230,17 @@ class CwmDecoderLayer(LlamaDecoderLayer):
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
-        if use_cache:
-            outputs = (hidden_states,) + outputs
-            return outputs
-        else:
-            return hidden_states
-
-
-class CwmMLP(LlamaMLP):
-    pass
-
-
-class CwmRMSNorm(LlamaRMSNorm):
-    pass
-
-
-class CwmRotaryEmbedding(LlamaRotaryEmbedding):
-    pass
+        return hidden_states
 
 
 class CwmModelOutputWithPast(BaseModelOutputWithPast):
     pass
 
 
-class CwmPreTrainedModel(LlamaPreTrainedModel):
-    config_class = CwmTextConfig
-    base_model_prefix = "model"
-
-
 class CwmModel(LlamaModel):
-    config_class = CwmTextConfig
+    config_class = CwmConfig
 
-    def __init__(self, config: CwmTextConfig):
-        # Validate layer types at model creation time
-        if hasattr(config, "layer_types") and config.layer_types is not None:
-            _validate_layer_types(config.layer_types, config.num_hidden_layers)
-
+    def __init__(self, config: CwmConfig):
         super().__init__(config)
         self.layers = torch.nn.ModuleList(
             [CwmDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
@@ -363,16 +313,11 @@ class CwmModel(LlamaModel):
 
 
 class CwmForCausalLM(LlamaForCausalLM):
-    config_class = CwmTextConfig
-
-    def __init__(self, config: CwmTextConfig):
-        super().__init__(config)
-        self.model = CwmModel(config)
+    pass
 
 
 __all__ = [
     "CwmConfig",
-    "CwmPreTrainedModel",
     "CwmModel",
     "CwmForCausalLM",
 ]

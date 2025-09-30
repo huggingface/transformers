@@ -37,7 +37,44 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
-from .configuration_cwm import CwmConfig, CwmTextConfig
+from .configuration_cwm import CwmConfig
+
+
+@use_kernel_forward_from_hub("RMSNorm")
+class CwmRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        CwmRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
+class CwmMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
 
 
 def rotate_half(x):
@@ -189,7 +226,7 @@ class CwmDecoderLayer(GradientCheckpointingLayer):
     based on config.layer_types / sliding_window / global_window before calling attention
     """
 
-    def __init__(self, config: CwmTextConfig, layer_idx: int):
+    def __init__(self, config: CwmConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
 
@@ -198,11 +235,8 @@ class CwmDecoderLayer(GradientCheckpointingLayer):
         self.mlp = CwmMLP(config)
         self.input_layernorm = CwmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = CwmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.layer_idx = layer_idx  # Ensure layer_idx is stored as instance attribute
-        self._cwm_layer_types = getattr(config, "layer_types", None)
-        self.layer_type = None
-        if self._cwm_layer_types is not None:
-            self.layer_type = self._cwm_layer_types[self.layer_idx]
+        self.layer_idx = layer_idx
+        self.layer_type = config.layer_types[self.layer_idx]
         self.sliding_window = int(getattr(config, "sliding_window", 0))
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
@@ -235,8 +269,6 @@ class CwmDecoderLayer(GradientCheckpointingLayer):
         )
 
         attn_output = attn_outputs[0]
-        outputs = attn_outputs[1:]
-
         hidden_states = residual + attn_output
 
         residual = hidden_states
@@ -245,48 +277,11 @@ class CwmDecoderLayer(GradientCheckpointingLayer):
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
-        if use_cache:
-            outputs = (hidden_states,) + outputs
-            return outputs
-        else:
-            return hidden_states
+        return hidden_states
 
 
-class CwmMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
-
-
-@use_kernel_forward_from_hub("RMSNorm")
-class CwmRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
-        """
-        CwmRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+class CwmModelOutputWithPast(BaseModelOutputWithPast):
+    pass
 
 
 class CwmRotaryEmbedding(nn.Module):
@@ -325,10 +320,6 @@ class CwmRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-class CwmModelOutputWithPast(BaseModelOutputWithPast):
-    pass
-
-
 @auto_docstring
 class CwmPreTrainedModel(PreTrainedModel):
     config: CwmConfig
@@ -346,28 +337,14 @@ class CwmPreTrainedModel(PreTrainedModel):
         "hidden_states": CwmDecoderLayer,
         "attentions": CwmAttention,
     }
-    config_class = CwmTextConfig
-
-
-def _validate_layer_types(layer_types: list[str], num_hidden_layers: int) -> None:
-    if len(layer_types) != num_hidden_layers:
-        raise ValueError(
-            f"layer_types must be a list of length {num_hidden_layers} for each "
-            f"hidden layer, got length {len(layer_types)}"
-        )
-    if any(t not in ("full_attention", "sliding_attention") for t in layer_types):
-        raise ValueError("Layer types must be either 'full_attention' or 'sliding_attention'")
 
 
 @auto_docstring
 class CwmModel(CwmPreTrainedModel):
-    config_class = CwmTextConfig
+    config_class = CwmConfig
 
-    def __init__(self, config: CwmTextConfig):
+    def __init__(self, config: CwmConfig):
         super().__init__(config)
-        # Validate layer types at model creation time
-        if hasattr(config, "layer_types") and config.layer_types is not None:
-            _validate_layer_types(config.layer_types, config.num_hidden_layers)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
@@ -455,9 +432,8 @@ class CwmForCausalLM(CwmPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
-    config_class = CwmTextConfig
 
-    def __init__(self, config: CwmTextConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.model = CwmModel(config)
         self.vocab_size = config.vocab_size
@@ -527,4 +503,4 @@ class CwmForCausalLM(CwmPreTrainedModel, GenerationMixin):
         )
 
 
-__all__ = ["CwmPreTrainedModel", "CwmModel", "CwmForCausalLM"]
+__all__ = ["CwmModel", "CwmForCausalLM"]

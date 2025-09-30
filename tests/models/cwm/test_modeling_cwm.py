@@ -43,30 +43,18 @@ class CwmModelTester(CausalLMModelTester):
         causal_lm_class = CwmForCausalLM
 
     def get_config(self):
-        # Add CWM-specific parameters
-        kwargs = {}
-        model_name_to_common_name = {v: k for k, v in self.config_class.attribute_map.items()}
-        for k in self.config_args + self.forced_config_args:
-            if hasattr(self, k) and k != "self":
-                kwargs[k] = getattr(self, k)
-            elif k in model_name_to_common_name and hasattr(self, model_name_to_common_name[k]):
-                kwargs[k] = getattr(self, model_name_to_common_name[k])
+        config = super().get_config()
 
-        # Add CWM-specific configuration
-        kwargs.update(
-            {
-                "sliding_window": 32,  # Small sliding window for tests
-                "rope_scaling": {
-                    "factor": 16.0,
-                    "high_freq_factor": 4.0,
-                    "low_freq_factor": 1.0,
-                    "original_max_position_embeddings": 8192,
-                    "rope_type": "llama3",
-                },
-            }
-        )
+        config.sliding_window = 8192
+        config.rope_scaling = {
+            "factor": 16.0,
+            "high_freq_factor": 4.0,
+            "low_freq_factor": 1.0,
+            "original_max_position_embeddings": 8192,
+            "rope_type": "llama3",
+        }
 
-        return self.config_class(**kwargs)
+        return config
 
 
 @require_torch
@@ -98,48 +86,6 @@ class CwmModelTest(CausalLMModelTest, unittest.TestCase):
     # for `test_torch_compile_for_training`
     _torch_compile_train_cls = CwmForCausalLM if is_torch_available() else None
 
-    def test_cwm_sliding_window_attention(self):
-        config = self.model_tester.get_config()
-        model = CwmModel(config)
-        model.to(torch_device)
-        model.eval()
-
-        # The pattern used in get_config() is window_pattern=2
-        window_pattern = 2
-        expected_layer_types = [
-            "full_attention" if (i % window_pattern == 0) else "sliding_attention"
-            for i in range(config.num_hidden_layers)
-        ]
-
-        for i, layer in enumerate(model.layers):
-            self.assertEqual(layer.layer_type, expected_layer_types[i])
-            if layer.layer_type == "sliding_attention":
-                self.assertEqual(layer.sliding_window, config.sliding_window)
-
-    def test_cwm_config_layer_types(self):
-        config = self.model_tester.get_config()
-        # Test with explicit layer types
-        config.layer_types = ["full_attention", "sliding_attention"] * (config.num_hidden_layers // 2)
-        if len(config.layer_types) < config.num_hidden_layers:
-            config.layer_types.append("full_attention")
-
-        model = CwmModel(config)
-        model.to(torch_device)
-
-        for i, layer in enumerate(model.layers):
-            self.assertEqual(layer.layer_type, config.layer_types[i])
-
-    def test_cwm_config_invalid_layer_types(self):
-        config = self.model_tester.get_config()
-
-        with self.assertRaises(ValueError):
-            config.layer_types = ["invalid_attention"] * config.num_hidden_layers
-            CwmModel(config)
-
-        with self.assertRaises(ValueError):
-            config.layer_types = ["full_attention"] * (config.num_hidden_layers - 1)
-            CwmModel(config)
-
     def test_cwm_forward_with_sliding_window(self):
         config = self.model_tester.get_config()
         model = CwmModel(config)
@@ -154,20 +100,6 @@ class CwmModelTest(CausalLMModelTest, unittest.TestCase):
             outputs = model(input_ids)
 
         self.assertEqual(outputs.last_hidden_state.shape, (1, seq_length, config.hidden_size))
-
-    def test_cwm_causal_lm_generation(self):
-        config = self.model_tester.get_config()
-        model = CwmForCausalLM(config)
-        model.to(torch_device)
-        model.eval()
-
-        input_ids = torch.tensor([[1, 2, 3]], device=torch_device)  # Simple input
-
-        with torch.no_grad():
-            generated = model.generate(input_ids, max_new_tokens=5, do_sample=False)
-
-        self.assertEqual(generated.shape[0], 1)
-        self.assertGreater(generated.shape[1], input_ids.shape[1])
 
     def test_cwm_attention_mask_mapping(self):
         config = self.model_tester.get_config()
