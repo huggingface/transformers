@@ -17,6 +17,8 @@ import shutil
 import tempfile
 import unittest
 
+from parameterized import parameterized
+
 from transformers import AutoProcessor, AutoTokenizer, InternVLProcessor
 from transformers.testing_utils import require_av, require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
@@ -377,3 +379,22 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         continue_prompt = processor.apply_chat_template(batch_messages, continue_final_message=True, tokenize=False)
         for prompt in continue_prompt:
             self.assertTrue(prompt.endswith("It is the sound of"))  # no `eos` token at the end
+
+    @parameterized.expand([(1, ), (2, )])
+    @require_torch
+    def test_frames_binding(self, batch_size: int):
+        texts = [
+            '<video>\nAre there any cyan objects that enter the scene?\nno',
+            '<video>\nAre there any red spheres that enter the scene?\nno',
+        ]
+        frames = torch.ones((4, 448, 448, 3), dtype=torch.float32)
+        videos = [frames, frames]
+
+        processor = self.get_processor()
+        inputs = processor(text=texts[:batch_size], return_tensors='pt',
+                           videos=videos[:batch_size],
+                           videos_kwargs={'size': (448, 448)})
+
+        actual_num_frames = inputs.pixel_values.pixel_values.shape[0]
+        expected_num_frames = sum(x.shape[0] for x in videos[:batch_size])
+        assert actual_num_frames == expected_num_frames
