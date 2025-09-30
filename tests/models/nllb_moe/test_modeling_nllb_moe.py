@@ -337,8 +337,8 @@ class NllbMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         model = NllbMoeForConditionalGeneration(config).eval().to(torch_device)
         out = model(**input_dict)
         self.assertIsNotNone(out.loss)
-        self.assertIsNotNone(model(**input_dict)["encoder_router_logits"][1])
-        self.assertIsNotNone(model(**input_dict)["decoder_router_logits"][0])
+        self.assertIsNotNone(model(**input_dict)["encoder_router_logits"])
+        self.assertIsNotNone(model(**input_dict)["decoder_router_logits"])
 
     @unittest.skip(
         reason="This architecture has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"

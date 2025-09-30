@@ -721,7 +721,7 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
         self.layers = nn.ModuleList()
         for i in range(config.encoder_layers):
             is_sparse = (i + 1) % sparse_step == 0 if sparse_step > 0 else False
-            self.layers.append(NllbMoeEncoderLayer(config, is_sparse, i))
+            self.layers.append(NllbMoeEncoderLayer(config, is_sparse, layer_idx=i))
 
         self.layer_norm = nn.LayerNorm(config.d_model)
         self.gradient_checkpointing = False
