@@ -804,7 +804,7 @@ class OutputRecorder:
     """
 
     target_class: "type[torch.nn.Module]"
-    index: Optional[int] = 0
+    index: int = 0
     layer_name: Optional[str] = None
     class_name: Optional[str] = None
 

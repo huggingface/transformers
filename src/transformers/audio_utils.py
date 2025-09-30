@@ -321,9 +321,7 @@ def mel_to_hertz(mels: Union[float, np.ndarray], mel_scale: str = "htk") -> Unio
     return freq
 
 
-def hertz_to_octave(
-    freq: Union[float, np.ndarray], tuning: Optional[float] = 0.0, bins_per_octave: Optional[int] = 12
-):
+def hertz_to_octave(freq: Union[float, np.ndarray], tuning: float = 0.0, bins_per_octave: int = 12):
     """
     Convert frequency from hertz to fractional octave numbers.
     Adapted from *librosa*.
