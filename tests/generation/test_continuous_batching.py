@@ -101,8 +101,8 @@ class ContinuousBatchingTest(unittest.TestCase):
         self,
         cumulative_seqlens_q: list[int],
         cumulative_seqlens_k: list[int],
-        sliding_window: int,
-        str_expected_mask: list[str]
+        sliding_window: int,  # the sliding window size, 1 means no sliding window
+        str_expected_mask: list[str],  # the attention mask, broken down by line as a string of 0s and 1s
     ) -> None:
         # Build expected mask
         minus_inf = torch.finfo(torch.float32).min
@@ -119,8 +119,7 @@ class ContinuousBatchingTest(unittest.TestCase):
         )
         # Check that the actual mask matches the expected mask
         matches = (expected_mask == actual_mask).all()
-        print(expected_mask - actual_mask)
-        # If it doesn't match, print the masks in a more readable format and fail the test
+        # If it doesn't match, print the masks in a readable form and fail the test
         if not matches:
             str_mask = [
                 "".join("1" if x == 0 else "0" for x in token_attn_vector)
