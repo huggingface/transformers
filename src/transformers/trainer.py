@@ -2316,6 +2316,27 @@ class Trainer:
         dp_world_size = args.world_size // self.get_tp_size()
         return self._train_batch_size * args.gradient_accumulation_steps * dp_world_size
 
+    def update_gradient_accumulation_steps(self, args) -> int:
+        dp_world_size = args.world_size // self.get_tp_size()
+
+        if (
+            args.total_train_batch_size_mode == "strict"
+            and args.total_train_batch_size % (self._train_batch_size * dp_world_size) != 0
+        ):
+            raise ValueError(
+                f"Can not find gradient_accumulation_steps to match total_train_batch_size of "
+                f"{args.total_train_batch_size} when train batch size is {self._train_batch_size} "
+                f"and dp world size is {dp_world_size}."
+            )
+        new_gradient_accumulation_steps = max(
+            1, round(args.total_train_batch_size / (self._train_batch_size * dp_world_size))
+        )
+        logger.info(
+            f"Updated gradient_accumulation_steps from {args.gradient_accumulation_steps} "
+            f"to {new_gradient_accumulation_steps}"
+        )
+        args.gradient_accumulation_steps = new_gradient_accumulation_steps
+
     def _inner_training_loop(
         self, batch_size=None, args=None, resume_from_checkpoint=None, trial=None, ignore_keys_for_eval=None
     ):
@@ -2346,6 +2367,8 @@ class Trainer:
         # number of training epochs: num_train_epochs
         # number of training steps per epoch: num_update_steps_per_epoch
         # total number of training steps to execute: max_steps
+        if not args.deepspeed and args.total_train_batch_size > 0:
+            self.update_gradient_accumulation_steps(args)
         total_train_batch_size = self.get_total_train_batch_size(args)
 
         (
