@@ -1,30 +1,15 @@
 """Conversion script for EoMT-DINOv3 checkpoints.
 
-Example
--------
 To convert one of the official checkpoints directly from the Hugging Face Hub you can run:
 
-.. code-block:: bash
-
-    HF_TOKEN=your_token_here \
-    python -m transformers.models.eomt_dinov3.convert_eomt_dinov3_to_hf \
-        --model-id tue-mps/coco_panoptic_eomt_large_640_dinov3 \
-        --output-dir /tmp/eomt_converted \
-        --verify \
-        --original-repo-path /tmp/eomt
-
-Alternatively, if the delta checkpoint has already been downloaded to ``/tmp/eomt_delta.bin``
-and the original EoMT repository is cloned at ``/tmp/eomt`` you can run:
-
-.. code-block:: bash
-
-    HF_TOKEN=your_token_here \
-    python -m transformers.models.eomt_dinov3.convert_eomt_dinov3_to_hf \
-        /tmp/eomt_delta.bin \
-        /tmp/eomt_converted \
-        --backbone-repo-id facebook/dinov3-vits16-pretrain-lvd1689m \
-        --verify \
-        --original-repo-path /tmp/eomt
+```bash
+HF_TOKEN=your_token_here \
+python -m transformers.models.eomt_dinov3.convert_eomt_dinov3_to_hf \
+    --model-id tue-mps/coco_panoptic_eomt_large_640_dinov3 \
+    --output-dir /tmp/eomt_converted \
+    --verify \
+    --original-repo-path /tmp/eomt
+```
 
 Make sure the token used above has been granted access to the gated DINOv3 weights.
 """
@@ -33,19 +18,17 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import sys
-import tempfile
 from pathlib import Path
-from typing import Iterable, NamedTuple, Optional, Tuple
+from typing import Iterable, NamedTuple, Optional
 
 import requests
 import torch
 from accelerate import init_empty_weights
 from huggingface_hub import hf_hub_download
-from safetensors.torch import load_file
 from PIL import Image
+from safetensors.torch import load_file
 
 from transformers import EomtDinov3Config, EomtDinov3ForUniversalSegmentation, EomtImageProcessorFast
 
@@ -61,7 +44,6 @@ class CheckpointSpec(NamedTuple):
     """Metadata describing how to convert an official EoMT-DINOv3 checkpoint."""
 
     model_id: str
-    delta_filename: str
     backbone_repo_id: str
     image_size: int
 
@@ -69,43 +51,36 @@ class CheckpointSpec(NamedTuple):
 CHECKPOINT_CATALOG: tuple[CheckpointSpec, ...] = (
     CheckpointSpec(
         model_id="tue-mps/coco_panoptic_eomt_small_640_dinov3",
-        delta_filename="pytorch_model.bin",
         backbone_repo_id="facebook/dinov3-vits16-pretrain-lvd1689m",
         image_size=640,
     ),
     CheckpointSpec(
         model_id="tue-mps/coco_panoptic_eomt_base_640_dinov3",
-        delta_filename="pytorch_model.bin",
         backbone_repo_id="facebook/dinov3-vitb16-pretrain-lvd1689m",
         image_size=640,
     ),
     CheckpointSpec(
         model_id="tue-mps/coco_panoptic_eomt_large_640_dinov3",
-        delta_filename="pytorch_model.bin",
         backbone_repo_id="facebook/dinov3-vitl16-pretrain-lvd1689m",
         image_size=640,
     ),
     CheckpointSpec(
         model_id="tue-mps/coco_panoptic_eomt_large_1280_dinov3",
-        delta_filename="pytorch_model.bin",
         backbone_repo_id="facebook/dinov3-vitl16-pretrain-lvd1689m",
         image_size=1280,
     ),
     CheckpointSpec(
         model_id="tue-mps/ade20k_semantic_eomt_large_512_dinov3",
-        delta_filename="pytorch_model.bin",
         backbone_repo_id="facebook/dinov3-vitl16-pretrain-lvd1689m",
         image_size=512,
     ),
     CheckpointSpec(
         model_id="tue-mps/coco_instance_eomt_large_640_dinov3",
-        delta_filename="pytorch_model.bin",
         backbone_repo_id="facebook/dinov3-vitl16-pretrain-lvd1689m",
         image_size=640,
     ),
     CheckpointSpec(
         model_id="tue-mps/coco_instance_eomt_large_1280_dinov3",
-        delta_filename="pytorch_model.bin",
         backbone_repo_id="facebook/dinov3-vitl16-pretrain-lvd1689m",
         image_size=1280,
     ),
@@ -130,18 +105,14 @@ def resolve_checkpoint_spec(model_id: str) -> CheckpointSpec:
     key = model_id.lower()
     if key not in CHECKPOINT_SPECS:
         available = ", ".join(sorted(spec.model_id for spec in CHECKPOINT_CATALOG))
-        raise ValueError(
-            f"Unknown checkpoint '{model_id}'. Available options: {available}."
-        )
+        raise ValueError(f"Unknown checkpoint '{model_id}'. Available options: {available}.")
     return CHECKPOINT_SPECS[key]
 
 
 def print_checkpoint_catalog() -> None:
     print("Supported checkpoints:")
     for spec in CHECKPOINT_CATALOG:
-        print(
-            f"- {spec.model_id} (image_size={spec.image_size}, backbone={spec.backbone_repo_id})"
-        )
+        print(f"- {spec.model_id} (image_size={spec.image_size}, backbone={spec.backbone_repo_id})")
 
 
 DELTA_KEY_REPLACEMENTS: tuple[tuple[str, str], ...] = (
@@ -171,7 +142,7 @@ SKIP_KEYS = {
 }
 
 
-def _rename_delta_key(key: str) -> Tuple[Optional[str], bool]:
+def _rename_delta_key(key: str) -> tuple[Optional[str], bool]:
     if key in SKIP_KEYS:
         return None, False
 
@@ -242,14 +213,14 @@ def merge_backbone_weights(
 def build_eomt_config(
     *,
     base_config: dict[str, object],
-    delta_state: dict[str, torch.Tensor],
+    delta_state_dict: dict[str, torch.Tensor],
     image_size: int,
 ) -> EomtDinov3Config:
-    num_queries = delta_state["network.q.weight"].shape[0]
-    num_blocks = delta_state["network.attn_mask_probs"].numel()
-    num_upscale_blocks = len({int(key.split(".")[2]) for key in delta_state if key.startswith("network.upscale")})
-    num_register_tokens = delta_state["network.encoder.backbone.patch_embed.register_tokens"].shape[1]
-    num_labels = delta_state["network.class_head.weight"].shape[0] - 1
+    num_queries = delta_state_dict["network.q.weight"].shape[0]
+    num_blocks = delta_state_dict["network.attn_mask_probs"].numel()
+    num_upscale_blocks = len({int(key.split(".")[2]) for key in delta_state_dict if key.startswith("network.upscale")})
+    num_register_tokens = delta_state_dict["network.encoder.backbone.patch_embed.register_tokens"].shape[1]
+    num_labels = delta_state_dict["network.class_head.weight"].shape[0] - 1
 
     config = EomtDinov3Config(
         hidden_size=base_config["hidden_size"],
@@ -288,33 +259,30 @@ def build_eomt_config(
 
 def convert_checkpoint(
     *,
-    delta_state: dict[str, torch.Tensor],
+    delta_state_dict: dict[str, torch.Tensor],
     backbone_repo_id: str,
-    token: Optional[str],
-    backbone_revision: Optional[str],
     image_size: int,
 ) -> tuple[EomtDinov3Config, dict[str, torch.Tensor]]:
-    
     # load model.safetensors
-    filepath = hf_hub_download(backbone_repo_id, filename="model.safetensors", token=token, revision=backbone_revision)
-    base_state = load_file(filepath)
+    filepath = hf_hub_download(backbone_repo_id, filename="model.safetensors")
+    base_state_dict = load_file(filepath)
 
     # load config.json
-    filepath = hf_hub_download(backbone_repo_id, filename="config.json", token=token, revision=backbone_revision)
+    filepath = hf_hub_download(backbone_repo_id, filename="config.json")
     with open(filepath, "r") as f:
         base_config = json.load(f)
 
-    mapped_base = map_dinov3_state_to_eomt(base_state)
-    converted_delta, backbone_delta_keys = convert_delta_state_dict(delta_state)
-    merged_state = merge_backbone_weights(mapped_base, converted_delta, backbone_delta_keys)
+    mapped_base = map_dinov3_state_to_eomt(base_state_dict)
+    converted_delta, backbone_delta_keys = convert_delta_state_dict(delta_state_dict)
+    merged_state_dict = merge_backbone_weights(mapped_base, converted_delta, backbone_delta_keys)
 
     config = build_eomt_config(
         base_config=base_config,
-        delta_state=delta_state,
+        delta_state_dict=delta_state_dict,
         image_size=image_size,
     )
 
-    return config, merged_state
+    return config, merged_state_dict
 
 
 def ensure_state_dict(state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
@@ -325,32 +293,33 @@ def ensure_state_dict(state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Te
 
 def convert_model(
     *,
-    delta_path: Path,
-    backbone_repo_id: str,
-    token: Optional[str],
-    backbone_revision: Optional[str],
-    image_size: int,
+    model_id: str,
     output_dir: Path,
-    safe_serialization: bool,
     verify: bool,
     original_repo_path: Optional[Path],
     push_to_hub: bool = False,
 ) -> None:
-    raw_delta_state = torch.load(delta_path, map_location="cpu")
-    delta_state = ensure_state_dict(raw_delta_state)
+    # resolve checkpoint spec
+    spec = resolve_checkpoint_spec(model_id)
+    backbone_repo_id = spec.backbone_repo_id
+    image_size = spec.image_size
 
-    config, merged_state = convert_checkpoint(
-        delta_state=delta_state,
+    # load delta state
+    delta_path = hf_hub_download(repo_id=model_id, filename="pytorch_model.bin")
+    raw_delta_state = torch.load(delta_path, map_location="cpu")
+    delta_state_dict = ensure_state_dict(raw_delta_state)
+
+    # convert checkpoint
+    config, merged_state_dict = convert_checkpoint(
+        delta_state_dict=delta_state_dict,
         backbone_repo_id=backbone_repo_id,
-        token=token,
-        backbone_revision=backbone_revision,
         image_size=image_size,
     )
 
     with init_empty_weights():
         model = EomtDinov3ForUniversalSegmentation(config)
 
-    model.load_state_dict(merged_state, strict=True, assign=True)
+    model.load_state_dict(merged_state_dict, strict=True, assign=True)
 
     processor = EomtImageProcessorFast(
         size={"shortest_edge": image_size, "longest_edge": image_size},
@@ -362,19 +331,19 @@ def convert_model(
         verify_conversion(
             hf_model=model,
             processor=processor,
-            delta_state=delta_state,
+            delta_state_dict=delta_state_dict,
             backbone_repo_id=backbone_repo_id,
-            token=token,
             image_size=image_size,
             original_repo_path=original_repo_path,
         )
 
     if output_dir is not None:
         output_dir.mkdir(parents=True, exist_ok=True)
-        model.save_pretrained(output_dir, safe_serialization=safe_serialization)
+        model.save_pretrained(output_dir)
         processor.save_pretrained(output_dir)
 
     if push_to_hub:
+        model_name = f"eomt-dinov3-{image_size}"
         model.push_to_hub(repo_id=f"nielsr/{model_name}")
         processor.push_to_hub(repo_id=f"nielsr/{model_name}")
 
@@ -389,27 +358,22 @@ def _load_original_model(
     *,
     original_repo_path: Path,
     backbone_repo_id: str,
-    token: Optional[str],
     image_size: int,
     num_labels: int,
     num_queries: int,
     num_blocks: int,
-    delta_state: dict[str, torch.Tensor],
-) -> "torch.nn.Module":
+    delta_state_dict: dict[str, torch.Tensor],
+) -> torch.nn.Module:
     sys.path.insert(0, str(original_repo_path))
 
     from models.eomt import EoMT
     from models.vit import ViT
 
-    if token is not None:
-        os.environ.setdefault("HF_TOKEN", token)
-        os.environ.setdefault("HUGGINGFACE_HUB_TOKEN", token)
-
     encoder = ViT((image_size, image_size), backbone_name=backbone_repo_id, ckpt_path=None)
     model = EoMT(encoder=encoder, num_classes=num_labels, num_q=num_queries, num_blocks=num_blocks)
 
     state_dict = model.state_dict()
-    for key, value in delta_state.items():
+    for key, value in delta_state_dict.items():
         if key in SKIP_KEYS or key.startswith("criterion"):
             continue
 
@@ -546,9 +510,7 @@ def _collect_hf_backbone_states(
                     device=hidden_states.device,
                 )
 
-                attention_mask = attention_mask[:, None, ...].expand(
-                    -1, model.config.num_attention_heads, -1, -1
-                )
+                attention_mask = attention_mask[:, None, ...].expand(-1, model.config.num_attention_heads, -1, -1)
 
                 bool_attention_mask = attention_mask
                 attention_mask = attention_mask.float().masked_fill(~bool_attention_mask, -1e9)
@@ -587,9 +549,8 @@ def verify_conversion(
     *,
     hf_model: EomtDinov3ForUniversalSegmentation,
     processor: EomtImageProcessorFast,
-    delta_state: dict[str, torch.Tensor],
+    delta_state_dict: dict[str, torch.Tensor],
     backbone_repo_id: str,
-    token: Optional[str],
     image_size: int,
     original_repo_path: Optional[Path],
 ) -> None:
@@ -611,12 +572,11 @@ def verify_conversion(
     original_model = _load_original_model(
         original_repo_path=original_repo_path,
         backbone_repo_id=backbone_repo_id,
-        token=token,
         image_size=image_size,
         num_labels=hf_model.config.num_labels,
         num_queries=hf_model.config.num_queries,
         num_blocks=hf_model.config.num_blocks,
-        delta_state=delta_state,
+        delta_state_dict=delta_state_dict,
     )
 
     hf_model.eval()
@@ -628,10 +588,7 @@ def verify_conversion(
     patch_abs_diff = (orig_outputs.patch_embeddings - hf_outputs.patch_embeddings).abs()
     print(f"Patch embedding max abs diff: {patch_abs_diff.max().item():.6e}")
 
-    rope_abs_diffs = [
-        (orig - hf).abs()
-        for orig, hf in zip(orig_outputs.rope_embeddings, hf_outputs.rope_embeddings)
-    ]
+    rope_abs_diffs = [(orig - hf).abs() for orig, hf in zip(orig_outputs.rope_embeddings, hf_outputs.rope_embeddings)]
     rope_max_diffs = [diff.max().item() for diff in rope_abs_diffs]
     print(
         "RoPE embedding max abs diff: "
@@ -653,26 +610,18 @@ def verify_conversion(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Convert EoMT-DINOv3 checkpoints to 🤗 Transformers format")
-    parser.add_argument("delta", type=Path, nargs="?", help="Path to the delta checkpoint (pytorch_model.bin)")
-    parser.add_argument("output_dir", type=Path, nargs="?", help="Directory to save the converted model")
-    parser.add_argument("--output-dir", dest="output_dir_kw", type=Path, help="Directory to save the converted model")
+    parser.add_argument("--list-models", action="store_true", help="List supported checkpoint names and exit")
     parser.add_argument(
         "--model-id",
         help="Name of an official EoMT-DINOv3 checkpoint to download and convert",
+        required=True,
     )
-    parser.add_argument("--list-models", action="store_true", help="List supported checkpoint names and exit")
-    parser.add_argument(
-        "--backbone-repo-id",
-        default=DEFAULT_BACKBONE_REPO_ID,
-        help="Hugging Face Hub repository id for the base DINOv3 weights",
-    )
-    parser.add_argument("--token", default=os.environ.get("HF_TOKEN"))
-    parser.add_argument("--backbone-revision", default=None)
-    parser.add_argument("--image-size", type=int, default=DEFAULT_IMAGE_SIZE)
-    parser.add_argument("--safe-serialization", action="store_true")
+    parser.add_argument("--output-dir", type=Path, help="Directory to save the converted model")
     parser.add_argument("--verify", action="store_true")
-    parser.add_argument("--original-repo-path", type=Path, default=None)
-    parser.add_argument("--push-to-hub", action="store_true", help="Whether to push the converted model to the Hugging Face Hub.")
+    parser.add_argument("--original-repo-path", type=Path, default=None, help="Path to the original EoMT repository")
+    parser.add_argument(
+        "--push-to-hub", action="store_true", help="Whether to push the converted model to the Hugging Face Hub."
+    )
     return parser.parse_args()
 
 
@@ -683,52 +632,9 @@ def main() -> None:
         print_checkpoint_catalog()
         return
 
-    output_dir = args.output_dir_kw or args.output_dir
-    delta_path = args.delta
-
-    if args.model_id is not None:
-        spec = resolve_checkpoint_spec(args.model_id)
-
-        if (
-            output_dir is None
-            and args.output_dir is None
-            and args.output_dir_kw is None
-            and delta_path is not None
-        ):
-            output_dir = delta_path
-            delta_path = None
-
-        if delta_path is None:
-            delta_path = hf_hub_download(
-                repo_id=spec.model_id,
-                filename=spec.delta_filename,
-                token=args.token,
-            )
-
-        if args.backbone_repo_id == DEFAULT_BACKBONE_REPO_ID:
-            args.backbone_repo_id = spec.backbone_repo_id
-
-        if args.image_size == DEFAULT_IMAGE_SIZE:
-            args.image_size = spec.image_size
-
-    if output_dir is None:
-        raise ValueError(
-            "An output directory must be provided via the positional argument or --output-dir."
-        )
-
-    if delta_path is None:
-        raise ValueError(
-            "Provide a delta checkpoint path or choose a supported checkpoint with --model-id."
-        )
-
     convert_model(
-        delta_path=delta_path,
-        backbone_repo_id=args.backbone_repo_id,
-        token=args.token,
-        backbone_revision=args.backbone_revision,
-        image_size=args.image_size,
-        output_dir=output_dir,
-        safe_serialization=args.safe_serialization,
+        model_id=args.model_id,
+        output_dir=args.output_dir,
         verify=args.verify,
         original_repo_path=args.original_repo_path,
         push_to_hub=args.push_to_hub,
@@ -737,4 +643,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
