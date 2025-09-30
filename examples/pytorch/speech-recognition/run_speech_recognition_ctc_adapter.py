@@ -152,7 +152,13 @@ class DataTrainingArguments:
     """
 
     dataset_name: str = field(
-        metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
+        metadata={"help": "Path or name of the dataset (cf `load_dataset` method of the Datasets library)."}
+    )
+    dataset_config_name: str = field(
+        default=None,
+        metadata={
+            "help": "The configuration name of the dataset to use (cf `load_dataset` method of the Datasets library)."
+        },
     )
     target_language: Optional[str] = field(
         metadata={
@@ -164,10 +170,6 @@ class DataTrainingArguments:
                 " another acronym that fits your data."
             )
         },
-    )
-    dataset_config_name: str = field(
-        default=None,
-        metadata={"help": "The configuration name of the dataset to use (via the datasets library)."},
     )
     train_split_name: str = field(
         default="train+validation",

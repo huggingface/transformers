@@ -158,12 +158,13 @@ class DataTrainingArguments:
     """
 
     dataset_name: str = field(
-        default=None,
-        metadata={"help": "The name of the dataset to use (via the datasets library)."},
+        metadata={"help": "Path or name of the dataset (cf `load_dataset` method of the Datasets library)."}
     )
-    dataset_config_name: Optional[str] = field(
+    dataset_config_name: str = field(
         default=None,
-        metadata={"help": "The configuration name of the dataset to use (via the datasets library)."},
+        metadata={
+            "help": "The configuration name of the dataset to use (cf `load_dataset` method of the Datasets library)."
+        },
     )
     overwrite_cache: bool = field(
         default=False,
