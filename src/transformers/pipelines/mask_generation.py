@@ -192,8 +192,8 @@ class MaskGenerationPipeline(ChunkPipeline):
         points_per_batch=64,
         crops_n_layers: int = 0,
         crop_overlap_ratio: float = 512 / 1500,
-        points_per_crop: Optional[int] = 32,
-        crop_n_points_downscale_factor: Optional[int] = 1,
+        points_per_crop: int = 32,
+        crop_n_points_downscale_factor: int = 1,
         timeout: Optional[float] = None,
     ):
         image = load_image(image, timeout=timeout)
