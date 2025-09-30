@@ -59,9 +59,7 @@ if is_torch_available():
 
     from transformers import (
         AutoModelForCausalLM,
-        AutoTokenizer,
         BitsAndBytesConfig,
-        GenerationConfig,
     )
 
 ALLOWED_KEY_CHARS = set(string.ascii_letters + string.whitespace)
@@ -534,7 +532,7 @@ class ChatCommand(BaseTransformersCLICommand):
     # -----------------------------------------------------------------------------------------------------------------
     # Model loading and performance automation methods
     @staticmethod
-    def get_quantization_config(model_args: ChatArguments) -> Optional["BitsAndBytesConfig"]:
+    def get_quantization_config(model_args: ChatArguments) -> Optional[BitsAndBytesConfig]:
         if model_args.load_in_4bit:
             quantization_config = BitsAndBytesConfig(
                 load_in_4bit=True,

@@ -29,8 +29,6 @@ from .configuration_utils import PretrainedConfig, WatermarkingConfig
 
 
 if is_torch_available():
-    import torch
-
     from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
 
 
