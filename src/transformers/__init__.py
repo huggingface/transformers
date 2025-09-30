@@ -266,6 +266,7 @@ _import_structure = {
         "VptqConfig",
     ],
     "video_utils": [],
+    "utils.kernel_config": ["KernelConfig"],
 }
 
 # tokenizers-backed objects
@@ -790,6 +791,7 @@ if TYPE_CHECKING:
     from .utils.quantization_config import VptqConfig as VptqConfig
     from .video_processing_utils import BaseVideoProcessor as BaseVideoProcessor
 
+    from .utils.kernel_config import KernelConfig as KernelConfig
 else:
     import sys
 

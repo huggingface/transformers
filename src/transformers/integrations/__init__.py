@@ -75,6 +75,7 @@ _import_structure = {
         "register_kernel_mapping",
         "replace_kernel_forward_from_hub",
         "use_kernel_forward_from_hub",
+        "_KERNEL_MAPPING",
     ],
     "integration_utils": [
         "INTEGRATION_TO_CALLBACK",
@@ -220,6 +221,7 @@ if TYPE_CHECKING:
         register_kernel_mapping,
         replace_kernel_forward_from_hub,
         use_kernel_forward_from_hub,
+        _KERNEL_MAPPING,
     )
     from .integration_utils import (
         INTEGRATION_TO_CALLBACK,
