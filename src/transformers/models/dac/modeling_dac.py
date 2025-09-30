@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -579,7 +579,7 @@ class DacModel(DacPreTrainedModel):
         input_values: torch.Tensor,
         n_quantizers: Optional[int] = None,
         return_dict: Optional[bool] = None,
-    ):
+    ) -> Union[tuple, DacEncoderOutput]:
         r"""
         input_values (`torch.Tensor of shape `(batch_size, 1, time_steps)`):
             Input audio data to encode,
@@ -606,7 +606,7 @@ class DacModel(DacPreTrainedModel):
         quantized_representation: Optional[torch.Tensor] = None,
         audio_codes: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
-    ):
+    ) -> Union[tuple, DacDecoderOutput]:
         r"""
         quantized_representation (torch.Tensor of shape `(batch_size, dimension, time_steps)`, *optional*):
             Quantized continuous representation of input.
@@ -639,7 +639,7 @@ class DacModel(DacPreTrainedModel):
         input_values: torch.Tensor,
         n_quantizers: Optional[int] = None,
         return_dict: Optional[bool] = None,
-    ):
+    ) -> Union[tuple, DacOutput]:
         r"""
         input_values (`torch.Tensor` of shape `(batch_size, 1, time_steps)`):
             Audio data to encode.

@@ -15,6 +15,8 @@
 # limitations under the License.
 """PyTorch MMBT model."""
 
+from typing import Union
+
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
@@ -204,7 +206,7 @@ class MMBTModel(nn.Module, ModuleUtilsMixin):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-    ):
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         Returns:
 
