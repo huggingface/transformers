@@ -307,6 +307,8 @@
     title: Glossary
   - local: philosophy
     title: Philosophy
+  - local: models_timeline
+    title: Models Timeline
   - local: notebooks
     title: Notebooks with examples
   - local: community
