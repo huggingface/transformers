@@ -154,13 +154,7 @@ class DataTrainingArguments:
     dataset_name: str = field(
         metadata={"help": "Path or name of the dataset (cf `load_dataset` method of the Datasets library)."}
     )
-    dataset_config_name: str = field(
-        default=None,
-        metadata={
-            "help": "The configuration name of the dataset to use (cf `load_dataset` method of the Datasets library)."
-        },
-    )
-    target_language: Optional[str] = field(
+    target_language: str = field(
         metadata={
             "help": (
                 "The target language on which the adapter attention layers"
@@ -169,6 +163,12 @@ class DataTrainingArguments:
                 " If you are not training the adapter layers on a language, simply choose"
                 " another acronym that fits your data."
             )
+        },
+    )
+    dataset_config_name: str = field(
+        default=None,
+        metadata={
+            "help": "The configuration name of the dataset to use (cf `load_dataset` method of the Datasets library)."
         },
     )
     train_split_name: str = field(
