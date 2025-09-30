@@ -107,8 +107,8 @@ class VideoPrismTubeletEmbeddings(nn.Module):
         self.pos_emb_shape = [self.image_size[0] // self.patch_size[1], self.image_size[1] // self.patch_size[2]]
         self.num_patches = self.pos_emb_shape[0] * self.pos_emb_shape[1]
 
-    def forward(self, pixel_values, interpolate_pos_encoding: bool = False) -> torch.Tensor:
-        batch_size, num_frames, num_channels, height, width = pixel_values.shape
+    def forward(self, pixel_values_videos, interpolate_pos_encoding: bool = False) -> torch.Tensor:
+        batch_size, num_frames, num_channels, height, width = pixel_values_videos.shape
         if not interpolate_pos_encoding and (
             height != self.image_size[0] or width != self.image_size[1]
         ):  # ! need to decide on this
@@ -116,9 +116,11 @@ class VideoPrismTubeletEmbeddings(nn.Module):
                 f"Image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
             )
         # permute to (batch_size, num_channels, num_frames, height, width)
-        pixel_values = pixel_values.permute(0, 2, 1, 3, 4)  # ? (B, C=3, T=16, H=288, W=288)
+        pixel_values_videos = pixel_values_videos.permute(0, 2, 1, 3, 4)  # ? (B, C=3, T=16, H=288, W=288)
 
-        hidden_states = self.projection(pixel_values)  # ? (B, dim=768, T=16, 16, 16), here 16, 16 = h // 18, w // 18
+        hidden_states = self.projection(
+            pixel_values_videos
+        )  # ? (B, dim=768, T=16, 16, 16), here 16, 16 = h // 18, w // 18
         # flatten the spatial part and permute to (B, T, num_patches, dim)
         hidden_states = hidden_states.flatten(3).permute(0, 2, 3, 1)  # ? (B, T=16, num_patches=256, dim=768)
         # combine batch and time dimension
@@ -183,14 +185,14 @@ class VideoPrismSpatialEmbeddings(nn.Module):
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
         return patch_pos_embed
 
-    def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
-        b, t, c, h, w = pixel_values.shape
+    def forward(self, pixel_values_videos: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
+        b, t, c, h, w = pixel_values_videos.shape
         assert h == w, "Input image height and width must be the same"  # ! requirement from the original repo
-        embeddings = self.patch_embeddings(pixel_values)
+        embeddings = self.patch_embeddings(pixel_values_videos)
 
         # add positional encoding to each token
         if interpolate_pos_encoding:
-            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)  #! fix it
         else:
             embeddings = embeddings + self.position_embeddings
 
@@ -246,15 +248,17 @@ class VideoPrismTemporalEmbeddings(nn.Module):
 
         return patch_pos_embed
 
-    def forward(self, pixel_values: torch.Tensor, input_shape, interpolate_pos_encoding: bool = False) -> torch.Tensor:
+    def forward(
+        self, pixel_values_videos: torch.Tensor, input_shape, interpolate_pos_encoding: bool = False
+    ) -> torch.Tensor:
         if input_shape is not None:
             b, t, c, h, w = input_shape  # ? input shape before it was passed into VideoPrismModel
 
         _, features, dim = (
-            pixel_values.shape
-        )  # ? pixel_values here corresponds to the hidden_states after spatial encoder output and has shape (B * T, 256, 768)
+            pixel_values_videos.shape
+        )  # ? pixel_values_videos here corresponds to the hidden_states after spatial encoder output and has shape (B * T, 256, 768)
 
-        hidden_states = pixel_values.view(b, t, features, dim)  # ? (B*T, 256, 768) -> (B, T, 256, 768)
+        hidden_states = pixel_values_videos.view(b, t, features, dim)  # ? (B*T, 256, 768) -> (B, T, 256, 768)
         hidden_states = hidden_states.permute(0, 2, 1, 3)  # ? (B, 256, T=16, 768)
         embeddings = hidden_states.reshape(b * features, t, dim)  # ? (B * 256, T=16, 768)
 
@@ -492,7 +496,7 @@ class VideoPrismEncoder(nn.Module):
 class VideoPrismPreTrainedModel(PreTrainedModel):
     config: VideoPrismConfig
     base_model_prefix = "videoprism"
-    main_input_name = "pixel_values"
+    main_input_name = "pixel_values_videos"
     supports_gradient_checkpointing = True
     _no_split_modules = []
     _supports_sdpa = True
@@ -520,7 +524,7 @@ class VideoPrismPreTrainedModel(PreTrainedModel):
 
 
 @auto_docstring
-class VideoPrismFactorizedEncoderModel(VideoPrismPreTrainedModel):
+class VideoPrismModel(VideoPrismPreTrainedModel):
     def __init__(self, config: VideoPrismConfig):
         super().__init__(config)
         self.config = config
@@ -537,16 +541,16 @@ class VideoPrismFactorizedEncoderModel(VideoPrismPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,  # ? (B, T=16, C=3, H=288, W=288)
+        pixel_values_videos: Optional[torch.FloatTensor] = None,  # ? (B, T=16, C=3, H=288, W=288)
         interpolate_pos_encoding: bool = False,  #! unused at the moment
     ) -> BaseModelOutputWithSpatialAndTemporalStates:
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
+        if pixel_values_videos is None:
+            raise ValueError("You have to specify pixel_values_videos")
 
-        input_shape = pixel_values.shape  # ? (B, T=16, C=3, H=288, W=288)
+        input_shape = pixel_values_videos.shape  # ? (B, T=16, C=3, H=288, W=288)
 
         spatial_embeds = self.spatial_embeddings(
-            pixel_values
+            pixel_values_videos
         )  # ? embeds has shape (B * T, 256, 768); embedding for each frame
         spatial_encoder_outputs: BaseModelOutput = self.spatial_encoder(
             hidden_states=spatial_embeds
@@ -749,7 +753,7 @@ class VideoPrismVideoModel(VideoPrismPreTrainedModel):
     def __init__(self, config: VideoPrismConfig):
         super().__init__(config)
         self.config = config
-        self.backbone = VideoPrismFactorizedEncoderModel(config)
+        self.backbone = VideoPrismModel(config)
         self.config.num_hidden_layers = config.num_auxiliary_layers
         self.auxiliary_encoder = VideoPrismEncoder(self.config)
         self.contrastive_vision_pooler = VideoPrismMultiheadAttentionPoolingHead(config)
@@ -759,11 +763,11 @@ class VideoPrismVideoModel(VideoPrismPreTrainedModel):
 
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values_videos: torch.FloatTensor,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
     ) -> BaseModelOutput:
-        backbone_outputs = self.backbone(pixel_values=pixel_values)  # ? returns (B, 4096, 768)
+        backbone_outputs = self.backbone(pixel_values_videos=pixel_values_videos)  # ? returns (B, 4096, 768)
         video_features = backbone_outputs.last_hidden_state
         auxiliary_output = self.auxiliary_encoder(video_features)  # ? returns (B, 4096, 768)
         auxiliary_output_features = auxiliary_output.last_hidden_state
@@ -789,17 +793,17 @@ class VideoPrismClipModel(VideoPrismPreTrainedModel):
 
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,  # ? (B, T=16, C=3, H=288, W=288)
+        pixel_values_videos: Optional[torch.FloatTensor] = None,  # ? (B, T=16, C=3, H=288, W=288)
         input_ids: Optional[torch.Tensor] = None,  # ? (B, 64)
         attention_mask: Optional[torch.Tensor] = None,  # ? (B, 64)
         temperature: Optional[float] = None,
     ) -> VideoPrismClipOutput:
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
+        if pixel_values_videos is None:
+            raise ValueError("You have to specify pixel_values_videos")
         if input_ids is None:
             raise ValueError("You have to specify input_ids")
 
-        video_model_outputs = self.video_model(pixel_values=pixel_values)
+        video_model_outputs = self.video_model(pixel_values_videos=pixel_values_videos)
         text_model_outputs = self.text_model(input_ids=input_ids, attention_mask=attention_mask)
 
         video_embeddings = video_model_outputs.video_last_hidden_state  # ? (video_batch, 1, 768)
@@ -827,4 +831,4 @@ class VideoPrismClipModel(VideoPrismPreTrainedModel):
         )
 
 
-__all__ = ["VideoPrismFactorizedEncoderModel", "VideoPrismPreTrainedModel", "VideoPrismClipModel"]
+__all__ = ["VideoPrismModel", "VideoPrismPreTrainedModel", "VideoPrismClipModel"]
