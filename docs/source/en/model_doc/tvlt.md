@@ -64,6 +64,11 @@ The original code can be found [here](https://github.com/zinengtang/TVLT). This 
 [[autodoc]] TvltProcessor
     - __call__
 
+## TvltFeatureExtractor
+
+[[autodoc]] TvltFeatureExtractor
+    - preprocess
+
 ## TvltImageProcessor
 
 [[autodoc]] TvltImageProcessor
