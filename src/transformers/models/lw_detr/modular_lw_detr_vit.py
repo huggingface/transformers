@@ -83,9 +83,6 @@ class LwDetrViTConfig(VitDetConfig):
             many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
             If unset and `out_features` is unset, will default to the last stage. Must be in the
             same order as defined in the `stage_names` attribute.
-        use_cae (`bool`, *optional*, defaults to `True`):
-            Whether to use Cross-Attention Enhancement (CAE) mechanism. When enabled, the key projection in attention
-            layers uses a different bias configuration for improved performance.
         cae_init_values (`float`, *optional*, defaults to 0.1):
             Initialization value for CAE parameters when `use_cae` is enabled.
         num_windows (`int`, *optional*, defaults to 16):
@@ -133,7 +130,6 @@ class LwDetrViTConfig(VitDetConfig):
         use_absolute_position_embeddings=True,
         out_features=None,
         out_indices=None,
-        use_cae: bool = True,
         cae_init_values: float = 0.1,
         num_windows=16,
         **kwargs,
@@ -163,7 +159,6 @@ class LwDetrViTConfig(VitDetConfig):
         del self.use_relative_position_embeddings
         del self.window_size
 
-        self.use_cae = use_cae
         self.cae_init_values = cae_init_values
         if num_windows % math.sqrt(num_windows) != 0:
             raise ValueError(
@@ -182,10 +177,7 @@ class LwDetrViTSelfAttention(ViTSelfAttention):
     def __init__(self, config: LwDetrViTConfig):
         super().__init__(config)
         del self.key
-        if config.use_cae:
-            self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=False)
-        else:
-            self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=False)
 
     def forward(
         self,
@@ -266,10 +258,8 @@ class LwDetrViTLayer(GradientCheckpointingLayer):
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-        self.use_cae = config.use_cae
-        if self.use_cae:
-            self.gamma_1 = nn.Parameter(torch.Tensor(dim), requires_grad=True)
-            self.gamma_2 = nn.Parameter(torch.Tensor(dim), requires_grad=True)
+        self.gamma_1 = nn.Parameter(torch.Tensor(dim), requires_grad=True)
+        self.gamma_2 = nn.Parameter(torch.Tensor(dim), requires_grad=True)
 
         drop_path_rate = config.drop_path_rates[layer_idx]
         self.drop_path = LwDetrViTDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
@@ -277,7 +267,6 @@ class LwDetrViTLayer(GradientCheckpointingLayer):
         self.window = layer_idx in config.window_block_indices
         self.num_windows = config.num_windows
         self.num_windows_side = int(math.sqrt(self.num_windows))
-        self.use_cae = config.use_cae
 
     def forward(
         self,
@@ -296,9 +285,7 @@ class LwDetrViTLayer(GradientCheckpointingLayer):
                 head_mask = head_mask.reshape(batch_size // self.num_windows, self.num_windows * seq_len)
 
         attention_output = self.attention(hidden_states_norm, head_mask, **kwargs)
-
-        if self.use_cae:
-            attention_output = attention_output * self.gamma_1
+        attention_output = attention_output * self.gamma_1
 
         if not self.window:
             attention_output = attention_output.reshape(batch_size, seq_len, channels)
@@ -310,9 +297,7 @@ class LwDetrViTLayer(GradientCheckpointingLayer):
 
         layer_output = self.layernorm_after(hidden_states)
         layer_output = self.intermediate(layer_output)
-
-        if self.use_cae:
-            layer_output = layer_output * self.gamma_2
+        layer_output = layer_output * self.gamma_2
 
         hidden_states = hidden_states + self.drop_path(layer_output)
 
@@ -379,9 +364,8 @@ class LwDetrViTPreTrainedModel(VitDetPreTrainedModel):
                 std=self.config.initializer_range,
             ).to(module.position_embeddings.dtype)
         elif isinstance(module, LwDetrViTLayer):
-            if module.use_cae:
-                nn.init.constant_(module.gamma_1, self.config.cae_init_values)
-                nn.init.constant_(module.gamma_2, self.config.cae_init_values)
+            nn.init.constant_(module.gamma_1, self.config.cae_init_values)
+            nn.init.constant_(module.gamma_2, self.config.cae_init_values)
 
 
 class LwDetrViTBackbone(VitDetBackbone):
