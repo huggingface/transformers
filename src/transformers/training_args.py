@@ -1386,7 +1386,7 @@ class TrainingArguments:
     )
 
     include_tokens_per_second: Optional[bool] = field(
-        default=False,
+        default=None,
         metadata={
             "help": "This arg is deprecated and will be removed in v5 , use `include_num_input_tokens_seen` instead."
         },
