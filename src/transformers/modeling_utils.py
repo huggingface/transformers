@@ -4883,6 +4883,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         model.eval()
 
         # check if using kernels
+        print(model.model.layers[0].input_layernorm.kernel_layer_name)
         if use_kernels:
             model.use_kernels = True
 
