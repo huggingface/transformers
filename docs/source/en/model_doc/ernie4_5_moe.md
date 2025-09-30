@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-06-30 and added to Hugging Face Transformers on 2025-07-21.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -39,7 +40,6 @@ Other models from the family can be found at [Ernie 4.5](./ernie4_5).
     <img src="https://ernie.baidu.com/blog/posts/ernie4.5/overview.png"/>
 </div>
 
-
 ## Usage Tips
 
 ### Generate text
@@ -55,7 +55,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_name)
 model = AutoModelForCausalLM.from_pretrained(
     model_name,
     device_map="auto",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
 )
 
 # prepare the model input
@@ -95,7 +95,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_name)
 model = AutoModelForCausalLM.from_pretrained(
     model_name,
     device_map="auto",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     tp_plan="auto",
 )
 
@@ -165,7 +165,6 @@ generate_text = tokenizer.decode(output_ids, skip_special_tokens=True)
 
 This model was contributed by [Anton Vlasjuk](https://huggingface.co/AntonV).
 The original code can be found [here](https://github.com/PaddlePaddle/ERNIE).
-
 
 ## Ernie4_5_MoeConfig
 

@@ -94,9 +94,6 @@ class MaskGenerationPipeline(ChunkPipeline):
         requires_backends(self, "vision")
         requires_backends(self, "torch")
 
-        if self.framework != "pt":
-            raise ValueError(f"The {self.__class__} is only available in PyTorch.")
-
         self.check_model_type(MODEL_FOR_MASK_GENERATION_MAPPING_NAMES)
 
     def _sanitize_parameters(self, **kwargs):
@@ -125,6 +122,10 @@ class MaskGenerationPipeline(ChunkPipeline):
             forward_params["mask_threshold"] = kwargs["mask_threshold"]
         if "stability_score_thresh" in kwargs:
             forward_params["stability_score_thresh"] = kwargs["stability_score_thresh"]
+        if "max_hole_area" in kwargs:
+            forward_params["max_hole_area"] = kwargs["max_hole_area"]
+        if "max_sprinkle_area" in kwargs:
+            forward_params["max_sprinkle_area"] = kwargs["max_sprinkle_area"]
         if "crops_nms_thresh" in kwargs:
             postprocess_kwargs["crops_nms_thresh"] = kwargs["crops_nms_thresh"]
         if "output_rle_mask" in kwargs:
@@ -191,36 +192,34 @@ class MaskGenerationPipeline(ChunkPipeline):
         points_per_batch=64,
         crops_n_layers: int = 0,
         crop_overlap_ratio: float = 512 / 1500,
-        points_per_crop: Optional[int] = 32,
-        crop_n_points_downscale_factor: Optional[int] = 1,
+        points_per_crop: int = 32,
+        crop_n_points_downscale_factor: int = 1,
         timeout: Optional[float] = None,
     ):
         image = load_image(image, timeout=timeout)
-        target_size = self.image_processor.size["longest_edge"]
+        target_size = self.image_processor.size.get("longest_edge", self.image_processor.size.get("height"))
         crop_boxes, grid_points, cropped_images, input_labels = self.image_processor.generate_crop_boxes(
             image, target_size, crops_n_layers, crop_overlap_ratio, points_per_crop, crop_n_points_downscale_factor
         )
         model_inputs = self.image_processor(images=cropped_images, return_tensors="pt")
-        if self.framework == "pt":
-            model_inputs = model_inputs.to(self.torch_dtype)
+        model_inputs = model_inputs.to(self.dtype)
 
         with self.device_placement():
-            if self.framework == "pt":
-                inference_context = self.get_inference_context()
-                with inference_context():
-                    model_inputs = self._ensure_tensor_on_device(model_inputs, device=self.device)
-                    embeddings = self.model.get_image_embeddings(model_inputs.pop("pixel_values"))
+            inference_context = self.get_inference_context()
+            with inference_context():
+                model_inputs = self._ensure_tensor_on_device(model_inputs, device=self.device)
+                embeddings = self.model.get_image_embeddings(model_inputs.pop("pixel_values"))
 
-                    # Handle both SAM (single tensor) and SAM-HQ (tuple) outputs
-                    if isinstance(embeddings, tuple):
-                        image_embeddings, intermediate_embeddings = embeddings
-                        model_inputs["intermediate_embeddings"] = intermediate_embeddings
-                    else:
-                        image_embeddings = embeddings
-                    # TODO: Identifying the model by the type of its returned embeddings is brittle.
-                    #       Consider using a more robust method for distinguishing model types here.
+                # Handle both SAM (single tensor) and SAM-HQ (tuple) outputs
+                if isinstance(embeddings, tuple):
+                    image_embeddings, intermediate_embeddings = embeddings
+                    model_inputs["intermediate_embeddings"] = intermediate_embeddings
+                else:
+                    image_embeddings = embeddings
+                # TODO: Identifying the model by the type of its returned embeddings is brittle.
+                #       Consider using a more robust method for distinguishing model types here.
 
-                    model_inputs["image_embeddings"] = image_embeddings
+                model_inputs["image_embeddings"] = image_embeddings
 
         n_points = grid_points.shape[1]
         points_per_batch = points_per_batch if points_per_batch is not None else n_points
@@ -250,6 +249,8 @@ class MaskGenerationPipeline(ChunkPipeline):
         stability_score_thresh=0.95,
         mask_threshold=0,
         stability_score_offset=1,
+        max_hole_area=None,
+        max_sprinkle_area=None,
     ):
         input_boxes = model_inputs.pop("input_boxes")
         is_last = model_inputs.pop("is_last")
@@ -260,8 +261,26 @@ class MaskGenerationPipeline(ChunkPipeline):
 
         # post processing happens here in order to avoid CPU GPU copies of ALL the masks
         low_resolution_masks = model_outputs["pred_masks"]
+        postprocess_kwargs = {}
+        if max_hole_area is not None:
+            postprocess_kwargs["max_hole_area"] = max_hole_area
+        if max_sprinkle_area is not None and max_sprinkle_area > 0:
+            postprocess_kwargs["max_sprinkle_area"] = max_sprinkle_area
+        if postprocess_kwargs:
+            low_resolution_masks = self.image_processor.post_process_masks(
+                low_resolution_masks,
+                original_sizes,
+                mask_threshold=mask_threshold,
+                reshaped_input_sizes=reshaped_input_sizes,
+                binarize=False,
+                **postprocess_kwargs,
+            )
         masks = self.image_processor.post_process_masks(
-            low_resolution_masks, original_sizes, reshaped_input_sizes, mask_threshold, binarize=False
+            low_resolution_masks,
+            original_sizes,
+            mask_threshold=mask_threshold,
+            reshaped_input_sizes=reshaped_input_sizes,
+            binarize=False,
         )
         iou_scores = model_outputs["iou_scores"]
         masks, iou_scores, boxes = self.image_processor.filter_masks(

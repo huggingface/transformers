@@ -18,7 +18,8 @@ import os
 import random
 import tempfile
 import unittest
-from typing import Optional, Sequence
+from collections.abc import Sequence
+from typing import Optional
 
 import numpy as np
 from parameterized import parameterized
@@ -228,6 +229,25 @@ class Gemma3nAudioFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unit
             for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
                 self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
+    def test_audio_features_attn_mask_consistent(self):
+        # regression test for https://github.com/huggingface/transformers/issues/39911
+        # Test input_features and input_features_mask have consistent shape
+        np.random.seed(42)
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
+        for i in [512, 640, 1024]:
+            audio = np.random.randn(i)
+            mm_data = {
+                "raw_speech": [audio],
+                "sampling_rate": 16000,
+            }
+            inputs = feature_extractor(**mm_data, return_tensors="np")
+            out = inputs["input_features"]
+            mask = inputs["input_features_mask"]
+
+            assert out.ndim == 3
+            assert mask.ndim == 2
+            assert out.shape[:2] == mask.shape[:2]
+
     def test_dither(self):
         np.random.seed(42)  # seed the dithering randn()
 
@@ -257,10 +277,12 @@ class Gemma3nAudioFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unit
         diff = input_features_dither - input_features_no_dither
 
         # features are not identical
-        self.assertTrue(np.abs(diff).mean() > 1e-6)
+        assert np.abs(diff).mean() > 1e-6
         # features are not too different
-        self.assertTrue(np.abs(diff).mean() <= 1e-4)
-        self.assertTrue(np.abs(diff).max() <= 5e-3)
+        # the heuristic value `7e-4` is obtained by running 50000 times (maximal value is around 3e-4).
+        assert np.abs(diff).mean() < 7e-4
+        # the heuristic value `8e-1` is obtained by running 50000 times (maximal value is around 5e-1).
+        assert np.abs(diff).max() < 8e-1
 
     @require_torch
     def test_double_precision_pad(self):

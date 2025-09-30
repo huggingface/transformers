@@ -38,13 +38,13 @@ pip install -q transformers accelerate flash_attn
 Let's initialize the model and the processor.
 
 ```python
-from transformers import AutoProcessor, AutoModelForImageTextToText
+from transformers import AutoProcessor, AutoModelForImageTextToText, infer_device
 import torch
 
-device = torch.device("cuda")
+device = torch.device(infer_device())
 model = AutoModelForImageTextToText.from_pretrained(
     "HuggingFaceM4/idefics2-8b",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     attn_implementation="flash_attention_2",
 ).to(device)
 
@@ -63,7 +63,6 @@ The image inputs look like the following.
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg" alt="A bee on a pink flower"/>
 </div>
 
-
 ```python
 from PIL import Image
 import requests
@@ -75,7 +74,6 @@ images = [Image.open(requests.get(img_urls[0], stream=True).raw),
 ```
 
 Below is an example of the chat template. We can feed conversation turns and the last message as an input by appending it at the end of the template.
-
 
 ```python
 messages = [
@@ -207,7 +205,6 @@ We can use [text streaming](./generation_strategies#streaming) for a better gene
 
 Assume we have an application that keeps chat history and takes in the new user input. We will preprocess the inputs as usual and initialize [`TextIteratorStreamer`] to handle the generation in a separate thread. This allows you to stream the generated text tokens in real-time. Any generation arguments can be passed to [`TextIteratorStreamer`].
 
-
 ```python
 import time
 from transformers import TextIteratorStreamer
@@ -301,7 +298,7 @@ from transformers import AutoModelForImageTextToText, QuantoConfig
 model_id = "HuggingFaceM4/idefics2-8b"
 quantization_config = QuantoConfig(weights="int8")
 quantized_model = AutoModelForImageTextToText.from_pretrained(
-    model_id, device_map="cuda", quantization_config=quantization_config
+    model_id, device_map="auto", quantization_config=quantization_config
 )
 ```
 

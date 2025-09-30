@@ -44,7 +44,6 @@ from ...image_utils import (
     infer_channel_dimension_format,
     is_scaled_image,
     make_flat_list_of_images,
-    make_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -59,12 +58,12 @@ if is_vision_available():
     from PIL import Image
 
 
-def divide_to_patches(image: np.array, patch_size: int, input_data_format) -> list[np.array]:
+def divide_to_patches(image: np.ndarray, patch_size: int, input_data_format) -> list[np.ndarray]:
     """
     Divides an image into patches of a specified size.
 
     Args:
-        image (`np.array`):
+        image (`np.ndarray`):
             The input image.
         patch_size (`int`):
             The size of each patch.
@@ -72,7 +71,7 @@ def divide_to_patches(image: np.array, patch_size: int, input_data_format) -> li
             The channel dimension format of the input image.
 
     Returns:
-        list: A list of np.array representing the patches.
+        list: A list of np.ndarray representing the patches.
     """
     patches = []
     height, width = get_image_size(image, channel_dim=input_data_format)
@@ -87,7 +86,7 @@ def divide_to_patches(image: np.array, patch_size: int, input_data_format) -> li
     return patches
 
 
-def expand_to_square(image: np.array, background_color, input_data_format) -> np.array:
+def expand_to_square(image: np.ndarray, background_color, input_data_format) -> np.ndarray:
     """
     Expands an image to a square by adding a background color.
     """
@@ -320,7 +319,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         images: ImageInput,
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_center_crop: Optional[bool] = None,
         crop_size: Optional[int] = None,
         do_rescale: Optional[bool] = None,
@@ -373,7 +372,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
 
         all_images = []
         for image in images:
@@ -400,13 +399,13 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         return images
 
     def _resize_for_patching(
-        self, image: np.array, target_resolution: tuple, resample, input_data_format: ChannelDimension
-    ) -> np.array:
+        self, image: np.ndarray, target_resolution: tuple, resample, input_data_format: ChannelDimension
+    ) -> np.ndarray:
         """
         Resizes an image to a target resolution while maintaining aspect ratio.
 
         Args:
-            image (np.array):
+            image (np.ndarray):
                 The input image.
             target_resolution (tuple):
                 The target resolution (height, width) of the image.
@@ -416,7 +415,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
                 The channel dimension format of the input image.
 
         Returns:
-            np.array: The resized and padded image.
+            np.ndarray: The resized and padded image.
         """
         new_height, new_width = get_patch_output_size(image, target_resolution, input_data_format)
 
@@ -433,8 +432,8 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         return (paste_y, paste_y + r_y), (paste_x, paste_x + r_x)
 
     def _pad_for_patching(
-        self, image: np.array, target_resolution: tuple, input_data_format: ChannelDimension
-    ) -> np.array:
+        self, image: np.ndarray, target_resolution: tuple, input_data_format: ChannelDimension
+    ) -> np.ndarray:
         """
         Pad an image to a target resolution while maintaining aspect ratio.
         """
@@ -447,19 +446,19 @@ class LlavaNextImageProcessor(BaseImageProcessor):
 
     def get_image_patches(
         self,
-        image: np.array,
+        image: np.ndarray,
         grid_pinpoints,
         size: tuple,
         patch_size: int,
         resample: PILImageResampling,
         data_format: ChannelDimension,
         input_data_format: ChannelDimension,
-    ) -> list[np.array]:
+    ) -> list[np.ndarray]:
         """
         Process an image with variable resolutions by dividing it into patches.
 
         Args:
-            image (np.array):
+            image (np.ndarray):
                 The input image to be processed.
             grid_pinpoints (List):
                 A string representation of a list of possible resolutions.
@@ -475,7 +474,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
                 The channel dimension format of the input image.
 
         Returns:
-            list[np.array]: A list of NumPy arrays containing the processed image patches.
+            list[np.ndarray]: A list of NumPy arrays containing the processed image patches.
         """
         if not isinstance(grid_pinpoints, list):
             raise TypeError("grid_pinpoints must be a list of possible resolutions.")
@@ -554,7 +553,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
         image_grid_pinpoints: Optional[list] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_center_crop: Optional[bool] = None,
         crop_size: Optional[int] = None,
         do_rescale: Optional[bool] = None,
@@ -607,10 +606,8 @@ class LlavaNextImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
-                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                 - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                 - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -640,13 +637,11 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         do_pad = do_pad if do_pad is not None else self.do_pad
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
+        images = self.fetch_images(images)
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         validate_preprocess_arguments(
             do_rescale=do_rescale,
@@ -677,7 +672,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(images[0])
 
-        new_images = []
+        processed_images = []
         image_sizes = [get_image_size(image, channel_dim=input_data_format) for image in images]
         for image in images:
             # convert image into a list of patches
@@ -711,10 +706,10 @@ class LlavaNextImageProcessor(BaseImageProcessor):
                 input_data_format=input_data_format,
             )
             pixel_values = np.array(pixel_values)
-            new_images.append(pixel_values)
+            processed_images.append(pixel_values)
 
         if do_pad:
-            processed_images = self._pad_for_batching(new_images)
+            processed_images = self._pad_for_batching(processed_images)
 
         return BatchFeature(
             data={"pixel_values": processed_images, "image_sizes": image_sizes}, tensor_type=return_tensors

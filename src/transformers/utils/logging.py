@@ -20,13 +20,13 @@ import sys
 import threading
 from logging import (
     CRITICAL,  # NOQA
-    DEBUG,  # NOQA
-    ERROR,  # NOQA
+    DEBUG,
+    ERROR,
     FATAL,  # NOQA
-    INFO,  # NOQA
+    INFO,
     NOTSET,  # NOQA
     WARN,  # NOQA
-    WARNING,  # NOQA
+    WARNING,
 )
 from logging import captureWarnings as _captureWarnings
 from typing import Optional
@@ -307,7 +307,7 @@ def warning_advice(self, *args, **kwargs):
     This method is identical to `logger.warning()`, but if env var TRANSFORMERS_NO_ADVISORY_WARNINGS=1 is set, this
     warning will not be printed
     """
-    no_advisory_warnings = os.getenv("TRANSFORMERS_NO_ADVISORY_WARNINGS", False)
+    no_advisory_warnings = os.getenv("TRANSFORMERS_NO_ADVISORY_WARNINGS")
     if no_advisory_warnings:
         return
     self.warning(*args, **kwargs)
@@ -392,7 +392,6 @@ tqdm = _tqdm_cls()
 
 def is_progress_bar_enabled() -> bool:
     """Return a boolean indicating whether tqdm progress bars are enabled."""
-    global _tqdm_active
     return bool(_tqdm_active)
 
 

@@ -9,13 +9,6 @@ class Cache(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class CacheConfig(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class DynamicCache(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -59,13 +52,6 @@ class OffloadedStaticCache(metaclass=DummyObject):
 
 
 class QuantizedCache(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class QuantizedCacheConfig(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -191,13 +177,6 @@ class BeamScorer(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class BeamSearchScorer(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class ClassifierFreeGuidanceLogitsProcessor(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -290,13 +269,6 @@ class ForcedEOSTokenLogitsProcessor(metaclass=DummyObject):
 
 
 class GenerationMixin(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class HammingDiversityLogitsProcessor(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

@@ -15,6 +15,7 @@
 
 import unittest
 
+import pytest
 import torch
 from packaging import version
 
@@ -32,14 +33,12 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 if is_torch_available():
-    from transformers import AutoTokenizer, Glm4MoeConfig, Glm4MoeForCausalLM, Glm4MoeModel
+    from transformers import AutoTokenizer, Glm4MoeForCausalLM, Glm4MoeModel
 
 
 class Glm4MoeModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = Glm4MoeConfig
         base_model_class = Glm4MoeModel
-        causal_lm_class = Glm4MoeForCausalLM
 
     def __init__(
         self,
@@ -59,14 +58,6 @@ class Glm4MoeModelTester(CausalLMModelTester):
 
 @require_torch
 class Glm4MoeModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            Glm4MoeModel,
-            Glm4MoeForCausalLM,
-        )
-        if is_torch_available()
-        else ()
-    )
     pipeline_model_mapping = (
         {
             "feature-extraction": Glm4MoeModel,
@@ -75,8 +66,6 @@ class Glm4MoeModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
-    test_pruning = False
     fx_compatible = False
     model_tester_class = Glm4MoeModelTester
     # used in `test_torch_compile_for_training`. Skip as "Dynamic control flow in MoE"
@@ -93,6 +82,7 @@ class Glm4MoeIntegrationTest(unittest.TestCase):
 
     @slow
     @require_torch_accelerator
+    @pytest.mark.torch_compile_test
     @require_read_token
     def test_compile_static_cache(self):
         # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
@@ -107,10 +97,8 @@ class Glm4MoeIntegrationTest(unittest.TestCase):
         ]
 
         prompts = ["[gMASK]<sop>hello", "[gMASK]<sop>tell me"]
-        tokenizer = AutoTokenizer.from_pretrained("THUDM/GLM-4.5")
-        model = Glm4MoeForCausalLM.from_pretrained(
-            "THUDM/GLM-4.5", device_map=torch_device, torch_dtype=torch.bfloat16
-        )
+        tokenizer = AutoTokenizer.from_pretrained("zai-org/GLM-4.5")
+        model = Glm4MoeForCausalLM.from_pretrained("zai-org/GLM-4.5", device_map=torch_device, dtype=torch.bfloat16)
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
         # Dynamic Cache

@@ -252,6 +252,14 @@ class DetrConfig(PretrainedConfig):
     def hidden_size(self) -> int:
         return self.d_model
 
+    @property
+    def sub_configs(self):
+        return (
+            {"backbone_config": type(self.backbone_config)}
+            if getattr(self, "backbone_config", None) is not None
+            else {}
+        )
+
     @classmethod
     def from_backbone_config(cls, backbone_config: PretrainedConfig, **kwargs):
         """Instantiate a [`DetrConfig`] (or a derived class) from a pre-trained backbone model configuration.

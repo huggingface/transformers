@@ -21,9 +21,7 @@ provides for it.
 
 Most of those are only useful if you are adding new models in the library.
 
-
 ## Model addition debuggers
-
 
 ### Model addition debugger - context manager for model adders
 
@@ -71,7 +69,6 @@ with model_addition_debugger_context(
     output = model.forward(**inputs)
 
 ```
-
 
 ### Reading results
 
@@ -231,14 +228,11 @@ Once the forward passes of two models have been traced by the debugger, one can 
 below: we can see slight differences between these two implementations' key projection layer. Inputs are mostly
 identical, but not quite. Looking through the file differences makes it easier to pinpoint which layer is wrong.
 
-
 ![download-icon](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/files_difference_debugging.png)
-
 
 ### Limitations and scope
 
-This feature will only work for torch-based models, and would require more work and case-by-case approach for say
-`jax`-based models that are usually compiled. Models relying heavily on external kernel calls may work, but trace will
+This feature will only work for torch-based models. Models relying heavily on external kernel calls may work, but trace will
 probably miss some things. Regardless, any python implementation that aims at mimicking another implementation can be
 traced once instead of reran N times with breakpoints.
 
@@ -254,7 +248,7 @@ layers.
 
 This small util is a power user tool intended for model adders and maintainers. It lists all test methods
 existing in `test_modeling_common.py`, inherited by all model tester classes, and scans the repository to measure
-how many tests are being skipped and for which models. 
+how many tests are being skipped and for which models.
 
 ### Rationale
 
@@ -269,8 +263,7 @@ This utility:
 
 ![download-icon](https://huggingface.co/datasets/huggingface/documentation-images/resolve/f7f671f69b88ce4967e19179172c248958d35742/transformers/tests_skipped_visualisation.png)
 
-
-### Usage 
+### Usage
 
 You can run the skipped test analyzer in two ways:
 
@@ -286,7 +279,7 @@ python utils/scan_skipped_tests.py --output_dir path/to/output
 
 **Example output:**
 
-```
+```text
 🔬 Parsing 331 model test files once each...
 📝 Aggregating 224 tests...
   (224/224) test_update_candidate_strategy_with_matches_1es_3d_is_nonecodet_schedule_fa_kwargs

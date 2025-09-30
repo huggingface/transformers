@@ -14,6 +14,7 @@
 
 import copy
 import unittest
+from functools import cached_property
 
 import numpy as np
 import pandas as pd
@@ -32,7 +33,6 @@ from transformers import (
 )
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
-from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -576,9 +576,6 @@ class TapasModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_no_head(self):
-        # ideally we want to test this with the weights of tapas_inter_masklm_base_reset,
-        # but since it's not straightforward to do this with the TF 1 implementation, we test it with
-        # the weights of the WTQ base model (i.e. tapas_wtq_wikisql_sqa_inter_masklm_base_reset)
         model = TapasModel.from_pretrained("google/tapas-base-finetuned-wtq").to(torch_device)
 
         tokenizer = self.default_tokenizer
@@ -767,7 +764,6 @@ class TapasModelIntegrationTest(unittest.TestCase):
         # note that google/tapas-base-finetuned-wtq should correspond to tapas_wtq_wikisql_sqa_inter_masklm_base_reset
         model = TapasForQuestionAnswering.from_pretrained("google/tapas-base-finetuned-wtq").to(torch_device)
         model.to(torch_device)
-        # normally we should put the model in training mode but it's a pain to do this with the TF 1 implementation
 
         tokenizer = self.default_tokenizer
         # let's test on a batch
@@ -972,11 +968,9 @@ class TapasUtilitiesTest(unittest.TestCase):
         self.assertEqual(cell_index.num_segments, 9)
 
         # Projections should give back the original indices.
-        # we use np.testing.assert_array_equal rather than Tensorflow's assertAllEqual
         np.testing.assert_array_equal(row_index.indices.numpy(), row_index_proj.indices.numpy())
         self.assertEqual(row_index.num_segments, row_index_proj.num_segments)
         self.assertEqual(row_index.batch_dims, row_index_proj.batch_dims)
-        # We use np.testing.assert_array_equal rather than Tensorflow's assertAllEqual
         np.testing.assert_array_equal(col_index.indices.numpy(), col_index_proj.indices.numpy())
         self.assertEqual(col_index.batch_dims, col_index_proj.batch_dims)
 
@@ -1006,7 +1000,6 @@ class TapasUtilitiesTest(unittest.TestCase):
         batched_index = IndexMap(indices=torch.zeros(shape).type(torch.LongTensor), num_segments=1, batch_dims=3)
         batched_index_flat = flatten(batched_index)
 
-        # We use np.testing.assert_array_equal rather than Tensorflow's assertAllEqual
         np.testing.assert_array_equal(
             row_index_flat.indices.numpy(), [0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5]
         )
@@ -1024,11 +1017,9 @@ class TapasUtilitiesTest(unittest.TestCase):
         self.assertEqual(num_segments, index.num_segments)
         self.assertEqual(2, index.batch_dims)
         indices = index.indices
-        # We use np.testing.assert_array_equal rather than Tensorflow's assertAllEqual
         np.testing.assert_array_equal(list(indices.size()), [3, 4, 5])
         for i in range(batch_shape[0]):
             for j in range(batch_shape[1]):
-                # We use np.testing.assert_array_equal rather than Tensorflow's assertAllEqual
                 np.testing.assert_array_equal(indices[i, j, :].numpy(), range(num_segments))
 
     def test_reduce_sum(self):
@@ -1038,7 +1029,6 @@ class TapasUtilitiesTest(unittest.TestCase):
         col_sum, _ = reduce_sum(values, col_index)
         cell_sum, _ = reduce_sum(values, cell_index)
 
-        # We use np.testing.assert_allclose rather than Tensorflow's assertAllClose
         np.testing.assert_allclose(row_sum.numpy(), [[6.0, 3.0, 8.0], [6.0, 3.0, 8.0]])
         np.testing.assert_allclose(col_sum.numpy(), [[9.0, 8.0, 0.0], [4.0, 5.0, 8.0]])
         np.testing.assert_allclose(
@@ -1053,7 +1043,6 @@ class TapasUtilitiesTest(unittest.TestCase):
         col_mean, _ = reduce_mean(values, col_index)
         cell_mean, _ = reduce_mean(values, cell_index)
 
-        # We use np.testing.assert_allclose rather than Tensorflow's assertAllClose
         np.testing.assert_allclose(
             row_mean.numpy(), [[6.0 / 3.0, 3.0 / 3.0, 8.0 / 3.0], [6.0 / 3.0, 3.0 / 3.0, 8.0 / 3.0]]
         )
@@ -1071,7 +1060,6 @@ class TapasUtilitiesTest(unittest.TestCase):
         index = IndexMap(indices=torch.as_tensor([0, 1, 0, 1]), num_segments=2)
         maximum, _ = reduce_max(values, index)
 
-        # We use np.testing.assert_array_equal rather than Tensorflow's assertAllEqual
         np.testing.assert_array_equal(maximum.numpy(), [2, 3])
 
     def test_reduce_sum_vectorized(self):
@@ -1079,9 +1067,7 @@ class TapasUtilitiesTest(unittest.TestCase):
         index = IndexMap(indices=torch.as_tensor([[0, 0, 1]]), num_segments=2, batch_dims=0)
         sums, new_index = reduce_sum(values, index)
 
-        # We use np.testing.assert_allclose rather than Tensorflow's assertAllClose
         np.testing.assert_allclose(sums.numpy(), [3.0, 3.0])
-        # We use np.testing.assert_array_equal rather than Tensorflow's assertAllEqual
         np.testing.assert_array_equal(new_index.indices.numpy(), [0, 1])
         np.testing.assert_array_equal(new_index.num_segments.numpy(), 2)
         np.testing.assert_array_equal(new_index.batch_dims, 0)
@@ -1097,7 +1083,6 @@ class TapasUtilitiesTest(unittest.TestCase):
         cell_sum = gather(sums, cell_index)
         assert cell_sum.size() == values.size()
 
-        # We use np.testing.assert_array_equal rather than Tensorflow's assertAllEqual
         np.testing.assert_allclose(
             cell_sum.numpy(),
             [[[3.0, 3.0, 3.0], [2.0, 2.0, 1.0], [4.0, 4.0, 4.0]], [[1.0, 2.0, 3.0], [2.0, 0.0, 1.0], [1.0, 3.0, 4.0]]],
@@ -1108,5 +1093,4 @@ class TapasUtilitiesTest(unittest.TestCase):
         index = IndexMap(indices=torch.as_tensor([[0, 1], [1, 0]]), num_segments=2, batch_dims=1)
         result = gather(values, index)
 
-        # We use np.testing.assert_array_equal rather than Tensorflow's assertAllEqual
         np.testing.assert_array_equal(result.numpy(), [[[1, 2], [3, 4]], [[7, 8], [5, 6]]])

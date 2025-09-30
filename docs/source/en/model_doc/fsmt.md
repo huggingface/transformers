@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2019-07-15 and added to Hugging Face Transformers on 2020-11-16.*
 
 # FSMT
 
@@ -39,7 +40,6 @@ This model was contributed by [stas](https://huggingface.co/stas). The original 
 - FSMT uses source and target vocabulary pairs that aren't combined into one. It doesn't share embeddings tokens
   either. Its tokenizer is very similar to [`XLMTokenizer`] and the main model is derived from
   [`BartModel`].
-
 
 ## FSMTConfig
 

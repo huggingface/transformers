@@ -15,6 +15,7 @@
 """VitMatte model configuration"""
 
 import copy
+from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -80,7 +81,7 @@ class VitMatteConfig(PretrainedConfig):
 
     def __init__(
         self,
-        backbone_config: PretrainedConfig = None,
+        backbone_config: Optional[PretrainedConfig] = None,
         backbone=None,
         use_pretrained_backbone=False,
         use_timm_backbone=False,
@@ -120,6 +121,14 @@ class VitMatteConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.convstream_hidden_sizes = convstream_hidden_sizes
         self.fusion_hidden_sizes = fusion_hidden_sizes
+
+    @property
+    def sub_configs(self):
+        return (
+            {"backbone_config": type(self.backbone_config)}
+            if getattr(self, "backbone_config", None) is not None
+            else {}
+        )
 
     def to_dict(self):
         """

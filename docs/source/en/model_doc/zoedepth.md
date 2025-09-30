@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-
+*This model was released on 2023-02-23 and added to Hugging Face Transformers on 2024-07-08.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -46,7 +46,7 @@ image = Image.open(requests.get(url, stream=True).raw)
 pipeline = pipeline(
     task="depth-estimation",
     model="Intel/zoedepth-nyu-kitti",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 results = pipeline(image)
@@ -71,7 +71,7 @@ model = AutoModelForDepthEstimation.from_pretrained(
 )
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
-inputs = image_processor(image, return_tensors="pt").to("cuda")
+inputs = image_processor(image, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
   outputs = model(inputs)
@@ -96,6 +96,7 @@ Image.fromarray(depth.astype("uint8"))
 ## Notes
 
 - In the [original implementation](https://github.com/isl-org/ZoeDepth/blob/edb6daf45458569e24f50250ef1ed08c015f17a7/zoedepth/models/depth_model.py#L131) ZoeDepth performs inference on both the original and flipped images and averages the results. The `post_process_depth_estimation` function handles this by passing the flipped outputs to the optional `outputs_flipped` argument as shown below.
+
    ```py
     with torch.no_grad():
         outputs = model(pixel_values)
@@ -106,7 +107,7 @@ Image.fromarray(depth.astype("uint8"))
             outputs_flipped=outputs_flipped,
         )
    ```
-   
+
 ## Resources
 - Refer to this [notebook](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/ZoeDepth) for an inference example.
 

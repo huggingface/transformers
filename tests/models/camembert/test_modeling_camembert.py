@@ -19,7 +19,6 @@ from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
     require_torch,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -62,7 +61,6 @@ class CamembertModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
-    @require_torch_sdpa
     def test_output_embeds_base_model_sdpa(self):
         input_ids = torch.tensor(
             [[5, 121, 11, 660, 16, 730, 25543, 110, 83, 6]],

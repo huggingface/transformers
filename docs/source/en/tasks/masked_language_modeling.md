@@ -151,7 +151,7 @@ This dataset contains the token sequences, but some of these are longer than the
 
 You can now use a second preprocessing function to
 - concatenate all the sequences
-- split the concatenated sequences into shorter chunks defined by `block_size`, which should be both shorter than the maximum input length and short enough for your GPU RAM. 
+- split the concatenated sequences into shorter chunks defined by `block_size`, which should be both shorter than the maximum input length and short enough for your GPU RAM.
 
 ```py
 >>> block_size = 128
@@ -181,9 +181,6 @@ Apply the `group_texts` function over the entire dataset:
 
 Now create a batch of examples using [`DataCollatorForLanguageModeling`]. It's more efficient to *dynamically pad* the sentences to the longest length in a batch during collation, instead of padding the whole dataset to the maximum length.
 
-<frameworkcontent>
-<pt>
-
 Use the end-of-sequence token as the padding token and specify `mlm_probability` to randomly mask tokens each time you iterate over the data:
 
 ```py
@@ -192,23 +189,9 @@ Use the end-of-sequence token as the padding token and specify `mlm_probability`
 >>> tokenizer.pad_token = tokenizer.eos_token
 >>> data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=0.15)
 ```
-</pt>
-<tf>
-
-Use the end-of-sequence token as the padding token and specify `mlm_probability` to randomly mask tokens each time you iterate over the data:
-
-```py
->>> from transformers import DataCollatorForLanguageModeling
-
->>> data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=0.15, return_tensors="tf")
-```
-</tf>
-</frameworkcontent>
 
 ## Train
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
@@ -266,81 +249,11 @@ Then share your model to the Hub with the [`~transformers.Trainer.push_to_hub`] 
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-<tf>
-<Tip>
-
-If you aren't familiar with finetuning a model with Keras, take a look at the basic tutorial [here](../training#train-a-tensorflow-model-with-keras)!
-
-</Tip>
-To finetune a model in TensorFlow, start by setting up an optimizer function, learning rate schedule, and some training hyperparameters:
-
-```py
->>> from transformers import create_optimizer, AdamWeightDecay
-
->>> optimizer = AdamWeightDecay(learning_rate=2e-5, weight_decay_rate=0.01)
-```
-
-Then you can load DistilRoBERTa with [`TFAutoModelForMaskedLM`]:
-
-```py
->>> from transformers import TFAutoModelForMaskedLM
-
->>> model = TFAutoModelForMaskedLM.from_pretrained("distilbert/distilroberta-base")
-```
-
-Convert your datasets to the `tf.data.Dataset` format with [`~transformers.TFPreTrainedModel.prepare_tf_dataset`]:
-
-```py
->>> tf_train_set = model.prepare_tf_dataset(
-...     lm_dataset["train"],
-...     shuffle=True,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-
->>> tf_test_set = model.prepare_tf_dataset(
-...     lm_dataset["test"],
-...     shuffle=False,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-```
-
-Configure the model for training with [`compile`](https://keras.io/api/models/model_training_apis/#compile-method). Note that Transformers models all have a default task-relevant loss function, so you don't need to specify one unless you want to:
-
-```py
->>> import tensorflow as tf
-
->>> model.compile(optimizer=optimizer)  # No loss argument!
-```
-
-This can be done by specifying where to push your model and tokenizer in the [`~transformers.PushToHubCallback`]:
-
-```py
->>> from transformers.keras_callbacks import PushToHubCallback
-
->>> callback = PushToHubCallback(
-...     output_dir="my_awesome_eli5_mlm_model",
-...     tokenizer=tokenizer,
-... )
-```
-
-Finally, you're ready to start training your model! Call [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) with your training and validation datasets, the number of epochs, and your callback to finetune the model:
-
-```py
->>> model.fit(x=tf_train_set, validation_data=tf_test_set, epochs=3, callbacks=[callback])
-```
-
-Once training is completed, your model is automatically uploaded to the Hub so everyone can use it!
-</tf>
-</frameworkcontent>
 
 <Tip>
 
 For a more in-depth example of how to finetune a model for masked language modeling, take a look at the corresponding
-[PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb)
-or [TensorFlow notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb).
+[PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb).
 
 </Tip>
 
@@ -375,8 +288,6 @@ The simplest way to try out your finetuned model for inference is to use it in a
   'sequence': 'The Milky Way is a small galaxy.'}]
 ```
 
-<frameworkcontent>
-<pt>
 Tokenize the text and return the `input_ids` as PyTorch tensors. You'll also need to specify the position of the `<mask>` token:
 
 ```py
@@ -408,38 +319,3 @@ The Milky Way is a spiral galaxy.
 The Milky Way is a massive galaxy.
 The Milky Way is a small galaxy.
 ```
-</pt>
-<tf>
-Tokenize the text and return the `input_ids` as TensorFlow tensors. You'll also need to specify the position of the `<mask>` token:
-
-```py
->>> from transformers import AutoTokenizer
-
->>> tokenizer = AutoTokenizer.from_pretrained("username/my_awesome_eli5_mlm_model")
->>> inputs = tokenizer(text, return_tensors="tf")
->>> mask_token_index = tf.where(inputs["input_ids"] == tokenizer.mask_token_id)[0, 1]
-```
-
-Pass your inputs to the model and return the `logits` of the masked token:
-
-```py
->>> from transformers import TFAutoModelForMaskedLM
-
->>> model = TFAutoModelForMaskedLM.from_pretrained("username/my_awesome_eli5_mlm_model")
->>> logits = model(**inputs).logits
->>> mask_token_logits = logits[0, mask_token_index, :]
-```
-
-Then return the three masked tokens with the highest probability and print them out:
-
-```py
->>> top_3_tokens = tf.math.top_k(mask_token_logits, 3).indices.numpy()
-
->>> for token in top_3_tokens:
-...     print(text.replace(tokenizer.mask_token, tokenizer.decode([token])))
-The Milky Way is a spiral galaxy.
-The Milky Way is a massive galaxy.
-The Milky Way is a small galaxy.
-```
-</tf>
-</frameworkcontent>
