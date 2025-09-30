@@ -37,6 +37,9 @@ from zipfile import is_zipfile
 import torch
 from huggingface_hub import split_torch_state_dict_into_shards
 from packaging import version
+from safetensors import safe_open
+from safetensors.torch import load_file as safe_load_file
+from safetensors.torch import save_file as safe_save_file
 from torch import Tensor, nn
 from torch.distributions import constraints
 from torch.utils.checkpoint import checkpoint
@@ -116,9 +119,6 @@ from .utils.import_utils import (
 )
 from .utils.quantization_config import BitsAndBytesConfig, QuantizationMethod
 
-from safetensors import safe_open
-from safetensors.torch import load_file as safe_load_file
-from safetensors.torch import save_file as safe_save_file
 
 if is_accelerate_available():
     from accelerate import dispatch_model, infer_auto_device_map

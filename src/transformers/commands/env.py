@@ -58,6 +58,7 @@ class EnvironmentCommand(BaseTransformersCLICommand):
 
     def run(self):
         import safetensors
+
         safetensors_version = safetensors.__version__
 
         accelerate_version = "not installed"
