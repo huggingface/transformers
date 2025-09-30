@@ -92,7 +92,7 @@ class PerceptionEncoderAudioConfig(PretrainedConfig):
         text_model = text_model or {}
         self.dac_vae_encoder = DACVAEConfig(**dac_vae_encoder)
         self.transformer = PerceptionEncoderAudioTransformerConfig(**transformer)
-        self.text_model = CONFIG_MAPPING[kwargs.get("model_type", "modernbert")](**kwargs)
+        self.text_model = CONFIG_MAPPING[kwargs.get("model_type", "modernbert")](**text_model)
         self.output_dim = output_dim
         self.nth_text_layer = nth_text_layer
 
@@ -444,13 +444,13 @@ class PerceptionEncoderAudioTextOutput(ModelOutput):
         return tuple(self[k] if not k.endswith("model_output") else getattr(self, k).to_tuple() for k in self.keys())
 
 
-class PerceptionEncoderAudioWithTextModel(PerceptionEncoderAudioPretrainedModel):
+class PerceptionEncoderAudioWithTextModel(PerceptionEncoderAudioModel):
     def __init__(self, config: PerceptionEncoderAudioConfig):
         super().__init__(config)
         self.text_model = AutoModel.from_config(config.text_model)
         self.audio_text_head = PerceptionEncoderAudioContrastiveHead(config.text_model.hidden_size, config.output_dim)
         self.audio_head = PerceptionEncoderAudioContrastiveHead(
-            config.audio_model.transformer.hidden_size, config.output_dim
+            config.transformer.hidden_size, config.output_dim
         )
         self.logit_scale = torch.nn.Parameter(torch.tensor([10.0]).log())
         self.logit_bias = torch.nn.Parameter(torch.tensor([-10.0]))
@@ -467,6 +467,9 @@ class PerceptionEncoderAudioWithTextModel(PerceptionEncoderAudioPretrainedModel)
 
         return BaseModelOutputWithPooling(last_hidden_state=text_model_output, pooler_output=text_model_output[:, 0])
 
+    def _get_audio_head_input(self, audio_model_output):
+        return audio_model_output.pooler_output
+
     def forward(
         self,
         input_ids: torch.Tensor,  # tokenized text
@@ -479,7 +482,7 @@ class PerceptionEncoderAudioWithTextModel(PerceptionEncoderAudioPretrainedModel)
         text_model_output = self._get_text_output(input_ids, attention_mask)
 
         text_embeds = self.audio_text_head(text_model_output.pooler_output)
-        audio_embeds = self.audio_head(audio_model_output.pooler_output)
+        audio_embeds = self.audio_head(self._get_audio_head_input(audio_model_output))
 
         loss = None
         if return_loss:
@@ -497,4 +500,8 @@ class PerceptionEncoderAudioWithTextModel(PerceptionEncoderAudioPretrainedModel)
         )
 
 
-__all__ = ["PerceptionEncoderAudioModel", "PerceptionEncoderAudioWithTextModel", "PerceptionEncoderAudioConfig"]
+class PerceptionEncoderAudioFrameWithText(PerceptionEncoderAudioWithTextModel):
+    def _get_audio_head_input(self, audio_model_output):
+        return audio_model_output.last_hidden_state
+
+__all__ = ["PerceptionEncoderAudioModel", "PerceptionEncoderAudioWithTextModel", "PerceptionEncoderAudioConfig", "PerceptionEncoderAudioFrameWithText"]

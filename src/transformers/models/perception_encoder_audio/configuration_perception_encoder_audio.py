@@ -164,7 +164,7 @@ class PerceptionEncoderAudioConfig(PretrainedConfig):
         text_model = text_model or {}
         self.dac_vae_encoder = DACVAEConfig(**dac_vae_encoder)
         self.transformer = PerceptionEncoderAudioTransformerConfig(**transformer)
-        self.text_model = CONFIG_MAPPING[kwargs.get("model_type", "modernbert")](**kwargs)
+        self.text_model = CONFIG_MAPPING[kwargs.get("model_type", "modernbert")](**text_model)
         self.output_dim = output_dim
         self.nth_text_layer = nth_text_layer
 
