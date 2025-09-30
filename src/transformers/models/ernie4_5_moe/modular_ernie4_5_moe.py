@@ -227,7 +227,7 @@ class Ernie4_5_MoePreTrainedModel(MixtralPreTrainedModel):
     # Not supporting multi-token prediction (MTP) atm
     _keys_to_ignore_on_load_unexpected = ["mtp"]
     _can_record_outputs = {
-        "router_logits": OutputRecorder(Ernie4_5_MoeSparseMoeBlock, index=1),
+        "router_logits": OutputRecorder(nn.Linear, layer_name="mlp.gate", index=0),
         "hidden_states": Ernie4_5_MoeDecoderLayer,
         "attentions": Ernie4_5_MoeAttention,
     }

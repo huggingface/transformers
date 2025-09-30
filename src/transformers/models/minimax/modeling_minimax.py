@@ -548,7 +548,7 @@ class MiniMaxPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False
     _supports_attention_backend = True
     _can_record_outputs = {
-        "router_logits": OutputRecorder(MiniMaxSparseMoeBlock, index=1),
+        "router_logits": OutputRecorder(nn.Linear, layer_name="block_sparse_moe.gate", index=0),
         "hidden_states": MiniMaxDecoderLayer,
         "attentions": [MiniMaxAttention, MiniMaxLightningAttention],
     }
