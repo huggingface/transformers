@@ -43,8 +43,8 @@ from typing import Iterable, NamedTuple, Optional, Tuple
 import requests
 import torch
 from accelerate import init_empty_weights
-from huggingface_hub import hf_hub_url
-from huggingface_hub.utils import build_hf_headers
+from huggingface_hub import hf_hub_download
+from safetensors.torch import load_file
 from PIL import Image
 
 from transformers import EomtDinov3Config, EomtDinov3ForUniversalSegmentation, EomtDinov3ImageProcessorFast
@@ -171,66 +171,6 @@ SKIP_KEYS = {
 }
 
 
-def _download_file(
-    repo_id: str | os.PathLike[str],
-    filename: str,
-    token: Optional[str] = None,
-    revision: Optional[str] = None,
-    cache_dir: Optional[Path] = None,
-) -> Path:
-    repo_path = Path(repo_id)
-
-    if repo_path.exists():
-        destination = repo_path / filename
-        if not destination.exists():
-            raise FileNotFoundError(f"File {filename} not found in local repository {repo_path}")
-        return destination
-
-    headers = build_hf_headers(token=token)
-    url = hf_hub_url(str(repo_id), filename=filename, revision=revision)
-    cache_dir = cache_dir or Path(tempfile.mkdtemp(prefix="eomt_dinov3_"))
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    destination = cache_dir / filename
-
-    if destination.exists():
-        return destination
-
-    with requests.get(url, headers=headers, stream=True) as response:
-        try:
-            response.raise_for_status()
-        except requests.HTTPError as error:
-            if response.status_code == 401:
-                message = (
-                    "Failed to download gated weights. "
-                    "Please make sure you have been granted access and either set the HF_TOKEN "
-                    "environment variable or pass --token."
-                )
-                raise requests.HTTPError(message) from error
-            raise
-        with open(destination, "wb") as handle:
-            for chunk in response.iter_content(chunk_size=1 << 20):
-                if chunk:
-                    handle.write(chunk)
-
-    return destination
-
-
-def _load_state_dict_from_repo(
-    repo_id: str,
-    filename: str,
-    token: Optional[str] = None,
-    revision: Optional[str] = None,
-) -> dict[str, torch.Tensor]:
-    path = _download_file(repo_id, filename, token=token, revision=revision)
-
-    if path.suffix == ".safetensors":
-        from safetensors.torch import load_file
-
-        return load_file(path)
-
-    return torch.load(path, map_location="cpu")
-
-
 def _rename_delta_key(key: str) -> Tuple[Optional[str], bool]:
     if key in SKIP_KEYS:
         return None, False
@@ -346,12 +286,6 @@ def build_eomt_config(
     return config
 
 
-def load_json_config(repo_id: str, token: Optional[str], revision: Optional[str]) -> dict[str, object]:
-    path = _download_file(repo_id, "config.json", token=token, revision=revision)
-    with open(path, "r") as handle:
-        return json.load(handle)
-
-
 def convert_checkpoint(
     *,
     delta_state: dict[str, torch.Tensor],
@@ -360,14 +294,15 @@ def convert_checkpoint(
     backbone_revision: Optional[str],
     image_size: int,
 ) -> tuple[EomtDinov3Config, dict[str, torch.Tensor]]:
-    base_state = _load_state_dict_from_repo(
-        backbone_repo_id,
-        filename="model.safetensors",
-        token=token,
-        revision=backbone_revision,
-    )
+    
+    # load model.safetensors
+    filepath = hf_hub_download(backbone_repo_id, filename="model.safetensors", token=token, revision=backbone_revision)
+    base_state = load_file(filepath)
 
-    base_config = load_json_config(backbone_repo_id, token=token, revision=backbone_revision)
+    # load config.json
+    filepath = hf_hub_download(backbone_repo_id, filename="config.json", token=token, revision=backbone_revision)
+    with open(filepath, "r") as f:
+        base_config = json.load(f)
 
     mapped_base = map_dinov3_state_to_eomt(base_state)
     converted_delta, backbone_delta_keys = convert_delta_state_dict(delta_state)
@@ -399,6 +334,7 @@ def convert_model(
     safe_serialization: bool,
     verify: bool,
     original_repo_path: Optional[Path],
+    push_to_hub: bool = False,
 ) -> None:
     raw_delta_state = torch.load(delta_path, map_location="cpu")
     delta_state = ensure_state_dict(raw_delta_state)
@@ -433,9 +369,14 @@ def convert_model(
             original_repo_path=original_repo_path,
         )
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-    model.save_pretrained(output_dir, safe_serialization=safe_serialization)
-    processor.save_pretrained(output_dir)
+    if output_dir is not None:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        model.save_pretrained(output_dir, safe_serialization=safe_serialization)
+        processor.save_pretrained(output_dir)
+
+    if push_to_hub:
+        model.push_to_hub(repo_id=f"nielsr/{model_name}")
+        processor.push_to_hub(repo_id=f"nielsr/{model_name}")
 
 
 def _prepare_image(processor: EomtDinov3ImageProcessorFast) -> torch.Tensor:
@@ -704,6 +645,7 @@ def verify_conversion(
     _assert_allclose(orig_outputs.hidden_states, hf_outputs.hidden_states, "backbone hidden states")
     _assert_allclose(orig_outputs.mask_logits, hf_outputs.mask_logits, "mask logits")
     _assert_allclose(orig_outputs.class_logits, hf_outputs.class_logits, "class logits")
+    print("Looks good!")
 
     if not torch.allclose(orig_outputs.sequence_output, hf_outputs.sequence_output, atol=1e-4, rtol=1e-4):
         raise ValueError("Mismatch in final sequence output")
@@ -730,6 +672,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--safe-serialization", action="store_true")
     parser.add_argument("--verify", action="store_true")
     parser.add_argument("--original-repo-path", type=Path, default=None)
+    parser.add_argument("--push-to-hub", action="store_true", help="Whether to push the converted model to the Hugging Face Hub.")
     return parser.parse_args()
 
 
@@ -756,8 +699,8 @@ def main() -> None:
             delta_path = None
 
         if delta_path is None:
-            delta_path = _download_file(
-                spec.model_id,
+            delta_path = hf_hub_download(
+                repo_id=spec.model_id,
                 filename=spec.delta_filename,
                 token=args.token,
             )
@@ -788,6 +731,7 @@ def main() -> None:
         safe_serialization=args.safe_serialization,
         verify=args.verify,
         original_repo_path=args.original_repo_path,
+        push_to_hub=args.push_to_hub,
     )
 
 
