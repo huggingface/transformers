@@ -4893,12 +4893,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             from kernels import use_kernel_mapping
 
             if kernel_config is not None and isinstance(kernel_config, KernelConfig):
+                # This will make sure the mapping is valid, and the layers are registered in the model
                 kernel_config.sanitize_kernel_mapping(model)
 
+                # This is a context manager to override the default kernel mapping
+                # We are calling kernelize inside this context manager using the use_kernels setter
                 with use_kernel_mapping(kernel_config.kernel_mapping):
                     model.use_kernels = True
+            # We use the default kernel mapping in .integrations.hub_kernels
             else:
                 model.use_kernels = True
+
         # If it is a model with generation capabilities, attempt to load generation files (generation config,
         # custom generate function)
         if model.can_generate() and generation_config is not None:
