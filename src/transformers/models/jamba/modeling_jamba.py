@@ -277,9 +277,7 @@ class JambaMambaMixer(nn.Module):
         self.ssm_state_size = config.mamba_d_state
         self.conv_kernel_size = config.mamba_d_conv
         self.intermediate_size = config.mamba_expand * config.hidden_size
-        self.time_step_rank = (
-            math.ceil(self.hidden_size / 16) if config.mamba_dt_rank == "auto" else config.mamba_dt_rank
-        )
+        self.time_step_rank = config.mamba_dt_rank
         self.use_conv_bias = config.mamba_conv_bias
         self.use_bias = config.mamba_proj_bias
         self.conv1d = nn.Conv1d(
@@ -1055,7 +1053,6 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
         inputs_embeds=None,
         cache_position=None,
         position_ids=None,
-        use_cache=True,
         **kwargs,
     ):
         # Overwritten -- has a unique cache type, `HybridMambaAttentionDynamicCache`
@@ -1097,7 +1094,7 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
             {
                 "position_ids": position_ids,
                 "past_key_values": past_key_values,
-                "use_cache": kwargs.get("use_cache"),
+                "use_cache": True,
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "logits_to_keep": self.config.num_logits_to_keep,
