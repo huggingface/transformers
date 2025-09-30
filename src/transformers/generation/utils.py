@@ -392,23 +392,20 @@ class GenerationMixin(ContinuousMixin):
         Returns:
             A callable that can be used to generate text.
         """
-        # Does `pretrained_model_name_or_path` have a `custom_generate` subdirectory? If not -> OSError
-        is_local_code = os.path.exists(pretrained_model_name_or_path)
-        has_custom_generate_folder = True
-        if is_local_code:
-            if not os.path.exists(os.path.join(pretrained_model_name_or_path, "custom_generate/generate.py")):
-                has_custom_generate_folder = False
-        else:
-            if not file_exists(pretrained_model_name_or_path, "custom_generate/generate.py"):
-                has_custom_generate_folder = False
-
-        if not has_custom_generate_folder:
+        # Fetches the generate.py file from the model repo. If it doesn't exist, a file in `.no_exist` cache directory
+        # is created (preventing future hub requests), and an OSError is raised.
+        try:
+            module = get_cached_module_file(
+                pretrained_model_name_or_path, module_file="custom_generate/generate.py", **kwargs
+            )
+        except OSError:
             raise OSError(
                 f"`{pretrained_model_name_or_path}` does not contain a `custom_generate` subdirectory with a "
                 "`generate.py` file, can't load the custom generate function."
             )
 
         # Handle opt-in `trust_remote_code` and related exceptions
+        is_local_code = os.path.exists(pretrained_model_name_or_path)
         error_message = (
             f"The repository `{pretrained_model_name_or_path}` contains custom generation code that will override "
             "the default `generate` method."
@@ -424,9 +421,6 @@ class GenerationMixin(ContinuousMixin):
         # Load the custom generate function
         check_python_requirements(
             pretrained_model_name_or_path, requirements_file="custom_generate/requirements.txt", **kwargs
-        )
-        module = get_cached_module_file(
-            pretrained_model_name_or_path, module_file="custom_generate/generate.py", **kwargs
         )
         custom_generate_function = get_class_in_module("generate", module)
         return custom_generate_function
