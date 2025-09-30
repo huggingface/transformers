@@ -36,6 +36,7 @@ The model is an optimized [GPT2 model](https://huggingface.co/docs/transformers/
 ## Implementation details
 
 The main differences compared to GPT2.
+
 - Added support for Multi-Query Attention.
 - Use `gelu_pytorch_tanh` instead of classic `gelu`.
 - Avoid unnecessary synchronizations (this has since been added to GPT2 in #20061, but wasn't in the reference codebase).

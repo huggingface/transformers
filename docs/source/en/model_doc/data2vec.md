@@ -104,6 +104,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - [`Data2VecVisionForImageClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
 
 **Data2VecText documentation resources**
+
 - [Text classification task guide](../tasks/sequence_classification)
 - [Token classification task guide](../tasks/token_classification)
 - [Question answering task guide](../tasks/question_answering)
@@ -112,10 +113,12 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - [Multiple choice task guide](../tasks/multiple_choice)
 
 **Data2VecAudio documentation resources**
+
 - [Audio classification task guide](../tasks/audio_classification)
 - [Automatic speech recognition task guide](../tasks/asr)
 
 **Data2VecVision documentation resources**
+
 - [Image classification](../tasks/image_classification)
 - [Semantic segmentation](../tasks/semantic_segmentation)
 

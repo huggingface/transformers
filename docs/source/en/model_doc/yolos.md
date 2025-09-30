@@ -97,6 +97,7 @@ for score, label, box in zip(filtered_scores, filtered_labels, pixel_boxes):
 </hfoptions>
 
 ## Notes
+
 - Use [`YolosImageProcessor`] for preparing images (and optional targets) for the model. Contrary to [DETR](./detr), YOLOS doesn't require a `pixel_mask`.
 
 ## Resources
