@@ -103,7 +103,6 @@ class VoxtralEncoder(Qwen2AudioEncoder):
             layer_outputs = encoder_layer(
                 hidden_states,
                 attention_mask=attention_mask,
-                layer_head_mask=None,
             )
             hidden_states = layer_outputs[0]
 

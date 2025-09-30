@@ -163,7 +163,6 @@ class ClvpEncoderTester:
 class ClvpEncoderTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (ClvpEncoder,) if is_torch_available() else ()
     test_pruning = False
-    test_head_masking = False
     test_torchscript = False
 
     def setUp(self):
@@ -412,7 +411,6 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
     # Doesn't run generation tests. There are interface mismatches when using `generate` -- TODO @gante
     all_generative_model_classes = ()
 
-    test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
