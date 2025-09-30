@@ -280,13 +280,12 @@ class GraniteMoeForCausalLM(MixtralForCausalLM):
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
             cache_position=cache_position,
             **kwargs,
         )
 
         # Only compute necessary logits
-        hidden_states = outputs[0]
+        hidden_states = outputs.last_hidden_state
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
         logits = logits / self.config.logits_scaling
@@ -313,13 +312,6 @@ class GraniteMoeForCausalLM(MixtralForCausalLM):
             )
             if labels is not None:
                 loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            if output_router_logits:
-                output = (aux_loss,) + output
-            return (loss,) + output if loss is not None else output
-
         return MoeCausalLMOutputWithPast(
             loss=loss,
             aux_loss=aux_loss,
