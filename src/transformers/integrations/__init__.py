@@ -75,7 +75,6 @@ _import_structure = {
         "register_kernel_mapping",
         "replace_kernel_forward_from_hub",
         "use_kernel_forward_from_hub",
-        "_KERNEL_MAPPING",
     ],
     "integration_utils": [
         "INTEGRATION_TO_CALLBACK",
@@ -217,7 +216,6 @@ if TYPE_CHECKING:
     from .higgs import HiggsLinear, dequantize_higgs, quantize_with_higgs, replace_with_higgs_linear
     from .hqq import prepare_for_hqq_linear
     from .hub_kernels import (
-        _KERNEL_MAPPING,
         LayerRepository,
         register_kernel_mapping,
         replace_kernel_forward_from_hub,
