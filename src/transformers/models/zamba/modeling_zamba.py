@@ -168,23 +168,24 @@ class ZambaHybridDynamicCache:
     # Copied from transformers.models.jamba.modeling_jamba.HybridMambaAttentionDynamicCache.reorder_cache
     def reorder_cache(self, beam_idx: torch.LongTensor):
         """Reorders the cache for beam search, given the selected beam indices."""
-        for layer_idx in range(len(self.key_cache)):
-            device = self.key_cache[layer_idx].device
-            self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx.to(device))
-            device = self.value_cache[layer_idx].device
-            self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
+        if self.get_seq_length() > 0:
+            for layer_idx in range(len(self.key_cache)):
+                device = self.key_cache[layer_idx].device
+                self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx.to(device))
+                device = self.value_cache[layer_idx].device
+                self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
 
-            device = self.conv_states[layer_idx].device
-            self.conv_states[layer_idx] = self.conv_states[layer_idx].index_select(0, beam_idx.to(device))
-            device = self.ssm_states[layer_idx].device
-            self.ssm_states[layer_idx] = self.ssm_states[layer_idx].index_select(0, beam_idx.to(device))
+                device = self.conv_states[layer_idx].device
+                self.conv_states[layer_idx] = self.conv_states[layer_idx].index_select(0, beam_idx.to(device))
+                device = self.ssm_states[layer_idx].device
+                self.ssm_states[layer_idx] = self.ssm_states[layer_idx].index_select(0, beam_idx.to(device))
 
     # Copied from transformers.models.jamba.modeling_jamba.HybridMambaAttentionDynamicCache.get_seq_length
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         # take any layer that contains cache and not empty tensor
         layer_idx = self.transformer_layers[0] if layer_idx not in self.transformer_layers else layer_idx
-        if layer_idx is None or len(self.key_cache) <= layer_idx:
+        if len(self.key_cache) <= layer_idx:
             return 0
         return self.key_cache[layer_idx].shape[-2]
 

@@ -171,16 +171,17 @@ class Zamba2HybridDynamicCache:
 
     def reorder_cache(self, beam_idx: torch.LongTensor):
         """Reorders the cache for beam search, given the selected beam indices."""
-        for layer_idx in range(len(self.key_cache)):
-            device = self.key_cache[layer_idx].device
-            self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx.to(device))
-            device = self.value_cache[layer_idx].device
-            self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
+        if self.get_seq_length() > 0:
+            for layer_idx in range(len(self.key_cache)):
+                device = self.key_cache[layer_idx].device
+                self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx.to(device))
+                device = self.value_cache[layer_idx].device
+                self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
 
-            device = self.conv_states[layer_idx].device
-            self.conv_states[layer_idx] = self.conv_states[layer_idx].index_select(0, beam_idx.to(device))
-            device = self.ssm_states[layer_idx].device
-            self.ssm_states[layer_idx] = self.ssm_states[layer_idx].index_select(0, beam_idx.to(device))
+                device = self.conv_states[layer_idx].device
+                self.conv_states[layer_idx] = self.conv_states[layer_idx].index_select(0, beam_idx.to(device))
+                device = self.ssm_states[layer_idx].device
+                self.ssm_states[layer_idx] = self.ssm_states[layer_idx].index_select(0, beam_idx.to(device))
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
