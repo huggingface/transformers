@@ -617,8 +617,6 @@ class EvollaSaProtProteinEncoder(EvollaSaProtPreTrainedModel):
             if "flash" in self.config._attn_implementation:
                 attention_mask = attention_mask if 0 in attention_mask else None
             elif self.config._attn_implementation == "sdpa":
-                # output_attentions=True & head_mask can not be supported when using SDPA, fall back to
-                # the manual implementation that requires a 4D causal mask in all cases.
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
                 attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
             elif self.config._attn_implementation == "flex_attention":
