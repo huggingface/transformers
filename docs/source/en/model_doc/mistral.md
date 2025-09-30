@@ -163,5 +163,4 @@ Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/bl
 ## MistralForQuestionAnswering
 
 [[autodoc]] MistralForQuestionAnswering
-
-- forward
+    - forward

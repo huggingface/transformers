@@ -83,5 +83,4 @@ The example below demonstrates how to use Ministral for text generation:
 ## MinistralForQuestionAnswering
 
 [[autodoc]] MinistralForQuestionAnswering
-
-- forward
+    - forward
