@@ -1087,19 +1087,6 @@ class LwDetrSinePositionEmbedding(nn.Module):
         return pos
 
 
-def build_position_encoding(config):
-    n_steps = config.d_model // 2
-    if config.position_embedding_type == "sine":
-        # TODO find a better way of exposing other arguments
-        position_embedding = LwDetrSinePositionEmbedding(n_steps, normalize=True)
-    elif config.position_embedding_type == "learned":
-        position_embedding = LwDetrLearnedPositionEmbedding(n_steps)
-    else:
-        raise ValueError(f"Not supported {config.position_embedding_type}")
-
-    return position_embedding
-
-
 def refine_bboxes(reference_points, deltas):
     new_reference_points_cxcy = deltas[..., :2] * reference_points[..., 2:] + reference_points[..., :2]
     new_reference_points_wh = deltas[..., 2:].exp() * reference_points[..., 2:]
@@ -1119,7 +1106,7 @@ class LwDetrModel(LwDetrPreTrainedModel):
 
         # Create backbone + positional encoding
         backbone = LwDetrConvEncoder(config)
-        position_embeddings = build_position_encoding(config)
+        position_embeddings = LwDetrSinePositionEmbedding(config.d_model // 2, normalize=True)
         self.backbone = LwDetrConvModel(backbone, position_embeddings)
 
         self.group_detr = config.group_detr
