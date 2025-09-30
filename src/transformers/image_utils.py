@@ -19,8 +19,8 @@ from dataclasses import dataclass
 from io import BytesIO
 from typing import Optional, Union
 
+import httpx
 import numpy as np
-import requests
 
 from .utils import (
     ExplicitEnum,
@@ -76,7 +76,7 @@ logger = logging.get_logger(__name__)
 
 ImageInput = Union[
     "PIL.Image.Image", np.ndarray, "torch.Tensor", list["PIL.Image.Image"], list[np.ndarray], list["torch.Tensor"]
-]  # noqa
+]
 
 
 class ChannelDimension(ExplicitEnum):
@@ -462,7 +462,7 @@ def load_image(image: Union[str, "PIL.Image.Image"], timeout: Optional[float] = 
         if image.startswith("http://") or image.startswith("https://"):
             # We need to actually check for a real protocol, otherwise it's impossible to use a local file
             # like http_huggingface_co.png
-            image = PIL.Image.open(BytesIO(requests.get(image, timeout=timeout).content))
+            image = PIL.Image.open(BytesIO(httpx.get(image, timeout=timeout, follow_redirects=True).content))
         elif os.path.isfile(image):
             image = PIL.Image.open(image)
         else:

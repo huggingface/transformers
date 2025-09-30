@@ -131,6 +131,9 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("dots1", "Dots1Model"),
         ("dpr", "DPRQuestionEncoder"),
         ("dpt", "DPTModel"),
+        ("edgetam", "EdgeTamModel"),
+        ("edgetam_video", "EdgeTamVideoModel"),
+        ("edgetam_vision_model", "EdgeTamVisionModel"),
         ("efficientformer", "EfficientFormerModel"),
         ("efficientloftr", "EfficientLoFTRModel"),
         ("efficientnet", "EfficientNetModel"),
@@ -295,6 +298,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("owlv2", "Owlv2Model"),
         ("owlvit", "OwlViTModel"),
         ("paligemma", "PaliGemmaModel"),
+        ("parakeet_ctc", "ParakeetForCTC"),
+        ("parakeet_encoder", "ParakeetEncoder"),
         ("patchtsmixer", "PatchTSMixerModel"),
         ("patchtst", "PatchTSTModel"),
         ("pegasus", "PegasusModel"),
@@ -1601,6 +1606,7 @@ MODEL_FOR_CTC_MAPPING_NAMES = OrderedDict(
         ("data2vec-audio", "Data2VecAudioForCTC"),
         ("hubert", "HubertForCTC"),
         ("mctct", "MCTCTForCTC"),
+        ("parakeet_ctc", "ParakeetForCTC"),
         ("sew", "SEWForCTC"),
         ("sew-d", "SEWDForCTC"),
         ("unispeech", "UniSpeechForCTC"),
@@ -1706,6 +1712,8 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_MASK_GENERATION_MAPPING_NAMES = OrderedDict(
     [
+        ("edgetam", "EdgeTamModel"),
+        ("edgetam_video", "EdgeTamModel"),
         ("sam", "SamModel"),
         ("sam2", "Sam2Model"),
         ("sam2_video", "Sam2Model"),

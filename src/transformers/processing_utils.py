@@ -1266,7 +1266,7 @@ class ProcessorMixin(PushToHubMixin):
         used_keys = set()
 
         # get defaults from set model processor kwargs if they exist
-        for modality in default_kwargs:  # noqa: PLC0206
+        for modality in default_kwargs:
             default_kwargs[modality] = ModelProcessorKwargs._defaults.get(modality, {}).copy()
             # update defaults with arguments from tokenizer init
             for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__:

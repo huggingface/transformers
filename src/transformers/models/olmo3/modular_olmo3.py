@@ -423,5 +423,5 @@ __all__ = [
     "Olmo3Config",
     "Olmo3ForCausalLM",
     "Olmo3Model",
-    "Olmo3PreTrainedModel",  # noqa: F822
+    "Olmo3PreTrainedModel",
 ]
