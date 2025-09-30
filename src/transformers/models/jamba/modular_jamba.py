@@ -618,7 +618,7 @@ ALL_DECODER_LAYER_TYPES = {"attention": JambaAttentionDecoderLayer, "mamba": Jam
 
 
 class JambaPreTrainedModel(PreTrainedModel):
-    config_class = JambaConfig
+    config: JambaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["JambaAttentionDecoderLayer", "JambaMambaDecoderLayer"]
