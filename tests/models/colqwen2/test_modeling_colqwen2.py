@@ -204,7 +204,6 @@ class ColQwen2ForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     test_torchscript = False
     test_pruning = False
     test_resize_embeddings = True
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = ColQwen2ForRetrievalModelTester(self)

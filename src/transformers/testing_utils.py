@@ -204,6 +204,17 @@ ENDPOINT_STAGING = "https://hub-ci.huggingface.co"
 # Not critical, only usable on the sandboxed CI instance.
 TOKEN = "hf_94wBhPGp6KrrTH3KDchhKpRxZwd6dmHWLL"
 
+
+# Used in CausalLMModelTester (and related classes/methods) to infer the common model classes from the base model class
+_COMMON_MODEL_NAMES_MAP = {
+    "config_class": "Config",
+    "causal_lm_class": "ForCausalLM",
+    "question_answering_class": "ForQuestionAnswering",
+    "sequence_classification_class": "ForSequenceClassification",
+    "token_classification_class": "ForTokenClassification",
+}
+
+
 if is_torch_available():
     import torch
 
@@ -3244,7 +3255,9 @@ def unpack_device_properties(
 class Expectations(UserDict[PackedDeviceProperties, Any]):
     def get_expectation(self) -> Any:
         """
-        Find best matching expectation based on environment device properties.
+        Find best matching expectation based on environment device properties. We look at device_type, major and minor
+        versions of the drivers. Expectations are stored as a dictionary with keys of the form
+        (device_type, (major, minor)). If the major and minor versions are not provided, we use None.
         """
         return self.find_expectation(get_device_properties())
 
