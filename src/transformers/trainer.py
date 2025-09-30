@@ -2131,7 +2131,6 @@ class Trainer:
         resume_from_checkpoint: Optional[Union[str, bool]] = None,
         trial: Union["optuna.Trial", dict[str, Any], None] = None,
         ignore_keys_for_eval: Optional[list[str]] = None,
-        **kwargs: Any,
     ):
         """
         Main training entry point.
@@ -2146,8 +2145,6 @@ class Trainer:
             ignore_keys_for_eval (`list[str]`, *optional*)
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions for evaluation during the training.
-            kwargs (`dict[str, Any]`, *optional*):
-                Additional keyword arguments used to hide deprecated arguments
         """
         if resume_from_checkpoint is False:
             resume_from_checkpoint = None
@@ -2179,15 +2176,6 @@ class Trainer:
         ):
             self._move_model_to_device(self.model, args.device)
 
-        if "model_path" in kwargs:
-            resume_from_checkpoint = kwargs.pop("model_path")
-            warnings.warn(
-                "`model_path` is deprecated and will be removed in a future version. Use `resume_from_checkpoint` "
-                "instead.",
-                FutureWarning,
-            )
-        if len(kwargs) > 0:
-            raise TypeError(f"train() got unexpected keyword arguments: {', '.join(list(kwargs.keys()))}.")
         # This might change the seed so needs to run first.
         self._hp_search_setup(trial)
         self._train_batch_size = self.args.train_batch_size
