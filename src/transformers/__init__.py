@@ -390,12 +390,7 @@ else:
             "AlternatingCodebooksLogitsProcessor",
             "BayesianDetectorConfig",
             "BayesianDetectorModel",
-            "BeamScorer",
             "ClassifierFreeGuidanceLogitsProcessor",
-            "ConstrainedBeamSearchScorer",
-            "Constraint",
-            "ConstraintListState",
-            "DisjunctiveConstraint",
             "EncoderNoRepeatNGramLogitsProcessor",
             "EncoderRepetitionPenaltyLogitsProcessor",
             "EosTokenCriteria",
@@ -416,7 +411,6 @@ else:
             "MinPLogitsWarper",
             "NoBadWordsLogitsProcessor",
             "NoRepeatNGramLogitsProcessor",
-            "PhrasalConstraint",
             "PrefixConstrainedLogitsProcessor",
             "RepetitionPenaltyLogitsProcessor",
             "SequenceBiasLogitsProcessor",
@@ -558,13 +552,8 @@ if TYPE_CHECKING:
     from .generation import AsyncTextIteratorStreamer as AsyncTextIteratorStreamer
     from .generation import BayesianDetectorConfig as BayesianDetectorConfig
     from .generation import BayesianDetectorModel as BayesianDetectorModel
-    from .generation import BeamScorer as BeamScorer
     from .generation import ClassifierFreeGuidanceLogitsProcessor as ClassifierFreeGuidanceLogitsProcessor
     from .generation import CompileConfig as CompileConfig
-    from .generation import ConstrainedBeamSearchScorer as ConstrainedBeamSearchScorer
-    from .generation import Constraint as Constraint
-    from .generation import ConstraintListState as ConstraintListState
-    from .generation import DisjunctiveConstraint as DisjunctiveConstraint
     from .generation import EncoderNoRepeatNGramLogitsProcessor as EncoderNoRepeatNGramLogitsProcessor
     from .generation import EncoderRepetitionPenaltyLogitsProcessor as EncoderRepetitionPenaltyLogitsProcessor
     from .generation import EosTokenCriteria as EosTokenCriteria
@@ -586,7 +575,6 @@ if TYPE_CHECKING:
     from .generation import MinPLogitsWarper as MinPLogitsWarper
     from .generation import NoBadWordsLogitsProcessor as NoBadWordsLogitsProcessor
     from .generation import NoRepeatNGramLogitsProcessor as NoRepeatNGramLogitsProcessor
-    from .generation import PhrasalConstraint as PhrasalConstraint
     from .generation import PrefixConstrainedLogitsProcessor as PrefixConstrainedLogitsProcessor
     from .generation import RepetitionPenaltyLogitsProcessor as RepetitionPenaltyLogitsProcessor
     from .generation import SequenceBiasLogitsProcessor as SequenceBiasLogitsProcessor
