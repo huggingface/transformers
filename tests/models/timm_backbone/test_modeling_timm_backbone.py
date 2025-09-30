@@ -86,7 +86,6 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
     all_model_classes = (TimmBackbone,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": TimmBackbone} if is_torch_available() else {}
     test_resize_embeddings = False
-    test_head_masking = False
     test_pruning = False
     has_attentions = False
 

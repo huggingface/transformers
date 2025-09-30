@@ -476,7 +476,7 @@ class TrainingArguments:
             When resuming training, whether or not to skip the epochs and batches to get the data loading at the same
             stage as in the previous training. If set to `True`, the training will begin faster (as that skipping step
             can take a long time) but will not yield the same results as the interrupted training would have.
-        fsdp (`bool`, `str` or list of [`~trainer_utils.FSDPOption`], *optional*, defaults to `''`):
+        fsdp (`bool`, `str` or list of [`~trainer_utils.FSDPOption`], *optional*, defaults to `[]`):
             Use PyTorch Distributed Parallel Training (in distributed training only).
 
             A list of options along the following:
@@ -738,11 +738,10 @@ class TrainingArguments:
             Refer to the PyTorch doc for possible values and note that they may change across PyTorch versions.
 
             This flag is experimental and subject to change in future releases.
-        include_tokens_per_second (`bool`, *optional*):
+        include_tokens_per_second (`bool`, *optional*, defaults to `False`):
             Whether or not to compute the number of tokens per second per device for training speed metrics.
 
             This will iterate over the entire training dataloader once beforehand,
-
             and will slow down the entire process.
 
         include_num_input_tokens_seen (`bool`, *optional*):
@@ -761,7 +760,7 @@ class TrainingArguments:
             See GaLore implementation (https://github.com/jiaweizzhao/GaLore) and APOLLO implementation (https://github.com/zhuhanqing/APOLLO) for more details.
             You need to make sure to pass a valid GaLore or APOLLO optimizer, e.g., one of: "apollo_adamw", "galore_adamw", "galore_adamw_8bit", "galore_adafactor" and make sure that the target modules are `nn.Linear` modules only.
 
-        batch_eval_metrics (`Optional[bool]`, defaults to `False`):
+        batch_eval_metrics (`bool`, *optional*, defaults to `False`):
             If set to `True`, evaluation will call compute_metrics at the end of each batch to accumulate statistics
             rather than saving all eval logits in memory. When set to `True`, you must pass a compute_metrics function
             that takes a boolean argument `compute_result`, which when passed `True`, will trigger the final global
@@ -845,7 +844,7 @@ class TrainingArguments:
         metadata={"help": "Number of predictions steps to accumulate before moving the tensors to the CPU."},
     )
 
-    eval_delay: Optional[float] = field(
+    eval_delay: float = field(
         default=0,
         metadata={
             "help": (
@@ -880,7 +879,7 @@ class TrainingArguments:
         default="linear",
         metadata={"help": "The scheduler type to use."},
     )
-    lr_scheduler_kwargs: Optional[Union[dict[str, Any], str]] = field(
+    lr_scheduler_kwargs: Union[dict[str, Any], str] = field(
         default_factory=dict,
         metadata={
             "help": (
@@ -963,7 +962,7 @@ class TrainingArguments:
             )
         },
     )
-    save_safetensors: Optional[bool] = field(
+    save_safetensors: bool = field(
         default=True,
         metadata={
             "help": "Use safetensors saving and loading for state dicts instead of default torch.load and torch.save."
@@ -1117,13 +1116,13 @@ class TrainingArguments:
         default=None, metadata={"help": "Whether or not to disable the tqdm progress bars."}
     )
 
-    remove_unused_columns: Optional[bool] = field(
+    remove_unused_columns: bool = field(
         default=True, metadata={"help": "Remove columns not required by the model when using an nlp.Dataset."}
     )
     label_names: Optional[list[str]] = field(
         default=None, metadata={"help": "The list of keys in your dictionary of inputs that correspond to the labels."}
     )
-    load_best_model_at_end: Optional[bool] = field(
+    load_best_model_at_end: bool = field(
         default=False,
         metadata={
             "help": (
@@ -1147,8 +1146,8 @@ class TrainingArguments:
             )
         },
     )
-    fsdp: Optional[Union[list[FSDPOption], str]] = field(
-        default="",
+    fsdp: Union[list[FSDPOption], str, bool] = field(
+        default_factory=list,
         metadata={
             "help": (
                 "Whether or not to use PyTorch Fully Sharded Data Parallel (FSDP) training (in distributed training"
@@ -1209,7 +1208,7 @@ class TrainingArguments:
         default=False,
         metadata={"help": "Whether or not to group samples of roughly the same length together when batching."},
     )
-    length_column_name: Optional[str] = field(
+    length_column_name: str = field(
         default="length",
         metadata={"help": "Column name with precomputed lengths to use when grouping by length."},
     )
@@ -1338,7 +1337,7 @@ class TrainingArguments:
             )
         },
     )
-    ray_scope: Optional[str] = field(
+    ray_scope: str = field(
         default="last",
         metadata={
             "help": (
@@ -1373,12 +1372,12 @@ class TrainingArguments:
         },
     )
 
-    include_tokens_per_second: Optional[bool] = field(
+    include_tokens_per_second: bool = field(
         default=False,
         metadata={"help": "If set to `True`, the speed metrics will include `tgs` (tokens per second per device)."},
     )
 
-    include_num_input_tokens_seen: Optional[Union[str, bool]] = field(
+    include_num_input_tokens_seen: Union[str, bool] = field(
         default=False,
         metadata={
             "help": (
@@ -1415,7 +1414,7 @@ class TrainingArguments:
         },
     )
 
-    use_liger_kernel: Optional[bool] = field(
+    use_liger_kernel: bool = field(
         default=False,
         metadata={"help": "Whether or not to enable the Liger Kernel for model training."},
     )
@@ -1433,14 +1432,14 @@ class TrainingArguments:
         },
     )
 
-    eval_use_gather_object: Optional[bool] = field(
+    eval_use_gather_object: bool = field(
         default=False,
         metadata={
             "help": "Whether to run recursively gather object in a nested list/tuple/dictionary of objects from all devices."
         },
     )
 
-    average_tokens_across_devices: Optional[bool] = field(
+    average_tokens_across_devices: bool = field(
         default=True,
         metadata={
             "help": "Whether or not to average tokens across devices. If enabled, will use all_reduce to "
