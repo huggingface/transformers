@@ -84,6 +84,7 @@ from .utils import (
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     ContextManagers,
+    KernelConfig,
     PushToHubMixin,
     cached_file,
     check_torch_load_is_safe,
@@ -107,7 +108,6 @@ from .utils import (
     is_torch_xla_available,
     is_torch_xpu_available,
     logging,
-    KernelConfig,
 )
 from .utils.generic import _CAN_RECORD_REGISTRY, GeneralInterface, OutputRecorder
 from .utils.hub import create_and_tag_model_card, get_checkpoint_shard_files

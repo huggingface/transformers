@@ -13,14 +13,16 @@
 # limitations under the License.
 from ..utils import is_kernels_available
 
+
 if is_kernels_available():
     from kernels import LayerRepository, Mode
 
+
 class KernelConfig:
-    def __init__(self, kernel_mapping = {}):
+    def __init__(self, kernel_mapping={}):
         self.kernel_mapping = kernel_mapping
 
-    def update_kernel(self,repo_id, registered_name, layer_name, device, mode, revision=None):
+    def update_kernel(self, repo_id, registered_name, layer_name, device, mode, revision=None):
         self.kernel_mapping[registered_name] = {
             device: {
                 mode: LayerRepository(
@@ -62,6 +64,7 @@ class KernelConfig:
                     # Check that the value is a LayerRepository
                     if is_kernels_available():
                         from kernels import LayerRepository
+
                         if not isinstance(repo, LayerRepository):
                             raise ValueError(
                                 f"Value for {layer_name} -> {device} -> {mode} must be a LayerRepository instance"

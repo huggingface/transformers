@@ -261,6 +261,7 @@ from .import_utils import (
     requires_backends,
     torch_only_method,
 )
+from .kernel_config import KernelConfig
 from .peft_utils import (
     ADAPTER_CONFIG_NAME,
     ADAPTER_SAFE_WEIGHTS_NAME,
@@ -269,7 +270,6 @@ from .peft_utils import (
     find_adapter_config_file,
 )
 
-from .kernel_config import KernelConfig
 
 WEIGHTS_NAME = "pytorch_model.bin"
 WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
