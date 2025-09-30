@@ -3085,14 +3085,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             module._reset_parameters()
         # We cannot use `isinstance` on the RMSNorms or LayerNorms, as they usually are custom modules which change names
         # between modelings (because they are prefixed with the model name)
-        # Some norms use the weight additively in `...*(1+weight)`,
-        # so those should init `weight` to 0 (https://github.com/huggingface/transformers/issues/40224).
-        elif (
-            "RMSNorm" in module.__class__.__name__
-            and "Gemma" in module.__class__.__name__
-            and "Gemma3n" not in module.__class__.__name__
-        ):
-            module.weight.data.zero_()
         elif (
             isinstance(module, (nn.GroupNorm, nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d))
             or "LayerNorm" in module.__class__.__name__
