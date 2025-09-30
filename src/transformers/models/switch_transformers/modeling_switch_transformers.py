@@ -1271,7 +1271,6 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
     _can_record_outputs = {
         "hidden_states": SwitchTransformersBlock,
         "attentions": OutputRecorder(SwitchTransformersAttention, index=-1, layer_name="layer.0"),
-        "cross_attentions": OutputRecorder(SwitchTransformersAttention, index=-1, layer_name="layer.1"),
         "router_logits": SwitchTransformersTop1Router,
     }
 

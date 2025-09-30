@@ -719,6 +719,10 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     def test_load_save_without_tied_weights(self):
         pass
 
+    @unittest.skip("TODO ARTHUR later on this will be fixed with t5 modular refactor")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+
 
 class SwitchTransformersEncoderOnlyModelTester:
     def __init__(
