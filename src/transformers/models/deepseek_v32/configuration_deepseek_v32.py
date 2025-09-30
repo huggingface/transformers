@@ -23,6 +23,11 @@ DEEPSEEK_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
 
 
 class DeepseekV32Config(DeepseekV3Config):
+    """This is the configuration class to store the configuration of a DeepSeek-V3.2 model.
+
+    At least one checkpoint for this architecture can be found at
+    [deepseek-ai/DeepSeek-V3.2-Exp](https://huggingface.co/deepseek-ai/DeepSeek-V3.2-Exp).
+    """
     model_type = "deepseek_v32"
     index_head_dim = 128
     index_n_heads = 64
