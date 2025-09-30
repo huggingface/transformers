@@ -72,7 +72,8 @@ class Qwen2MoeMLP(GemmaMLP):
 class Qwen2MoeAttention(LlamaAttention):
     def __init__(self, config: Qwen2MoeConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
+        if self.config.layer_types[layer_idx] == "sliding_attention":
+            self.sliding_window = config.sliding_window
 
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias)
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.qkv_bias)
@@ -209,7 +210,7 @@ class Qwen2MoeModel(MixtralModel):
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[self.config.attention_type[i]],
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
