@@ -1191,7 +1191,7 @@ class FlavaModel(FlavaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: bool = True,
         return_dict: Optional[bool] = None,
-    ) -> Union[tuple, FlavaOutput]:
+    ) -> Union[tuple, FlavaModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, image_num_patches + text_seq_len)`):
             Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
