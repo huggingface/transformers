@@ -15,10 +15,10 @@
 import os
 import shutil
 import warnings
-from collections.abc import Mapping, Sized
+from collections.abc import Callable, Mapping, Sized
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Optional, Union, overload
+from typing import Any, Optional, Union, overload
 
 import numpy as np
 

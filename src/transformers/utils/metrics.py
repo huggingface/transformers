@@ -1,8 +1,9 @@
 import functools
 import logging
 import time
+from collections.abc import Callable
 from enum import Enum
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 
 class RequestStatus(Enum):

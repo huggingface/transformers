@@ -4,7 +4,8 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_my_new_model2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-from typing import Callable, Optional
+from collections.abc import Callable
+from typing import Optional
 
 import torch
 from torch import nn

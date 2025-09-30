@@ -5,7 +5,8 @@
 #                          modular_ijepa.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 import collections.abc
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
