@@ -145,7 +145,6 @@ class JambaConfig(PretrainedConfig):
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
-        sliding_window=None,
         max_position_embeddings=262144,
         attention_dropout=0.0,
         num_experts_per_tok=2,
