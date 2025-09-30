@@ -17,7 +17,7 @@ import unittest
 
 from parameterized import parameterized
 
-from transformers import DbrxConfig, is_torch_available
+from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -30,10 +30,8 @@ if is_torch_available():
 
 
 class DbrxModelTester(CausalLMModelTester):
-    config_class = DbrxConfig
     if is_torch_available():
         base_model_class = DbrxModel
-        causal_lm_class = DbrxForCausalLM
 
     def __init__(
         self,

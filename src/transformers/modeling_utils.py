@@ -104,7 +104,6 @@ from .utils import (
     is_torch_npu_available,
     is_torch_xla_available,
     is_torch_xpu_available,
-    is_torchao_available,
     logging,
 )
 from .utils.generic import _CAN_RECORD_REGISTRY, GeneralInterface, OutputRecorder
@@ -118,9 +117,6 @@ from .utils.import_utils import (
 )
 from .utils.quantization_config import BitsAndBytesConfig, QuantizationMethod
 
-
-if is_torchao_available():
-    from torchao.quantization import Int4WeightOnlyConfig
 
 if is_accelerate_available():
     from accelerate import dispatch_model, infer_auto_device_map
@@ -644,6 +640,7 @@ def _infer_parameter_dtype(
             QuantizationMethod.HQQ,
             QuantizationMethod.QUARK,
             QuantizationMethod.MXFP4,
+            QuantizationMethod.BITS_AND_BYTES,
         }:
             return True, None
         else:
@@ -698,13 +695,8 @@ def _load_state_dict_into_meta_model(
         device_map_regex = "|".join([re.escape(k) for k in sorted(device_map.keys(), reverse=True)])
 
     is_quantized = hf_quantizer is not None
-    is_hqq_or_bnb_or_ao = is_quantized and hf_quantizer.quantization_config.quant_method in {
-        QuantizationMethod.HQQ,
-        QuantizationMethod.BITS_AND_BYTES,
-        QuantizationMethod.TORCHAO,
-    }
     is_safetensors = shard_file.endswith(".safetensors")
-    is_meta_state_dict = is_safetensors and not is_hqq_or_bnb_or_ao
+    is_meta_state_dict = is_safetensors
     file_pointer = safe_open(shard_file, framework="pt", device=tensor_device) if is_meta_state_dict else None
     params_to_load = list(state_dict.keys())
 
@@ -726,9 +718,7 @@ def _load_state_dict_into_meta_model(
         )
 
         if device_mesh is not None:
-            if not is_quantized or not hf_quantizer.param_needs_quantization(
-                model, param, param_name, state_dict, device_map=device_map
-            ):
+            if not is_quantized or not hf_quantizer.param_needs_quantization(model, param_name):
                 # In this case, the param is already on the correct device!
                 shard_and_distribute_module(
                     model,
@@ -740,7 +730,8 @@ def _load_state_dict_into_meta_model(
                     device_mesh.get_local_rank(),
                     device_mesh,
                 )
-            else:  # we have a device mesh but the param needs to be quantized, so we shard inside create_quantized_param:
+            else:
+                # we have a device mesh but the param needs to be quantized, so we shard inside create_quantized_param
                 sharding_kwargs = {
                     "empty_param": empty_param,
                     "casting_dtype": casting_dtype,
@@ -753,7 +744,6 @@ def _load_state_dict_into_meta_model(
                     param,
                     param_name,
                     device_mesh.get_local_rank(),
-                    state_dict,
                     **sharding_kwargs,
                 )
         else:
@@ -775,9 +765,7 @@ def _load_state_dict_into_meta_model(
             if param_device == "disk":
                 if not is_safetensors:
                     disk_offload_index = offload_weight(param, param_name, disk_offload_folder, disk_offload_index)
-            elif not is_quantized or not hf_quantizer.param_needs_quantization(
-                model, param, param_name, state_dict, param_device=param_device, device_map=device_map
-            ):
+            elif not is_quantized or not hf_quantizer.param_needs_quantization(model, param_name):
                 if is_fsdp_enabled():
                     param_device = "cpu" if is_local_dist_rank_0() else "meta"
 
@@ -785,7 +773,7 @@ def _load_state_dict_into_meta_model(
 
             else:
                 # TODO naming is stupid it loads it as well
-                hf_quantizer.create_quantized_param(model, param, param_name, param_device, state_dict)
+                hf_quantizer.create_quantized_param(model, param, param_name, param_device)
 
                 # For quantized modules with FSDP/DeepSpeed Stage 3, we need to quantize the parameter on the GPU
                 # and then cast it to CPU to avoid excessive memory usage on each GPU
@@ -823,7 +811,6 @@ def load_shard_file(args):
         shard_file,
         state_dict,
         disk_only_shard_files,
-        is_hqq_or_bnb_or_ao,
         is_quantized,
         device_map,
         hf_quantizer,
@@ -842,22 +829,8 @@ def load_shard_file(args):
         return [], disk_offload_index
 
     map_location = "cpu"
-    if (
-        shard_file.endswith(".safetensors")
-        and not is_hqq_or_bnb_or_ao
-        and not (is_deepspeed_zero3_enabled() and not is_quantized)
-    ):
+    if shard_file.endswith(".safetensors") and not (is_deepspeed_zero3_enabled() and not is_quantized):
         map_location = "meta"
-    elif (
-        device_map is not None
-        and hf_quantizer is not None
-        and hf_quantizer.quantization_config.quant_method == QuantizationMethod.TORCHAO
-        and (
-            hf_quantizer.quantization_config.quant_type in ["int4_weight_only", "autoquant"]
-            or isinstance(hf_quantizer.quantization_config.quant_type, Int4WeightOnlyConfig)
-        )
-    ):
-        map_location = torch.device([d for d in device_map.values() if d not in ["disk"]][0])
 
     # If shard_file is "", we use the existing state_dict instead of loading it
     if shard_file != "":
@@ -868,14 +841,7 @@ def load_shard_file(args):
     # Fix the key names
     state_dict = {key_renaming_mapping[k]: v for k, v in state_dict.items() if k in key_renaming_mapping}
 
-    if hf_quantizer is not None and hf_quantizer.quantization_config.quant_method == QuantizationMethod.TORCHAO:
-        if shard_file.endswith(".safetensors") and is_safetensors_available():
-            with safe_open(shard_file, framework="pt") as f:
-                metadata = f.metadata()
-            state_dict = hf_quantizer.update_state_dict_with_metadata(state_dict, metadata)
-
     error_msgs = []
-
     if is_deepspeed_zero3_enabled() and not is_quantized:
         error_msgs += _load_state_dict_into_zero3_model(model, state_dict)
     # Skip it with fsdp on ranks other than 0
@@ -1384,6 +1350,7 @@ def _find_missing_and_unexpected_keys(
 
     if hf_quantizer is not None:
         missing_keys = hf_quantizer.update_missing_keys(model, missing_keys, prefix)
+        unexpected_keys = hf_quantizer.update_unexpected_keys(model, unexpected_keys)
 
     return missing_keys, unexpected_keys
 
@@ -1620,44 +1587,6 @@ class ModuleUtilsMixin:
         extended_attention_mask = (1.0 - extended_attention_mask) * torch.finfo(dtype).min
         return extended_attention_mask
 
-    def get_head_mask(
-        self, head_mask: Optional[Tensor], num_hidden_layers: int, is_attention_chunked: bool = False
-    ) -> Tensor:
-        """
-        Prepare the head mask if needed.
-
-        Args:
-            head_mask (`torch.Tensor` with shape `[num_heads]` or `[num_hidden_layers x num_heads]`, *optional*):
-                The mask indicating if we should keep the heads or not (1.0 for keep, 0.0 for discard).
-            num_hidden_layers (`int`):
-                The number of hidden layers in the model.
-            is_attention_chunked (`bool`, *optional*, defaults to `False`):
-                Whether or not the attentions scores are computed by chunks or not.
-
-        Returns:
-            `torch.Tensor` with shape `[num_hidden_layers x batch x num_heads x seq_length x seq_length]` or list with
-            `[None]` for each layer.
-        """
-        if head_mask is not None:
-            head_mask = self._convert_head_mask_to_5d(head_mask, num_hidden_layers)
-            if is_attention_chunked is True:
-                head_mask = head_mask.unsqueeze(-1)
-        else:
-            head_mask = [None] * num_hidden_layers
-
-        return head_mask
-
-    def _convert_head_mask_to_5d(self, head_mask, num_hidden_layers):
-        """-> [num_hidden_layers x batch x num_heads x seq_length x seq_length]"""
-        if head_mask.dim() == 1:
-            head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
-            head_mask = head_mask.expand(num_hidden_layers, -1, -1, -1, -1)
-        elif head_mask.dim() == 2:
-            head_mask = head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)  # We can specify head_mask for each layer
-        assert head_mask.dim() == 5, f"head_mask.dim != 5, instead {head_mask.dim()}"
-        head_mask = head_mask.to(dtype=self.dtype)  # switch to float if need + fp16 compatibility
-        return head_mask
-
     def num_parameters(self, only_trainable: bool = False, exclude_embeddings: bool = False) -> int:
         """
         Get number of (optionally, trainable or non-embeddings) parameters in the module.
@@ -1805,7 +1734,7 @@ class EmbeddingAccessMixin:
             )
 
     def set_input_embeddings(self, value: nn.Module):
-        """Fallback setter that handles **~70 %** of models in the code‑base.
+        """Fallback setter that handles **~70%** of models in the code-base.
 
         Order of attempts:
         1. `self.model.embed_tokens`
@@ -1866,7 +1795,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
           for this model architecture.
         - **base_model_prefix** (`str`) -- A string indicating the attribute associated to the base model in derived
           classes of the same architecture adding modules on top of the base model.
-        - **is_parallelizable** (`bool`) -- A flag indicating whether this model supports model parallelization.
         - **main_input_name** (`str`) -- The name of the principal input to the model (often `input_ids` for NLP
           models, `pixel_values` for vision models and `input_values` for speech models).
         - **can_record_outputs** (dict):
@@ -1901,7 +1829,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     # a list of `state_dict` keys that are potentially tied to another key in the state_dict.
     _tied_weights_keys = None
 
-    is_parallelizable = False
     supports_gradient_checkpointing = False
     _is_stateful = False
 
@@ -2609,35 +2536,39 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             None to sdpa (to potentially eager).
         """
         applicable_attn_implementation = attn_implementation
+
         # If FA not installed, do not fail but use kernels instead
         if (
-            applicable_attn_implementation == "flash_attention_2"
+            attn_implementation is not None
+            and attn_implementation.startswith("flash_attention")
             and self._supports_flash_attn
-            and not is_flash_attn_2_available()
+            and not (is_flash_attn_2_available() or is_flash_attn_3_available())
             and is_kernels_available()
         ):
-            applicable_attn_implementation = "kernels-community/flash-attn"
+            if attn_implementation.endswith("2"):
+                applicable_attn_implementation = "kernels-community/flash-attn"
+            else:
+                applicable_attn_implementation = "kernels-community/vllm-flash-attn3"
+
         if is_kernel(applicable_attn_implementation):
             try:
                 load_and_register_kernel(applicable_attn_implementation)
                 # log that we used kernel fallback if successful
-                if attn_implementation == "flash_attention_2":
+                if attn_implementation.startswith("flash_attention"):
                     logger.warning_once(
-                        "You do not have `flash_attn` installed, using `kernels-community/flash-attn` from the `kernels` "
-                        "library instead!"
+                        f"You do not have `flash_attn` installed, using `{applicable_attn_implementation}` "
+                        "from the `kernels` library instead!"
                     )
             except Exception as e:
-                if attn_implementation == "flash_attention_2":
-                    self._flash_attn_2_can_dispatch()  # will fail as fa2 is not available but raise the proper exception
-                logger.warning_once(
-                    f"Could not find a kernel matching `{applicable_attn_implementation}` compatible with your device in the "
-                    f"hub:\n{e}.\nUsing default attention implementation instead (sdpa if available, eager otherwise)."
-                )
-                try:
-                    self._sdpa_can_dispatch(is_init_check)
-                    applicable_attn_implementation = "sdpa"
-                except (ValueError, ImportError):
-                    applicable_attn_implementation = "eager"
+                # raise the proper exception for requested flash attention
+                if attn_implementation.startswith("flash_attention"):
+                    if attn_implementation.endswith("2"):
+                        self._flash_attn_2_can_dispatch()
+                    else:
+                        self._flash_attn_3_can_dispatch()
+
+                # error properly out if a kernel was specifically requested
+                raise e
         else:
             applicable_attn_implementation = self.get_correct_attn_implementation(
                 applicable_attn_implementation, is_init_check
@@ -4400,9 +4331,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force the (re-)download of the model weights and configuration files, overriding the
                 cached versions if they exist.
-            resume_download:
-                Deprecated and ignored. All downloads are now resumed by default when possible.
-                Will be removed in v5 of Transformers.
             proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
@@ -4933,6 +4861,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             config._pre_quantization_dtype = original_dtype
             _assign_original_dtype(model)
 
+            # Torchao needs access to all metadata later
+            if hf_quantizer.quantization_config.quant_method == QuantizationMethod.TORCHAO:
+                hf_quantizer.set_metadata(checkpoint_files)
+
         if _torch_distributed_available and device_mesh is not None:
             model = distribute_model(model, distributed_config, device_mesh, tp_size)
 
@@ -5203,11 +5135,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             QuantizationMethod.HQQ,
             QuantizationMethod.QUARK,
         }
-        is_hqq_or_bnb_or_ao = is_quantized and hf_quantizer.quantization_config.quant_method in {
-            QuantizationMethod.HQQ,
-            QuantizationMethod.BITS_AND_BYTES,
-            QuantizationMethod.TORCHAO,
-        }
 
         # Get all the keys of the state dicts that we have to initialize the model
         if sharded_metadata is not None:
@@ -5340,7 +5267,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 shard_file,
                 state_dict,
                 disk_only_shard_files,
-                is_hqq_or_bnb_or_ao,
                 is_quantized,
                 device_map,
                 hf_quantizer,
@@ -5711,12 +5637,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # Buffers are not initialized on the meta device, so we still need this check to avoid overwriting them
             if param.device == torch.device("meta"):
                 value = torch.empty_like(param, dtype=dtype, device="cpu")
-                if not is_quantized or not hf_quantizer.param_needs_quantization(
-                    self, param_value=value, param_name=key, state_dict={}
-                ):
+                if not is_quantized or not hf_quantizer.param_needs_quantization(self, key):
                     _load_parameter_into_model(self, key, value)
                 else:
-                    hf_quantizer.create_quantized_param(self, value, key, "cpu", model_state_dict)
+                    hf_quantizer.create_quantized_param(self, value, key, "cpu")
 
     def _initialize_missing_keys(self, missing_keys: list[str], is_quantized: bool) -> None:
         """Initialize the missing keys (keys that are part of the model parameters, but were NOT found in the loaded state dicts), according to

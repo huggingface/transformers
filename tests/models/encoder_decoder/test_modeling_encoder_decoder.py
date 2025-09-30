@@ -1051,7 +1051,6 @@ class GPT2EncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
             decoder_config,
             decoder_input_ids,
             decoder_input_mask,
-            decoder_head_mask,
             decoder_token_type_ids,
             decoder_sequence_labels,
             decoder_token_labels,

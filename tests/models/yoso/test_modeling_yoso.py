@@ -260,7 +260,6 @@ class YosoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else ()
     )
     test_pruning = False
-    test_headmasking = False
     test_torchscript = False
 
     pipeline_model_mapping = (

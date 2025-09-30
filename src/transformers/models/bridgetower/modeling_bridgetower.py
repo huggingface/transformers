@@ -415,7 +415,6 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: Optional[float] = None,
     dropout: float = 0.0,
-    head_mask: Optional[torch.Tensor] = None,
     **kwargs: Unpack[TransformersKwargs],
 ):
     if scaling is None:
@@ -430,9 +429,6 @@ def eager_attention_forward(
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-
-    if head_mask is not None:
-        attn_weights = attn_weights * head_mask
 
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
@@ -470,7 +466,6 @@ class BridgeTowerSelfAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -509,7 +504,6 @@ class BridgeTowerSelfAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.dropout.p,
             scaling=self.scaling,
-            head_mask=head_mask,
             **kwargs,
         )
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
@@ -546,7 +540,6 @@ class BridgeTowerCrossAttention(nn.Module):
         hidden_states: torch.Tensor,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[EncoderDecoderCache] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
@@ -589,7 +582,6 @@ class BridgeTowerCrossAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.dropout.p,
             scaling=self.scaling,
-            head_mask=head_mask,
             **kwargs,
         )
         attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
@@ -628,7 +620,6 @@ class BridgeTowerAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Cache] = None,
@@ -640,7 +631,6 @@ class BridgeTowerAttention(nn.Module):
             hidden_states,
             encoder_hidden_states=encoder_hidden_states,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             past_key_value=past_key_value,
             cache_position=cache_position,
             **kwargs,
@@ -671,7 +661,6 @@ class BridgeTowerBertCrossLayer(nn.Module):
         hidden_states,
         encoder_hidden_states,
         attention_mask=None,
-        head_mask=None,
         encoder_attention_mask=None,
         past_key_value=None,
         **kwargs: Unpack[TransformersKwargs],
@@ -679,7 +668,6 @@ class BridgeTowerBertCrossLayer(nn.Module):
         self_attention_output, self_attn_weights = self.attention(
             hidden_states,
             attention_mask=attention_mask,
-            head_mask=None,
             past_key_value=None,
             **kwargs,
         )
@@ -688,7 +676,6 @@ class BridgeTowerBertCrossLayer(nn.Module):
         cross_attention_output, cross_attn_weights = self.crossattention(
             attention_output,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             past_key_value=past_key_value,
@@ -736,7 +723,6 @@ class BridgeTowerTextLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Cache] = None,
@@ -747,7 +733,6 @@ class BridgeTowerTextLayer(GradientCheckpointingLayer):
         self_attention_output, self_attn_weights = self.attention(
             hidden_states,
             attention_mask,
-            head_mask,
             past_key_value=past_key_value,
             cache_position=cache_position,
             **kwargs,
@@ -764,7 +749,6 @@ class BridgeTowerTextLayer(GradientCheckpointingLayer):
             cross_attention_output, cross_attn_weights = self.crossattention(
                 self_attention_output,
                 None,  # attention_mask
-                head_mask,
                 encoder_hidden_states,
                 encoder_attention_mask,
                 past_key_value=past_key_value,
@@ -800,7 +784,6 @@ class BridgeTowerTextEncoder(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -815,12 +798,9 @@ class BridgeTowerTextEncoder(nn.Module):
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
         for i, layer_module in enumerate(self.layer):
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-
             layer_outputs = layer_module(
                 hidden_states,
                 attention_mask,
-                layer_head_mask,
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,
                 past_key_value=past_key_values,
@@ -1062,7 +1042,6 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
@@ -1133,17 +1112,9 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
             past_key_values=past_key_values,
         )
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
@@ -1230,8 +1201,6 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
             if "flash" in self.config._attn_implementation:
                 attention_mask = attention_mask if 0 in attention_mask else None
             elif self.config._attn_implementation == "sdpa":
-                # output_attentions=True & head_mask can not be supported when using SDPA, fall back to
-                # the manual implementation that requires a 4D causal mask in all cases.
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
                 attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
             elif self.config._attn_implementation == "flex_attention":
@@ -1256,8 +1225,6 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
             if "flash" in self.config._attn_implementation:
                 encoder_attention_mask = encoder_attention_mask if 0 in encoder_attention_mask else None
             elif self.config._attn_implementation == "sdpa":
-                # output_attentions=True & cross_attn_head_mask can not be supported when using SDPA, and we fall back on
-                # the manual implementation that requires a 4D causal mask in all cases.
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
                 encoder_attention_mask = _prepare_4d_attention_mask_for_sdpa(
                     encoder_attention_mask,
@@ -1356,7 +1323,6 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         token_type_ids: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
         pixel_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         image_embeds: Optional[torch.FloatTensor] = None,
         image_token_type_idx: Optional[int] = None,
@@ -1666,7 +1632,6 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
         token_type_ids: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
         pixel_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         image_embeds: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
@@ -1715,7 +1680,6 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
             token_type_ids=token_type_ids,
             pixel_values=pixel_values,
             pixel_mask=pixel_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             image_embeds=image_embeds,
             output_attentions=output_attentions,
@@ -1768,7 +1732,6 @@ class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
         token_type_ids: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
         pixel_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         image_embeds: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
@@ -1814,7 +1777,6 @@ class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
             token_type_ids=token_type_ids,
             pixel_values=pixel_values,
             pixel_mask=pixel_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             image_embeds=image_embeds,
             output_attentions=output_attentions,
@@ -1882,7 +1844,6 @@ class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
         token_type_ids: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
         pixel_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         image_embeds: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
@@ -1935,7 +1896,6 @@ class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
             token_type_ids=token_type_ids,
             pixel_values=pixel_values,
             pixel_mask=pixel_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             image_embeds=image_embeds,
             output_attentions=output_attentions,

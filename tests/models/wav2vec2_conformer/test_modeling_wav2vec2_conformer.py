@@ -411,7 +411,6 @@ class Wav2Vec2ConformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
         else {}
     )
     test_pruning = False
-    test_headmasking = False
     test_torchscript = False
 
     def setUp(self):

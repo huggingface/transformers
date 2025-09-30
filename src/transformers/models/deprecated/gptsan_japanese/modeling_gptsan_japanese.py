@@ -386,7 +386,6 @@ class GPTSanJapaneseAttention(nn.Module):
         key_value_states: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
@@ -460,15 +459,6 @@ class GPTSanJapaneseAttention(nn.Module):
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
-        if layer_head_mask is not None:
-            if layer_head_mask.size() != (self.num_heads,):
-                raise ValueError(
-                    f"Head mask for a single layer should be of size {(self.num_heads,)}, but is"
-                    f" {layer_head_mask.size()}"
-                )
-            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
         if output_attentions:
             # this operation is a bit awkward, but it's required to
             # make sure that attn_weights keeps its gradient.
@@ -522,7 +512,6 @@ class GPTSanJapaneseLayerSelfAttention(nn.Module):
         hidden_states: Optional[tuple[torch.FloatTensor]],
         past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
     ) -> tuple[Union[torch.Tensor, tuple[torch.Tensor]], ...]:
@@ -545,12 +534,6 @@ class GPTSanJapaneseLayerSelfAttention(nn.Module):
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
 
-            head_mask (`numpy.ndarray` of shape `({0})`, `optional):
-                Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
-
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
@@ -568,7 +551,6 @@ class GPTSanJapaneseLayerSelfAttention(nn.Module):
             hidden_states=hidden_states,
             past_key_values=self_attn_past_key_value,
             attention_mask=(1 - attention_mask) * torch.finfo(hidden_states.dtype).min,
-            layer_head_mask=head_mask,
             output_attentions=output_attentions,
         )
         if output_attentions:
@@ -604,7 +586,6 @@ class GPTSanJapaneseBlock(nn.Module):
         hidden_states: Optional[tuple[torch.FloatTensor]],
         past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
         output_router_tuple: Optional[bool] = False,
@@ -628,12 +609,6 @@ class GPTSanJapaneseBlock(nn.Module):
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
 
-            head_mask (`numpy.ndarray` of shape `({0})`, `optional):
-                Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
-
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
@@ -648,7 +623,6 @@ class GPTSanJapaneseBlock(nn.Module):
             hidden_states=hidden_states,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
         )
@@ -808,8 +782,6 @@ GPTSAN_JAPANESE_INPUTS_DOCSTRING = r"""
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
             `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
         use_cache (`bool`, *optional*):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
@@ -878,7 +850,6 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
         token_type_ids: Optional[torch.FloatTensor] = None,
         spout: Optional[torch.FloatTensor] = None,
         past_key_values: Optional[Cache] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -1000,12 +971,6 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
         # Merge prefix_lm_mask and attention_mask
         extended_attention_mask = prefix_lm_mask * attention_mask.unsqueeze(1).unsqueeze(2)
 
-        # Prepare head mask if needed
-        if head_mask is not None:
-            head_mask = self.get_head_mask(
-                head_mask, self.config.num_switch_layers + self.config.num_ext_layers
-            )  # n_layer x batch x n_heads x N x N
-
         # outputs
         present_key_value_states = () if self.config.use_cache or use_cache else None
         all_hidden_states = () if self.config.output_hidden_states or output_hidden_states else None
@@ -1030,7 +995,6 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
                 hidden_states=hidden_states,
                 past_key_values=past,
                 attention_mask=extended_attention_mask,
-                head_mask=head_mask,
                 use_cache=self.config.use_cache or use_cache,
                 output_attentions=self.config.output_attentions or output_attentions,
                 output_router_tuple=output_router_tuple,
@@ -1104,7 +1068,6 @@ class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
         token_type_ids: Optional[torch.FloatTensor] = None,
         spout: Optional[torch.FloatTensor] = None,
         past_key_values: Optional[Cache] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -1194,7 +1157,6 @@ class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
             token_type_ids,
             spout,
             past_key_values,
-            head_mask,
             use_cache,
             inputs_embeds,
             decoder_inputs_embeds,
@@ -1214,7 +1176,7 @@ class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
         router_probs = None
         aux_loss = None
         if labels is not None:
-            # move labels to correct device to enable model parallelism
+            # move labels to correct device
             labels = labels.to(lm_logits.device)
 
             loss_fct = nn.CrossEntropyLoss(ignore_index=-100)

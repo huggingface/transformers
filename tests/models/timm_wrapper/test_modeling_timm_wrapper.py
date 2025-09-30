@@ -94,10 +94,8 @@ class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     )
 
     test_resize_embeddings = False
-    test_head_masking = False
     test_pruning = False
     has_attentions = False
-    test_model_parallel = False
 
     def setUp(self):
         self.config_class = TimmWrapperConfig

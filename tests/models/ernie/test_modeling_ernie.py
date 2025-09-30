@@ -617,7 +617,7 @@ class ErnieModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
 
-                # Drop all keys except for the minimal set. Hard to manipulate with multimodals/head_mask/etc
+                # Drop all keys except for the minimal set. Hard to manipulate with multimodals  etc
                 inputs_dict = {k: v for k, v in inputs_dict.items() if k in ["input_ids", "attention_mask"]}
 
                 # Ensure left padding, to adapt for some models

@@ -400,11 +400,7 @@ def is_torchvision_available() -> bool:
 
 
 def is_torchvision_v2_available() -> bool:
-    if not is_torchvision_available():
-        return False
-
-    # NOTE: We require torchvision>=0.15 as v2 transforms are available from this version: https://pytorch.org/vision/stable/transforms.html#v1-or-v2-which-one-should-i-use
-    return version.parse(_torchvision_version) >= version.parse("0.15")
+    return is_torchvision_available()
 
 
 def is_galore_torch_available() -> Union[tuple[bool, str], bool]:
@@ -911,7 +907,7 @@ def is_habana_gaudi1() -> bool:
     if not is_torch_hpu_available():
         return False
 
-    import habana_frameworks.torch.utils.experimental as htexp  # noqa: F401
+    import habana_frameworks.torch.utils.experimental as htexp
 
     # Check if the device is Gaudi1 (vs Gaudi2, Gaudi3)
     return htexp._get_device_type() == htexp.synDeviceType.synDeviceGaudi
@@ -937,7 +933,7 @@ def is_torchdynamo_compiling() -> Union[tuple[bool, str], bool]:
         return torch.compiler.is_compiling()
     except Exception:
         try:
-            import torch._dynamo as dynamo  # noqa: F401
+            import torch._dynamo as dynamo
 
             return dynamo.is_compiling()
         except Exception:
@@ -954,7 +950,7 @@ def is_torchdynamo_exporting() -> bool:
         return torch.compiler.is_exporting()
     except Exception:
         try:
-            import torch._dynamo as dynamo  # noqa: F401
+            import torch._dynamo as dynamo
 
             return dynamo.is_exporting()
         except Exception:
