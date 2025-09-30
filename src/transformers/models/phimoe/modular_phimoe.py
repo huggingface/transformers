@@ -18,7 +18,6 @@
 from typing import Optional
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...modeling_layers import (
@@ -35,6 +34,7 @@ from ..mixtral.modeling_mixtral import (
     MixtralPreTrainedModel,
 )
 from .configuration_phimoe import PhimoeConfig
+from ...utils.generic import OutputRecorder
 
 
 class PhimoeRotaryEmbedding(nn.Module):
@@ -334,7 +334,11 @@ class PhimoeDecoderLayer(MixtralDecoderLayer):
 
 
 class PhimoePreTrainedModel(MixtralPreTrainedModel):
-    pass
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(nn.Linear, layer_name="mlp.gate", index=0),
+        "hidden_states": PhimoeDecoderLayer,
+        "attentions": PhimoeAttention,
+    }
 
 
 class PhimoeModel(MixtralModel):

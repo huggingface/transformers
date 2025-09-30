@@ -48,6 +48,8 @@ from ..mixtral.modeling_mixtral import (
 )
 from .configuration_qwen2_moe import Qwen2MoeConfig
 
+from ...utils.generic import OutputRecorder
+
 
 class Qwen2MoeRMSNorm(LlamaRMSNorm):
     pass
@@ -141,7 +143,11 @@ class Qwen2MoeDecoderLayer(LlamaDecoderLayer, nn.Module):
 
 @auto_docstring
 class Qwen2MoePreTrainedModel(MixtralPreTrainedModel):
-    pass
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(nn.Linear, layer_name="mlp.gate", index=0),
+        "hidden_states": Qwen2MoeDecoderLayer,
+        "attentions": Qwen2MoeAttention,
+    }
 
 
 @auto_docstring
