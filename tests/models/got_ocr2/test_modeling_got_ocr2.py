@@ -153,7 +153,6 @@ class GotOcr2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
     test_pruning = False
 
     def setUp(self):

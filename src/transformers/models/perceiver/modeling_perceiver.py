@@ -185,7 +185,6 @@ class PerceiverSelfAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs: Optional[torch.FloatTensor] = None,
         inputs_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
@@ -231,10 +230,6 @@ class PerceiverSelfAttention(nn.Module):
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
 
         context_layer = torch.matmul(attention_probs, values)
 
@@ -330,7 +325,6 @@ class PerceiverAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs: Optional[torch.FloatTensor] = None,
         inputs_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
@@ -338,7 +332,6 @@ class PerceiverAttention(nn.Module):
         self_outputs = self.self(
             hidden_states,
             attention_mask,
-            head_mask,
             inputs,
             inputs_mask,
             output_attentions,
@@ -409,7 +402,6 @@ class PerceiverLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs: Optional[torch.FloatTensor] = None,
         inputs_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
@@ -417,7 +409,6 @@ class PerceiverLayer(nn.Module):
         attention_outputs = self.attention(
             hidden_states,
             attention_mask,
-            head_mask,
             inputs,
             inputs_mask,
             output_attentions,
@@ -496,7 +487,6 @@ class PerceiverEncoder(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs: Optional[torch.FloatTensor] = None,
         inputs_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
@@ -511,7 +501,6 @@ class PerceiverEncoder(nn.Module):
         layer_outputs = self.cross_attention(
             hidden_states,
             attention_mask=attention_mask,
-            head_mask=None,
             inputs=inputs,
             inputs_mask=inputs_mask,
             output_attentions=output_attentions,
@@ -527,12 +516,9 @@ class PerceiverEncoder(nn.Module):
                 if output_hidden_states:
                     all_hidden_states = all_hidden_states + (hidden_states,)
 
-                layer_head_mask = head_mask[i] if head_mask is not None else None
-
                 layer_outputs = layer_module(
                     hidden_states,
                     attention_mask=attention_mask,
-                    head_mask=layer_head_mask,
                     output_attentions=output_attentions,
                 )
 
@@ -648,7 +634,6 @@ class PerceiverModel(PerceiverPreTrainedModel):
         inputs: torch.FloatTensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         subsampled_output_points: Optional[dict[str, torch.Tensor]] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
@@ -780,19 +765,11 @@ class PerceiverModel(PerceiverPreTrainedModel):
         # Make the attention mask broadcastable to [batch_size, num_heads, seq_length, seq_length]
         extended_attention_mask = self.invert_attention_mask(attention_mask)
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_blocks x num_heads]
-        # and head_mask is converted to shape [num_blocks x batch x num_heads x N x N]
-        head_mask = self.get_head_mask(head_mask, self.config.num_blocks * self.config.num_self_attends_per_block)
-
         embedding_output = self.embeddings(batch_size=batch_size)
 
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=None,
-            head_mask=head_mask,
             inputs=inputs,
             inputs_mask=extended_attention_mask,
             output_attentions=output_attentions,
@@ -891,7 +868,6 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
         self,
         inputs: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
@@ -959,7 +935,6 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
         outputs = self.perceiver(
             inputs=inputs,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1018,7 +993,6 @@ class PerceiverForSequenceClassification(PerceiverPreTrainedModel):
         self,
         inputs: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
@@ -1058,7 +1032,6 @@ class PerceiverForSequenceClassification(PerceiverPreTrainedModel):
         outputs = self.perceiver(
             inputs=inputs,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1151,7 +1124,6 @@ class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
         self,
         inputs: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
@@ -1201,7 +1173,6 @@ class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
         outputs = self.perceiver(
             inputs=inputs,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
@@ -1276,7 +1247,6 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
         self,
         inputs: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
@@ -1324,7 +1294,6 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
         outputs = self.perceiver(
             inputs=inputs,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1399,7 +1368,6 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
         self,
         inputs: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
@@ -1447,7 +1415,6 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
         outputs = self.perceiver(
             inputs=inputs,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1539,7 +1506,6 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
         self,
         inputs: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
@@ -1578,7 +1544,6 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
         outputs = self.perceiver(
             inputs=inputs,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1749,7 +1714,6 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
         inputs: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         subsampled_output_points: Optional[dict[str, torch.Tensor]] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
@@ -1814,7 +1778,6 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
             inputs=inputs,
             attention_mask=attention_mask,
             subsampled_output_points=subsampled_output_points,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -2088,7 +2051,6 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
         layer_outputs = self.decoding_cross_attention(
             query,
             attention_mask=query_mask,
-            head_mask=None,
             inputs=z,
             inputs_mask=None,
             output_attentions=output_attentions,

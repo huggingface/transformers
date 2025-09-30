@@ -324,7 +324,6 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMi
         else {}
     )
     test_pruning = False
-    test_headmasking = False
     test_torchscript = False
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):

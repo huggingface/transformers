@@ -189,7 +189,6 @@ class ColPaliForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     test_torchscript = False
     test_pruning = False
     test_resize_embeddings = True
-    test_head_masking = False
     additional_model_inputs = ["token_type_ids"]
 
     def setUp(self):

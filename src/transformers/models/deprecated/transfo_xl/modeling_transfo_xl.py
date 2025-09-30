@@ -153,7 +153,7 @@ class RelPartialLearnableMultiHeadAttn(nn.Module):
 
         return x
 
-    def forward(self, w, r, attn_mask=None, mems=None, head_mask=None, output_attentions=False):
+    def forward(self, w, r, attn_mask=None, mems=None, output_attentions=False):
         qlen, rlen, bsz = w.size(0), r.size(0), w.size(1)
 
         if mems is not None:
@@ -211,10 +211,6 @@ class RelPartialLearnableMultiHeadAttn(nn.Module):
         attn_prob = nn.functional.softmax(attn_score, dim=1)
         attn_prob = self.dropatt(attn_prob)
 
-        # Mask heads if we want to
-        if head_mask is not None:
-            attn_prob = attn_prob * head_mask
-
         # compute attention vector
         attn_vec = torch.einsum("ijbn,jbnd->ibnd", (attn_prob, w_head_v))
 
@@ -249,13 +245,12 @@ class RelPartialLearnableDecoderLayer(nn.Module):
             d_model, d_inner, dropout, pre_lnorm=kwargs.get("pre_lnorm"), layer_norm_epsilon=layer_norm_epsilon
         )
 
-    def forward(self, dec_inp, r, dec_attn_mask=None, mems=None, head_mask=None, output_attentions=False):
+    def forward(self, dec_inp, r, dec_attn_mask=None, mems=None, output_attentions=False):
         attn_outputs = self.dec_attn(
             dec_inp,
             r,
             attn_mask=dec_attn_mask,
             mems=mems,
-            head_mask=head_mask,
             output_attentions=output_attentions,
         )
         ff_output = self.pos_ff(attn_outputs[0])
@@ -604,12 +599,6 @@ TRANSFO_XL_INPUTS_DOCSTRING = r"""
             Contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model (see
             `mems` output below). Can be used to speed up sequential decoding. The token ids which have their mems
             given to this model should not be passed as `input_ids` as they have already been computed.
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
@@ -742,7 +731,6 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         mems: Optional[list[torch.FloatTensor]] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -769,23 +757,6 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
 
         if mems is None:
             mems = self.init_mems(bsz)
-
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads] (a head_mask for each layer)
-        # and head_mask is converted to shape [num_hidden_layers x qlen x klen x bsz x n_head]
-        if head_mask is not None:
-            if head_mask.dim() == 1:
-                head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(0).unsqueeze(0)
-                head_mask = head_mask.expand(self.n_layer, -1, -1, -1, -1)
-            elif head_mask.dim() == 2:
-                head_mask = head_mask.unsqueeze(1).unsqueeze(1).unsqueeze(1)
-            head_mask = head_mask.to(
-                dtype=next(self.parameters()).dtype
-            )  # switch to float if need + fp16 compatibility
-        else:
-            head_mask = [None] * self.n_layer
 
         if inputs_embeds is not None:
             word_emb = inputs_embeds
@@ -828,7 +799,6 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
                     pos_emb,
                     dec_attn_mask=dec_attn_mask,
                     mems=mems_i,
-                    head_mask=head_mask[i],
                     output_attentions=output_attentions,
                 )
                 core_out = layer_outputs[0]
@@ -937,7 +907,6 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         mems: Optional[list[torch.FloatTensor]] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
@@ -961,7 +930,6 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         transformer_outputs = self.transformer(
             input_ids,
             mems=mems,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1078,7 +1046,6 @@ class TransfoXLForSequenceClassification(TransfoXLPreTrainedModel):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         mems: Optional[list[torch.FloatTensor]] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
@@ -1096,7 +1063,6 @@ class TransfoXLForSequenceClassification(TransfoXLPreTrainedModel):
         transformer_outputs = self.transformer(
             input_ids,
             mems=mems,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,

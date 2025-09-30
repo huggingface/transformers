@@ -106,7 +106,6 @@ class EomtForUniversalSegmentationTest(ModelTesterMixin, PipelineTesterMixin, un
     pipeline_model_mapping = {"image-segmentation": EomtForUniversalSegmentation} if is_torch_available() else {}
     is_encoder_decoder = False
     test_pruning = False
-    test_head_masking = False
     test_missing_keys = False
     test_torch_exportable = False
 

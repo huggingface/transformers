@@ -125,7 +125,6 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: Optional[float] = None,
     dropout: float = 0.0,
-    head_mask: Optional[torch.Tensor] = None,
     use_cache: Optional[bool] = None,
     **kwargs: Unpack[TransformersKwargs],
 ):
@@ -165,9 +164,6 @@ def eager_attention_forward(
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-
-    if head_mask is not None:
-        attn_weights = attn_weights * head_mask
 
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
@@ -231,7 +227,6 @@ class AlbertAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -259,7 +254,6 @@ class AlbertAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout.p,
             scaling=self.scaling,
-            head_mask=head_mask,
             # only for relevant for non-absolute positional embeddings
             use_cache=False,
             **kwargs,
@@ -291,10 +285,9 @@ class AlbertLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        attention_output, _ = self.attention(hidden_states, attention_mask, head_mask, **kwargs)
+        attention_output, _ = self.attention(hidden_states, attention_mask, **kwargs)
 
         ffn_output = apply_chunking_to_forward(
             self.ff_chunk,
@@ -322,11 +315,10 @@ class AlbertLayerGroup(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[Union[torch.Tensor, tuple[torch.Tensor]], ...]:
         for layer_index, albert_layer in enumerate(self.albert_layers):
-            hidden_states = albert_layer(hidden_states, attention_mask, head_mask[layer_index], **kwargs)
+            hidden_states = albert_layer(hidden_states, attention_mask, **kwargs)
         return hidden_states
 
 
@@ -342,24 +334,17 @@ class AlbertTransformer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[BaseModelOutput, tuple]:
         hidden_states = self.embedding_hidden_mapping_in(hidden_states)
 
-        head_mask = [None] * self.config.num_hidden_layers if head_mask is None else head_mask
-
         for i in range(self.config.num_hidden_layers):
-            # Number of layers in a hidden group
-            layers_per_group = int(self.config.num_hidden_layers / self.config.num_hidden_groups)
-
             # Index of the hidden group
             group_idx = int(i / (self.config.num_hidden_layers / self.config.num_hidden_groups))
 
             hidden_states = self.albert_layer_groups[group_idx](
                 hidden_states,
                 attention_mask,
-                head_mask[group_idx * layers_per_group : (group_idx + 1) * layers_per_group],
                 **kwargs,
             )
 
@@ -480,7 +465,6 @@ class AlbertModel(AlbertPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[BaseModelOutputWithPooling, tuple]:
@@ -493,12 +477,9 @@ class AlbertModel(AlbertPreTrainedModel):
 
         attention_mask = self._update_full_mask(attention_mask, embedding_output)
 
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask,
-            head_mask=head_mask,
             position_ids=position_ids,
             **kwargs,
         )
@@ -522,8 +503,6 @@ class AlbertModel(AlbertPreTrainedModel):
             if "flash" in self.config._attn_implementation:
                 attention_mask = attention_mask if 0 in attention_mask else None
             elif self.config._attn_implementation == "sdpa":
-                # output_attentions=True & head_mask can not be supported when using SDPA, fall back to
-                # the manual implementation that requires a 4D causal mask in all cases.
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
                 attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
             elif self.config._attn_implementation == "flex_attention":
@@ -572,7 +551,6 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         sentence_order_label: Optional[torch.LongTensor] = None,
@@ -609,7 +587,6 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             return_dict=True,
             **kwargs,
@@ -710,7 +687,6 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -755,7 +731,6 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             return_dict=True,
             **kwargs,
@@ -804,7 +779,6 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -820,7 +794,6 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             return_dict=True,
             **kwargs,
@@ -888,7 +861,6 @@ class AlbertForTokenClassification(AlbertPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -902,7 +874,6 @@ class AlbertForTokenClassification(AlbertPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             return_dict=True,
             **kwargs,
@@ -946,7 +917,6 @@ class AlbertForQuestionAnswering(AlbertPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         start_positions: Optional[torch.LongTensor] = None,
         end_positions: Optional[torch.LongTensor] = None,
@@ -957,7 +927,6 @@ class AlbertForQuestionAnswering(AlbertPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             return_dict=True,
             **kwargs,
@@ -1016,7 +985,6 @@ class AlbertForMultipleChoice(AlbertPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1067,7 +1035,6 @@ class AlbertForMultipleChoice(AlbertPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             return_dict=True,
             **kwargs,

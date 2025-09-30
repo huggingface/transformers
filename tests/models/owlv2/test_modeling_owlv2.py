@@ -146,7 +146,6 @@ class Owlv2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = Owlv2VisionModelTester(self)
@@ -309,7 +308,6 @@ class Owlv2TextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Owlv2TextModel,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = Owlv2TextModelTester(self)
@@ -427,7 +425,6 @@ class Owlv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
     fx_compatible = False
-    test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
@@ -644,7 +641,6 @@ class Owlv2ForObjectDetectionTester:
 class Owlv2ForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Owlv2ForObjectDetection,) if is_torch_available() else ()
     fx_compatible = False
-    test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False

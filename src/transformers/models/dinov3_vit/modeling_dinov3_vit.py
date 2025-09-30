@@ -527,10 +527,8 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
             collected_hidden_states = [hidden_states]
 
         for i, layer_module in enumerate(self.layer):
-            layer_head_mask = head_mask[i] if head_mask is not None else None
             hidden_states = layer_module(
                 hidden_states,
-                attention_mask=layer_head_mask,
                 position_embeddings=position_embeddings,
             )
             if output_hidden_states:

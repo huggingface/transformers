@@ -141,7 +141,6 @@ class CLIPSegVisionModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = CLIPSegVisionModelTester(self)
@@ -298,7 +297,6 @@ class CLIPSegTextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (CLIPSegTextModel,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
-    test_head_masking = False
     model_split_percents = [0.5, 0.8, 0.9]
 
     def setUp(self):
@@ -425,7 +423,6 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     all_model_classes = (CLIPSegModel, CLIPSegForImageSegmentation) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": CLIPSegModel} if is_torch_available() else {}
     fx_compatible = False
-    test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False

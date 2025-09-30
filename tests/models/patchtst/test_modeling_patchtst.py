@@ -161,7 +161,6 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     pipeline_model_mapping = {"feature-extraction": PatchTSTModel} if is_torch_available() else {}
     is_encoder_decoder = False
     test_pruning = False
-    test_head_masking = False
     test_missing_keys = True
     test_torchscript = False
     test_inputs_embeds = False

@@ -184,7 +184,6 @@ class Qwen3VLMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         else ()
     )
     test_pruning = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = Qwen3VLMoeVisionText2TextModelTester(self)

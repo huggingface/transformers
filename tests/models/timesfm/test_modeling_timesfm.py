@@ -149,10 +149,6 @@ class TimesFmModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="Model does not have head mask")
-    def test_headmasking(self):
-        pass
-
     # the main input name is `inputs`
     def test_model_main_input_name(self):
         model_signature = inspect.signature(getattr(TimesFmModelForPrediction, "forward"))

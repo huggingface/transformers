@@ -364,7 +364,6 @@ class UniSpeechSatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         else {}
     )
     test_pruning = False
-    test_headmasking = False
     test_torchscript = False
 
     def setUp(self):
@@ -574,7 +573,6 @@ class UniSpeechSatRobustModelTest(ModelTesterMixin, unittest.TestCase):
         else ()
     )
     test_pruning = False
-    test_headmasking = False
     test_torchscript = False
 
     def setUp(self):
