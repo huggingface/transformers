@@ -100,9 +100,8 @@ class PretrainedConfig(PushToHubMixin):
 
     Arg:
         name_or_path (`str`, *optional*, defaults to `""`):
-            Store the string that was passed to [`PreTrainedModel.from_pretrained`] or
-            [`TFPreTrainedModel.from_pretrained`] as `pretrained_model_name_or_path` if the configuration was created
-            with such a method.
+            Store the string that was passed to [`PreTrainedModel.from_pretrained`] as `pretrained_model_name_or_path`
+            if the configuration was created with such a method.
         output_hidden_states (`bool`, *optional*, defaults to `False`):
             Whether or not the model should return all hidden-states.
         output_attentions (`bool`, *optional*, defaults to `False`):
@@ -140,8 +139,7 @@ class PretrainedConfig(PushToHubMixin):
         architectures (`list[str]`, *optional*):
             Model architectures that can be used with the model pretrained weights.
         finetuning_task (`str`, *optional*):
-            Name of the task used to fine-tune the model. This can be used when converting from an original (TensorFlow
-            or PyTorch) checkpoint.
+            Name of the task used to fine-tune the model.
         id2label (`dict[int, str]`, *optional*):
             A map from index (for instance prediction index, or target index) to label.
         label2id (`dict[str, int]`, *optional*):
@@ -345,10 +343,6 @@ class PretrainedConfig(PushToHubMixin):
             except AttributeError as err:
                 logger.error(f"Can't set {key} with value {value} for {self}")
                 raise err
-
-        # TODO: remove later, deprecated arguments for TF models
-        self.tf_legacy_loss = kwargs.pop("tf_legacy_loss", False)
-        self.use_bfloat16 = kwargs.pop("use_bfloat16", False)
 
     def _create_id_label_maps(self, num_labels: int):
         self.id2label = {i: f"LABEL_{i}" for i in range(num_labels)}
@@ -1058,7 +1052,9 @@ class PretrainedConfig(PushToHubMixin):
         if d.get("dtype") is not None:
             if isinstance(d["dtype"], dict):
                 d["dtype"] = {k: str(v).split(".")[-1] for k, v in d["dtype"].items()}
-            elif not isinstance(d["dtype"], str):
+            # models like Emu3 can have "dtype" as token in config's vocabulary map,
+            # so we also exclude int type here to avoid error in this special case.
+            elif not isinstance(d["dtype"], (str, int)):
                 d["dtype"] = str(d["dtype"]).split(".")[1]
         for value in d.values():
             if isinstance(value, dict):
@@ -1121,8 +1117,6 @@ class PretrainedConfig(PushToHubMixin):
             "do_sample": False,
             "early_stopping": False,
             "num_beams": 1,
-            "num_beam_groups": 1,
-            "diversity_penalty": 0.0,
             "temperature": 1.0,
             "top_k": 50,
             "top_p": 1.0,
@@ -1141,6 +1135,9 @@ class PretrainedConfig(PushToHubMixin):
             "exponential_decay_length_penalty": None,
             "suppress_tokens": None,
             "begin_suppress_tokens": None,
+            # Deprecated arguments (moved to the Hub). TODO joao, manuel: remove in v4.62.0
+            "num_beam_groups": 1,
+            "diversity_penalty": 0.0,
         }
 
     def _get_non_default_generation_parameters(self) -> dict[str, Any]:
@@ -1238,14 +1235,30 @@ class PretrainedConfig(PushToHubMixin):
         if not return_both and len(valid_text_config_names) == 0 and config_to_return.is_encoder_decoder:
             config_to_return = copy.deepcopy(config_to_return)
             prefix_to_discard = "encoder" if decoder else "decoder"
+            prefix_to_keep = "decoder" if decoder else "encoder"
             for key in config_to_return.to_dict():
-                if key.startswith(prefix_to_discard):
+                # NOTE: We don't want to discard the key if it is mapped from a different attribute name at read time
+                if key.startswith(prefix_to_discard) and key not in config_to_return.attribute_map.values():
                     delattr(config_to_return, key)
-            # old encoder/decoder models may use "encoder_layers"/"decoder_layers" instead of "num_hidden_layers"
-            if decoder and hasattr(config_to_return, "decoder_layers"):
-                config_to_return.num_hidden_layers = config_to_return.decoder_layers
-            elif encoder and hasattr(config_to_return, "encoder_layers"):
-                config_to_return.num_hidden_layers = config_to_return.encoder_layers
+                if key.startswith(prefix_to_keep):
+                    # [encoder/decoder]_layers -> num_hidden_layers
+                    if key == prefix_to_keep + "_layers":
+                        new_key = "num_hidden_layers"
+                    # [encoder/decoder]_attention_heads -> num_attention_heads
+                    elif key == prefix_to_keep + "_attention_heads":
+                        new_key = "num_attention_heads"
+                    # e.g. encoder_hidden_act -> hidden_act
+                    else:
+                        new_key = key[len(prefix_to_keep) + 1 :]
+
+                    # Does the class map the new key into a different attribute name at read time? if so, let's write
+                    # into that attribute instead
+                    if new_key in config_to_return.attribute_map:
+                        new_key = config_to_return.attribute_map[new_key]
+
+                    value = getattr(config_to_return, key)
+                    delattr(config_to_return, key)
+                    setattr(config_to_return, new_key, value)
 
         return config_to_return
 
@@ -1350,7 +1363,12 @@ ALLOWED_LAYER_TYPES = (
 )
 
 
-def layer_type_validation(layer_types: list[str]):
-    """Check that each entry in `layer_types` are allowed."""
+def layer_type_validation(layer_types: list[str], num_hidden_layers: Optional[int] = None):
+    """Check that `layer_types` is correctly defined."""
     if not all(layer_type in ALLOWED_LAYER_TYPES for layer_type in layer_types):
         raise ValueError(f"The `layer_types` entries must be in {ALLOWED_LAYER_TYPES}")
+    if num_hidden_layers is not None and num_hidden_layers != len(layer_types):
+        raise ValueError(
+            f"`num_hidden_layers` ({num_hidden_layers}) must be equal to the number of layer types "
+            f"({len(layer_types)})"
+        )

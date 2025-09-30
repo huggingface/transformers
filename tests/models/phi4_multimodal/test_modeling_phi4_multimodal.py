@@ -85,7 +85,7 @@ class Phi4MultimodalModelTester:
             hidden_size=32,
             num_attention_heads=8,
             intermediate_size=48,
-            depthwise_seperable_out_channel=128,
+            depthwise_separable_out_channel=128,
             nemo_conv_channels=128,
             initializer_range=1e-5,
         ),
@@ -213,10 +213,6 @@ class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
     def test_initialization(self):
         pass
 
-    @unittest.skip(reason="Right padding not supported")
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        pass
-
     @unittest.skip(reason="Depending on input modalities, some params may not have gradients")
     def test_training_gradient_checkpointing(self):
         pass
@@ -285,8 +281,8 @@ class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
 class Phi4MultimodalIntegrationTest(unittest.TestCase):
     checkpoint_path = "microsoft/Phi-4-multimodal-instruct"
     revision = "refs/pr/70"
-    image_url = "https://www.ilankelman.org/stopsigns/australia.jpg"
-    audio_url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav"
+    image_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+    audio_url = "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav"
 
     def setUp(self):
         # Currently, the Phi-4 checkpoint on the hub is not working with the latest Phi-4 code, so the slow integration tests

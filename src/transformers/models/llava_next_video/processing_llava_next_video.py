@@ -16,7 +16,7 @@
 Processor class for LLaVa-NeXT-Video.
 """
 
-from typing import Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -114,18 +114,18 @@ class LlavaNextVideoProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio=None,
-        videos: VideoInput = None,
+        videos: Optional[VideoInput] = None,
         **kwargs: Unpack[LlavaNextVideoProcessorKwargs],
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
+        the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
         LlavaNextImageProcessor's [`~LlavaNextImageProcessor.__call__`] if `images` is not `None`. To prepare the video(s),
-        this method forwards the `videos` and `kwrags` arguments to LlavaNextVideoImageProcessor's
+        this method forwards the `videos` and `kwargs` arguments to LlavaNextVideoImageProcessor's
         [`~LlavaNextVideoImageProcessor.__call__`] if `videos` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
@@ -143,10 +143,8 @@ class LlavaNextVideoProcessor(ProcessorMixin):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:

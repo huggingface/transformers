@@ -18,7 +18,7 @@ Processor class for TrOCR.
 
 import warnings
 from contextlib import contextmanager
-from typing import Union
+from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
@@ -60,10 +60,6 @@ class TrOCRProcessor(ProcessorMixin):
             feature_extractor = kwargs.pop("feature_extractor")
 
         image_processor = image_processor if image_processor is not None else feature_extractor
-        if image_processor is None:
-            raise ValueError("You need to specify an `image_processor`.")
-        if tokenizer is None:
-            raise ValueError("You need to specify a `tokenizer`.")
 
         super().__init__(image_processor, tokenizer)
         self.current_processor = self.image_processor
@@ -71,7 +67,7 @@ class TrOCRProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio=None,
         videos=None,

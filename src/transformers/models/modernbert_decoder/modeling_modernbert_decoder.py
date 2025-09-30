@@ -397,9 +397,9 @@ class ModernBertDecoderPreTrainedModel(PreTrainedModel):
             init_weight(module.Wo, stds["out"])
         elif isinstance(module, ModernBertDecoderPredictionHead):
             init_weight(module.dense, stds["out"])
-        elif module.__class__.__name__ == "ModernBertDecoderForSequenceClassification":
+        elif isinstance(module, ModernBertDecoderForSequenceClassification):
             init_weight(module.classifier, stds["final_out"])
-        elif module.__class__.__name__ == "ModernBertDecoderForCausalLM":
+        elif isinstance(module, ModernBertDecoderForCausalLM):
             init_weight(module.decoder, stds["out"])
         elif isinstance(module, nn.LayerNorm):
             module.weight.data.fill_(1.0)
@@ -598,7 +598,6 @@ class ModernBertDecoderForCausalLM(ModernBertDecoderPreTrainedModel, GenerationM
             loss_fct = CrossEntropyLoss()
             shift_logits = shift_logits.view(-1, self.config.vocab_size)
             shift_labels = shift_labels.view(-1)
-            # Enable model parallelism
             shift_labels = shift_labels.to(shift_logits.device)
             loss = loss_fct(shift_logits, shift_labels)
 

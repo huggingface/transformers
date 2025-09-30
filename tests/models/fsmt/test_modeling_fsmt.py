@@ -14,6 +14,7 @@
 
 import tempfile
 import unittest
+from functools import cached_property
 
 import timeout_decorator  # noqa
 from parameterized import parameterized
@@ -27,7 +28,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -545,7 +545,7 @@ class FSMTModelIntegrationTests(unittest.TestCase):
     @slow
     def test_translation_pipeline(self, pair):
         tokenizer, model, src_text, tgt_text = self.translation_setup(pair)
-        pipeline = TranslationPipeline(model, tokenizer, framework="pt", device=torch_device)
+        pipeline = TranslationPipeline(model, tokenizer, device=torch_device)
         output = pipeline([src_text])
         self.assertEqual([tgt_text], [x["translation_text"] for x in output])
 

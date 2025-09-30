@@ -19,7 +19,7 @@ from typing import Optional, Union
 from transformers.models.paligemma.processing_paligemma import IMAGE_TOKEN, PaliGemmaProcessor, build_string_from_input
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, is_valid_image, make_flat_list_of_images
+from ...image_utils import ImageInput, make_flat_list_of_images
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_torch_available, logging
@@ -27,7 +27,6 @@ from ...utils import is_torch_available, logging
 
 if is_torch_available():
     import torch
-
 
 logger = logging.get_logger(__name__)
 
@@ -89,7 +88,7 @@ class ColPaliProcessor(PaliGemmaProcessor):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio=None,
         videos=None,
@@ -118,10 +117,8 @@ class ColPaliProcessor(PaliGemmaProcessor):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -139,7 +136,7 @@ class ColPaliProcessor(PaliGemmaProcessor):
         )
         suffix = output_kwargs["text_kwargs"].pop("suffix", None)
 
-        return_token_type_ids = suffix is not None
+        return_token_type_ids = True
 
         if text is None and images is None:
             raise ValueError("Either text or images must be provided")
@@ -147,13 +144,8 @@ class ColPaliProcessor(PaliGemmaProcessor):
             raise ValueError("Only one of text or images can be processed at a time")
 
         if images is not None:
-            if is_valid_image(images):
-                images = [images]
-            elif isinstance(images, list) and is_valid_image(images[0]):
-                pass
-            elif not (isinstance(images, list) and isinstance(images[0], list) and is_valid_image(images[0][0])):
-                raise ValueError("images must be an image, list of images or list of list of images")
-
+            images = self.image_processor.fetch_images(images)
+            images = make_flat_list_of_images(images)
             texts_doc = [self.visual_prompt_prefix] * len(images)
             images = [image.convert("RGB") for image in images]
 
@@ -167,7 +159,6 @@ class ColPaliProcessor(PaliGemmaProcessor):
                 )
                 for prompt, image_list in zip(texts_doc, images)
             ]
-            images = make_flat_list_of_images(images)
             pixel_values = self.image_processor(images, **output_kwargs["images_kwargs"])["pixel_values"]
 
             # max_length has to account for the image tokens
@@ -176,7 +167,7 @@ class ColPaliProcessor(PaliGemmaProcessor):
 
             inputs = self.tokenizer(
                 input_strings,
-                return_token_type_ids=False,
+                return_token_type_ids=return_token_type_ids,
                 **output_kwargs["text_kwargs"],
             )
 
@@ -206,7 +197,7 @@ class ColPaliProcessor(PaliGemmaProcessor):
 
             batch_query = self.tokenizer(
                 texts_query,
-                return_token_type_ids=False,
+                return_token_type_ids=return_token_type_ids,
                 **output_kwargs["text_kwargs"],
             )
 
@@ -214,7 +205,7 @@ class ColPaliProcessor(PaliGemmaProcessor):
 
     def process_images(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         **kwargs: Unpack[ColPaliProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -231,10 +222,8 @@ class ColPaliProcessor(PaliGemmaProcessor):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -266,10 +255,8 @@ class ColPaliProcessor(PaliGemmaProcessor):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:

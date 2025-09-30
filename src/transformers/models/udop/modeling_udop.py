@@ -77,10 +77,9 @@ class BaseModelOutputWithAttentionMask(ModelOutput):
         - 1 for tokens that are **not masked**,
         - 0 for tokens that are **masked**.
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
-        `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
-        encoder_sequence_length, embed_size_per_head)`. Contains pre-computed hidden-states (key and values in the
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+
+        Contains pre-computed hidden-states (key and values in the
         self-attention blocks and optionally if `config.is_encoder_decoder=True` in the cross-attention blocks)
         that can be used (see `past_key_values` input) to speed up sequential decoding.
     hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
@@ -281,16 +280,11 @@ class UdopPreTrainedModel(PreTrainedModel):
             d_model = self.config.d_model
             module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
         elif isinstance(module, UdopModel):
-            # Mesh TensorFlow embeddings initialization
-            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
             module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
         elif isinstance(module, UdopForConditionalGeneration):
             if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
                 module.lm_head.weight.data.normal_(mean=0.0, std=factor * 1.0)
         elif isinstance(module, UdopDenseActDense):
-            # Mesh TensorFlow FF initialization
-            # See https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/transformer_layers.py#L56
-            # and https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L89
             module.wi.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module.wi, "bias") and module.wi.bias is not None:
                 module.wi.bias.data.zero_()
@@ -308,8 +302,6 @@ class UdopPreTrainedModel(PreTrainedModel):
             if hasattr(module.wo, "bias") and module.wo.bias is not None:
                 module.wo.bias.data.zero_()
         elif isinstance(module, UdopAttention):
-            # Mesh TensorFlow attention initialization to avoid scaling before softmax
-            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/attention.py#L136
             d_model = self.config.d_model
             key_value_proj_dim = self.config.d_kv
             n_heads = self.config.num_heads
@@ -468,7 +460,6 @@ class UdopAttention(nn.Module):
                 "when creating this class."
             )
 
-        # Mesh TensorFlow initialization to avoid scaling before softmax
         self.q = nn.Linear(self.d_model, self.inner_dim, bias=False)
         self.k = nn.Linear(self.d_model, self.inner_dim, bias=False)
         self.v = nn.Linear(self.d_model, self.inner_dim, bias=False)
@@ -591,7 +582,8 @@ class UdopAttention(nn.Module):
         query_states = query_states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
 
         # Check is encoder-decoder model is being used. Otherwise we'll get `DynamicCache`
-        if past_key_values is not None and isinstance(past_key_values, EncoderDecoderCache):
+        is_updated = False
+        if isinstance(past_key_values, EncoderDecoderCache):
             is_updated = past_key_values.is_updated.get(self.layer_idx)
             if is_cross_attention:
                 # after the first generated id, we can subsequently re-use all key/value_states from cache
@@ -619,7 +611,7 @@ class UdopAttention(nn.Module):
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention:
+                if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
 
         # compute scores, equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
@@ -1230,9 +1222,11 @@ class UdopStack(UdopPreTrainedModel):
         if self.is_decoder:
             if use_cache and past_key_values is None:
                 if self.config.is_encoder_decoder:
-                    past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+                    past_key_values = EncoderDecoderCache(
+                        DynamicCache(config=self.config), DynamicCache(config=self.config)
+                    )
                 else:
-                    past_key_values = DynamicCache()
+                    past_key_values = DynamicCache(config=self.config)
         elif not self.is_decoder:
             # do not pass cache object down the line for encoder stack
             # it messes indexing later in decoder-stack because cache object is modified in-place
@@ -1850,8 +1844,6 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         sequence_output = decoder_outputs[0]
 
         if self.config.tie_word_embeddings:
-            # Rescale output before projecting on vocab
-            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/transformer.py#L586
             sequence_output = sequence_output * (self.config.d_model**-0.5)
 
         lm_logits = self.lm_head(sequence_output)

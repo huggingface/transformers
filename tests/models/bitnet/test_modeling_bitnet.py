@@ -16,14 +16,10 @@
 import gc
 import unittest
 
-import pytest
-
 from transformers import AutoTokenizer, BitNetConfig, is_torch_available
 from transformers.testing_utils import (
     backend_empty_cache,
-    require_flash_attn,
     require_torch,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -53,7 +49,7 @@ class BitNetModelTester:
         use_input_mask=True,
         vocab_size=99,
         hidden_size=64,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         num_key_value_heads=2,
         intermediate_size=37,
@@ -178,20 +174,6 @@ class BitNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         for type in ["absolute", "relative_key", "relative_key_query"]:
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_torch_fx_output_loss(self):
-        super().test_torch_fx_output_loss()
-
-    # Ignore copy
-    def test_past_key_values_format(self):
-        super().test_past_key_values_format()
-
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest(reason="BitNet flash attention does not support right padding")
 
 
 @require_torch

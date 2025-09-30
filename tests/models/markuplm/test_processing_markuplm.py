@@ -17,6 +17,7 @@ import os
 import shutil
 import tempfile
 import unittest
+from functools import cached_property
 
 from transformers import (
     MarkupLMProcessor,
@@ -27,7 +28,7 @@ from transformers import (
 )
 from transformers.models.markuplm.tokenization_markuplm import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_bs4, require_tokenizers, require_torch, slow
-from transformers.utils import FEATURE_EXTRACTOR_NAME, cached_property, is_bs4_available, is_tokenizers_available
+from transformers.utils import FEATURE_EXTRACTOR_NAME, is_bs4_available, is_tokenizers_available
 
 
 if is_bs4_available():

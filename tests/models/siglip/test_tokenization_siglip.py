@@ -16,23 +16,15 @@ import json
 import os
 import tempfile
 import unittest
-from functools import lru_cache
+from functools import cached_property
 
 from transformers import SPIECE_UNDERLINE, AddedToken, BatchEncoding, SiglipTokenizer
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
-from transformers.utils import cached_property, is_tf_available, is_torch_available
 
-from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
-
-if is_torch_available():
-    FRAMEWORK = "pt"
-elif is_tf_available():
-    FRAMEWORK = "tf"
-else:
-    FRAMEWORK = "jax"
 
 
 @require_sentencepiece
@@ -136,8 +128,6 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         return SiglipTokenizer.from_pretrained("google/siglip-base-patch16-224")
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_tokenizer(cls, pretrained_name=None, **kwargs) -> SiglipTokenizer:
         pretrained_name = pretrained_name or cls.tmpdirname
         return cls.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
@@ -175,13 +165,10 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.siglip_tokenizer
         src_text = ["A long paragraph for summarization.", "Another paragraph for summarization."]
         expected_src_tokens = [262, 266, 476, 8532, 270, 4460, 3949, 1682, tokenizer.eos_token_id]
-        batch = tokenizer(src_text, padding=True, return_tensors=FRAMEWORK)
+        batch = tokenizer(src_text, padding=True, return_tensors="pt")
         self.assertIsInstance(batch, BatchEncoding)
 
-        if FRAMEWORK != "jax":
-            result = list(batch.input_ids.numpy()[0])
-        else:
-            result = list(batch.input_ids.tolist()[0])
+        result = list(batch.input_ids.numpy()[0])
 
         self.assertListEqual(expected_src_tokens, result)
 
@@ -190,7 +177,7 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_empty_target_text(self):
         tokenizer = self.siglip_tokenizer
         src_text = ["A long paragraph for summarization.", "Another paragraph for summarization."]
-        batch = tokenizer(src_text, padding=True, return_tensors=FRAMEWORK)
+        batch = tokenizer(src_text, padding=True, return_tensors="pt")
         # check if input_ids are returned and no decoder_input_ids
         self.assertIn("input_ids", batch)
         self.assertNotIn("decoder_input_ids", batch)
@@ -200,7 +187,7 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.siglip_tokenizer
         tgt_text = ["Summary of the text.", "Another summary."]
         targets = tokenizer(
-            text_target=tgt_text, max_length=32, padding="max_length", truncation=True, return_tensors=FRAMEWORK
+            text_target=tgt_text, max_length=32, padding="max_length", truncation=True, return_tensors="pt"
         )
         self.assertEqual(32, targets["input_ids"].shape[1])
 

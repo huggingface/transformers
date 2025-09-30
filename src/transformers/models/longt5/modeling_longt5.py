@@ -250,7 +250,7 @@ class LongT5LayerNorm(nn.Module):
 try:
     from apex.normalization import FusedRMSNorm
 
-    LongT5LayerNorm = FusedRMSNorm  # noqa
+    LongT5LayerNorm = FusedRMSNorm
 
     logger.info("Discovered apex.normalization.FusedRMSNorm - will use it instead of LongT5LayerNorm")
 except ImportError:
@@ -347,7 +347,6 @@ class LongT5Attention(nn.Module):
                 "when creating this class."
             )
 
-        # Mesh TensorFlow initialization to avoid scaling before softmax
         self.q = nn.Linear(self.d_model, self.inner_dim, bias=False)
         self.k = nn.Linear(self.d_model, self.inner_dim, bias=False)
         self.v = nn.Linear(self.d_model, self.inner_dim, bias=False)
@@ -470,7 +469,8 @@ class LongT5Attention(nn.Module):
         query_states = query_states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
 
         # Check is encoder-decoder model is being used. Otherwise we'll get `DynamicCache`
-        if past_key_values is not None and isinstance(past_key_values, EncoderDecoderCache):
+        is_updated = False
+        if isinstance(past_key_values, EncoderDecoderCache):
             is_updated = past_key_values.is_updated.get(self.layer_idx)
             if is_cross_attention:
                 # after the first generated id, we can subsequently re-use all key/value_states from cache
@@ -498,7 +498,7 @@ class LongT5Attention(nn.Module):
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention:
+                if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
 
         # compute scores, equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
@@ -569,7 +569,6 @@ class LongT5LocalAttention(nn.Module):
         self.dropout = config.dropout_rate
         self.inner_dim = self.n_heads * self.key_value_proj_dim
 
-        # Mesh TensorFlow initialization to avoid scaling before softmax
         self.q = nn.Linear(self.d_model, self.inner_dim, bias=False)
         self.k = nn.Linear(self.d_model, self.inner_dim, bias=False)
         self.v = nn.Linear(self.d_model, self.inner_dim, bias=False)
@@ -764,7 +763,6 @@ class LongT5TransientGlobalAttention(nn.Module):
         self.dropout = config.dropout_rate
         self.inner_dim = self.n_heads * self.key_value_proj_dim
 
-        # Mesh TensorFlow initialization to avoid scaling before softmax
         self.q = nn.Linear(self.d_model, self.inner_dim, bias=False)
         self.k = nn.Linear(self.d_model, self.inner_dim, bias=False)
         self.v = nn.Linear(self.d_model, self.inner_dim, bias=False)
@@ -1269,21 +1267,46 @@ class LongT5PreTrainedModel(PreTrainedModel):
         }
         return dummy_inputs
 
+    def _try_load_missing_tied_module(self, key):
+        module = self
+        if key.endswith(".weight"):
+            key = key[: -len(".weight")]
+        for sub_key in key.split("."):
+            if not hasattr(module, sub_key):
+                return
+            module = getattr(module, sub_key)
+
+        self._tie_or_clone_weights(module, self.shared)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requested_loading_info = kwargs.get("output_loading_info", False)
+        kwargs["output_loading_info"] = True
+        model, loading_info = super().from_pretrained(*args, **kwargs)
+        missing_keys = loading_info.get("missing_keys", [])
+
+        if hasattr(model, "shared") and hasattr(model, "_tied_weights_keys"):
+            for missing_key in missing_keys:
+                logger.warning(
+                    f"Recovering a missing tied weight {missing_key} from a legacy LongT5 checkpoint. "
+                    f"Consider saving {missing_key} in your checkpoint or updating the config (tie_word_embeddings=true)."
+                )
+                model._try_load_missing_tied_module(missing_key)
+
+        if requested_loading_info:
+            return model, loading_info
+        return model
+
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor  # Used for testing weights initialization
         if isinstance(module, LongT5LayerNorm):
             module.weight.data.fill_(factor * 1.0)
         elif isinstance(module, (LongT5Model, LongT5ForConditionalGeneration, LongT5EncoderModel)):
-            # Mesh TensorFlow embeddings initialization
-            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
             module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
             if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
                 module.lm_head.weight.data.normal_(mean=0.0, std=factor * 1.0)
         elif isinstance(module, LongT5DenseActDense):
-            # Mesh TensorFlow FF initialization
-            # See https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/transformer_layers.py#L56
-            # and https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L89
             module.wi.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module.wi, "bias") and module.wi.bias is not None:
                 module.wi.bias.data.zero_()
@@ -1301,8 +1324,6 @@ class LongT5PreTrainedModel(PreTrainedModel):
             if hasattr(module.wo, "bias") and module.wo.bias is not None:
                 module.wo.bias.data.zero_()
         elif isinstance(module, (LongT5Attention, LongT5LocalAttention, LongT5TransientGlobalAttention)):
-            # Mesh TensorFlow attention initialization to avoid scaling before softmax
-            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/attention.py#L136
             d_model = self.config.d_model
             key_value_proj_dim = self.config.d_kv
             n_heads = self.config.num_heads
@@ -1429,9 +1450,11 @@ class LongT5Stack(LongT5PreTrainedModel):
         if self.is_decoder:
             if use_cache and past_key_values is None:
                 if self.config.is_encoder_decoder:
-                    past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+                    past_key_values = EncoderDecoderCache(
+                        DynamicCache(config=self.config), DynamicCache(config=self.config)
+                    )
                 else:
-                    past_key_values = DynamicCache()
+                    past_key_values = DynamicCache(config=self.config)
         elif not self.is_decoder:
             # do not pass cache object down the line for encoder stack
             # it messes indexing later in decoder-stack because cache object is modified in-place
@@ -2069,8 +2092,6 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel, GenerationMixin):
         sequence_output = decoder_outputs[0]
 
         if self.config.tie_word_embeddings:
-            # Rescale output before projecting on vocab
-            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/transformer.py#L586
             sequence_output = sequence_output * (self.model_dim**-0.5)
 
         lm_logits = self.lm_head(sequence_output)
@@ -2081,7 +2102,6 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel, GenerationMixin):
 
             labels = labels.to(lm_logits.device)
             loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
-            # TODO(thom): Add z_loss https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
 
         if not return_dict:
             output = (lm_logits,) + decoder_outputs[1:] + encoder_outputs

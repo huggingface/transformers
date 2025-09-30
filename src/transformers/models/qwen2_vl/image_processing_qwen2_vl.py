@@ -40,7 +40,6 @@ from ...image_utils import (
     infer_channel_dimension_format,
     is_scaled_image,
     make_flat_list_of_images,
-    make_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -168,7 +167,7 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
         images: Union[ImageInput, VideoInput],
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
@@ -224,7 +223,7 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.   - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
 
         if do_convert_rgb:
             images = [convert_to_rgb(image) for image in images]
@@ -300,12 +299,12 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        videos: VideoInput = None,
+        videos: Optional[VideoInput] = None,
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
         min_pixels: Optional[int] = None,
         max_pixels: Optional[int] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
@@ -361,10 +360,8 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
-                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                 - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                 - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -405,13 +402,11 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
         if images is not None:
+            images = self.fetch_images(images)
             images = make_flat_list_of_images(images)
 
         if images is not None and not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         validate_preprocess_arguments(
             rescale_factor=rescale_factor,

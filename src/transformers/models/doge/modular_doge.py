@@ -30,7 +30,7 @@ from ...integrations.flex_attention import compile_friendly_flex_attention
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import rope_config_validation
-from ...modeling_utils import AttentionInterface
+from ...modeling_utils import AttentionInterface, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, is_torch_flex_attn_available
 from ...utils.deprecation import deprecate_kwarg
@@ -534,7 +534,7 @@ class DogeDecoderLayer(GradientCheckpointingLayer):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[torch.Tensor]] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -576,7 +576,7 @@ class DogePreTrainedModel(LlamaPreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        LlamaPreTrainedModel._init_weights(self, module)
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, DogeAttention):
             if hasattr(module, "A"):
                 module.A.data.zero_()
@@ -708,7 +708,7 @@ class DogeForCausalLM(MixtralForCausalLM):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,

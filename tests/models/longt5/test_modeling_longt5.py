@@ -16,11 +16,11 @@
 import copy
 import tempfile
 import unittest
+from functools import cached_property
 
 from transformers import LongT5Config, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
-from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -515,7 +515,6 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     test_pruning = False
     test_torchscript = True
     test_resize_embeddings = True
-    test_model_parallel = False
     is_encoder_decoder = True
 
     def setUp(self):
@@ -1012,7 +1011,6 @@ class LongT5EncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_torchscript = True
     test_resize_embeddings = False
-    test_model_parallel = False
 
     def setUp(self):
         self.model_tester = LongT5EncoderOnlyModelTester(self)

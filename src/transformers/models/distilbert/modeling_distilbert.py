@@ -562,7 +562,6 @@ class Transformer(nn.Module):
 @auto_docstring
 class DistilBertPreTrainedModel(PreTrainedModel):
     config: DistilBertConfig
-    load_tf_weights = None
     base_model_prefix = "distilbert"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
@@ -571,8 +570,6 @@ class DistilBertPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module: nn.Module):
         """Initialize the weights."""
         if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -596,8 +593,6 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
         self.embeddings = Embeddings(config)  # Embeddings
         self.transformer = Transformer(config)  # Encoder
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
-        self._use_sdpa = config._attn_implementation == "sdpa"
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -712,13 +707,13 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
         embeddings = self.embeddings(input_ids, inputs_embeds)  # (bs, seq_length, dim)
 
-        if self._use_flash_attention_2:
+        if self.config._attn_implementation == "flash_attention_2":
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         else:
             if attention_mask is None:
                 attention_mask = torch.ones(input_shape, device=device)  # (bs, seq_length)
 
-            if self._use_sdpa and head_mask_is_none and not output_attentions:
+            if self.config._attn_implementation == "sdpa" and head_mask_is_none and not output_attentions:
                 attention_mask = _prepare_4d_attention_mask_for_sdpa(
                     attention_mask, embeddings.dtype, tgt_len=input_shape[1]
                 )

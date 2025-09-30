@@ -15,17 +15,16 @@
 """PyTorch Nezha model."""
 
 import math
-import os
 import warnings
 from dataclasses import dataclass
 from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ....activations import ACT2FN
+from ....cache_utils import Cache
 from ....modeling_layers import GradientCheckpointingLayer
 from ....modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -55,79 +54,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "sijunhe/nezha-cn-base"
 _CONFIG_FOR_DOC = "NezhaConfig"
-
-
-def load_tf_weights_in_nezha(model, config, tf_checkpoint_path):
-    """Load tf checkpoints in a pytorch model."""
-    try:
-        import re
-
-        import numpy as np
-        import tensorflow as tf
-    except ImportError:
-        logger.error(
-            "Loading a TensorFlow model in PyTorch, requires TensorFlow to be installed. Please see "
-            "https://www.tensorflow.org/install/ for installation instructions."
-        )
-        raise
-    tf_path = os.path.abspath(tf_checkpoint_path)
-    logger.info(f"Converting TensorFlow checkpoint from {tf_path}")
-    # Load weights from TF model
-    init_vars = tf.train.list_variables(tf_path)
-    names = []
-    arrays = []
-    for name, shape in init_vars:
-        logger.info(f"Loading TF weight {name} with shape {shape}")
-        array = tf.train.load_variable(tf_path, name)
-        names.append(name)
-        arrays.append(array)
-
-    for name, array in zip(names, arrays):
-        name = name.split("/")
-        # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
-        # which are not required for using pretrained model
-        if any(
-            n in ["adam_v", "adam_m", "AdamWeightDecayOptimizer", "AdamWeightDecayOptimizer_1", "global_step"]
-            for n in name
-        ):
-            logger.info(f"Skipping {'/'.join(name)}")
-            continue
-        pointer = model
-        for m_name in name:
-            if re.fullmatch(r"[A-Za-z]+_\d+", m_name):
-                scope_names = re.split(r"_(\d+)", m_name)
-            else:
-                scope_names = [m_name]
-            if scope_names[0] == "kernel" or scope_names[0] == "gamma":
-                pointer = getattr(pointer, "weight")
-            elif scope_names[0] == "output_bias" or scope_names[0] == "beta":
-                pointer = getattr(pointer, "bias")
-            elif scope_names[0] == "output_weights":
-                pointer = getattr(pointer, "weight")
-            elif scope_names[0] == "squad":
-                pointer = getattr(pointer, "classifier")
-            else:
-                try:
-                    pointer = getattr(pointer, scope_names[0])
-                except AttributeError:
-                    logger.info(f"Skipping {'/'.join(name)}")
-                    continue
-            if len(scope_names) >= 2:
-                num = int(scope_names[1])
-                pointer = pointer[num]
-        if m_name[-11:] == "_embeddings":
-            pointer = getattr(pointer, "weight")
-        elif m_name == "kernel":
-            array = np.transpose(array)
-        try:
-            if pointer.shape != array.shape:
-                raise ValueError(f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
-        except AssertionError as e:
-            e.args += (pointer.shape, array.shape)
-            raise
-        logger.info(f"Initialize PyTorch weight {name}")
-        pointer.data = torch.from_numpy(array)
-    return model
 
 
 class NezhaRelativePositionsEncoding(nn.Module):
@@ -170,8 +96,6 @@ class NezhaEmbeddings(nn.Module):
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
-        # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
-        # any TensorFlow checkpoint file
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.register_buffer(
@@ -251,7 +175,7 @@ class NezhaSelfAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
         mixed_query_layer = self.query(hidden_states)
@@ -396,7 +320,7 @@ class NezhaAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
         self_outputs = self.self(
@@ -465,7 +389,7 @@ class NezhaLayer(GradientCheckpointingLayer):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
@@ -543,7 +467,7 @@ class NezhaEncoder(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
@@ -703,15 +627,12 @@ class NezhaPreTrainedModel(PreTrainedModel):
     """
 
     config: NezhaConfig
-    load_tf_weights = load_tf_weights_in_nezha
     base_model_prefix = "nezha"
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -877,7 +798,7 @@ class NezhaModel(NezhaPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,

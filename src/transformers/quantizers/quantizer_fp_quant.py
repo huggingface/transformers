@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Optional
 
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
@@ -89,8 +89,7 @@ class FPQuantHfQuantizer(HfQuantizer):
         param_value: "torch.Tensor",
         param_name: str,
         target_device: "torch.device",
-        state_dict: dict[str, Any],
-        unexpected_keys: Optional[list[str]] = None,
+        **kwargs,
     ):
         module, _ = get_module_from_name(model, param_name)
 
@@ -121,9 +120,6 @@ class FPQuantHfQuantizer(HfQuantizer):
         module.weight = torch.nn.Parameter(param_value.to(target_device))
         # Let pre-forward handle the quantization and set None where necessary
         module.pre_forward()
-
-        if unexpected_keys is not None and param_name in unexpected_keys:
-            unexpected_keys.remove(param_name)
 
     def _process_model_before_weight_loading(
         self,
@@ -163,14 +159,7 @@ class FPQuantHfQuantizer(HfQuantizer):
     def is_serializable(self, safe_serialization=None):
         return True
 
-    def check_quantized_param(
-        self,
-        model: "PreTrainedModel",
-        param_value: "torch.Tensor",
-        param_name: str,
-        state_dict: dict[str, Any],
-        **kwargs,
-    ) -> bool:
+    def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         from fp_quant import FPQuantLinear
 
         module, tensor_name = get_module_from_name(model, param_name)

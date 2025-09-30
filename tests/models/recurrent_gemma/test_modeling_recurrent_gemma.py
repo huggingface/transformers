@@ -18,7 +18,7 @@ import unittest
 import pytest
 from parameterized import parameterized
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, RecurrentGemmaConfig, is_torch_available, set_seed
+from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available, set_seed
 from transformers.testing_utils import (
     Expectations,
     require_bitsandbytes,
@@ -33,22 +33,18 @@ from transformers.testing_utils import (
 if is_torch_available():
     import torch
 
-    from transformers import RecurrentGemmaConfig, RecurrentGemmaForCausalLM, RecurrentGemmaModel
-
+    from transformers import RecurrentGemmaForCausalLM, RecurrentGemmaModel
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 class RecurrentGemmaModelTester(CausalLMModelTester):
-    config_class = RecurrentGemmaConfig
     if is_torch_available():
         base_model_class = RecurrentGemmaModel
-        causal_lm_class = RecurrentGemmaForCausalLM
 
 
 @require_torch
 class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (RecurrentGemmaModel, RecurrentGemmaForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": RecurrentGemmaModel,
@@ -57,25 +53,11 @@ class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
-    test_pruning = False
     has_attentions = False
     model_tester_class = RecurrentGemmaModelTester
 
     @unittest.skip(reason="RecurrentGemma only supports sdpa")
     def test_eager_matches_sdpa_generate(self):
-        pass
-
-    @unittest.skip(reason="RecurrentGemma does not return the cache")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
-    @unittest.skip(reason="RecurrentGemma does not return the cache")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip(reason="RecurrentGemma does not return the cache")
-    def test_contrastive_generate(self):
         pass
 
     @unittest.skip(reason="SQRBound is known to have issues with gc")
@@ -130,27 +112,7 @@ class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):
 
     @unittest.skip(reason="RecurrentGemma is unusual and fails a lot of generation tests")
     @pytest.mark.generate
-    def test_constrained_beam_search_generate_dict_output(self):
-        pass
-
-    @unittest.skip(reason="RecurrentGemma is unusual and fails a lot of generation tests")
-    @pytest.mark.generate
     def test_generate_without_input_ids(self):
-        pass
-
-    @unittest.skip(reason="RecurrentGemma is unusual and fails a lot of generation tests")
-    @pytest.mark.generate
-    def test_group_beam_search_generate(self):
-        pass
-
-    @unittest.skip(reason="RecurrentGemma is unusual and fails a lot of generation tests")
-    @pytest.mark.generate
-    def test_group_beam_search_generate_dict_output(self):
-        pass
-
-    @unittest.skip(reason="RecurrentGemma is unusual and fails a lot of generation tests")
-    @pytest.mark.generate
-    def test_constrained_beam_search_generate(self):
         pass
 
     @unittest.skip(reason="RecurrentGemma is unusual and fails a lot of generation tests")
@@ -165,6 +127,15 @@ class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):
 
     @unittest.skip(reason="RecurrentGemma is unusual and fails a lot of generation tests")
     def test_model_outputs_equivalence(self):
+        pass
+
+    @unittest.skip("RecurrentGemma doesn't have RoPE scaling implemented")
+    def test_model_rope_scaling_frequencies(self):
+        pass
+
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    @unittest.skip("RecurrentGemma doesn't have RoPE scaling implemented")
+    def test_model_rope_scaling_from_config(self, scaling_type):
         pass
 
 

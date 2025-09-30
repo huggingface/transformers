@@ -52,10 +52,7 @@ class DeepseekVLHybridBaseModelOutputWithPast(ModelOutput):
         If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
         hidden_size)` is output.
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
-        `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
-        encoder_sequence_length, embed_size_per_head)`.
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
         `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
@@ -68,7 +65,7 @@ class DeepseekVLHybridBaseModelOutputWithPast(ModelOutput):
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Cache] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[tuple[torch.FloatTensor]] = None
@@ -87,8 +84,7 @@ class DeepseekVLHybridCausalLMOutputWithPast(ModelOutput):
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
@@ -101,40 +97,36 @@ class DeepseekVLHybridCausalLMOutputWithPast(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[list[torch.FloatTensor]] = None
+    past_key_values: Optional[Cache] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
-class DeepseekVLHybridLayerNorm(nn.Module):
+class DeepseekVLHybridLayerNorm(nn.LayerNorm):
     r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
     The ordering of the dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height,
     width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
     """
 
-    def __init__(self, normalized_shape, eps=1e-6, data_format="channels_last"):
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(normalized_shape))
-        self.bias = nn.Parameter(torch.zeros(normalized_shape))
-        self.eps = eps
+    def __init__(self, normalized_shape, *, eps=1e-6, data_format="channels_last", **kwargs):
+        super().__init__(normalized_shape, eps=eps, **kwargs)
+        if data_format not in ["channels_last", "channels_first"]:
+            raise NotImplementedError(f"Unsupported data format: {data_format}")
         self.data_format = data_format
-        if self.data_format not in ["channels_last", "channels_first"]:
-            raise NotImplementedError(f"Unsupported data format: {self.data_format}")
-        self.normalized_shape = (normalized_shape,)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if self.data_format == "channels_last":
-            x = torch.nn.functional.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
-        elif self.data_format == "channels_first":
-            input_dtype = x.dtype
-            x = x.float()
-            u = x.mean(1, keepdim=True)
-            s = (x - u).pow(2).mean(1, keepdim=True)
-            x = (x - u) / torch.sqrt(s + self.eps)
-            x = x.to(dtype=input_dtype)
-            x = self.weight[:, None, None] * x + self.bias[:, None, None]
-        return x
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            features: Tensor of shape (batch_size, channels, height, width) OR (batch_size, height, width, channels)
+        """
+        if self.data_format == "channels_first":
+            features = features.permute(0, 2, 3, 1)
+            features = super().forward(features)
+            features = features.permute(0, 3, 1, 2)
+        else:
+            features = super().forward(features)
+        return features
 
 
 class DeepseekVLSamVisionNeck(nn.Module):
@@ -289,7 +281,7 @@ class DeepseekVLHybridModel(DeepseekVLHybridPreTrainedModel):
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
     ):
         """
-        Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
         equal to the length of multimodal features. If the lengths are different, an error is raised.
         """
         if input_ids is None:
@@ -313,9 +305,9 @@ class DeepseekVLHybridModel(DeepseekVLHybridPreTrainedModel):
     @auto_docstring(custom_args=DEEPSEEK_VL_COMMON_CUSTOM_ARGS)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
-        high_res_pixel_values: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        high_res_pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -424,9 +416,9 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLHybridPreTrainedModel, 
     @auto_docstring(custom_args=DEEPSEEK_VL_COMMON_CUSTOM_ARGS)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
-        high_res_pixel_values: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        high_res_pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,

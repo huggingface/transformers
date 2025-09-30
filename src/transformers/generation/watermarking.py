@@ -43,31 +43,31 @@ class WatermarkDetectorOutput:
     Outputs of a watermark detector.
 
     Args:
-        num_tokens_scored (np.array of shape (batch_size)):
+        num_tokens_scored (np.ndarray of shape (batch_size)):
             Array containing the number of tokens scored for each element in the batch.
-        num_green_tokens (np.array of shape (batch_size)):
+        num_green_tokens (np.ndarray of shape (batch_size)):
             Array containing the number of green tokens for each element in the batch.
-        green_fraction (np.array of shape (batch_size)):
+        green_fraction (np.ndarray of shape (batch_size)):
             Array containing the fraction of green tokens for each element in the batch.
-        z_score (np.array of shape (batch_size)):
+        z_score (np.ndarray of shape (batch_size)):
             Array containing the z-score for each element in the batch. Z-score here shows
             how many standard deviations away is the green token count in the input text
             from the expected green token count for machine-generated text.
-        p_value (np.array of shape (batch_size)):
+        p_value (np.ndarray of shape (batch_size)):
             Array containing the p-value for each batch obtained from z-scores.
-        prediction (np.array of shape (batch_size)), *optional*:
+        prediction (np.ndarray of shape (batch_size)), *optional*:
             Array containing boolean predictions whether a text is machine-generated for each element in the batch.
-        confidence (np.array of shape (batch_size)), *optional*:
+        confidence (np.ndarray of shape (batch_size)), *optional*:
             Array containing confidence scores of a text being machine-generated for each element in the batch.
     """
 
-    num_tokens_scored: Optional[np.array] = None
-    num_green_tokens: Optional[np.array] = None
-    green_fraction: Optional[np.array] = None
-    z_score: Optional[np.array] = None
-    p_value: Optional[np.array] = None
-    prediction: Optional[np.array] = None
-    confidence: Optional[np.array] = None
+    num_tokens_scored: Optional[np.ndarray] = None
+    num_green_tokens: Optional[np.ndarray] = None
+    green_fraction: Optional[np.ndarray] = None
+    z_score: Optional[np.ndarray] = None
+    p_value: Optional[np.ndarray] = None
+    prediction: Optional[np.ndarray] = None
+    confidence: Optional[np.ndarray] = None
 
 
 class WatermarkDetector:
@@ -179,7 +179,7 @@ class WatermarkDetector:
                 )
         return num_tokens_scored_batch, green_token_count_batch
 
-    def _compute_z_score(self, green_token_count: np.array, total_num_tokens: np.array) -> np.array:
+    def _compute_z_score(self, green_token_count: np.ndarray, total_num_tokens: np.ndarray) -> np.ndarray:
         expected_count = self.greenlist_ratio
         numer = green_token_count - expected_count * total_num_tokens
         denom = np.sqrt(total_num_tokens * expected_count * (1 - expected_count))
@@ -195,7 +195,7 @@ class WatermarkDetector:
         input_ids: torch.LongTensor,
         z_threshold: float = 3.0,
         return_dict: bool = False,
-    ) -> Union[WatermarkDetectorOutput, np.array]:
+    ) -> Union[WatermarkDetectorOutput, np.ndarray]:
         """
                 Args:
                 input_ids (`torch.LongTensor`):
@@ -207,8 +207,8 @@ class WatermarkDetector:
                     Whether to return `~generation.WatermarkDetectorOutput` or not. If not it will return boolean predictions,
         ma
                 Return:
-                    [`~generation.WatermarkDetectorOutput`] or `np.array`: A [`~generation.WatermarkDetectorOutput`]
-                    if `return_dict=True` otherwise a `np.array`.
+                    [`~generation.WatermarkDetectorOutput`] or `np.ndarray`: A [`~generation.WatermarkDetectorOutput`]
+                    if `return_dict=True` otherwise a `np.ndarray`.
 
         """
 

@@ -14,10 +14,8 @@
 import json
 import unittest
 
-import requests
-
+from transformers.image_utils import load_image
 from transformers.testing_utils import (
-    is_flaky,
     require_torch,
     require_torch_accelerator,
     require_torchvision,
@@ -28,6 +26,7 @@ from transformers.testing_utils import (
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_processing_common import url_to_local_path
 
 
 if is_vision_available():
@@ -234,7 +233,7 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         images = []
         for url in images_urls:
-            image = Image.open(requests.get(url, stream=True).raw)
+            image = load_image(url_to_local_path(url))
             images.append(image)
 
         for image_processing_class in self.image_processor_list:
@@ -435,9 +434,3 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         )
         # verify size
         torch.testing.assert_close(encoding_cpu["labels"][0]["size"], encoding_gpu["labels"][0]["size"].to("cpu"))
-
-    @is_flaky(
-        description="Still flaky with a failing ratio of ~0.6% after #36240",
-    )
-    def test_fast_is_faster_than_slow(self):
-        super().test_fast_is_faster_than_slow()

@@ -20,6 +20,8 @@ from collections.abc import Iterable
 from functools import lru_cache
 from typing import Any, Optional, Union
 
+import torch
+
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     BatchFeature,
@@ -27,13 +29,11 @@ from ...image_processing_utils_fast import (
     get_size_dict,
 )
 from ...image_transforms import ChannelDimension, group_images_by_shape, reorder_images
-from ...image_utils import ImageInput, PILImageResampling, SizeDict
+from ...image_utils import ImageInput, PILImageResampling, SizeDict, pil_torch_interpolation_mapping
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
     is_torchvision_v2_available,
 )
 from .image_processing_flava import (
@@ -45,16 +45,10 @@ from .image_processing_flava import (
 )
 
 
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    from ...image_utils import pil_torch_interpolation_mapping
-
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
+if is_torchvision_v2_available():
+    from torchvision.transforms.v2 import functional as F
+else:
+    from torchvision.transforms import functional as F
 
 
 class FlavaMaskingGenerator:
@@ -337,7 +331,6 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
 
         kwargs["size"] = size
         kwargs["crop_size"] = crop_size
-        kwargs["default_to_square"] = default_to_square
         kwargs["image_mean"] = image_mean
         kwargs["image_std"] = image_std
         kwargs["codebook_size"] = codebook_size
@@ -349,6 +342,15 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
             pil_torch_interpolation_mapping[codebook_resample]
             if isinstance(codebook_resample, (PILImageResampling, int))
             else codebook_resample
+        )
+
+        # torch resize uses interpolation instead of resample
+        # Check if resample is an int before checking if it's an instance of PILImageResampling
+        # because if pillow < 9.1.0, resample is an int and PILImageResampling is a module.
+        # Checking PILImageResampling will fail with error `TypeError: isinstance() arg 2 must be a type or tuple of types`.
+        resample = kwargs.pop("resample")
+        kwargs["interpolation"] = (
+            pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
         )
 
         return kwargs

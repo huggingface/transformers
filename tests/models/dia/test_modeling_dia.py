@@ -237,8 +237,6 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         skippable_tests = [
             "test_sample_generate_dict_output",  # return sequences > 1
             "test_beam",
-            "test_group_beam",
-            "test_constrained_beam",
             "test_contrastive",
             "test_assisted",
             "test_prompt_lookup",
@@ -252,7 +250,7 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 self.skipTest(reason="Dia only supports greedy search / sampling with one sequence.")
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        """Overriden to account for the 2D flattened structure"""
+        """Overridden to account for the 2D flattened structure"""
         inputs_dict = copy.deepcopy(inputs_dict)
 
         if return_labels:
@@ -519,9 +517,9 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                         )
                     )
 
-    @unittest.skip(reason="Indirectly checked in Dia through the generate methods.")
-    def test_past_key_values_format(self, custom_all_cache_shapes=None):
-        pass
+    @pytest.mark.generate
+    def test_prepare_inputs_for_generation_kwargs_forwards(self):
+        super().test_prepare_inputs_for_generation_kwargs_forwards(encoder_outputs=torch.randn(2, 2, 32))
 
     @unittest.skip(reason="Indirectly checked in Dia through the generate methods.")
     def test_hidden_states_output(self):

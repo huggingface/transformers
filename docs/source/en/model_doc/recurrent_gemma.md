@@ -31,15 +31,13 @@ The abstract from the paper is the following:
 
 Tips:
 
-- The original checkpoints can be converted using the conversion script [`src/transformers/models/recurrent_gemma/convert_recurrent_gemma_weights_to_hf.py`](https://github.com/huggingface/transformers/blob/main/src/transformers/models/recurrent_gemma/convert_recurrent_gemma_to_hf.py). 
+- The original checkpoints can be converted using the conversion script [`src/transformers/models/recurrent_gemma/convert_recurrent_gemma_weights_to_hf.py`](https://github.com/huggingface/transformers/blob/main/src/transformers/models/recurrent_gemma/convert_recurrent_gemma_to_hf.py).
 
 This model was contributed by [Arthur Zucker](https://huggingface.co/ArthurZ). The original code can be found [here](https://github.com/google-deepmind/recurrentgemma).
-
 
 ## RecurrentGemmaConfig
 
 [[autodoc]] RecurrentGemmaConfig
-
 
 ## RecurrentGemmaModel
 
@@ -50,4 +48,3 @@ This model was contributed by [Arthur Zucker](https://huggingface.co/ArthurZ). T
 
 [[autodoc]] RecurrentGemmaForCausalLM
     - forward
-
