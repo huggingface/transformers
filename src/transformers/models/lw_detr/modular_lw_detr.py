@@ -426,7 +426,7 @@ class LwDetrRepVggBlock(nn.Module):
         return y
 
 
-class LwDetrCSPRepLayer(nn.Module):
+class LwDetrC2FLayer(nn.Module):
     # Inspired by RTDetrCSPRepLayer
     def __init__(self, config: LwDetrConfig, in_channels: int, out_channels: int):
         super().__init__()
@@ -499,7 +499,7 @@ class LwDetrScaleProjector(nn.Module):
                 intermediate_dim = intermediate_dim // 2
         projector_input_dim = intermediate_dim * len(intermediate_dims)
 
-        self.projector_layer = LwDetrCSPRepLayer(config, projector_input_dim, output_dim)
+        self.projector_layer = LwDetrC2FLayer(config, projector_input_dim, output_dim)
         self.layer_norm = LwDetrLayerNorm(output_dim, data_format="channels_first")
 
     def forward(self, hidden_states_tuple: tuple[torch.Tensor]) -> torch.Tensor:
