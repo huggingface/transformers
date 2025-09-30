@@ -347,13 +347,14 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         for idx, url in enumerate(input_data[:batch_size]):
             batch_messages[idx][0]["content"] = [batch_messages[idx][0]["content"][0], {"type": modality, "url": url}]
 
+        num_frames = 2  # by default no more than 2 frames, otherwise too slow
         out_dict = processor.apply_chat_template(
             batch_messages,
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
             return_tensors="pt",
-            num_frames=2,  # by default no more than 2 frames, otherwise too slow
+            num_frames=num_frames,
         )
         self.assertTrue(self.videos_input_name in out_dict)
         self.assertEqual(len(out_dict["input_ids"]), batch_size)
@@ -361,11 +362,15 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # InternVL internally collects frames from all the videos in a batch and flattens the batch dimension (B T C H W) -> (B*T C H W) then patches and removes the frames
         # hence output length does not equal batch size
-        # removed hardcoded video length check video_len = 2 if batch_size == 1 else 3
-        # from experiment video_len looks like batch_size + 1
-        # TODO: update expected video_len calculation based on the internal processing logic of InternVLProcessor
-        output_len = batch_size + 1 if modality == "video" else batch_size
-        self.assertEqual(len(out_dict[self.videos_input_name]), output_len)
+        num_pixel_planes = 0  # i.e. images + video frames
+        for message_thread in batch_messages:
+            for message in message_thread:
+                for content in message.get("content", []):
+                    if (content_type := content.get("type")) == "image":
+                        num_pixel_planes += 1
+                    elif content_type == "video":
+                        num_pixel_planes += num_frames
+        self.assertEqual(len(out_dict[self.videos_input_name]), num_pixel_planes)
         for k in out_dict:
             self.assertIsInstance(out_dict[k], torch.Tensor)
 
@@ -398,6 +403,6 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             videos_kwargs={"size": (448, 448)},
         )
 
-        actual_num_frames = inputs.pixel_values.pixel_values.shape[0]
+        actual_num_frames = inputs.pixel_values.shape[0]
         expected_num_frames = sum(x.shape[0] for x in videos[:batch_size])
         assert actual_num_frames == expected_num_frames
