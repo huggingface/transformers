@@ -311,7 +311,6 @@ for decoded_output in decoded_outputs:
 Use the model to transcribe audio (state-of-the-art performance in English, Spanish, French, Portuguese, Hindi, German, Dutch, Italian)!
 It also support automatic language detection.
 
-
 ```python
 import torch
 from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device

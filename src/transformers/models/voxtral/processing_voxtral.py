@@ -317,8 +317,9 @@ class VoxtralProcessor(ProcessorMixin):
             model_id (`str`:
                 The hub model id of the model to use for transcription.
             language (`str`, `list[Union[str, None]]`, *optional*):
-                The language or languages of the audio. If not provided, automatic language detection will be used for all audio.
-                If provided as a string, it should be a language code in the [ISO 639-1 alpha-2 format](https://en.wikipedia.org/wiki/ISO_639-1) e.g. `"en"`, will be applied uniformly to all audio.
+                The language or languages of the audio.
+                If not provided or None, automatic language detection will be used for all audio.
+                If provided as a string (a language code in the [ISO 639-1 alpha-2 format](https://en.wikipedia.org/wiki/ISO_639-1) e.g. `"en"`), it will be applied uniformly to all audio.
                 If provided as a list of strings/ None values, e.g. `["en", None, "fr"]`, will be applied to each audio individually with a one-to-one mapping,
                 with a None value indicating automatic language detection for that audio.
             sampling_rate (`int`, *optional*):
