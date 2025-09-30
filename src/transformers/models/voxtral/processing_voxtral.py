@@ -284,9 +284,9 @@ class VoxtralProcessor(ProcessorMixin):
     # TODO: @eustlb, this should be moved to mistral_common + testing
     def apply_transcription_request(
         self,
-        language: Union[str, list[str]],
         audio: Union[str, list[str], AudioInput],
         model_id: str,
+        language: Optional[Union[str, list[Union[str, None]]]] = None,
         sampling_rate: Optional[int] = None,
         format: Optional[Union[str, list[str]]] = None,
         **kwargs: Unpack[VoxtralProcessorKwargs],
@@ -304,17 +304,23 @@ class VoxtralProcessor(ProcessorMixin):
         language = "en"
         audio = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3"
 
+        # set the language is already know for better accuracy
         inputs = processor.apply_transcription_request(language=language, audio=audio, model_id=model_id)
+
+        # but you can also let the model detect the language automatically
+        inputs = processor.apply_transcription_request(audio=audio, model_id=model_id)
         ```
 
         Args:
-            language (`str`, `list[str]`):
-                The language or languages of the audio. If provided as a string, will be applied uniformly to all audio.
-                If provided as a list, will be applied to each audio individually with a one-to-one mapping.
             audio (`str`, `list[str]`, `np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The audio or batch of audio to be prepared. If provided as a string, it should correspond to the path or url of the audio file.
             model_id (`str`:
                 The hub model id of the model to use for transcription.
+            language (`str`, `list[Union[str, None]]`, *optional*):
+                The language or languages of the audio. If not provided, automatic language detection will be used for all audio.
+                If provided as a string, it should be a language code in the [ISO 639-1 alpha-2 format](https://en.wikipedia.org/wiki/ISO_639-1) e.g. `"en"`, will be applied uniformly to all audio.
+                If provided as a list of strings/ None values, e.g. `["en", None, "fr"]`, will be applied to each audio individually with a one-to-one mapping,
+                with a None value indicating automatic language detection for that audio.
             sampling_rate (`int`, *optional*):
                 The sampling rate of the audio. Necessary if it is provided as `np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`.
                 Used to avoid silent errors when passing audio that is not in the expected sampling rate.
@@ -386,7 +392,8 @@ class VoxtralProcessor(ProcessorMixin):
         n_audio = len(audio)
         if isinstance(language, str):
             language = [language] * n_audio
-
+        elif language is None:
+            language = [None] * n_audio
         if len(language) != n_audio:
             raise ValueError(
                 f"When passed as a list of languages, the length ({len(language)}) must match the number of audio ({n_audio})"

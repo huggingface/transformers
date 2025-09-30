@@ -308,7 +308,9 @@ for decoded_output in decoded_outputs:
 
 ### Transcription Mode
 
-Use the model to transcribe audio (supports English, Spanish, French, Portuguese, Hindi, German, Dutch, Italian)!
+Use the model to transcribe audio (state-of-the-art performance in English, Spanish, French, Portuguese, Hindi, German, Dutch, Italian)!
+It also support automatic language detection.
+
 
 ```python
 import torch
@@ -320,9 +322,13 @@ repo_id = "mistralai/Voxtral-Mini-3B-2507"
 processor = AutoProcessor.from_pretrained(repo_id)
 model = VoxtralForConditionalGeneration.from_pretrained(repo_id, dtype=torch.bfloat16, device_map=device)
 
+# set the language is already know for better accuracy
 inputs = processor.apply_transcription_request(language="en", audio="https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3", model_id=repo_id)
-inputs = inputs.to(device, dtype=torch.bfloat16)
 
+# # but you can also let the model detect the language automatically
+# inputs = processor.apply_transcription_request(audio="https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3", model_id=repo_id) 
+
+inputs = inputs.to(device, dtype=torch.bfloat16)
 outputs = model.generate(**inputs, max_new_tokens=500)
 decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
 
