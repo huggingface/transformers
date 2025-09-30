@@ -97,7 +97,6 @@ from .utils import (
     is_optimum_available,
     is_peft_available,
     is_remote_url,
-    is_safetensors_available,
     is_torch_flex_attn_available,
     is_torch_greater_or_equal,
     is_torch_mlu_available,
@@ -117,6 +116,9 @@ from .utils.import_utils import (
 )
 from .utils.quantization_config import BitsAndBytesConfig, QuantizationMethod
 
+from safetensors import safe_open
+from safetensors.torch import load_file as safe_load_file
+from safetensors.torch import save_file as safe_save_file
 
 if is_accelerate_available():
     from accelerate import dispatch_model, infer_auto_device_map
@@ -133,11 +135,6 @@ if is_accelerate_available():
     accelerate_version = version.parse(importlib.metadata.version("accelerate"))
     if accelerate_version >= version.parse("0.31"):
         from accelerate.utils.modeling import get_state_dict_from_offload
-
-if is_safetensors_available():
-    from safetensors import safe_open
-    from safetensors.torch import load_file as safe_load_file
-    from safetensors.torch import save_file as safe_save_file
 
 if is_peft_available():
     from .utils import find_adapter_config_file
@@ -403,21 +400,14 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
     index_present = os.path.isfile(index_file)
     safe_index_present = os.path.isfile(safe_index_file)
 
-    if not index_present and not (safe_index_present and is_safetensors_available()):
-        filenames = (
-            (WEIGHTS_INDEX_NAME, SAFE_WEIGHTS_INDEX_NAME) if is_safetensors_available() else (WEIGHTS_INDEX_NAME,)
-        )
+    if not index_present and not safe_index_present:
+        filenames = (WEIGHTS_INDEX_NAME, SAFE_WEIGHTS_INDEX_NAME)
         raise ValueError(f"Can't find a checkpoint index ({' or '.join(filenames)}) in {folder}.")
 
     load_safe = False
     if safe_index_present:
         if prefer_safe:
-            if is_safetensors_available():
-                load_safe = True  # load safe due to preference
-            else:
-                logger.warning(
-                    f"Cannot load sharded checkpoint at {folder} safely since safetensors is not installed!"
-                )
+            load_safe = True
         elif not index_present:
             load_safe = True  # load safe since we have no other choice
 
@@ -493,7 +483,7 @@ def load_state_dict(
     Reads a `safetensor` or a `.bin` checkpoint file. We load the checkpoint on "cpu" by default.
     """
     # Use safetensors if possible
-    if checkpoint_file.endswith(".safetensors") and is_safetensors_available():
+    if checkpoint_file.endswith(".safetensors"):
         with safe_open(checkpoint_file, framework="pt") as f:
             state_dict = {}
             for k in f.keys():
@@ -3784,8 +3774,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 "`save_config` is deprecated and will be removed in v5 of Transformers. Use `is_main_process` instead."
             )
             is_main_process = kwargs.pop("save_config")
-        if safe_serialization and not is_safetensors_available():
-            raise ImportError("`safe_serialization` requires the `safetensors library: `pip install safetensors`.")
 
         # we need to check against tp_size, not tp_plan, as tp_plan is substituted to the class one
         if self._tp_size is not None and not is_huggingface_hub_greater_or_equal("0.31.4"):
@@ -4624,9 +4612,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if token is not None and adapter_kwargs is not None and "token" not in adapter_kwargs:
             adapter_kwargs["token"] = token
 
-        if use_safetensors is None and not is_safetensors_available():
-            use_safetensors = False
-
         if gguf_file is not None and not is_accelerate_available():
             raise ValueError("accelerate is required when loading a GGUF file `pip install accelerate`.")
 
@@ -4816,18 +4801,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         )
 
         is_quantized = hf_quantizer is not None
-        is_from_file = pretrained_model_name_or_path is not None or gguf_file is not None
-
-        # Just a helpful message in case we try to load safetensors files coming from old Transformers tf/flax classes
-        if is_safetensors_available() and is_from_file and checkpoint_files[0].endswith(".safetensors"):
-            with safe_open(checkpoint_files[0], framework="pt") as f:
-                metadata = f.metadata()
-            if metadata is not None and metadata.get("format") in ["tf", "flax"]:
-                logger.warning(
-                    "The safetensors checkpoint found has format `tf` or `flax`. This mean that the keys will very"
-                    "likely not match to the model you are trying to load, and will be newly initialized. If it's the case "
-                    "another warning will be raised later. Consider converting your checkpoint to the correct format."
-                )
 
         if gguf_file:
             from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
