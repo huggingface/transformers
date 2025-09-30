@@ -558,7 +558,7 @@ class RecurrentGemmaPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
         elif isinstance(module, RecurrentGemmaRMSNorm):
-            module.weight.data.fill_(1.0)
+            module.weight.data.zero_()
 
     def _setup_cache(self, config, batch, device, dtype):
         layers = getattr(self, "model", self).layers
