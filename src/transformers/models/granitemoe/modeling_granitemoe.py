@@ -456,6 +456,7 @@ class GraniteMoeModel(GraniteMoePreTrainedModel):
         self.rotary_emb = GraniteMoeRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
         self.embedding_multiplier = config.embedding_multiplier
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -481,7 +482,6 @@ class GraniteMoeModel(GraniteMoePreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        inputs_embeds = inputs_embeds * self.embedding_multiplier
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
@@ -498,7 +498,7 @@ class GraniteMoeModel(GraniteMoePreTrainedModel):
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
-
+        inputs_embeds = inputs_embeds * self.embedding_multiplier
         hidden_states = inputs_embeds
 
         # create position embeddings to be shared across the decoder layers

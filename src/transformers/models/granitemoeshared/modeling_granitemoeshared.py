@@ -526,6 +526,7 @@ class GraniteMoeSharedModel(GraniteMoeSharedPreTrainedModel):
         self.norm = GraniteMoeSharedRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = GraniteMoeSharedRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
+        self.embedding_multiplier = config.embedding_multiplier
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -568,7 +569,7 @@ class GraniteMoeSharedModel(GraniteMoeSharedPreTrainedModel):
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
-
+        inputs_embeds = inputs_embeds * self.embedding_multiplier
         hidden_states = inputs_embeds
 
         # create position embeddings to be shared across the decoder layers
