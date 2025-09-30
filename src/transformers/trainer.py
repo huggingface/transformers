@@ -220,17 +220,18 @@ if is_accelerate_available():
     from accelerate.state import AcceleratorState
     from accelerate.utils import (
         AutocastKwargs,
+        DataLoaderConfiguration,
         DistributedDataParallelKwargs,
         DistributedType,
         load_fsdp_model,
         load_fsdp_optimizer,
         save_fsdp_model,
         save_fsdp_optimizer,
-        DataLoaderConfiguration
     )
-    
+
     if is_deepspeed_available():
         from accelerate.utils import DeepSpeedSchedulerWrapper
+
 
 def _is_peft_model(model):
     if is_peft_available():
@@ -5067,7 +5068,7 @@ class Trainer:
             **{param: accelerator_config.pop(param) for param in dataloader_params}
         )
         dataloader_config.data_seed = self.args.data_seed
-        
+
         non_blocking = accelerator_config.pop("non_blocking")
 
         if non_blocking and not self.args.dataloader_pin_memory:
@@ -5078,10 +5079,7 @@ class Trainer:
         # this would have been updated above, no need for it anymore
         accelerator_config.pop("gradient_accumulation_kwargs")
 
-        args = {
-            "deepspeed_plugin": self.args.deepspeed_plugin,
-            "dataloader_config": dataloader_config
-        }
+        args = {"deepspeed_plugin": self.args.deepspeed_plugin, "dataloader_config": dataloader_config}
 
         # We defer compatibility checks to accelerator
         if self.args.parallelism_config is not None:
@@ -5098,6 +5096,7 @@ class Trainer:
                 if version.parse(accelerate_version) > version.parse("1.10.1"):
                     if self.args.parallelism_config is not None:
                         from accelerate import ParallelismConfig
+
                         args["parallelism_config"] = ParallelismConfig(tp_size=self.model.tp_size)
                 else:
                     raise ValueError("Requires accelerate>1.10.1 to use Tensor Parallelism.")
