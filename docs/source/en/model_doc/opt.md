@@ -101,8 +101,6 @@ tokenizer.batch_decode(generated_ids)[0]
 
 - OPT adds an `EOS` token `</s>` to the beginning of every prompt.
 
-- The `head_mask` argument is ignored if the attention implementation isn't `"eager"`. Set `attn_implementation="eager"` to enable the `head_mask`.
-
 ## Resources
 
 - Refer to this [notebook](https://colab.research.google.com/drive/1jCkpikz0J2o20FBQmYmAGdiKmJGOMo-o?usp=sharing) for an example of fine-tuning OPT with PEFT, bitsandbytes, and Transformers.

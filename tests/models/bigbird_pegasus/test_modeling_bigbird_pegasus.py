@@ -266,7 +266,6 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     is_encoder_decoder = True
     test_missing_keys = False
     test_pruning = False
-    test_head_masking = False
 
     # torchscript tests are not passing for now.
     # Also torchscript is not an important feature to have in the beginning.

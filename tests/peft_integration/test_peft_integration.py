@@ -715,9 +715,8 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 # Here we need to adjust the key name a bit to account for PEFT-specific naming.
                 # 1. Remove PEFT-specific prefix
-                # If merged after dropping Python 3.8, we can use: key = key.removeprefix(peft_prefix)
                 peft_prefix = "base_model.model."
-                key = key[len(peft_prefix) :]
+                key = key.removeprefix(peft_prefix)
                 # 2. Insert adapter name
                 prefix, _, suffix = key.rpartition(".")
                 key = f"{prefix}.other.{suffix}"

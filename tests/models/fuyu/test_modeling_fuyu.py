@@ -169,7 +169,6 @@ class FuyuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         {"text-generation": FuyuForCausalLM, "image-text-to-text": FuyuForCausalLM} if is_torch_available() else {}
     )
 
-    test_head_masking = False
     test_pruning = False
     test_cpu_offload = False
     test_disk_offload = False

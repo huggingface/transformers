@@ -157,7 +157,6 @@ class MinistralIntegrationTest(unittest.TestCase):
         assistant_model.generation_config.num_assistant_tokens = 2
         assistant_model.generation_config.num_assistant_tokens_schedule = "constant"
         generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
-        print(generated_ids[0][-2:].tolist())
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
 
         del assistant_model
@@ -247,7 +246,6 @@ class MinistralIntegrationTest(unittest.TestCase):
         input_length = inputs.input_ids.shape[1]  # around 33k tokens > 32k sliding window
         outputs = model.generate(**inputs, max_new_tokens=100, do_sample=False)
         output_text = tokenizer.decode(outputs[0][input_length:], skip_special_tokens=True)
-        print(output_text)
         self.assertEqual(
             output_text,
             " H. Gammarus lives on the continental shelf at depths of 0 – 150 metres ( 0 – 492 ft ) , although not normally deeper than 50 m ( 160 ft ) .",

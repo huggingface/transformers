@@ -207,7 +207,6 @@ class AutoformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     all_model_classes = (AutoformerModel, AutoformerForPrediction) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": AutoformerModel} if is_torch_available() else {}
     test_pruning = False
-    test_head_masking = False
     test_missing_keys = False
     test_torchscript = False
     test_inputs_embeds = False
@@ -294,9 +293,6 @@ class AutoformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             expected_arg_names.extend(
                 [
                     "decoder_attention_mask",
-                    "head_mask",
-                    "decoder_head_mask",
-                    "cross_attn_head_mask",
                     "encoder_outputs",
                     "past_key_values",
                     "output_hidden_states",

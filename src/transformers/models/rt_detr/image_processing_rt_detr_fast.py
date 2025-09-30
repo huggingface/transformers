@@ -8,6 +8,7 @@ import pathlib
 from typing import Any, Optional, Union
 
 import torch
+from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -34,12 +35,6 @@ from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_v2_available, requires_backends
 from ...utils.import_utils import requires
 from .image_processing_rt_detr import get_size_with_aspect_ratio
-
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
 
 
 class RTDetrFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):

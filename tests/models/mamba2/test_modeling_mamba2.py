@@ -246,7 +246,6 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     test_torchscript = False  # FIXME I think this should be doable @molbap @ArthurZucker
     test_missing_keys = False
     test_pruning = False
-    test_head_masking = False  # Mamba does not have attention heads
 
     pipeline_model_mapping = (
         {"feature-extraction": Mamba2Model, "text-generation": Mamba2ForCausalLM} if is_torch_available() else {}

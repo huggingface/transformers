@@ -269,7 +269,6 @@ class ConvBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         else {}
     )
     test_pruning = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = ConvBertModelTester(self)

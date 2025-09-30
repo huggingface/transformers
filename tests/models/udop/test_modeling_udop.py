@@ -278,7 +278,6 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     fx_compatible = False
     test_pruning = False
     test_torchscript = False
-    test_head_masking = False
     test_resize_embeddings = True
     is_encoder_decoder = True
     test_cpu_offload = False
@@ -348,13 +347,10 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
                 "attention_mask",
                 "bbox",
                 "cache_position",
-                "cross_attn_head_mask",
                 "decoder_attention_mask",
-                "decoder_head_mask",
                 "decoder_input_ids",
                 "decoder_inputs_embeds",
                 "encoder_outputs",
-                "head_mask",
                 "input_ids",
                 "inputs_embeds",
             ]
@@ -553,7 +549,6 @@ class UdopEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (UdopEncoderModel,) if is_torch_available() else ()
     test_pruning = False
     test_torchscript = False
-    test_head_masking = False
     test_resize_embeddings = False
 
     def setUp(self):

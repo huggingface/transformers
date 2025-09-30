@@ -49,9 +49,6 @@ The main differences compared to GPT2.
 
 You can read more about the optimizations in the [original pull request](https://github.com/huggingface/transformers/pull/22575)
 
-> [!NOTE]
-> The `head_mask` argument is ignored when using all attention implementation other than "eager". If you have a `head_mask` and want it to have effect, load the model with `XXXModel.from_pretrained(model_id, attn_implementation="eager")`
-
 ## Combining Starcoder and Flash Attention 2
 
 First, make sure to install the latest version of Flash Attention 2 to include the sliding window attention feature.

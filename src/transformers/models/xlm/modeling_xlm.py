@@ -530,7 +530,6 @@ class MultiHeadAttention(nn.Module):
         mask,
         kv=None,
         cache=None,
-        head_mask=None,
         output_attentions=False,
         cache_position=None,
     ):
@@ -581,10 +580,6 @@ class MultiHeadAttention(nn.Module):
 
         weights = nn.functional.softmax(scores.float(), dim=-1).type_as(scores)  # (bs, n_heads, qlen, klen)
         weights = nn.functional.dropout(weights, p=self.dropout, training=self.training)  # (bs, n_heads, qlen, klen)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            weights = weights * head_mask
 
         context = torch.matmul(weights, v)  # (bs, n_heads, qlen, head_dim)
         context = context.transpose(1, 2).contiguous().view(bs, -1, self.n_heads * self.head_dim)
@@ -785,7 +780,6 @@ class XLMModel(XLMPreTrainedModel):
         position_ids: Optional[torch.Tensor] = None,
         lengths: Optional[torch.Tensor] = None,
         cache: Optional[dict[str, torch.Tensor]] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -852,9 +846,6 @@ class XLMModel(XLMPreTrainedModel):
         if langs is not None:
             assert langs.size() == (bs, slen)  # (slen, bs)
 
-        # Prepare head mask if needed
-        head_mask = self.get_head_mask(head_mask, self.config.n_layers)
-
         # do not recompute cached elements
         if cache is not None and input_ids is not None:
             _slen = slen - cache.get_seq_length()
@@ -890,7 +881,6 @@ class XLMModel(XLMPreTrainedModel):
                 tensor,
                 attn_mask,
                 cache=cache,
-                head_mask=head_mask[i],
                 output_attentions=output_attentions,
                 cache_position=cache_position,
             )
@@ -1016,7 +1006,6 @@ class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
         position_ids: Optional[torch.Tensor] = None,
         lengths: Optional[torch.Tensor] = None,
         cache: Optional[dict[str, torch.Tensor]] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
@@ -1056,7 +1045,6 @@ class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
             position_ids=position_ids,
             lengths=lengths,
             cache=cache,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1107,7 +1095,6 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
         position_ids: Optional[torch.Tensor] = None,
         lengths: Optional[torch.Tensor] = None,
         cache: Optional[dict[str, torch.Tensor]] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
@@ -1145,7 +1132,6 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
             position_ids=position_ids,
             lengths=lengths,
             cache=cache,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1216,7 +1202,6 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
         position_ids: Optional[torch.Tensor] = None,
         lengths: Optional[torch.Tensor] = None,
         cache: Optional[dict[str, torch.Tensor]] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         start_positions: Optional[torch.Tensor] = None,
         end_positions: Optional[torch.Tensor] = None,
@@ -1251,7 +1236,6 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
             position_ids=position_ids,
             lengths=lengths,
             cache=cache,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1316,7 +1300,6 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
         position_ids: Optional[torch.Tensor] = None,
         lengths: Optional[torch.Tensor] = None,
         cache: Optional[dict[str, torch.Tensor]] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         start_positions: Optional[torch.Tensor] = None,
         end_positions: Optional[torch.Tensor] = None,
@@ -1380,7 +1363,6 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
             position_ids=position_ids,
             lengths=lengths,
             cache=cache,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1437,7 +1419,6 @@ class XLMForTokenClassification(XLMPreTrainedModel):
         position_ids: Optional[torch.Tensor] = None,
         lengths: Optional[torch.Tensor] = None,
         cache: Optional[dict[str, torch.Tensor]] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
@@ -1473,7 +1454,6 @@ class XLMForTokenClassification(XLMPreTrainedModel):
             position_ids=position_ids,
             lengths=lengths,
             cache=cache,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1524,7 +1504,6 @@ class XLMForMultipleChoice(XLMPreTrainedModel):
         position_ids: Optional[torch.Tensor] = None,
         lengths: Optional[torch.Tensor] = None,
         cache: Optional[dict[str, torch.Tensor]] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
@@ -1605,7 +1584,6 @@ class XLMForMultipleChoice(XLMPreTrainedModel):
             position_ids=position_ids,
             lengths=lengths,
             cache=cache,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,

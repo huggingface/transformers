@@ -357,7 +357,6 @@ class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     test_missing_keys = False
     test_pruning = False
     test_torchscript = False
-    test_head_masking = False
     pipeline_model_mapping = (
         {
             "feature-extraction": MptModel,

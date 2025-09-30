@@ -168,7 +168,6 @@ class DeepseekVLHybridModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
     )
     _is_composite = True
     test_pruning = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = DeepseekVLHybridModelTester(self)

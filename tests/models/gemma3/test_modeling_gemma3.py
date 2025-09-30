@@ -267,7 +267,6 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
         else ()
     )
     all_generative_model_classes = (Gemma3ForConditionalGeneration,) if is_torch_available() else ()
-    test_headmasking = False
     test_pruning = False
     test_missing_keys = False
     _is_stateful = True

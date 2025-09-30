@@ -261,7 +261,6 @@ class MraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else ()
     )
     test_pruning = False
-    test_headmasking = False
     test_torchscript = False
     has_attentions = False
 
