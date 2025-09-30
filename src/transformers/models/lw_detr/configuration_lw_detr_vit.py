@@ -70,9 +70,6 @@ class LwDetrViTConfig(BackboneConfigMixin, PretrainedConfig):
             many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
             If unset and `out_features` is unset, will default to the last stage. Must be in the
             same order as defined in the `stage_names` attribute.
-        use_cae (`bool`, *optional*, defaults to `True`):
-            Whether to use Cross-Attention Enhancement (CAE) mechanism. When enabled, the key projection in attention
-            layers uses a different bias configuration for improved performance.
         cae_init_values (`float`, *optional*, defaults to 0.1):
             Initialization value for CAE parameters when `use_cae` is enabled.
         num_windows (`int`, *optional*, defaults to 16):
@@ -120,7 +117,6 @@ class LwDetrViTConfig(BackboneConfigMixin, PretrainedConfig):
         use_absolute_position_embeddings=True,
         out_features=None,
         out_indices=None,
-        use_cae: bool = True,
         cae_init_values: float = 0.1,
         num_windows=16,
         **kwargs,
@@ -149,7 +145,6 @@ class LwDetrViTConfig(BackboneConfigMixin, PretrainedConfig):
             out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
         )
 
-        self.use_cae = use_cae
         self.cae_init_values = cae_init_values
         if num_windows % math.sqrt(num_windows) != 0:
             raise ValueError(

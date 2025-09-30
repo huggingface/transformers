@@ -72,10 +72,7 @@ class LwDetrViTSelfAttention(nn.Module):
 
         self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
         self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        if config.use_cae:
-            self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=False)
-        else:
-            self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=False)
 
     def forward(
         self,
@@ -214,10 +211,8 @@ class LwDetrViTLayer(GradientCheckpointingLayer):
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-        self.use_cae = config.use_cae
-        if self.use_cae:
-            self.gamma_1 = nn.Parameter(torch.Tensor(dim), requires_grad=True)
-            self.gamma_2 = nn.Parameter(torch.Tensor(dim), requires_grad=True)
+        self.gamma_1 = nn.Parameter(torch.Tensor(dim), requires_grad=True)
+        self.gamma_2 = nn.Parameter(torch.Tensor(dim), requires_grad=True)
 
         drop_path_rate = config.drop_path_rates[layer_idx]
         self.drop_path = LwDetrViTDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
@@ -225,7 +220,6 @@ class LwDetrViTLayer(GradientCheckpointingLayer):
         self.window = layer_idx in config.window_block_indices
         self.num_windows = config.num_windows
         self.num_windows_side = int(math.sqrt(self.num_windows))
-        self.use_cae = config.use_cae
 
     def forward(
         self,
@@ -244,9 +238,7 @@ class LwDetrViTLayer(GradientCheckpointingLayer):
                 head_mask = head_mask.reshape(batch_size // self.num_windows, self.num_windows * seq_len)
 
         attention_output = self.attention(hidden_states_norm, head_mask, **kwargs)
-
-        if self.use_cae:
-            attention_output = attention_output * self.gamma_1
+        attention_output = attention_output * self.gamma_1
 
         if not self.window:
             attention_output = attention_output.reshape(batch_size, seq_len, channels)
@@ -258,9 +250,7 @@ class LwDetrViTLayer(GradientCheckpointingLayer):
 
         layer_output = self.layernorm_after(hidden_states)
         layer_output = self.intermediate(layer_output)
-
-        if self.use_cae:
-            layer_output = layer_output * self.gamma_2
+        layer_output = layer_output * self.gamma_2
 
         hidden_states = hidden_states + self.drop_path(layer_output)
 
@@ -414,9 +404,8 @@ class LwDetrViTPreTrainedModel(PreTrainedModel):
                 std=self.config.initializer_range,
             ).to(module.position_embeddings.dtype)
         elif isinstance(module, LwDetrViTLayer):
-            if module.use_cae:
-                nn.init.constant_(module.gamma_1, self.config.cae_init_values)
-                nn.init.constant_(module.gamma_2, self.config.cae_init_values)
+            nn.init.constant_(module.gamma_1, self.config.cae_init_values)
+            nn.init.constant_(module.gamma_2, self.config.cae_init_values)
 
 
 @auto_docstring(
