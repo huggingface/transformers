@@ -50,7 +50,7 @@ from transformers import (
 from transformers.image_processing_utils import BatchFeature
 from transformers.trainer import EvalPrediction
 from transformers.trainer_utils import get_last_checkpoint
-from transformers.utils import check_min_version, send_example_telemetry
+from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 
 
@@ -366,10 +366,6 @@ def main():
     training_args.eval_do_concat_batches = False
     training_args.batch_eval_metrics = True
     training_args.remove_unused_columns = False
-
-    # # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
-    # # information sent is the one passed as arguments along with your Python/PyTorch versions.
-    send_example_telemetry("run_instance_segmentation", args)
 
     # Setup logging and log on each process the small summary:
     setup_logging(training_args)

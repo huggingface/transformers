@@ -23,6 +23,7 @@ rendered properly in your Markdown viewer.
 Image segmentation models separate areas corresponding to different areas of interest in an image. These models work by assigning a label to each pixel. There are several types of segmentation: semantic segmentation, instance segmentation, and panoptic segmentation.
 
 In this guide, we will:
+
 1. [Take a look at different types of segmentation](#types-of-segmentation).
 2. [Have an end-to-end fine-tuning example for semantic segmentation](#fine-tuning-a-model-for-segmentation).
 
@@ -69,6 +70,7 @@ results
 ```
 
 The segmentation pipeline output includes a mask for every predicted class.
+
 ```bash
 [{'score': None,
   'label': 'road',
@@ -107,6 +109,7 @@ Taking a look at the mask for the car class, we can see every car is classified 
 ```python
 results[-1]["mask"]
 ```
+
 <div class="flex justify-center">
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/semantic_segmentation_output.png" alt="Semantic Segmentation Output"/>
 </div>
@@ -135,11 +138,13 @@ As you can see below, there are multiple cars classified, and there's no classif
   'label': 'person',
   'mask': <PIL.Image.Image image mode=L size=612x415>}]
 ```
+
 Checking out one of the car masks below.
 
 ```python
 results[2]["mask"]
 ```
+
 <div class="flex justify-center">
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/instance_segmentation_output.png" alt="Semantic Segmentation Output"/>
 </div>
@@ -151,6 +156,7 @@ panoptic_segmentation = pipeline("image-segmentation", "facebook/mask2former-swi
 results = panoptic_segmentation(image)
 results
 ```
+
 As you can see below, we have more classes. We will later illustrate to see that every pixel is classified into one of the classes.
 
 ```bash
@@ -205,7 +211,6 @@ We will now:
 To see all architectures and checkpoints compatible with this task, we recommend checking the [task-page](https://huggingface.co/tasks/image-segmentation)
 
 </Tip>
-
 
 ### Load SceneParse150 dataset
 
@@ -473,7 +478,6 @@ Reload the dataset and load an image for inference.
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/semantic-seg-image.png" alt="Image of bedroom"/>
 </div>
 
-
 We will now see how to infer without a pipeline. Process the image with an image processor and place the `pixel_values` on a GPU:
 
 ```py
@@ -502,7 +506,6 @@ Next, rescale the logits to the original image size:
 
 >>> pred_seg = upsampled_logits.argmax(dim=1)[0]
 ```
-
 
 To visualize the results, load the [dataset color palette](https://github.com/tensorflow/models/blob/3f1ca33afe3c1631b733ea7e40c294273b9e406d/research/deeplab/utils/get_dataset_colormap.py#L51) as `ade_palette()` that maps each class to their RGB values.
 

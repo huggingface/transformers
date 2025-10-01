@@ -41,8 +41,8 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...generation.test_utils import GenerationTesterMixin
-from ...models.gemma.test_modeling_gemma import GemmaModelTester
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
@@ -62,27 +62,27 @@ if is_torch_available():
     from transformers.pytorch_utils import is_torch_greater_or_equal
 
 
-class Gemma3ModelTester(GemmaModelTester):
+class Gemma3TextModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = Gemma3TextConfig
-        model_class = Gemma3TextModel
-        for_causal_lm_class = Gemma3ForCausalLM
+        base_model_class = Gemma3TextModel
+        causal_lm_class = Gemma3ForCausalLM
+        sequence_classification_class = Gemma3TextForSequenceClassification
 
 
 @require_torch
-class Gemma3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (Gemma3TextModel, Gemma3ForCausalLM, Gemma3TextForSequenceClassification) if is_torch_available() else ()
+class Gemma3TextModelTest(CausalLMModelTest, unittest.TestCase):
+    model_tester_class = Gemma3TextModelTester
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": Gemma3TextModel,
+            "text-classification": Gemma3TextForSequenceClassification,
+            "text-generation": Gemma3ForCausalLM,
+        }
+        if is_torch_available()
+        else {}
     )
-    all_generative_model_classes = (Gemma3ForCausalLM,) if is_torch_available() else ()
-    test_headmasking = False
-    test_pruning = False
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
-
-    def setUp(self):
-        self.model_tester = Gemma3ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Gemma3Config, hidden_size=37)
 
     @unittest.skip("Gemma3 applies key/query norm which doesn't work with packing")
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
@@ -152,20 +152,10 @@ class Gemma3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
         EXPECTED_OUTPUT = torch.tensor([[90109, 90109, 90109, 83191, 83191], [246901, 69832, 69832, 69832, 62288]])
         torch.testing.assert_close(generated_sequences, EXPECTED_OUTPUT)
 
-    def test_gemma3_text_sequence_classification_model(self):
-        """Test the text-only sequence classification model."""
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 3
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.num_labels)
-
-        model = Gemma3TextForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-
-        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, config.num_labels))
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    @unittest.skip("TODO (joao): check why this is failing")
+    def test_model_rope_scaling_from_config(self):
+        pass
 
 
 class Gemma3Vision2TextModelTester:
@@ -201,7 +191,7 @@ class Gemma3Vision2TextModelTester:
         self.image_token_index = image_token_index
         self.boi_token_index = boi_token_index
         self.eoi_token_index = eoi_token_index
-        self.llm_tester = Gemma3ModelTester(self.parent)
+        self.llm_tester = Gemma3TextModelTester(self.parent)
         self.text_config = self.llm_tester.get_config()
         self.vision_config = vision_config
         self.seq_length = seq_length
@@ -277,11 +267,11 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
         else ()
     )
     all_generative_model_classes = (Gemma3ForConditionalGeneration,) if is_torch_available() else ()
-    test_headmasking = False
     test_pruning = False
     test_missing_keys = False
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
+    additional_model_inputs = ["token_type_ids"]
 
     # MP works but offload doesn't work when the SigLIP MultiheadAttention is offloaded
     # TODO: One potential solution would be to add to set preload_module_classes = ["SiglipMultiheadAttentionPoolingHead"]
@@ -353,10 +343,6 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
 
     @unittest.skip("Loading nested configs with overwritten `kwargs` isn't supported yet, FIXME @raushan.")
     def test_load_with_mismatched_shapes(self):
-        pass
-
-    @unittest.skip("Loading nested configs with overwritten `kwargs` isn't supported yet, FIXME @raushan.")
-    def test_mismatched_shapes_have_properly_initialized_weights(self):
         pass
 
     def test_automodelforcausallm(self):

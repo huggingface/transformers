@@ -19,7 +19,6 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-
 The GraniteMoe model was proposed in [Power Scheduler: A Batch Size and Token Number Agnostic Learning Rate Scheduler](https://huggingface.co/papers/2408.13359) by Yikang Shen, Matthew Stallone, Mayank Mishra, Gaoyuan Zhang, Shawn Tan, Aditya Prasad, Adriana Meza Soria, David D. Cox and Rameswar Panda.
 
 Additionally this class GraniteMoeSharedModel adds shared experts for Moe.
@@ -50,7 +49,6 @@ for i in output:
 ```
 
 This HF implementation is contributed by [Mayank Mishra](https://huggingface.co/mayank-mishra), [Shawn Tan](https://huggingface.co/shawntan) and [Sukriti Sharma](https://huggingface.co/SukritiSharma).
-
 
 ## GraniteMoeSharedConfig
 

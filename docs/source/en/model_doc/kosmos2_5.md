@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2025-08-19.*
+*This model was released on 2023-09-20 and added to Hugging Face Transformers on 2025-08-19.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -18,7 +18,6 @@ specific language governing permissions and limitations under the License.
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
 </div>
-
 
 # KOSMOS-2.5
 
@@ -158,7 +157,6 @@ image.save("output.png")
 
 </hfoption>
 </hfoptions>
-
 
 ## Chat version
 

@@ -143,14 +143,11 @@ processed_outputs = processor.post_process_keypoint_matching(outputs, image_size
 ## SuperGlueImageProcessor
 
 [[autodoc]] SuperGlueImageProcessor
-
-- preprocess
-- post_process_keypoint_matching
-- visualize_keypoint_matching
+    - preprocess
+    - post_process_keypoint_matching
+    - visualize_keypoint_matching
 
 ## SuperGlueForKeypointMatching
 
 [[autodoc]] SuperGlueForKeypointMatching
-
-- forward
-
+    - forward

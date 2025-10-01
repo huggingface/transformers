@@ -64,8 +64,7 @@ NOT_DEVICE_TESTS = {
     "test_load_save_without_tied_weights",
     "test_tied_weights_keys",
     "test_model_weights_reload_no_missing_tied_weights",
-    "test_mismatched_shapes_have_properly_initialized_weights",
-    "test_matched_shapes_have_loaded_weights_when_some_mismatched_shapes_exist",
+    "test_can_load_ignoring_mismatched_shapes",
     "test_model_is_small",
     "ModelTest::test_pipeline_",  # None of the pipeline tests from PipelineTesterMixin (of which XxxModelTest inherits from) are running on device
     "ModelTester::test_pipeline_",
@@ -90,6 +89,8 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "not_device_test: mark the tests always running on cpu")
     config.addinivalue_line("markers", "torch_compile_test: mark test which tests torch compile functionality")
     config.addinivalue_line("markers", "torch_export_test: mark test which tests torch export functionality")
+
+    os.environ['DISABLE_SAFETENSORS_CONVERSION'] = 'true'
 
 
 def pytest_collection_modifyitems(items):

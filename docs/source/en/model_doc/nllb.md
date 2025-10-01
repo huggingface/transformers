@@ -29,7 +29,6 @@ rendered properly in your Markdown viewer.
 
 [NLLB: No Language Left Behind](https://huggingface.co/papers/2207.04672) is a multilingual translation model. It's trained on data using data mining techniques tailored for low-resource languages and supports over 200 languages. NLLB features a conditional compute architecture using a Sparsely Gated Mixture of Experts.
 
-
 You can find all the original NLLB checkpoints under the [AI at Meta](https://huggingface.co/facebook/models?search=nllb) organization.
 
 > [!TIP]
@@ -129,9 +128,10 @@ visualizer("UN Chief says there is no military solution in Syria")
    >>> tokenizer = NllbTokenizer.from_pretrained("facebook/nllb-200-distilled-600M", legacy_behaviour=True)
    ```
 
- - For non-English languages, specify the language's [BCP-47](https://github.com/facebookresearch/flores/blob/main/flores200/README.md#languages-in-flores-200) code with the `src_lang` keyword as shown below.
+- For non-English languages, specify the language's [BCP-47](https://github.com/facebookresearch/flores/blob/main/flores200/README.md#languages-in-flores-200) code with the `src_lang` keyword as shown below.
 
- - See example below for a translation from Romanian to German.
+- See example below for a translation from Romanian to German.
+
     ```python
     >>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 

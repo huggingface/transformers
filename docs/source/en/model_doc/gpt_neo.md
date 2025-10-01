@@ -22,11 +22,9 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
-
 ## GPT-Neo
 
 [GPT-Neo](https://zenodo.org/records/5297715) is an open-source alternative to GPT-2 and GPT-3 models, built with Mesh TensorFlow for TPUs. GPT-Neo uses local attention in every other layer for more efficiency. It is trained on the [Pile](https://huggingface.co/datasets/EleutherAI/pile), a diverse dataset consisting of 22 smaller high-quality datasets. The original github repository can be found [here](https://github.com/EleutherAI/gpt-neo/tree/v1.1)
-
 
 You can find all the original GPT-Neo checkpoints under the [EleutherAI](https://huggingface.co/EleutherAI?search_models=gpt-neo) organization.
 
@@ -45,6 +43,7 @@ from transformers import pipeline
 pipeline = pipeline(task="text-generation", model="EleutherAI/gpt-neo-1.3B", dtype=torch.float16, device=0)
 pipeline("Hello, I'm a language model")
 ```
+
 </hfoption>
 <hfoption id="AutoModel">
 

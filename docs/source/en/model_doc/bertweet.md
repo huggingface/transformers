@@ -24,8 +24,7 @@ rendered properly in your Markdown viewer.
 
 ## BERTweet
 
-[BERTweet](https://huggingface.co/papers/2005.10200) shares the same architecture as [BERT-base](./bert), but it’s pretrained like [RoBERTa](./roberta) on English Tweets. It performs really well on Tweet-related tasks like part-of-speech tagging, named entity recognition, and text classification.
-
+[BERTweet](https://huggingface.co/papers/2005.10200) shares the same architecture as [BERT-base](./bert), but it's pretrained like [RoBERTa](./roberta) on English Tweets. It performs really well on Tweet-related tasks like part-of-speech tagging, named entity recognition, and text classification.
 
 You can find all the original BERTweet checkpoints under the [VinAI Research](https://huggingface.co/vinai?search_models=BERTweet) organization.
 
@@ -49,6 +48,7 @@ pipeline = pipeline(
 )
 pipeline("Plants create <mask> through a process known as photosynthesis.")
 ```
+
 </hfoption>
 <hfoption id="AutoModel">
 
@@ -88,7 +88,8 @@ echo -e "Plants create <mask> through a process known as photosynthesis." | tran
 </hfoptions>
 
 ## Notes
-- Use the [`AutoTokenizer`] or [`BertweetTokenizer`] because it’s preloaded with a custom vocabulary adapted to tweet-specific tokens like hashtags (#), mentions (@), emojis, and common abbreviations. Make sure to also install the [emoji](https://pypi.org/project/emoji/) library.
+
+- Use the [`AutoTokenizer`] or [`BertweetTokenizer`] because it's preloaded with a custom vocabulary adapted to tweet-specific tokens like hashtags (#), mentions (@), emojis, and common abbreviations. Make sure to also install the [emoji](https://pypi.org/project/emoji/) library.
 - Inputs should be padded on the right (`padding="max_length"`) because BERT uses absolute position embeddings.
 
 ## BertweetTokenizer

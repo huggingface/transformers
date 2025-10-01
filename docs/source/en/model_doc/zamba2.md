@@ -26,7 +26,6 @@ rendered properly in your Markdown viewer.
 
 This model was contributed by [pglo](https://huggingface.co/pglo).
 
-
 ## Model details
 
 [Zamba2-1.2B](https://www.zyphra.com/post/zamba2-mini), [Zamba2-2.7B](https://www.zyphra.com/post/zamba2-small) and [Zamba2-7B](https://www.zyphra.com/post/zamba2-7b) are hybrid models combining state-space models (Specifically [Mamba2](https://github.com/state-spaces/mamba)) and transformer, and were trained using next-token prediction. Zamba2 uses shared transformer layers after every 6 mamba blocks. It uses the [Mistral v0.1 tokenizer](https://huggingface.co/mistralai/Mistral-7B-v0.1). We came to this architecture after a series of ablations at small scales. Zamba2-1.2B, Zamba2-2.7B and Zamba2-7B were pre-trained on 2T and 3T tokens, respectively.
@@ -35,10 +34,10 @@ This model was contributed by [pglo](https://huggingface.co/pglo).
 
 ## Quick start
 
-
 ### Presequities
 
 Zamba2 requires you use `transformers` version 4.48.0 or higher:
+
 ```bash
 pip install transformers>=4.48.0
 ```
@@ -59,40 +58,34 @@ outputs = model.generate(**input_ids, max_new_tokens=100)
 print(tokenizer.decode(outputs[0]))
 ```
 
-
 ## Model card
 
 The model cards can be found at:
+
 * [Zamba2-1.2B](https://huggingface.co/Zyphra/Zamba2-1.2B)
 * [Zamba2-2.7B](https://huggingface.co/Zyphra/Zamba2-2.7B)
 * [Zamba2-7B](https://huggingface.co/Zyphra/Zamba2-7B)
 
-
 ## Issues
 For issues with model output, or community discussion, please use the Hugging Face community [forum](https://huggingface.co/Zyphra/Zamba2-7B/discussions)
-
 
 ## License
 
 The model weights are open-sourced via an Apache 2.0 license.
 
-
 ## Zamba2Config
 
 [[autodoc]] Zamba2Config
-
 
 ## Zamba2Model
 
 [[autodoc]] Zamba2Model
     - forward
 
-
 ## Zamba2ForCausalLM
 
 [[autodoc]] Zamba2ForCausalLM
     - forward
-
 
 ## Zamba2ForSequenceClassification
 

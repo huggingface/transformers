@@ -112,22 +112,22 @@ Consider the quantization method below during fine-tuning to save memory.
 
 ### bitsandbytes[[training]]
 
-*   **Description:** The standard method for QLoRA fine-tuning via PEFT.
-*   **Pros:** Enables fine-tuning large models on consumer GPUs; widely supported and documented for PEFT.
-*   **Cons:** Primarily for NVIDIA GPUs.
+* **Description:** The standard method for QLoRA fine-tuning via PEFT.
+* **Pros:** Enables fine-tuning large models on consumer GPUs; widely supported and documented for PEFT.
+* **Cons:** Primarily for NVIDIA GPUs.
 
 Other methods offer PEFT compatibility, though bitsandbytes is the most established and straightforward path for QLoRA.
 
-See the [bitsandbytes documentation](./bitsandbytes#qlora) and [PEFT Docs](https://huggingface.co/docs/peft/developer_guides/quantization#aqlm-quantization) for more details. 
+See the [bitsandbytes documentation](./bitsandbytes#qlora) and [PEFT Docs](https://huggingface.co/docs/peft/developer_guides/quantization#aqlm-quantization) for more details.
 
 ## Research
 
 Methods like [AQLM](./aqlm), [SpQR](./spqr), [VPTQ](./vptq), [HIGGS](./higgs), etc., push the boundaries of compression (< 2-bit) or explore novel techniques.
 
-*   Consider these if:
-    *   You need extreme compression (sub-4-bit).
-    *   You are conducting research or require state-of-the-art results from their respective papers.
-    *   You have significant compute resources available for potentially complex quantization procedures.
+* Consider these if:
+  * You need extreme compression (sub-4-bit).
+  * You are conducting research or require state-of-the-art results from their respective papers.
+  * You have significant compute resources available for potentially complex quantization procedures.
 We recommend consulting each methods documentation and associated papers carefully before choosing one for use in production.
 
 ## Benchmark Comparison

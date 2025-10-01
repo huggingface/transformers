@@ -142,8 +142,8 @@ def get_max_height_width(images: list["torch.Tensor"]) -> tuple[int, ...]:
 
 
 def divide_to_patches(
-    image: Union[np.array, "torch.Tensor"], patch_size: int
-) -> list[Union[np.array, "torch.Tensor"]]:
+    image: Union[np.ndarray, "torch.Tensor"], patch_size: int
+) -> list[Union[np.ndarray, "torch.Tensor"]]:
     """
     Divides an image into patches of a specified size.
 
@@ -248,7 +248,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         pad_size: SizeDict = None,
         fill_value: Optional[int] = 0,
         padding_mode: Optional[str] = "constant",
-        return_mask: Optional[bool] = False,
+        return_mask: bool = False,
         disable_grouping: Optional[bool] = False,
         **kwargs,
     ) -> "torch.Tensor":

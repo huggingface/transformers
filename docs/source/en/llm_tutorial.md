@@ -24,6 +24,7 @@ In Transformers, the [`~GenerationMixin.generate`] API handles text generation, 
 
 > [!TIP]
 > You can also chat with a model directly from the command line. ([reference](./conversations.md#transformers))
+>
 > ```shell
 > transformers chat Qwen/Qwen2.5-0.5B-Instruct
 > ```
@@ -35,6 +36,7 @@ Before you begin, it's helpful to install [bitsandbytes](https://hf.co/docs/bits
 ```bash
 !pip install -U transformers bitsandbytes
 ```
+
 Bitsandbytes supports multiple backends in addition to CUDA-based GPUs. Refer to the multi-backend installation [guide](https://huggingface.co/docs/bitsandbytes/main/en/installation#multi-backend) to learn more.
 
 Load a LLM with [`~PreTrainedModel.from_pretrained`] and add the following two parameters to reduce the memory requirements.
@@ -92,6 +94,7 @@ model.generate(**inputs, num_beams=4, do_sample=True)
 ```
 
 [`~GenerationMixin.generate`] can also be extended with external libraries or custom code:
+
 1. the `logits_processor` parameter accepts custom [`LogitsProcessor`] instances for manipulating the next token probability distribution;
 2. the `stopping_criteria` parameters supports custom [`StoppingCriteria`] to stop text generation;
 3. other custom generation methods can be loaded through the `custom_generate` flag ([docs](generation_strategies.md/#custom-decoding-methods)).
@@ -153,7 +156,6 @@ print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
 | `num_beams` | `int` | When set to `>1`, activates the beam search algorithm. Beam search is good on input-grounded tasks. Check [this guide](./generation_strategies) for more information. |
 | `repetition_penalty` | `float` | Set it to `>1.0` if you're seeing the model repeat itself often. Larger values apply a larger penalty. |
 | `eos_token_id` | `list[int]` | The token(s) that will cause generation to stop. The default value is usually good, but you can specify a different token. |
-
 
 ## Pitfalls
 

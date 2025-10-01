@@ -1454,7 +1454,7 @@ class MoshiConverter(SpmConverter):
 class HeliumConverter(SpmConverter):
     handle_byte_fallback = True
 
-    def __init__(self, vocab_file=None, *args):
+    def __init__(self, vocab_file=None, **kwargs):
         requires_backends(self, "protobuf")
 
         Converter.__init__(self, vocab_file)
@@ -1540,6 +1540,54 @@ class HeliumConverter(SpmConverter):
         )
 
 
+class ParakeetConverter(SpmConverter):
+    handle_byte_fallback = True
+
+    def __init__(self, vocab_file=None, *args):
+        self.vocab_file = vocab_file
+
+        requires_backends(self, "protobuf")
+
+        Converter.__init__(self, vocab_file)
+
+        model_pb2 = import_protobuf()
+        m = model_pb2.ModelProto()
+        with open(vocab_file, "rb") as f:
+            m.ParseFromString(f.read())
+        self.proto = m
+
+    def tokenizer(self, proto):
+        vocab_scores = self.vocab(proto)
+
+        _, merges = self.SpmExtractor(self.vocab_file).extract(vocab_scores)
+        bpe_vocab = {word: i for i, (word, score) in enumerate(vocab_scores)}
+        tokenizer = Tokenizer(
+            BPE(
+                bpe_vocab,
+                merges,
+                unk_token=proto.trainer_spec.unk_piece,
+                fuse_unk=True,
+                byte_fallback=self.handle_byte_fallback,
+                dropout=None,
+            )
+        )
+
+        # Add user defined symbols and control tokens from sentencepiece model
+        spm_added_tokens = [
+            (id, p.piece, p.type == 3 or p.piece in self.special_tokens)
+            for id, p in enumerate(proto.pieces)
+            if p.type in [3, 4]
+        ]
+        tokenizer.add_tokens(
+            [
+                AddedToken(token, normalized=False, special=special)
+                for id, token, special in sorted(spm_added_tokens, key=lambda x: x[0])
+            ]
+        )
+
+        return tokenizer
+
+
 # Copied from transformers.models.gpt2.tokenization_gpt2.bytes_to_unicode
 def bytes_to_unicode():
     """
@@ -1576,10 +1624,8 @@ class TikTokenConverter:
         pattern=r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+""",
         add_prefix_space=False,
         additional_special_tokens=None,
-        *args,
         **kwargs,
     ):
-        super().__init__(*args)
         self.vocab_file = vocab_file
         self.pattern = pattern
         self.add_prefix_space = add_prefix_space
