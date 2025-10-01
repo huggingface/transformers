@@ -404,13 +404,7 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
         filenames = (WEIGHTS_INDEX_NAME, SAFE_WEIGHTS_INDEX_NAME)
         raise ValueError(f"Can't find a checkpoint index ({' or '.join(filenames)}) in {folder}.")
 
-    load_safe = False
-    if safe_index_present:
-        if prefer_safe:
-            load_safe = True
-        elif not index_present:
-            load_safe = True  # load safe since we have no other choice
-
+    load_safe = safe_index_present and (prefer_safe or not index_present)
     load_index = safe_index_file if load_safe else index_file
 
     with open(load_index, "r", encoding="utf-8") as f:
