@@ -155,7 +155,7 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
             break
     with open(fsmt_merges_file, encoding="utf-8") as fin:
         merges = fin.read()
-    merges = re.sub(r" \d+$", "", merges, 0, re.M)  # remove frequency number
+    merges = re.sub(r" \d+$", "", merges, 0, re.MULTILINE)  # remove frequency number
     print(f"Generating {merges_file}")
     with open(merges_file, "w", encoding="utf-8") as fout:
         fout.write(merges)
