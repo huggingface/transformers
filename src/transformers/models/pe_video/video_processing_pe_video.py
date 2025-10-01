@@ -9,7 +9,7 @@ from ...video_processing_utils import BaseVideoProcessor, VideoMetadata
 from ...video_utils import VideoInput
 
 
-class PerceptionEncoderVideoVideoProcessor(BaseVideoProcessor):
+class PEVideoVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BILINEAR
 
     def sample_frames(
@@ -49,4 +49,4 @@ class PerceptionEncoderVideoVideoProcessor(BaseVideoProcessor):
         return BatchFeature(data=data, tensor_type=return_tensors)
 
 
-__all__ = ["PerceptionEncoderVideoVideoProcessor"]
+__all__ = ["PEVideoVideoProcessor"]

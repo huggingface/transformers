@@ -9,29 +9,51 @@ from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
-from ..perception_encoder_audio.configuration_perception_encoder_audio import PerceptionEncoderAudioTransformerConfig
-from ..perception_encoder_audio.modeling_perception_encoder_audio import (
-    PerceptionEncoderAudioContrastiveHead,
-    PerceptionEncoderAudioTransformer,
+from ..pe_audio.configuration_pe_audio import PEAudioTransformerConfig
+from ..pe_audio.modeling_pe_audio import (
+    PEAudioContrastiveHead,
+    PEAudioTransformer,
 )
 
 
-class PerceptionEncoderAudioVideoTransformerConfig(PerceptionEncoderAudioTransformerConfig): ...
+class PEAudioVideoTransformerConfig(PEAudioTransformerConfig): ...
 
 
-class PerceptionEncoderAudioVideoConfig(PretrainedConfig):
+class PEAudioVideoEncoderConfig(PretrainedConfig):
     r"""
-    PerceptionEncoderAudioVideoConfig
+    PEAudioVideoEncoderConfig
     """
 
-    sub_config = {"video_model": AutoConfig, "audio_model": AutoConfig, "text_model": AutoConfig}
-    model_type = "perception_encoder_audio_video"
+    sub_configs = {"transformer": PEAudioVideoTransformerConfig}
+    model_type = "pe_audio_video"
 
     def __init__(
         self,
         transformer: Optional[dict] = None,
         video_model: Optional[dict] = None,
         audio_model: Optional[dict] = None,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        video_model = video_model or {}
+        transformer = transformer or {}
+        audio_model = audio_model or {}
+
+        self.video_model = CONFIG_MAPPING[video_model.get("model_type", "pe_video_encoder")](**video_model)
+        self.audio_model = CONFIG_MAPPING[audio_model.get("model_type", "pe_audio_encoder")](**audio_model)
+        self.transformer = PEAudioVideoTransformerConfig(**transformer)
+
+
+class PEAudioVideoConfig(PretrainedConfig):
+    r"""
+    PEAudioVideoConfig
+    """
+
+    sub_configs = {"audio_video_model": PEAudioVideoEncoderConfig, "text_model": AutoConfig}
+
+    def __init__(
+        self,
+        audio_video_model: Optional[dict] = None,
         text_model: Optional[dict] = None,
         output_dim: int = 1024,
         nth_text_layer: Optional[int] = 22,
@@ -39,14 +61,9 @@ class PerceptionEncoderAudioVideoConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
         text_model = text_model or {}
-        video_model = video_model or {}
-        transformer = transformer or {}
-        audio_model = audio_model or {}
-
-        self.video_model = CONFIG_MAPPING[video_model.get("model_type", "perception_encoder_video")](**video_model)
+        audio_video_model = audio_video_model or {}
         self.text_model = CONFIG_MAPPING[text_model.get("model_type", "modernbert")](**text_model)
-        self.audio_model = CONFIG_MAPPING[audio_model.get("model_type", "perception_encoder_audio")](**audio_model)
-        self.transformer = PerceptionEncoderAudioVideoTransformerConfig(**transformer)
+        self.audio_video_model = PEAudioVideoEncoderConfig(**audio_video_model)
         self.output_dim = output_dim
         self.nth_text_layer = nth_text_layer
 
@@ -105,14 +122,14 @@ class AlignModalities(torch.nn.Module):
         return upsampled, src_mask
 
 
-class PerceptionEncoderAudioVideoTransformer(PerceptionEncoderAudioTransformer): ...
+class PEAudioVideoTransformer(PEAudioTransformer): ...
 
 
-class PerceptionEncoderAudioVideoContrastiveHead(PerceptionEncoderAudioContrastiveHead): ...
+class PEAudioVideoContrastiveHead(PEAudioContrastiveHead): ...
 
 
 ## Audio Video Encoder
-class AudioVideoEncoder(PerceptionEncoderAudioVideoTransformer):
+class AudioVideoEncoder(PEAudioVideoTransformer):
     def __init__(self, config):
         super().__init__(config)
         self.modality_aligner = AlignModalities(
@@ -131,7 +148,7 @@ class AudioVideoEncoder(PerceptionEncoderAudioVideoTransformer):
         video, video_padding_mask = self.modality_aligner(audio, audio_padding_mask, video, video_padding_mask)
         x = torch.cat([audio, video], dim=-1)
         x = self.concat_modality_proj(x)
-        return super().forward(self.data_proj(x), padding_mask=video_padding_mask)
+        return super().forward(self.data_proj(x), attention_mask=video_padding_mask)
 
 
 @dataclass
@@ -140,9 +157,9 @@ class AudioVideoModelOutput(BaseModelOutputWithPooling):
     video_model_output: Optional[BaseModelOutputWithPooling] = None
 
 
-class PerceptionEncoderAudioVideoPretrainedModel(PreTrainedModel):
-    config: PerceptionEncoderAudioVideoConfig
-    base_model_prefix = "perception_encoder_audio_video"
+class PEAudioVideoPretrainedModel(PreTrainedModel):
+    config: PEAudioVideoConfig
+    base_model_prefix = "pe_audio_video"
     supports_gradient_checkpointing = True
     _supports_sdpa = True
     _supports_flash_attn = True
@@ -150,12 +167,10 @@ class PerceptionEncoderAudioVideoPretrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
 
-class PerceptionEncoderAudioVideoModel(PerceptionEncoderAudioVideoPretrainedModel):
-    def __init__(self, config: PerceptionEncoderAudioVideoConfig):
+class PEAudioVideoModel(PEAudioVideoPretrainedModel):
+    def __init__(self, config: PEAudioVideoEncoderConfig):
         super().__init__(config)
         # Synchronize _attn_implementations
-        config.audio_model.transformer_attn_implementation = config._attn_implementation
-        config.transformer.transformer_attn_implementation = config._attn_implementation
         config.transformer._attn_implementation = config._attn_implementation
         self.audio_model = AutoModel.from_config(config.audio_model)
         self.video_model = AutoModel.from_config(config.video_model)
@@ -185,7 +200,7 @@ class PerceptionEncoderAudioVideoModel(PerceptionEncoderAudioVideoPretrainedMode
 
 
 @dataclass
-class PerceptionEncoderAudioVideoTextOutput(ModelOutput):
+class PEAudioVideoTextOutput(ModelOutput):
     audio_video_loss: Optional[torch.FloatTensor] = None
     text_audio_loss: Optional[torch.FloatTensor] = None
     text_audio_video_loss: Optional[torch.FloatTensor] = None
@@ -207,27 +222,20 @@ class PerceptionEncoderAudioVideoTextOutput(ModelOutput):
         return tuple(self[k] if not k.endswith("model_output") else getattr(self, k).to_tuple() for k in self.keys())
 
 
-class PerceptionEncoderAudioVideoWithTextModel(PerceptionEncoderAudioVideoModel):
-    def __init__(self, config: PerceptionEncoderAudioVideoConfig):
+class PEAudioVideoWithTextModel(PEAudioVideoPretrainedModel):
+    def __init__(self, config: PEAudioVideoConfig):
         super().__init__(config)
+        self.audio_video_model = PEAudioVideoModel(config.audio_video_model)
         self.text_model = AutoModel.from_config(config.text_model)
-        self.audio_video_text_head = PerceptionEncoderAudioVideoContrastiveHead(
-            config.text_model.hidden_size, config.output_dim
+        self.audio_video_text_head = PEAudioVideoContrastiveHead(config.text_model.hidden_size, config.output_dim)
+        self.audio_text_head = PEAudioVideoContrastiveHead(config.text_model.hidden_size, config.output_dim)
+        self.video_text_head = PEAudioVideoContrastiveHead(config.text_model.hidden_size, config.output_dim)
+        self.audio_video_head = PEAudioVideoContrastiveHead(config.audio_video_model.transformer.hidden_size, config.output_dim)
+        self.audio_head = PEAudioVideoContrastiveHead(
+            config.audio_video_model.audio_model.transformer.hidden_size, config.output_dim
         )
-        self.audio_text_head = PerceptionEncoderAudioVideoContrastiveHead(
-            config.text_model.hidden_size, config.output_dim
-        )
-        self.video_text_head = PerceptionEncoderAudioVideoContrastiveHead(
-            config.text_model.hidden_size, config.output_dim
-        )
-        self.audio_video_head = PerceptionEncoderAudioVideoContrastiveHead(
-            config.transformer.hidden_size, config.output_dim
-        )
-        self.audio_head = PerceptionEncoderAudioVideoContrastiveHead(
-            config.audio_model.transformer.hidden_size, config.output_dim
-        )
-        self.video_head = PerceptionEncoderAudioVideoContrastiveHead(
-            config.video_model.transformer.hidden_size, config.output_dim
+        self.video_head = PEAudioVideoContrastiveHead(
+            config.audio_video_model.video_model.transformer.hidden_size, config.output_dim
         )
         self.logit_scale = torch.nn.Parameter(torch.tensor([10.0]).log())
         self.logit_bias = torch.nn.Parameter(torch.tensor([-10.0]))
@@ -257,12 +265,14 @@ class PerceptionEncoderAudioVideoWithTextModel(PerceptionEncoderAudioVideoModel)
     def get_video_features(
         self, pixel_values_videos: torch.Tensor, padding_mask_videos: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
-        return self.video_head(self.video_model(pixel_values_videos, padding_mask_videos).pooler_output)
+        return self.video_head(
+            self.audio_video_model.video_model(pixel_values_videos, padding_mask_videos).pooler_output
+        )
 
     def get_audio_features(
         self, input_values: torch.Tensor, padding_mask: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
-        return self.audio_head(self.audio_model(input_values, padding_mask).pooler_output)
+        return self.audio_head(self.audio_video_model.audio_model(input_values, padding_mask).pooler_output)
 
     def get_audio_video_features(
         self,
@@ -271,7 +281,7 @@ class PerceptionEncoderAudioVideoWithTextModel(PerceptionEncoderAudioVideoModel)
         padding_mask: Optional[torch.Tensor] = None,
         padding_mask_videos: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        output = super().forward(
+        output = self.audio_video_model(
             input_values=input_values,
             pixel_values_videos=pixel_values_videos,
             padding_mask=padding_mask,
@@ -297,7 +307,7 @@ class PerceptionEncoderAudioVideoWithTextModel(PerceptionEncoderAudioVideoModel)
         padding_mask_videos: Optional[torch.Tensor] = None,
         padding_mask: Optional[torch.Tensor] = None,
         return_loss=False,
-    ) -> PerceptionEncoderAudioVideoTextOutput:
+    ) -> PEAudioVideoTextOutput:
         # text embeddings
         audio_text_embeds = video_text_embeds = audio_video_text_embeds = None
         # media embeddings (audio, video, audio_video)
@@ -310,7 +320,7 @@ class PerceptionEncoderAudioVideoWithTextModel(PerceptionEncoderAudioVideoModel)
             text_outputs = self._get_text_output(input_ids, attention_mask)
         if input_values is not None and pixel_values_videos is not None:
             # If we compute audio/video outputs, then extract the intermedia audio and video outputs
-            audio_video_outputs = super().forward(
+            audio_video_outputs = self.audio_video_model(
                 input_values, pixel_values_videos, padding_mask=padding_mask, padding_mask_videos=padding_mask_videos
             )
             audio_outputs = audio_video_outputs.audio_model_output
@@ -326,16 +336,18 @@ class PerceptionEncoderAudioVideoWithTextModel(PerceptionEncoderAudioVideoModel)
                 audio_video_text_embeds = self.audio_video_text_head(text_outputs.pooler_output)
         else:
             if pixel_values_videos is not None:
-                video_outputs = self.video_model(pixel_values_videos, padding_mask_videos=padding_mask_videos)
+                video_outputs = self.audio_video_model.video_model(
+                    pixel_values_videos, padding_mask_videos=padding_mask_videos
+                )
                 video_embeds = self.video_head(video_outputs.pooler_output)
                 if text_outputs is not None:
                     video_text_embeds = self.video_text_head(text_outputs.pooler_output)
             if input_values is not None:
-                audio_outputs = self.audio_model(input_values, padding_mask=padding_mask)
+                audio_outputs = self.audio_video_model.audio_model(input_values, padding_mask=padding_mask)
                 if text_outputs is not None:
                     audio_text_embeds = self.audio_text_head(text_outputs.pooler_output)
 
-        return PerceptionEncoderAudioVideoTextOutput(
+        return PEAudioVideoTextOutput(
             audio_video_loss=self._maybe_compute_loss(audio_embeds, video_embeds, return_loss),
             text_audio_loss=self._maybe_compute_loss(audio_text_embeds, audio_embeds, return_loss),
             text_audio_video_loss=self._maybe_compute_loss(audio_video_text_embeds, audio_video_embeds, return_loss),
@@ -354,8 +366,9 @@ class PerceptionEncoderAudioVideoWithTextModel(PerceptionEncoderAudioVideoModel)
 
 
 __all__ = [
-    "PerceptionEncoderAudioVideoModel",
-    "PerceptionEncoderAudioVideoWithTextModel",
-    "PerceptionEncoderAudioVideoTextOutput",
-    "PerceptionEncoderAudioVideoConfig",
+    "PEAudioVideoModel",
+    "PEAudioVideoWithTextModel",
+    "PEAudioVideoTextOutput",
+    "PEAudioVideoConfig",
+    "PEAudioVideoEncoderConfig",
 ]
