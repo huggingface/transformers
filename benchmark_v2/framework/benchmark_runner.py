@@ -154,7 +154,7 @@ class BenchmarkRunner:
             truncation=True,
             return_attention_mask=True,
         ).to(config.device)
-        self.inputs["use_cache"] = config.use_cache
+        self.inputs["use_cache"] = True
 
         # Prepare generation config
         gen_config = GenerationConfig(
@@ -164,8 +164,7 @@ class BenchmarkRunner:
         # Prepare compile config
         if config.compile_mode is not None:
             gen_config.compile_config = CompileConfig(mode=config.compile_mode, options=config.compile_options)
-            if config.use_cache:
-                gen_config.cache_implementation = "static"
+            gen_config.cache_implementation = "static"
 
         # Load model
         self.logger.debug(f"Loading model {model_id} on device {config.device}...")

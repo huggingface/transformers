@@ -24,7 +24,6 @@ class BenchmarkConfig:
         sequence_length: int = 128,
         num_tokens_to_generate: int = 128,
         attn_implementation: str = "eager",
-        use_cache: bool = True,
         sdpa_backend: Optional[str] = None,
         compile_mode: Optional[str] = None,
         compile_options: Optional[dict[str, Any]] = None,
@@ -41,7 +40,6 @@ class BenchmarkConfig:
         self.num_tokens_to_generate = num_tokens_to_generate
         # Generation parameters
         self.attn_implementation = attn_implementation
-        self.use_cache = use_cache
         self.sdpa_backend = sdpa_backend
         # Optimization parameters
         self.compile_mode = compile_mode
@@ -71,7 +69,6 @@ class BenchmarkConfig:
             attn_code,
             f"compiled_{self.compile_mode}" if self.compile_mode is not None else "uncompiled",
             "kernelized" if self.kernelize else "unkernelized",
-            "with_cache" if self.use_cache else "no_cache",
         ])
 
     def to_dict(self) -> dict[str, Union[None, int, float, str]]:
@@ -84,7 +81,6 @@ class BenchmarkConfig:
             "sequence_length": self.sequence_length,
             "num_tokens_to_generate": self.num_tokens_to_generate,
             "attn_implementation": self.attn_implementation,
-            "use_cache": self.use_cache,
             "sdpa_backend": self.sdpa_backend,
             "compile_mode": self.compile_mode,
             "compile_options": self.compile_options,
@@ -101,7 +97,6 @@ class BenchmarkConfig:
             sequence_length=data["sequence_length"],
             num_tokens_to_generate=data["num_tokens_to_generate"],
             attn_implementation=data["attn_implementation"],
-            use_cache=data["use_cache"],
             sdpa_backend=data["sdpa_backend"],
             compile_mode=data["compile_mode"],
             compile_options=data["compile_options"],
@@ -119,7 +114,6 @@ def cross_generate_configs(
     batch_size: int = 1,
     sequence_length: int = 128,
     num_tokens_to_generate: int = 128,
-    use_cache: bool = True,  # no real interest in testing with cache disabled
     gpu_monitoring: bool = False,  # this slows down the benchmark by a lot so we disable it by default
 ) -> list[BenchmarkConfig]:
     # Create kwargs common to all configs
@@ -129,7 +123,6 @@ def cross_generate_configs(
         "batch_size": batch_size,
         "sequence_length": sequence_length,
         "num_tokens_to_generate": num_tokens_to_generate,
-        "use_cache": use_cache,
         "gpu_monitoring": gpu_monitoring,
     }
     # Cross-generate all combinations of attn_implementation, compiled_mode, and kernelized
@@ -153,7 +146,6 @@ def generate_all_configs(
     batch_size: int = 1,
     sequence_length: int = 128,
     num_tokens_to_generate: int = 128,
-    use_cache: bool = True,
     gpu_monitoring: bool = False,
 ) -> list[BenchmarkConfig]:
     all_attn_implementations = [
@@ -171,7 +163,6 @@ def generate_all_configs(
         batch_size=batch_size,
         sequence_length=sequence_length,
         num_tokens_to_generate=num_tokens_to_generate,
-        use_cache=use_cache,
         gpu_monitoring=gpu_monitoring,
     )
 
@@ -182,7 +173,6 @@ def generate_useful_configs(
     batch_size: int = 1,
     sequence_length: int = 128,
     num_tokens_to_generate: int = 128,
-    use_cache: bool = True,
     gpu_monitoring: bool = False,
 ) -> list[BenchmarkConfig]:
     all_attn_implementations = [
@@ -200,6 +190,5 @@ def generate_useful_configs(
         batch_size=batch_size,
         sequence_length=sequence_length,
         num_tokens_to_generate=num_tokens_to_generate,
-        use_cache=use_cache,
         gpu_monitoring=gpu_monitoring,
     )
