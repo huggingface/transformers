@@ -16,10 +16,9 @@ from typing import Callable, Optional
 import torch
 from torch import nn
 
-from transformers.masking_utils import create_causal_mask
-
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
+from ...masking_utils import create_causal_mask
 from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack

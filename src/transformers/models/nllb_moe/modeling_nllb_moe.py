@@ -669,7 +669,6 @@ class NllbMoePreTrainedModel(PreTrainedModel):
     _supports_flash_attn = False
     _supports_sdpa = False
     _supports_flex_attn = False
-    _can_record_outputs = {}
 
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""

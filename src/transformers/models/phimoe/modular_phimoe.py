@@ -352,7 +352,6 @@ class PhimoeModel(MixtralModel):
     def __init__(self, config: PhimoeConfig):
         super().__init__(config)
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps, elementwise_affine=True)
-        self._attn_implementation = config._attn_implementation
 
 
 class PhimoeForCausalLM(MixtralForCausalLM):

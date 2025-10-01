@@ -18,9 +18,8 @@ from typing import Callable, Optional, Union
 import torch
 from torch import nn
 
-from transformers.masking_utils import create_causal_mask
-
 from ...cache_utils import Cache
+from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack

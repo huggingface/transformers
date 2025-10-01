@@ -29,10 +29,6 @@ from ..mixtral.modeling_mixtral import MixtralExperts, MixtralForCausalLM, Mixtr
 from .configuration_jamba import JambaConfig
 
 
-if is_flash_attn_available():
-    pass
-
-
 if is_mamba_ssm_available():
     from mamba_ssm.ops.selective_scan_interface import mamba_inner_fn, selective_scan_fn
     from mamba_ssm.ops.triton.selective_state_update import selective_state_update
