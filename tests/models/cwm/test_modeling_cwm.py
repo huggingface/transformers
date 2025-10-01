@@ -98,9 +98,8 @@ class CwmIntegrationTest(unittest.TestCase):
     def test_cwm_integration(self):
         from transformers import AutoTokenizer
 
-        path = "/checkpoint/amaia/codegen/jacobkahn/cwm/v1/release_checkpoints/hf/cwm"
-        tokenizer = AutoTokenizer.from_pretrained(path)
-        model = CwmForCausalLM.from_pretrained(path, device_map="auto", dtype=torch.bfloat16)
+        tokenizer = AutoTokenizer.from_pretrained("facebook/cwm")
+        model = CwmForCausalLM.from_pretrained("facebook/cwm", device_map="auto", dtype=torch.bfloat16)
 
         self.assertIsNotNone(model.config.sliding_window)
         self.assertIsNotNone(model.config.layer_types)
@@ -168,10 +167,8 @@ class CwmIntegrationTest(unittest.TestCase):
     def test_cwm_sliding_window_long_sequence(self):
         from transformers import AutoTokenizer
 
-        path = "/checkpoint/amaia/codegen/jacobkahn/cwm/v1/release_checkpoints/hf/cwm"
-
-        tokenizer = AutoTokenizer.from_pretrained(path)
-        model = CwmForCausalLM.from_pretrained(path, device_map="auto", dtype=torch.bfloat16)
+        tokenizer = AutoTokenizer.from_pretrained("facebook/cwm")
+        model = CwmForCausalLM.from_pretrained("facebook/cwm", device_map="auto", dtype=torch.bfloat16)
 
         sliding_window = model.config.sliding_window
         long_text = "for i in range(1000):\n    print(f'iteration {i}')\n" * 600

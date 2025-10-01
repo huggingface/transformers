@@ -297,7 +297,6 @@ class CwmPreTrainedModel(PreTrainedModel):
         "hidden_states": CwmDecoderLayer,
         "attentions": CwmAttention,
     }
-    config_class = CwmConfig
 
 
 class CwmModelOutputWithPast(BaseModelOutputWithPast):
