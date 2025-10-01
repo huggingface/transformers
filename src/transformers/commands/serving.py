@@ -1541,7 +1541,6 @@ class ServeCommand(BaseTransformersCLICommand):
         if args.quantization == "bitsandbytes-4bit":
             quantization_config = BitsAndBytesConfig(
                 load_in_4bit=True,
-                bnb_4bit_compute_dtype=args.dtype,
                 bnb_4bit_quant_type="nf4",
                 bnb_4bit_use_double_quant=True,
             )
@@ -1597,7 +1596,6 @@ class ServeCommand(BaseTransformersCLICommand):
             revision=revision,
             trust_remote_code=args.trust_remote_code,
         )
-
         dtype = args.dtype if args.dtype in ["auto", None] else getattr(torch, args.dtype)
         quantization_config = self.get_quantization_config(args)
 

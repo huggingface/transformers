@@ -392,7 +392,7 @@ For models that are already quantized (e.g., GPTQ, AWQ, bitsandbytes), simply pa
 Make sure to install the required libraries listed in the quantization documentation.
 
 ```sh
-transformers chat localhost:8000 --model-name-or-path Qwen/Qwen3-4B-bnb
+transformers serve --quantization Qwen/Qwen3-4B-bnb
 ```
 
 > [!TIP]
@@ -408,7 +408,7 @@ Currently, with transformers serve, we only supports the some methods: ["bitsand
 For example, to enable 4-bit quantization with bitsandbytes, you need to pass add `--quantization bitsandbytes-4bit`: 
 
 ```sh
-transformers chat localhost:8000 --model-name-or-path Qwen/Qwen3-4B --quantization bitsandbytes-4bit
+transformers serve --quantization bitsandbytes-4bit
 ```
 
 ### Performance tips
