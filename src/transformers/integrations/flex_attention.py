@@ -32,7 +32,7 @@ import torch
 from packaging import version
 
 from ..utils import is_torch_flex_attn_available, logging
-from ..utils.import_utils import _torch_version, is_torch_less_or_equal, is_torchdynamo_compiling
+from ..utils.import_utils import get_torch_version, is_torch_less_or_equal, is_torchdynamo_compiling
 
 
 if is_torch_flex_attn_available():
@@ -70,7 +70,7 @@ class WrappedFlexAttention:
             # In PyTorch 2.6.0, there's a known issue with flex attention compilation which may
             # cause errors. The suggested fix is to compile with "max-autotune-no-cudagraphs"
             # see https://github.com/pytorch/pytorch/issues/146260 for training
-            elif version.parse(_torch_version).base_version == "2.6.0" and training:
+            elif version.parse(get_torch_version()).base_version == "2.6.0" and training:
                 self._compiled_flex_attention = torch.compile(
                     flex_attention, dynamic=False, mode="max-autotune-no-cudagraphs"
                 )

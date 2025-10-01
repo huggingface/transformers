@@ -62,7 +62,7 @@ from . import __version__, logging
 from .generic import working_or_temp_dir
 from .import_utils import (
     ENV_VARS_TRUE_VALUES,
-    _torch_version,
+    get_torch_version,
     is_torch_available,
     is_training_run_on_sagemaker,
 )
@@ -227,7 +227,7 @@ def http_user_agent(user_agent: Union[dict, str, None] = None) -> str:
     """
     ua = f"transformers/{__version__}; python/{sys.version.split()[0]}; session_id/{SESSION_ID}"
     if is_torch_available():
-        ua += f"; torch/{_torch_version}"
+        ua += f"; torch/{get_torch_version()}"
     if constants.HF_HUB_DISABLE_TELEMETRY:
         return ua + "; telemetry/off"
     if is_training_run_on_sagemaker():
