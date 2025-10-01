@@ -105,12 +105,6 @@ for result in results:
     - preprocess
     - post_process_object_detection
 
-## DeformableDetrFeatureExtractor
-
-[[autodoc]] DeformableDetrFeatureExtractor
-    - __call__
-    - post_process_object_detection
-
 ## DeformableDetrConfig
 
 [[autodoc]] DeformableDetrConfig
