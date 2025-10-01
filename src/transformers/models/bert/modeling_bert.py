@@ -770,12 +770,11 @@ class BertModel(BertPreTrainedModel):
 
         if input_ids is not None:
             device = input_ids.device
-            input_shape = input_ids.shape
+            seq_length = input_ids.shape[1]
         else:
             device = inputs_embeds.device
-            input_shape = inputs_embeds.shape[:-1]
+            seq_length = inputs_embeds.shape[1]
 
-        seq_length = input_shape[1]
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
         if cache_position is None:
             cache_position = torch.arange(past_key_values_length, past_key_values_length + seq_length, device=device)
@@ -789,7 +788,6 @@ class BertModel(BertPreTrainedModel):
         )
 
         attention_mask, encoder_attention_mask = self._create_attention_masks(
-            input_shape=input_shape,
             attention_mask=attention_mask,
             encoder_attention_mask=encoder_attention_mask,
             embedding_output=embedding_output,
@@ -823,7 +821,6 @@ class BertModel(BertPreTrainedModel):
 
     def _create_attention_masks(
         self,
-        input_shape,
         attention_mask,
         encoder_attention_mask,
         embedding_output,
@@ -831,44 +828,28 @@ class BertModel(BertPreTrainedModel):
         cache_position,
         past_key_values,
     ):
-        if attention_mask is not None and attention_mask.dim() == 2:
-            if self.config.is_decoder:
-                attention_mask = create_causal_mask(
-                    config=self.config,
-                    input_embeds=embedding_output,
-                    attention_mask=attention_mask,
-                    cache_position=cache_position,
-                    past_key_values=past_key_values,
-                )
-            else:
-                attention_mask = create_bidirectional_mask(
-                    config=self.config,
-                    input_embeds=embedding_output,
-                    attention_mask=attention_mask,
-                )
-        elif attention_mask is not None and attention_mask.dim() == 3:
-            if "flash" in self.config._attn_implementation or self.config._attn_implementation == "flex_attention":
-                raise ValueError(
-                    "Passing attention mask with a 3D/4D shape does not work with type "
-                    f"{self.config._attn_implementation} - please use either `sdpa` or `eager` instead."
-                )
-            attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
+        if self.config.is_decoder:
+            attention_mask = create_causal_mask(
+                config=self.config,
+                input_embeds=embedding_output,
+                attention_mask=attention_mask,
+                cache_position=cache_position,
+                past_key_values=past_key_values,
+            )
+        else:
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=embedding_output,
+                attention_mask=attention_mask,
+            )
 
         if encoder_attention_mask is not None:
-            if encoder_attention_mask.dim() == 2:
-                encoder_attention_mask = create_bidirectional_mask(
-                    config=self.config,
-                    input_embeds=embedding_output,
-                    attention_mask=encoder_attention_mask,
-                    encoder_hidden_states=encoder_hidden_states,
-                )
-            else:
-                if "flash" in self.config._attn_implementation or self.config._attn_implementation == "flex_attention":
-                    raise ValueError(
-                        "Passing attention mask with a 3D/4D shape does not work with type "
-                        f"{self.config._attn_implementation} - please use either `sdpa` or `eager` instead."
-                    )
-                encoder_attention_mask = self.invert_attention_mask(encoder_attention_mask)
+            encoder_attention_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=embedding_output,
+                attention_mask=encoder_attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
+            )
 
         return attention_mask, encoder_attention_mask
 
