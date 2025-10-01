@@ -16,18 +16,17 @@
 
 import copy
 import math
-import warnings
-from typing import Optional, Tuple, Union
-
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
+from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     MoEModelOutput,
     MoEModelOutputWithPastAndCrossAttentions,
@@ -35,24 +34,27 @@ from ...modeling_outputs import (
     Seq2SeqMoEOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS, find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
+    auto_docstring,
+    is_torch_flex_attn_available,
     is_torch_fx_proxy,
     is_torchdynamo_compiling,
     logging,
-    replace_return_docstrings,
 )
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_switch_transformers import SwitchTransformersConfig
 
 
-logger = logging.get_logger(__name__)
+if is_torch_flex_attn_available():
+    from torch.nn.attention.flex_attention import BlockMask
 
-_CONFIG_FOR_DOC = "SwitchTransformersConfig"
-_CHECKPOINT_FOR_DOC = "google/switch-base-8"
+    from ...integrations.flex_attention import make_flex_block_causal_mask
+
+
+logger = logging.get_logger(__name__)
 
 ####################################################
 # This dict contains ids and associated url
@@ -64,7 +66,7 @@ def router_z_loss_func(router_logits: torch.Tensor) -> float:
     r"""
     Compute the router z-loss implemented in PyTorch.
 
-    The router z-loss was introduced in [Designing Effective Sparse Expert Models](https://arxiv.org/abs/2202.08906).
+    The router z-loss was introduced in [Designing Effective Sparse Expert Models](https://huggingface.co/papers/2202.08906).
     It encourages router logits to remain small in an effort to improve stability.
 
     Args:
@@ -84,15 +86,15 @@ def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.T
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
 
-    See Switch Transformer (https://arxiv.org/abs/2101.03961) for more details. This function implements the loss
+    See Switch Transformer (https://huggingface.co/papers/2101.03961) for more details. This function implements the loss
     function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
     experts is too unbalanced.
 
     Args:
         router_probs (`torch.Tensor`):
-            Probability assigned to each expert per token. Shape: [batch_size, seqeunce_length, num_experts].
+            Probability assigned to each expert per token. Shape: [batch_size, sequence_length, num_experts].
         expert_indices (`torch.Tensor`):
-            Indices tensor of shape [batch_size, seqeunce_length] identifying the selected expert for a given token.
+            Indices tensor of shape [batch_size, sequence_length] identifying the selected expert for a given token.
 
     Returns:
         The auxiliary loss.
@@ -123,8 +125,8 @@ class SwitchTransformersTop1Router(nn.Module):
     """
     Router using tokens choose top-1 experts assignment.
 
-    This router uses the same mechanism as in Switch Transformer (https://arxiv.org/abs/2101.03961) and V-MoE
-    (https://arxiv.org/abs/2106.05974): tokens choose their top experts. Items are sorted by router_probs and then
+    This router uses the same mechanism as in Switch Transformer (https://huggingface.co/papers/2101.03961) and V-MoE
+    (https://huggingface.co/papers/2106.05974): tokens choose their top experts. Items are sorted by router_probs and then
     routed to their choice of expert until the expert's expert_capacity is reached. **There is no guarantee that each
     token is processed by an expert**, or that each expert receives at least one token.
 
@@ -139,7 +141,7 @@ class SwitchTransformersTop1Router(nn.Module):
         self.ignore_padding_tokens = config.router_ignore_padding_tokens
         self.dtype = getattr(torch, config.router_dtype)
 
-    def _compute_router_probabilities(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _compute_router_probabilities(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         r"""
         Computes router probabilities from input hidden states.
 
@@ -155,7 +157,7 @@ class SwitchTransformersTop1Router(nn.Module):
                 This is used later for computing router z-loss.
         """
         # float32 is used to ensure stability. See the discussion of "selective precision" in
-        # https://arxiv.org/abs/2101.03961.
+        # https://huggingface.co/papers/2101.03961.
         # We also store the previous dtype to cast back the output to the previous dtype
         self.input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(self.dtype)
@@ -180,19 +182,21 @@ class SwitchTransformersTop1Router(nn.Module):
         if not (hasattr(self.classifier, "SCB") or hasattr(self.classifier, "CB")):
             self.classifier = self.classifier.to(self.dtype)
 
-    def forward(self, hidden_states: torch.Tensor) -> Tuple:
+    def forward(self, hidden_states: torch.Tensor) -> tuple:
         r"""
         Generic forward function for every Router class. Each Router expects to have the same input hidden states
         (`hidden_states`) corresponding to the hidden states for each token, the `expert_capacity` corresponding to the
         number of tokens the Router will send to each expert, some Routers can send up to few tokens to each expert.
+
         Each Router works as the following: it expects the hidden states for each token, gets the `router_probs` and
         `router_logits` from the `router_weights`. This will assign for each token, the raw probability to be assigned
         to an expert. Then each Router class will have to define its own `_compute_routing_instructions`.
+
         Args:
             hidden_states (`torch.Tensor`) :
                 [num_groups, tokens_per_group, hidden_dim] inputs to send to experts.
         Returns:
-            Tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`] Tuple containing the expert index, the router probs
+            tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`] Tuple containing the expert index, the router probs
             and the router logits. The router probabilities and logits are required to compute the loss.
         """
         # Create a copy for applying jitter noise
@@ -233,7 +237,7 @@ class SwitchTransformersLayerNorm(nn.Module):
 
     def forward(self, hidden_states):
         # SwitchTransformers uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
-        # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus varience is calculated
+        # Square Layer Normalization https://huggingface.co/papers/1910.07467 thus variance is calculated
         # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
         # half-precision inputs is done in fp32
 
@@ -247,7 +251,6 @@ class SwitchTransformersLayerNorm(nn.Module):
         return self.weight * hidden_states
 
 
-ALL_LAYERNORM_LAYERS.append(SwitchTransformersLayerNorm)
 
 
 # Copied from transformers.models.t5.modeling_t5.T5DenseActDense with T5->SwitchTransformers
@@ -291,32 +294,31 @@ class SwitchTransformersSparseMLP(nn.Module):
     def forward(self, hidden_states):
         r"""
         Hold on, this will be slightly tricky to understand In the correct order, a MoE layer does the following:
+
         1- Gets the `router_mask` from the router. The shape of the mask is `(batch_size, sequence_length, num_expert)`
         and corresponds to the argmax of the `router_probs`. The probabilities are needed in the computation of the
         hidden states : they are broadcasted to the hidden states values (can be interpreted as a scaling factor).
+
         2- Dispatch the tokens to its associated experts. We do a classic for loop over the experts and assign for each
         expert the corresponding hidden states.
-        """
-        # Step 1: Get the router_mask from the router as wel as the probabilities
-        expert_hidden_states = hidden_states.clone()
 
-        # Get router outputs using potentially jittered states
+        """
+        # Step 1: Get the router_mask from the router as well as the probabilities
         router_mask, router_probs, router_logits = self.router(hidden_states)
         expert_index = torch.argmax(router_mask, dim=-1)
 
-        # The routers introduced might not always map all the tokens, to a router, which means that some hidden states
-        # can be unchanged from one layer to another. That is why the hidden states are cloned before updating only the seleced ones.
-        # Use original hidden states for expert processing
-        next_states = expert_hidden_states.clone()
+        # If a token gets dropped, we just set it to zero such that it does not get updated.
+        next_states = torch.zeros(hidden_states.shape, device=hidden_states.device, dtype=hidden_states.dtype)
 
         router_mask = router_mask.bool()
         batch_size, seq_len, num_experts = router_mask.shape
-        idx_mask = router_mask.transpose(1, 2).reshape(batch_size * seq_len, num_experts).sum(dim=0)
-        idx_mask = torch.nonzero(idx_mask, as_tuple=True)[0].tolist()
-
+        idx_mask = router_mask.reshape(batch_size * seq_len, num_experts).sum(dim=0)
+        idx_mask = torch.nonzero(idx_mask, as_tuple=True)[
+            0
+        ].tolist()  # length: number of "activated" expert / value: index
         for idx in idx_mask:
             next_states[router_mask[:, :, idx]] = getattr(self.experts, f"expert_{idx}")(
-                expert_hidden_states[router_mask[:, :, idx]]
+                hidden_states[router_mask[:, :, idx]]
             )
 
         hidden_states = router_probs * next_states
@@ -391,7 +393,6 @@ class SwitchTransformersAttention(nn.Module):
                 "when creating this class."
             )
 
-        # Mesh TensorFlow initialization to avoid scaling before softmax
         self.q = nn.Linear(self.d_model, self.inner_dim, bias=False)
         self.k = nn.Linear(self.d_model, self.inner_dim, bias=False)
         self.v = nn.Linear(self.d_model, self.inner_dim, bias=False)
@@ -486,14 +487,14 @@ class SwitchTransformersAttention(nn.Module):
         values = values.permute([2, 0, 1]).unsqueeze(0)  # shape (1, num_heads, query_length, key_length)
         return values
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
         mask=None,
         key_value_states=None,
         position_bias=None,
-        past_key_value=None,
-        layer_head_mask=None,
+        past_key_values=None,
         query_length=None,
         use_cache=False,
         output_attentions=False,
@@ -512,34 +513,38 @@ class SwitchTransformersAttention(nn.Module):
         query_states = self.q(hidden_states)
         query_states = query_states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
 
-        if past_key_value is not None:
-            is_updated = past_key_value.is_updated.get(self.layer_idx)
+        # Check is encoder-decoder model is being used. Otherwise we'll get `DynamicCache`
+        is_updated = False
+        if isinstance(past_key_values, EncoderDecoderCache):
+            is_updated = past_key_values.is_updated.get(self.layer_idx)
             if is_cross_attention:
                 # after the first generated id, we can subsequently re-use all key/value_states from cache
-                curr_past_key_value = past_key_value.cross_attention_cache
+                curr_past_key_value = past_key_values.cross_attention_cache
             else:
-                curr_past_key_value = past_key_value.self_attention_cache
+                curr_past_key_value = past_key_values.self_attention_cache
+        else:
+            curr_past_key_value = past_key_values
 
         current_states = key_value_states if is_cross_attention else hidden_states
-        if is_cross_attention and past_key_value is not None and is_updated:
+        if is_cross_attention and past_key_values is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.key_cache[self.layer_idx]
-            value_states = curr_past_key_value.value_cache[self.layer_idx]
+            key_states = curr_past_key_value.layers[self.layer_idx].keys
+            value_states = curr_past_key_value.layers[self.layer_idx].values
         else:
             key_states = self.k(current_states)
             value_states = self.v(current_states)
             key_states = key_states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
             value_states = value_states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
 
-            if past_key_value is not None:
+            if past_key_values is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
                 cache_position = cache_position if not is_cross_attention else None
                 key_states, value_states = curr_past_key_value.update(
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention:
-                    past_key_value.is_updated[self.layer_idx] = True
+                if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
+                    past_key_values.is_updated[self.layer_idx] = True
 
         # compute scores, equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
         scores = torch.matmul(query_states, key_states.transpose(3, 2))
@@ -577,17 +582,13 @@ class SwitchTransformersAttention(nn.Module):
         attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(scores)
         attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
 
-        # Mask heads if we want to
-        if layer_head_mask is not None:
-            attn_weights = attn_weights * layer_head_mask
-
         attn_output = torch.matmul(attn_weights, value_states)
 
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.view(batch_size, -1, self.inner_dim)
         attn_output = self.o(attn_output)
 
-        outputs = (attn_output, past_key_value, position_bias)
+        outputs = (attn_output, position_bias)
 
         if output_attentions:
             outputs = outputs + (attn_weights,)
@@ -604,13 +605,13 @@ class SwitchTransformersLayerSelfAttention(nn.Module):
         self.layer_norm = SwitchTransformersLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
         attention_mask=None,
         position_bias=None,
-        layer_head_mask=None,
-        past_key_value=None,
+        past_key_values=None,
         use_cache=False,
         output_attentions=False,
         cache_position=None,
@@ -620,8 +621,7 @@ class SwitchTransformersLayerSelfAttention(nn.Module):
             normed_hidden_states,
             mask=attention_mask,
             position_bias=position_bias,
-            layer_head_mask=layer_head_mask,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             use_cache=use_cache,
             output_attentions=output_attentions,
             cache_position=cache_position,
@@ -641,14 +641,14 @@ class SwitchTransformersLayerCrossAttention(nn.Module):
         self.layer_norm = SwitchTransformersLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
         key_value_states,
         attention_mask=None,
         position_bias=None,
-        layer_head_mask=None,
-        past_key_value=None,
+        past_key_values=None,
         use_cache=False,
         query_length=None,
         output_attentions=False,
@@ -660,8 +660,7 @@ class SwitchTransformersLayerCrossAttention(nn.Module):
             mask=attention_mask,
             key_value_states=key_value_states,
             position_bias=position_bias,
-            layer_head_mask=layer_head_mask,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             use_cache=use_cache,
             query_length=query_length,
             output_attentions=output_attentions,
@@ -672,7 +671,7 @@ class SwitchTransformersLayerCrossAttention(nn.Module):
         return outputs
 
 
-class SwitchTransformersBlock(nn.Module):
+class SwitchTransformersBlock(GradientCheckpointingLayer):
     def __init__(self, config, has_relative_attention_bias=False, is_sparse=False, layer_idx: Optional[int] = None):
         super().__init__()
         self.is_decoder = config.is_decoder
@@ -696,9 +695,7 @@ class SwitchTransformersBlock(nn.Module):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         encoder_decoder_position_bias=None,
-        layer_head_mask=None,
-        cross_attn_layer_head_mask=None,
-        past_key_value=None,
+        past_key_values=None,
         use_cache=False,
         output_attentions=False,
         output_router_logits=True,
@@ -709,14 +706,13 @@ class SwitchTransformersBlock(nn.Module):
             hidden_states,
             attention_mask=attention_mask,
             position_bias=position_bias,
-            layer_head_mask=layer_head_mask,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             use_cache=use_cache,
             output_attentions=output_attentions,
             cache_position=cache_position,
         )
-        hidden_states, past_key_value = self_attention_outputs[:2]
-        attention_outputs = self_attention_outputs[2:]  # Keep self-attention outputs and relative position weights
+        hidden_states = self_attention_outputs[0]
+        attention_outputs = self_attention_outputs[1:]  # Keep self-attention outputs and relative position weights
 
         # clamp inf values to enable fp16 training
         if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
@@ -730,14 +726,13 @@ class SwitchTransformersBlock(nn.Module):
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
                 position_bias=encoder_decoder_position_bias,
-                layer_head_mask=cross_attn_layer_head_mask,
-                past_key_value=past_key_value,
+                past_key_values=past_key_values,
                 query_length=cache_position[-1] + 1,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
                 cache_position=cache_position,
             )
-            hidden_states, past_key_value = cross_attention_outputs[:2]
+            hidden_states = cross_attention_outputs[0]
 
             # clamp inf values to enable fp16 training
             if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
@@ -745,7 +740,7 @@ class SwitchTransformersBlock(nn.Module):
                 hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
             # Keep cross-attention outputs and relative position weights
-            attention_outputs = attention_outputs + cross_attention_outputs[2:]
+            attention_outputs = attention_outputs + cross_attention_outputs[1:]
 
         # Apply Feed Forward layer
         hidden_states = self.layer[-1](hidden_states, output_router_logits)
@@ -762,25 +757,18 @@ class SwitchTransformersBlock(nn.Module):
 
         outputs = (hidden_states,)
 
-        if use_cache:
-            outputs = outputs + (past_key_value,) + attention_outputs + (router_tuple,)
-        else:
-            outputs = outputs + attention_outputs + (router_tuple,)
-
-        return outputs  # hidden-states, past_key_value, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights), (router_tuple)
+        return (
+            outputs + attention_outputs + (router_tuple,)
+        )  # hidden-states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights), (router_tuple)
 
 
+@auto_docstring
 class SwitchTransformersPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = SwitchTransformersConfig
+    config: SwitchTransformersConfig
     base_model_prefix = "switch_transformers"
     supports_gradient_checkpointing = True
-    _supports_cache_class = True
-    _supports_static_cache = False
+
+    _can_compile_fullgraph = False
     _no_split_modules = ["SwitchTransformersBlock"]
 
     @property
@@ -803,15 +791,10 @@ class SwitchTransformersPreTrainedModel(PreTrainedModel):
             module,
             (SwitchTransformersModel, SwitchTransformersForConditionalGeneration, SwitchTransformersEncoderModel),
         ):
-            # Mesh TensorFlow embeddings initialization
-            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
             module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
             if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
                 module.lm_head.weight.data.normal_(mean=0.0, std=factor * 1.0)
         elif isinstance(module, SwitchTransformersDenseActDense):
-            # Mesh TensorFlow FF initialization
-            # See https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/transformer_layers.py#L56
-            # and https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L89
             module.wi.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module.wi, "bias") and module.wi.bias is not None:
                 module.wi.bias.data.zero_()
@@ -819,8 +802,6 @@ class SwitchTransformersPreTrainedModel(PreTrainedModel):
             if hasattr(module.wo, "bias") and module.wo.bias is not None:
                 module.wo.bias.data.zero_()
         elif isinstance(module, SwitchTransformersAttention):
-            # Mesh TensorFlow attention initialization to avoid scaling before softmax
-            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/attention.py#L136
             d_model = self.config.d_model
             key_value_proj_dim = self.config.d_kv
             n_heads = self.config.num_heads
@@ -831,8 +812,6 @@ class SwitchTransformersPreTrainedModel(PreTrainedModel):
             if module.has_relative_attention_bias:
                 module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
         elif isinstance(module, SwitchTransformersSparseMLP):
-            # Mesh TensorFlow attention initialization to avoid scaling before softmax
-            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/attention.py#L136
             d_model = self.config.d_model
             key_value_proj_dim = self.config.d_kv
             n_heads = self.config.num_heads
@@ -901,9 +880,6 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         self.device_map = None
         self.gradient_checkpointing = False
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
     def set_input_embeddings(self, new_embeddings):
         self.embed_tokens = new_embeddings
 
@@ -914,8 +890,6 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         inputs_embeds=None,
-        head_mask=None,
-        cross_attn_head_mask=None,
         past_key_values=None,
         use_cache=None,
         output_attentions=None,
