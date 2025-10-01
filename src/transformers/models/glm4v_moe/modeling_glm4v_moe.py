@@ -268,7 +268,7 @@ class Glm4vMoeTextNaiveMoe(nn.ModuleList):
         super().__init__()
         self.num_experts = config.num_local_experts
         for _ in range(self.num_experts):
-            self += [Glm4vMoeTextMLP(config, intermediate_size=config.moe_intermediate_size)]
+            self.append(Glm4vMoeTextMLP(config, intermediate_size=config.moe_intermediate_size))
 
     def forward(
         self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor

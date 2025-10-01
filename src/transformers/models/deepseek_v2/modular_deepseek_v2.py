@@ -230,7 +230,7 @@ class DeepseekV2Experts(Qwen2MoeExperts, nn.ModuleList):
         nn.ModuleList.__init__(self)
         self.num_experts = config.n_routed_experts
         for _ in range(config.n_routed_experts):
-            self += [DeepseekV2MLP(config, intermediate_size=config.moe_intermediate_size)]
+            self.append(DeepseekV2MLP(config, intermediate_size=config.moe_intermediate_size))
 
 
 class DeepseekV2Moe(nn.Module):

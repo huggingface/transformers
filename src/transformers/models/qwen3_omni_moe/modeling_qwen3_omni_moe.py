@@ -2650,7 +2650,7 @@ class Qwen3OmniMoeTalkerTextExperts(nn.ModuleList):
         super().__init__()
         self.num_experts = config.num_experts
         for _ in range(config.num_experts):
-            self += [Qwen3OmniMoeTalkerTextMLP(config, intermediate_size=config.moe_intermediate_size)]
+            self.append(Qwen3OmniMoeTalkerTextMLP(config, intermediate_size=config.moe_intermediate_size))
 
     def forward(
         self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor

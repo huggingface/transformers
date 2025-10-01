@@ -237,7 +237,7 @@ class VitPoseNaiveMoe(nn.ModuleList):
         part_features = config.part_features
 
         for _ in range(self.num_experts):
-            self += [nn.Linear(hidden_features, part_features)]
+            self.append(nn.Linear(hidden_features, part_features))
 
     def forward(self, hidden_state, indices):
         expert_hidden_state = torch.zeros_like(hidden_state[:, :, -self.part_features :])

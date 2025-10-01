@@ -86,7 +86,7 @@ class Qwen2MoeExperts(MixtralExperts, nn.Module):
         nn.ModuleList.__init__(self)
         self.num_experts = config.num_experts
         for _ in range(config.num_experts):
-            self += [Qwen2MoeMLP(config, intermediate_size=config.moe_intermediate_size)]
+            self.append(Qwen2MoeMLP(config, intermediate_size=config.moe_intermediate_size))
 
 
 class Qwen2MoeSparseMoeBlock(nn.Module):
