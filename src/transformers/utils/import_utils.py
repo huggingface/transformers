@@ -41,54 +41,24 @@ from . import logging
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
-# TODO: This doesn't work for all packages (`bs4`, `faiss`, etc.) Talk to Sylvain to see how to do with it better.
+PACKAGE_DISTRIBUTION_MAPPING = importlib.metadata.packages_distributions()
+
+
 def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[tuple[bool, str], bool]:
-    # Check if the package spec exists and grab its version to avoid importing a local directory
+    """Check if `pkg_name` exist, and optionally try to get its version"""
     package_exists = importlib.util.find_spec(pkg_name) is not None
     package_version = "N/A"
-    if package_exists:
+    if package_exists and return_version:
         try:
-            # TODO: Once python 3.9 support is dropped, `importlib.metadata.packages_distributions()`
-            # should be used here to map from package name to distribution names
-            # e.g. PIL -> Pillow, Pillow-SIMD; quark -> amd-quark; onnxruntime -> onnxruntime-gpu.
-            # `importlib.metadata.packages_distributions()` is not available in Python 3.9.
-
-            # Primary method to get the package version
-            package_version = importlib.metadata.version(pkg_name)
+            # importlib.metadata works with the distribution package, which may be different from the import
+            # name (e.g. `PIL` is the import name, but `pillow` is the distribution name)
+            distribution_name = PACKAGE_DISTRIBUTION_MAPPING[pkg_name][0]
+            package_version = importlib.metadata.version(distribution_name)
         except importlib.metadata.PackageNotFoundError:
-            # Fallback method: Only for "torch" and versions containing "dev"
-            if pkg_name == "torch":
-                try:
-                    package = importlib.import_module(pkg_name)
-                    temp_version = getattr(package, "__version__", "N/A")
-                    # Check if the version contains "dev"
-                    if "dev" in temp_version:
-                        package_version = temp_version
-                        package_exists = True
-                    else:
-                        package_exists = False
-                except ImportError:
-                    # If the package can't be imported, it's not available
-                    package_exists = False
-            elif pkg_name == "quark":
-                # TODO: remove once `importlib.metadata.packages_distributions()` is supported.
-                try:
-                    package_version = importlib.metadata.version("amd-quark")
-                except Exception:
-                    package_exists = False
-            elif pkg_name == "triton":
-                try:
-                    # import triton works for both linux and windows
-                    package = importlib.import_module(pkg_name)
-                    package_version = getattr(package, "__version__", "N/A")
-                except Exception:
-                    try:
-                        package_version = importlib.metadata.version("pytorch-triton")  # pytorch-triton
-                    except Exception:
-                        package_exists = False
-            else:
-                # For packages other than "torch", don't attempt the fallback and set as not available
-                package_exists = False
+            # If we cannot find the metadata (because of editable install for example), try to import directly.
+            # Note that this branch will almost never be run, so we do not import packages for nothing here
+            package = importlib.import_module(pkg_name)
+            package_version = getattr(package, "__version__", "N/A")
         logger.debug(f"Detected {pkg_name} version: {package_version}")
     if return_version:
         return package_exists, package_version
@@ -122,9 +92,9 @@ _apex_available = _is_package_available("apex")
 _apollo_torch_available = _is_package_available("apollo_torch")
 _aqlm_available = _is_package_available("aqlm")
 _vptq_available, _vptq_version = _is_package_available("vptq", return_version=True)
-_av_available = importlib.util.find_spec("av") is not None
-_decord_available = importlib.util.find_spec("decord") is not None
-_torchcodec_available = importlib.util.find_spec("torchcodec") is not None
+_av_available = _is_package_available("av")
+_decord_available = _is_package_available("decord")
+_torchcodec_available = _is_package_available("torchcodec")
 _libcst_available = _is_package_available("libcst")
 _bitsandbytes_available = _is_package_available("bitsandbytes")
 _eetq_available = _is_package_available("eetq")
@@ -133,37 +103,20 @@ _galore_torch_available = _is_package_available("galore_torch")
 _lomo_available = _is_package_available("lomo_optim")
 _grokadamw_available = _is_package_available("grokadamw")
 _schedulefree_available, _schedulefree_version = _is_package_available("schedulefree", return_version=True)
-_torch_optimi_available = importlib.util.find_spec("optimi") is not None
-# `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
-_bs4_available = importlib.util.find_spec("bs4") is not None
+_torch_optimi_available = _is_package_available("optimi")
+_bs4_available = _is_package_available("bs4")
 _coloredlogs_available = _is_package_available("coloredlogs")
-# `importlib.metadata.util` doesn't work with `opencv-python-headless`.
-_cv2_available = importlib.util.find_spec("cv2") is not None
-_yt_dlp_available = importlib.util.find_spec("yt_dlp") is not None
+_cv2_available = _is_package_available("cv2")
+_yt_dlp_available = _is_package_available("yt_dlp")
 _datasets_available = _is_package_available("datasets")
 _detectron2_available = _is_package_available("detectron2")
-# We need to check `faiss`, `faiss-cpu` and `faiss-gpu`.
-_faiss_available = importlib.util.find_spec("faiss") is not None
-try:
-    _faiss_version = importlib.metadata.version("faiss")
-    logger.debug(f"Successfully imported faiss version {_faiss_version}")
-except importlib.metadata.PackageNotFoundError:
-    try:
-        _faiss_version = importlib.metadata.version("faiss-cpu")
-        logger.debug(f"Successfully imported faiss version {_faiss_version}")
-    except importlib.metadata.PackageNotFoundError:
-        try:
-            _faiss_version = importlib.metadata.version("faiss-gpu")
-            logger.debug(f"Successfully imported faiss version {_faiss_version}")
-        except importlib.metadata.PackageNotFoundError:
-            _faiss_available = False
+_faiss_available = _is_package_available("faiss")
 _ftfy_available = _is_package_available("ftfy")
 _g2p_en_available = _is_package_available("g2p_en")
 _hadamard_available = _is_package_available("fast_hadamard_transform")
 _ipex_available, _ipex_version = _is_package_available("intel_extension_for_pytorch", return_version=True)
 _jinja_available = _is_package_available("jinja2")
 _kenlm_available = _is_package_available("kenlm")
-_keras_nlp_available = _is_package_available("keras_nlp")
 _levenshtein_available = _is_package_available("Levenshtein")
 _librosa_available = _is_package_available("librosa")
 _natten_available = _is_package_available("natten")
@@ -174,19 +127,12 @@ _optimum_available = _is_package_available("optimum")
 _auto_gptq_available = _is_package_available("auto_gptq")
 _gptqmodel_available = _is_package_available("gptqmodel")
 _auto_round_available, _auto_round_version = _is_package_available("auto_round", return_version=True)
-# `importlib.metadata.version` doesn't work with `awq`
-_auto_awq_available = importlib.util.find_spec("awq") is not None
+_auto_awq_available = _is_package_available("awq")
 _quark_available = _is_package_available("quark")
 _fp_quant_available, _fp_quant_version = _is_package_available("fp_quant", return_version=True)
 _qutlass_available, _qutlass_version = _is_package_available("qutlass", return_version=True)
-_is_optimum_quanto_available = False
-try:
-    importlib.metadata.version("optimum_quanto")
-    _is_optimum_quanto_available = True
-except importlib.metadata.PackageNotFoundError:
-    _is_optimum_quanto_available = False
-# For compressed_tensors, only check spec to allow compressed_tensors-nightly package
-_compressed_tensors_available = importlib.util.find_spec("compressed_tensors") is not None
+_is_optimum_quanto_available = _is_package_available("optimum.quanto")
+_compressed_tensors_available = _is_package_available("compressed_tensors")
 _pandas_available = _is_package_available("pandas")
 _peft_available = _is_package_available("peft")
 _phonemizer_available = _is_package_available("phonemizer")
@@ -205,13 +151,8 @@ _scipy_available = _is_package_available("scipy")
 _sentencepiece_available = _is_package_available("sentencepiece")
 _is_seqio_available = _is_package_available("seqio")
 _is_gguf_available, _gguf_version = _is_package_available("gguf", return_version=True)
-_sklearn_available = importlib.util.find_spec("sklearn") is not None
-if _sklearn_available:
-    try:
-        importlib.metadata.version("scikit-learn")
-    except importlib.metadata.PackageNotFoundError:
-        _sklearn_available = False
-_smdistributed_available = importlib.util.find_spec("smdistributed") is not None
+_sklearn_available = _is_package_available("sklearn")
+_smdistributed_available = _is_package_available("smdistributed")
 _soundfile_available = _is_package_available("soundfile")
 _spacy_available = _is_package_available("spacy")
 _sudachipy_available, _sudachipy_version = _is_package_available("sudachipy", return_version=True)
@@ -220,7 +161,7 @@ _tokenizers_available = _is_package_available("tokenizers")
 _torchaudio_available = _is_package_available("torchaudio")
 _torchao_available, _torchao_version = _is_package_available("torchao", return_version=True)
 _torchdistx_available = _is_package_available("torchdistx")
-_torchvision_available, _torchvision_version = _is_package_available("torchvision", return_version=True)
+_torchvision_available = _is_package_available("torchvision")
 _mlx_available = _is_package_available("mlx")
 _num2words_available = _is_package_available("num2words")
 _hqq_available, _hqq_version = _is_package_available("hqq", return_version=True)
@@ -229,10 +170,18 @@ _blobfile_available = _is_package_available("blobfile")
 _liger_kernel_available = _is_package_available("liger_kernel")
 _spqr_available = _is_package_available("spqr_quant")
 _rich_available = _is_package_available("rich")
+_pil_available = _is_package_available("PIL")
 _kernels_available = _is_package_available("kernels")
 _matplotlib_available = _is_package_available("matplotlib")
 _mistral_common_available = _is_package_available("mistral_common")
 _triton_available, _triton_version = _is_package_available("triton", return_version=True)
+_essentia_available = _is_package_available("essentia")
+_pydantic_available = _is_package_available("pydantic")
+_fastapi_available = _is_package_available("fastapi")
+_uvicorn_available = _is_package_available("uvicorn")
+_pretty_midi_available = _is_package_available("pretty_midi")
+_is_ccl_available = _is_package_available("torch_ccl") or _is_package_available("oneccl_bindings_for_pytorch")
+_torch_xla_available = USE_TORCH_XLA in ENV_VARS_TRUE_VALUES and _is_package_available("torch_xla")
 
 _torch_available, _torch_version = _is_package_available("torch", return_version=True)
 if _torch_available:
@@ -241,86 +190,27 @@ if _torch_available:
         logger.warning(f"Disabling PyTorch because PyTorch >= 2.2 is required but found {_torch_version}")
 
 
-_essentia_available = importlib.util.find_spec("essentia") is not None
-try:
-    _essentia_version = importlib.metadata.version("essentia")
-    logger.debug(f"Successfully imported essentia version {_essentia_version}")
-except importlib.metadata.PackageNotFoundError:
-    _essentia_version = False
-
-
-_pydantic_available = importlib.util.find_spec("pydantic") is not None
-try:
-    _pydantic_version = importlib.metadata.version("pydantic")
-    logger.debug(f"Successfully imported pydantic version {_pydantic_version}")
-except importlib.metadata.PackageNotFoundError:
-    _pydantic_available = False
-
-
-_fastapi_available = importlib.util.find_spec("fastapi") is not None
-try:
-    _fastapi_version = importlib.metadata.version("fastapi")
-    logger.debug(f"Successfully imported pydantic version {_fastapi_version}")
-except importlib.metadata.PackageNotFoundError:
-    _fastapi_available = False
-
-
-_uvicorn_available = importlib.util.find_spec("uvicorn") is not None
-try:
-    _uvicorn_version = importlib.metadata.version("uvicorn")
-    logger.debug(f"Successfully imported pydantic version {_uvicorn_version}")
-except importlib.metadata.PackageNotFoundError:
-    _uvicorn_available = False
-
-
-_pretty_midi_available = importlib.util.find_spec("pretty_midi") is not None
-try:
-    _pretty_midi_version = importlib.metadata.version("pretty_midi")
-    logger.debug(f"Successfully imported pretty_midi version {_pretty_midi_version}")
-except importlib.metadata.PackageNotFoundError:
-    _pretty_midi_available = False
-
-
-ccl_version = "N/A"
-_is_ccl_available = (
-    importlib.util.find_spec("torch_ccl") is not None
-    or importlib.util.find_spec("oneccl_bindings_for_pytorch") is not None
-)
-try:
-    ccl_version = importlib.metadata.version("oneccl_bind_pt")
-    logger.debug(f"Detected oneccl_bind_pt version {ccl_version}")
-except importlib.metadata.PackageNotFoundError:
-    _is_ccl_available = False
-
-
-_torch_xla_available = False
-if USE_TORCH_XLA in ENV_VARS_TRUE_VALUES:
-    _torch_xla_available, _torch_xla_version = _is_package_available("torch_xla", return_version=True)
-    if _torch_xla_available:
-        logger.info(f"Torch XLA version {_torch_xla_version} available.")
-
-
-def is_kenlm_available() -> Union[tuple[bool, str], bool]:
+def is_kenlm_available() -> bool:
     return _kenlm_available
 
 
-def is_kernels_available() -> Union[tuple[bool, str], bool]:
+def is_kernels_available() -> bool:
     return _kernels_available
 
 
-def is_cv2_available() -> Union[tuple[bool, str], bool]:
+def is_cv2_available() -> bool:
     return _cv2_available
 
 
-def is_yt_dlp_available() -> Union[tuple[bool, str], bool]:
+def is_yt_dlp_available() -> bool:
     return _yt_dlp_available
 
 
-def is_torch_available() -> Union[tuple[bool, str], bool]:
+def is_torch_available() -> bool:
     return _torch_available
 
 
-def is_libcst_available() -> Union[tuple[bool, str], bool]:
+def is_libcst_available() -> bool:
     return _libcst_available
 
 
@@ -356,7 +246,7 @@ def is_triton_available(min_version: str = TRITON_MIN_VERSION) -> bool:
     return _triton_available and version.parse(_triton_version) >= version.parse(min_version)
 
 
-def is_hadamard_available() -> Union[tuple[bool, str], bool]:
+def is_hadamard_available() -> bool:
     return _hadamard_available
 
 
@@ -364,7 +254,7 @@ def is_hqq_available(min_version: str = HQQ_MIN_VERSION) -> bool:
     return _hqq_available and version.parse(_hqq_version) >= version.parse(min_version)
 
 
-def is_pygments_available() -> Union[tuple[bool, str], bool]:
+def is_pygments_available() -> bool:
     return _pygments_available
 
 
@@ -403,23 +293,23 @@ def is_torchvision_v2_available() -> bool:
     return is_torchvision_available()
 
 
-def is_galore_torch_available() -> Union[tuple[bool, str], bool]:
+def is_galore_torch_available() -> bool:
     return _galore_torch_available
 
 
-def is_apollo_torch_available() -> Union[tuple[bool, str], bool]:
+def is_apollo_torch_available() -> bool:
     return _apollo_torch_available
 
 
-def is_torch_optimi_available() -> Union[tuple[bool, str], bool]:
+def is_torch_optimi_available() -> bool:
     return _torch_optimi_available
 
 
-def is_lomo_available() -> Union[tuple[bool, str], bool]:
+def is_lomo_available() -> bool:
     return _lomo_available
 
 
-def is_grokadamw_available() -> Union[tuple[bool, str], bool]:
+def is_grokadamw_available() -> bool:
     return _grokadamw_available
 
 
@@ -427,35 +317,35 @@ def is_schedulefree_available(min_version: str = SCHEDULEFREE_MIN_VERSION) -> bo
     return _schedulefree_available and version.parse(_schedulefree_version) >= version.parse(min_version)
 
 
-def is_pyctcdecode_available() -> Union[tuple[bool, str], bool]:
+def is_pyctcdecode_available() -> bool:
     return _pyctcdecode_available
 
 
-def is_librosa_available() -> Union[tuple[bool, str], bool]:
+def is_librosa_available() -> bool:
     return _librosa_available
 
 
-def is_essentia_available() -> Union[tuple[bool, str], bool]:
+def is_essentia_available() -> bool:
     return _essentia_available
 
 
-def is_pydantic_available() -> Union[tuple[bool, str], bool]:
+def is_pydantic_available() -> bool:
     return _pydantic_available
 
 
-def is_fastapi_available() -> Union[tuple[bool, str], bool]:
+def is_fastapi_available() -> bool:
     return _fastapi_available
 
 
-def is_uvicorn_available() -> Union[tuple[bool, str], bool]:
+def is_uvicorn_available() -> bool:
     return _uvicorn_available
 
 
-def is_openai_available() -> Union[tuple[bool, str], bool]:
+def is_openai_available() -> bool:
     return _openai_available
 
 
-def is_pretty_midi_available() -> Union[tuple[bool, str], bool]:
+def is_pretty_midi_available() -> bool:
     return _pretty_midi_available
 
 
@@ -486,7 +376,7 @@ def is_rocm_platform() -> bool:
         return False
 
 
-def is_mamba_ssm_available() -> Union[tuple[bool, str], bool]:
+def is_mamba_ssm_available() -> bool:
     if is_torch_available():
         import torch
 
@@ -529,7 +419,7 @@ def is_flash_linear_attention_available():
     return False
 
 
-def is_causal_conv1d_available() -> Union[tuple[bool, str], bool]:
+def is_causal_conv1d_available() -> bool:
     if is_torch_available():
         import torch
 
@@ -539,13 +429,13 @@ def is_causal_conv1d_available() -> Union[tuple[bool, str], bool]:
     return False
 
 
-def is_xlstm_available() -> Union[tuple[bool, str], bool]:
+def is_xlstm_available() -> bool:
     if is_torch_available():
         return _is_package_available("xlstm")
     return False
 
 
-def is_mambapy_available() -> Union[tuple[bool, str], bool]:
+def is_mambapy_available() -> bool:
     if is_torch_available():
         return _is_package_available("mambapy")
     return False
@@ -586,7 +476,7 @@ def is_torch_bf16_gpu_available() -> bool:
     return False
 
 
-def is_torch_bf16_cpu_available() -> Union[tuple[bool, str], bool]:
+def is_torch_bf16_cpu_available() -> bool:
     return is_torch_available()
 
 
@@ -675,23 +565,23 @@ def is_torch_tf32_available() -> bool:
     return True
 
 
-def is_torch_fx_available() -> Union[tuple[bool, str], bool]:
+def is_torch_fx_available() -> bool:
     return is_torch_available()
 
 
-def is_peft_available() -> Union[tuple[bool, str], bool]:
+def is_peft_available() -> bool:
     return _peft_available
 
 
-def is_bs4_available() -> Union[tuple[bool, str], bool]:
+def is_bs4_available() -> bool:
     return _bs4_available
 
 
-def is_coloredlogs_available() -> Union[tuple[bool, str], bool]:
+def is_coloredlogs_available() -> bool:
     return _coloredlogs_available
 
 
-def is_onnx_available() -> Union[tuple[bool, str], bool]:
+def is_onnx_available() -> bool:
     return _onnx_available
 
 
@@ -702,11 +592,11 @@ def is_flute_available() -> bool:
         return False
 
 
-def is_ftfy_available() -> Union[tuple[bool, str], bool]:
+def is_ftfy_available() -> bool:
     return _ftfy_available
 
 
-def is_g2p_en_available() -> Union[tuple[bool, str], bool]:
+def is_g2p_en_available() -> bool:
     return _g2p_en_available
 
 
@@ -913,15 +803,7 @@ def is_habana_gaudi1() -> bool:
     return htexp._get_device_type() == htexp.synDeviceType.synDeviceGaudi
 
 
-def is_torchdynamo_available() -> Union[tuple[bool, str], bool]:
-    return is_torch_available()
-
-
-def is_torch_compile_available() -> Union[tuple[bool, str], bool]:
-    return is_torch_available()
-
-
-def is_torchdynamo_compiling() -> Union[tuple[bool, str], bool]:
+def is_torchdynamo_compiling() -> bool:
     if not is_torch_available():
         return False
 
@@ -963,35 +845,35 @@ def is_torch_tensorrt_fx_available() -> bool:
     return importlib.util.find_spec("torch_tensorrt.fx") is not None
 
 
-def is_datasets_available() -> Union[tuple[bool, str], bool]:
+def is_datasets_available() -> bool:
     return _datasets_available
 
 
-def is_detectron2_available() -> Union[tuple[bool, str], bool]:
+def is_detectron2_available() -> bool:
     return _detectron2_available
 
 
-def is_rjieba_available() -> Union[tuple[bool, str], bool]:
+def is_rjieba_available() -> bool:
     return _rjieba_available
 
 
-def is_psutil_available() -> Union[tuple[bool, str], bool]:
+def is_psutil_available() -> bool:
     return _psutil_available
 
 
-def is_py3nvml_available() -> Union[tuple[bool, str], bool]:
+def is_py3nvml_available() -> bool:
     return _py3nvml_available
 
 
-def is_sacremoses_available() -> Union[tuple[bool, str], bool]:
+def is_sacremoses_available() -> bool:
     return _sacremoses_available
 
 
-def is_apex_available() -> Union[tuple[bool, str], bool]:
+def is_apex_available() -> bool:
     return _apex_available
 
 
-def is_aqlm_available() -> Union[tuple[bool, str], bool]:
+def is_aqlm_available() -> bool:
     return _aqlm_available
 
 
@@ -1238,19 +1120,19 @@ def is_faiss_available() -> bool:
     return _faiss_available
 
 
-def is_scipy_available() -> Union[tuple[bool, str], bool]:
+def is_scipy_available() -> bool:
     return _scipy_available
 
 
-def is_sklearn_available() -> Union[tuple[bool, str], bool]:
+def is_sklearn_available() -> bool:
     return _sklearn_available
 
 
-def is_sentencepiece_available() -> Union[tuple[bool, str], bool]:
+def is_sentencepiece_available() -> bool:
     return _sentencepiece_available
 
 
-def is_seqio_available() -> Union[tuple[bool, str], bool]:
+def is_seqio_available() -> bool:
     return _is_seqio_available
 
 
@@ -1268,7 +1150,7 @@ def is_fsdp_available(min_version: str = FSDP_MIN_VERSION) -> bool:
     return is_torch_available() and version.parse(_torch_version) >= version.parse(min_version)
 
 
-def is_optimum_available() -> Union[tuple[bool, str], bool]:
+def is_optimum_available() -> bool:
     return _optimum_available
 
 
@@ -1285,7 +1167,7 @@ def is_optimum_quanto_available():
     return _is_optimum_quanto_available
 
 
-def is_quark_available() -> Union[tuple[bool, str], bool]:
+def is_quark_available() -> bool:
     return _quark_available
 
 
@@ -1301,62 +1183,51 @@ def is_compressed_tensors_available() -> bool:
     return _compressed_tensors_available
 
 
-def is_auto_gptq_available() -> Union[tuple[bool, str], bool]:
+def is_auto_gptq_available() -> bool:
     return _auto_gptq_available
 
 
-def is_gptqmodel_available() -> Union[tuple[bool, str], bool]:
+def is_gptqmodel_available() -> bool:
     return _gptqmodel_available
 
 
-def is_eetq_available() -> Union[tuple[bool, str], bool]:
+def is_eetq_available() -> bool:
     return _eetq_available
 
 
-def is_fbgemm_gpu_available() -> Union[tuple[bool, str], bool]:
+def is_fbgemm_gpu_available() -> bool:
     return _fbgemm_gpu_available
 
 
-def is_levenshtein_available() -> Union[tuple[bool, str], bool]:
+def is_levenshtein_available() -> bool:
     return _levenshtein_available
 
 
-def is_optimum_neuron_available() -> Union[tuple[bool, str], bool]:
+def is_optimum_neuron_available() -> bool:
     return _optimum_available and _is_package_available("optimum.neuron")
 
 
-def is_safetensors_available() -> Union[tuple[bool, str], bool]:
+def is_safetensors_available() -> bool:
     return _safetensors_available
 
 
-def is_tokenizers_available() -> Union[tuple[bool, str], bool]:
+def is_tokenizers_available() -> bool:
     return _tokenizers_available
 
 
-@lru_cache
 def is_vision_available() -> bool:
-    _pil_available = importlib.util.find_spec("PIL") is not None
-    if _pil_available:
-        try:
-            package_version = importlib.metadata.version("Pillow")
-        except importlib.metadata.PackageNotFoundError:
-            try:
-                package_version = importlib.metadata.version("Pillow-SIMD")
-            except importlib.metadata.PackageNotFoundError:
-                return False
-        logger.debug(f"Detected PIL version {package_version}")
     return _pil_available
 
 
-def is_pytesseract_available() -> Union[tuple[bool, str], bool]:
+def is_pytesseract_available() -> bool:
     return _pytesseract_available
 
 
-def is_pytest_available() -> Union[tuple[bool, str], bool]:
+def is_pytest_available() -> bool:
     return _pytest_available
 
 
-def is_spacy_available() -> Union[tuple[bool, str], bool]:
+def is_spacy_available() -> bool:
     return _spacy_available
 
 
@@ -1380,11 +1251,11 @@ def is_in_notebook() -> bool:
         return False
 
 
-def is_pytorch_quantization_available() -> Union[tuple[bool, str], bool]:
+def is_pytorch_quantization_available() -> bool:
     return _pytorch_quantization_available
 
 
-def is_pandas_available() -> Union[tuple[bool, str], bool]:
+def is_pandas_available() -> bool:
     return _pandas_available
 
 
@@ -1430,23 +1301,23 @@ def is_training_run_on_sagemaker() -> bool:
     return "SAGEMAKER_JOB_NAME" in os.environ
 
 
-def is_soundfile_available() -> Union[tuple[bool, str], bool]:
+def is_soundfile_available() -> bool:
     return _soundfile_available
 
 
-def is_timm_available() -> Union[tuple[bool, str], bool]:
+def is_timm_available() -> bool:
     return _timm_available
 
 
-def is_natten_available() -> Union[tuple[bool, str], bool]:
+def is_natten_available() -> bool:
     return _natten_available
 
 
-def is_nltk_available() -> Union[tuple[bool, str], bool]:
+def is_nltk_available() -> bool:
     return _nltk_available
 
 
-def is_torchaudio_available() -> Union[tuple[bool, str], bool]:
+def is_torchaudio_available() -> bool:
     return _torchaudio_available
 
 
@@ -1454,20 +1325,20 @@ def is_torchao_available(min_version: str = TORCHAO_MIN_VERSION) -> bool:
     return _torchao_available and version.parse(_torchao_version) >= version.parse(min_version)
 
 
-def is_speech_available() -> Union[tuple[bool, str], bool]:
+def is_speech_available() -> bool:
     # For now this depends on torchaudio but the exact dependency might evolve in the future.
     return _torchaudio_available
 
 
-def is_spqr_available() -> Union[tuple[bool, str], bool]:
+def is_spqr_available() -> bool:
     return _spqr_available
 
 
-def is_phonemizer_available() -> Union[tuple[bool, str], bool]:
+def is_phonemizer_available() -> bool:
     return _phonemizer_available
 
 
-def is_uroman_available() -> Union[tuple[bool, str], bool]:
+def is_uroman_available() -> bool:
     return _uroman_available
 
 
@@ -1510,19 +1381,19 @@ def is_cython_available() -> bool:
     return importlib.util.find_spec("pyximport") is not None
 
 
-def is_jinja_available() -> Union[tuple[bool, str], bool]:
+def is_jinja_available() -> bool:
     return _jinja_available
 
 
-def is_mlx_available() -> Union[tuple[bool, str], bool]:
+def is_mlx_available() -> bool:
     return _mlx_available
 
 
-def is_num2words_available() -> Union[tuple[bool, str], bool]:
+def is_num2words_available() -> bool:
     return _num2words_available
 
 
-def is_tiktoken_available() -> Union[tuple[bool, str], bool]:
+def is_tiktoken_available() -> bool:
     return _tiktoken_available and _blobfile_available
 
 
@@ -1533,15 +1404,15 @@ def is_liger_kernel_available() -> bool:
     return version.parse(importlib.metadata.version("liger_kernel")) >= version.parse("0.3.0")
 
 
-def is_rich_available() -> Union[tuple[bool, str], bool]:
+def is_rich_available() -> bool:
     return _rich_available
 
 
-def is_matplotlib_available() -> Union[tuple[bool, str], bool]:
+def is_matplotlib_available() -> bool:
     return _matplotlib_available
 
 
-def is_mistral_common_available() -> Union[tuple[bool, str], bool]:
+def is_mistral_common_available() -> bool:
     return _mistral_common_available
 
 

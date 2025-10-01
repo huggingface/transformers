@@ -160,7 +160,6 @@ from .utils import (
     is_torchao_available,
     is_torchaudio_available,
     is_torchcodec_available,
-    is_torchdynamo_available,
     is_torchvision_available,
     is_triton_available,
     is_vision_available,
@@ -1010,11 +1009,6 @@ if is_torch_available():
         torch_device = "cpu"
 else:
     torch_device = None
-
-
-def require_torchdynamo(test_case):
-    """Decorator marking a test that requires TorchDynamo"""
-    return unittest.skipUnless(is_torchdynamo_available(), "test requires TorchDynamo")(test_case)
 
 
 def require_torchao(test_case):
