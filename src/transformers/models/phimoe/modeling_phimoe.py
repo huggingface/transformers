@@ -576,7 +576,6 @@ class PhimoeModel(PhimoePreTrainedModel):
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps, elementwise_affine=True)
         self.rotary_emb = PhimoeRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
-        self._attn_implementation = config._attn_implementation
 
         # Initialize weights and apply final processing
         self.post_init()

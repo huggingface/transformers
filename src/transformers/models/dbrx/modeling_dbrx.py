@@ -693,20 +693,20 @@ class DbrxForCausalLM(DbrxPreTrainedModel, GenerationMixin):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, MixtralForCausalLM
+        >> from transformers import AutoTokenizer, DbrxForCausalLM
 
-        >>> model = MixtralForCausalLM.from_pretrained("mistralai/Mixtral-8x7B-v0.1")
-        >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mixtral-8x7B-v0.1")
+        >> model = DbrxForCausalLM.from_pretrained("databricks/dbrx-instruct")
+        >> tokenizer = AutoTokenizer.from_pretrained("databricks/dbrx-instruct")
 
-        >>> prompt = "Hey, are you conscious? Can you talk to me?"
-        >>> inputs = tokenizer(prompt, return_tensors="pt")
+        >> prompt = "Hey, are you conscious? Can you talk to me?"
+        >> inputs = tokenizer(prompt, return_tensors="pt")
 
-        >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        >> # Generate
+        >> generate_ids = model.generate(inputs.input_ids, max_length=30)
+        >> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
-        ```"""
-
+        ```
+        """
         output_router_logits = (
             output_router_logits if output_router_logits is not None else self.config.output_router_logits
         )
