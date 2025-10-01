@@ -26,7 +26,7 @@ Consider the quantization methods below for inference.
 
 | quantization method | use case |
 |---|---|
-| bitsandbytes | ease of use and QLoRA fine-tuning on NVIDIA GPUs |
+| bitsandbytes | ease of use and QLoRA fine-tuning on NVIDIA and Intel GPUs |
 | compressed-tensors | loading specific quantized formats (FP8, Sparse) |
 | GPTQModel or AWQ | good 4-bit accuracy with upfront calibration |
 | HQQ | fast on the fly quantization without calibration |
