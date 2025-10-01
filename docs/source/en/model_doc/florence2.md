@@ -138,21 +138,21 @@ print(parsed_answer)
 ## Notes
 
 - Florence-2 is a prompt-based model. You need to provide a task prompt to tell the model what to do. Supported tasks are:
-    - `<OCR>`
-    - `<OCR_WITH_REGION>`
-    - `<CAPTION>`
-    - `<DETAILED_CAPTION>`
-    - `<MORE_DETAILED_CAPTION>`
-    - `<OD>`
-    - `<DENSE_REGION_CAPTION>`
-    - `<CAPTION_TO_PHRASE_GROUNDING>`
-    - `<REFERRING_EXPRESSION_SEGMENTATION>`
-    - `<REGION_TO_SEGMENTATION>`
-    - `<OPEN_VOCABULARY_DETECTION>`
-    - `<REGION_TO_CATEGORY>`
-    - `<REGION_TO_DESCRIPTION>`
-    - `<REGION_TO_OCR>`
-    - `<REGION_PROPOSAL>`
+  - `<OCR>`
+  - `<OCR_WITH_REGION>`
+  - `<CAPTION>`
+  - `<DETAILED_CAPTION>`
+  - `<MORE_DETAILED_CAPTION>`
+  - `<OD>`
+  - `<DENSE_REGION_CAPTION>`
+  - `<CAPTION_TO_PHRASE_GROUNDING>`
+  - `<REFERRING_EXPRESSION_SEGMENTATION>`
+  - `<REGION_TO_SEGMENTATION>`
+  - `<OPEN_VOCABULARY_DETECTION>`
+  - `<REGION_TO_CATEGORY>`
+  - `<REGION_TO_DESCRIPTION>`
+  - `<REGION_TO_OCR>`
+  - `<REGION_PROPOSAL>`
 - The raw output of the model is a string that needs to be parsed. The [`Florence2Processor`] has a [`~Florence2Processor.post_process_generation`] method that can parse the string into a more usable format, like bounding boxes and labels for object detection.
 
 ## Resources

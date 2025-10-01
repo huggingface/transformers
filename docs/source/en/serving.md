@@ -37,6 +37,7 @@ In this document, we dive into the different supported endpoints and modalities;
 You can serve models of diverse modalities supported by `transformers` with the `transformers serve` CLI. It spawns a local server that offers compatibility with the OpenAI SDK, which is the _de facto_ standard for LLM conversations and other related tasks. This way, you can use the server from many third party applications, or test it using the `transformers chat` CLI ([docs](conversations#chat-cli)).
 
 The server supports the following REST APIs:
+
 - `/v1/chat/completions`
 - `/v1/responses`
 - `/v1/audio/transcriptions`

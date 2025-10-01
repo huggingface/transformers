@@ -236,7 +236,7 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         if time_reduction % 2 != 0:
             raise ValueError("`time_reduction` should be a multiple of 2!")
         length = input_size
-        for _ in range(int(math.log(time_reduction, 2))):
+        for _ in range(int(math.log2(time_reduction))):
             length = math.floor((length - 1) / 2 + 1)
         self.nemo_final_size = length
 

@@ -116,7 +116,6 @@ class MultiHeadAttention(nn.Module):
         mask,
         kv=None,
         cache=None,
-        head_mask=None,
         output_attentions=False,
         cache_position=None,
     ):
@@ -167,10 +166,6 @@ class MultiHeadAttention(nn.Module):
 
         weights = nn.functional.softmax(scores.float(), dim=-1).type_as(scores)  # (bs, n_heads, qlen, klen)
         weights = nn.functional.dropout(weights, p=self.dropout, training=self.training)  # (bs, n_heads, qlen, klen)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            weights = weights * head_mask
 
         context = torch.matmul(weights, v)  # (bs, n_heads, qlen, head_dim)
         context = context.transpose(1, 2).contiguous().view(bs, -1, self.n_heads * self.head_dim)
@@ -814,7 +809,6 @@ class FlaubertModel(FlaubertPreTrainedModel):
         position_ids: Optional[torch.LongTensor] = None,
         lengths: Optional[torch.LongTensor] = None,
         cache: Optional[dict[str, torch.FloatTensor]] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -900,9 +894,6 @@ class FlaubertModel(FlaubertPreTrainedModel):
             assert langs.size() == (bs, slen)  # (slen, bs)
             # langs = langs.transpose(0, 1)
 
-        # Prepare head mask if needed
-        head_mask = self.get_head_mask(head_mask, self.config.n_layers)
-
         # do not recompute cached elements
         if cache is not None and input_ids is not None:
             _slen = slen - cache.get_seq_length()
@@ -945,7 +936,6 @@ class FlaubertModel(FlaubertPreTrainedModel):
                     tensor,
                     attn_mask,
                     cache=cache,
-                    head_mask=head_mask[i],
                     output_attentions=output_attentions,
                     cache_position=cache_position,
                 )
@@ -957,7 +947,7 @@ class FlaubertModel(FlaubertPreTrainedModel):
                 tensor = self.layer_norm1[i](tensor)
             else:
                 tensor_normalized = self.layer_norm1[i](tensor)
-                attn_outputs = self.attentions[i](tensor_normalized, attn_mask, cache=cache, head_mask=head_mask[i])
+                attn_outputs = self.attentions[i](tensor_normalized, attn_mask, cache=cache[i])
                 attn = attn_outputs[0]
                 if output_attentions:
                     attentions = attentions + (attn_outputs[1],)
@@ -1032,7 +1022,6 @@ class FlaubertWithLMHeadModel(FlaubertPreTrainedModel, GenerationMixin):
         position_ids: Optional[torch.Tensor] = None,
         lengths: Optional[torch.Tensor] = None,
         cache: Optional[dict[str, torch.Tensor]] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
@@ -1072,7 +1061,6 @@ class FlaubertWithLMHeadModel(FlaubertPreTrainedModel, GenerationMixin):
             position_ids=position_ids,
             lengths=lengths,
             cache=cache,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1122,7 +1110,6 @@ class FlaubertForSequenceClassification(FlaubertPreTrainedModel):
         position_ids: Optional[torch.Tensor] = None,
         lengths: Optional[torch.Tensor] = None,
         cache: Optional[dict[str, torch.Tensor]] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
@@ -1160,7 +1147,6 @@ class FlaubertForSequenceClassification(FlaubertPreTrainedModel):
             position_ids=position_ids,
             lengths=lengths,
             cache=cache,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1229,7 +1215,6 @@ class FlaubertForTokenClassification(FlaubertPreTrainedModel):
         position_ids: Optional[torch.Tensor] = None,
         lengths: Optional[torch.Tensor] = None,
         cache: Optional[dict[str, torch.Tensor]] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
@@ -1265,7 +1250,6 @@ class FlaubertForTokenClassification(FlaubertPreTrainedModel):
             position_ids=position_ids,
             lengths=lengths,
             cache=cache,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1321,7 +1305,6 @@ class FlaubertForQuestionAnsweringSimple(FlaubertPreTrainedModel):
         position_ids: Optional[torch.Tensor] = None,
         lengths: Optional[torch.Tensor] = None,
         cache: Optional[dict[str, torch.Tensor]] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         start_positions: Optional[torch.Tensor] = None,
         end_positions: Optional[torch.Tensor] = None,
@@ -1356,7 +1339,6 @@ class FlaubertForQuestionAnsweringSimple(FlaubertPreTrainedModel):
             position_ids=position_ids,
             lengths=lengths,
             cache=cache,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1457,7 +1439,6 @@ class FlaubertForQuestionAnswering(FlaubertPreTrainedModel):
         position_ids: Optional[torch.Tensor] = None,
         lengths: Optional[torch.Tensor] = None,
         cache: Optional[dict[str, torch.Tensor]] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         start_positions: Optional[torch.Tensor] = None,
         end_positions: Optional[torch.Tensor] = None,
@@ -1521,7 +1502,6 @@ class FlaubertForQuestionAnswering(FlaubertPreTrainedModel):
             position_ids=position_ids,
             lengths=lengths,
             cache=cache,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1578,7 +1558,6 @@ class FlaubertForMultipleChoice(FlaubertPreTrainedModel):
         position_ids: Optional[torch.Tensor] = None,
         lengths: Optional[torch.Tensor] = None,
         cache: Optional[dict[str, torch.Tensor]] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
@@ -1659,7 +1638,6 @@ class FlaubertForMultipleChoice(FlaubertPreTrainedModel):
             position_ids=position_ids,
             lengths=lengths,
             cache=cache,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
