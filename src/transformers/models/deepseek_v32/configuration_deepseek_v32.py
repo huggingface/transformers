@@ -18,7 +18,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 
@@ -180,6 +179,9 @@ class DeepseekV32Config(PretrainedConfig):
         num_experts_per_tok=None,
         norm_topk_prob=False,
         moe_intermediate_size=1407,
+        index_n_heads=64,
+        index_head_dim=128,
+        index_topk=2048,
         **kwargs,
     ):
         super().__init__(
@@ -233,6 +235,9 @@ class DeepseekV32Config(PretrainedConfig):
         self.num_experts_per_tok = num_experts_per_tok
         self.norm_topk_prob = norm_topk_prob
         self.moe_intermediate_size = moe_intermediate_size
+        self.index_n_heads = index_n_heads
+        self.index_head_dim = index_head_dim
+        self.index_top_k = index_topk
 
 
 __all__ = ["DeepseekV32Config"]

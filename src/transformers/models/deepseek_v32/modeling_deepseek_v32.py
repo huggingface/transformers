@@ -18,9 +18,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-import warnings
-from typing import Callable, Optional, Union
+import math
+from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -34,7 +33,7 @@ from ...masking_utils import create_causal_mask
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
@@ -231,44 +230,6 @@ class DeepseekV32RotaryEmbedding(nn.Module):
         return freqs_cis
 
 
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs: Unpack[TransformersKwargs],
-):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
-
 def apply_rotary_emb(
     xq: torch.Tensor,
     xk: torch.Tensor,
@@ -285,123 +246,154 @@ def apply_rotary_emb(
     return xq_out, xk_out
 
 
+class DeepseekV32Indexer(nn.Module):
+    def __init__(self, config: DeepseekV32Config):
+        super().__init__()
+        self.dim: int = config.dim
+        self.n_heads: int = config.index_n_heads
+        self.n_local_heads = config.index_n_heads  # // world_size
+        self.head_dim: int = config.index_head_dim
+        self.rope_head_dim: int = config.qk_rope_head_dim
+        self.index_topk: int = config.index_topk
+        self.q_lora_rank: int = config.q_lora_rank
+        self.wq_b = nn.Linear(self.q_lora_rank, self.n_heads * self.head_dim)
+        self.wk = nn.Linear(self.dim, self.head_dim)
+        self.k_norm = nn.LayerNorm(self.head_dim)
+        self.weights_proj = nn.Linear(self.dim, self.n_heads, dtype=torch.get_default_dtype())
+        self.softmax_scale = self.head_dim**-0.5
+        self.scale_fmt = config.scale_fmt
+        self.k_sclae_head_dim = self.head_dim
+        self.register_buffer(
+            "k_cache",
+            torch.zeros(config.max_batch_size, config.max_seq_len, self.head_dim, dtype=torch.float8_e4m3fn),
+            persistent=False,
+        )
+        self.register_buffer(
+            "k_scale_cache",
+            torch.zeros(config.max_batch_size, config.max_seq_len, self.head_dim, dtype=torch.float32),
+            persistent=False,
+        )
+
+    def forward(
+        self, x: torch.Tensor, qr: torch.Tensor, start_pos: int, freqs_cis: torch.Tensor, mask: Optional[torch.Tensor]
+    ):
+        bsz, seqlen, _ = x.size()
+        end_pos = start_pos + seqlen
+        q = self.wq_b(qr)
+        q = q.reshape(bsz, seqlen, -1, self.head_dim)
+        q_pe, q_nope = torch.split(q, [self.rope_head_dim, self.head_dim - self.rope_head_dim], dim=-1)
+        q_pe = apply_rotary_pos_emb(q_pe, freqs_cis)
+        q = torch.cat([q_pe, q_nope], dim=-1)
+        k = self.wk(x)
+        k = self.k_norm(k)
+        k_pe, k_nope = torch.split(k, [self.rope_head_dim, self.head_dim - self.rope_head_dim], dim=-1)
+        k_pe = apply_rotary_emb(k_pe.unsqueeze(2), freqs_cis).squeeze(2)
+        k = torch.cat([k_pe, k_nope], dim=-1)
+        q_fp8, q_scale = act_quant(q, block_size, self.scale_fmt)
+        k_fp8, k_scale = act_quant(k, block_size, self.scale_fmt)
+        self.k_cache[:bsz, start_pos:end_pos] = k_fp8
+        self.k_scale_cache[:bsz, start_pos:end_pos] = k_scale
+        weights = self.weights_proj(x) * self.n_heads**-0.5
+        weights = weights.unsqueeze(-1) * q_scale * self.softmax_scale
+        index_score = fp8_index(
+            q_fp8.contiguous(),
+            weights,
+            self.k_cache[:bsz, :end_pos].contiguous(),
+            self.k_scale_cache[:bsz, :end_pos].contiguous(),
+        )
+        if mask is not None:
+            index_score += mask
+        topk_indices = index_score.topk(min(self.index_topk, end_pos), dim=-1)[1]
+        topk_indices_ = topk_indices.clone()
+        assert torch.all(topk_indices == topk_indices_), f"{topk_indices=} {topk_indices_=}"
+        return topk_indices
+
+
 class DeepseekV32Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: DeepseekV32Config, layer_idx: Optional[int] = None):
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-        self.attention_dropout = config.attention_dropout
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = config.head_dim
-        self.max_position_embeddings = config.max_position_embeddings
-        self.rope_theta = config.rope_theta
-        self.q_lora_rank = config.q_lora_rank
-        self.qk_rope_head_dim = config.qk_rope_head_dim
-        self.kv_lora_rank = config.kv_lora_rank
-        self.v_head_dim = config.v_head_dim
-        self.qk_nope_head_dim = config.qk_nope_head_dim
-        self.qk_head_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+    def __init__(self, config, layer_idx):
+        self.softmax_scale = self.qk_head_dim**-0.5
+        if config.max_seq_len > config.original_seq_len:
+            mscale = 0.1 * config.mscale * math.log(config.rope_factor) + 1.0
+            self.softmax_scale = self.softmax_scale * mscale * mscale
 
-        self.is_causal = True
+        self.indexer = DeepseekV32Indexer(config)
 
-        if self.q_lora_rank is None:
-            self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
-        else:
-            self.q_a_proj = nn.Linear(self.hidden_size, config.q_lora_rank, bias=config.attention_bias)
-            self.q_a_layernorm = DeepseekV32RMSNorm(config.q_lora_rank)
-            self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
-
-        self.kv_a_proj_with_mqa = nn.Linear(
-            self.hidden_size,
-            config.kv_lora_rank + config.qk_rope_head_dim,
-            bias=config.attention_bias,
+        self.register_buffer(
+            "kv_cache", torch.zeros(config.max_batch_size, config.max_seq_len, self.kv_lora_rank), persistent=False
         )
-        self.kv_a_layernorm = DeepseekV32RMSNorm(config.kv_lora_rank)
-        self.kv_b_proj = nn.Linear(
-            config.kv_lora_rank,
-            self.num_heads * (self.qk_head_dim - self.qk_rope_head_dim + self.v_head_dim),
-            bias=False,
+        self.register_buffer(
+            "pe_cache", torch.zeros(config.max_batch_size, config.max_seq_len, self.qk_rope_head_dim), persistent=False
         )
-
-        self.o_proj = nn.Linear(
-            self.num_heads * self.v_head_dim,
-            self.hidden_size,
-            bias=config.attention_bias,
-        )
-
-        self.scaling = self.qk_head_dim ** (-0.5)
+        self.dequant_wkv_b = None
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        **kwargs,
+        self, x: torch.Tensor, start_pos: int, freqs_cis: torch.Tensor, mask: Optional[torch.Tensor]
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
-        if "padding_mask" in kwargs:
-            warnings.warn(
-                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
-            )
-        batch_size, seq_length = hidden_states.shape[:-1]
-        query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
-        key_shape = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
+        """
+        Forward pass for the Multi-Head Latent Attention (MLA) Layer.
 
-        if self.q_lora_rank is None:
-            q = self.q_proj(hidden_states)
-        else:
-            q = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states)))
-        q = q.view(query_shape).transpose(1, 2)
+        config.
+            x (torch.Tensor): Input tensor of shape (batch_size, seq_len, dim).
+            start_pos (int): Starting position in the sequence for caching.
+            freqs_cis (torch.Tensor): Precomputed complex exponential values for rotary embeddings.
+            mask (Optional[torch.Tensor]): Mask tensor to exclude certain positions from attention.
+
+        Returns:
+            torch.Tensor: Output tensor with the same shape as the input.
+        """
+        bsz, seqlen, _ = x.size()
+        end_pos = start_pos + seqlen
+        qr = self.q_norm(self.wq_a(x))
+        q = self.wq_b(qr)
+        q = q.view(bsz, seqlen, self.n_local_heads, self.qk_head_dim)
         q_nope, q_pe = torch.split(q, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
+        kv = self.wkv_a(x)
+        kv, k_pe = torch.split(kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
+        kv = self.kv_norm(kv)
+        q_pe, k_pe = apply_rotary_emb(q_pe, k_pe.unsqueeze(2), freqs_cis)
 
-        compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
-        k_nope, k_pe = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-        k_nope = self.kv_b_proj(self.kv_a_layernorm(k_nope)).view(key_shape).transpose(1, 2)
-        k_nope, value_states = torch.split(k_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
+        self.kv_cache[:bsz, start_pos:end_pos] = kv
+        self.pe_cache[:bsz, start_pos:end_pos] = k_pe.squeeze(2)
+        if mask is not None:  # MHA prefill
+            q = torch.cat([q_nope, q_pe], dim=-1)
+            kv = self.wkv_b(kv)
+            kv = kv.view(bsz, seqlen, self.n_local_heads, self.qk_nope_head_dim + self.v_head_dim)
+            k_nope, v = torch.split(kv, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
+            k = torch.cat([k_nope, k_pe.expand(-1, -1, self.n_local_heads, -1)], dim=-1)
+            scores = torch.einsum("bshd,bthd->bsht", q.float(), k.float()) * self.softmax_scale
 
-        k_pe = k_pe.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
-        q_pe, k_pe = apply_rotary_emb(q_pe, k_pe, position_embeddings.to(q_pe.device))
+            # indexer
+            topk_indices = self.indexer(x, qr, start_pos, freqs_cis, mask)
+            index_mask = torch.full((bsz, seqlen, seqlen), float("-inf"), device=x.device).scatter_(
+                -1, topk_indices, 0
+            )
+            index_mask += mask
+            scores += index_mask.unsqueeze(2)
 
-        k_pe = k_pe.expand(*k_nope.shape[:-1], -1)
-        query_states = torch.cat((q_nope, q_pe), dim=-1)
-        key_states = torch.cat((k_nope, k_pe), dim=-1)
+            scores = scores.softmax(dim=-1, dtype=torch.float32)
+            x = torch.einsum("bsht,bthd->bshd", scores.type_as(x), v)
+        else:  # MHA decode
+            wkv_b = self.wkv_b.weight
+            wkv_b = wkv_b.view(self.n_local_heads, -1, self.kv_lora_rank)
+            q_nope = torch.einsum("bshd,hdc->bshc", q_nope, wkv_b[:, : self.qk_nope_head_dim])
+            scores = (
+                torch.einsum("bshc,btc->bsht", q_nope.float(), self.kv_cache[:bsz, :end_pos].float())
+                + torch.einsum("bshr,btr->bsht", q_pe.float(), self.pe_cache[:bsz, :end_pos].float())
+            ) * self.softmax_scale
 
-        if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            # indexer
+            topk_indices = self.indexer(x, qr, start_pos, freqs_cis, mask)
+            index_mask = torch.full((bsz, 1, end_pos), float("-inf"), device=x.device).scatter_(-1, topk_indices, 0)
+            scores += index_mask.unsqueeze(2)
 
-        if self.config._attn_implementation == "flash_attention_2" and self.qk_head_dim != self.v_head_dim:
-            value_states = F.pad(value_states, [0, self.qk_head_dim - self.v_head_dim])
-
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            **kwargs,
-        )
-
-        if self.config._attn_implementation == "flash_attention_2" and self.qk_head_dim != self.v_head_dim:
-            attn_output = attn_output[:, :, :, : self.v_head_dim]
-
-        attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
+            scores = scores.softmax(dim=-1, dtype=torch.float32)
+            x = torch.einsum("bsht,btc->bshc", scores.type_as(x), self.kv_cache[:bsz, :end_pos])
+            x = torch.einsum("bshc,hdc->bshd", x, wkv_b[:, -self.v_head_dim :])
+        x = self.wo(x.flatten(2))
+        return x
 
 
 class DeepseekV32DecoderLayer(GradientCheckpointingLayer):
