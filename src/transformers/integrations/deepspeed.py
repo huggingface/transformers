@@ -356,7 +356,7 @@ def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps
 
     optimizer = None
     if "optimizer" in config:
-        if args.adafactor:
+        if args.optim == "adafactor":
             raise ValueError(
                 "--adafactor was passed, but also found `optimizer` configured in the DeepSpeed config. "
                 "Only one optimizer can be configured."
