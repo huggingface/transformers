@@ -443,8 +443,7 @@ class ChatCommand(BaseTransformersCLICommand):
         # 2. b. strings should be quoted
         def is_number(s: str) -> bool:
             # handle negative numbers
-            if s.startswith("-"):
-                s = s[1:]
+            s = s.removeprefix("-")
             return s.replace(".", "", 1).isdigit()
 
         generate_flags_as_dict = {k: f'"{v}"' if not is_number(v) else v for k, v in generate_flags_as_dict.items()}
