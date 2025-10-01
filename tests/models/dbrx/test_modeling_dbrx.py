@@ -65,7 +65,7 @@ class DbrxModelTester(CausalLMModelTester):
         # DBRX takes sub-configurations for the FFN and attention layers, so we need to set that correctly here
         self.ffn_config = {
             "ffn_hidden_size": self.hidden_size,
-            "ffn_intermediate_size": 2 * self.hidden_size,
+            "hidden_size": 2 * self.hidden_size,
             "moe_jitter_eps": moe_jitter_eps,
             "moe_loss_weight": moe_loss_weight,
             "moe_num_experts": moe_num_experts,
