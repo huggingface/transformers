@@ -626,7 +626,7 @@ class PEAudioWithTextModel(PEAudioPretrainedModel):
         self.text_model = AutoModel.from_config(config.text_model)
         self.audio_model = PEAudioModel(config.audio_model)
         self.audio_text_head = PEAudioContrastiveHead(config.text_model.hidden_size, config.output_dim)
-        self.audio_head = PEAudioContrastiveHead(config.transformer.hidden_size, config.output_dim)
+        self.audio_head = PEAudioContrastiveHead(config.audio_model.transformer.hidden_size, config.output_dim)
         self.logit_scale = torch.nn.Parameter(torch.tensor([10.0]).log())
         self.logit_bias = torch.nn.Parameter(torch.tensor([-10.0]))
 
@@ -675,9 +675,9 @@ class PEAudioWithTextModel(PEAudioPretrainedModel):
         )
 
 
-class PEAudioFrameWithText(PEAudioWithTextModel):
+class PEAudioFrameWithTextModel(PEAudioWithTextModel):
     def _get_audio_head_input(self, audio_model_output):
         return audio_model_output.last_hidden_state
 
 
-__all__ = ["PEAudioModel", "PEAudioWithTextModel", "PEAudioFrameWithText"]
+__all__ = ["PEAudioModel", "PEAudioWithTextModel", "PEAudioFrameWithTextModel"]
