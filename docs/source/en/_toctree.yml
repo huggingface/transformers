@@ -305,6 +305,8 @@
     title: Glossary
   - local: philosophy
     title: Philosophy
+  - local: models_timeline
+    title: Models Timeline
   - local: notebooks
     title: Notebooks with examples
   - local: community
@@ -340,8 +342,6 @@
       title: Models
     - local: main_classes/text_generation
       title: Text Generation
-    - local: main_classes/onnx
-      title: ONNX
     - local: main_classes/optimizer_schedules
       title: Optimization
     - local: main_classes/output

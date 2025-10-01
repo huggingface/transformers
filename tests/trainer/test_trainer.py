@@ -87,7 +87,6 @@ from transformers.testing_utils import (
     require_optuna,
     require_peft,
     require_ray,
-    require_safetensors,
     require_schedulefree,
     require_sentencepiece,
     require_sigopt,
@@ -123,7 +122,6 @@ from transformers.utils import (
     is_accelerate_available,
     is_apex_available,
     is_bitsandbytes_available,
-    is_safetensors_available,
     is_torchao_available,
     is_torchdistx_available,
 )
@@ -138,6 +136,7 @@ else:
     ATOL = 1e-5
 
 if is_torch_available():
+    import safetensors.torch
     import torch
     from torch import nn
     from torch.utils.data import IterableDataset
@@ -159,9 +158,6 @@ if is_torch_available():
         TrainerState,
     )
     from transformers.trainer_pt_utils import AcceleratorConfig
-
-    if is_safetensors_available():
-        import safetensors.torch
 
 if is_datasets_available():
     import datasets
@@ -1290,13 +1286,6 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             trainer = get_regression_trainer(learning_rate=0.1, bf16=True, output_dir=tmp_dir)
             trainer.train()
             self.check_trained_model(trainer.model, atol=ATOL, rtol=RTOL)
-
-        # --bf16 --half_precision_backend apex can't be used together
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            with self.assertRaises(ValueError):
-                trainer = get_regression_trainer(
-                    learning_rate=0.1, bf16=True, half_precision_backend="apex", output_dir=tmp_dir
-                )
 
     @require_torch_gpu
     @require_torch_tf32
@@ -2879,6 +2868,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer = get_regression_trainer(
                 a=1.5, b=2.5, compute_metrics=AlmostAccuracy(), jit_mode_eval=True, output_dir=tmp_dir
             )
+            # Make sure the trainer doesn't pass num_items_in_batch to the model's forward method,
+            # since it's not in the model forward's signature when using JIT
+            trainer.model_accepts_loss_kwargs = False
             results = trainer.evaluate()
 
             x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
@@ -2892,6 +2884,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer = get_regression_trainer(
                 a=1.5, b=2.5, eval_len=66, compute_metrics=AlmostAccuracy(), jit_mode_eval=True, output_dir=tmp_dir
             )
+            trainer.model_accepts_loss_kwargs = False
             results = trainer.evaluate()
 
             x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
@@ -2910,6 +2903,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 jit_mode_eval=True,
                 output_dir=tmp_dir,
             )
+            trainer.model_accepts_loss_kwargs = False
             results = trainer.evaluate()
 
             x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
@@ -2953,6 +2947,40 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertTrue(np.allclose(preds[1], 1.5 * x + 2.5))
             self.assertTrue(np.array_equal(labels[0], trainer.eval_dataset.ys[0]))
             self.assertTrue(np.array_equal(labels[1], trainer.eval_dataset.ys[1]))
+
+    def test_train_and_predict_loss_parity(self):
+        """
+        Tests that the loss computed during a training_step is the same as the one computed during prediction_step.
+        for the same inputs
+        """
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+        # Create a dummy batch of inputs
+        inputs = {}
+        inputs["input_ids"] = []
+        for row_ind in range(4):
+            seq_len = torch.randint(32, 64, (1,)).item()
+            x = torch.randint(1, 100, (seq_len,))
+            inputs["input_ids"].append(x)
+        inputs["input_ids"] = torch.nn.utils.rnn.pad_sequence(inputs["input_ids"], batch_first=True, padding_value=0)
+        inputs["labels"] = inputs["input_ids"].clone()
+        inputs["labels"][inputs["input_ids"] == 0] = -100
+        num_items_in_batch = inputs["labels"].ne(-100).sum().item()
+
+        def custom_loss_func(outputs, labels, num_items_in_batch=None):
+            logits = outputs["logits"]
+            loss_fct = torch.nn.CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, logits.size(-1)), labels.view(-1))
+            if num_items_in_batch is not None:
+                return loss / num_items_in_batch  # multiply by number of items to get the sum
+            return loss
+
+        trainer = Trainer(model, train_dataset=None, compute_loss_func=custom_loss_func)
+
+        # creating log history of trainer, results don't matter
+        train_loss = trainer.training_step(model, inputs, num_items_in_batch)
+        predict_loss = trainer.prediction_step(model, inputs, prediction_loss_only=True)[0]
+
+        torch.testing.assert_close(train_loss, predict_loss, atol=1e-6, rtol=0)
 
     def test_predict_with_batch_eval_metrics(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -3021,18 +3049,23 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     def test_predict_with_jit(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(a=1.5, b=2.5, jit_mode_eval=True, output_dir=tmp_dir)
+            # Make sure the trainer doesn't pass num_items_in_batch to the model's forward method,
+            # since it's not in the model forward's signature when using JIT
+            trainer.model_accepts_loss_kwargs = False
             preds = trainer.predict(trainer.eval_dataset).predictions
             x = trainer.eval_dataset.x
             self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
 
             # With a number of elements not a round multiple of the batch size
             trainer = get_regression_trainer(a=1.5, b=2.5, eval_len=66, jit_mode_eval=True, output_dir=tmp_dir)
+            trainer.model_accepts_loss_kwargs = False
             preds = trainer.predict(trainer.eval_dataset).predictions
             x = trainer.eval_dataset.x
             self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
 
             # With more than one output of the model
             trainer = get_regression_trainer(a=1.5, b=2.5, double_output=True, jit_mode_eval=True, output_dir=tmp_dir)
+            trainer.model_accepts_loss_kwargs = False
             preds = trainer.predict(trainer.eval_dataset).predictions
             x = trainer.eval_dataset.x
             self.assertEqual(len(preds), 2)
@@ -3048,6 +3081,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 jit_mode_eval=True,
                 output_dir=tmp_dir,
             )
+            trainer.model_accepts_loss_kwargs = False
             outputs = trainer.predict(trainer.eval_dataset)
             preds = outputs.predictions
             labels = outputs.label_ids
@@ -3139,7 +3173,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         trainer.train()
         self.check_saved_checkpoints(tmp_dir, 5, int(self.n_epochs * 64 / self.batch_size), False)
 
-    @require_safetensors
     def test_safe_checkpoints(self):
         for save_safetensors in [True, False]:
             tmp_dir = self.get_auto_remove_tmp_dir()
@@ -3590,7 +3623,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(b, b1)
             self.check_trainer_state_are_the_same(state, state1)
 
-    @require_safetensors
     @require_torch_up_to_2_accelerators
     def test_resume_training_with_safe_checkpoint(self):
         # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
@@ -3775,7 +3807,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.check_saved_checkpoints(tmpdir, 5, total, is_pretrained=False)
             self.check_best_model_has_been_loaded(tmpdir, 5, total, trainer, "eval_loss", is_pretrained=False)
 
-    @require_safetensors
     def test_load_best_model_from_safetensors(self):
         total = int(self.n_epochs * 64 / self.batch_size)
         for save_safetensors, pretrained in product([False, True], [False, True]):
@@ -5165,7 +5196,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             )
             trainer.train()
 
-    @require_safetensors
     def test_resume_from_interrupted_training(self):
         """
         Tests resuming training from a checkpoint after a simulated interruption.

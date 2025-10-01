@@ -154,7 +154,6 @@ class BlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = BlipVisionModelTester(self)
@@ -315,7 +314,6 @@ class BlipTextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (BlipTextModel,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = BlipTextModelTester(self)
@@ -424,7 +422,6 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
     fx_compatible = False
-    test_head_masking = False
     test_pruning = False
     test_resize_embeddings = True
     test_attention_outputs = False
@@ -804,7 +801,6 @@ class BlipVQAModelTest(ModelTesterMixin, unittest.TestCase):
     # Doesn't run generation tests due to custom generation logic -- won't fix
     all_generative_model_classes = ()
     fx_compatible = False
-    test_head_masking = False
     test_pruning = False
     test_resize_embeddings = True
     test_attention_outputs = False
@@ -883,7 +879,6 @@ class BlipVQAModelTest(ModelTesterMixin, unittest.TestCase):
 class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (BlipForImageTextRetrieval,) if is_torch_available() else ()
     fx_compatible = False
-    test_head_masking = False
     test_pruning = False
     test_resize_embeddings = True
     test_attention_outputs = False
@@ -928,11 +923,7 @@ class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
                     "decoder_input_ids",
                     "decoder_attention_mask",
                 ]
-                expected_arg_names.extend(
-                    ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
-                    if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
-                    else ["encoder_outputs"]
-                )
+                expected_arg_names.extend(["encoder_outputs"])
                 self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
             else:
                 expected_arg_names = ["input_ids"] if model_class != BlipForConditionalGeneration else ["pixel_values"]
@@ -1113,7 +1104,6 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
     # Doesn't run generation tests due to custom generation logic -- wont fix
     all_generative_model_classes = ()
     fx_compatible = False
-    test_head_masking = False
     test_pruning = False
     test_resize_embeddings = True
     test_attention_outputs = False
@@ -1158,11 +1148,7 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
                     "decoder_input_ids",
                     "decoder_attention_mask",
                 ]
-                expected_arg_names.extend(
-                    ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
-                    if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
-                    else ["encoder_outputs"]
-                )
+                expected_arg_names.extend(["encoder_outputs"])
                 self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
             else:
                 expected_arg_names = ["input_ids"] if model_class != BlipForConditionalGeneration else ["pixel_values"]

@@ -301,7 +301,6 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
     test_pruning = False
 
     def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):

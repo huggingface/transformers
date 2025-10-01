@@ -168,7 +168,6 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: Optional[float] = None,
     dropout: float = 0.0,
-    head_mask: Optional[torch.Tensor] = None,
     **kwargs,
 ):
     if scaling is None:
@@ -179,9 +178,6 @@ def eager_attention_forward(
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-    if head_mask is not None:
-        attn_weights = attn_weights * head_mask.view(1, -1, 1, 1)
 
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value)
@@ -234,7 +230,6 @@ class MusicgenMelodyAttention(nn.Module):
         key_value_states: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.Tensor] = None,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
@@ -301,7 +296,6 @@ class MusicgenMelodyAttention(nn.Module):
             dropout=0.0 if not self.training else self.dropout,
             scaling=self.scaling,
             output_attentions=output_attentions,
-            head_mask=layer_head_mask,
             **kwargs,
         )
 
@@ -341,7 +335,6 @@ class MusicgenMelodyDecoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = True,
@@ -352,7 +345,6 @@ class MusicgenMelodyDecoderLayer(GradientCheckpointingLayer):
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size `(attention_heads,)`.
             past_key_values (`Cache`): cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
@@ -366,7 +358,6 @@ class MusicgenMelodyDecoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
-            layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
             cache_position=cache_position,
         )
@@ -453,7 +444,6 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
@@ -566,14 +556,6 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
-        # check if head_mask has a correct number of layers specified if desired
-        if head_mask is not None:
-            if head_mask.size()[0] != len(self.layers):
-                raise ValueError(
-                    f"The `head_mask` should be specified for {len(self.layers)} layers, but it is for"
-                    f" {head_mask.size()[0]}."
-                )
-
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             if output_hidden_states:
@@ -585,7 +567,6 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
             layer_outputs = decoder_layer(
                 hidden_states,
                 attention_mask=attention_mask,
-                layer_head_mask=(head_mask[idx] if head_mask is not None else None),
                 past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
@@ -623,8 +604,6 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
             # 2d mask is passed through the layers
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         elif self.config._attn_implementation == "sdpa":
-            # output_attentions=True & cross_attn_head_mask can not be supported when using SDPA, and we fall back on
-            # the manual implementation that requires a 4D causal mask in all cases.
             attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
                 attention_mask,
                 input_shape,
@@ -687,7 +666,6 @@ class MusicgenMelodyModel(MusicgenMelodyPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
@@ -740,7 +718,6 @@ class MusicgenMelodyModel(MusicgenMelodyPreTrainedModel):
             attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
-            head_mask=head_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
@@ -807,7 +784,6 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel, GenerationMixin):
         attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
@@ -863,7 +839,6 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel, GenerationMixin):
             attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
-            head_mask=head_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
@@ -921,7 +896,6 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel, GenerationMixin):
         attention_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        head_mask=None,
         past_key_values=None,
         use_cache=True,
         delay_pattern_mask=None,
@@ -967,7 +941,6 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel, GenerationMixin):
             "attention_mask": attention_mask,
             "encoder_hidden_states": encoder_hidden_states,
             "encoder_attention_mask": encoder_attention_mask,
-            "head_mask": head_mask,
             "past_key_values": past_key_values,
             "use_cache": use_cache,
         }
@@ -1755,7 +1728,6 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
         past_key_values=None,
         attention_mask=None,
         decoder_attention_mask=None,
-        decoder_head_mask=None,
         use_cache=None,
         decoder_delay_pattern_mask=None,
         guidance_scale=None,
@@ -1802,7 +1774,6 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
             "decoder_attention_mask": decoder_attention_mask,
-            "decoder_head_mask": decoder_head_mask,
             "use_cache": use_cache,
         }
 

@@ -62,6 +62,8 @@ class AutoImageProcessorTest(unittest.TestCase):
 
     def test_image_processor_from_local_directory_from_feature_extractor_key(self):
         # Ensure we can load the image processor from the feature extractor config
+        # Though we don't have any `CLIPFeatureExtractor` class, we can't be sure that
+        # there are no models in the hub serialized with `processor_type=CLIPFeatureExtractor`
         with tempfile.TemporaryDirectory() as tmpdirname:
             processor_tmpfile = Path(tmpdirname) / "preprocessor_config.json"
             config_tmpfile = Path(tmpdirname) / "config.json"
