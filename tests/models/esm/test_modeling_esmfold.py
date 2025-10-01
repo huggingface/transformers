@@ -240,12 +240,6 @@ class EsmFoldModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip(
-        reason="ESMFold doesn't respect you and it certainly doesn't respect your initialization arguments."
-    )
-    def test_initialization(self):
-        pass
-
     @unittest.skip(reason="ESMFold doesn't support torchscript compilation.")
     def test_torchscript_output_attentions(self):
         pass
