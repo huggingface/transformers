@@ -48,6 +48,7 @@ if TYPE_CHECKING:
     from .blip import *
     from .blip_2 import *
     from .bloom import *
+    from .blt import *
     from .bridgetower import *
     from .bros import *
     from .byt5 import *
@@ -107,6 +108,8 @@ if TYPE_CHECKING:
     from .dots1 import *
     from .dpr import *
     from .dpt import *
+    from .edgetam import *
+    from .edgetam_video import *
     from .efficientloftr import *
     from .efficientnet import *
     from .electra import *
@@ -123,6 +126,7 @@ if TYPE_CHECKING:
     from .fastspeech2_conformer import *
     from .flaubert import *
     from .flava import *
+    from .flex_olmo import *
     from .florence2 import *
     from .fnet import *
     from .focalnet import *
@@ -182,6 +186,7 @@ if TYPE_CHECKING:
     from .led import *
     from .levit import *
     from .lfm2 import *
+    from .lfm2_vl import *
     from .lightglue import *
     from .lilt import *
     from .llama import *
@@ -250,6 +255,7 @@ if TYPE_CHECKING:
     from .owlv2 import *
     from .owlvit import *
     from .paligemma import *
+    from .parakeet import *
     from .patchtsmixer import *
     from .patchtst import *
     from .pegasus import *
@@ -280,6 +286,7 @@ if TYPE_CHECKING:
     from .qwen3 import *
     from .qwen3_moe import *
     from .qwen3_next import *
+    from .qwen3_omni_moe import *
     from .qwen3_vl import *
     from .qwen3_vl_moe import *
     from .rag import *

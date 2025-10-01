@@ -40,6 +40,12 @@ from transformers.commands.serving import ServeArguments, ServeCommand
 from transformers.utils import is_rich_available, is_torch_available
 
 
+try:
+    import readline  # noqa importing this enables GNU readline capabilities
+except ImportError:
+    # some platforms may not support readline: https://docs.python.org/3/library/readline.html
+    pass
+
 if platform.system() != "Windows":
     import pwd
 
@@ -53,9 +59,7 @@ if is_torch_available():
 
     from transformers import (
         AutoModelForCausalLM,
-        AutoTokenizer,
         BitsAndBytesConfig,
-        GenerationConfig,
     )
 
 ALLOWED_KEY_CHARS = set(string.ascii_letters + string.whitespace)
@@ -437,8 +441,7 @@ class ChatCommand(BaseTransformersCLICommand):
         # 2. b. strings should be quoted
         def is_number(s: str) -> bool:
             # handle negative numbers
-            if s.startswith("-"):
-                s = s[1:]
+            s = s.removeprefix("-")
             return s.replace(".", "", 1).isdigit()
 
         generate_flags_as_dict = {k: f'"{v}"' if not is_number(v) else v for k, v in generate_flags_as_dict.items()}
@@ -528,7 +531,7 @@ class ChatCommand(BaseTransformersCLICommand):
     # -----------------------------------------------------------------------------------------------------------------
     # Model loading and performance automation methods
     @staticmethod
-    def get_quantization_config(model_args: ChatArguments) -> Optional["BitsAndBytesConfig"]:
+    def get_quantization_config(model_args: ChatArguments) -> Optional[BitsAndBytesConfig]:
         if model_args.load_in_4bit:
             quantization_config = BitsAndBytesConfig(
                 load_in_4bit=True,

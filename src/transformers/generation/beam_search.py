@@ -165,10 +165,10 @@ class BeamSearchScorer(BeamScorer):
         batch_size: int,
         num_beams: int,
         device: torch.device,
-        length_penalty: Optional[float] = 1.0,
-        do_early_stopping: Optional[Union[bool, str]] = False,
-        num_beam_hyps_to_keep: Optional[int] = 1,
-        num_beam_groups: Optional[int] = 1,
+        length_penalty: float = 1.0,
+        do_early_stopping: Union[bool, str] = False,
+        num_beam_hyps_to_keep: int = 1,
+        num_beam_groups: int = 1,
         max_length: Optional[int] = None,
     ):
         logger.warning_once(
@@ -214,7 +214,7 @@ class BeamSearchScorer(BeamScorer):
 
     @property
     def is_done(self) -> bool:
-        return self._done.all()
+        return self._done.all().item()
 
     def process(
         self,
@@ -225,8 +225,8 @@ class BeamSearchScorer(BeamScorer):
         pad_token_id: Optional[Union[int, torch.Tensor]] = None,
         eos_token_id: Optional[Union[int, list[int], torch.Tensor]] = None,
         beam_indices: Optional[torch.LongTensor] = None,
-        group_index: Optional[int] = 0,
-        decoder_prompt_len: Optional[int] = 0,
+        group_index: int = 0,
+        decoder_prompt_len: int = 0,
     ) -> dict[str, torch.Tensor]:
         # add up to the length which the next_scores is calculated on (including decoder prompt)
         cur_len = input_ids.shape[-1] + 1
@@ -331,7 +331,7 @@ class BeamSearchScorer(BeamScorer):
         pad_token_id: Optional[Union[int, torch.Tensor]] = None,
         eos_token_id: Optional[Union[int, list[int], torch.Tensor]] = None,
         beam_indices: Optional[torch.LongTensor] = None,
-        decoder_prompt_len: Optional[int] = 0,
+        decoder_prompt_len: int = 0,
     ) -> tuple[torch.LongTensor]:
         batch_size = len(self._beam_hyps) // self.num_beam_groups
 
@@ -460,9 +460,9 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         num_beams: int,
         constraints: list[Constraint],
         device: torch.device,
-        length_penalty: Optional[float] = 1.0,
-        do_early_stopping: Optional[Union[bool, str]] = False,
-        num_beam_hyps_to_keep: Optional[int] = 1,
+        length_penalty: float = 1.0,
+        do_early_stopping: Union[bool, str] = False,
+        num_beam_hyps_to_keep: int = 1,
         max_length: Optional[int] = None,
     ):
         logger.warning_once(
@@ -495,7 +495,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
 
     @property
     def is_done(self) -> bool:
-        return self._done.all()
+        return self._done.all().item()
 
     def make_constraint_states(self, n):
         return [ConstraintListState([constraint.copy() for constraint in self.constraints]) for _ in range(n)]
@@ -515,7 +515,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         pad_token_id: Optional[Union[int, torch.Tensor]] = None,
         eos_token_id: Optional[Union[int, list[int], torch.Tensor]] = None,
         beam_indices: Optional[torch.LongTensor] = None,
-        decoder_prompt_len: Optional[int] = 0,
+        decoder_prompt_len: int = 0,
     ) -> tuple[torch.Tensor]:
         r"""
         Args:
@@ -804,7 +804,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         pad_token_id: Optional[Union[int, torch.Tensor]] = None,
         eos_token_id: Optional[Union[int, list[int], torch.Tensor]] = None,
         beam_indices: Optional[torch.LongTensor] = None,
-        decoder_prompt_len: Optional[int] = 0,
+        decoder_prompt_len: int = 0,
     ) -> tuple[torch.LongTensor]:
         batch_size = len(self._beam_hyps)
 
@@ -912,7 +912,9 @@ class ConstrainedBeamSearchScorer(BeamScorer):
 
 
 class BeamHypotheses:
-    def __init__(self, num_beams: int, length_penalty: float, early_stopping: bool, max_length: Optional[int] = None):
+    def __init__(
+        self, num_beams: int, length_penalty: float, early_stopping: Union[bool, str], max_length: Optional[int] = None
+    ):
         """
         Initialize n-best list of hypotheses.
         """
@@ -963,7 +965,7 @@ class BeamHypotheses:
             else:
                 self.worst_score = min(score, self.worst_score)
 
-    def is_done(self, best_sum_logprobs: float, cur_len: int, decoder_prompt_len: Optional[int] = 0) -> bool:
+    def is_done(self, best_sum_logprobs: float, cur_len: int, decoder_prompt_len: int = 0) -> bool:
         """
         If there are enough hypotheses and that none of the hypotheses being generated can become better than the worst
         one in the heap, then we are done with this sentence.

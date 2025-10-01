@@ -12,7 +12,6 @@ from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import (
     PaddingStrategy,
     add_end_docstrings,
-    is_tf_available,
     is_tokenizers_available,
     is_torch_available,
     logging,
@@ -23,18 +22,11 @@ from .base import ArgumentHandler, ChunkPipeline, build_pipeline_init_args
 logger = logging.get_logger(__name__)
 
 if TYPE_CHECKING:
-    from ..modeling_tf_utils import TFPreTrainedModel
     from ..modeling_utils import PreTrainedModel
 
     if is_tokenizers_available():
         import tokenizers
 
-if is_tf_available():
-    import tensorflow as tf
-
-    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES
-
-    Dataset = None
 
 if is_torch_available():
     import torch
@@ -265,10 +257,9 @@ class QuestionAnsweringPipeline(ChunkPipeline):
 
     def __init__(
         self,
-        model: Union["PreTrainedModel", "TFPreTrainedModel"],
+        model: "PreTrainedModel",
         tokenizer: PreTrainedTokenizer,
         modelcard: Optional[ModelCard] = None,
-        framework: Optional[str] = None,
         task: str = "",
         **kwargs,
     ):
@@ -276,17 +267,12 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             model=model,
             tokenizer=tokenizer,
             modelcard=modelcard,
-            framework=framework,
             task=task,
             **kwargs,
         )
 
         self._args_parser = QuestionAnsweringArgumentHandler()
-        self.check_model_type(
-            TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES
-            if self.framework == "tf"
-            else MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES
-        )
+        self.check_model_type(MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES)
 
     @staticmethod
     def create_sample(
@@ -503,16 +489,10 @@ class QuestionAnsweringPipeline(ChunkPipeline):
 
             for k, v in feature.__dict__.items():
                 if k in model_input_names:
-                    if self.framework == "tf":
-                        tensor = tf.constant(v)
-                        if tensor.dtype == tf.int64:
-                            tensor = tf.cast(tensor, tf.int32)
-                        fw_args[k] = tf.expand_dims(tensor, 0)
-                    elif self.framework == "pt":
-                        tensor = torch.tensor(v)
-                        if tensor.dtype == torch.int32:
-                            tensor = tensor.long()
-                        fw_args[k] = tensor.unsqueeze(0)
+                    tensor = torch.tensor(v)
+                    if tensor.dtype == torch.int32:
+                        tensor = tensor.long()
+                    fw_args[k] = tensor.unsqueeze(0)
                 else:
                     others[k] = v
 
@@ -523,7 +503,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         example = inputs["example"]
         model_inputs = {k: inputs[k] for k in self.tokenizer.model_input_names}
         # `XXXForSequenceClassification` models should not use `use_cache=True` even if it's supported
-        model_forward = self.model.forward if self.framework == "pt" else self.model.call
+        model_forward = self.model.forward
         if "use_cache" in inspect.signature(model_forward).parameters:
             model_inputs["use_cache"] = False
         output = self.model(**model_inputs)
@@ -544,7 +524,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         min_null_score = 1000000  # large and positive
         answers = []
         for output in model_outputs:
-            if self.framework == "pt" and output["start"].dtype == torch.bfloat16:
+            if output["start"].dtype == torch.bfloat16:
                 start_ = output["start"].to(torch.float32)
                 end_ = output["end"].to(torch.float32)
             else:
@@ -678,7 +658,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         words = []
         token_idx = char_start_idx = char_end_idx = chars_idx = 0
 
-        for i, word in enumerate(text.split(" ")):
+        for word in text.split(" "):
             token = self.tokenizer.tokenize(word)
 
             # Append words if they are in the span

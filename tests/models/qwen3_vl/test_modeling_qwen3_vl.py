@@ -61,7 +61,7 @@ class Qwen3VLVisionText2TextModelTester:
             "max_position_embeddings": 512,
             "model_type": "qwen3_vl",
             "num_attention_heads": 4,
-            "num_hidden_layers": 4,
+            "num_hidden_layers": 2,
             "num_key_value_heads": 2,
             "rope_theta": 10000,
             "tie_word_embeddings": True,
@@ -183,7 +183,6 @@ class Qwen3VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         else ()
     )
     test_pruning = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = Qwen3VLVisionText2TextModelTester(self)
@@ -201,6 +200,7 @@ class Qwen3VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
+            model.eval()
             _ = model(**input_dict)  # successful forward with no modifications
             curr_input_dict = copy.deepcopy(input_dict)
 

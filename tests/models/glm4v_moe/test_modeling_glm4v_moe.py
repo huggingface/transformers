@@ -183,7 +183,6 @@ class Glm4vMoeVisionText2TextModelTester:
 class Glm4vMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (Glm4vMoeModel, Glm4vMoeForConditionalGeneration) if is_torch_available() else ()
     test_pruning = False
-    test_head_masking = False
     test_torchscript = False
     model_split_percents = [0.7, 0.9]  # model too big to split at 0.5
     _is_composite = True
@@ -202,9 +201,6 @@ class Glm4vMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
         # We don't want a few model inputs in our model input dictionary for generation tests
         input_keys_to_ignore = [
             # we don't want to mask attention heads
-            "head_mask",
-            "decoder_head_mask",
-            "cross_attn_head_mask",
             # we don't want encoder-decoder models to start from filled decoder ids
             "decoder_input_ids",
             "decoder_attention_mask",
@@ -297,6 +293,7 @@ class Glm4vMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
 
 
 @require_torch
+@slow
 class Glm4vMoeIntegrationTest(unittest.TestCase):
     model = None
 
@@ -310,7 +307,8 @@ class Glm4vMoeIntegrationTest(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        del cls.model
+        if hasattr(cls, "model"):
+            del cls.model
         cleanup(torch_device, gc_collect=True)
 
     def setUp(self):
@@ -364,7 +362,6 @@ class Glm4vMoeIntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    @slow
     def test_small_model_integration_test(self):
         inputs = self.processor.apply_chat_template(
             self.message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
@@ -386,7 +383,6 @@ class Glm4vMoeIntegrationTest(unittest.TestCase):
         )
         torch.testing.assert_close(expected_pixel_slice, inputs.pixel_values[:6, :3], atol=1e-4, rtol=1e-4)
 
-    @slow
     def test_small_model_integration_test_batch(self):
         model = self.get_model()
         batch_messages = [self.message, self.message2, self.message_wo_image]
@@ -414,7 +410,6 @@ class Glm4vMoeIntegrationTest(unittest.TestCase):
             EXPECTED_DECODED_TEXT,
         )
 
-    @slow
     def test_small_model_integration_test_with_video(self):
         processor = AutoProcessor.from_pretrained("zai-org/GLM-4.5V", max_image_size={"longest_edge": 50176})
         model = self.get_model()
@@ -437,7 +432,6 @@ class Glm4vMoeIntegrationTest(unittest.TestCase):
         )
 
     @run_first
-    @slow
     @require_flash_attn
     @require_torch_gpu
     def test_small_model_integration_test_batch_flashatt2(self):

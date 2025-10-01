@@ -178,7 +178,6 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
         else ()
     )
     test_pruning = False
-    test_head_masking = False
     _is_composite = True
 
     def setUp(self):
@@ -253,6 +252,7 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
             if model_class == PerceptionLMModel:
                 continue
             model = model_class(config).to(torch_device)
+            model.eval()
             _ = model(**input_dict)  # successful forward with no modifications
 
             # remove one image but leave the image token in text

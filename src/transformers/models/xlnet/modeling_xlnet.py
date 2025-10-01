@@ -36,156 +36,6 @@ from .configuration_xlnet import XLNetConfig
 logger = logging.get_logger(__name__)
 
 
-def build_tf_xlnet_to_pytorch_map(model, config, tf_weights=None):
-    """
-    A map of modules from TF to PyTorch. I use a map to keep the PyTorch model as identical to the original PyTorch
-    model as possible.
-    """
-
-    tf_to_pt_map = {}
-
-    if hasattr(model, "transformer"):
-        if hasattr(model, "lm_loss"):
-            # We will load also the output bias
-            tf_to_pt_map["model/lm_loss/bias"] = model.lm_loss.bias
-        if hasattr(model, "sequence_summary") and "model/sequnece_summary/summary/kernel" in tf_weights:
-            # We will load also the sequence summary
-            tf_to_pt_map["model/sequnece_summary/summary/kernel"] = model.sequence_summary.summary.weight
-            tf_to_pt_map["model/sequnece_summary/summary/bias"] = model.sequence_summary.summary.bias
-        if (
-            hasattr(model, "logits_proj")
-            and config.finetuning_task is not None
-            and f"model/regression_{config.finetuning_task}/logit/kernel" in tf_weights
-        ):
-            tf_to_pt_map[f"model/regression_{config.finetuning_task}/logit/kernel"] = model.logits_proj.weight
-            tf_to_pt_map[f"model/regression_{config.finetuning_task}/logit/bias"] = model.logits_proj.bias
-
-        # Now load the rest of the transformer
-        model = model.transformer
-
-    # Embeddings and output
-    tf_to_pt_map.update(
-        {
-            "model/transformer/word_embedding/lookup_table": model.word_embedding.weight,
-            "model/transformer/mask_emb/mask_emb": model.mask_emb,
-        }
-    )
-
-    # Transformer blocks
-    for i, b in enumerate(model.layer):
-        layer_str = f"model/transformer/layer_{i}/"
-        tf_to_pt_map.update(
-            {
-                layer_str + "rel_attn/LayerNorm/gamma": b.rel_attn.layer_norm.weight,
-                layer_str + "rel_attn/LayerNorm/beta": b.rel_attn.layer_norm.bias,
-                layer_str + "rel_attn/o/kernel": b.rel_attn.o,
-                layer_str + "rel_attn/q/kernel": b.rel_attn.q,
-                layer_str + "rel_attn/k/kernel": b.rel_attn.k,
-                layer_str + "rel_attn/r/kernel": b.rel_attn.r,
-                layer_str + "rel_attn/v/kernel": b.rel_attn.v,
-                layer_str + "ff/LayerNorm/gamma": b.ff.layer_norm.weight,
-                layer_str + "ff/LayerNorm/beta": b.ff.layer_norm.bias,
-                layer_str + "ff/layer_1/kernel": b.ff.layer_1.weight,
-                layer_str + "ff/layer_1/bias": b.ff.layer_1.bias,
-                layer_str + "ff/layer_2/kernel": b.ff.layer_2.weight,
-                layer_str + "ff/layer_2/bias": b.ff.layer_2.bias,
-            }
-        )
-
-    # Relative positioning biases
-    if config.untie_r:
-        r_r_list = []
-        r_w_list = []
-        r_s_list = []
-        seg_embed_list = []
-        for b in model.layer:
-            r_r_list.append(b.rel_attn.r_r_bias)
-            r_w_list.append(b.rel_attn.r_w_bias)
-            r_s_list.append(b.rel_attn.r_s_bias)
-            seg_embed_list.append(b.rel_attn.seg_embed)
-    else:
-        r_r_list = [model.r_r_bias]
-        r_w_list = [model.r_w_bias]
-        r_s_list = [model.r_s_bias]
-        seg_embed_list = [model.seg_embed]
-    tf_to_pt_map.update(
-        {
-            "model/transformer/r_r_bias": r_r_list,
-            "model/transformer/r_w_bias": r_w_list,
-            "model/transformer/r_s_bias": r_s_list,
-            "model/transformer/seg_embed": seg_embed_list,
-        }
-    )
-    return tf_to_pt_map
-
-
-def load_tf_weights_in_xlnet(model, config, tf_path):
-    """Load tf checkpoints in a pytorch model"""
-    try:
-        import numpy as np
-        import tensorflow as tf
-    except ImportError:
-        logger.error(
-            "Loading a TensorFlow models in PyTorch, requires TensorFlow to be installed. Please see "
-            "https://www.tensorflow.org/install/ for installation instructions."
-        )
-        raise
-    # Load weights from TF model
-    init_vars = tf.train.list_variables(tf_path)
-    tf_weights = {}
-    for name, shape in init_vars:
-        logger.info(f"Loading TF weight {name} with shape {shape}")
-        array = tf.train.load_variable(tf_path, name)
-        tf_weights[name] = array
-
-    # Build TF to PyTorch weights loading map
-    tf_to_pt_map = build_tf_xlnet_to_pytorch_map(model, config, tf_weights)
-
-    for name, pointer in tf_to_pt_map.items():
-        logger.info(f"Importing {name}")
-        if name not in tf_weights:
-            logger.info(f"{name} not in tf pre-trained weights, skipping")
-            continue
-        array = tf_weights[name]
-        # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
-        # which are not required for using pretrained model
-        if "kernel" in name and ("ff" in name or "summary" in name or "logit" in name):
-            logger.info("Transposing")
-            array = np.transpose(array)
-        if isinstance(pointer, list):
-            # Here we will split the TF weights
-            assert len(pointer) == array.shape[0], (
-                f"Pointer length {len(pointer)} and array length {array.shape[0]} mismatched"
-            )
-            for i, p_i in enumerate(pointer):
-                arr_i = array[i, ...]
-                try:
-                    assert p_i.shape == arr_i.shape, (
-                        f"Pointer shape {p_i.shape} and array shape {arr_i.shape} mismatched"
-                    )
-                except AssertionError as e:
-                    e.args += (p_i.shape, arr_i.shape)
-                    raise
-                logger.info(f"Initialize PyTorch weight {name} for layer {i}")
-                p_i.data = torch.from_numpy(arr_i)
-        else:
-            try:
-                assert pointer.shape == array.shape, (
-                    f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
-                )
-            except AssertionError as e:
-                e.args += (pointer.shape, array.shape)
-                raise
-            logger.info(f"Initialize PyTorch weight {name}")
-            pointer.data = torch.from_numpy(array)
-        tf_weights.pop(name, None)
-        tf_weights.pop(name + "/Adam", None)
-        tf_weights.pop(name + "/Adam_1", None)
-
-    logger.info(f"Weights not copied to PyTorch model: {', '.join(tf_weights.keys())}")
-    return model
-
-
 class XLNetRelativeAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -254,7 +104,6 @@ class XLNetRelativeAttention(nn.Module):
         k_head_r,
         seg_mat=None,
         attn_mask=None,
-        head_mask=None,
         output_attentions=False,
     ):
         """Core relative positional attention operations."""
@@ -286,10 +135,6 @@ class XLNetRelativeAttention(nn.Module):
         attn_prob = nn.functional.softmax(attn_score, dim=3)
         attn_prob = self.dropout(attn_prob)
 
-        # Mask heads if we want to
-        if head_mask is not None:
-            attn_prob = attn_prob * torch.einsum("ijbn->bnij", head_mask)
-
         # attention output
         attn_vec = torch.einsum("bnij,jbnd->ibnd", attn_prob, v_head_h)
 
@@ -320,7 +165,6 @@ class XLNetRelativeAttention(nn.Module):
         seg_mat,
         mems=None,
         target_mapping=None,
-        head_mask=None,
         output_attentions=False,
     ):
         if g is not None:
@@ -352,7 +196,6 @@ class XLNetRelativeAttention(nn.Module):
                 k_head_r,
                 seg_mat=seg_mat,
                 attn_mask=attn_mask_h,
-                head_mask=head_mask,
                 output_attentions=output_attentions,
             )
 
@@ -376,7 +219,6 @@ class XLNetRelativeAttention(nn.Module):
                     k_head_r,
                     seg_mat=seg_mat,
                     attn_mask=attn_mask_g,
-                    head_mask=head_mask,
                     output_attentions=output_attentions,
                 )
 
@@ -392,7 +234,6 @@ class XLNetRelativeAttention(nn.Module):
                     k_head_r,
                     seg_mat=seg_mat,
                     attn_mask=attn_mask_g,
-                    head_mask=head_mask,
                     output_attentions=output_attentions,
                 )
 
@@ -429,7 +270,6 @@ class XLNetRelativeAttention(nn.Module):
                 k_head_r,
                 seg_mat=seg_mat,
                 attn_mask=attn_mask_h,
-                head_mask=head_mask,
                 output_attentions=output_attentions,
             )
 
@@ -488,7 +328,6 @@ class XLNetLayer(nn.Module):
         seg_mat,
         mems=None,
         target_mapping=None,
-        head_mask=None,
         output_attentions=False,
     ):
         outputs = self.rel_attn(
@@ -500,7 +339,6 @@ class XLNetLayer(nn.Module):
             seg_mat,
             mems=mems,
             target_mapping=target_mapping,
-            head_mask=head_mask,
             output_attentions=output_attentions,
         )
         output_h, output_g = outputs[:2]
@@ -797,14 +635,11 @@ class XLNetSequenceSummary(nn.Module):
 @auto_docstring
 class XLNetPreTrainedModel(PreTrainedModel):
     config: XLNetConfig
-    load_tf_weights = load_tf_weights_in_xlnet
     base_model_prefix = "transformer"
 
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -1168,7 +1003,6 @@ class XLNetModel(XLNetPreTrainedModel):
         target_mapping: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         input_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         use_mems: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1335,23 +1169,6 @@ class XLNetModel(XLNetPreTrainedModel):
         pos_emb = pos_emb.to(output_h.device)
         pos_emb = self.dropout(pos_emb)
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads] (a head_mask for each layer)
-        # and head_mask is converted to shape [num_hidden_layers x qlen x klen x bsz x n_head]
-        if head_mask is not None:
-            if head_mask.dim() == 1:
-                head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(0).unsqueeze(0)
-                head_mask = head_mask.expand(self.n_layer, -1, -1, -1, -1)
-            elif head_mask.dim() == 2:
-                head_mask = head_mask.unsqueeze(1).unsqueeze(1).unsqueeze(1)
-            head_mask = head_mask.to(
-                dtype=next(self.parameters()).dtype
-            )  # switch to float if need + fp16 compatibility
-        else:
-            head_mask = [None] * self.n_layer
-
         new_mems = ()
         if mems is None:
             mems = [None] * len(self.layer)
@@ -1374,7 +1191,6 @@ class XLNetModel(XLNetPreTrainedModel):
                 seg_mat=seg_mat,
                 mems=mems[i],
                 target_mapping=target_mapping,
-                head_mask=head_mask[i],
                 output_attentions=output_attentions,
             )
             output_h, output_g = outputs[:2]
@@ -1504,7 +1320,6 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
         target_mapping: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         input_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         use_mems: Optional[bool] = None,
@@ -1621,7 +1436,6 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
             target_mapping=target_mapping,
             token_type_ids=token_type_ids,
             input_mask=input_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_mems=use_mems,
             output_attentions=output_attentions,
@@ -1689,7 +1503,6 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
         target_mapping: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         input_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         use_mems: Optional[bool] = None,
@@ -1746,7 +1559,6 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
             target_mapping=target_mapping,
             token_type_ids=token_type_ids,
             input_mask=input_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_mems=use_mems,
             output_attentions=output_attentions,
@@ -1817,7 +1629,6 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
         target_mapping: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         input_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         use_mems: Optional[bool] = None,
@@ -1875,7 +1686,6 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
             target_mapping=target_mapping,
             token_type_ids=token_type_ids,
             input_mask=input_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_mems=use_mems,
             output_attentions=output_attentions,
@@ -1927,7 +1737,6 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
         mems: Optional[torch.Tensor] = None,
         perm_mask: Optional[torch.Tensor] = None,
         target_mapping: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         use_mems: Optional[bool] = None,
@@ -2013,7 +1822,6 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
             mems=mems,
             perm_mask=perm_mask,
             target_mapping=target_mapping,
-            head_mask=head_mask,
             inputs_embeds=flat_inputs_embeds,
             use_mems=use_mems,
             output_attentions=output_attentions,
@@ -2073,7 +1881,6 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
         target_mapping: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         input_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         start_positions: Optional[torch.Tensor] = None,
         end_positions: Optional[torch.Tensor] = None,
@@ -2127,7 +1934,6 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
             target_mapping=target_mapping,
             token_type_ids=token_type_ids,
             input_mask=input_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_mems=use_mems,
             output_attentions=output_attentions,
@@ -2199,7 +2005,6 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
         target_mapping: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         input_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         start_positions: Optional[torch.Tensor] = None,
         end_positions: Optional[torch.Tensor] = None,
@@ -2282,7 +2087,6 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
             target_mapping=target_mapping,
             token_type_ids=token_type_ids,
             input_mask=input_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_mems=use_mems,
             output_attentions=output_attentions,
@@ -2385,5 +2189,4 @@ __all__ = [
     "XLNetLMHeadModel",
     "XLNetModel",
     "XLNetPreTrainedModel",
-    "load_tf_weights_in_xlnet",
 ]

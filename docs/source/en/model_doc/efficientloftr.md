@@ -45,6 +45,7 @@ results = keypoint_matcher([url_0, url_1], threshold=0.9)
 print(results[0])
 # {'keypoint_image_0': {'x': ..., 'y': ...}, 'keypoint_image_1': {'x': ..., 'y': ...}, 'score': ...}
 ```
+
 </hfoption>
 <hfoption id="AutoModel">
 
@@ -143,32 +144,23 @@ processed_outputs = processor.post_process_keypoint_matching(outputs, image_size
 ## EfficientLoFTRImageProcessor
 
 [[autodoc]] EfficientLoFTRImageProcessor
-
-- preprocess
-- post_process_keypoint_matching
-- visualize_keypoint_matching
+    - preprocess
+    - post_process_keypoint_matching
+    - visualize_keypoint_matching
 
 ## EfficientLoFTRImageProcessorFast
 
 [[autodoc]] EfficientLoFTRImageProcessorFast
+    - preprocess
+    - post_process_keypoint_matching
+    - visualize_keypoint_matching
 
-- preprocess
-- post_process_keypoint_matching
-- visualize_keypoint_matching
-
-<frameworkcontent>
-<pt>
 ## EfficientLoFTRModel
 
 [[autodoc]] EfficientLoFTRModel
-
-- forward
+    - forward
 
 ## EfficientLoFTRForKeypointMatching
 
 [[autodoc]] EfficientLoFTRForKeypointMatching
-
-- forward
-
-</pt>
-</frameworkcontent>
+    - forward

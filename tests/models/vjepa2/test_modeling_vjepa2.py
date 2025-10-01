@@ -61,7 +61,7 @@ class VJEPA2ModelTester:
         patch_size=16,
         num_channels=3,
         hidden_size=32,
-        num_hidden_layers=4,
+        num_hidden_layers=2,
         num_attention_heads=2,
         num_frames=2,
         mlp_ratio=1,
@@ -162,7 +162,6 @@ class VJEPA2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = VJEPA2ModelTester(self)

@@ -13,18 +13,21 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on {release_date} and added to Hugging Face Transformers on 2025-09-10.*
+
 ## Overview
 
-The Qwen3-Next series represents our next-generation foundation models, optimized for extreme context length and large-scale parameter efficiency. 
+The Qwen3-Next series represents our next-generation foundation models, optimized for extreme context length and large-scale parameter efficiency.
 The series introduces a suite of architectural innovations designed to maximize performance while minimizing computational cost:
-- **Hybrid Attention**: Replaces standard attention with the combination of **Gated DeltaNet** and **Gated Attention**, enabling efficient context modeling.  
+
+- **Hybrid Attention**: Replaces standard attention with the combination of **Gated DeltaNet** and **Gated Attention**, enabling efficient context modeling.
 - **High-Sparsity MoE**: Achieves an extreme low activation ratio as 1:50 in MoE layers — drastically reducing FLOPs per token while preserving model capacity.
 - **Multi-Token Prediction(MTP)**: Boosts pretraining model performance, and accelerates inference.
-- **Other Optimizations**: Includes techniques such as **zero-centered and weight-decayed layernorm**, **Gated Attention**, and other stabilizing enhancements for robust training.  
+- **Other Optimizations**: Includes techniques such as **zero-centered and weight-decayed layernorm**, **Gated Attention**, and other stabilizing enhancements for robust training.
 
 Built on this architecture, we trained and open-sourced Qwen3-Next-80B-A3B — 80B total parameters, only 3B active — achieving extreme sparsity and efficiency.
 
-Despite its ultra-efficiency, it outperforms Qwen3-32B on downstream tasks — while requiring **less than 1/10 of the training cost**. 
+Despite its ultra-efficiency, it outperforms Qwen3-32B on downstream tasks — while requiring **less than 1/10 of the training cost**.
 Moreover, it delivers over **10x higher inference throughput** than Qwen3-32B when handling contexts longer than 32K tokens.
 
 For more details, please visit our blog [Qwen3-Next](qwen3_next) ([blog post](https://qwenlm.github.io/blog/qwen3_next/)).
@@ -60,7 +63,7 @@ generated_ids = model.generate(
     **model_inputs,
     max_new_tokens=512
 )
-output_ids = generated_ids[0][len(model_inputs.input_ids[0]):].tolist() 
+output_ids = generated_ids[0][len(model_inputs.input_ids[0]):].tolist()
 
 content = tokenizer.decode(output_ids, skip_special_tokens=True)
 

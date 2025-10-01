@@ -15,9 +15,7 @@
 # limitations under the License.
 """PyTorch OpenAI GPT model."""
 
-import json
 import math
-import os
 from dataclasses import dataclass
 from typing import Any, Callable, Optional, Union
 
@@ -41,84 +39,6 @@ from .configuration_openai import OpenAIGPTConfig
 logger = logging.get_logger(__name__)
 
 
-def load_tf_weights_in_openai_gpt(model, config, openai_checkpoint_folder_path):
-    """Load tf pre-trained weights in a pytorch model (from NumPy arrays here)"""
-    import re
-
-    import numpy as np
-
-    if ".ckpt" in openai_checkpoint_folder_path:
-        openai_checkpoint_folder_path = os.path.dirname(openai_checkpoint_folder_path)
-
-    logger.info(f"Loading weights from {openai_checkpoint_folder_path}")
-
-    with open(openai_checkpoint_folder_path + "/parameters_names.json", "r", encoding="utf-8") as names_handle:
-        names = json.load(names_handle)
-    with open(openai_checkpoint_folder_path + "/params_shapes.json", "r", encoding="utf-8") as shapes_handle:
-        shapes = json.load(shapes_handle)
-    offsets = np.cumsum([np.prod(shape) for shape in shapes])
-    init_params = [np.load(openai_checkpoint_folder_path + f"/params_{n}.npy") for n in range(10)]
-    init_params = np.split(np.concatenate(init_params, 0), offsets)[:-1]
-    init_params = [param.reshape(shape) for param, shape in zip(init_params, shapes)]
-
-    # This was used when we had a single embedding matrix for positions and tokens
-    # init_params[0] = np.concatenate([init_params[1], init_params[0]], 0)
-    # del init_params[1]
-    init_params = [arr.squeeze() for arr in init_params]
-
-    # Check that the token and position embeddings weight dimensions map those of the init parameters.
-    if model.tokens_embed.weight.shape != init_params[1].shape:
-        raise ValueError(
-            f"tokens_embed.weight.shape: {model.tokens_embed.weight.shape} does not match init_param[1].shape:"
-            f" {init_params[1].shape}"
-        )
-
-    if model.positions_embed.weight.shape != init_params[0].shape:
-        raise ValueError(
-            f"positions_embed.weight.shape: {model.positions_embed.weight.shape} does not match init_param[0].shape:"
-            f" {init_params[0].shape}"
-        )
-
-    model.tokens_embed.weight.data = torch.from_numpy(init_params[1])
-    model.positions_embed.weight.data = torch.from_numpy(init_params[0])
-    names.pop(0)
-    # Pop position and token embedding arrays
-    init_params.pop(0)
-    init_params.pop(0)
-
-    for name, array in zip(names, init_params):  # names[1:n_transfer], init_params[1:n_transfer]):
-        name = name[6:]  # skip "model/"
-        if name[-2:] != ":0":
-            raise ValueError(f"Layer {name} does not end with :0")
-        name = name[:-2]
-        name = name.split("/")
-        pointer = model
-        for m_name in name:
-            if re.fullmatch(r"[A-Za-z]+\d+", m_name):
-                scope_names = re.split(r"(\d+)", m_name)
-            else:
-                scope_names = [m_name]
-            if scope_names[0] == "g":
-                pointer = getattr(pointer, "weight")
-            elif scope_names[0] == "b":
-                pointer = getattr(pointer, "bias")
-            elif scope_names[0] == "w":
-                pointer = getattr(pointer, "weight")
-            else:
-                pointer = getattr(pointer, scope_names[0])
-            if len(scope_names) >= 2:
-                num = int(scope_names[1])
-                pointer = pointer[num]
-
-        # Ensure that the pointer and array have compatible shapes.
-        if pointer.shape != array.shape:
-            raise ValueError(f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
-
-        logger.info(f"Initialize PyTorch weight {name}")
-        pointer.data = torch.from_numpy(array)
-    return model
-
-
 ACT_FNS = {"relu": nn.ReLU(), "silu": silu, "gelu": gelu_new, "swish": silu}
 
 
@@ -126,7 +46,6 @@ class Attention(nn.Module):
     def __init__(self, nx, n_positions, config, scale=False):
         super().__init__()
         n_state = nx  # in Attention: n_state=768 (nx=n_embd)
-        # [switch nx => n_state from Block to Attention to keep identical to TF implementation]
         if n_state % config.n_head != 0:
             raise ValueError(f"Attention n_state shape: {n_state} must be divisible by config.n_head {config.n_head}")
         self.register_buffer(
@@ -159,11 +78,10 @@ class Attention(nn.Module):
         self.n_head = self.n_head - len(heads)
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def _attn(self, q, k, v, attention_mask=None, head_mask=None, output_attentions=False):
+    def _attn(self, q, k, v, attention_mask=None, output_attentions=False):
         w = torch.matmul(q, k)
         if self.scale:
             w = w / math.sqrt(v.size(-1))
-        # w = w * self.bias + -1e9 * (1 - self.bias)  # TF implementation method: mask_attn_weights
         # XD: self.b may be larger than w, so we need to crop it
         b = self.bias[:, :, : w.size(-2), : w.size(-1)]
         w = w * b + -1e4 * (1 - b)
@@ -175,10 +93,6 @@ class Attention(nn.Module):
         w = nn.functional.softmax(w, dim=-1)
         w = self.attn_dropout(w)
 
-        # Mask heads if we want to
-        if head_mask is not None:
-            w = w * head_mask
-
         outputs = [torch.matmul(w, v)]
         if output_attentions:
             outputs.append(w)
@@ -187,24 +101,24 @@ class Attention(nn.Module):
     def merge_heads(self, x):
         x = x.permute(0, 2, 1, 3).contiguous()
         new_x_shape = x.size()[:-2] + (x.size(-2) * x.size(-1),)
-        return x.view(*new_x_shape)  # in Tensorflow implementation: fct merge_states
+        return x.view(*new_x_shape)
 
     def split_heads(self, x, k=False):
         new_x_shape = x.size()[:-1] + (self.n_head, x.size(-1) // self.n_head)
-        x = x.view(*new_x_shape)  # in Tensorflow implementation: fct split_states
+        x = x.view(*new_x_shape)
         if k:
             return x.permute(0, 2, 3, 1)
         else:
             return x.permute(0, 2, 1, 3)
 
-    def forward(self, x, attention_mask=None, head_mask=None, output_attentions=False):
+    def forward(self, x, attention_mask=None, output_attentions=False):
         x = self.c_attn(x)
         query, key, value = x.split(self.split_size, dim=2)
         query = self.split_heads(query)
         key = self.split_heads(key, k=True)
         value = self.split_heads(value)
 
-        attn_outputs = self._attn(query, key, value, attention_mask, head_mask, output_attentions)
+        attn_outputs = self._attn(query, key, value, attention_mask, output_attentions)
         a = attn_outputs[0]
 
         a = self.merge_heads(a)
@@ -239,11 +153,10 @@ class Block(nn.Module):
         self.mlp = MLP(4 * nx, config)
         self.ln_2 = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
 
-    def forward(self, x, attention_mask=None, head_mask=None, output_attentions=False):
+    def forward(self, x, attention_mask=None, output_attentions=False):
         attn_outputs = self.attn(
             x,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             output_attentions=output_attentions,
         )
         a = attn_outputs[0]
@@ -359,14 +272,11 @@ class OpenAIGPTSequenceSummary(nn.Module):
 @auto_docstring
 class OpenAIGPTPreTrainedModel(PreTrainedModel):
     config: OpenAIGPTConfig
-    load_tf_weights = load_tf_weights_in_openai_gpt
     base_model_prefix = "transformer"
 
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, (nn.Linear, Conv1D)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -439,7 +349,6 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -483,9 +392,6 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
             attention_mask = attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
             attention_mask = (1.0 - attention_mask) * torch.finfo(self.dtype).min
 
-        # Prepare head mask if needed
-        head_mask = self.get_head_mask(head_mask, self.config.n_layer)
-
         if inputs_embeds is None:
             inputs_embeds = self.tokens_embed(input_ids)
         position_embeds = self.positions_embed(position_ids)
@@ -505,7 +411,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            outputs = block(hidden_states, attention_mask, head_mask[i], output_attentions=output_attentions)
+            outputs = block(hidden_states, attention_mask, output_attentions=output_attentions)
             hidden_states = outputs[0]
             if output_attentions:
                 all_attentions = all_attentions + (outputs[1],)
@@ -549,7 +455,6 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel, GenerationMixin):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
@@ -570,7 +475,6 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel, GenerationMixin):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -641,7 +545,6 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         mc_token_ids: Optional[torch.LongTensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -690,7 +593,6 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -755,7 +657,6 @@ class OpenAIGPTForSequenceClassification(OpenAIGPTPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
@@ -775,7 +676,6 @@ class OpenAIGPTForSequenceClassification(OpenAIGPTPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -849,5 +749,4 @@ __all__ = [
     "OpenAIGPTLMHeadModel",
     "OpenAIGPTModel",
     "OpenAIGPTPreTrainedModel",
-    "load_tf_weights_in_openai_gpt",
 ]

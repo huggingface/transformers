@@ -149,11 +149,10 @@ Audio(waveform, rate=model.config.sampling_rate)
 ## VitsTokenizer
 
 [[autodoc]] VitsTokenizer
-- __call__
-- save_vocabulary
+    - __call__
+    - save_vocabulary
 
 ## VitsModel
 
 [[autodoc]] VitsModel
-- forward
-
+    - forward

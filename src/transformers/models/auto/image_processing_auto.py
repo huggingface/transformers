@@ -91,6 +91,7 @@ else:
             ("dinov3_vit", (None, "DINOv3ViTImageProcessorFast")),
             ("donut-swin", ("DonutImageProcessor", "DonutImageProcessorFast")),
             ("dpt", ("DPTImageProcessor", "DPTImageProcessorFast")),
+            ("edgetam", (None, "Sam2ImageProcessorFast")),
             ("efficientformer", ("EfficientFormerImageProcessor", None)),
             ("efficientloftr", ("EfficientLoFTRImageProcessor", "EfficientLoFTRImageProcessorFast")),
             ("efficientnet", ("EfficientNetImageProcessor", "EfficientNetImageProcessorFast")),
@@ -120,6 +121,7 @@ else:
             ("layoutlmv2", ("LayoutLMv2ImageProcessor", "LayoutLMv2ImageProcessorFast")),
             ("layoutlmv3", ("LayoutLMv3ImageProcessor", "LayoutLMv3ImageProcessorFast")),
             ("levit", ("LevitImageProcessor", "LevitImageProcessorFast")),
+            ("lfm2_vl", (None, "Lfm2VlImageProcessorFast")),
             ("lightglue", ("LightGlueImageProcessor", None)),
             ("llama4", ("Llama4ImageProcessor", "Llama4ImageProcessorFast")),
             ("llava", ("LlavaImageProcessor", "LlavaImageProcessorFast")),
@@ -564,9 +566,7 @@ class AutoImageProcessor:
                     )
                 image_processor_class = get_image_processor_class_from_name(image_processor_type)
             else:
-                image_processor_type_slow = (
-                    image_processor_type[:-4] if image_processor_type.endswith("Fast") else image_processor_type
-                )
+                image_processor_type_slow = image_processor_type.removesuffix("Fast")
                 image_processor_class = get_image_processor_class_from_name(image_processor_type_slow)
                 if image_processor_class is None and image_processor_type.endswith("Fast"):
                     raise ValueError(

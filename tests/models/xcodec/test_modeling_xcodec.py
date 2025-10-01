@@ -39,7 +39,7 @@ from transformers.testing_utils import (
 if is_torch_available():
     import torch
 
-    from transformers import XcodecModel
+    from transformers import DacConfig, HubertConfig, XcodecModel
 
 
 @require_torch
@@ -51,7 +51,7 @@ class XcodecModelTester:
         num_channels=1,
         sample_rate=16000,
         codebook_size=1024,
-        num_samples=400,
+        num_samples=256,
         is_training=False,
     ):
         self.parent = parent
@@ -61,6 +61,16 @@ class XcodecModelTester:
         self.codebook_size = codebook_size
         self.is_training = is_training
         self.num_samples = num_samples
+        self.acoustic_model_config = DacConfig(
+            decoder_hidden_size=8, encoder_hidden_size=8, codebook_size=16, downsampling_ratios=[16, 16]
+        )
+        self.semantic_model_config = HubertConfig(
+            hidden_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            intermediate_size=12,
+            conv_dim=(4, 4, 4, 4, 4, 4, 4),
+        )
 
     def prepare_config_and_inputs(self):
         config = self.get_config()
@@ -86,6 +96,8 @@ class XcodecModelTester:
             sample_rate=self.sample_rate,
             audio_channels=self.num_channels,
             codebook_size=self.codebook_size,
+            acoustic_model_config=self.acoustic_model_config,
+            semantic_model_config=self.semantic_model_config,
         )
 
     def create_and_check_model_forward(self, config, inputs_dict):
@@ -99,10 +111,8 @@ class XcodecModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (XcodecModel,) if is_torch_available() else ()
     is_encoder_decoder = True
     test_pruning = False
-    test_headmasking = False
     test_resize_embeddings = False
     test_torchscript = False
-    test_can_init_all_missing_weights = False
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         # model does not support returning hidden states
@@ -150,10 +160,6 @@ class XcodecModelTest(ModelTesterMixin, unittest.TestCase):
             config.decoder.gradient_checkpointing = True
             model = model_class(config)
             self.assertTrue(model.is_gradient_checkpointing)
-
-    @unittest.skip(reason="We cannot configure to output a smaller model.")
-    def test_model_is_small(self):
-        pass
 
     @unittest.skip(reason="The XcodecModel does not have `inputs_embeds` logics")
     def test_inputs_embeds(self):
