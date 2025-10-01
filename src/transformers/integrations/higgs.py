@@ -14,6 +14,7 @@
 "HIGGS through FLUTE (Flexible Lookup Table Engine for LUT-quantized LLMs) integration file"
 
 from math import sqrt
+from typing import Optional
 
 from ..utils import (
     is_flute_available,
@@ -28,14 +29,11 @@ if is_torch_available():
 
 
 if is_flute_available():
-    import flute.utils
+    from flute.integrations.higgs import prepare_data_transposed
+    from flute.tune import TuneMetaData, qgemm_v2
 
 if is_hadamard_available():
     from fast_hadamard_transform import hadamard_transform
-
-if is_flute_available():
-    import flute.utils
-    from flute.integrations.higgs import prepare_data_transposed
 
 
 def pad_to_block(tensor, dims, had_block_size, value=0):
@@ -49,7 +47,7 @@ def pad_to_block(tensor, dims, had_block_size, value=0):
     return nn.functional.pad(tensor, pad_dims, "constant", value)
 
 
-def get_higgs_grid(p: int, n: int):
+def get_higgs_grid(p: int, n: int) -> "torch.Tensor":
     if (p, n) == (2, 256):
         return torch.tensor(
             [
@@ -449,7 +447,7 @@ def quantize_with_higgs(weight, bits: int = 4, p: int = 2, group_size: int = 256
 
     device = weight.device
     dtype = weight.dtype
-    weight = weight.clone().float()
+    weight = weight.to(copy=True, dtype=torch.float32)
     # Pad to Hadamard transform size
     weight = pad_to_block(weight, [1], hadamard_size)
 
@@ -464,14 +462,14 @@ def quantize_with_higgs(weight, bits: int = 4, p: int = 2, group_size: int = 256
 
     # Quantize
     codes = torch.empty(weight.shape[:-1], device=device, dtype=torch.uint8)
-    for i in range(0, weight.shape[0], 64):
-        codes[i : i + 64] = torch.argmax(2 * weight[i : i + 64] @ grid.T - grid_norm_2, dim=-1).to(torch.uint8)
+    for i in range(0, weight.shape[0], 16):
+        codes[i : i + 16] = torch.argmax(2 * weight[i : i + 16] @ grid.T - grid_norm_2, dim=-1).to(torch.uint8)
     del weight
 
     codes = codes.reshape(codes.shape[0], -1)
     scales = scales / sqrt(hadamard_size)
 
-    weight, scales, tables, tables2 = prepare_data_transposed(
+    weight, scales, tables, tables2, tune_metadata = prepare_data_transposed(
         codes,
         torch.repeat_interleave(scales.to(dtype), hadamard_size // group_size, dim=1),
         grid.to(dtype),
@@ -480,6 +478,7 @@ def quantize_with_higgs(weight, bits: int = 4, p: int = 2, group_size: int = 256
         vector_size=p,
         dtype=dtype,
         device=device,
+        check_correctness=False,
     )
 
     return {
@@ -487,6 +486,7 @@ def quantize_with_higgs(weight, bits: int = 4, p: int = 2, group_size: int = 256
         "scales": scales,
         "tables": tables,
         "tables2": tables2.view(dtype=torch.float16),
+        "tune_metadata": tune_metadata,
     }
 
 
@@ -497,8 +497,8 @@ class HiggsLinear(torch.nn.Module):
         out_features: int,
         num_bits: int,
         bias=True,
-        dtype: torch.dtype = None,
-        device: torch.device = None,
+        dtype: Optional[torch.dtype] = None,
+        device: Optional[torch.device] = None,
         group_size: int = 256,
         hadamard_size: int = 1024,
     ):
@@ -508,7 +508,6 @@ class HiggsLinear(torch.nn.Module):
         self.num_bits = num_bits
         self.group_size = group_size
         self.hadamard_size = hadamard_size
-        self.num_sms_packed = nn.Parameter(torch.tensor(-1, dtype=torch.int32, device=device), requires_grad=False)
 
         assert in_features % group_size == 0
         assert num_bits in [2, 3, 4]
@@ -531,6 +530,7 @@ class HiggsLinear(torch.nn.Module):
             self.register_parameter("bias", None)
 
         self.workspace = None  # must be set externally to be reused among layers
+        self.tune_metadata: TuneMetaData = None  # must be set externally because architecture dependent
 
     def forward(self, x):
         x = pad_to_block(x, [-1], self.hadamard_size)
@@ -538,16 +538,15 @@ class HiggsLinear(torch.nn.Module):
         if self.workspace is None:
             raise Exception("Workspace must be set before calling forward")
 
-        return flute.qgemm_hadamard(
+        return qgemm_v2(
             x,
             self.weight,
             self.scales,
             self.tables,
             self.tables2.view(dtype=torch.float32),
             self.workspace,
-            self.num_bits,
-            self.group_size,
-            self.hadamard_size,
+            self.tune_metadata,
+            hadamard_size=self.hadamard_size,
         )
 
 
@@ -556,11 +555,12 @@ def replace_with_higgs_linear(
     quantization_config=None,
     current_key_name=None,
     has_been_replaced=False,
+    modules_to_not_convert=None,
 ):
     """
     Public method that recursively replaces the Linear layers of the given model with HIGGS quantized layers.
     `accelerate` is needed to use this method. Returns the converted model and a boolean that indicates if the
-    conversion has been successfull or not.
+    conversion has been successful or not.
 
     Args:
         model (`torch.nn.Module`):
@@ -584,7 +584,7 @@ def replace_with_higgs_linear(
         if isinstance(module, nn.Linear):
             # Check if the current key is not in the `quantization_config.modules_to_not_convert`
             current_key_name_str = ".".join(current_key_name)
-            if not any(current_key_name_str.endswith(key) for key in quantization_config.modules_to_not_convert):
+            if not any(current_key_name_str.endswith(key) for key in modules_to_not_convert):
                 with init_empty_weights():
                     in_features = module.in_features
                     out_features = module.out_features
@@ -609,6 +609,7 @@ def replace_with_higgs_linear(
                 quantization_config=quantization_config,
                 current_key_name=current_key_name,
                 has_been_replaced=has_been_replaced,
+                modules_to_not_convert=modules_to_not_convert,
             )
         # Remove the last key for recursion
         current_key_name.pop(-1)

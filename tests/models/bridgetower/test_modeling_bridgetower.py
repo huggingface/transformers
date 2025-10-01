@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The Intel Labs Team Authors, The Microsoft Research Team Authors and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,10 +13,8 @@
 # limitations under the License.
 """Testing suite for the PyTorch BridgeTower model."""
 
-import tempfile
 import unittest
-
-import numpy as np
+from functools import cached_property
 
 from transformers import (
     BridgeTowerConfig,
@@ -27,7 +24,6 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -207,9 +203,9 @@ class BridgeTowerModelTester:
         return (config, input_ids, attention_mask, pixel_values, pixel_mask)
 
     def get_config(self):
-        return BridgeTowerConfig.from_text_vision_configs(
-            text_config=self.text_model_tester.get_config(),
-            vision_config=self.vision_model_tester.get_config(),
+        return BridgeTowerConfig(
+            text_config=self.text_model_tester.get_config().to_dict(),
+            vision_config=self.vision_model_tester.get_config().to_dict(),
             share_cross_modal_transformer_layers=self.share_cross_modal_transformer_layers,
             share_link_tower_layers=self.share_link_tower_layers,
             link_tower_type=self.link_tower_type,
@@ -312,7 +308,6 @@ class BridgeTowerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     pipeline_model_mapping = {"feature-extraction": BridgeTowerModel} if is_torch_available() else {}
 
     is_training = False
-    test_headmasking = False
     test_pruning = False
     test_torchscript = False
     test_resize_embeddings = False
@@ -358,39 +353,6 @@ class BridgeTowerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         model_name = "BridgeTower/bridgetower-base"
         model = BridgeTowerModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
-
-    @slow
-    def test_save_load_fast_init_from_base(self):
-        # Override as it is a slow test on this model
-        super().test_save_load_fast_init_from_base()
-
-    # Override as extracting meaningful tensor from output is different for BridgeTower
-    def test_save_load(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**input_dict)
-
-            out_2 = self.extract_output(outputs, model_class.__name__)
-            out_2 = out_2.cpu().numpy()
-            out_2[np.isnan(out_2)] = 0
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(tmpdirname)
-                model.to(torch_device)
-                with torch.no_grad():
-                    after_outputs = model(**input_dict)
-
-                # Make sure we don't have nans
-                out_1 = self.extract_output(after_outputs, model_class.__name__)
-                out_1 = out_1.cpu().numpy()
-                out_1[np.isnan(out_1)] = 0
-                max_diff = np.amax(np.abs(out_1 - out_2))
-                self.assertLessEqual(max_diff, 1e-5)
 
     # Override this as `hidden states output` is different for BridgeTower
     def test_hidden_states_output(self):
@@ -475,7 +437,7 @@ class BridgeTowerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         if self.has_attentions:
             self.assertIsNotNone(attentions.grad)
 
-    # override as the `logit_scale` parameter initilization is different for BRIDGE TOWER
+    # override as the `logit_scale` parameter initialization is different for BRIDGE TOWER
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -689,4 +651,4 @@ class BridgeTowerModelTrainingTest(unittest.TestCase):
             [[-0.6518, 0.4978, -0.4544], [-2.6672, -0.0843, -0.4210], [-2.4510, -0.1002, -0.3458]]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.image_features[0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.image_features[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

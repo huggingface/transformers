@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## 개요 [[overview]]
 
-TimeSformer 모델은 Facebook Research에서 제안한 [TimeSformer: Is Space-Time Attention All You Need for Video Understanding?](https://arxiv.org/abs/2102.05095)에서 소개되었습니다. 이 연구는 첫 번째 비디오 Transformer로서, 행동 인식 분야에서 중요한 이정표가 되었습니다. 또한 Transformer 기반의 비디오 이해 및 분류 논문에 많은 영감을 주었습니다.
+TimeSformer 모델은 Facebook Research에서 제안한 [TimeSformer: Is Space-Time Attention All You Need for Video Understanding?](https://huggingface.co/papers/2102.05095)에서 소개되었습니다. 이 연구는 첫 번째 비디오 Transformer로서, 행동 인식 분야에서 중요한 이정표가 되었습니다. 또한 Transformer 기반의 비디오 이해 및 분류 논문에 많은 영감을 주었습니다.
 
 논문의 초록은 다음과 같습니다. 
 

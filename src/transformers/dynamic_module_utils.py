@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,23 +13,26 @@
 # limitations under the License.
 """Utilities to dynamically load objects from the Hub."""
 
+import ast
 import filecmp
 import hashlib
 import importlib
+import importlib.metadata
 import importlib.util
+import keyword
 import os
 import re
 import shutil
 import signal
 import sys
 import threading
-import typing
 import warnings
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 from huggingface_hub import try_to_load_from_cache
+from packaging import version
 
 from .utils import (
     HF_MODULES_CACHE,
@@ -40,9 +42,45 @@ from .utils import (
     is_offline_mode,
     logging,
 )
+from .utils.import_utils import VersionComparison, split_package_version
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
+
+
+def _sanitize_module_name(name: str) -> str:
+    r"""
+    Tries to sanitize a module name so that it can be used as a Python module.
+
+    The following transformations are applied:
+
+    1. Replace `.` in module names with `_dot_`.
+    2. Replace `-` in module names with `_hyphen_`.
+    3. If the module name starts with a digit, prepend it with `_`.
+    4. Warn if the sanitized name is a Python reserved keyword or not a valid identifier.
+
+    If the input name is already a valid identifier, it is returned unchanged.
+    """
+    # We not replacing `\W` characters with `_` to avoid collisions. Because `_` is a very common
+    # separator used in module names, replacing `\W` with `_` would create too many collisions.
+    # Once a module is imported, it is cached in `sys.modules` and the second import would return
+    # the first module, which might not be the expected behavior if name collisions happen.
+    new_name = name.replace(".", "_dot_").replace("-", "_hyphen_")
+    if new_name and new_name[0].isdigit():
+        new_name = f"_{new_name}"
+    if keyword.iskeyword(new_name):
+        logger.warning(
+            f"The module name {new_name} (originally {name}) is a reserved keyword in Python. "
+            "Please rename the original module to avoid import issues."
+        )
+    elif not new_name.isidentifier():
+        logger.warning(
+            f"The module name {new_name} (originally {name}) is not a valid Python identifier. "
+            "Please rename the original module to avoid import issues."
+        )
+    return new_name
+
+
 _HF_REMOTE_CODE_LOCK = threading.Lock()
 
 
@@ -84,7 +122,7 @@ def create_dynamic_module(name: Union[str, os.PathLike]) -> None:
         importlib.invalidate_caches()
 
 
-def get_relative_imports(module_file: Union[str, os.PathLike]) -> List[str]:
+def get_relative_imports(module_file: Union[str, os.PathLike]) -> list[str]:
     """
     Get the list of modules that are relatively imported in a module file.
 
@@ -92,9 +130,9 @@ def get_relative_imports(module_file: Union[str, os.PathLike]) -> List[str]:
         module_file (`str` or `os.PathLike`): The module file to inspect.
 
     Returns:
-        `List[str]`: The list of relative imports in the module.
+        `list[str]`: The list of relative imports in the module.
     """
-    with open(module_file, "r", encoding="utf-8") as f:
+    with open(module_file, encoding="utf-8") as f:
         content = f.read()
 
     # Imports of the form `import .xxx`
@@ -105,7 +143,7 @@ def get_relative_imports(module_file: Union[str, os.PathLike]) -> List[str]:
     return list(set(relative_imports))
 
 
-def get_relative_import_files(module_file: Union[str, os.PathLike]) -> List[str]:
+def get_relative_import_files(module_file: Union[str, os.PathLike]) -> list[str]:
     """
     Get the list of all files that are needed for a given module. Note that this function recurses through the relative
     imports (if a imports b and b imports c, it will return module files for b and c).
@@ -114,7 +152,7 @@ def get_relative_import_files(module_file: Union[str, os.PathLike]) -> List[str]
         module_file (`str` or `os.PathLike`): The module file to inspect.
 
     Returns:
-        `List[str]`: The list of all relative imports a given module needs (recursively), which will give us the list
+        `list[str]`: The list of all relative imports a given module needs (recursively), which will give us the list
         of module files a given module needs.
     """
     no_change = False
@@ -128,17 +166,16 @@ def get_relative_import_files(module_file: Union[str, os.PathLike]) -> List[str]
             new_imports.extend(get_relative_imports(f))
 
         module_path = Path(module_file).parent
-        new_import_files = [str(module_path / m) for m in new_imports]
-        new_import_files = [f for f in new_import_files if f not in all_relative_imports]
-        files_to_check = [f"{f}.py" for f in new_import_files]
+        new_import_files = [f"{str(module_path / m)}.py" for m in new_imports]
+        files_to_check = [f for f in new_import_files if f not in all_relative_imports]
 
-        no_change = len(new_import_files) == 0
+        no_change = len(files_to_check) == 0
         all_relative_imports.extend(files_to_check)
 
     return all_relative_imports
 
 
-def get_imports(filename: Union[str, os.PathLike]) -> List[str]:
+def get_imports(filename: Union[str, os.PathLike]) -> list[str]:
     """
     Extracts all the libraries (not relative imports this time) that are imported in a file.
 
@@ -146,29 +183,54 @@ def get_imports(filename: Union[str, os.PathLike]) -> List[str]:
         filename (`str` or `os.PathLike`): The module file to inspect.
 
     Returns:
-        `List[str]`: The list of all packages required to use the input module.
+        `list[str]`: The list of all packages required to use the input module.
     """
-    with open(filename, "r", encoding="utf-8") as f:
+    with open(filename, encoding="utf-8") as f:
         content = f.read()
+    imported_modules = set()
 
-    # filter out try/except block so in custom code we can have try/except imports
-    content = re.sub(r"\s*try\s*:.*?except.*?:", "", content, flags=re.DOTALL)
+    import transformers.utils
 
-    # filter out imports under is_flash_attn_2_available block for avoid import issues in cpu only environment
-    content = re.sub(
-        r"if is_flash_attn[a-zA-Z0-9_]+available\(\):\s*(from flash_attn\s*.*\s*)+", "", content, flags=re.MULTILINE
-    )
+    def recursive_look_for_imports(node):
+        if isinstance(node, ast.Try):
+            return  # Don't recurse into Try blocks and ignore imports in them
+        elif isinstance(node, ast.If):
+            test = node.test
+            for condition_node in ast.walk(test):
+                if isinstance(condition_node, ast.Call):
+                    check_function = getattr(condition_node.func, "id", "")
+                    if (
+                        check_function.endswith("available")
+                        and check_function.startswith("is_flash_attn")
+                        or hasattr(transformers.utils.import_utils, check_function)
+                    ):
+                        # Don't recurse into "if flash_attn_available()" or any "if library_available" blocks
+                        # that appears in `transformers.utils.import_utils` and ignore imports in them
+                        return
+        elif isinstance(node, ast.Import):
+            # Handle 'import x' statements
+            for alias in node.names:
+                top_module = alias.name.split(".")[0]
+                if top_module:
+                    imported_modules.add(top_module)
+        elif isinstance(node, ast.ImportFrom):
+            # Handle 'from x import y' statements, ignoring relative imports
+            if node.level == 0 and node.module:
+                top_module = node.module.split(".")[0]
+                if top_module:
+                    imported_modules.add(top_module)
 
-    # Imports of the form `import xxx`
-    imports = re.findall(r"^\s*import\s+(\S+)\s*$", content, flags=re.MULTILINE)
-    # Imports of the form `from xxx import yyy`
-    imports += re.findall(r"^\s*from\s+(\S+)\s+import", content, flags=re.MULTILINE)
-    # Only keep the top-level module
-    imports = [imp.split(".")[0] for imp in imports if not imp.startswith(".")]
-    return list(set(imports))
+        # Recursively visit all children
+        for child in ast.iter_child_nodes(node):
+            recursive_look_for_imports(child)
+
+    tree = ast.parse(content)
+    recursive_look_for_imports(tree)
+
+    return sorted(imported_modules)
 
 
-def check_imports(filename: Union[str, os.PathLike]) -> List[str]:
+def check_imports(filename: Union[str, os.PathLike]) -> list[str]:
     """
     Check if the current Python environment contains all the libraries that are imported in a file. Will raise if a
     library is missing.
@@ -177,7 +239,7 @@ def check_imports(filename: Union[str, os.PathLike]) -> List[str]:
         filename (`str` or `os.PathLike`): The module file to check.
 
     Returns:
-        `List[str]`: The list of relative imports in the file.
+        `list[str]`: The list of relative imports in the file.
     """
     imports = get_imports(filename)
     missing_packages = []
@@ -208,7 +270,7 @@ def get_class_in_module(
     module_path: Union[str, os.PathLike],
     *,
     force_reload: bool = False,
-) -> typing.Type:
+) -> type:
     """
     Import a module on the cache directory for modules and extract a class from it.
 
@@ -223,8 +285,7 @@ def get_class_in_module(
         `typing.Type`: The class looked for.
     """
     name = os.path.normpath(module_path)
-    if name.endswith(".py"):
-        name = name[:-3]
+    name = name.removesuffix(".py")
     name = name.replace(os.path.sep, ".")
     module_file: Path = Path(HF_MODULES_CACHE) / module_path
     with _HF_REMOTE_CODE_LOCK:
@@ -235,7 +296,7 @@ def get_class_in_module(
         module_spec = importlib.util.spec_from_file_location(name, location=module_file)
 
         # Hash the module file and all its relative imports to check if we need to reload it
-        module_files: List[Path] = [module_file] + sorted(map(Path, get_relative_import_files(module_file)))
+        module_files: list[Path] = [module_file] + sorted(map(Path, get_relative_import_files(module_file)))
         module_hash: str = hashlib.sha256(b"".join(bytes(f) + f.read_bytes() for f in module_files)).hexdigest()
 
         module: ModuleType
@@ -258,7 +319,7 @@ def get_cached_module_file(
     cache_dir: Optional[Union[str, os.PathLike]] = None,
     force_download: bool = False,
     resume_download: Optional[bool] = None,
-    proxies: Optional[Dict[str, str]] = None,
+    proxies: Optional[dict[str, str]] = None,
     token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
     local_files_only: bool = False,
@@ -290,12 +351,12 @@ def get_cached_module_file(
         resume_download:
             Deprecated and ignored. All downloads are now resumed by default when possible.
             Will be removed in v5 of Transformers.
-        proxies (`Dict[str, str]`, *optional*):
+        proxies (`dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
         token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-            when running `huggingface-cli login` (stored in `~/.huggingface`).
+            when running `hf auth login` (stored in `~/.huggingface`).
         revision (`str`, *optional*, defaults to `"main"`):
             The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
             git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -332,9 +393,9 @@ def get_cached_module_file(
     pretrained_model_name_or_path = str(pretrained_model_name_or_path)
     is_local = os.path.isdir(pretrained_model_name_or_path)
     if is_local:
-        submodule = os.path.basename(pretrained_model_name_or_path)
+        submodule = _sanitize_module_name(os.path.basename(pretrained_model_name_or_path))
     else:
-        submodule = pretrained_model_name_or_path.replace("/", os.path.sep)
+        submodule = _sanitize_module_name(pretrained_model_name_or_path.replace("/", os.path.sep))
         cached_module = try_to_load_from_cache(
             pretrained_model_name_or_path, module_file, cache_dir=cache_dir, revision=_commit_hash, repo_type=repo_type
         )
@@ -358,8 +419,8 @@ def get_cached_module_file(
         if not is_local and cached_module != resolved_module_file:
             new_files.append(module_file)
 
-    except EnvironmentError:
-        logger.error(f"Could not locate the {module_file} inside {pretrained_model_name_or_path}.")
+    except OSError:
+        logger.info(f"Could not locate the {module_file} inside {pretrained_model_name_or_path}.")
         raise
 
     # Check we have all the requirements in our environment
@@ -369,16 +430,17 @@ def get_cached_module_file(
     full_submodule = TRANSFORMERS_DYNAMIC_MODULE_NAME + os.path.sep + submodule
     create_dynamic_module(full_submodule)
     submodule_path = Path(HF_MODULES_CACHE) / full_submodule
-    if submodule == os.path.basename(pretrained_model_name_or_path):
+    if submodule == _sanitize_module_name(os.path.basename(pretrained_model_name_or_path)):
         # We copy local files to avoid putting too many folders in sys.path. This copy is done when the file is new or
         # has changed since last copy.
         if not (submodule_path / module_file).exists() or not filecmp.cmp(
             resolved_module_file, str(submodule_path / module_file)
         ):
+            (submodule_path / module_file).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(resolved_module_file, submodule_path / module_file)
             importlib.invalidate_caches()
         for module_needed in modules_needed:
-            module_needed = f"{module_needed}.py"
+            module_needed = Path(module_file).parent / f"{module_needed}.py"
             module_needed_file = os.path.join(pretrained_model_name_or_path, module_needed)
             if not (submodule_path / module_needed).exists() or not filecmp.cmp(
                 module_needed_file, str(submodule_path / module_needed)
@@ -393,17 +455,18 @@ def get_cached_module_file(
         # benefit of versioning.
         submodule_path = submodule_path / commit_hash
         full_submodule = full_submodule + os.path.sep + commit_hash
-        create_dynamic_module(full_submodule)
+        full_submodule_module_file_path = os.path.join(full_submodule, module_file)
+        create_dynamic_module(Path(full_submodule_module_file_path).parent)
 
         if not (submodule_path / module_file).exists():
             shutil.copy(resolved_module_file, submodule_path / module_file)
             importlib.invalidate_caches()
         # Make sure we also have every file with relative
         for module_needed in modules_needed:
-            if not (submodule_path / f"{module_needed}.py").exists():
+            if not ((submodule_path / module_file).parent / f"{module_needed}.py").exists():
                 get_cached_module_file(
                     pretrained_model_name_or_path,
-                    f"{module_needed}.py",
+                    f"{Path(module_file).parent / module_needed}.py",
                     cache_dir=cache_dir,
                     force_download=force_download,
                     resume_download=resume_download,
@@ -434,14 +497,14 @@ def get_class_from_dynamic_module(
     cache_dir: Optional[Union[str, os.PathLike]] = None,
     force_download: bool = False,
     resume_download: Optional[bool] = None,
-    proxies: Optional[Dict[str, str]] = None,
+    proxies: Optional[dict[str, str]] = None,
     token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
     local_files_only: bool = False,
     repo_type: Optional[str] = None,
     code_revision: Optional[str] = None,
     **kwargs,
-) -> typing.Type:
+) -> type:
     """
     Extracts a class from a module file, present in the local folder or repository of a model.
 
@@ -479,12 +542,12 @@ def get_class_from_dynamic_module(
         resume_download:
             Deprecated and ignored. All downloads are now resumed by default when possible.
             Will be removed in v5 of Transformers.
-        proxies (`Dict[str, str]`, *optional*):
+        proxies (`dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
         token (`str` or `bool`, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-            when running `huggingface-cli login` (stored in `~/.huggingface`).
+            when running `hf auth login` (stored in `~/.huggingface`).
         revision (`str`, *optional*, defaults to `"main"`):
             The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
             git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -553,7 +616,7 @@ def get_class_from_dynamic_module(
     return get_class_in_module(class_name, final_module, force_reload=force_download)
 
 
-def custom_object_save(obj: Any, folder: Union[str, os.PathLike], config: Optional[Dict] = None) -> List[str]:
+def custom_object_save(obj: Any, folder: Union[str, os.PathLike], config: Optional[dict] = None) -> list[str]:
     """
     Save the modeling files corresponding to a custom model/configuration/tokenizer etc. in a given folder. Optionally
     adds the proper fields in a config.
@@ -565,7 +628,7 @@ def custom_object_save(obj: Any, folder: Union[str, os.PathLike], config: Option
             A config in which to register the auto_map corresponding to this custom object.
 
     Returns:
-        `List[str]`: The list of files saved.
+        `list[str]`: The list of files saved.
     """
     if obj.__module__ == "__main__":
         logger.warning(
@@ -639,7 +702,49 @@ def _raise_timeout_error(signum, frame):
 TIME_OUT_REMOTE_CODE = 15
 
 
-def resolve_trust_remote_code(trust_remote_code, model_name, has_local_code, has_remote_code):
+def resolve_trust_remote_code(
+    trust_remote_code, model_name, has_local_code, has_remote_code, error_message=None, upstream_repo=None
+):
+    """
+    Resolves the `trust_remote_code` argument. If there is remote code to be loaded, the user must opt-in to loading
+    it.
+
+    Args:
+        trust_remote_code (`bool` or `None`):
+            User-defined `trust_remote_code` value.
+        model_name (`str`):
+            The name of the model repository in huggingface.co.
+        has_local_code (`bool`):
+            Whether the model has local code.
+        has_remote_code (`bool`):
+            Whether the model has remote code.
+        error_message (`str`, *optional*):
+            Custom error message to display if there is remote code to load and the user didn't opt-in. If unset, the error
+            message will be regarding loading a model with custom code.
+
+    Returns:
+        The resolved `trust_remote_code` value.
+    """
+    if error_message is None:
+        if upstream_repo is not None:
+            error_message = (
+                f"The repository {model_name} references custom code contained in {upstream_repo} which "
+                f"must be executed to correctly load the model. You can inspect the repository "
+                f"content at https://hf.co/{upstream_repo} .\n"
+            )
+        elif os.path.isdir(model_name):
+            error_message = (
+                f"The repository {model_name} contains custom code which must be executed "
+                f"to correctly load the model. You can inspect the repository "
+                f"content at {os.path.abspath(model_name)} .\n"
+            )
+        else:
+            error_message = (
+                f"The repository {model_name} contains custom code which must be executed "
+                f"to correctly load the model. You can inspect the repository "
+                f"content at https://hf.co/{model_name} .\n"
+            )
+
     if trust_remote_code is None:
         if has_local_code:
             trust_remote_code = False
@@ -650,8 +755,7 @@ def resolve_trust_remote_code(trust_remote_code, model_name, has_local_code, has
                 signal.alarm(TIME_OUT_REMOTE_CODE)
                 while trust_remote_code is None:
                     answer = input(
-                        f"The repository for {model_name} contains custom code which must be executed to correctly "
-                        f"load the model. You can inspect the repository content at https://hf.co/{model_name}.\n"
+                        f"{error_message} You can inspect the repository content at https://hf.co/{model_name}.\n"
                         f"You can avoid this prompt in future by passing the argument `trust_remote_code=True`.\n\n"
                         f"Do you wish to run the custom code? [y/N] "
                     )
@@ -663,8 +767,7 @@ def resolve_trust_remote_code(trust_remote_code, model_name, has_local_code, has
             except Exception:
                 # OS which does not support signal.SIGALRM
                 raise ValueError(
-                    f"The repository for {model_name} contains custom code which must be executed to correctly "
-                    f"load the model. You can inspect the repository content at https://hf.co/{model_name}.\n"
+                    f"{error_message} You can inspect the repository content at https://hf.co/{model_name}.\n"
                     f"Please pass the argument `trust_remote_code=True` to allow custom code to be run."
                 )
             finally:
@@ -677,9 +780,64 @@ def resolve_trust_remote_code(trust_remote_code, model_name, has_local_code, has
 
     if has_remote_code and not has_local_code and not trust_remote_code:
         raise ValueError(
-            f"Loading {model_name} requires you to execute the configuration file in that"
-            " repo on your local machine. Make sure you have read the code there to avoid malicious use, then"
-            " set the option `trust_remote_code=True` to remove this error."
+            f"{error_message} You can inspect the repository content at https://hf.co/{model_name}.\n"
+            f"Please pass the argument `trust_remote_code=True` to allow custom code to be run."
         )
 
     return trust_remote_code
+
+
+def check_python_requirements(path_or_repo_id, requirements_file="requirements.txt", **kwargs):
+    """
+    Tries to locate `requirements_file` in a local folder or repo, and confirms that the environment has all the
+    python dependencies installed.
+
+    Args:
+        path_or_repo_id (`str` or `os.PathLike`):
+            This can be either:
+            - a string, the *model id* of a model repo on huggingface.co.
+            - a path to a *directory* potentially containing the file.
+        kwargs (`dict[str, Any]`, *optional*):
+            Additional arguments to pass to `cached_file`.
+    """
+    failed = []  # error messages regarding requirements
+    try:
+        requirements = cached_file(path_or_repo_id=path_or_repo_id, filename=requirements_file, **kwargs)
+        with open(requirements, "r") as f:
+            requirements = f.readlines()
+
+        for requirement in requirements:
+            requirement = requirement.strip()
+            if not requirement or requirement.startswith("#"):  # skip empty lines and comments
+                continue
+
+            try:
+                # e.g. "torch>2.6.0" -> "torch", ">", "2.6.0"
+                package_name, delimiter, version_number = split_package_version(requirement)
+            except ValueError:  # e.g. "torch", as opposed to "torch>2.6.0"
+                package_name = requirement
+                delimiter, version_number = None, None
+
+            try:
+                local_package_version = importlib.metadata.version(package_name)
+            except importlib.metadata.PackageNotFoundError:
+                failed.append(f"{requirement} (installed: None)")
+                continue
+
+            if delimiter is not None and version_number is not None:
+                is_satisfied = VersionComparison.from_string(delimiter)(
+                    version.parse(local_package_version), version.parse(version_number)
+                )
+            else:
+                is_satisfied = True
+
+            if not is_satisfied:
+                failed.append(f"{requirement} (installed: {local_package_version})")
+
+    except OSError:  # no requirements.txt
+        pass
+
+    if failed:
+        raise ImportError(
+            f"Missing requirements in your local environment for `{path_or_repo_id}`:\n" + "\n".join(failed)
+        )

@@ -13,10 +13,9 @@
 # limitations under the License.
 
 import contextlib
-import warnings
 from copy import deepcopy
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
 import torch
 from torch import nn
@@ -28,7 +27,6 @@ from .integrations.deepspeed import is_deepspeed_zero3_enabled
 from .integrations.fsdp import is_fsdp_managed_module
 from .trainer import Trainer
 from .utils import is_datasets_available, logging
-from .utils.deprecation import deprecate_kwarg
 
 
 if is_datasets_available():
@@ -52,22 +50,21 @@ logger = logging.get_logger(__name__)
 
 
 class Seq2SeqTrainer(Trainer):
-    @deprecate_kwarg("tokenizer", new_name="processing_class", version="5.0.0", raise_if_both_names=True)
     def __init__(
         self,
-        model: Union["PreTrainedModel", nn.Module] = None,
-        args: "TrainingArguments" = None,
+        model: Optional[Union["PreTrainedModel", nn.Module]] = None,
+        args: Optional["TrainingArguments"] = None,
         data_collator: Optional["DataCollator"] = None,
         train_dataset: Optional[Union[Dataset, "IterableDataset", "datasets.Dataset"]] = None,
-        eval_dataset: Optional[Union[Dataset, Dict[str, Dataset]]] = None,
+        eval_dataset: Optional[Union[Dataset, dict[str, Dataset]]] = None,
         processing_class: Optional[
             Union["PreTrainedTokenizerBase", "BaseImageProcessor", "FeatureExtractionMixin", "ProcessorMixin"]
         ] = None,
         model_init: Optional[Callable[[], "PreTrainedModel"]] = None,
         compute_loss_func: Optional[Callable] = None,
-        compute_metrics: Optional[Callable[["EvalPrediction"], Dict]] = None,
-        callbacks: Optional[List["TrainerCallback"]] = None,
-        optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
+        compute_metrics: Optional[Callable[["EvalPrediction"], dict]] = None,
+        callbacks: Optional[list["TrainerCallback"]] = None,
+        optimizers: tuple[Optional[torch.optim.Optimizer], Optional[torch.optim.lr_scheduler.LambdaLR]] = (None, None),
         preprocess_logits_for_metrics: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None,
     ):
         super().__init__(
@@ -129,24 +126,19 @@ class Seq2SeqTrainer(Trainer):
         # Strict validation to fail early. `GenerationConfig.save_pretrained()`, run at the end of training, throws
         # an exception if there are warnings at validation time.
         try:
-            with warnings.catch_warnings(record=True) as caught_warnings:
-                gen_config.validate()
-            if len(caught_warnings) > 0:
-                raise ValueError(str([w.message for w in caught_warnings]))
+            gen_config.validate(strict=True)
         except ValueError as exc:
-            raise ValueError(
-                "The loaded generation config instance is invalid -- `GenerationConfig.validate()` throws warnings "
-                "and/or exceptions. Fix these issues to train your model.\n\nThrown during validation:\n" + str(exc)
-            )
+            raise ValueError(str(exc) + "\n\nFix these issues to train your model.")
+
         return gen_config
 
     def evaluate(
         self,
         eval_dataset: Optional[Dataset] = None,
-        ignore_keys: Optional[List[str]] = None,
+        ignore_keys: Optional[list[str]] = None,
         metric_key_prefix: str = "eval",
         **gen_kwargs,
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """
         Run evaluation and returns metrics.
 
@@ -160,7 +152,7 @@ class Seq2SeqTrainer(Trainer):
                 Pass a dataset if you wish to override `self.eval_dataset`. If it is an [`~datasets.Dataset`], columns
                 not accepted by the `model.forward()` method are automatically removed. It must implement the `__len__`
                 method.
-            ignore_keys (`List[str]`, *optional*):
+            ignore_keys (`list[str]`, *optional*):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions.
             metric_key_prefix (`str`, *optional*, defaults to `"eval"`):
@@ -199,7 +191,7 @@ class Seq2SeqTrainer(Trainer):
     def predict(
         self,
         test_dataset: Dataset,
-        ignore_keys: Optional[List[str]] = None,
+        ignore_keys: Optional[list[str]] = None,
         metric_key_prefix: str = "test",
         **gen_kwargs,
     ) -> "PredictionOutput":
@@ -213,7 +205,7 @@ class Seq2SeqTrainer(Trainer):
             test_dataset (`Dataset`):
                 Dataset to run the predictions on. If it is a [`~datasets.Dataset`], columns not accepted by the
                 `model.forward()` method are automatically removed. Has to implement the method `__len__`
-            ignore_keys (`List[str]`, *optional*):
+            ignore_keys (`list[str]`, *optional*):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions.
             metric_key_prefix (`str`, *optional*, defaults to `"eval"`):
@@ -239,7 +231,7 @@ class Seq2SeqTrainer(Trainer):
 
             - predictions (`np.ndarray`): The predictions on `test_dataset`.
             - label_ids (`np.ndarray`, *optional*): The labels (if the dataset contained some).
-            - metrics (`Dict[str, float]`, *optional*): The potential dictionary of metrics (if the dataset contained
+            - metrics (`dict[str, float]`, *optional*): The potential dictionary of metrics (if the dataset contained
               labels).
         """
 
@@ -263,11 +255,11 @@ class Seq2SeqTrainer(Trainer):
     def prediction_step(
         self,
         model: nn.Module,
-        inputs: Dict[str, Union[torch.Tensor, Any]],
+        inputs: dict[str, Union[torch.Tensor, Any]],
         prediction_loss_only: bool,
-        ignore_keys: Optional[List[str]] = None,
+        ignore_keys: Optional[list[str]] = None,
         **gen_kwargs,
-    ) -> Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
+    ) -> tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
         """
         Perform an evaluation step on `model` using `inputs`.
 
@@ -276,7 +268,7 @@ class Seq2SeqTrainer(Trainer):
         Args:
             model (`nn.Module`):
                 The model to evaluate.
-            inputs (`Dict[str, Union[torch.Tensor, Any]]`):
+            inputs (`dict[str, Union[torch.Tensor, Any]]`):
                 The inputs and targets of the model.
 
                 The dictionary will be unpacked before being fed to the model. Most models expect the targets under the
@@ -287,7 +279,7 @@ class Seq2SeqTrainer(Trainer):
                 Additional `generate` specific kwargs.
 
         Return:
-            Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]: A tuple with the loss, logits and
+            tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]: A tuple with the loss, logits and
             labels (each being optional).
         """
 
@@ -351,9 +343,9 @@ class Seq2SeqTrainer(Trainer):
                 with self.compute_loss_context_manager():
                     outputs = model(**inputs)
                 if self.label_smoother is not None:
-                    loss = self.label_smoother(outputs, inputs["labels"]).mean().detach()
+                    loss = self.label_smoother(outputs, inputs["labels"]).detach().mean()
                 else:
-                    loss = (outputs["loss"] if isinstance(outputs, dict) else outputs[0]).mean().detach()
+                    loss = (outputs["loss"] if isinstance(outputs, dict) else outputs[0]).detach().mean()
             else:
                 loss = None
 

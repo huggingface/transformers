@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,13 +11,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
+import json
 import os
+import tempfile
 import unittest
 
 import pytest
 from packaging import version
 
-from transformers import AutoTokenizer, ModernBertConfig, is_torch_available
+from transformers import AutoTokenizer, ModernBertConfig, PreTrainedModel, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
     CaptureLogger,
@@ -29,7 +31,6 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -41,6 +42,8 @@ if is_torch_available():
     from transformers import (
         MODEL_FOR_PRETRAINING_MAPPING,
         ModernBertForMaskedLM,
+        ModernBertForMultipleChoice,
+        ModernBertForQuestionAnswering,
         ModernBertForSequenceClassification,
         ModernBertForTokenClassification,
         ModernBertModel,
@@ -141,7 +144,7 @@ class ModernBertModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
         )
-        if test := os.environ.get("PYTEST_CURRENT_TEST", False):
+        if test := os.environ.get("PYTEST_CURRENT_TEST", None):
             test_name = test.split(":")[-1].split(" ")[0]
 
             # If we're testing `test_retain_grad_hidden_states_attentions`, we normally get an error
@@ -201,6 +204,22 @@ class ModernBertModelTester:
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
+    def create_and_check_for_multiple_choice(
+        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        config.num_labels = self.num_labels
+        model = ModernBertForMultipleChoice(config=config)
+        model.to(torch_device)
+        model.eval()
+        multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        result = model(
+            multiple_choice_inputs_ids,
+            attention_mask=multiple_choice_input_mask,
+            labels=choice_labels,
+        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -216,7 +235,7 @@ class ModernBertModelTester:
 
 
 @require_torch
-class ModernBertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_torchscript = False
 
     all_model_classes = (
@@ -225,11 +244,12 @@ class ModernBertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             ModernBertForMaskedLM,
             ModernBertForSequenceClassification,
             ModernBertForTokenClassification,
+            ModernBertForQuestionAnswering,
+            ModernBertForMultipleChoice,
         )
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = ()
     pipeline_model_mapping = (
         {
             "feature-extraction": ModernBertModel,
@@ -237,12 +257,12 @@ class ModernBertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             "text-classification": ModernBertForSequenceClassification,
             "token-classification": ModernBertForTokenClassification,
             "zero-shot": ModernBertForSequenceClassification,
+            "question-answering": ModernBertForQuestionAnswering,
         }
         if is_torch_available()
         else {}
     )
     fx_compatible = False
-    test_head_masking = False
     test_pruning = False
     model_split_percents = [0.5, 0.8, 0.9]
 
@@ -291,7 +311,13 @@ class ModernBertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                 # are initialized without `initializer_range`, so they're not set to ~0 via the _config_zero_init
                 if param.requires_grad and not (
                     name == "classifier.weight"
-                    and model_class in [ModernBertForSequenceClassification, ModernBertForTokenClassification]
+                    and model_class
+                    in [
+                        ModernBertForSequenceClassification,
+                        ModernBertForTokenClassification,
+                        ModernBertForQuestionAnswering,
+                        ModernBertForMultipleChoice,
+                    ]
                 ):
                     self.assertIn(
                         ((param.data.mean() * 1e9).round() / 1e9).item(),
@@ -310,6 +336,10 @@ class ModernBertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
+
+    def test_for_multiple_choice(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
 
     def test_for_warning_if_padding_and_no_attention_mask(self):
         (
@@ -360,6 +390,156 @@ class ModernBertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def test_flash_attn_2_conversion(self):
         self.skipTest(reason="ModernBert doesn't use the ModernBertFlashAttention2 class method.")
 
+    @pytest.mark.torch_compile_test
+    def test_saved_config_excludes_reference_compile(self):
+        config = ModernBertConfig(reference_compile=True)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            config.save_pretrained(tmpdirname)
+            with open(os.path.join(tmpdirname, "config.json")) as f:
+                config_dict = json.load(f)
+            self.assertNotIn("reference_compile", config_dict)
+
+    @require_flash_attn
+    @require_torch_gpu
+    @pytest.mark.flash_attn_test
+    def test_flash_attention_dispatches_by_default(self):
+        "ModernBert should dispatch to FA2 by default, not SDPA"
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config=config)
+            self.assertTrue(model.config._attn_implementation == "flash_attention_2")
+
+    # This is overloaded because the model handles padding / unpadding on its own, thus ModernBertForMultipleChoice has
+    # a different hidden states shape when using FA2.
+    def flash_attn_inference_equivalence(
+        self, attn_implementation: str, padding_side: str, atol: float = 4e-2, rtol: float = 4e-2
+    ):
+        r"""
+        Tests the equivalence between the eager and flash attention implementations.
+        This test is only for inference and runs with `dtype=torch.bfloat16`.
+        """
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        # This flag is used to know if the test was skipped for all `self.all_model_classes` or not
+        _has_run_at_least_one_model = False
+
+        for model_class in self.all_model_classes:
+            # Custom kernel which needs the mask interface to be properly usable on these models
+            if not model_class._supports_attention_backend and not attn_implementation.startswith("flash_attention"):
+                continue
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            # flash attention variants does not always support arbitrary headim
+            config = self._prepare_config_headdim(config, 16)
+
+            # forcing the prefill size to go over sliding window size to check for SWA correctness
+            if getattr(config, "sliding_window", None):
+                config.sliding_window = 2
+
+            model = model_class(config)
+            if not all(
+                submodel._supports_flash_attn for submodel in model.modules() if isinstance(submodel, PreTrainedModel)
+            ):
+                continue
+
+            # If we end up here, at least one model class was not skipped
+            _has_run_at_least_one_model = True
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                # Save the model so we can reload with correct attention
+                model.save_pretrained(tmpdirname)
+
+                # Create first inputs without attention mask
+                main_input = inputs_dict[model.main_input_name]
+                # Only keep first batch sequence
+                if isinstance(main_input, torch.Tensor):
+                    main_input = main_input[:1]
+                    # Fix the dtype
+                    if torch.is_floating_point(main_input):
+                        main_input = main_input.to(torch.bfloat16)
+                first_inputs = {model.main_input_name: main_input, "output_hidden_states": True}
+                # Some models have main input name which is different from input_ids, but require input_ids... e.g. BarkFine
+                if model.main_input_name != "input_ids" and "input_ids" in inputs_dict:
+                    first_inputs["input_ids"] = inputs_dict["input_ids"][:1]
+                # If we have some pixel values, use them as well
+                if model.main_input_name != "pixel_values" and "pixel_values" in inputs_dict:
+                    # NOTE: this fixes qwen2_5_vl/omni because test break w/ pixel values
+                    if "image_grid_thw" in inputs_dict:
+                        continue
+                    first_inputs["pixel_values"] = inputs_dict["pixel_values"][:1].to(torch.bfloat16)
+                if model.config.is_encoder_decoder:
+                    decoder_input_ids = inputs_dict.get("decoder_input_ids", first_inputs.get("input_ids"))
+                    if decoder_input_ids is not None:
+                        first_inputs["decoder_input_ids"] = decoder_input_ids[:1]
+
+                # Create attention mask with padding
+                dummy_attention_mask = inputs_dict.get("attention_mask", None)
+                if dummy_attention_mask is not None:
+                    dummy_attention_mask = dummy_attention_mask[:1]
+                    if padding_side == "left":
+                        dummy_attention_mask[:, 1:] = 1
+                        dummy_attention_mask[:, 0] = 0
+                    else:
+                        dummy_attention_mask[:, :-1] = 1
+                        dummy_attention_mask[:, -1] = 0
+
+                # Create second inputs with attention mask and padding
+                second_inputs = copy.deepcopy(first_inputs)
+                if dummy_attention_mask is not None:
+                    second_inputs["attention_mask"] = dummy_attention_mask
+                    if model.config.is_encoder_decoder:
+                        second_inputs["decoder_attention_mask"] = dummy_attention_mask
+
+                # Use prepare for class to account for special attributes (e.g. in QnA models)
+                first_inputs = self._prepare_for_class(first_inputs, model_class)
+                first_inputs = {
+                    k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in first_inputs.items()
+                }
+                second_inputs = self._prepare_for_class(second_inputs, model_class)
+                second_inputs = {
+                    k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in second_inputs.items()
+                }
+
+                model = model_class.from_pretrained(
+                    tmpdirname, dtype=torch.bfloat16, attn_implementation="eager", device_map=torch_device
+                )
+
+                # First run without attention mask
+                outputs = model(**first_inputs)
+                retrieve_logits = model_class == ModernBertForMultipleChoice
+                logits_1_eager = outputs.logits if retrieve_logits else outputs.hidden_states[-1]
+                # Second run with attention mask and padding
+                outputs = model(**second_inputs)
+                logits_2_eager = outputs.logits if retrieve_logits else outputs.hidden_states[-1]
+
+                # Switch to FA
+                del model
+                model = model_class.from_pretrained(
+                    tmpdirname, dtype=torch.bfloat16, attn_implementation=attn_implementation, device_map=torch_device
+                )
+                outputs = model(**first_inputs)
+                logits_1_fa = outputs.logits if retrieve_logits else outputs.hidden_states[-1]
+                # Second run with attention mask and padding
+                outputs = model(**second_inputs)
+                logits_2_fa = outputs.logits if retrieve_logits else outputs.hidden_states[-1]
+
+                # Check the results
+                torch.testing.assert_close(logits_1_eager, logits_1_fa, atol=atol, rtol=rtol)
+                if padding_side == "left":
+                    torch.testing.assert_close(logits_2_eager[1:], logits_2_fa[1:], atol=atol, rtol=rtol)
+                    # Check it can run in training mode
+                    model.train()
+                    _ = model(**second_inputs)
+                else:
+                    torch.testing.assert_close(logits_2_eager[:-1], logits_2_fa[:-1], atol=atol, rtol=rtol)
+
+        # In this case, the test should appear as skipped, not successful
+        if not _has_run_at_least_one_model:
+            self.skipTest(
+                f"Model architecture does not support {attn_implementation}, or setting its attention dynamically"
+            )
+
 
 @require_torch
 class ModernBertModelIntegrationTest(unittest.TestCase):
@@ -383,7 +563,7 @@ class ModernBertModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor(
             [[[3.8387, -0.2017, 12.2839], [3.6300, 0.6869, 14.7123], [-5.1137, -3.8122, 11.9874]]]
         )
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_no_head(self):
@@ -405,7 +585,7 @@ class ModernBertModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor(
             [[[0.3151, -0.6417, -0.7027], [-0.7834, -1.5810, 0.4576], [1.0614, -0.7268, -0.0871]]]
         )
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_token_classification(self):
@@ -428,7 +608,7 @@ class ModernBertModelIntegrationTest(unittest.TestCase):
         expected = torch.tensor(
             [[[2.0159, 4.6569], [-0.9430, 3.1595], [-3.8770, 3.2653], [1.5752, 4.5167], [-1.6939, 1.2524]]]
         )
-        self.assertTrue(torch.allclose(output, expected, atol=1e-4))
+        torch.testing.assert_close(output, expected, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_sequence_classification(self):
@@ -451,8 +631,9 @@ class ModernBertModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
 
         expected = torch.tensor([[1.6466, 4.5662]])
-        self.assertTrue(torch.allclose(output, expected, atol=1e-4))
+        torch.testing.assert_close(output, expected, rtol=1e-4, atol=1e-4)
 
+    @pytest.mark.torch_export_test
     @slow
     def test_export(self):
         if version.parse(torch.__version__) < version.parse("2.4.0"):
@@ -491,3 +672,39 @@ class ModernBertModelIntegrationTest(unittest.TestCase):
         result = exported_program.module().forward(inputs["input_ids"], inputs["attention_mask"])
         ep_predicted_mask = tokenizer.decode(result.logits[0, 6].topk(5).indices)
         self.assertEqual(eg_predicted_mask, ep_predicted_mask)
+
+    @slow
+    def test_inference_multiple_choice(self):
+        if version.parse(torch.__version__) < version.parse("2.4.0"):
+            self.skipTest(reason="This test requires torch >= 2.4 to run.")
+
+        tokenizer = AutoTokenizer.from_pretrained("answerdotai/ModernBERT-base")
+        model = (
+            ModernBertForMultipleChoice.from_pretrained(
+                "netique/ModernBertForMultipleChoice",
+                reference_compile=False,
+                attn_implementation="sdpa",
+            )
+            .eval()
+            .to(torch_device)
+        )
+
+        prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
+        choices = [
+            "It is eaten with a fork and a knife.",
+            "It is eaten while held in the hand.",
+            "It also walks on the sidewalks.",
+            "It is a common drink.",
+        ]
+        labels = torch.tensor([0], device=torch_device)
+
+        encoding = tokenizer([prompt for _ in choices], choices, return_tensors="pt", padding=True)
+        outputs = model(**{k: v.unsqueeze(0).to(torch_device) for k, v in encoding.items()}, labels=labels)
+
+        expected_logits = torch.tensor([[0.1973, 0.2041, 0.1835, 0.1896]])
+        logits = outputs.logits.to("cpu")
+
+        self.assertTrue(
+            torch.allclose(logits, expected_logits, atol=1e-4, rtol=1e-4),
+            f"Logits: {logits.tolist()}\nExpected: {expected_logits.tolist()}",
+        )

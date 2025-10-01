@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,12 +16,13 @@
 import unittest
 
 import numpy as np
-import requests
 
+from transformers.image_utils import load_image
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
@@ -65,8 +65,10 @@ class Pix2StructImageProcessingTester:
         return {"do_normalize": self.do_normalize, "do_convert_rgb": self.do_convert_rgb}
 
     def prepare_dummy_image(self):
-        img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
-        raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+        img_url = url_to_local_path(
+            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+        )
+        raw_image = load_image(img_url).convert("RGB")
         return raw_image
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
@@ -106,7 +108,7 @@ class Pix2StructImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         max_patch = 2048
 
         inputs = image_processor(dummy_image, return_tensors="pt", max_patches=max_patch)
-        self.assertTrue(torch.allclose(inputs.flattened_patches.mean(), torch.tensor(0.0606), atol=1e-3, rtol=1e-3))
+        torch.testing.assert_close(inputs.flattened_patches.mean(), torch.tensor(0.0606), rtol=1e-3, atol=1e-3)
 
     def test_call_pil(self):
         # Initialize image_processor

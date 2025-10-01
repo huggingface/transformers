@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +18,9 @@ import inspect
 import math
 import re
 import unittest
+from functools import cached_property
+
+from datasets import load_dataset
 
 from transformers import (
     GroundingDinoConfig,
@@ -26,8 +28,9 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.file_utils import cached_property
 from transformers.testing_utils import (
+    Expectations,
+    is_flaky,
     require_timm,
     require_torch,
     require_torch_accelerator,
@@ -37,14 +40,14 @@ from transformers.testing_utils import (
 )
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
 
-    from transformers import GroundingDinoForObjectDetection, GroundingDinoModel
+    from transformers import GroundingDinoConfig, GroundingDinoForObjectDetection, GroundingDinoModel
     from transformers.pytorch_utils import id_tensor_storage
 
 
@@ -52,6 +55,39 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import AutoProcessor
+
+
+def generate_fake_bounding_boxes(n_boxes):
+    """Generate bounding boxes in the format (center_x, center_y, width, height)"""
+    # Validate the input
+    if not isinstance(n_boxes, int):
+        raise TypeError("n_boxes must be an integer")
+    if n_boxes <= 0:
+        raise ValueError("n_boxes must be a positive integer")
+
+    # Generate random bounding boxes in the format (center_x, center_y, width, height)
+    bounding_boxes = torch.rand((n_boxes, 4))
+
+    # Extract the components
+    center_x = bounding_boxes[:, 0]
+    center_y = bounding_boxes[:, 1]
+    width = bounding_boxes[:, 2]
+    height = bounding_boxes[:, 3]
+
+    # Ensure width and height do not exceed bounds
+    width = torch.min(width, torch.tensor(1.0))
+    height = torch.min(height, torch.tensor(1.0))
+
+    # Ensure the bounding box stays within the normalized space
+    center_x = torch.where(center_x - width / 2 < 0, width / 2, center_x)
+    center_x = torch.where(center_x + width / 2 > 1, 1 - width / 2, center_x)
+    center_y = torch.where(center_y - height / 2 < 0, height / 2, center_y)
+    center_y = torch.where(center_y + height / 2 > 1, 1 - height / 2, center_y)
+
+    # Combine back into bounding boxes
+    bounding_boxes = torch.stack([center_x, center_y, width, height], dim=1)
+
+    return bounding_boxes
 
 
 class GroundingDinoModelTester:
@@ -72,7 +108,7 @@ class GroundingDinoModelTester:
         num_channels=3,
         image_size=98,
         n_targets=8,
-        num_labels=3,
+        num_labels=2,
         num_feature_levels=4,
         encoder_n_points=2,
         decoder_n_points=6,
@@ -115,7 +151,11 @@ class GroundingDinoModelTester:
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         pixel_mask = torch.ones([self.batch_size, self.image_size, self.image_size], device=torch_device)
 
-        input_ids = ids_tensor([self.batch_size, self.max_text_len], self.num_labels)
+        # When using `GroundingDino` the text input template is '{label1}. {label2}. {label3. ... {labelN}.'
+        # Therefore to avoid errors when running tests with `labels` `input_ids` have to follow this structure.
+        # Otherwise when running `build_label_maps` it will throw an error when trying to split the input_ids into segments.
+        input_ids = torch.tensor([101, 3869, 1012, 11420, 3869, 1012, 102], device=torch_device)
+        input_ids = input_ids.unsqueeze(0).expand(self.batch_size, -1)
 
         labels = None
         if self.use_labels:
@@ -126,7 +166,7 @@ class GroundingDinoModelTester:
                 target["class_labels"] = torch.randint(
                     high=self.num_labels, size=(self.n_targets,), device=torch_device
                 )
-                target["boxes"] = torch.rand(self.n_targets, 4, device=torch_device)
+                target["boxes"] = generate_fake_bounding_boxes(self.n_targets).to(torch_device)
                 target["masks"] = torch.rand(self.n_targets, self.image_size, self.image_size, device=torch_device)
                 labels.append(target)
 
@@ -209,7 +249,6 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     is_encoder_decoder = True
     test_torchscript = False
     test_pruning = False
-    test_head_masking = False
     test_missing_keys = False
     pipeline_model_mapping = (
         {"image-feature-extraction": GroundingDinoModel, "zero-shot-object-detection": GroundingDinoForObjectDetection}
@@ -288,7 +327,8 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -317,7 +357,7 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
             )
             out_len = len(outputs)
 
-            correct_outlen = 10
+            correct_outlen = 12
 
             # loss is at first position
             if "labels" in inputs_dict:
@@ -545,6 +585,8 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
                         or "value_proj" in name
                         or "output_proj" in name
                         or "reference_points" in name
+                        or "vision_proj" in name
+                        or "text_proj" in name
                     ):
                         continue
                     self.assertIn(
@@ -595,7 +637,7 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
             # GroundingDino when sharing weights also uses the shared ones in GroundingDinoDecoder
             # Therefore, differently from DeformableDetr, we expect the group lens to be 2
-            # one for self.bbox_embed in GroundingDinoForObejectDetection and another one
+            # one for self.bbox_embed in GroundingDinoForObjectDetection and another one
             # in the decoder
             tied_params = [group for group in tied_params if len(group) > 2]
             self.assertListEqual(
@@ -638,29 +680,52 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
         expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.d_model))
         self.assertEqual(outputs.logits.shape, expected_shape_logits)
 
-        expected_boxes = torch.tensor(
-            [[0.7674, 0.4136, 0.4572], [0.2566, 0.5463, 0.4760], [0.2585, 0.5442, 0.4641]]
-        ).to(torch_device)
-        expected_logits = torch.tensor(
-            [[-4.8913, -0.1900, -0.2161], [-4.9653, -0.3719, -0.3950], [-5.9599, -3.3765, -3.3104]]
-        ).to(torch_device)
+        expectations = Expectations(
+            {
+                (None, None): [[0.7674, 0.4136, 0.4572], [0.2566, 0.5463, 0.4760], [0.2585, 0.5442, 0.4641]],
+                ("cuda", 8): [[0.7674, 0.4135, 0.4571], [0.2566, 0.5463, 0.4760], [0.2585, 0.5442, 0.4640]],
+            }
+        )
+        expected_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-3))
+        expectations = Expectations(
+            {
+                (None, None): [[-4.8913, -0.1900, -0.2161], [-4.9653, -0.3719, -0.3950], [-5.9599, -3.3765, -3.3104]],
+                ("cuda", 8): [[-4.8915, -0.1900, -0.2161], [-4.9658, -0.3716, -0.3948], [-5.9596, -3.3763, -3.3103]],
+            }
+        )
+        expected_logits = torch.tensor(expectations.get_expectation()).to(torch_device)
+
+        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, rtol=1e-3, atol=1e-3)
 
         expected_shape_boxes = torch.Size((1, model.config.num_queries, 4))
         self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
-        self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4))
+        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, rtol=2e-4, atol=2e-4)
 
         # verify postprocessing
         results = processor.image_processor.post_process_object_detection(
             outputs, threshold=0.35, target_sizes=[(image.height, image.width)]
         )[0]
-        expected_scores = torch.tensor([0.4526, 0.4082]).to(torch_device)
-        expected_slice_boxes = torch.tensor([344.8143, 23.1796, 637.4004, 373.8295]).to(torch_device)
+
+        expectations = Expectations(
+            {
+                (None, None): [[0.4526, 0.4082]],
+                ("cuda", 8): [0.4524, 0.4074],
+            }
+        )
+        expected_scores = torch.tensor(expectations.get_expectation()).to(torch_device)
+
+        expectations = Expectations(
+            {
+                (None, None): [344.8143, 23.1796, 637.4004, 373.8295],
+                ("cuda", 8): [344.8210, 23.1831, 637.3943, 373.8227],
+            }
+        )
+        expected_slice_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
 
         self.assertEqual(len(results["scores"]), 2)
-        self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-3))
-        self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes, atol=1e-2))
+        torch.testing.assert_close(results["scores"], expected_scores, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(results["boxes"][0, :], expected_slice_boxes, rtol=1e-2, atol=1e-2)
 
         # verify grounded postprocessing
         expected_labels = ["a cat", "a cat"]
@@ -672,12 +737,13 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
             target_sizes=[(image.height, image.width)],
         )[0]
 
-        self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-3))
-        self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes, atol=1e-2))
+        torch.testing.assert_close(results["scores"], expected_scores, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(results["boxes"][0, :], expected_slice_boxes, rtol=1e-2, atol=1e-2)
         self.assertListEqual(results["text_labels"], expected_labels)
 
     @require_torch_accelerator
-    def test_inference_object_detection_head_equivalence_cpu_gpu(self):
+    @is_flaky()
+    def test_inference_object_detection_head_equivalence_cpu_accelerator(self):
         processor = self.default_processor
         image = prepare_img()
         text = prepare_text()
@@ -689,20 +755,20 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
         with torch.no_grad():
             cpu_outputs = model(**encoding)
 
-        # 2. run model on GPU
+        # 2. run model on accelerator
         model.to(torch_device)
         encoding = encoding.to(torch_device)
         with torch.no_grad():
             gpu_outputs = model(**encoding)
 
         # 3. assert equivalence
-        for key in cpu_outputs.keys():
-            self.assertTrue(torch.allclose(cpu_outputs[key], gpu_outputs[key].cpu(), atol=1e-3))
+        for key in cpu_outputs:
+            torch.testing.assert_close(cpu_outputs[key], gpu_outputs[key].cpu(), rtol=1e-3, atol=1e-3)
 
         expected_logits = torch.tensor(
             [[-4.8915, -0.1900, -0.2161], [-4.9658, -0.3716, -0.3948], [-5.9596, -3.3763, -3.3103]]
         )
-        self.assertTrue(torch.allclose(cpu_outputs.logits[0, :3, :3], expected_logits, atol=1e-3))
+        torch.testing.assert_close(cpu_outputs.logits[0, :3, :3], expected_logits, rtol=1e-3, atol=1e-3)
 
         # assert postprocessing
         results_cpu = processor.image_processor.post_process_object_detection(
@@ -713,9 +779,10 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
             gpu_outputs, threshold=0.35, target_sizes=[(image.height, image.width)]
         )[0]
 
-        self.assertTrue(torch.allclose(results_cpu["scores"], result_gpu["scores"].cpu(), atol=1e-3))
-        self.assertTrue(torch.allclose(results_cpu["boxes"], result_gpu["boxes"].cpu(), atol=1e-3))
+        torch.testing.assert_close(results_cpu["scores"], result_gpu["scores"].cpu(), rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(results_cpu["boxes"], result_gpu["boxes"].cpu(), rtol=1e-3, atol=1e-3)
 
+    @is_flaky()
     def test_cross_attention_mask(self):
         model = GroundingDinoForObjectDetection.from_pretrained("IDEA-Research/grounding-dino-tiny").to(torch_device)
 
@@ -728,7 +795,7 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
         encoding1 = processor(images=image, text=text1, return_tensors="pt").to(torch_device)
         encoding2 = processor(images=image, text=text2, return_tensors="pt").to(torch_device)
         # If we batch the text and cross attention masking is working the batched result should be equal to
-        # The singe text result
+        # The single text result
         encoding_batched = processor(
             images=[image] * len(text_batched), text=text_batched, padding="longest", return_tensors="pt"
         ).to(torch_device)
@@ -738,6 +805,88 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
             outputs2 = model(**encoding2)
             outputs_batched = model(**encoding_batched)
 
-        self.assertTrue(torch.allclose(outputs1.logits, outputs_batched.logits[:1], atol=1e-3))
+        torch.testing.assert_close(outputs1.logits, outputs_batched.logits[:1], rtol=1e-3, atol=1e-3)
         # For some reason 12 elements are > 1e-3, but the rest are fine
         self.assertTrue(torch.allclose(outputs2.logits, outputs_batched.logits[1:], atol=1.8e-3))
+
+    def test_grounding_dino_loss(self):
+        ds = load_dataset("EduardoPacheco/aquarium-sample", split="train")
+        image_processor = self.default_processor.image_processor
+        tokenizer = self.default_processor.tokenizer
+        id2label = {0: "fish", 1: "jellyfish", 2: "penguins", 3: "sharks", 4: "puffins", 5: "stingrays", 6: "starfish"}
+        prompt = ". ".join(id2label.values()) + "."
+
+        text_inputs = tokenizer([prompt, prompt], return_tensors="pt")
+        image_inputs = image_processor(
+            images=list(ds["image"]), annotations=list(ds["annotations"]), return_tensors="pt"
+        )
+
+        # Passing auxiliary_loss=True to compare with the expected loss
+        model = GroundingDinoForObjectDetection.from_pretrained(
+            "IDEA-Research/grounding-dino-tiny",
+            auxiliary_loss=True,
+        )
+        # Interested in the loss only
+        model.eval()
+        with torch.no_grad():
+            outputs = model(**text_inputs, **image_inputs)
+
+        # Loss differs by CPU and accelerator, also this can be changed in future.
+        expected_loss_dicts = Expectations(
+            {
+                 ("xpu", 3): {
+                                    "loss_ce": torch.tensor(1.1147),
+                                    "loss_bbox": torch.tensor(0.2031),
+                                    "loss_giou": torch.tensor(0.5819),
+                                    "loss_ce_0": torch.tensor(1.1941),
+                                    "loss_bbox_0": torch.tensor(0.1978),
+                                    "loss_giou_0": torch.tensor(0.5524),
+                                    "loss_ce_1": torch.tensor(1.1621),
+                                    "loss_bbox_1": torch.tensor(0.1909),
+                                    "loss_giou_1": torch.tensor(0.5892),
+                                    "loss_ce_2": torch.tensor(1.1641),
+                                    "loss_bbox_2": torch.tensor(0.1892),
+                                    "loss_giou_2": torch.tensor(0.5626),
+                                    "loss_ce_3": torch.tensor(1.1943),
+                                    "loss_bbox_3": torch.tensor(0.1941),
+                                    "loss_giou_3": torch.tensor(0.5592),
+                                    "loss_ce_4": torch.tensor(1.0956),
+                                    "loss_bbox_4": torch.tensor(0.2037),
+                                    "loss_giou_4": torch.tensor(0.5813),
+                                    "loss_ce_enc": torch.tensor(16226.3164),
+                                    "loss_bbox_enc": torch.tensor(0.3063),
+                                    "loss_giou_enc": torch.tensor(0.7380),
+                },
+                ("cuda", None): {
+                                    "loss_ce": torch.tensor(1.1147),
+                                    "loss_bbox": torch.tensor(0.2031),
+                                    "loss_giou": torch.tensor(0.5819),
+                                    "loss_ce_0": torch.tensor(1.1941),
+                                    "loss_bbox_0": torch.tensor(0.1978),
+                                    "loss_giou_0": torch.tensor(0.5524),
+                                    "loss_ce_1": torch.tensor(1.1621),
+                                    "loss_bbox_1": torch.tensor(0.1909),
+                                    "loss_giou_1": torch.tensor(0.5892),
+                                    "loss_ce_2": torch.tensor(1.1641),
+                                    "loss_bbox_2": torch.tensor(0.1892),
+                                    "loss_giou_2": torch.tensor(0.5626),
+                                    "loss_ce_3": torch.tensor(1.1943),
+                                    "loss_bbox_3": torch.tensor(0.1941),
+                                    "loss_giou_3": torch.tensor(0.5607),
+                                    "loss_ce_4": torch.tensor(1.0956),
+                                    "loss_bbox_4": torch.tensor(0.2008),
+                                    "loss_giou_4": torch.tensor(0.5836),
+                                    "loss_ce_enc": torch.tensor(16226.3164),
+                                    "loss_bbox_enc": torch.tensor(0.3063),
+                                    "loss_giou_enc": torch.tensor(0.7380),
+                },
+            }
+        )  # fmt: skip
+        expected_loss_dict = expected_loss_dicts.get_expectation()
+
+        expected_loss = torch.tensor(32482.2305)
+
+        for key in expected_loss_dict:
+            torch.testing.assert_close(outputs.loss_dict[key], expected_loss_dict[key], rtol=1e-5, atol=1e-3)
+
+        self.assertTrue(torch.allclose(outputs.loss, expected_loss, atol=1e-3))

@@ -31,9 +31,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from git import Repo
-
 from huggingface_hub import HfApi
-
 from optimum_benchmark import Benchmark
 from optimum_benchmark_wrapper import main
 
@@ -90,7 +88,7 @@ def summarize(run_dir, metrics, expand_metrics=False):
 
         model = benchmark.config.backend["model"]
 
-        # Ths looks like `benchmark.input_shapes.batch_size=1,benchmark.input_shapes.sequence_length=5`.
+        # This looks like `benchmark.input_shapes.batch_size=1,benchmark.input_shapes.sequence_length=5`.
         # (we rely on the usage of hydra's `${hydra.job.override_dirname}`.)
         benchmark_name = re.sub(f"backend.model={model},*", "", report_dir)
         benchmark_name = str(Path(benchmark_name).parts[-1])

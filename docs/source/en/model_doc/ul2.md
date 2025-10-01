@@ -13,12 +13,17 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2022-05-10 and added to Hugging Face Transformers on 2023-06-20.*
 
 # UL2
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
-The T5 model was presented in [Unifying Language Learning Paradigms](https://arxiv.org/pdf/2205.05131v1.pdf) by Yi Tay, Mostafa Dehghani, Vinh Q. Tran, Xavier Garcia, Dara Bahri, Tal Schuster, Huaixiu Steven Zheng, Neil Houlsby, Donald Metzler.
+The T5 model was presented in [Unifying Language Learning Paradigms](https://huggingface.co/papers/2205.05131) by Yi Tay, Mostafa Dehghani, Vinh Q. Tran, Xavier Garcia, Dara Bahri, Tal Schuster, Huaixiu Steven Zheng, Neil Houlsby, Donald Metzler.
 
 The abstract from the paper is the following:
 
@@ -32,12 +37,8 @@ This model was contributed by [DanielHesslow](https://huggingface.co/Seledorn). 
 - UL2 has the same architecture as [T5v1.1](t5v1.1) but uses the Gated-SiLU activation function instead of Gated-GELU.
 - The authors release checkpoints of one architecture which can be seen [here](https://huggingface.co/google/ul2)
 
-<Tip> 
+<Tip>
 
 As UL2 has the same architecture as T5v1.1,  refer to [T5's documentation page](t5) for API reference, tips, code examples and notebooks.
 
 </Tip>
-
-
-
-

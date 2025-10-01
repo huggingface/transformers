@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,11 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch UperNet framework."""
+"""Testing suite for the PyTorch UperNet."""
 
 import unittest
 
-from huggingface_hub import hf_hub_download
+from datasets import load_dataset
 
 from transformers import ConvNextConfig, UperNetConfig
 from transformers.testing_utils import (
@@ -28,6 +27,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils.import_utils import get_torch_major_and_minor_version
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
@@ -41,8 +41,6 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from PIL import Image
-
     from transformers import AutoImageProcessor
 
 
@@ -154,9 +152,10 @@ class UperNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     test_torchscript = False
     has_attentions = False
+    test_torch_exportable = True
+    test_torch_exportable_strictly = get_torch_major_and_minor_version() != "2.7"
 
     def setUp(self):
         self.model_tester = UperNetModelTester(self)
@@ -181,14 +180,6 @@ class UperNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @unittest.skip(reason="UperNet does not support input and output embeddings")
     def test_model_get_set_embeddings(self):
-        pass
-
-    @unittest.skip(reason="UperNet does not have a base model")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="UperNet does not have a base model")
-    def test_save_load_fast_init_to_base(self):
         pass
 
     @require_torch_multi_gpu
@@ -283,11 +274,8 @@ class UperNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
 # We will verify our results on an image of ADE20k
 def prepare_img():
-    filepath = hf_hub_download(
-        repo_id="hf-internal-testing/fixtures_ade20k", repo_type="dataset", filename="ADE_val_00000001.jpg"
-    )
-    image = Image.open(filepath).convert("RGB")
-    return image
+    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+    return ds[0]["image"].convert("RGB")
 
 
 @require_torch
@@ -310,7 +298,7 @@ class UperNetModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor(
             [[-7.5958, -7.5958, -7.4302], [-7.5958, -7.5958, -7.4302], [-7.4797, -7.4797, -7.3068]]
         ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.logits[0, 0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, 0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     def test_inference_convnext_backbone(self):
         processor = AutoImageProcessor.from_pretrained("openmmlab/upernet-convnext-tiny")
@@ -328,4 +316,4 @@ class UperNetModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor(
             [[-8.8110, -8.8110, -8.6521], [-8.8110, -8.8110, -8.6521], [-8.7746, -8.7746, -8.6130]]
         ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.logits[0, 0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, 0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

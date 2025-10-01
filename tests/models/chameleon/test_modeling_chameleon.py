@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch chameleon model."""
 
+import copy
 import unittest
 
 import requests
@@ -21,6 +21,7 @@ from parameterized import parameterized
 
 from transformers import ChameleonConfig, is_torch_available, is_vision_available, set_seed
 from transformers.testing_utils import (
+    Expectations,
     require_bitsandbytes,
     require_read_token,
     require_torch,
@@ -30,7 +31,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -52,12 +53,12 @@ class ChameleonModelTester:
         self,
         parent,
         batch_size=13,
-        seq_length=7,
+        seq_length=35,
         is_training=False,
         use_input_mask=True,
         use_labels=True,
         vocab_size=99,
-        image_token_id=98,
+        image_token_id=4,
         hidden_size=32,
         num_hidden_layers=2,
         num_attention_heads=2,
@@ -73,8 +74,8 @@ class ChameleonModelTester:
         num_labels=3,
         num_choices=4,
         pad_token_id=0,
-        vq_num_embeds=12,
-        vq_embed_dim=12,
+        vq_num_embeds=5,
+        vq_embed_dim=5,
         vq_channel_multiplier=[1, 2],
         vq_img_token_start_id=10,  # has to be less than vocab size when added with vq_num_embeds
         scope=None,
@@ -129,7 +130,7 @@ class ChameleonModelTester:
 
     def get_config(self):
         # create dummy vocab map for image2bpe mapping if it needs remapping
-        # we assume that vocab size is big enough to accoun for image tokens somewhere in the beginning
+        # we assume that vocab size is big enough to account for image tokens somewhere in the beginning
         # same way as in real ckpt, when img tokens are in first half of embeds
         # we will need "vq_num_embeds" amount of tokens
 
@@ -138,7 +139,9 @@ class ChameleonModelTester:
         start = self.vq_img_token_start_id
         end = self.vq_img_token_start_id + self.vq_num_embeds
         for i in range(start, end):
-            vocab_map[i] = f"IMGIMGBS{i}"  # dummy str for each token, anything starting with IMGIMG
+            image_token_infix = "".join(chr(ord("A") + int(c)) for c in str(i))
+            # dummy str for each image token, anything starting with IMGIMG
+            vocab_map[i] = f"IMGIMG{image_token_infix}Z"
 
         return ChameleonConfig(
             vocab_size=self.vocab_size,
@@ -177,83 +180,6 @@ class ChameleonModelTester:
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    def create_and_check_for_causal_lm(
-        self,
-        config,
-        input_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        model = ChameleonForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-
-    def create_and_check_decoder_model_past_large_inputs(
-        self,
-        config,
-        input_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        config.is_decoder = True
-        model = ChameleonForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.eval()
-
-        # first forward pass
-        outputs = model(
-            input_ids,
-            attention_mask=input_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            use_cache=True,
-        )
-        past_key_values = outputs.past_key_values
-
-        # create hypothetical multiple next token and extent to next_input_ids
-        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
-        next_mask = ids_tensor((self.batch_size, 3), vocab_size=2)
-
-        # append to next input_ids and
-        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
-        next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
-
-        output_from_no_past = model(
-            next_input_ids,
-            attention_mask=next_attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            output_hidden_states=True,
-        )["hidden_states"][0]
-        output_from_past = model(
-            next_tokens,
-            attention_mask=next_attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
-            output_hidden_states=True,
-        )["hidden_states"][0]
-
-        # select random slice
-        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
-        output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
-
-        self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
-
-        # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -271,17 +197,14 @@ class ChameleonModelTester:
 @require_torch
 class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (ChameleonModel, ChameleonForConditionalGeneration) if is_torch_available() else ()
-    all_generative_model_classes = (ChameleonForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": ChameleonModel,
             "text-generation": ChameleonForConditionalGeneration,
-            "image-text-to-text": ChameleonForConditionalGeneration,
         }
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
     test_pruning = False
     fx_compatible = False
 
@@ -320,7 +243,7 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
         # maximum sequence length, so the outputs for the short input should match.
         if scaling_type == "dynamic":
-            self.assertTrue(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
+            torch.testing.assert_close(original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5)
         else:
             self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
 
@@ -331,10 +254,109 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_batching_equivalence(self):
         pass
 
-    # TODO (joao, raushan): fix me -- the problem is in `cache_position[0] == 0`, i.e. dynamic control flow
-    @unittest.skip("Chameleon is not compatible with end-to-end generation compilation")
-    def test_generate_compile_model_forward(self):
+
+class ChameleonVision2SeqModelTester(ChameleonModelTester):
+    def __init__(self, parent, image_size=10, **kwargs):
+        super().__init__(parent, **kwargs)
+        self.image_size = image_size
+        self.image_seq_length = 25
+
+    def prepare_config_and_inputs(self):
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        input_ids[input_ids == self.image_token_id] = self.pad_token_id
+        input_ids[:, : self.image_seq_length] = self.image_token_id
+        attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
+        pixel_values = floats_tensor([self.batch_size, 3, self.image_size, self.image_size])
+
+        config = self.get_config()
+
+        return config, input_ids, attention_mask, pixel_values
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, input_ids, attention_mask, pixel_values = config_and_inputs
+        inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask, "pixel_values": pixel_values}
+        return config, inputs_dict
+
+
+@require_torch
+class ChameleonVision2SeqModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    all_model_classes = (ChameleonModel, ChameleonForConditionalGeneration) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "image-text-to-text": ChameleonForConditionalGeneration,
+        }
+        if is_torch_available()
+        else {}
+    )
+    test_pruning = False
+    fx_compatible = False
+
+    def setUp(self):
+        self.model_tester = ChameleonVision2SeqModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=ChameleonConfig, hidden_size=37)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    @unittest.skip("Chameleon forces some token ids to be -inf!")
+    def test_batching_equivalence(self):
         pass
+
+    @unittest.skip("Chameleon cannot do offload because it uses `self.linear.weight` in forward")
+    def test_cpu_offload(self):
+        pass
+
+    @unittest.skip("Chameleon cannot do offload because it uses `self.linear.weight` in forward")
+    def test_disk_offload_bin(self):
+        pass
+
+    @unittest.skip("Chameleon cannot do offload because it uses `self.linear.weight` in forward")
+    def test_disk_offload_safetensors(self):
+        pass
+
+    @unittest.skip("Chameleon applies key/query norm which doesn't work with packing")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Chameleon applies key/query norm which doesn't work with packing")
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Chameleon applies key/query norm which doesn't work with packing")
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    def test_mismatching_num_image_tokens(self):
+        """
+        Tests that VLMs through an error with explicit message saying what is wrong
+        when number of images don't match number of image tokens in the text.
+        Also we need to test multi-image cases when one prompr has multiple image tokens.
+        """
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model.eval()
+            curr_input_dict = copy.deepcopy(input_dict)  # the below tests modify dict in-place
+            _ = model(**curr_input_dict)  # successful forward with no modifications
+
+            # remove one image but leave the image token in text
+            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-1:, ...]
+            with self.assertRaises(ValueError):
+                _ = model(**curr_input_dict)
+
+            # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
+            input_ids = curr_input_dict["input_ids"][:1]
+            pixel_values = curr_input_dict["pixel_values"][:1]
+            input_ids = torch.cat([input_ids, input_ids], dim=0)
+
+            # one image and two image tokens raise an error
+            with self.assertRaises(ValueError):
+                _ = model(input_ids=input_ids, pixel_values=pixel_values)
+
+            # two images and two image tokens don't raise an error
+            pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
+            _ = model(input_ids=input_ids, pixel_values=pixel_values)
 
 
 @require_torch
@@ -356,7 +378,15 @@ class ChameleonIntegrationTest(unittest.TestCase):
         inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device, torch.float16)
 
         # greedy generation outputs
-        EXPECTED_TEXT_COMPLETION = ['Describe what do you see here and tell me about the history behind it?The image depicts a star map, with a bright blue dot in the center representing the star Alpha Centauri. The star map is a representation of the night sky, showing the positions of stars in']  # fmt: skip
+        EXPECTED_TEXT_COMPLETIONS = Expectations(
+            {
+                ("xpu", 3): ['Describe what do you see here and tell me about the history behind it?The image depicts a star map, with a bright blue dot in the center representing the star Altair. The star map is set against a black background, with the constellations visible in the night'],
+                ("cuda", 7): ['Describe what do you see here and tell me about the history behind it?The image depicts a star map, with a bright blue dot in the center representing the star Alpha Centauri. The star map is a representation of the night sky, showing the positions of stars in'],
+                ("cuda", 8): ['Describe what do you see here and tell me about the history behind it?The image depicts a star map, with a bright blue dot representing the position of the star Alpha Centauri. Alpha Centauri is the brightest star in the constellation Centaurus and is located'],
+            }
+        )  # fmt: skip
+        EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETIONS.get_expectation()
+
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
@@ -386,10 +416,24 @@ class ChameleonIntegrationTest(unittest.TestCase):
         )
 
         # greedy generation outputs
-        EXPECTED_TEXT_COMPLETION = [
-            'Describe what do you see here and tell me about the history behind it?The image depicts a star map, with a bright blue dot in the center representing the star Alpha Centauri. The star map is a representation of the night sky, showing the positions of stars in',
-            'What constellation is this image showing?The image shows the constellation of Orion.The image shows the constellation of Orion.The image shows the constellation of Orion.The image shows the constellation of Orion.'
-            ]  # fmt: skip
+        EXPECTED_TEXT_COMPLETIONS = Expectations(
+            {
+                ("xpu", 3): [
+                    'Describe what do you see here and tell me about the history behind it?The image depicts a star map, with a bright blue dot in the center representing the star Alpha Centauri. The star map is a representation of the night sky, showing the positions of stars in',
+                    'What constellation is this image showing?The image shows the constellation of Orion.The image shows the constellation of Orion.The image shows the constellation of Orion.The image shows the constellation of Orion.',
+                ],
+                ("cuda", 7): [
+                    'Describe what do you see here and tell me about the history behind it?The image depicts a star map, with a bright blue dot representing the position of the star Alpha Centauri. Alpha Centauri is the brightest star in the constellation Centaurus and is located',
+                    'What constellation is this image showing?The image shows the constellation of Orion.The image shows the constellation of Orion.The image shows the constellation of Orion.The image shows the constellation of Orion.',
+                ],
+                ("cuda", 8): [
+                    'Describe what do you see here and tell me about the history behind it?The image depicts a star map, with a bright blue dot representing the position of the star Alpha Centauri. Alpha Centauri is the brightest star in the constellation Centaurus and is located',
+                    'What constellation is this image showing?The image shows the constellation of Orion.The image shows the constellation of Orion.The image shows the constellation of Orion.The image shows the constellation of Orion.',
+                ],
+            }
+        )  # fmt: skip
+        EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETIONS.get_expectation()
+
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)

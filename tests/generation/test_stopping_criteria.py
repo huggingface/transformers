@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -176,6 +175,18 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         for i in range(len(false_strings)):
             self.assertFalse(criteria(false_input_ids["input_ids"][i : i + 1], scores))
 
+    def test_stop_string_criteria_vocab_size_mismatch(self):
+        """Test that StopStringCriteria handles tokens above len(tokenizer) correctly."""
+        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+
+        # Create input_ids with tokens above len(tokenizer)
+        input_ids = torch.tensor([[len(tokenizer) + 1024, 1, 2]], device=torch_device)
+        scores = None
+        criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings=["test"])
+
+        # This should not raise an error and should return False since no stop string is matched
+        self.assertFalse(criteria(input_ids, scores))
+
     def test_stop_string_matching_positions(self):
         stop_string = "stop"
         token_list = ["last", "top", "topper", "s", "p"]
@@ -200,14 +211,14 @@ class StoppingCriteriaTestCase(unittest.TestCase):
 
         # Positions inside the stop string where the token matches (excluding end overlaps)
         valid_positions = embedding_vec[:, 0].tolist()
-        self.assertEqual(valid_positions, [2, -1, -1, 3, -1])
+        self.assertEqual(valid_positions, [2, -1, -1, 3, -1, -1])
 
         # Overlap lengths between end of stop string and start of token
         end_overlaps = embedding_vec[:, 1].tolist()
-        self.assertEqual(end_overlaps, [-1, 3, 3, -1, 1])
+        self.assertEqual(end_overlaps, [-1, 3, 3, -1, 1, -1])
 
         # Length of each token
-        token_lengths = embedding_vec[:, 2].tolist()
+        token_lengths = embedding_vec[:-1, 2].tolist()
         self.assertEqual(token_lengths, [len(token) for token in token_list])
 
     def test_single_letter_stop_string(self):
@@ -228,7 +239,7 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         for input_ids in false_input_ids["input_ids"]:
             self.assertFalse(criteria(input_ids.unsqueeze(0), scores))
 
-    def test_criterias_per_row(self):
+    def test_criteria_per_row(self):
         text = "They completed the challenging puzzle, revealing the hidden image at the end"
         stop_strings = ["end"]
 
@@ -244,13 +255,13 @@ class StoppingCriteriaTestCase(unittest.TestCase):
             ]
         )
 
-        # trigger stopping when at leat one criteria is satisfied, one value per batch
+        # trigger stopping when at least one criteria is satisfied, one value per batch
         self.assertTrue(criteria(inputs["input_ids"], scores))
 
         # return False when neither is satisfied
         self.assertFalse(criteria(inputs["input_ids"][:, :-1], scores))
 
-    def test_criterias_per_row_batched(self):
+    def test_criteria_per_row_batched(self):
         text = [
             "They completed the challenging puzzle, revealing the hidden image at the end",
             "Today a dragon flew over France",
@@ -271,7 +282,7 @@ class StoppingCriteriaTestCase(unittest.TestCase):
             ]
         )
 
-        # trigger stopping when at leat one criteria is satisfied
+        # trigger stopping when at least one criteria is satisfied
         self.assertListEqual(criteria(inputs["input_ids"], scores).tolist(), [True, False, False])
 
         # False when neither is satisfied

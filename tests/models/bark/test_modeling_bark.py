@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,10 +17,10 @@ import copy
 import inspect
 import tempfile
 import unittest
-
-import pytest
+from functools import cached_property
 
 from transformers import (
+    BarkCausalModel,
     BarkCoarseConfig,
     BarkConfig,
     BarkFineConfig,
@@ -34,14 +33,13 @@ from transformers.models.bark.generation_configuration_bark import (
     BarkSemanticGenerationConfig,
 )
 from transformers.testing_utils import (
-    require_flash_attn,
+    backend_torch_accelerator_module,
     require_torch,
+    require_torch_accelerator,
     require_torch_fp16,
-    require_torch_gpu,
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -53,7 +51,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        BarkCausalModel,
         BarkCoarseModel,
         BarkFineModel,
         BarkModel,
@@ -116,11 +113,8 @@ class BarkSemanticModelTester:
 
         config = self.get_config()
 
-        head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
-
         inputs_dict = {
             "input_ids": input_ids,
-            "head_mask": head_mask,
             "attention_mask": input_mask,
         }
 
@@ -252,11 +246,8 @@ class BarkCoarseModelTester:
 
         config = self.get_config()
 
-        head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
-
         inputs_dict = {
             "input_ids": input_ids,
-            "head_mask": head_mask,
             "attention_mask": input_mask,
         }
 
@@ -388,15 +379,12 @@ class BarkFineModelTester:
 
         config = self.get_config()
 
-        head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
-
         # randint between self.n_codes_given - 1 and self.n_codes_total - 1
         codebook_idx = ids_tensor((1,), self.n_codes_total - self.n_codes_given).item() + self.n_codes_given
 
         inputs_dict = {
             "codebook_idx": codebook_idx,
             "input_ids": input_ids,
-            "head_mask": head_mask,
             "attention_mask": input_mask,
         }
 
@@ -527,14 +515,14 @@ class BarkModelTester:
 @require_torch
 class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (BarkSemanticModel,) if is_torch_available() else ()
+    # `BarkSemanticModel` inherits from `BarkCausalModel`, but requires an advanced generation config.
+    # `BarkCausalModel` does not, so we run generation tests there.
     all_generative_model_classes = (BarkCausalModel,) if is_torch_available() else ()
 
     is_encoder_decoder = False
     fx_compatible = False
     test_missing_keys = False
     test_pruning = False
-    test_model_parallel = False
-    # no model_parallel for now
 
     test_resize_embeddings = True
 
@@ -599,7 +587,7 @@ class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
             with torch.no_grad():
                 out_embeds = model(**inputs)[0]
 
-            self.assertTrue(torch.allclose(out_embeds, out_ids))
+            torch.testing.assert_close(out_embeds, out_ids)
 
     @require_torch_fp16
     def test_generate_fp16(self):
@@ -614,17 +602,15 @@ class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
 
 @require_torch
 class BarkCoarseModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    # Same tester as BarkSemanticModelTest, except for model_class and config_class
     all_model_classes = (BarkCoarseModel,) if is_torch_available() else ()
+    # `BarkCoarseModel` inherits from `BarkCausalModel`, but requires an advanced generation config.
+    # `BarkCausalModel` does not, so we run generation tests there.
     all_generative_model_classes = (BarkCausalModel,) if is_torch_available() else ()
 
     is_encoder_decoder = False
     fx_compatible = False
     test_missing_keys = False
     test_pruning = False
-    test_model_parallel = False
-    # no model_parallel for now
-
     test_resize_embeddings = True
 
     def setUp(self):
@@ -688,7 +674,7 @@ class BarkCoarseModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
             with torch.no_grad():
                 out_embeds = model(**inputs)[0]
 
-            self.assertTrue(torch.allclose(out_embeds, out_ids))
+            torch.testing.assert_close(out_embeds, out_ids)
 
     @require_torch_fp16
     def test_generate_fp16(self):
@@ -709,9 +695,6 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_missing_keys = False
     test_pruning = False
-    # no model_parallel for now
-    test_model_parallel = False
-
     # torchscript disabled for now because forward with an int
     test_torchscript = False
 
@@ -884,6 +867,7 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
             model = model_class(config).to(torch_device)
+            model.eval()
 
             # if no output embeddings -> leave test
             if model.get_output_embeddings() is None:
@@ -924,121 +908,6 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
 
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_equivalence(self):
-        for model_class in self.all_model_classes:
-            if not model_class._supports_flash_attn_2:
-                self.skipTest(reason="Model does not support flash_attention_2")
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
-                )
-                model_fa.to(torch_device)
-
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
-                model.to(torch_device)
-
-                dummy_input = inputs_dict["input_ids"][:1]
-                if dummy_input.dtype in [torch.float32, torch.float16]:
-                    dummy_input = dummy_input.to(torch.bfloat16)
-
-                dummy_attention_mask = inputs_dict.get("attention_mask", None)
-
-                if dummy_attention_mask is not None:
-                    dummy_attention_mask = dummy_attention_mask[:1]
-                    dummy_attention_mask[:, 1:] = 1
-                    dummy_attention_mask[:, :1] = 0
-
-                outputs = model(inputs_dict["codebook_idx"], dummy_input, output_hidden_states=True)
-                outputs_fa = model_fa(inputs_dict["codebook_idx"], dummy_input, output_hidden_states=True)
-
-                logits = outputs.hidden_states[-1]
-                logits_fa = outputs_fa.hidden_states[-1]
-
-                assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
-
-                other_inputs = {"output_hidden_states": True}
-                if dummy_attention_mask is not None:
-                    other_inputs["attention_mask"] = dummy_attention_mask
-
-                outputs = model(inputs_dict["codebook_idx"], dummy_input, **other_inputs)
-                outputs_fa = model_fa(inputs_dict["codebook_idx"], dummy_input, **other_inputs)
-
-                logits = outputs.hidden_states[-1]
-                logits_fa = outputs_fa.hidden_states[-1]
-
-                assert torch.allclose(logits_fa[1:], logits[1:], atol=4e-2, rtol=4e-2)
-
-                # check with inference + dropout
-                model.train()
-                _ = model_fa(inputs_dict["codebook_idx"], dummy_input, **other_inputs)
-
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        for model_class in self.all_model_classes:
-            if not model_class._supports_flash_attn_2:
-                self.skipTest(reason="Model does not support flash_attention_2")
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
-                )
-                model_fa.to(torch_device)
-
-                model = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.bfloat16,
-                )
-                model.to(torch_device)
-
-                dummy_input = inputs_dict["input_ids"][:1]
-                if dummy_input.dtype in [torch.float32, torch.float16]:
-                    dummy_input = dummy_input.to(torch.bfloat16)
-
-                dummy_attention_mask = inputs_dict.get("attention_mask", None)
-
-                if dummy_attention_mask is not None:
-                    dummy_attention_mask = dummy_attention_mask[:1]
-                    dummy_attention_mask[:, :-1] = 1
-                    dummy_attention_mask[:, -1:] = 0
-
-                outputs = model(inputs_dict["codebook_idx"], dummy_input, output_hidden_states=True)
-                outputs_fa = model_fa(inputs_dict["codebook_idx"], dummy_input, output_hidden_states=True)
-
-                logits = outputs.hidden_states[-1]
-                logits_fa = outputs_fa.hidden_states[-1]
-
-                assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
-
-                other_inputs = {
-                    "output_hidden_states": True,
-                }
-                if dummy_attention_mask is not None:
-                    other_inputs["attention_mask"] = dummy_attention_mask
-
-                outputs = model(inputs_dict["codebook_idx"], dummy_input, **other_inputs)
-                outputs_fa = model_fa(inputs_dict["codebook_idx"], dummy_input, **other_inputs)
-
-                logits = outputs.hidden_states[-1]
-                logits_fa = outputs_fa.hidden_states[-1]
-
-                assert torch.allclose(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2)
-
 
 @require_torch
 class BarkModelIntegrationTests(unittest.TestCase):
@@ -1054,7 +923,8 @@ class BarkModelIntegrationTests(unittest.TestCase):
     def inputs(self):
         input_ids = self.processor("In the light of the moon, a little egg lay on a leaf", voice_preset="en_speaker_6")
 
-        input_ids = input_ids.to(torch_device)
+        for k, v in input_ids.items():
+            input_ids[k] = v.to(torch_device)
 
         return input_ids
 
@@ -1072,6 +942,10 @@ class BarkModelIntegrationTests(unittest.TestCase):
     def fine_generation_config(self):
         fine_generation_config = BarkFineGenerationConfig(**self.model.generation_config.fine_acoustics_config)
         return fine_generation_config
+
+    def test_model_can_generate(self):
+        # Bark has custom generate without inheriting GenerationMixin. This test could prevent regression.
+        self.assertTrue(self.model.can_generate())
 
     @slow
     def test_generate_semantic(self):
@@ -1252,8 +1126,8 @@ class BarkModelIntegrationTests(unittest.TestCase):
         self.assertEqual(tuple(audio_lengths), (output1.shape[1], output2.shape[1]))
 
         # then assert almost equal
-        self.assertTrue(torch.allclose(outputs[0, : audio_lengths[0]], output1.squeeze(), atol=2e-3))
-        self.assertTrue(torch.allclose(outputs[1, : audio_lengths[1]], output2.squeeze(), atol=2e-3))
+        torch.testing.assert_close(outputs[0, : audio_lengths[0]], output1.squeeze(), rtol=2e-3, atol=2e-3)
+        torch.testing.assert_close(outputs[1, : audio_lengths[1]], output2.squeeze(), rtol=2e-3, atol=2e-3)
 
         # now test single input with return_output_lengths = True
         outputs, _ = self.model.generate(**s1, **args, return_output_lengths=True)
@@ -1289,7 +1163,7 @@ class BarkModelIntegrationTests(unittest.TestCase):
             len(output_ids_with_min_eos_p[0, :].tolist()), len(output_ids_without_min_eos_p[0, :].tolist())
         )
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     def test_generate_end_to_end_with_offload(self):
         input_ids = self.inputs
@@ -1298,15 +1172,17 @@ class BarkModelIntegrationTests(unittest.TestCase):
             # standard generation
             output_with_no_offload = self.model.generate(**input_ids, do_sample=False, temperature=1.0)
 
-            torch.cuda.empty_cache()
+            torch_accelerator_module = backend_torch_accelerator_module(torch_device)
 
-            memory_before_offload = torch.cuda.memory_allocated()
+            torch_accelerator_module.empty_cache()
+
+            memory_before_offload = torch_accelerator_module.memory_allocated()
             model_memory_footprint = self.model.get_memory_footprint()
 
             # activate cpu offload
             self.model.enable_cpu_offload()
 
-            memory_after_offload = torch.cuda.memory_allocated()
+            memory_after_offload = torch_accelerator_module.memory_allocated()
 
             # checks if the model have been offloaded
 

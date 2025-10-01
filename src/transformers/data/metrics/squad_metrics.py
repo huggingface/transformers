@@ -148,7 +148,7 @@ def find_best_thresh_v2(preds, scores, na_probs, qid_to_has_ans):
     best_score = cur_score
     best_thresh = 0.0
     qid_list = sorted(na_probs, key=lambda k: na_probs[k])
-    for i, qid in enumerate(qid_list):
+    for qid in qid_list:
         if qid not in scores:
             continue
         if qid_to_has_ans[qid]:
@@ -226,7 +226,7 @@ def squad_evaluate(examples, preds, no_answer_probs=None, no_answer_probability_
     no_answer_qids = [qas_id for qas_id, has_answer in qas_id_to_has_answer.items() if not has_answer]
 
     if no_answer_probs is None:
-        no_answer_probs = {k: 0.0 for k in preds}
+        no_answer_probs = dict.fromkeys(preds, 0.0)
 
     exact, f1 = get_raw_scores(examples, preds)
 

@@ -255,7 +255,7 @@ def read_in_q_k_v_metric_head(state_dict):
 
 
 def convert_state_dict(orig_state_dict):
-    for key in orig_state_dict.copy().keys():
+    for key in orig_state_dict.copy():
         val = orig_state_dict.pop(key)
 
         # rename key
@@ -266,7 +266,7 @@ def convert_state_dict(orig_state_dict):
 
 
 def remove_ignore_keys(state_dict):
-    for key, _ in state_dict.copy().items():
+    for key in state_dict.copy():
         if (
             "fc_norm" in key
             or "relative_position_index" in key
@@ -347,7 +347,7 @@ def convert_zoedepth_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
         filename="zoedepth_pixel_values.pt",
         repo_type="dataset",
     )
-    original_pixel_values = torch.load(filepath, map_location="cpu")
+    original_pixel_values = torch.load(filepath, map_location="cpu", weights_only=True)
     assert torch.allclose(pixel_values, original_pixel_values)
 
     # verify logits
@@ -358,7 +358,7 @@ def convert_zoedepth_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
         repo_type="dataset",
         revision="1865dbb81984f01c89e83eec10f8d07efd10743d",
     )
-    cats_pixel_values = torch.load(filepath, map_location="cpu")
+    cats_pixel_values = torch.load(filepath, map_location="cpu", weights_only=True)
     depth = model(cats_pixel_values).predicted_depth
 
     # Verify logits

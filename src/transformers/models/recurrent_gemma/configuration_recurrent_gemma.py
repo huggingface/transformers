@@ -76,7 +76,7 @@ class RecurrentGemmaConfig(PretrainedConfig):
             The partial rotary factor used in the initialization of the rotary embeddings.
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
-        block_types (`List[str]`, *optional*, defaults to `('recurrent', 'recurrent', 'attention')`):
+        block_types (`list[str]`, *optional*, defaults to `('recurrent', 'recurrent', 'attention')`):
             List of aleternating blocks that will be repeated to initialize the `temporal_block` layer.
         attention_dropout (`float`, *optional*, defaults to 0.0): dropout value to use after the attention softmax.
         num_key_value_heads (`16`, *optional*, defaults to 16): Number of key value heads to use GQA.

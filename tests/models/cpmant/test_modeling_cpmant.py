@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The OpenBMB Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -136,6 +135,8 @@ class CpmAntModelTester:
 @require_torch
 class CpmAntModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (CpmAntModel, CpmAntForCausalLM) if is_torch_available() else ()
+    # Doesn't run generation tests. There are interface mismatches when using `generate` -- TODO @gante
+    all_generative_model_classes = ()
     pipeline_model_mapping = (
         {"feature-extraction": CpmAntModel, "text-generation": CpmAntForCausalLM} if is_torch_available() else {}
     )
@@ -143,7 +144,6 @@ class CpmAntModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_missing_keys = False
     test_mismatched_shapes = False
-    test_head_masking = False
     test_resize_embeddings = False
 
     def setUp(self):
@@ -159,7 +159,7 @@ class CpmAntModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         unittest.skip(
             "CPMAnt doesn't support retain grad in hidden_states or attentions, because prompt management will peel off the output.hidden_states from graph.\
-                 So is attentions. We strongly recommand you use loss to tune model."
+                 So is attentions. We strongly recommend you use loss to tune model."
         )(self.test_retain_grad_hidden_states_attentions)
 
     def test_cpmant_model(self):
@@ -185,13 +185,13 @@ class CpmAntModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor(
             [[[6.1708, 5.9244, 1.0835], [6.5207, 6.2893, -11.3324], [-1.0107, -0.0576, -5.9577]]],
         )
-        self.assertTrue(torch.allclose(hidden_states[:, :3, :3], expected_slice, atol=1e-2))
+        torch.testing.assert_close(hidden_states[:, :3, :3], expected_slice, rtol=1e-2, atol=1e-2)
 
 
 @require_torch
 class CpmAntForCausalLMlIntegrationTest(unittest.TestCase):
     @tooslow
-    def test_inference_casual(self):
+    def test_inference_causal(self):
         texts = "今天天气真好！"
         model_path = "openbmb/cpm-ant-10b"
         model = CpmAntForCausalLM.from_pretrained(model_path)
@@ -202,7 +202,7 @@ class CpmAntForCausalLMlIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor(
             [[[-6.4267, -6.4083, -6.3958], [-5.8802, -5.9447, -5.7811], [-5.3896, -5.4820, -5.4295]]],
         )
-        self.assertTrue(torch.allclose(hidden_states[:, :3, :3], expected_slice, atol=1e-2))
+        torch.testing.assert_close(hidden_states[:, :3, :3], expected_slice, rtol=1e-2, atol=1e-2)
 
     @tooslow
     def test_simple_generation(self):

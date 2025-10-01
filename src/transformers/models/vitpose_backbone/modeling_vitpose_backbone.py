@@ -20,31 +20,23 @@ This code is the same as the original Vision Transformer (ViT) with 2 modificati
 """
 
 import collections.abc
-import math
-from typing import Optional, Set, Tuple, Union
+from typing import Callable, Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import auto_docstring, logging
 from ...utils.backbone_utils import BackboneMixin
+from ...utils.generic import check_model_inputs
 from .configuration_vitpose_backbone import VitPoseBackboneConfig
 
 
 logger = logging.get_logger(__name__)
-
-# General docstring
-_CONFIG_FOR_DOC = "VitPoseBackboneConfig"
 
 
 class VitPoseBackbonePatchEmbeddings(nn.Module):
@@ -84,7 +76,7 @@ class VitPoseBackboneEmbeddings(nn.Module):
     Construct the position and patch embeddings.
     """
 
-    def __init__(self, config: VitPoseBackboneConfig) -> None:
+    def __init__(self, config: VitPoseBackboneConfig):
         super().__init__()
 
         self.patch_embeddings = VitPoseBackbonePatchEmbeddings(config)
@@ -103,65 +95,86 @@ class VitPoseBackboneEmbeddings(nn.Module):
         return embeddings
 
 
+# Copied from transformers.models.vit.modeling_vit.eager_attention_forward
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    # Take the dot product between "query" and "key" to get the raw attention scores.
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
+
+    # Normalize the attention scores to probabilities.
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+
+    # This is actually dropping out entire tokens to attend to, which might
+    # seem a bit unusual, but is taken from the original Transformer paper.
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    # Mask heads if we want to
+    if attention_mask is not None:
+        attn_weights = attn_weights * attention_mask
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 # Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->VitPoseBackbone
 class VitPoseBackboneSelfAttention(nn.Module):
-    def __init__(self, config: VitPoseBackboneConfig) -> None:
+    def __init__(self, config: VitPoseBackboneConfig):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
-                f"The hidden size {config.hidden_size,} is not a multiple of the number of attention "
+                f"The hidden size {config.hidden_size} is not a multiple of the number of attention "
                 f"heads {config.num_attention_heads}."
             )
 
+        self.config = config
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.dropout_prob = config.attention_probs_dropout_prob
+        self.scaling = self.attention_head_size**-0.5
+        self.is_causal = False
 
         self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
         self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
         self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
 
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        batch_size = hidden_states.shape[0]
+        new_shape = batch_size, -1, self.num_attention_heads, self.attention_head_size
 
-    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(new_x_shape)
-        return x.permute(0, 2, 1, 3)
+        key_layer = self.key(hidden_states).view(*new_shape).transpose(1, 2)
+        value_layer = self.value(hidden_states).view(*new_shape).transpose(1, 2)
+        query_layer = self.query(hidden_states).view(*new_shape).transpose(1, 2)
 
-    def forward(
-        self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        mixed_query_layer = self.query(hidden_states)
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-        query_layer = self.transpose_for_scores(mixed_query_layer)
+        context_layer, attention_probs = attention_interface(
+            self,
+            query_layer,
+            key_layer,
+            value_layer,
+            None,
+            is_causal=self.is_causal,
+            scaling=self.scaling,
+            dropout=0.0 if not self.training else self.dropout_prob,
+        )
 
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-
-        # Normalize the attention scores to probabilities.
-        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
-
-        context_layer = torch.matmul(attention_probs, value_layer)
-
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(new_context_layer_shape)
+        context_layer = context_layer.reshape(new_context_layer_shape)
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
-
-        return outputs
+        return context_layer, attention_probs
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->VitPoseBackbone
@@ -171,7 +184,7 @@ class VitPoseBackboneSelfOutput(nn.Module):
     layernorm applied before each block.
     """
 
-    def __init__(self, config: VitPoseBackboneConfig) -> None:
+    def __init__(self, config: VitPoseBackboneConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -179,19 +192,18 @@ class VitPoseBackboneSelfOutput(nn.Module):
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-
         return hidden_states
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->VitPoseBackbone
 class VitPoseBackboneAttention(nn.Module):
-    def __init__(self, config: VitPoseBackboneConfig) -> None:
+    def __init__(self, config: VitPoseBackboneConfig):
         super().__init__()
         self.attention = VitPoseBackboneSelfAttention(config)
         self.output = VitPoseBackboneSelfOutput(config)
         self.pruned_heads = set()
 
-    def prune_heads(self, heads: Set[int]) -> None:
+    def prune_heads(self, heads: set[int]):
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(
@@ -209,18 +221,10 @@ class VitPoseBackboneAttention(nn.Module):
         self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        self_outputs = self.attention(hidden_states, head_mask, output_attentions)
-
-        attention_output = self.output(self_outputs[0], hidden_states)
-
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
-        return outputs
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        self_attn_output, _ = self.attention(hidden_states)
+        output = self.output(self_attn_output, hidden_states)
+        return output
 
 
 class VitPoseBackboneMoeMLP(nn.Module):
@@ -263,7 +267,7 @@ class VitPoseBackboneMoeMLP(nn.Module):
 
 
 class VitPoseBackboneMLP(nn.Module):
-    def __init__(self, config: VitPoseBackboneConfig) -> None:
+    def __init__(self, config: VitPoseBackboneConfig):
         super().__init__()
         in_features = out_features = config.hidden_size
         hidden_features = int(config.hidden_size * config.mlp_ratio)
@@ -278,8 +282,8 @@ class VitPoseBackboneMLP(nn.Module):
         return hidden_state
 
 
-class VitPoseBackboneLayer(nn.Module):
-    def __init__(self, config: VitPoseBackboneConfig) -> None:
+class VitPoseBackboneLayer(GradientCheckpointingLayer):
+    def __init__(self, config: VitPoseBackboneConfig):
         super().__init__()
         self.num_experts = config.num_experts
         self.attention = VitPoseBackboneAttention(config)
@@ -291,9 +295,7 @@ class VitPoseBackboneLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         dataset_index: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+    ) -> torch.Tensor:
         # Validate dataset_index when using multiple experts
         if self.num_experts > 1 and dataset_index is None:
             raise ValueError(
@@ -301,13 +303,9 @@ class VitPoseBackboneLayer(nn.Module):
                 f"(num_experts={self.num_experts}). Please provide dataset_index "
                 "to the forward pass."
             )
-        self_attention_outputs = self.attention(
-            self.layernorm_before(hidden_states),  # in VitPoseBackbone, layernorm is applied before self-attention
-            head_mask,
-            output_attentions=output_attentions,
-        )
-        attention_output = self_attention_outputs[0]
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+
+        hidden_states_norm = self.layernorm_before(hidden_states)
+        attention_output = self.attention(hidden_states_norm)
 
         # first residual connection
         hidden_states = attention_output + hidden_states
@@ -321,14 +319,12 @@ class VitPoseBackboneLayer(nn.Module):
         # second residual connection
         layer_output = layer_output + hidden_states
 
-        outputs = (layer_output,) + outputs
-
-        return outputs
+        return layer_output
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->VitPoseBackbone
 class VitPoseBackboneEncoder(nn.Module):
-    def __init__(self, config: VitPoseBackboneConfig) -> None:
+    def __init__(self, config: VitPoseBackboneConfig):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([VitPoseBackboneLayer(config) for _ in range(config.num_hidden_layers)])
@@ -339,61 +335,34 @@ class VitPoseBackboneEncoder(nn.Module):
         self,
         hidden_states: torch.Tensor,
         dataset_index: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
-        return_dict: bool = True,
-    ) -> Union[tuple, BaseModelOutput]:
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-
+        output_hidden_states: Optional[bool] = None,
+    ) -> BaseModelOutput:
+        all_hidden_states = [hidden_states] if output_hidden_states else None
         for i, layer_module in enumerate(self.layer):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
+            hidden_states = layer_module(hidden_states, dataset_index)
+            if all_hidden_states is not None:
+                all_hidden_states.append(hidden_states)
 
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    dataset_index,
-                    layer_head_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, dataset_index, layer_head_mask, output_attentions)
-
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
         return BaseModelOutput(
             last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
+            hidden_states=tuple(all_hidden_states) if all_hidden_states else None,
         )
 
 
+@auto_docstring
 class VitPoseBackbonePreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = VitPoseBackboneConfig
+    config: VitPoseBackboneConfig
     base_model_prefix = "vit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = ["VitPoseBackboneEmbeddings", "VitPoseBackboneLayer"]
+    _supports_sdpa = True
+    _supports_flash_attn = True
+    _can_record_outputs = {
+        "attentions": VitPoseBackboneSelfAttention,
+    }
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm, VitPoseBackboneEmbeddings]) -> None:
+    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm, VitPoseBackboneEmbeddings]):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
@@ -414,47 +383,10 @@ class VitPoseBackbonePreTrainedModel(PreTrainedModel):
             ).to(module.position_embeddings.dtype)
 
 
-VITPOSE_BACKBONE_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`VitPoseBackboneConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-VITPOSE_BACKBONE_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values.
-
-        dataset_index (`torch.Tensor` of shape `(batch_size,)`):
-            Index to use in the Mixture-of-Experts (MoE) blocks of the backbone.
-
-            This corresponds to the dataset index used during training, e.g. index 0 refers to COCO.
-
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The VitPose backbone useful for downstream tasks.",
-    VITPOSE_BACKBONE_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    The VitPose backbone useful for downstream tasks.
+    """
 )
 class VitPoseBackbone(VitPoseBackbonePreTrainedModel, BackboneMixin):
     def __init__(self, config: VitPoseBackboneConfig):
@@ -470,19 +402,20 @@ class VitPoseBackbone(VitPoseBackbonePreTrainedModel, BackboneMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(VITPOSE_BACKBONE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
+    @check_model_inputs
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
         dataset_index: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        **kwargs,
     ):
-        """
-        Returns:
+        r"""
+        dataset_index (`torch.Tensor` of shape `(batch_size,)`):
+            Index to use in the Mixture-of-Experts (MoE) blocks of the backbone.
+
+            This corresponds to the dataset index used during training, e.g. index 0 refers to COCO.
 
         Examples:
 
@@ -497,46 +430,26 @@ class VitPoseBackbone(VitPoseBackbonePreTrainedModel, BackboneMixin):
         >>> dataset_index = torch.tensor([1])
         >>> outputs = model(pixel_values, dataset_index)
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
+        if output_hidden_states is None:
+            output_hidden_states = self.config.output_hidden_states
 
         embedding_output = self.embeddings(pixel_values)
-
-        outputs = self.encoder(
-            embedding_output,
-            dataset_index=dataset_index,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=True,
-            return_dict=return_dict,
+        outputs: BaseModelOutput = self.encoder(
+            embedding_output, dataset_index=dataset_index, output_hidden_states=True
         )
-        hidden_states = outputs.hidden_states if return_dict else outputs[1]
+        hidden_states = outputs.hidden_states
 
-        feature_maps = ()
+        feature_maps = []
         for stage, hidden_state in zip(self.stage_names, hidden_states):
             if stage in self.out_features:
                 hidden_state = self.layernorm(hidden_state)
-                feature_maps += (hidden_state,)
-
-        if not return_dict:
-            if output_hidden_states:
-                output = (feature_maps,) + outputs[1:]
-            else:
-                output = (feature_maps,) + outputs[2:]
-            return output
+                feature_maps.append(hidden_state)
 
         return BackboneOutput(
-            feature_maps=feature_maps,
+            feature_maps=tuple(feature_maps),
             hidden_states=outputs.hidden_states if output_hidden_states else None,
-            attentions=outputs.attentions,
         )
+
+
+__all__ = ["VitPoseBackbonePreTrainedModel", "VitPoseBackbone"]

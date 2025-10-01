@@ -39,7 +39,7 @@ BLOOM を使い始めるのに役立つ公式 Hugging Face およびコミュニ
 
 以下も参照してください。
 - [因果言語モデリング タスク ガイド](../tasks/language_modeling)
-- [テキスト分類タスクガイド](../tasks/sequence_classification)
+- [テキスト分類タスクガイド(英語版)](../../en/tasks/sequence_classification)
 - [トークン分類タスクガイド](../tasks/token_classification)
 - [質問回答タスク ガイド](../tasks/question_answering)
 
@@ -62,8 +62,6 @@ BLOOM を使い始めるのに役立つ公式 Hugging Face およびコミュニ
     - all
 
 
-<frameworkcontent>
-<pt>
 
 ## BloomModel
 
@@ -90,18 +88,3 @@ BLOOM を使い始めるのに役立つ公式 Hugging Face およびコミュニ
 [[autodoc]] BloomForQuestionAnswering
     - forward
 
-</pt>
-<jax>
-
-## FlaxBloomModel
-
-[[autodoc]] FlaxBloomModel
-    - __call__
-
-## FlaxBloomForCausalLM
-
-[[autodoc]] FlaxBloomForCausalLM
-    - __call__
-
-</jax>
-</frameworkcontent>

@@ -18,14 +18,13 @@ import pytest
 
 from transformers import (
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
-    TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     MBart50TokenizerFast,
     MBartConfig,
     MBartForConditionalGeneration,
     TranslationPipeline,
     pipeline,
 )
-from transformers.testing_utils import is_pipeline_test, require_tf, require_torch, slow
+from transformers.testing_utils import is_pipeline_test, require_torch, slow
 
 from .test_pipelines_common import ANY
 
@@ -33,7 +32,6 @@ from .test_pipelines_common import ANY
 @is_pipeline_test
 class TranslationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
-    tf_model_mapping = TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
 
     def get_test_pipeline(
         self,
@@ -42,7 +40,7 @@ class TranslationPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        torch_dtype="float32",
+        dtype="float32",
     ):
         if isinstance(model.config, MBartConfig):
             src_lang, tgt_lang = list(tokenizer.lang_code_to_id.keys())[:2]
@@ -52,9 +50,10 @@ class TranslationPipelineTests(unittest.TestCase):
                 feature_extractor=feature_extractor,
                 image_processor=image_processor,
                 processor=processor,
-                torch_dtype=torch_dtype,
+                dtype=dtype,
                 src_lang=src_lang,
                 tgt_lang=tgt_lang,
+                max_new_tokens=20,
             )
         else:
             translator = TranslationPipeline(
@@ -63,7 +62,8 @@ class TranslationPipelineTests(unittest.TestCase):
                 feature_extractor=feature_extractor,
                 image_processor=image_processor,
                 processor=processor,
-                torch_dtype=torch_dtype,
+                dtype=dtype,
+                max_new_tokens=20,
             )
         return translator, ["Some string", "Some other text"]
 
@@ -79,23 +79,7 @@ class TranslationPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_small_model_pt(self):
-        translator = pipeline("translation_en_to_ro", model="patrickvonplaten/t5-tiny-random", framework="pt")
-        outputs = translator("This is a test string", max_length=20)
-        self.assertEqual(
-            outputs,
-            [
-                {
-                    "translation_text": (
-                        "Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide"
-                        " Beide Beide"
-                    )
-                }
-            ],
-        )
-
-    @require_tf
-    def test_small_model_tf(self):
-        translator = pipeline("translation_en_to_ro", model="patrickvonplaten/t5-tiny-random", framework="tf")
+        translator = pipeline("translation_en_to_ro", model="patrickvonplaten/t5-tiny-random")
         outputs = translator("This is a test string", max_length=20)
         self.assertEqual(
             outputs,
@@ -111,23 +95,7 @@ class TranslationPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_en_to_de_pt(self):
-        translator = pipeline("translation_en_to_de", model="patrickvonplaten/t5-tiny-random", framework="pt")
-        outputs = translator("This is a test string", max_length=20)
-        self.assertEqual(
-            outputs,
-            [
-                {
-                    "translation_text": (
-                        "monoton monoton monoton monoton monoton monoton monoton monoton monoton monoton urine urine"
-                        " urine urine urine urine urine urine urine"
-                    )
-                }
-            ],
-        )
-
-    @require_tf
-    def test_en_to_de_tf(self):
-        translator = pipeline("translation_en_to_de", model="patrickvonplaten/t5-tiny-random", framework="tf")
+        translator = pipeline("translation_en_to_de", model="patrickvonplaten/t5-tiny-random")
         outputs = translator("This is a test string", max_length=20)
         self.assertEqual(
             outputs,

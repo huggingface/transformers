@@ -38,6 +38,8 @@
     sections:
     - local: tasks/asr
       title: Reconocimiento automático del habla
+    - local: tasks/audio_classification
+      title: Clasificación de audio
     title: Audio
   - isExpanded: false
     sections:
@@ -62,8 +64,6 @@
     title: Entrenador
   - local: sagemaker
     title: Ejecutar el entrenamiento en Amazon SageMaker
-  - local: converting_tensorflow_models
-    title: Convertir checkpoints de TensorFlow
   - local: serialization
     title: Exportar a ONNX
   - local: torchscript

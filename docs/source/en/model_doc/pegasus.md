@@ -13,97 +13,117 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2019-12-18 and added to Hugging Face Transformers on 2020-11-16.*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # Pegasus
 
-<div class="flex flex-wrap space-x-1">
-<a href="https://huggingface.co/models?filter=pegasus">
-<img alt="Models" src="https://img.shields.io/badge/All_model_pages-pegasus-blueviolet">
-</a>
-<a href="https://huggingface.co/spaces/docs-demos/pegasus_paraphrase">
-<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
-</a>
-</div>
+[Pegasus](https://huggingface.co/papers/1912.08777) is an encoder-decoder (sequence-to-sequence) transformer model pretrained on unlabeled text to perform abstractive summarization. Pegasus is trained jointly on two self-supervised objective functions, masked language modeling (MLM) and gap sentence generation (GSG). Whole sentences are masked and the model has to fill in the gaps in the document. It can be fine-tuned with good performance even on small datasets with only 1000 examples.
 
+You can find all the original Pegasus checkpoints under the [Google](https://huggingface.co/google?search_models=pegasus) organization.
 
-## Overview
+> [!TIP]
+> Click on the Pegasus models in the right sidebar for more examples of how to apply Pegasus to different language tasks.
 
-The Pegasus model was proposed in [PEGASUS: Pre-training with Extracted Gap-sentences for Abstractive Summarization](https://arxiv.org/pdf/1912.08777.pdf) by Jingqing Zhang, Yao Zhao, Mohammad Saleh and Peter J. Liu on Dec 18, 2019.
+The example below demonstrates how to summarize text with [`Pipeline`], [`AutoModel`], and from the command line.
 
-According to the abstract,
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-- Pegasus' pretraining task is intentionally similar to summarization: important sentences are removed/masked from an
-  input document and are generated together as one output sequence from the remaining sentences, similar to an
-  extractive summary.
-- Pegasus achieves SOTA summarization performance on all 12 downstream tasks, as measured by ROUGE and human eval.
+```py
+import torch
+from transformers import pipeline
 
-This model was contributed by [sshleifer](https://huggingface.co/sshleifer). The Authors' code can be found [here](https://github.com/google-research/pegasus).
-
-## Usage tips
-
-- Sequence-to-sequence model with the same encoder-decoder model architecture as BART. Pegasus is pre-trained jointly on two self-supervised objective functions: Masked Language Modeling (MLM) and a novel summarization specific pretraining objective, called Gap Sentence Generation (GSG).
-
-  * MLM: encoder input tokens are randomly replaced by a mask tokens and have to be predicted by the encoder (like in BERT)
-  * GSG: whole encoder input sentences are replaced by a second mask token and fed to the decoder, but which has a causal mask to hide the future words like a regular auto-regressive transformer decoder.
-
-- FP16 is not supported (help/ideas on this appreciated!).
-- The adafactor optimizer is recommended for pegasus fine-tuning.
-
-
-## Checkpoints
-
-All the [checkpoints](https://huggingface.co/models?search=pegasus) are fine-tuned for summarization, besides
-*pegasus-large*, whence the other checkpoints are fine-tuned:
-
-- Each checkpoint is 2.2 GB on disk and 568M parameters.
-- FP16 is not supported (help/ideas on this appreciated!).
-- Summarizing xsum in fp32 takes about 400ms/sample, with default parameters on a v100 GPU.
-- Full replication results and correctly pre-processed data can be found in this [Issue](https://github.com/huggingface/transformers/issues/6844#issue-689259666).
-- [Distilled checkpoints](https://huggingface.co/models?search=distill-pegasus) are described in this [paper](https://arxiv.org/abs/2010.13002).
-
-## Implementation Notes
-
-- All models are transformer encoder-decoders with 16 layers in each component.
-- The implementation is completely inherited from [`BartForConditionalGeneration`]
-- Some key configuration differences:
-  - static, sinusoidal position embeddings
-  - the model starts generating with pad_token_id (which has 0 token_embedding) as the prefix.
-  - more beams are used (`num_beams=8`)
-- All pretrained pegasus checkpoints are the same besides three attributes: `tokenizer.model_max_length` (maximum
-  input size), `max_length` (the maximum number of tokens to generate) and `length_penalty`.
-- The code to convert checkpoints trained in the author's [repo](https://github.com/google-research/pegasus) can be
-  found in `convert_pegasus_tf_to_pytorch.py`.
-
-## Usage Example
-
-```python
->>> from transformers import PegasusForConditionalGeneration, PegasusTokenizer
->>> import torch
-
->>> src_text = [
-...     """ PG&E stated it scheduled the blackouts in response to forecasts for high winds amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."""
-... ]
-
-... model_name = "google/pegasus-xsum"
-... device = "cuda" if torch.cuda.is_available() else "cpu"
-... tokenizer = PegasusTokenizer.from_pretrained(model_name)
-... model = PegasusForConditionalGeneration.from_pretrained(model_name).to(device)
-... batch = tokenizer(src_text, truncation=True, padding="longest", return_tensors="pt").to(device)
-... translated = model.generate(**batch)
-... tgt_text = tokenizer.batch_decode(translated, skip_special_tokens=True)
-... assert (
-...     tgt_text[0]
-...     == "California's largest electricity provider has turned off power to hundreds of thousands of customers."
-... )
+pipeline = pipeline(
+    task="summarization",
+    model="google/pegasus-xsum",
+    dtype=torch.float16,
+    device=0
+)
+pipeline("""Plants are remarkable organisms that produce their own food using a method called photosynthesis.
+This process involves converting sunlight, carbon dioxide, and water into glucose, which provides energy for growth.
+Plants play a crucial role in sustaining life on Earth by generating oxygen and serving as the foundation of most ecosystems.""")
 ```
 
-## Resources
+</hfoption>
+<hfoption id="AutoModel">
 
-- [Script](https://github.com/huggingface/transformers/tree/main/examples/research_projects/seq2seq-distillation/finetune_pegasus_xsum.sh) to fine-tune pegasus
-  on the XSUM dataset. Data download instructions at [examples/pytorch/summarization/](https://github.com/huggingface/transformers/tree/main/examples/pytorch/summarization/README.md).
-- [Causal language modeling task guide](../tasks/language_modeling)
-- [Translation task guide](../tasks/translation)
-- [Summarization task guide](../tasks/summarization)
+```py
+import torch
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained(
+    "google/pegasus-xsum"
+)
+model = AutoModelForSeq2SeqLM.from_pretrained(
+    "google/pegasus-xsum",
+    dtype=torch.float16,
+    device_map="auto",
+    attn_implementation="sdpa"
+)
+
+input_text = """Plants are remarkable organisms that produce their own food using a method called photosynthesis.
+This process involves converting sunlight, carbon dioxide, and water into glucose, which provides energy for growth.
+Plants play a crucial role in sustaining life on Earth by generating oxygen and serving as the foundation of most ecosystems."""
+input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
+
+output = model.generate(**input_ids, cache_implementation="static")
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
+
+</hfoption>
+<hfoption id="transformers CLI">
+
+```bash
+echo -e "Plants are remarkable organisms that produce their own food using a method called photosynthesis. This process involves converting sunlight, carbon dioxide, and water into glucose, which provides energy for growth. Plants play a crucial role in sustaining life on Earth by generating oxygen and serving as the foundation of most ecosystems." | transformers run --task summarization --model google/pegasus-xsum --device 0
+```
+
+</hfoption>
+</hfoptions>
+
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+
+The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to int4.
+
+```py
+import torch
+from transformers import BitsAndBytesConfig, AutoModelForSeq2SeqLM, AutoTokenizer
+
+quantization_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_compute_dtype=torch.bfloat16,
+    bnb_4bit_quant_type="nf4"
+)
+model = AutoModelForSeq2SeqLM.from_pretrained(
+    "google/pegasus-xsum",
+    dtype=torch.bfloat16,
+    device_map="auto",
+    quantization_config=quantization_config
+)
+
+tokenizer = AutoTokenizer.from_pretrained(
+    "google/pegasus-xsum"
+)
+input_text = """Plants are remarkable organisms that produce their own food using a method called photosynthesis.
+This process involves converting sunlight, carbon dioxide, and water into glucose, which provides energy for growth.
+Plants play a crucial role in sustaining life on Earth by generating oxygen and serving as the foundation of most ecosystems."""
+input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
+
+output = model.generate(**input_ids, cache_implementation="static")
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
+
+## Notes
+
+- [`AdaFactor`] is the recommended optimizer for fine-tuning Pegasus.
+- This implementation of Pegasus inherits from [`BartForConditionalGeneration`] but it uses static/sinusoidal positional embeddings instead. Pegasus also starts generating with `pad_token_id` as the prefix and uses `num_beams=8`.
 
 ## PegasusConfig
 
@@ -119,9 +139,6 @@ warning: `add_tokens` does not work at the moment.
 
 [[autodoc]] PegasusTokenizerFast
 
-<frameworkcontent>
-<pt>
-
 ## PegasusModel
 
 [[autodoc]] PegasusModel
@@ -136,36 +153,3 @@ warning: `add_tokens` does not work at the moment.
 
 [[autodoc]] PegasusForCausalLM
     - forward
-
-</pt>
-<tf>
-
-## TFPegasusModel
-
-[[autodoc]] TFPegasusModel
-    - call
-
-## TFPegasusForConditionalGeneration
-
-[[autodoc]] TFPegasusForConditionalGeneration
-    - call
-
-</tf>
-<jax>
-
-## FlaxPegasusModel
-
-[[autodoc]] FlaxPegasusModel
-    - __call__
-    - encode
-    - decode
-
-## FlaxPegasusForConditionalGeneration
-
-[[autodoc]] FlaxPegasusForConditionalGeneration
-    - __call__
-    - encode
-    - decode
-
-</jax>
-</frameworkcontent>

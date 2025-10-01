@@ -16,22 +16,32 @@
 Processor class for LLaVa-NeXT-Video.
 """
 
-from typing import TYPE_CHECKING, List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils import select_best_resolution
-from ...image_utils import ImageInput, VideoInput, get_image_size, to_numpy_array
-from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
-from ...utils import TensorType, logging
+from ...image_utils import ImageInput, get_image_size, to_numpy_array
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import logging
+from ...video_utils import VideoInput
 
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.get_logger(__name__)
+
+
+class LlavaNextVideoProcessorKwargs(ProcessingKwargs, total=False):
+    # see processing_utils.ProcessingKwargs documentation for usage.
+    _defaults = {
+        "text_kwargs": {
+            "padding": False,
+        },
+        "common_kwargs": {
+            "return_tensors": "pt",
+        },
+    }
 
 
 class LlavaNextVideoProcessor(ProcessorMixin):
@@ -43,7 +53,7 @@ class LlavaNextVideoProcessor(ProcessorMixin):
     [`LlamaTokenizerFast`]. See the [`~LlavaNextVideoProcessor.__call__`] and [`~LlavaNextVideoProcessor.decode`] for more information.
 
     Args:
-        video_processor ([`LlavaNextVideoImageProcessor`], *optional*):
+        video_processor ([`LlavaNextVideoVideoProcessor`], *optional*):
             The video processor is a required input.
         image_processor ([`LlavaNextImageProcessor`], *optional*):
             The image processor is a required input.
@@ -55,7 +65,7 @@ class LlavaNextVideoProcessor(ProcessorMixin):
             Patch size from the vision tower.
         vision_feature_select_strategy (`str`, *optional*):
             The feature selection strategy used to select the vision feature from the vision backbone.
-            Shoudl be same as in model's config
+            Should be same as in model's config
         video_token (`str`, *optional*, defaults to `"<video>"`):
             Special token used to denote video location.
         image_token (`str`, *optional*, defaults to `"<image>"`):
@@ -68,16 +78,8 @@ class LlavaNextVideoProcessor(ProcessorMixin):
     # video and image processor share same args, but have different processing logic
     # only image processor config is saved in the hub
     attributes = ["video_processor", "image_processor", "tokenizer"]
-    valid_kwargs = [
-        "chat_template",
-        "patch_size",
-        "vision_feature_select_strategy",
-        "image_token",
-        "video_token",
-        "num_additional_image_tokens",
-    ]
-    image_processor_class = "LlavaNextImageProcessor"
-    video_processor_class = "LlavaNextVideoImageProcessor"
+    image_processor_class = ("LlavaNextImageProcessor", "LlavaNextImageProcessorFast")
+    video_processor_class = "AutoVideoProcessor"
     tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
 
     def __init__(
@@ -98,58 +100,51 @@ class LlavaNextVideoProcessor(ProcessorMixin):
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
         self.video_token = tokenizer.video_token if hasattr(tokenizer, "video_token") else video_token
+        self.image_token_id = (
+            tokenizer.image_token_id
+            if getattr(tokenizer, "image_token_id", None)
+            else tokenizer.convert_tokens_to_ids(self.image_token)
+        )
+        self.video_token_id = (
+            tokenizer.video_token_id
+            if getattr(tokenizer, "video_token_id", None)
+            else tokenizer.convert_tokens_to_ids(self.video_token)
+        )
         super().__init__(video_processor, image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
-        images: ImageInput = None,
-        videos: VideoInput = None,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: int = None,
-        return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
+        images: Optional[ImageInput] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        audio=None,
+        videos: Optional[VideoInput] = None,
+        **kwargs: Unpack[LlavaNextVideoProcessorKwargs],
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
+        the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
         LlavaNextImageProcessor's [`~LlavaNextImageProcessor.__call__`] if `images` is not `None`. To prepare the video(s),
-        this method forwards the `videos` and `kwrags` arguments to LlavaNextVideoImageProcessor's
-        [`~LlavaNextVideoImageProcessor.__call__`] if `videos` is not `None`. Please refer to the doctsring
+        this method forwards the `videos` and `kwargs` arguments to LlavaNextVideoImageProcessor's
+        [`~LlavaNextVideoImageProcessor.__call__`] if `videos` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. Both channels-first and channels-last formats are supported.
-            videos (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            videos (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of videos to be prepared. Each video can be a 4D NumPy array or PyTorch
                 tensor, or a nested list of 3D frames. Both channels-first and channels-last formats are supported.
-            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
-                Select a strategy to pad the returned sequences (according to the model's padding side and padding
-                index) among:
-                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-                  sequence if provided).
-                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
-                  acceptable input length for the model if that argument is not provided.
-                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
-                  lengths).
-            max_length (`int`, *optional*):
-                Maximum length of the returned list and optionally padding length (see above).
-            truncation (`bool`, *optional*):
-                Activates truncation to cut input sequences longer than `max_length` to `max_length`.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -160,20 +155,26 @@ class LlavaNextVideoProcessor(ProcessorMixin):
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
+
+        output_kwargs = self._merge_kwargs(
+            LlavaNextVideoProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
         if images is not None:
-            image_inputs = self.image_processor(images, return_tensors=return_tensors)
+            image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
         else:
             image_inputs = {}
 
         if videos is not None:
-            videos_inputs = self.video_processor(videos, return_tensors=return_tensors)
+            videos_inputs = self.video_processor(videos, **output_kwargs["videos_kwargs"])
         else:
             videos_inputs = {}
 
         if isinstance(text, str):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
-            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+            raise TypeError("Invalid input text. Please provide a string, or a list of strings")
 
         if image_inputs:
             image_sizes = iter(image_inputs["image_sizes"])
@@ -212,14 +213,11 @@ class LlavaNextVideoProcessor(ProcessorMixin):
                 prompt_strings.append(sample)
             text = prompt_strings
 
-        text_inputs = self.tokenizer(
-            text,
-            return_tensors=return_tensors,
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
-        )
-        return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs})
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+        self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
+
+        return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
 
     # Copied from transformers.models.llava_next.processing_llava_next.LlavaNextProcessor._get_number_of_features
     def _get_number_of_features(self, orig_height: int, orig_width: int, height: int, width: int) -> int:
@@ -253,11 +251,11 @@ class LlavaNextVideoProcessor(ProcessorMixin):
         original_aspect_ratio = width / height
         current_aspect_ratio = current_width / current_height
         if original_aspect_ratio > current_aspect_ratio:
-            new_height = (height * current_width) // width
+            new_height = int(round(height * (current_width / width), 7))
             padding = (current_height - new_height) // 2
             current_height -= padding * 2
         else:
-            new_width = (width * current_height) // height
+            new_width = int(round(width * (current_height / height), 7))
             padding = (current_width - new_width) // 2
             current_width -= padding * 2
 
@@ -265,28 +263,42 @@ class LlavaNextVideoProcessor(ProcessorMixin):
         newline_features = current_height
         return (unpadded_features, newline_features)
 
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
-    def batch_decode(self, *args, **kwargs):
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """
-        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+        Args:
+            image_sizes (list[list[str]], *optional*):
+                The input sizes formatted as (height, width) per each image.
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
         """
-        return self.tokenizer.batch_decode(*args, **kwargs)
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = LlavaNextVideoProcessorKwargs._defaults.get("images_kwargs", {})
+            images_kwargs.update(kwargs)
 
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.decode with CLIP->Llama
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
+            size = images_kwargs.get("size", None) or self.image_processor.size
+            size = (
+                (size["shortest_edge"], size["shortest_edge"])
+                if "shortest_edge" in size
+                else (min(size["height"], size["width"]), min(size["height"], size["width"]))
+            )
+            processed_height, processed_width = size
 
-    @property
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.model_input_names
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+            batch_num_image_tokens = []
+            num_image_patches = [1] * len(image_sizes)  # llava-next doesn't batch pixels as Idefics, thus `1` patch`
+            for image_size in image_sizes:
+                orig_height, orig_width = image_size
+                num_image_tokens = self._get_number_of_features(
+                    orig_height, orig_width, processed_height, processed_width
+                )
+                if self.vision_feature_select_strategy == "default":
+                    num_image_tokens -= 1
+                batch_num_image_tokens.append(num_image_tokens)
+            vision_data.update({"num_image_tokens": batch_num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
 
 
 __all__ = ["LlavaNextVideoProcessor"]

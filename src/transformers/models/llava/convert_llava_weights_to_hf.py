@@ -39,8 +39,8 @@ Example for creating the old state dict file with Python:
     from llava.model.language_model.llava_llama import LlavaLlamaForCausalLM
 
     # load model
-    kwargs = {"device_map": "auto", "torch_dtype": torch.float16}
-    model = LlavaLlamaForCausalLM.from_pretrained("liuhaotian/llava-v1.5-7b", low_cpu_mem_usage=True, **kwargs)
+    kwargs = {"device_map": "auto", "dtype": torch.float16}
+    model = LlavaLlamaForCausalLM.from_pretrained("liuhaotian/llava-v1.5-7b", **kwargs)
 
     # load vision tower
     model.get_vision_tower().load_model()
@@ -72,7 +72,7 @@ def load_original_state_dict(model_id):
                 for key in f.keys():
                     original_state_dict[key] = f.get_tensor(key)
 
-    # tied wieghts so lm.head is not saved. Let's clone to load state dict
+    # tied weights so lm.head is not saved. Let's clone to load state dict
     if "lm_head.weight" not in original_state_dict:
         original_state_dict["lm_head.weight"] = original_state_dict["model.embed_tokens.weight"].clone()
 
@@ -127,15 +127,15 @@ def convert_llava_llama_to_hf(text_model_id, vision_model_id, output_hub_path, o
         vision_config=vision_config,
     )
 
-    # llms-lab interleeave models do not use any selection startegy except for last hidden state
+    # llms-lab interleave models do not use any selection strategy except for last hidden state
     if "Qwen" in text_model_id:
-        config.image_token_index = 151646
+        config.image_token_id = 151646
         if "siglip" in vision_model_id:
             config.vision_feature_select_strategy = "full"
             config.vision_feature_layer = -1
     else:
         config.pad_token_id = 32001
-        config.image_token_index = 32000
+        config.image_token_id = 32000
 
     with torch.device("meta"):
         model = LlavaForConditionalGeneration(config)
@@ -161,13 +161,11 @@ def convert_llava_llama_to_hf(text_model_id, vision_model_id, output_hub_path, o
     vocab_size = config.text_config.vocab_size
     model.resize_token_embeddings(config.text_config.vocab_size + 2, pad_shape)
     model.language_model.model.embed_tokens.weight.data[vocab_size:] = torch.stack(
-        tuple(
-            (dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[vocab_size:].shape[0]))
-        ),
+        tuple(dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[vocab_size:].shape[0])),
         dim=0,
     )
     model.language_model.lm_head.weight.data[vocab_size:] = torch.stack(
-        tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[vocab_size:].shape[0]))),
+        tuple(dist.sample() for _ in range(model.language_model.lm_head.weight.data[vocab_size:].shape[0])),
         dim=0,
     )
 

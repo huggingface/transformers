@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,16 +15,16 @@
 
 import unittest
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, HeliumConfig, is_torch_available
+from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
+    Expectations,
     require_read_token,
     require_torch,
     slow,
     torch_device,
 )
 
-from ...test_configuration_common import ConfigTester
-from ..gemma.test_modeling_gemma import GemmaModelTest, GemmaModelTester
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 if is_torch_available():
@@ -39,23 +38,13 @@ if is_torch_available():
     )
 
 
-class HeliumModelTester(GemmaModelTester):
+class HeliumModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = HeliumConfig
-        model_class = HeliumModel
-        for_causal_lm_class = HeliumForCausalLM
-        for_sequence_class = HeliumForSequenceClassification
-        for_token_class = HeliumForTokenClassification
+        base_model_class = HeliumModel
 
 
 @require_torch
-class HeliumModelTest(GemmaModelTest, unittest.TestCase):
-    all_model_classes = (
-        (HeliumModel, HeliumForCausalLM, HeliumForSequenceClassification, HeliumForTokenClassification)
-        if is_torch_available()
-        else ()
-    )
-    all_generative_model_classes = (HeliumForCausalLM,) if is_torch_available() else ()
+class HeliumModelTest(CausalLMModelTest, unittest.TestCase):
     pipeline_model_mapping = (
         {
             "feature-extraction": HeliumModel,
@@ -67,40 +56,32 @@ class HeliumModelTest(GemmaModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
-    test_pruning = False
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
 
-    def setUp(self):
-        self.model_tester = HeliumModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=HeliumConfig, hidden_size=37)
+    model_tester_class = HeliumModelTester
 
 
 @slow
 # @require_torch_gpu
 class HeliumIntegrationTest(unittest.TestCase):
     input_text = ["Hello, today is a great day to"]
-    # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
-    # Depending on the hardware we get different logits / generations
-    cuda_compute_capability_major_version = None
-
-    @classmethod
-    def setUpClass(cls):
-        if is_torch_available() and torch.cuda.is_available():
-            # 8 is for A100 / A10 and 7 for T4
-            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
 
     @require_read_token
     def test_model_2b(self):
         model_id = "kyutai/helium-1-preview"
-        EXPECTED_TEXTS = [
-            "Hello, today is a great day to start a new project. I have been working on a new project for a while now and I have"
-        ]
+        expected_texts = Expectations(
+            {
+                ("rocm", (9, 5)): ["Hello, today is a great day to start a new project. I have been working on a new project for a while now, and I"],
+                (None, None): ["Hello, today is a great day to start a new project. I have been working on a new project for a while now and I have"],
+                ("cuda", 8): ['Hello, today is a great day to start a new project. I have been working on a new project for a while now, and I'],
+            }
+        )  # fmt: skip
+        EXPECTED_TEXTS = expected_texts.get_expectation()
 
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, revision="refs/pr/1"
-        ).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, revision="refs/pr/1").to(
+            torch_device
+        )
         tokenizer = AutoTokenizer.from_pretrained(model_id, revision="refs/pr/1")
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
 

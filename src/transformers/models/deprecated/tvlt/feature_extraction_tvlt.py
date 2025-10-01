@@ -15,7 +15,7 @@
 """Feature extractor class for TVLT."""
 
 from math import ceil
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -35,18 +35,18 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
     should refer to this superclass for more information regarding those methods.
 
     Args:
-        spectrogram_length (`Dict[str, int]` *optional*, defaults to 2048):
+        spectrogram_length (`dict[str, int]` *optional*, defaults to 2048):
             The time length of each audio spectrogram.
         num_channels (`int` *optional*, defaults to 1):
             Number of audio channels.
-        patch_size (`List[int]` *optional*, defaults to `[16, 16]`):
+        patch_size (`list[int]` *optional*, defaults to `[16, 16]`):
             The patch size of audio patch embedding.
         feature_size (`int`, *optional*, defaults to 128):
             The frequency length of audio spectrogram.
         sampling_rate (`int`, *optional*, defaults to 44100):
             The sampling rate at which the audio files should be digitalized expressed in Hertz (Hz).
         hop_length_to_sampling_rate (`int`, *optional*, defaults to 86):
-            Hop length is length of the overlaping windows for the STFT used to obtain the Mel Frequency coefficients.
+            Hop length is length of the overlapping windows for the STFT used to obtain the Mel Frequency coefficients.
             For example, with sampling rate 44100, the hop length is 512, with 44100 / 512 = 86
         n_fft (`int`, *optional*, defaults to 2048):
             Size of the Fourier transform.
@@ -93,7 +93,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
             mel_scale="slaney",
         ).T
 
-    def _np_extract_fbank_features(self, waveform: np.array) -> np.ndarray:
+    def _np_extract_fbank_features(self, waveform: np.ndarray) -> np.ndarray:
         """
         Compute the log-mel spectrogram of the provided audio, gives similar results to Whisper's original torch
         implementation with 1e-5 tolerance.
@@ -115,7 +115,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
+        raw_speech: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_attention_mask: Optional[bool] = True,
         sampling_rate: Optional[int] = None,
@@ -127,7 +127,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
         Main method to prepare one or several audio(s) for the model.
 
         Args:
-            raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
+            raw_speech (`np.ndarray`, `list[float]`, `list[np.ndarray]`, `list[list[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
                 values, a list of numpy arrays or a list of list of float values. Must be mono channel audio, not
                 stereo, i.e. single float per timestep.
@@ -141,7 +141,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
 
                 <Tip>
 
-                For TvltTransformer models, `attention_mask` should alwys be passed for batched inference, to avoid
+                For TvltTransformer models, `attention_mask` should always be passed for batched inference, to avoid
                 subtle bugs.
 
                 </Tip>
@@ -197,7 +197,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
         audio_features = [
             self._np_extract_fbank_features(waveform.squeeze()).T[: self.spectrogram_length] for waveform in raw_speech
         ]
-        if isinstance(audio_features[0], List):
+        if isinstance(audio_features[0], list):
             audio_features = [np.asarray(feature, dtype=np.float32) for feature in audio_features]
 
         # Create audio attention mask
@@ -228,3 +228,6 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
 
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
         return encoded_inputs
+
+
+__all__ = ["TvltFeatureExtractor"]

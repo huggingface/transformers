@@ -72,7 +72,7 @@ def write_model(save_path, input_base_path, config, safe_serialization=True, pus
     head_dim = config.head_dim
 
     print(f"Fetching all parameters from the checkpoint at '{input_base_path}'")
-    model_state_dict = torch.load(input_base_path, map_location="cpu")["model_state_dict"]
+    model_state_dict = torch.load(input_base_path, map_location="cpu", weights_only=True)["model_state_dict"]
     model_state_dict.pop("freqs_cis")
 
     state_dict = {}
@@ -114,7 +114,7 @@ def write_model(save_path, input_base_path, config, safe_serialization=True, pus
         model = GemmaForCausalLM(config)
     model.load_state_dict(state_dict, assign=True, strict=False)
 
-    model.config.torch_dtype = torch.float32
+    model.config.dtype = torch.float32
     del model.config._name_or_path
     print("Saving in the Transformers format.")
 
@@ -151,7 +151,7 @@ def main():
         "--model_size",
         default="7B",
         choices=["2B", "7B", "tokenizer_only"],
-        help="'f' models correspond to the finetuned versions, and are specific to the Gemma2 official release. For more details on Gemma2, checkout the original repo: https://huggingface.co/google/gemma-7b",
+        help="'f' models correspond to the finetuned versions, and are specific to the Gemma2 official release. For more details on Gemma2, check out the original repo: https://huggingface.co/google/gemma-7b",
     )
     parser.add_argument(
         "--output_dir",

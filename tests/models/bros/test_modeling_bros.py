@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -50,7 +49,7 @@ class BrosModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=64,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -285,7 +284,6 @@ class BrosModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = () if is_torch_available() else ()
     pipeline_model_mapping = (
         {"feature-extraction": BrosModel, "token-classification": BrosForTokenClassification}
         if is_torch_available()
@@ -452,4 +450,4 @@ class BrosModelIntegrationTest(unittest.TestCase):
         ).to(torch_device)
         torch.set_printoptions(sci_mode=False)
 
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

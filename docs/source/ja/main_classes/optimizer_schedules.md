@@ -22,19 +22,9 @@ rendered properly in your Markdown viewer.
 - `_LRSchedule` から継承するスケジュール オブジェクトの形式のいくつかのスケジュール:
 - 複数のバッチの勾配を累積するための勾配累積クラス
 
-## AdamW (PyTorch)
-
-[[autodoc]] AdamW
-
 ## AdaFactor (PyTorch)
 
 [[autodoc]] Adafactor
-
-## AdamWeightDecay (TensorFlow)
-
-[[autodoc]] AdamWeightDecay
-
-[[autodoc]] create_optimizer
 
 ## Schedules
 
@@ -65,13 +55,3 @@ rendered properly in your Markdown viewer.
 [[autodoc]] get_polynomial_decay_schedule_with_warmup
 
 [[autodoc]] get_inverse_sqrt_schedule
-
-### Warmup (TensorFlow)
-
-[[autodoc]] WarmUp
-
-## Gradient Strategies
-
-### GradientAccumulator (TensorFlow)
-
-[[autodoc]] GradientAccumulator

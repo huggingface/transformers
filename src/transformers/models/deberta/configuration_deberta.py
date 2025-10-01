@@ -15,7 +15,8 @@
 """DeBERTa model configuration"""
 
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
@@ -23,7 +24,7 @@ from ...utils import logging
 
 
 if TYPE_CHECKING:
-    from ... import FeatureExtractionMixin, PreTrainedTokenizerBase, TensorType
+    from ... import FeatureExtractionMixin, PreTrainedTokenizerBase
 
 
 logger = logging.get_logger(__name__)
@@ -77,7 +78,7 @@ class DebertaConfig(PretrainedConfig):
             The value used to pad input_ids.
         position_biased_input (`bool`, *optional*, defaults to `True`):
             Whether add absolute position embedding to content embedding.
-        pos_att_type (`List[str]`, *optional*):
+        pos_att_type (`list[str]`, *optional*):
             The type of relative position attention, it can be a combination of `["p2c", "c2p"]`, e.g. `["p2c"]`,
             `["p2c", "c2p"]`.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -184,13 +185,12 @@ class DebertaOnnxConfig(OnnxConfig):
         seq_length: int = -1,
         num_choices: int = -1,
         is_pair: bool = False,
-        framework: Optional["TensorType"] = None,
         num_channels: int = 3,
         image_width: int = 40,
         image_height: int = 40,
         tokenizer: "PreTrainedTokenizerBase" = None,
     ) -> Mapping[str, Any]:
-        dummy_inputs = super().generate_dummy_inputs(preprocessor=preprocessor, framework=framework)
+        dummy_inputs = super().generate_dummy_inputs(preprocessor=preprocessor)
         if self._config.type_vocab_size == 0 and "token_type_ids" in dummy_inputs:
             del dummy_inputs["token_type_ids"]
         return dummy_inputs

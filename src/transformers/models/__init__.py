@@ -11,296 +11,386 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from typing import TYPE_CHECKING
 
-from . import (
-    albert,
-    align,
-    altclip,
-    aria,
-    audio_spectrogram_transformer,
-    auto,
-    autoformer,
-    bamba,
-    bark,
-    bart,
-    barthez,
-    bartpho,
-    beit,
-    bert,
-    bert_generation,
-    bert_japanese,
-    bertweet,
-    big_bird,
-    bigbird_pegasus,
-    biogpt,
-    bit,
-    blenderbot,
-    blenderbot_small,
-    blip,
-    blip_2,
-    bloom,
-    bridgetower,
-    bros,
-    byt5,
-    camembert,
-    canine,
-    chameleon,
-    chinese_clip,
-    clap,
-    clip,
-    clipseg,
-    clvp,
-    code_llama,
-    codegen,
-    cohere,
-    cohere2,
-    colpali,
-    conditional_detr,
-    convbert,
-    convnext,
-    convnextv2,
-    cpm,
-    cpmant,
-    ctrl,
-    cvt,
-    dac,
-    data2vec,
-    dbrx,
-    deberta,
-    deberta_v2,
-    decision_transformer,
-    deformable_detr,
-    deit,
-    deprecated,
-    depth_anything,
-    detr,
-    dialogpt,
-    diffllama,
-    dinat,
-    dinov2,
-    dinov2_with_registers,
-    distilbert,
-    dit,
-    donut,
-    dpr,
-    dpt,
-    efficientnet,
-    electra,
-    emu3,
-    encodec,
-    encoder_decoder,
-    ernie,
-    esm,
-    falcon,
-    falcon_mamba,
-    fastspeech2_conformer,
-    flaubert,
-    flava,
-    fnet,
-    focalnet,
-    fsmt,
-    funnel,
-    fuyu,
-    gemma,
-    gemma2,
-    git,
-    glm,
-    glpn,
-    gpt2,
-    gpt_bigcode,
-    gpt_neo,
-    gpt_neox,
-    gpt_neox_japanese,
-    gpt_sw3,
-    gptj,
-    granite,
-    granitemoe,
-    grounding_dino,
-    groupvit,
-    helium,
-    herbert,
-    hiera,
-    hubert,
-    ibert,
-    idefics,
-    idefics2,
-    idefics3,
-    ijepa,
-    imagegpt,
-    informer,
-    instructblip,
-    instructblipvideo,
-    jamba,
-    jetmoe,
-    kosmos2,
-    layoutlm,
-    layoutlmv2,
-    layoutlmv3,
-    layoutxlm,
-    led,
-    levit,
-    lilt,
-    llama,
-    llava,
-    llava_next,
-    llava_next_video,
-    llava_onevision,
-    longformer,
-    longt5,
-    luke,
-    lxmert,
-    m2m_100,
-    mamba,
-    mamba2,
-    marian,
-    markuplm,
-    mask2former,
-    maskformer,
-    mbart,
-    mbart50,
-    megatron_bert,
-    megatron_gpt2,
-    mgp_str,
-    mimi,
-    mistral,
-    mixtral,
-    mllama,
-    mluke,
-    mobilebert,
-    mobilenet_v1,
-    mobilenet_v2,
-    mobilevit,
-    mobilevitv2,
-    modernbert,
-    moonshine,
-    moshi,
-    mpnet,
-    mpt,
-    mra,
-    mt5,
-    musicgen,
-    musicgen_melody,
-    mvp,
-    myt5,
-    nemotron,
-    nllb,
-    nllb_moe,
-    nougat,
-    nystromformer,
-    olmo,
-    olmo2,
-    olmoe,
-    omdet_turbo,
-    oneformer,
-    openai,
-    opt,
-    owlv2,
-    owlvit,
-    paligemma,
-    patchtsmixer,
-    patchtst,
-    pegasus,
-    pegasus_x,
-    perceiver,
-    persimmon,
-    phi,
-    phi3,
-    phimoe,
-    phobert,
-    pix2struct,
-    pixtral,
-    plbart,
-    poolformer,
-    pop2piano,
-    prophetnet,
-    pvt,
-    pvt_v2,
-    qwen2,
-    qwen2_audio,
-    qwen2_moe,
-    qwen2_vl,
-    rag,
-    recurrent_gemma,
-    reformer,
-    regnet,
-    rembert,
-    resnet,
-    roberta,
-    roberta_prelayernorm,
-    roc_bert,
-    roformer,
-    rt_detr,
-    rwkv,
-    sam,
-    seamless_m4t,
-    seamless_m4t_v2,
-    segformer,
-    seggpt,
-    sew,
-    sew_d,
-    siglip,
-    speech_encoder_decoder,
-    speech_to_text,
-    speecht5,
-    splinter,
-    squeezebert,
-    stablelm,
-    starcoder2,
-    superglue,
-    superpoint,
-    swiftformer,
-    swin,
-    swin2sr,
-    swinv2,
-    switch_transformers,
-    t5,
-    table_transformer,
-    tapas,
-    textnet,
-    time_series_transformer,
-    timesformer,
-    timm_backbone,
-    timm_wrapper,
-    trocr,
-    tvp,
-    udop,
-    umt5,
-    unispeech,
-    unispeech_sat,
-    univnet,
-    upernet,
-    video_llava,
-    videomae,
-    vilt,
-    vipllava,
-    vision_encoder_decoder,
-    vision_text_dual_encoder,
-    visual_bert,
-    vit,
-    vit_mae,
-    vit_msn,
-    vitdet,
-    vitmatte,
-    vitpose,
-    vitpose_backbone,
-    vits,
-    vivit,
-    wav2vec2,
-    wav2vec2_bert,
-    wav2vec2_conformer,
-    wav2vec2_phoneme,
-    wav2vec2_with_lm,
-    wavlm,
-    whisper,
-    x_clip,
-    xglm,
-    xlm,
-    xlm_roberta,
-    xlm_roberta_xl,
-    xlnet,
-    xmod,
-    yolos,
-    yoso,
-    zamba,
-    zoedepth,
-)
+from ..utils import _LazyModule
+from ..utils.import_utils import define_import_structure
+
+
+if TYPE_CHECKING:
+    from .aimv2 import *
+    from .albert import *
+    from .align import *
+    from .altclip import *
+    from .arcee import *
+    from .aria import *
+    from .audio_spectrogram_transformer import *
+    from .auto import *
+    from .autoformer import *
+    from .aya_vision import *
+    from .bamba import *
+    from .bark import *
+    from .bart import *
+    from .barthez import *
+    from .bartpho import *
+    from .beit import *
+    from .bert import *
+    from .bert_generation import *
+    from .bert_japanese import *
+    from .bertweet import *
+    from .big_bird import *
+    from .bigbird_pegasus import *
+    from .biogpt import *
+    from .bit import *
+    from .bitnet import *
+    from .blenderbot import *
+    from .blenderbot_small import *
+    from .blip import *
+    from .blip_2 import *
+    from .bloom import *
+    from .blt import *
+    from .bridgetower import *
+    from .bros import *
+    from .byt5 import *
+    from .camembert import *
+    from .canine import *
+    from .chameleon import *
+    from .chinese_clip import *
+    from .clap import *
+    from .clip import *
+    from .clipseg import *
+    from .clvp import *
+    from .code_llama import *
+    from .codegen import *
+    from .cohere import *
+    from .cohere2 import *
+    from .cohere2_vision import *
+    from .colpali import *
+    from .colqwen2 import *
+    from .conditional_detr import *
+    from .convbert import *
+    from .convnext import *
+    from .convnextv2 import *
+    from .cpm import *
+    from .cpmant import *
+    from .csm import *
+    from .ctrl import *
+    from .cvt import *
+    from .d_fine import *
+    from .dab_detr import *
+    from .dac import *
+    from .data2vec import *
+    from .dbrx import *
+    from .deberta import *
+    from .deberta_v2 import *
+    from .decision_transformer import *
+    from .deepseek_v2 import *
+    from .deepseek_v3 import *
+    from .deepseek_vl import *
+    from .deepseek_vl_hybrid import *
+    from .deformable_detr import *
+    from .deit import *
+    from .deprecated import *
+    from .depth_anything import *
+    from .depth_pro import *
+    from .detr import *
+    from .dia import *
+    from .dialogpt import *
+    from .diffllama import *
+    from .dinat import *
+    from .dinov2 import *
+    from .dinov2_with_registers import *
+    from .dinov3_convnext import *
+    from .dinov3_vit import *
+    from .distilbert import *
+    from .dit import *
+    from .donut import *
+    from .dots1 import *
+    from .dpr import *
+    from .dpt import *
+    from .edgetam import *
+    from .edgetam_video import *
+    from .efficientloftr import *
+    from .efficientnet import *
+    from .electra import *
+    from .emu3 import *
+    from .encodec import *
+    from .encoder_decoder import *
+    from .ernie import *
+    from .esm import *
+    from .evolla import *
+    from .exaone4 import *
+    from .falcon import *
+    from .falcon_h1 import *
+    from .falcon_mamba import *
+    from .fastspeech2_conformer import *
+    from .flaubert import *
+    from .flava import *
+    from .flex_olmo import *
+    from .florence2 import *
+    from .fnet import *
+    from .focalnet import *
+    from .fsmt import *
+    from .funnel import *
+    from .fuyu import *
+    from .gemma import *
+    from .gemma2 import *
+    from .gemma3 import *
+    from .gemma3n import *
+    from .git import *
+    from .glm import *
+    from .glm4 import *
+    from .glpn import *
+    from .got_ocr2 import *
+    from .gpt2 import *
+    from .gpt_bigcode import *
+    from .gpt_neo import *
+    from .gpt_neox import *
+    from .gpt_neox_japanese import *
+    from .gpt_oss import *
+    from .gpt_sw3 import *
+    from .gptj import *
+    from .granite import *
+    from .granite_speech import *
+    from .granitemoe import *
+    from .granitemoehybrid import *
+    from .granitemoeshared import *
+    from .grounding_dino import *
+    from .groupvit import *
+    from .helium import *
+    from .herbert import *
+    from .hgnet_v2 import *
+    from .hiera import *
+    from .hubert import *
+    from .hunyuan_v1_dense import *
+    from .hunyuan_v1_moe import *
+    from .ibert import *
+    from .idefics import *
+    from .idefics2 import *
+    from .idefics3 import *
+    from .ijepa import *
+    from .imagegpt import *
+    from .informer import *
+    from .instructblip import *
+    from .instructblipvideo import *
+    from .internvl import *
+    from .jamba import *
+    from .janus import *
+    from .jetmoe import *
+    from .kosmos2 import *
+    from .kyutai_speech_to_text import *
+    from .layoutlm import *
+    from .layoutlmv2 import *
+    from .layoutlmv3 import *
+    from .layoutxlm import *
+    from .led import *
+    from .levit import *
+    from .lfm2 import *
+    from .lfm2_vl import *
+    from .lightglue import *
+    from .lilt import *
+    from .llama import *
+    from .llama4 import *
+    from .llava import *
+    from .llava_next import *
+    from .llava_next_video import *
+    from .llava_onevision import *
+    from .longcat_flash import *
+    from .longformer import *
+    from .longt5 import *
+    from .luke import *
+    from .lxmert import *
+    from .m2m_100 import *
+    from .mamba import *
+    from .mamba2 import *
+    from .marian import *
+    from .markuplm import *
+    from .mask2former import *
+    from .maskformer import *
+    from .mbart import *
+    from .mbart50 import *
+    from .megatron_bert import *
+    from .megatron_gpt2 import *
+    from .mgp_str import *
+    from .mimi import *
+    from .minimax import *
+    from .ministral import *
+    from .mistral import *
+    from .mistral3 import *
+    from .mixtral import *
+    from .mlcd import *
+    from .mllama import *
+    from .mluke import *
+    from .mobilebert import *
+    from .mobilenet_v1 import *
+    from .mobilenet_v2 import *
+    from .mobilevit import *
+    from .mobilevitv2 import *
+    from .modernbert import *
+    from .modernbert_decoder import *
+    from .moonshine import *
+    from .moshi import *
+    from .mpnet import *
+    from .mpt import *
+    from .mra import *
+    from .mt5 import *
+    from .musicgen import *
+    from .musicgen_melody import *
+    from .mvp import *
+    from .myt5 import *
+    from .nemotron import *
+    from .nllb import *
+    from .nllb_moe import *
+    from .nougat import *
+    from .nystromformer import *
+    from .olmo import *
+    from .olmo2 import *
+    from .olmo3 import *
+    from .olmoe import *
+    from .omdet_turbo import *
+    from .oneformer import *
+    from .openai import *
+    from .opt import *
+    from .ovis2 import *
+    from .owlv2 import *
+    from .owlvit import *
+    from .paligemma import *
+    from .parakeet import *
+    from .patchtsmixer import *
+    from .patchtst import *
+    from .pegasus import *
+    from .pegasus_x import *
+    from .perceiver import *
+    from .perception_lm import *
+    from .persimmon import *
+    from .phi import *
+    from .phi3 import *
+    from .phi4_multimodal import *
+    from .phimoe import *
+    from .phobert import *
+    from .pix2struct import *
+    from .pixtral import *
+    from .plbart import *
+    from .poolformer import *
+    from .pop2piano import *
+    from .prompt_depth_anything import *
+    from .prophetnet import *
+    from .pvt import *
+    from .pvt_v2 import *
+    from .qwen2 import *
+    from .qwen2_5_omni import *
+    from .qwen2_5_vl import *
+    from .qwen2_audio import *
+    from .qwen2_moe import *
+    from .qwen2_vl import *
+    from .qwen3 import *
+    from .qwen3_moe import *
+    from .qwen3_next import *
+    from .qwen3_omni_moe import *
+    from .qwen3_vl import *
+    from .qwen3_vl_moe import *
+    from .rag import *
+    from .recurrent_gemma import *
+    from .reformer import *
+    from .regnet import *
+    from .rembert import *
+    from .resnet import *
+    from .roberta import *
+    from .roberta_prelayernorm import *
+    from .roc_bert import *
+    from .roformer import *
+    from .rt_detr import *
+    from .rt_detr_v2 import *
+    from .rwkv import *
+    from .sam import *
+    from .sam2 import *
+    from .sam2_video import *
+    from .sam_hq import *
+    from .seamless_m4t import *
+    from .seamless_m4t_v2 import *
+    from .seed_oss import *
+    from .segformer import *
+    from .seggpt import *
+    from .sew import *
+    from .sew_d import *
+    from .shieldgemma2 import *
+    from .siglip import *
+    from .siglip2 import *
+    from .smolvlm import *
+    from .speech_encoder_decoder import *
+    from .speech_to_text import *
+    from .speecht5 import *
+    from .splinter import *
+    from .squeezebert import *
+    from .stablelm import *
+    from .starcoder2 import *
+    from .superglue import *
+    from .superpoint import *
+    from .swiftformer import *
+    from .swin import *
+    from .swin2sr import *
+    from .swinv2 import *
+    from .switch_transformers import *
+    from .t5 import *
+    from .t5gemma import *
+    from .table_transformer import *
+    from .tapas import *
+    from .textnet import *
+    from .time_series_transformer import *
+    from .timesfm import *
+    from .timesformer import *
+    from .timm_backbone import *
+    from .timm_wrapper import *
+    from .trocr import *
+    from .tvp import *
+    from .udop import *
+    from .umt5 import *
+    from .unispeech import *
+    from .unispeech_sat import *
+    from .univnet import *
+    from .upernet import *
+    from .vaultgemma import *
+    from .video_llava import *
+    from .videomae import *
+    from .vilt import *
+    from .vipllava import *
+    from .vision_encoder_decoder import *
+    from .vision_text_dual_encoder import *
+    from .visual_bert import *
+    from .vit import *
+    from .vit_mae import *
+    from .vit_msn import *
+    from .vitdet import *
+    from .vitmatte import *
+    from .vitpose import *
+    from .vitpose_backbone import *
+    from .vits import *
+    from .vivit import *
+    from .vjepa2 import *
+    from .voxtral import *
+    from .wav2vec2 import *
+    from .wav2vec2_bert import *
+    from .wav2vec2_conformer import *
+    from .wav2vec2_phoneme import *
+    from .wav2vec2_with_lm import *
+    from .wavlm import *
+    from .whisper import *
+    from .x_clip import *
+    from .xcodec import *
+    from .xglm import *
+    from .xlm import *
+    from .xlm_roberta import *
+    from .xlm_roberta_xl import *
+    from .xlnet import *
+    from .xlstm import *
+    from .xmod import *
+    from .yolos import *
+    from .yoso import *
+    from .zamba import *
+    from .zamba2 import *
+    from .zoedepth import *
+else:
+    import sys
+
+    _file = globals()["__file__"]
+    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)

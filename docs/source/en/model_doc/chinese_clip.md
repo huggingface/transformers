@@ -13,12 +13,17 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2022-11-02 and added to Hugging Face Transformers on 2022-12-01.*
 
 # Chinese-CLIP
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
-The Chinese-CLIP model was proposed in [Chinese CLIP: Contrastive Vision-Language Pretraining in Chinese](https://arxiv.org/abs/2211.01335) by An Yang, Junshu Pan, Junyang Lin, Rui Men, Yichang Zhang, Jingren Zhou, Chang Zhou.
+The Chinese-CLIP model was proposed in [Chinese CLIP: Contrastive Vision-Language Pretraining in Chinese](https://huggingface.co/papers/2211.01335) by An Yang, Junshu Pan, Junyang Lin, Rui Men, Yichang Zhang, Jingren Zhou, Chang Zhou.
 Chinese-CLIP is an implementation of CLIP (Radford et al., 2021) on a large-scale dataset of Chinese image-text pairs. It is capable of performing cross-modal retrieval and also playing as a vision backbone for vision tasks like zero-shot image classification, open-domain object detection, etc. The original Chinese-CLIP code is released [at this link](https://github.com/OFA-Sys/Chinese-CLIP).
 
 The abstract from the paper is the following:
@@ -86,9 +91,10 @@ Currently, following scales of pretrained Chinese-CLIP models are available on ð
 [[autodoc]] ChineseCLIPImageProcessor
     - preprocess
 
-## ChineseCLIPFeatureExtractor
+## ChineseCLIPImageProcessorFast
 
-[[autodoc]] ChineseCLIPFeatureExtractor
+[[autodoc]] ChineseCLIPImageProcessorFast
+    - preprocess
 
 ## ChineseCLIPProcessor
 

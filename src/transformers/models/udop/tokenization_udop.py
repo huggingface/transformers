@@ -18,7 +18,7 @@ import os
 import re
 import warnings
 from shutil import copyfile
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import sentencepiece as spm
 
@@ -33,6 +33,7 @@ from ...tokenization_utils_base import (
     TruncationStrategy,
 )
 from ...utils import PaddingStrategy, TensorType, add_end_docstrings, logging
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
@@ -85,7 +86,6 @@ UDOP_ENCODE_KWARGS_DOCSTRING = r"""
             return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
             return_token_type_ids (`bool`, *optional*):
@@ -147,6 +147,7 @@ UDOP_ENCODE_KWARGS_DOCSTRING = r"""
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
 
 
+@requires(backends=("sentencepiece",))
 class UdopTokenizer(PreTrainedTokenizer):
     """
     Adapted from [`LayoutXLMTokenizer`] and [`T5Tokenizer`]. Based on
@@ -180,16 +181,16 @@ class UdopTokenizer(PreTrainedTokenizer):
 
         pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        sep_token_box (`List[int]`, *optional*, defaults to `[1000, 1000, 1000, 1000]`):
+        sep_token_box (`list[int]`, *optional*, defaults to `[1000, 1000, 1000, 1000]`):
             The bounding box to use for the special [SEP] token.
-        pad_token_box (`List[int]`, *optional*, defaults to `[0, 0, 0, 0]`):
+        pad_token_box (`list[int]`, *optional*, defaults to `[0, 0, 0, 0]`):
             The bounding box to use for the special [PAD] token.
         pad_token_label (`int`, *optional*, defaults to -100):
             The label to use for padding tokens. Defaults to -100, which is the `ignore_index` of PyTorch's
             CrossEntropyLoss.
         only_label_first_subword (`bool`, *optional*, defaults to `True`):
             Whether or not to only label the first subword, in case word labels are provided.
-        additional_special_tokens (`List[str]`, *optional*, defaults to `["<s>NOTUSED", "</s>NOTUSED"]`):
+        additional_special_tokens (`list[str]`, *optional*, defaults to `["<s>NOTUSED", "</s>NOTUSED"]`):
             Additional special tokens used by the tokenizer.
 
         sp_model_kwargs (`dict`, *optional*):
@@ -253,7 +254,7 @@ class UdopTokenizer(PreTrainedTokenizer):
         pad_token_label=-100,
         only_label_first_subword=True,
         additional_special_tokens=None,
-        sp_model_kwargs: Optional[Dict[str, Any]] = None,
+        sp_model_kwargs: Optional[dict[str, Any]] = None,
         legacy=True,
         add_prefix_space=True,
         **kwargs,
@@ -306,22 +307,22 @@ class UdopTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.get_special_tokens_mask
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+    ) -> list[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer `prepare_for_model` method.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
             already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
-            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+            `list[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
         if already_has_special_tokens:
             return super().get_special_tokens_mask(
@@ -344,7 +345,7 @@ class UdopTokenizer(PreTrainedTokenizer):
         return [self.convert_tokens_to_ids(token) for token in self.get_sentinel_tokens()]
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer._add_eos_if_not_present
-    def _add_eos_if_not_present(self, token_ids: List[int]) -> List[int]:
+    def _add_eos_if_not_present(self, token_ids: list[int]) -> list[int]:
         """Do not add eos again if user already added it."""
         if len(token_ids) > 0 and token_ids[-1] == self.eos_token_id:
             warnings.warn(
@@ -357,20 +358,20 @@ class UdopTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.create_token_type_ids_from_sequences
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. T5 does not make
         use of token type ids, therefore a list of zeros is returned.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of zeros.
+            `list[int]`: List of zeros.
         """
         eos = [self.eos_token_id]
 
@@ -380,8 +381,8 @@ class UdopTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.build_inputs_with_special_tokens
     def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A sequence has the following format:
@@ -390,13 +391,13 @@ class UdopTokenizer(PreTrainedTokenizer):
         - pair of sequences: `A </s> B </s>`
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs to which the special tokens will be added.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+            `list[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
         token_ids_0 = self._add_eos_if_not_present(token_ids_0)
         if token_ids_1 is None:
@@ -417,7 +418,7 @@ class UdopTokenizer(PreTrainedTokenizer):
         self.sp_model.Load(self.vocab_file)
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.tokenize
-    def tokenize(self, text: "TextInput", **kwargs) -> List[str]:
+    def tokenize(self, text: "TextInput", **kwargs) -> list[str]:
         """
         Converts a string to a list of tokens. If `self.legacy` is set to `False`, a prefix token is added unless the
         first token is special.
@@ -487,7 +488,7 @@ class UdopTokenizer(PreTrainedTokenizer):
         return out_string.strip()
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.save_vocabulary
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
@@ -507,13 +508,13 @@ class UdopTokenizer(PreTrainedTokenizer):
     @add_end_docstrings(UDOP_ENCODE_KWARGS_DOCSTRING)
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        text_pair: Optional[Union[PreTokenizedInput, List[PreTokenizedInput]]] = None,
-        boxes: Union[List[List[int]], List[List[List[int]]]] = None,
-        word_labels: Optional[Union[List[int], List[List[int]]]] = None,
-        text_target: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        text_pair: Optional[Union[PreTokenizedInput, list[PreTokenizedInput]]] = None,
+        boxes: Optional[Union[list[list[int]], list[list[list[int]]]]] = None,
+        word_labels: Optional[Union[list[int], list[list[int]]]] = None,
+        text_target: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         text_pair_target: Optional[
-            Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]
+            Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]
         ] = None,
         **kwargs,
     ) -> BatchEncoding:
@@ -541,17 +542,17 @@ class UdopTokenizer(PreTrainedTokenizer):
 
     def call_boxes(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
-        text_pair: Optional[Union[PreTokenizedInput, List[PreTokenizedInput]]] = None,
-        boxes: Union[List[List[int]], List[List[List[int]]]] = None,
-        word_labels: Optional[Union[List[int], List[List[int]]]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]],
+        text_pair: Optional[Union[PreTokenizedInput, list[PreTokenizedInput]]] = None,
+        boxes: Optional[Union[list[list[int]], list[list[list[int]]]]] = None,
+        word_labels: Optional[Union[list[int], list[list[int]]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -567,16 +568,16 @@ class UdopTokenizer(PreTrainedTokenizer):
         sequences with word-level normalized bounding boxes and optional labels.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string, a list of strings
                 (words of a single example or questions of a batch of examples) or a list of list of strings (batch of
                 words).
-            text_pair (`List[str]`, `List[List[str]]`):
+            text_pair (`list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence should be a list of strings
                 (pretokenized string).
-            boxes (`List[List[int]]`, `List[List[List[int]]]`):
+            boxes (`list[list[int]]`, `list[list[list[int]]]`):
                 Word-level bounding boxes. Each bounding box should be normalized to be on a 0-1000 scale.
-            word_labels (`List[int]`, `List[List[int]]`, *optional*):
+            word_labels (`list[int]`, `list[list[int]]`, *optional*):
                 Word-level integer labels (for token classification tasks such as FUNSD, CORD).
         """
 
@@ -604,18 +605,18 @@ class UdopTokenizer(PreTrainedTokenizer):
         if text_pair is not None:
             # in case text + text_pair are provided, text = questions, text_pair = words
             if not _is_valid_text_input(text):
-                raise ValueError("text input must of type `str` (single example) or `List[str]` (batch of examples). ")
+                raise ValueError("text input must of type `str` (single example) or `list[str]` (batch of examples). ")
             if not isinstance(text_pair, (list, tuple)):
                 raise ValueError(
-                    "words must of type `List[str]` (single pretokenized example), "
-                    "or `List[List[str]]` (batch of pretokenized examples)."
+                    "words must of type `list[str]` (single pretokenized example), "
+                    "or `list[list[str]]` (batch of pretokenized examples)."
                 )
         else:
             # in case only text is provided => must be words
             if not isinstance(text, (list, tuple)):
                 raise ValueError(
-                    "Words must of type `List[str]` (single pretokenized example), "
-                    "or `List[List[str]]` (batch of pretokenized examples)."
+                    "Words must of type `list[str]` (single pretokenized example), "
+                    "or `list[list[str]]` (batch of pretokenized examples)."
                 )
 
         if text_pair is not None:
@@ -693,13 +694,13 @@ class UdopTokenizer(PreTrainedTokenizer):
     def batch_encode_plus_boxes(
         self,
         batch_text_or_text_pairs: Union[
-            List[TextInput],
-            List[TextInputPair],
-            List[PreTokenizedInput],
+            list[TextInput],
+            list[TextInputPair],
+            list[PreTokenizedInput],
         ],
-        is_pair: bool = None,
-        boxes: Optional[List[List[List[int]]]] = None,
-        word_labels: Optional[List[List[int]]] = None,
+        is_pair: Optional[bool] = None,
+        boxes: Optional[list[list[list[int]]]] = None,
+        word_labels: Optional[list[list[int]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -707,7 +708,7 @@ class UdopTokenizer(PreTrainedTokenizer):
         stride: int = 0,
         is_split_into_words: bool = False,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -722,7 +723,7 @@ class UdopTokenizer(PreTrainedTokenizer):
         Tokenize and prepare for the model a list of sequences or a list of pairs of sequences.
 
         Args:
-            batch_text_or_text_pairs (`List[str]`, `List[Tuple[str, str]]`, `List[List[str]]`, `List[Tuple[List[str], List[str]]]`, and for not-fast tokenizers, also `List[List[int]]`, `List[Tuple[List[int], List[int]]]`):
+            batch_text_or_text_pairs (`list[str]`, `list[tuple[str, str]]`, `list[list[str]]`, `list[tuple[list[str], list[str]]]`, and for not-fast tokenizers, also `list[list[int]]`, `list[tuple[list[int], list[int]]]`):
                 Batch of sequences or pair of sequences to be encoded. This can be a list of
                 string/string-sequences/int-sequences or a list of pair of string/string-sequences/int-sequence (see
                 details in `encode_plus`).
@@ -766,8 +767,8 @@ class UdopTokenizer(PreTrainedTokenizer):
         self,
         text: Union[TextInput, PreTokenizedInput, EncodedInput],
         text_pair: Optional[Union[TextInput, PreTokenizedInput, EncodedInput]] = None,
-        boxes: Optional[List[List[int]]] = None,
-        word_labels: Optional[List[List[int]]] = None,
+        boxes: Optional[list[list[int]]] = None,
+        word_labels: Optional[list[list[int]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -775,16 +776,16 @@ class UdopTokenizer(PreTrainedTokenizer):
         stride: int = 0,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
-    ) -> List[int]:
+    ) -> list[int]:
         """
         Args:
         Converts a string to a sequence of ids (integer), using the tokenizer and vocabulary. Same as doing
         `self.convert_tokens_to_ids(self.tokenize(text))`.
-            text (`str`, `List[str]` or `List[int]`):
+            text (`str`, `list[str]` or `list[int]`):
                 The first sequence to be encoded. This can be a string, a list of strings (tokenized string using the
                 `tokenize` method) or a list of integers (tokenized string ids using the `convert_tokens_to_ids`
                 method).
-            text_pair (`str`, `List[str]` or `List[int]`, *optional*):
+            text_pair (`str`, `list[str]` or `list[int]`, *optional*):
                 Optional second sequence to be encoded. This can be a string, a list of strings (tokenized string using
                 the `tokenize` method) or a list of integers (tokenized string ids using the `convert_tokens_to_ids`
                 method).
@@ -809,8 +810,8 @@ class UdopTokenizer(PreTrainedTokenizer):
         self,
         text: Union[TextInput, PreTokenizedInput],
         text_pair: Optional[PreTokenizedInput] = None,
-        boxes: Optional[List[List[int]]] = None,
-        word_labels: Optional[List[List[int]]] = None,
+        boxes: Optional[list[list[int]]] = None,
+        word_labels: Optional[list[list[int]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -818,7 +819,7 @@ class UdopTokenizer(PreTrainedTokenizer):
         stride: int = 0,
         is_split_into_words: bool = False,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -839,11 +840,11 @@ class UdopTokenizer(PreTrainedTokenizer):
         </Tip>
 
         Args:
-            text (`str`, `List[str]` or (for non-fast tokenizers) `List[int]`):
+            text (`str`, `list[str]` or (for non-fast tokenizers) `list[int]`):
                 The first sequence to be encoded. This can be a string, a list of strings (tokenized string using the
                 `tokenize` method) or a list of integers (tokenized string ids using the `convert_tokens_to_ids`
                 method).
-            text_pair (`str`, `List[str]` or `List[int]`, *optional*):
+            text_pair (`str`, `list[str]` or `list[int]`, *optional*):
                 Optional second sequence to be encoded. This can be a string, a list of strings (tokenized string using
                 the `tokenize` method) or a list of integers (tokenized string ids using the `convert_tokens_to_ids`
                 method).
@@ -886,20 +887,20 @@ class UdopTokenizer(PreTrainedTokenizer):
     def _batch_encode_plus_boxes(
         self,
         batch_text_or_text_pairs: Union[
-            List[TextInput],
-            List[TextInputPair],
-            List[PreTokenizedInput],
+            list[TextInput],
+            list[TextInputPair],
+            list[PreTokenizedInput],
         ],
-        is_pair: bool = None,
-        boxes: Optional[List[List[List[int]]]] = None,
-        word_labels: Optional[List[List[int]]] = None,
+        is_pair: Optional[bool] = None,
+        boxes: Optional[list[list[list[int]]]] = None,
+        word_labels: Optional[list[list[int]]] = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -944,16 +945,16 @@ class UdopTokenizer(PreTrainedTokenizer):
     def _batch_prepare_for_model_boxes(
         self,
         batch_text_or_text_pairs,
-        is_pair: bool = None,
-        boxes: Optional[List[List[int]]] = None,
-        word_labels: Optional[List[List[int]]] = None,
+        is_pair: Optional[bool] = None,
+        boxes: Optional[list[list[int]]] = None,
+        word_labels: Optional[list[list[int]]] = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[str] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -1018,15 +1019,15 @@ class UdopTokenizer(PreTrainedTokenizer):
         self,
         text: Union[TextInput, PreTokenizedInput],
         text_pair: Optional[PreTokenizedInput] = None,
-        boxes: Optional[List[List[int]]] = None,
-        word_labels: Optional[List[int]] = None,
+        boxes: Optional[list[list[int]]] = None,
+        word_labels: Optional[list[int]] = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -1073,15 +1074,15 @@ class UdopTokenizer(PreTrainedTokenizer):
         self,
         text: Union[TextInput, PreTokenizedInput],
         text_pair: Optional[PreTokenizedInput] = None,
-        boxes: Optional[List[List[int]]] = None,
-        word_labels: Optional[List[int]] = None,
+        boxes: Optional[list[list[int]]] = None,
+        word_labels: Optional[list[int]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -1103,9 +1104,9 @@ class UdopTokenizer(PreTrainedTokenizer):
         labeled with -100, such that they will be ignored by the loss function.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The first sequence to be encoded. This can be a string, a list of strings or a list of list of strings.
-            text_pair (`List[str]` or `List[int]`, *optional*):
+            text_pair (`list[str]` or `list[int]`, *optional*):
                 Optional second sequence to be encoded. This can be a list of strings (words of a single example) or a
                 list of list of strings (words of a batch of examples).
         """
@@ -1271,30 +1272,30 @@ class UdopTokenizer(PreTrainedTokenizer):
     # Copied from transformers.models.layoutxlm.tokenization_layoutxlm.LayoutXLMTokenizer.truncate_sequences
     def truncate_sequences(
         self,
-        ids: List[int],
-        token_boxes: List[List[int]],
-        pair_ids: Optional[List[int]] = None,
-        pair_token_boxes: Optional[List[List[int]]] = None,
-        labels: Optional[List[int]] = None,
+        ids: list[int],
+        token_boxes: list[list[int]],
+        pair_ids: Optional[list[int]] = None,
+        pair_token_boxes: Optional[list[list[int]]] = None,
+        labels: Optional[list[int]] = None,
         num_tokens_to_remove: int = 0,
         truncation_strategy: Union[str, TruncationStrategy] = "longest_first",
         stride: int = 0,
-    ) -> Tuple[List[int], List[int], List[int]]:
+    ) -> tuple[list[int], list[int], list[int]]:
         """
         Truncates a sequence pair in-place following the strategy.
 
         Args:
-            ids (`List[int]`):
+            ids (`list[int]`):
                 Tokenized input ids of the first sequence. Can be obtained from a string by chaining the `tokenize` and
                 `convert_tokens_to_ids` methods.
-            token_boxes (`List[List[int]]`):
+            token_boxes (`list[list[int]]`):
                 Bounding boxes of the first sequence.
-            pair_ids (`List[int]`, *optional*):
+            pair_ids (`list[int]`, *optional*):
                 Tokenized input ids of the second sequence. Can be obtained from a string by chaining the `tokenize`
                 and `convert_tokens_to_ids` methods.
-            pair_token_boxes (`List[List[int]]`, *optional*):
+            pair_token_boxes (`list[list[int]]`, *optional*):
                 Bounding boxes of the second sequence.
-            labels (`List[int]`, *optional*):
+            labels (`list[int]`, *optional*):
                 Labels of the first sequence (for token classification tasks).
             num_tokens_to_remove (`int`, *optional*, defaults to 0):
                 Number of tokens to remove using the truncation strategy.
@@ -1318,7 +1319,7 @@ class UdopTokenizer(PreTrainedTokenizer):
                 sequence returned. The value of this argument defines the number of additional tokens.
 
         Returns:
-            `Tuple[List[int], List[int], List[int]]`: The truncated `ids`, the truncated `pair_ids` and the list of
+            `tuple[list[int], list[int], list[int]]`: The truncated `ids`, the truncated `pair_ids` and the list of
             overflowing tokens.
         """
         if num_tokens_to_remove <= 0:
@@ -1397,11 +1398,11 @@ class UdopTokenizer(PreTrainedTokenizer):
     # Copied from transformers.models.layoutxlm.tokenization_layoutxlm.LayoutXLMTokenizer._pad
     def _pad(
         self,
-        encoded_inputs: Union[Dict[str, EncodedInput], BatchEncoding],
+        encoded_inputs: Union[dict[str, EncodedInput], BatchEncoding],
         max_length: Optional[int] = None,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_attention_mask: Optional[bool] = None,
     ) -> dict:
         """
@@ -1409,7 +1410,7 @@ class UdopTokenizer(PreTrainedTokenizer):
 
         Args:
             encoded_inputs:
-                Dictionary of tokenized inputs (`List[int]`) or batch of tokenized inputs (`List[List[int]]`).
+                Dictionary of tokenized inputs (`list[int]`) or batch of tokenized inputs (`list[list[int]]`).
             max_length: maximum length of the returned list and optionally padding length (see below).
                 Will truncate by taking into account the special tokens.
             padding_strategy: PaddingStrategy to use for padding.

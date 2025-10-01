@@ -13,44 +13,49 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-05-22 and added to Hugging Face Transformers on 2023-06-20.*
 
 # MMS
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
-The MMS model was proposed in [Scaling Speech Technology to 1,000+ Languages](https://arxiv.org/abs/2305.13516) 
+The MMS model was proposed in [Scaling Speech Technology to 1,000+ Languages](https://huggingface.co/papers/2305.13516)
 by Vineel Pratap, Andros Tjandra, Bowen Shi, Paden Tomasello, Arun Babu, Sayani Kundu, Ali Elkahky, Zhaoheng Ni, Apoorv Vyas, Maryam Fazel-Zarandi, Alexei Baevski, Yossi Adi, Xiaohui Zhang, Wei-Ning Hsu, Alexis Conneau, Michael Auli
 
 The abstract from the paper is the following:
 
-*Expanding the language coverage of speech technology has the potential to improve access to information for many more people. 
+*Expanding the language coverage of speech technology has the potential to improve access to information for many more people.
 However, current speech technology is restricted to about one hundred languages which is a small fraction of the over 7,000
-languages spoken around the world. 
-The Massively Multilingual Speech (MMS) project increases the number of supported languages by 10-40x, depending on the task. 
+languages spoken around the world.
+The Massively Multilingual Speech (MMS) project increases the number of supported languages by 10-40x, depending on the task.
 The main ingredients are a new dataset based on readings of publicly available religious texts and effectively leveraging
-self-supervised learning. We built pre-trained wav2vec 2.0 models covering 1,406 languages, 
-a single multilingual automatic speech recognition model for 1,107 languages, speech synthesis models 
-for the same number of languages, as well as a language identification model for 4,017 languages. 
-Experiments show that our multilingual speech recognition model more than halves the word error rate of 
+self-supervised learning. We built pre-trained wav2vec 2.0 models covering 1,406 languages,
+a single multilingual automatic speech recognition model for 1,107 languages, speech synthesis models
+for the same number of languages, as well as a language identification model for 4,017 languages.
+Experiments show that our multilingual speech recognition model more than halves the word error rate of
 Whisper on 54 languages of the FLEURS benchmark while being trained on a small fraction of the labeled data.*
 
 Here are the different models open sourced in the MMS project. The models and code are originally released [here](https://github.com/facebookresearch/fairseq/tree/main/examples/mms). We have add them to the `transformers` framework, making them easier to use.
 
 ### Automatic Speech Recognition (ASR)
 
-The ASR model checkpoints  can be found here : [mms-1b-fl102](https://huggingface.co/facebook/mms-1b-fl102), [mms-1b-l1107](https://huggingface.co/facebook/mms-1b-l1107), [mms-1b-all](https://huggingface.co/facebook/mms-1b-all). For best accuracy, use the `mms-1b-all` model. 
+The ASR model checkpoints  can be found here : [mms-1b-fl102](https://huggingface.co/facebook/mms-1b-fl102), [mms-1b-l1107](https://huggingface.co/facebook/mms-1b-l1107), [mms-1b-all](https://huggingface.co/facebook/mms-1b-all). For best accuracy, use the `mms-1b-all` model.
 
 Tips:
 
 - All ASR models accept a float array corresponding to the raw waveform of the speech signal. The raw waveform should be pre-processed with [`Wav2Vec2FeatureExtractor`].
 - The models were trained using connectionist temporal classification (CTC) so the model output has to be decoded using
   [`Wav2Vec2CTCTokenizer`].
-- You can load different language adapter weights for different languages via [`~Wav2Vec2PreTrainedModel.load_adapter`]. Language adapters only consists of roughly 2 million parameters 
+- You can load different language adapter weights for different languages via [`~Wav2Vec2PreTrainedModel.load_adapter`]. Language adapters only consists of roughly 2 million parameters
   and can therefore be efficiently loaded on the fly when needed.
 
 #### Loading
 
-By default MMS loads adapter weights for English. If you want to load adapter weights of another language 
+By default MMS loads adapter weights for English. If you want to load adapter weights of another language
 make sure to specify `target_lang=<your-chosen-target-lang>` as well as `"ignore_mismatched_sizes=True`.
 The `ignore_mismatched_sizes=True` keyword has to be passed to allow the language model head to be resized according
 to the vocabulary of the specified language.
@@ -161,13 +166,13 @@ processor.tokenizer.vocab.keys()
 
 to see all supported languages.
 
-To further improve performance from ASR models, language model decoding can be used. See the documentation [here](https://huggingface.co/facebook/mms-1b-all) for further details.  
+To further improve performance from ASR models, language model decoding can be used. See the documentation [here](https://huggingface.co/facebook/mms-1b-all) for further details.
 
 ### Speech Synthesis (TTS)
 
-MMS-TTS uses the same model architecture as VITS, which was added to 🤗 Transformers in v4.33. MMS trains a separate 
-model checkpoint for each of the 1100+ languages in the project. All available checkpoints can be found on the Hugging 
-Face Hub: [facebook/mms-tts](https://huggingface.co/models?sort=trending&search=facebook%2Fmms-tts), and the inference 
+MMS-TTS uses the same model architecture as VITS, which was added to 🤗 Transformers in v4.33. MMS trains a separate
+model checkpoint for each of the 1100+ languages in the project. All available checkpoints can be found on the Hugging
+Face Hub: [facebook/mms-tts](https://huggingface.co/models?sort=trending&search=facebook%2Fmms-tts), and the inference
 documentation under [VITS](https://huggingface.co/docs/transformers/main/en/model_doc/vits).
 
 #### Inference
@@ -178,10 +183,10 @@ To use the MMS model, first update to the latest version of the Transformers lib
 pip install --upgrade transformers accelerate
 ```
 
-Since the flow-based model in VITS is non-deterministic, it is good practice to set a seed to ensure reproducibility of 
-the outputs. 
+Since the flow-based model in VITS is non-deterministic, it is good practice to set a seed to ensure reproducibility of
+the outputs.
 
-- For languages with a Roman alphabet, such as English or French, the tokenizer can be used directly to 
+- For languages with a Roman alphabet, such as English or French, the tokenizer can be used directly to
 pre-process the text inputs. The following code example runs a forward pass using the MMS-TTS English checkpoint:
 
 ```python
@@ -217,10 +222,10 @@ from IPython.display import Audio
 Audio(waveform, rate=model.config.sampling_rate)
 ```
 
-For certain languages with non-Roman alphabets, such as Arabic, Mandarin or Hindi, the [`uroman`](https://github.com/isi-nlp/uroman) 
+For certain languages with non-Roman alphabets, such as Arabic, Mandarin or Hindi, the [`uroman`](https://github.com/isi-nlp/uroman)
 perl package is required to pre-process the text inputs to the Roman alphabet.
 
-You can check whether you require the `uroman` package for your language by inspecting the `is_uroman` attribute of 
+You can check whether you require the `uroman` package for your language by inspecting the `is_uroman` attribute of
 the pre-trained `tokenizer`:
 
 ```python
@@ -230,7 +235,7 @@ tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-eng")
 print(tokenizer.is_uroman)
 ```
 
-If required, you should apply the uroman package to your text inputs **prior** to passing them to the `VitsTokenizer`, 
+If required, you should apply the uroman package to your text inputs **prior** to passing them to the `VitsTokenizer`,
 since currently the tokenizer does not support performing the pre-processing itself.
 
 To do this, first clone the uroman repository to your local machine and set the bash variable `UROMAN` to the local path:
@@ -241,7 +246,7 @@ cd uroman
 export UROMAN=$(pwd)
 ```
 
-You can then pre-process the text input using the following code snippet. You can either rely on using the bash variable 
+You can then pre-process the text input using the following code snippet. You can either rely on using the bash variable
 `UROMAN` to point to the uroman repository, or you can pass the uroman directory as an argument to the `uromanize` function:
 
 ```python
@@ -296,7 +301,7 @@ model = VitsModel.from_pretrained("facebook/mms-tts-eng")
 inputs = tokenizer(text="Hello - my dog is cute", return_tensors="pt")
 
 # make deterministic
-set_seed(555)  
+set_seed(555)
 
 # make speech faster and more noisy
 model.speaking_rate = 1.5
@@ -308,7 +313,7 @@ with torch.no_grad():
 
 ### Language Identification (LID)
 
-Different LID models are available based on the number of languages they can recognize - [126](https://huggingface.co/facebook/mms-lid-126), [256](https://huggingface.co/facebook/mms-lid-256), [512](https://huggingface.co/facebook/mms-lid-512), [1024](https://huggingface.co/facebook/mms-lid-1024), [2048](https://huggingface.co/facebook/mms-lid-2048), [4017](https://huggingface.co/facebook/mms-lid-4017). 
+Different LID models are available based on the number of languages they can recognize - [126](https://huggingface.co/facebook/mms-lid-126), [256](https://huggingface.co/facebook/mms-lid-256), [512](https://huggingface.co/facebook/mms-lid-512), [1024](https://huggingface.co/facebook/mms-lid-1024), [2048](https://huggingface.co/facebook/mms-lid-2048), [4017](https://huggingface.co/facebook/mms-lid-4017).
 
 #### Inference
 First, we install transformers and some other libraries
@@ -371,18 +376,19 @@ detected_lang = model.config.id2label[lang_id]
 ```
 
 To see all the supported languages of a checkpoint, you can print out the language ids as follows:
+
 ```py
 processor.id2label.values()
 ```
 
 ### Audio Pretrained Models
 
-Pretrained models are available for two different sizes - [300M](https://huggingface.co/facebook/mms-300m) , 
-[1Bil](https://huggingface.co/facebook/mms-1b). 
+Pretrained models are available for two different sizes - [300M](https://huggingface.co/facebook/mms-300m) ,
+[1Bil](https://huggingface.co/facebook/mms-1b).
 
 <Tip>
 
-The MMS for ASR architecture is based on the Wav2Vec2 model, refer to [Wav2Vec2's documentation page](wav2vec2) for further 
+The MMS for ASR architecture is based on the Wav2Vec2 model, refer to [Wav2Vec2's documentation page](wav2vec2) for further
 details on how to finetune with models for various downstream tasks.
 
 MMS-TTS uses the same model architecture as VITS, refer to [VITS's documentation page](vits) for API reference.

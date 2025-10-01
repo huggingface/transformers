@@ -14,34 +14,19 @@
 # limitations under the License.
 
 
-from typing import ClassVar, List, Optional, Union
+from typing import Optional, Union
 
-from transformers.models.paligemma.processing_paligemma import (
-    IMAGE_TOKEN,
-    PaliGemmaProcessor,
-    build_string_from_input,
-    make_batched_images,
-)
+from transformers.models.paligemma.processing_paligemma import IMAGE_TOKEN, PaliGemmaProcessor, build_string_from_input
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, is_valid_image
-from ...processing_utils import (
-    ProcessingKwargs,
-    Unpack,
-)
-from ...tokenization_utils_base import (
-    PreTokenizedInput,
-    TextInput,
-)
-from ...utils import (
-    is_torch_available,
-    logging,
-)
+from ...image_utils import ImageInput, make_flat_list_of_images
+from ...processing_utils import ProcessingKwargs, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import is_torch_available, logging
 
 
 if is_torch_available():
     import torch
-
 
 logger = logging.get_logger(__name__)
 
@@ -74,10 +59,23 @@ class ColPaliProcessor(PaliGemmaProcessor):
             The tokenizer is a required input.
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
+        visual_prompt_prefix (`str`, *optional*, defaults to `"Describe the image."`):
+            A string that gets tokenized and prepended to the image tokens.
+        query_prefix (`str`, *optional*, defaults to `"Question: "`):
+            A prefix to be used for the query.
     """
 
-    visual_prompt_prefix: ClassVar[str] = "Describe the image."
-    query_prefix: ClassVar[str] = "Question: "
+    def __init__(
+        self,
+        image_processor=None,
+        tokenizer=None,
+        chat_template=None,
+        visual_prompt_prefix: str = "Describe the image.",
+        query_prefix: str = "Question: ",
+    ):
+        super().__init__(image_processor=image_processor, tokenizer=tokenizer, chat_template=chat_template)
+        self.visual_prompt_prefix = visual_prompt_prefix
+        self.query_prefix = query_prefix
 
     @property
     def query_augmentation_token(self) -> str:
@@ -90,39 +88,37 @@ class ColPaliProcessor(PaliGemmaProcessor):
 
     def __call__(
         self,
-        images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        images: Optional[ImageInput] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[ColPaliProcessorKwargs],
     ) -> BatchFeature:
         """
-        Main method to prepare for the model either (1) one or several texts, either (2) one or several image(s). This method is custom
+        Main method to prepare for the model either (1) one or several texts, either (2) one or several image(s). This method is a custom
         wrapper around the PaliGemmaProcessor's [`~PaliGemmaProcessor.__call__`] method adapted for the ColPali model. It cannot process
         both text and images at the same time.
 
-        When preparing the the text(s), this method forwards the `text` and `kwargs` arguments to LlamaTokenizerFast's
+        When preparing the text(s), this method forwards the `text` and `kwargs` arguments to LlamaTokenizerFast's
         [`~LlamaTokenizerFast.__call__`].
-        When preparing the the image(s), this method forwards the `images` and `kwargs` arguments to SiglipImageProcessor's
+        When preparing the image(s), this method forwards the `images` and `kwargs` arguments to SiglipImageProcessor's
         [`~SiglipImageProcessor.__call__`].
-        Please refer to the doctsring of the above two methods for more information.
+        Please refer to the docstring of the above two methods for more information.
 
         Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -140,7 +136,7 @@ class ColPaliProcessor(PaliGemmaProcessor):
         )
         suffix = output_kwargs["text_kwargs"].pop("suffix", None)
 
-        return_token_type_ids = True if suffix is not None else False
+        return_token_type_ids = True
 
         if text is None and images is None:
             raise ValueError("Either text or images must be provided")
@@ -148,13 +144,8 @@ class ColPaliProcessor(PaliGemmaProcessor):
             raise ValueError("Only one of text or images can be processed at a time")
 
         if images is not None:
-            if is_valid_image(images):
-                images = [images]
-            elif isinstance(images, list) and is_valid_image(images[0]):
-                pass
-            elif not (isinstance(images, list) and isinstance(images[0], list) and is_valid_image(images[0][0])):
-                raise ValueError("images must be an image, list of images or list of list of images")
-
+            images = self.image_processor.fetch_images(images)
+            images = make_flat_list_of_images(images)
             texts_doc = [self.visual_prompt_prefix] * len(images)
             images = [image.convert("RGB") for image in images]
 
@@ -168,7 +159,6 @@ class ColPaliProcessor(PaliGemmaProcessor):
                 )
                 for prompt, image_list in zip(texts_doc, images)
             ]
-            images = make_batched_images(images)
             pixel_values = self.image_processor(images, **output_kwargs["images_kwargs"])["pixel_values"]
 
             # max_length has to account for the image tokens
@@ -177,7 +167,7 @@ class ColPaliProcessor(PaliGemmaProcessor):
 
             inputs = self.tokenizer(
                 input_strings,
-                return_token_type_ids=False,
+                return_token_type_ids=return_token_type_ids,
                 **output_kwargs["text_kwargs"],
             )
 
@@ -197,19 +187,17 @@ class ColPaliProcessor(PaliGemmaProcessor):
 
             if suffix is None:
                 suffix = self.query_augmentation_token * 10
-            texts_query: List[str] = []
 
+            texts_query: list[str] = []
             for query in text:
-                query = self.tokenizer.bos_token + self.query_prefix + query
-                query += suffix  # add suffix (pad tokens)
-                query += "\n"  # make input ISO to PaliGemma's processor
+                query = self.tokenizer.bos_token + self.query_prefix + query + suffix + "\n"
                 texts_query.append(query)
 
             output_kwargs["text_kwargs"]["max_length"] = output_kwargs["text_kwargs"].get("max_length", 50)
 
             batch_query = self.tokenizer(
                 texts_query,
-                return_token_type_ids=False,
+                return_token_type_ids=return_token_type_ids,
                 **output_kwargs["text_kwargs"],
             )
 
@@ -217,27 +205,25 @@ class ColPaliProcessor(PaliGemmaProcessor):
 
     def process_images(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         **kwargs: Unpack[ColPaliProcessorKwargs],
     ) -> BatchFeature:
         """
         Prepare for the model one or several image(s). This method is a wrapper around the `__call__` method of the ColPaliProcessor's
         [`ColPaliProcessor.__call__`].
 
-        This method forwards the `images` and `kwargs` arguments to SiglipImageProcessor's [`~SiglipImageProcessor.__call__`].
+        This method forwards the `images` and `kwargs` arguments to the image processor.
 
         Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -252,27 +238,25 @@ class ColPaliProcessor(PaliGemmaProcessor):
 
     def process_queries(
         self,
-        text: Union[TextInput, List[TextInput]],
+        text: Union[TextInput, list[TextInput]],
         **kwargs: Unpack[ColPaliProcessorKwargs],
     ) -> BatchFeature:
         """
         Prepare for the model one or several texts. This method is a wrapper around the `__call__` method of the ColPaliProcessor's
         [`ColPaliProcessor.__call__`].
 
-        This method forwards the `text` and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`].
+        This method forwards the `text` and `kwargs` arguments to the tokenizer.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -286,8 +270,8 @@ class ColPaliProcessor(PaliGemmaProcessor):
 
     def score_retrieval(
         self,
-        query_embeddings: Union["torch.Tensor", List["torch.Tensor"]],
-        passage_embeddings: Union["torch.Tensor", List["torch.Tensor"]],
+        query_embeddings: Union["torch.Tensor", list["torch.Tensor"]],
+        passage_embeddings: Union["torch.Tensor", list["torch.Tensor"]],
         batch_size: int = 128,
         output_dtype: Optional["torch.dtype"] = None,
         output_device: Union["torch.device", str] = "cpu",
@@ -304,8 +288,8 @@ class ColPaliProcessor(PaliGemmaProcessor):
             obtained by padding the list of tensors.
 
         Args:
-            query_embeddings (`Union[torch.Tensor, List[torch.Tensor]`): Query embeddings.
-            passage_embeddings (`Union[torch.Tensor, List[torch.Tensor]`): Passage embeddings.
+            query_embeddings (`Union[torch.Tensor, list[torch.Tensor]`): Query embeddings.
+            passage_embeddings (`Union[torch.Tensor, list[torch.Tensor]`): Passage embeddings.
             batch_size (`int`, *optional*, defaults to 128): Batch size for computing scores.
             output_dtype (`torch.dtype`, *optional*, defaults to `torch.float32`): The dtype of the output tensor.
                 If `None`, the dtype of the input embeddings is used.
@@ -330,10 +314,10 @@ class ColPaliProcessor(PaliGemmaProcessor):
         if output_dtype is None:
             output_dtype = query_embeddings[0].dtype
 
-        scores: List[torch.Tensor] = []
+        scores: list[torch.Tensor] = []
 
         for i in range(0, len(query_embeddings), batch_size):
-            batch_scores: List[torch.Tensor] = []
+            batch_scores: list[torch.Tensor] = []
             batch_queries = torch.nn.utils.rnn.pad_sequence(
                 query_embeddings[i : i + batch_size], batch_first=True, padding_value=0
             )

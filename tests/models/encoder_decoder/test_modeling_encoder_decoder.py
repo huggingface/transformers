@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,9 +19,9 @@ import unittest
 from transformers import is_torch_available, logging
 from transformers.testing_utils import (
     CaptureLogger,
+    Expectations,
     require_deterministic_for_xpu,
     require_torch,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -179,7 +178,10 @@ class EncoderDecoderMixin:
         **kwargs,
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        with tempfile.TemporaryDirectory() as encoder_tmp_dirname, tempfile.TemporaryDirectory() as decoder_tmp_dirname:
+        with (
+            tempfile.TemporaryDirectory() as encoder_tmp_dirname,
+            tempfile.TemporaryDirectory() as decoder_tmp_dirname,
+        ):
             encoder_model.save_pretrained(encoder_tmp_dirname)
             decoder_model.save_pretrained(decoder_tmp_dirname)
             model_kwargs = {"encoder_hidden_dropout_prob": 0.0}
@@ -306,7 +308,10 @@ class EncoderDecoderMixin:
             out_2 = outputs[0].cpu().numpy()
             out_2[np.isnan(out_2)] = 0
 
-            with tempfile.TemporaryDirectory() as encoder_tmp_dirname, tempfile.TemporaryDirectory() as decoder_tmp_dirname:
+            with (
+                tempfile.TemporaryDirectory() as encoder_tmp_dirname,
+                tempfile.TemporaryDirectory() as decoder_tmp_dirname,
+            ):
                 enc_dec_model.encoder.save_pretrained(encoder_tmp_dirname)
                 enc_dec_model.decoder.save_pretrained(decoder_tmp_dirname)
                 enc_dec_model = EncoderDecoderModel.from_encoder_decoder_pretrained(
@@ -406,6 +411,10 @@ class EncoderDecoderMixin:
         labels,
         **kwargs,
     ):
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
+        decoder_config._attn_implementation = "eager"
+
         # make the decoder inputs a different shape from the encoder inputs to harden the test
         decoder_input_ids = decoder_input_ids[:, :-1]
         decoder_attention_mask = decoder_attention_mask[:, :-1]
@@ -439,10 +448,15 @@ class EncoderDecoderMixin:
         # config file. Contrarily to most models, changing the model's config won't work -- the defaults are loaded
         # from the inner models' configurations.
 
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
+        decoder_config._attn_implementation = "eager"
+
         decoder_input_ids = decoder_input_ids[:, :-1]
         decoder_attention_mask = decoder_attention_mask[:, :-1]
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        enc_dec_model.config._attn_implementation = "eager"  # model config -> won't work
         enc_dec_model.config.output_attentions = True  # model config -> won't work
         enc_dec_model.to(torch_device)
         outputs_encoder_decoder = enc_dec_model(
@@ -681,7 +695,6 @@ class EncoderDecoderMixin:
                 max_diff = np.amax(np.abs(out_1 - out_2))
                 self.assertLessEqual(max_diff, 1e-5)
 
-    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         if not self.supports_sdpa:
             self.skipTest("SDPA is not supported")
@@ -794,11 +807,14 @@ class BertEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
         encoder_config = config_and_inputs["config"]
         decoder_config = config_and_inputs["decoder_config"]
 
+        encoder_config._attn_implementation = "eager"
+        decoder_config._attn_implementation = "eager"
         encoder_config.position_embedding_type = "relative_key_query"
         decoder_config.position_embedding_type = "relative_key_query"
 
-        config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder_config, decoder_config)
-        model = EncoderDecoderModel(config).eval().to(torch_device)
+        encoder_model, decoder_model = self.get_encoder_decoder_model(encoder_config, decoder_config)
+        model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model).eval().to(torch_device)
+        model.config._attn_implementation = "eager"  # model config -> won't work
 
         logits = model(
             input_ids=config_and_inputs["input_ids"], decoder_input_ids=config_and_inputs["decoder_input_ids"]
@@ -823,7 +839,6 @@ class BertEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
         input_dict = tokenizer(
             [ARTICLE_SIGMA, ARTICLE_AMERICA],
             padding="max_length",
-            pad_to_max_length=True,
             max_length=512,
             return_tensors="pt",
         )
@@ -931,6 +946,7 @@ class BertGenerationEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCa
         }
 
     @slow
+    @require_deterministic_for_xpu
     def test_roberta2roberta_summarization(self):
         model = EncoderDecoderModel.from_pretrained("google/roberta2roberta_L-24_bbc")
         model.to(torch_device)
@@ -940,9 +956,28 @@ class BertGenerationEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCa
 
         ARTICLE_TOSHIBA = """An independent panel appointed by Toshiba found institutional accounting irregularities, the firm said in a statement to investors. Toshiba said it "takes the situation it has caused very seriously" and that it "deeply apologised" to shareholders. The overstatement was roughly triple an initial Toshiba estimate. The probe could lead to a restatement of earnings, a board overhaul and potential action by regulators. "Within Toshiba, there was a corporate culture in which one could not go against the wishes of superiors," the report said. "Therefore, when top management presented 'challenges', division presidents, line managers and employees below them continually carried out inappropriate accounting practices to meet targets in line with the wishes of their superiors." The improper accounting practices stretched back to 2008."""
 
-        EXPECTED_SUMMARY_PS3 = """Sony has said that a bug in its PlayStation 3 console is preventing them from using the machine as a computer."""
+        # fmt: off
+        EXPECTED_SUMMARIES_PS3 = Expectations(
+            {
+                ("xpu", 3): """Sony has said that a bug in its PlayStation 3 console is preventing them from using the machine as a computer .""",
+                ("cuda", 7): """Sony has said that a bug in its PlayStation 3 console is preventing them from using the machine as a computer.""",
+            }
+        ) # fmt: on
+        EXPECTED_SUMMARY_PS3 = EXPECTED_SUMMARIES_PS3.get_expectation()
 
-        EXPECTED_SUMMARY_TOSHIBA = """Japanese electronics giant Toshiba overstated its annual earnings by more than a third last year, according to a report."""
+        EXPECTED_SUMMARIES_TOSHIBA = Expectations(
+            {
+                (
+                    "xpu",
+                    3,
+                ): """Japanese electronics giant Toshiba overstated its annual earnings by more than a third last year , according to a report .""",
+                (
+                    "cuda",
+                    7,
+                ): """Japanese electronics giant Toshiba overstated its annual earnings by more than a third last year, according to a report.""",
+            }
+        )
+        EXPECTED_SUMMARY_TOSHIBA = EXPECTED_SUMMARIES_TOSHIBA.get_expectation()
 
         input_dict = tokenizer(
             [ARTICLE_PS3, ARTICLE_TOSHIBA], max_length=512, padding="max_length", return_tensors="pt"
@@ -1037,7 +1072,6 @@ class GPT2EncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
             decoder_config,
             decoder_input_ids,
             decoder_input_mask,
-            decoder_head_mask,
             decoder_token_type_ids,
             decoder_sequence_labels,
             decoder_token_labels,
@@ -1075,6 +1109,7 @@ class GPT2EncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
         pass
 
     @slow
+    @require_deterministic_for_xpu
     def test_bert2gpt2_summarization(self):
         model = EncoderDecoderModel.from_pretrained("patrickvonplaten/bert2gpt2-cnn_dailymail-fp16")
 
@@ -1084,7 +1119,19 @@ class GPT2EncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
 
         ARTICLE_STUDENTS = """(CNN)Sigma Alpha Epsilon is under fire for a video showing party-bound fraternity members singing a racist chant. SAE's national chapter suspended the students, but University of Oklahoma President David Boren took it a step further, saying the university's affiliation with the fraternity is permanently done. The news is shocking, but it's not the first time SAE has faced controversy. SAE was founded March 9, 1856, at the University of Alabama, five years before the American Civil War, according to the fraternity website. When the war began, the group had fewer than 400 members, of which "369 went to war for the Confederate States and seven for the Union Army," the website says. The fraternity now boasts more than 200,000 living alumni, along with about 15,000 undergraduates populating 219 chapters and 20 "colonies" seeking full membership at universities. SAE has had to work hard to change recently after a string of member deaths, many blamed on the hazing of new recruits, SAE national President Bradley Cohen wrote in a message on the fraternity's website. The fraternity's website lists more than 130 chapters cited or suspended for "health and safety incidents" since 2010. At least 30 of the incidents involved hazing, and dozens more involved alcohol. However, the list is missing numerous incidents from recent months. Among them, according to various media outlets: Yale University banned the SAEs from campus activities last month after members allegedly tried to interfere with a sexual misconduct investigation connected to an initiation rite. Stanford University in December suspended SAE housing privileges after finding sorority members attending a fraternity function were subjected to graphic sexual content. And Johns Hopkins University in November suspended the fraternity for underage drinking. "The media has labeled us as the 'nation's deadliest fraternity,' " Cohen said. In 2011, for example, a student died while being coerced into excessive alcohol consumption, according to a lawsuit. SAE's previous insurer dumped the fraternity. "As a result, we are paying Lloyd's of London the highest insurance rates in the Greek-letter world," Cohen said. Universities have turned down SAE's attempts to open new chapters, and the fraternity had to close 12 in 18 months over hazing incidents."""
 
-        EXPECTED_SUMMARY_STUDENTS = """SAS Alpha Epsilon suspended the students, but university president says it's permanent.\nThe fraternity has had to deal with a string of student deaths since 2010.\nSAS has more than 200,000 members, many of whom are students.\nA student died while being forced into excessive alcohol consumption."""
+        EXPECTED_SUMMARIES_STUDENTS = Expectations(
+            {
+                (
+                    "xpu",
+                    3,
+                ): """SAS Alpha Epsilon suspended the students, but university president says it's permanent .\nThe fraternity has had to deal with a string of student deaths since 2010 .\nSAS has more than 200,000 members, many of whom are students .\nA student died while being forced into excessive alcohol consumption .""",
+                (
+                    "cuda",
+                    7,
+                ): """SAS Alpha Epsilon suspended the students, but university president says it's permanent.\nThe fraternity has had to deal with a string of student deaths since 2010.\nSAS has more than 200,000 members, many of whom are students.\nA student died while being forced into excessive alcohol consumption.""",
+            }
+        )
+        EXPECTED_SUMMARY_STUDENTS = EXPECTED_SUMMARIES_STUDENTS.get_expectation()
 
         input_dict = tokenizer_in(ARTICLE_STUDENTS, return_tensors="pt")
         output_ids = model.generate(input_dict["input_ids"].to(torch_device))

@@ -21,6 +21,7 @@ import os
 import sys
 
 import transformers
+from transformers import is_torch_hpu_available, is_torch_xpu_available
 
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -32,11 +33,27 @@ try:
     import torch
 
     print("Torch version:", torch.__version__)
-    print("Cuda available:", torch.cuda.is_available())
-    print("Cuda version:", torch.version.cuda)
-    print("CuDNN version:", torch.backends.cudnn.version())
-    print("Number of GPUs available:", torch.cuda.device_count())
-    print("NCCL version:", torch.cuda.nccl.version())
+    accelerator = "NA"
+    if torch.cuda.is_available():
+        accelerator = "CUDA"
+    elif is_torch_xpu_available():
+        accelerator = "XPU"
+    elif is_torch_hpu_available():
+        accelerator = "HPU"
+
+    print("Torch accelerator:", accelerator)
+
+    if accelerator == "CUDA":
+        print("Cuda version:", torch.version.cuda)
+        print("CuDNN version:", torch.backends.cudnn.version())
+        print("Number of GPUs available:", torch.cuda.device_count())
+        print("NCCL version:", torch.cuda.nccl.version())
+    elif accelerator == "XPU":
+        print("SYCL version:", torch.version.xpu)
+        print("Number of XPUs available:", torch.xpu.device_count())
+    elif accelerator == "HPU":
+        print("HPU version:", torch.__version__.split("+")[-1])
+        print("Number of HPUs available:", torch.hpu.device_count())
 except ImportError:
     print("Torch version:", None)
 
@@ -47,11 +64,13 @@ try:
 except ImportError:
     print("DeepSpeed version:", None)
 
-try:
-    import tensorflow as tf
 
-    print("TensorFlow version:", tf.__version__)
-    print("TF GPUs available:", bool(tf.config.list_physical_devices("GPU")))
-    print("Number of TF GPUs available:", len(tf.config.list_physical_devices("GPU")))
+try:
+    import torchcodec
+
+    versions = torchcodec._core.get_ffmpeg_library_versions()
+    print("FFmpeg version:", versions["ffmpeg_version"])
 except ImportError:
-    print("TensorFlow version:", None)
+    print("FFmpeg version:", None)
+except (AttributeError, KeyError, RuntimeError):
+    print("Failed to get FFmpeg version")

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,7 +24,6 @@ from transformers.testing_utils import (
     require_essentia,
     require_librosa,
     require_scipy,
-    require_tf,
     require_torch,
 )
 from transformers.utils.import_utils import (
@@ -140,15 +138,15 @@ class Pop2PianoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
         speech_samples = ds.sort("id").select([0])["audio"]
         input_speech = [x["array"] for x in speech_samples][0]
         sampling_rate = [x["sampling_rate"] for x in speech_samples][0]
-        feaure_extractor = Pop2PianoFeatureExtractor.from_pretrained("sweetcocoa/pop2piano")
-        input_features = feaure_extractor(
+        feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("sweetcocoa/pop2piano")
+        input_features = feature_extractor(
             input_speech, sampling_rate=sampling_rate, return_tensors="pt"
         ).input_features
 
         EXPECTED_INPUT_FEATURES = torch.tensor(
             [[-7.1493, -6.8701, -4.3214], [-5.9473, -5.7548, -3.8438], [-6.1324, -5.9018, -4.3778]]
         )
-        self.assertTrue(torch.allclose(input_features[0, :3, :3], EXPECTED_INPUT_FEATURES, atol=1e-4))
+        torch.testing.assert_close(input_features[0, :3, :3], EXPECTED_INPUT_FEATURES, rtol=1e-4, atol=1e-4)
 
     def test_attention_mask(self):
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
@@ -228,28 +226,6 @@ class Pop2PianoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
 
         # check pt tensor or not
         self.assertEqual(type(input_features["input_features"]), torch.Tensor)
-
-        # check shape
-        self.assertEqual(len(input_features["input_features"].shape), 3)
-
-    @require_tf
-    def test_batch_feature_tf(self):
-        import tensorflow as tf
-
-        feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
-        speech_input1 = np.zeros([1_000_000], dtype=np.float32)
-        speech_input2 = np.ones([2_000_000], dtype=np.float32)
-        speech_input3 = np.random.randint(low=0, high=10, size=500_000).astype(np.float32)
-
-        input_features = feature_extractor(
-            [speech_input1, speech_input2, speech_input3],
-            sampling_rate=[44_100, 16_000, 48_000],
-            return_tensors="tf",
-            return_attention_mask=True,
-        )
-
-        # check tf tensor or not
-        self.assertTrue(tf.is_tensor(input_features["input_features"]))
 
         # check shape
         self.assertEqual(len(input_features["input_features"].shape), 3)

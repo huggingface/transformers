@@ -16,7 +16,7 @@
 import collections
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 import torch
@@ -24,14 +24,9 @@ from torch import nn
 from torch.nn import BCELoss
 
 from ..modeling_utils import PreTrainedModel
-from ..utils import ModelOutput, is_torch_available, logging
+from ..utils import ModelOutput, logging
 from .configuration_utils import PretrainedConfig, WatermarkingConfig
-
-
-if is_torch_available():
-    import torch
-
-    from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
+from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
 
 
 logger = logging.get_logger(__name__)
@@ -43,31 +38,31 @@ class WatermarkDetectorOutput:
     Outputs of a watermark detector.
 
     Args:
-        num_tokens_scored (np.array of shape (batch_size)):
+        num_tokens_scored (np.ndarray of shape (batch_size)):
             Array containing the number of tokens scored for each element in the batch.
-        num_green_tokens (np.array of shape (batch_size)):
+        num_green_tokens (np.ndarray of shape (batch_size)):
             Array containing the number of green tokens for each element in the batch.
-        green_fraction (np.array of shape (batch_size)):
+        green_fraction (np.ndarray of shape (batch_size)):
             Array containing the fraction of green tokens for each element in the batch.
-        z_score (np.array of shape (batch_size)):
+        z_score (np.ndarray of shape (batch_size)):
             Array containing the z-score for each element in the batch. Z-score here shows
             how many standard deviations away is the green token count in the input text
             from the expected green token count for machine-generated text.
-        p_value (np.array of shape (batch_size)):
+        p_value (np.ndarray of shape (batch_size)):
             Array containing the p-value for each batch obtained from z-scores.
-        prediction (np.array of shape (batch_size)), *optional*:
+        prediction (np.ndarray of shape (batch_size)), *optional*:
             Array containing boolean predictions whether a text is machine-generated for each element in the batch.
-        confidence (np.array of shape (batch_size)), *optional*:
+        confidence (np.ndarray of shape (batch_size)), *optional*:
             Array containing confidence scores of a text being machine-generated for each element in the batch.
     """
 
-    num_tokens_scored: np.array = None
-    num_green_tokens: np.array = None
-    green_fraction: np.array = None
-    z_score: np.array = None
-    p_value: np.array = None
-    prediction: Optional[np.array] = None
-    confidence: Optional[np.array] = None
+    num_tokens_scored: Optional[np.ndarray] = None
+    num_green_tokens: Optional[np.ndarray] = None
+    green_fraction: Optional[np.ndarray] = None
+    z_score: Optional[np.ndarray] = None
+    p_value: Optional[np.ndarray] = None
+    prediction: Optional[np.ndarray] = None
+    confidence: Optional[np.ndarray] = None
 
 
 class WatermarkDetector:
@@ -77,7 +72,7 @@ class WatermarkDetector:
     the correct device that was used during text generation, the correct watermarking arguments and the correct tokenizer vocab size.
     The code was based on the [original repo](https://github.com/jwkirchenbauer/lm-watermarking/tree/main).
 
-    See [the paper](https://arxiv.org/abs/2306.04634) for more information.
+    See [the paper](https://huggingface.co/papers/2306.04634) for more information.
 
     Args:
         model_config (`PretrainedConfig`):
@@ -126,7 +121,7 @@ class WatermarkDetector:
         self,
         model_config: PretrainedConfig,
         device: str,
-        watermarking_config: Union[WatermarkingConfig, Dict],
+        watermarking_config: Union[WatermarkingConfig, dict],
         ignore_repeated_ngrams: bool = False,
         max_cache_size: int = 128,
     ):
@@ -161,7 +156,7 @@ class WatermarkDetector:
         for batch_idx in range(ngram_tensors.shape[0]):
             frequencies_table = collections.Counter(ngram_tensors[batch_idx])
             ngram_to_watermark_lookup = {}
-            for ngram_example in frequencies_table.keys():
+            for ngram_example in frequencies_table:
                 prefix = ngram_example if selfhash else ngram_example[:-1]
                 target = ngram_example[-1]
                 ngram_to_watermark_lookup[ngram_example] = self._get_ngram_score_cached(prefix, target)
@@ -179,7 +174,7 @@ class WatermarkDetector:
                 )
         return num_tokens_scored_batch, green_token_count_batch
 
-    def _compute_z_score(self, green_token_count: np.array, total_num_tokens: np.array) -> np.array:
+    def _compute_z_score(self, green_token_count: np.ndarray, total_num_tokens: np.ndarray) -> np.ndarray:
         expected_count = self.greenlist_ratio
         numer = green_token_count - expected_count * total_num_tokens
         denom = np.sqrt(total_num_tokens * expected_count * (1 - expected_count))
@@ -195,7 +190,7 @@ class WatermarkDetector:
         input_ids: torch.LongTensor,
         z_threshold: float = 3.0,
         return_dict: bool = False,
-    ) -> Union[WatermarkDetectorOutput, np.array]:
+    ) -> Union[WatermarkDetectorOutput, np.ndarray]:
         """
                 Args:
                 input_ids (`torch.LongTensor`):
@@ -207,8 +202,8 @@ class WatermarkDetector:
                     Whether to return `~generation.WatermarkDetectorOutput` or not. If not it will return boolean predictions,
         ma
                 Return:
-                    [`~generation.WatermarkDetectorOutput`] or `np.array`: A [`~generation.WatermarkDetectorOutput`]
-                    if `return_dict=True` otherwise a `np.array`.
+                    [`~generation.WatermarkDetectorOutput`] or `np.ndarray`: A [`~generation.WatermarkDetectorOutput`]
+                    if `return_dict=True` otherwise a `np.ndarray`.
 
         """
 
@@ -257,7 +252,7 @@ class BayesianDetectorConfig(PretrainedConfig):
             Prior probability P(w) that a text is watermarked.
     """
 
-    def __init__(self, watermarking_depth: int = None, base_rate: float = 0.5, **kwargs):
+    def __init__(self, watermarking_depth: Optional[int] = None, base_rate: float = 0.5, **kwargs):
         self.watermarking_depth = watermarking_depth
         self.base_rate = base_rate
         # These can be set later to store information about this detector.
@@ -300,7 +295,7 @@ class BayesianDetectorWatermarkedLikelihood(nn.Module):
         self.beta = torch.nn.Parameter(-2.5 + 0.001 * torch.randn(1, 1, watermarking_depth))
         self.delta = torch.nn.Parameter(0.001 * torch.randn(1, 1, self.watermarking_depth, watermarking_depth))
 
-    def _compute_latents(self, g_values: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _compute_latents(self, g_values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Computes the unique token probability distribution given g-values.
 
         Args:
@@ -375,7 +370,7 @@ class BayesianDetectorModel(PreTrainedModel):
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
     """
 
-    config_class = BayesianDetectorConfig
+    config: BayesianDetectorConfig
     base_model_prefix = "model"
 
     def __init__(self, config):
@@ -490,7 +485,7 @@ class SynthIDTextWatermarkDetector:
     Parameters:
         detector_module ([`BayesianDetectorModel`]):
             Bayesian detector module object initialized with parameters.
-            Check examples/research_projects/synthid_text/detector_training.py for usage.
+            Check https://github.com/huggingface/transformers-research-projects/tree/main/synthid_text for usage.
         logits_processor (`SynthIDTextWatermarkLogitsProcessor`):
             The logits processor used for watermarking.
         tokenizer (`Any`):
@@ -502,7 +497,7 @@ class SynthIDTextWatermarkDetector:
     ...     AutoTokenizer, BayesianDetectorModel, SynthIDTextWatermarkLogitsProcessor, SynthIDTextWatermarkDetector
     ... )
 
-    >>> # Load the detector. See examples/research_projects/synthid_text for training a detector.
+    >>> # Load the detector. See https://github.com/huggingface/transformers-research-projects/tree/main/synthid_text for training a detector.
     >>> detector_model = BayesianDetectorModel.from_pretrained("joaogante/dummy_synthid_detector")
     >>> logits_processor = SynthIDTextWatermarkLogitsProcessor(
     ...     **detector_model.config.watermarking_config, device="cpu"
@@ -538,7 +533,7 @@ class SynthIDTextWatermarkDetector:
         context_repetition_mask = self.logits_processor.compute_context_repetition_mask(
             input_ids=tokenized_outputs,
         )
-        # context repitition mask shape [batch_size, output_len - (ngram_len - 1)]
+        # context repetition mask shape [batch_size, output_len - (ngram_len - 1)]
 
         combined_mask = context_repetition_mask * eos_token_mask
 

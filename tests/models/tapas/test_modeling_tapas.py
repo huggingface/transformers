@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +14,7 @@
 
 import copy
 import unittest
+from functools import cached_property
 
 import numpy as np
 import pandas as pd
@@ -32,8 +32,7 @@ from transformers import (
     is_torch_available,
 )
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_tensorflow_probability, require_torch, slow, torch_device
-from transformers.utils import cached_property
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -433,7 +432,6 @@ class TapasModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
     test_pruning = False
     test_resize_embeddings = True
-    test_head_masking = False
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -522,11 +520,6 @@ class TapasModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
 
-    @require_tensorflow_probability
-    @unittest.skip(reason="tfp is not defined even if installed. FIXME @Arthur in a followup PR!")
-    def test_pt_tf_model_equivalence(self):
-        pass
-
     @unittest.skip(reason="tfp is not defined even if installed. FIXME @Arthur in a followup PR!")
     def test_tf_from_pt_safetensors(self):
         pass
@@ -582,9 +575,6 @@ class TapasModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_no_head(self):
-        # ideally we want to test this with the weights of tapas_inter_masklm_base_reset,
-        # but since it's not straightforward to do this with the TF 1 implementation, we test it with
-        # the weights of the WTQ base model (i.e. tapas_wtq_wikisql_sqa_inter_masklm_base_reset)
         model = TapasModel.from_pretrained("google/tapas-base-finetuned-wtq").to(torch_device)
 
         tokenizer = self.default_tokenizer
@@ -605,12 +595,12 @@ class TapasModelIntegrationTest(unittest.TestCase):
             device=torch_device,
         )
 
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[:, :3, :3], expected_slice, atol=0.0005))
+        torch.testing.assert_close(outputs.last_hidden_state[:, :3, :3], expected_slice, rtol=0.0005, atol=0.0005)
 
         # test the pooled output
         expected_slice = torch.tensor([[0.987518311, -0.970520139, -0.994303405]], device=torch_device)
 
-        self.assertTrue(torch.allclose(outputs.pooler_output[:, :3], expected_slice, atol=0.0005))
+        torch.testing.assert_close(outputs.pooler_output[:, :3], expected_slice, rtol=0.0005, atol=0.0005)
 
     @unittest.skip(reason="Model not available yet")
     def test_inference_masked_lm(self):
@@ -666,7 +656,7 @@ class TapasModelIntegrationTest(unittest.TestCase):
             device=torch_device,
         )
 
-        self.assertTrue(torch.allclose(logits, expected_tensor, atol=0.015))
+        torch.testing.assert_close(logits, expected_tensor, rtol=0.015, atol=0.015)
 
     @slow
     def test_inference_question_answering_head_conversational_absolute_embeddings(self):
@@ -716,7 +706,7 @@ class TapasModelIntegrationTest(unittest.TestCase):
             device=torch_device,
         )
 
-        self.assertTrue(torch.allclose(logits, expected_tensor, atol=0.01))
+        torch.testing.assert_close(logits, expected_tensor, rtol=0.01, atol=0.01)
 
     @slow
     def test_inference_question_answering_head_weak_supervision(self):
@@ -744,7 +734,7 @@ class TapasModelIntegrationTest(unittest.TestCase):
             device=torch_device,
         )
 
-        self.assertTrue(torch.allclose(logits[:, -6:], expected_slice, atol=0.4))
+        torch.testing.assert_close(logits[:, -6:], expected_slice, rtol=0.4, atol=0.4)
 
         # test the aggregation logits
         logits_aggregation = outputs.logits_aggregation
@@ -755,7 +745,7 @@ class TapasModelIntegrationTest(unittest.TestCase):
             device=torch_device,
         )
 
-        self.assertTrue(torch.allclose(logits_aggregation, expected_tensor, atol=0.001))
+        torch.testing.assert_close(logits_aggregation, expected_tensor, rtol=0.001, atol=0.001)
 
         # test the predicted answer coordinates and aggregation indices
         EXPECTED_PREDICTED_ANSWER_COORDINATES = [[(0, 0)], [(1, 2)]]
@@ -773,7 +763,6 @@ class TapasModelIntegrationTest(unittest.TestCase):
         # note that google/tapas-base-finetuned-wtq should correspond to tapas_wtq_wikisql_sqa_inter_masklm_base_reset
         model = TapasForQuestionAnswering.from_pretrained("google/tapas-base-finetuned-wtq").to(torch_device)
         model.to(torch_device)
-        # normally we should put the model in training mode but it's a pain to do this with the TF 1 implementation
 
         tokenizer = self.default_tokenizer
         # let's test on a batch
@@ -813,7 +802,7 @@ class TapasModelIntegrationTest(unittest.TestCase):
         # test the loss
         loss = outputs.loss
         expected_loss = torch.tensor(3.3527612686157227e-08, device=torch_device)
-        self.assertTrue(torch.allclose(loss, expected_loss, atol=1e-6))
+        torch.testing.assert_close(loss, expected_loss, rtol=1e-6, atol=1e-6)
 
         # test the logits on the first example
         logits = outputs.logits
@@ -834,7 +823,7 @@ class TapasModelIntegrationTest(unittest.TestCase):
             device=torch_device,
         )
 
-        self.assertTrue(torch.allclose(logits[0, -9:], expected_slice, atol=1e-6))
+        torch.testing.assert_close(logits[0, -9:], expected_slice, rtol=1e-6, atol=1e-6)
 
         # test the aggregation logits on the second example
         logits_aggregation = outputs.logits_aggregation
@@ -842,7 +831,7 @@ class TapasModelIntegrationTest(unittest.TestCase):
         self.assertEqual(logits_aggregation.shape, expected_shape)
         expected_slice = torch.tensor([-4.0538, 40.0304, -5.3554, 23.3965], device=torch_device)
 
-        self.assertTrue(torch.allclose(logits_aggregation[1, -4:], expected_slice, atol=1e-4))
+        torch.testing.assert_close(logits_aggregation[1, -4:], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_question_answering_head_strong_supervision(self):
@@ -890,7 +879,7 @@ class TapasModelIntegrationTest(unittest.TestCase):
             device=torch_device,
         )
 
-        self.assertTrue(torch.allclose(logits, expected_tensor, atol=0.02))
+        torch.testing.assert_close(logits, expected_tensor, rtol=0.02, atol=0.02)
 
         # test the aggregation logits
         logits_aggregation = outputs.logits_aggregation
@@ -900,7 +889,7 @@ class TapasModelIntegrationTest(unittest.TestCase):
             [[16.5659733, -3.06624889, -2.34152961, -0.970244825]], device=torch_device
         )  # PyTorch model outputs [[16.5679, -3.0668, -2.3442, -0.9674]]
 
-        self.assertTrue(torch.allclose(logits_aggregation, expected_tensor, atol=0.003))
+        torch.testing.assert_close(logits_aggregation, expected_tensor, rtol=0.003, atol=0.003)
 
     @slow
     def test_inference_classification_head(self):
@@ -922,7 +911,7 @@ class TapasModelIntegrationTest(unittest.TestCase):
             [[0.795137286, 9.5572]], device=torch_device
         )  # Note that the PyTorch model outputs [[0.8057, 9.5281]]
 
-        self.assertTrue(torch.allclose(outputs.logits, expected_tensor, atol=0.05))
+        torch.testing.assert_close(outputs.logits, expected_tensor, rtol=0.05, atol=0.05)
 
 
 @require_torch
@@ -978,11 +967,9 @@ class TapasUtilitiesTest(unittest.TestCase):
         self.assertEqual(cell_index.num_segments, 9)
 
         # Projections should give back the original indices.
-        # we use np.testing.assert_array_equal rather than Tensorflow's assertAllEqual
         np.testing.assert_array_equal(row_index.indices.numpy(), row_index_proj.indices.numpy())
         self.assertEqual(row_index.num_segments, row_index_proj.num_segments)
         self.assertEqual(row_index.batch_dims, row_index_proj.batch_dims)
-        # We use np.testing.assert_array_equal rather than Tensorflow's assertAllEqual
         np.testing.assert_array_equal(col_index.indices.numpy(), col_index_proj.indices.numpy())
         self.assertEqual(col_index.batch_dims, col_index_proj.batch_dims)
 
@@ -1012,7 +999,6 @@ class TapasUtilitiesTest(unittest.TestCase):
         batched_index = IndexMap(indices=torch.zeros(shape).type(torch.LongTensor), num_segments=1, batch_dims=3)
         batched_index_flat = flatten(batched_index)
 
-        # We use np.testing.assert_array_equal rather than Tensorflow's assertAllEqual
         np.testing.assert_array_equal(
             row_index_flat.indices.numpy(), [0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5]
         )
@@ -1030,11 +1016,9 @@ class TapasUtilitiesTest(unittest.TestCase):
         self.assertEqual(num_segments, index.num_segments)
         self.assertEqual(2, index.batch_dims)
         indices = index.indices
-        # We use np.testing.assert_array_equal rather than Tensorflow's assertAllEqual
         np.testing.assert_array_equal(list(indices.size()), [3, 4, 5])
         for i in range(batch_shape[0]):
             for j in range(batch_shape[1]):
-                # We use np.testing.assert_array_equal rather than Tensorflow's assertAllEqual
                 np.testing.assert_array_equal(indices[i, j, :].numpy(), range(num_segments))
 
     def test_reduce_sum(self):
@@ -1044,7 +1028,6 @@ class TapasUtilitiesTest(unittest.TestCase):
         col_sum, _ = reduce_sum(values, col_index)
         cell_sum, _ = reduce_sum(values, cell_index)
 
-        # We use np.testing.assert_allclose rather than Tensorflow's assertAllClose
         np.testing.assert_allclose(row_sum.numpy(), [[6.0, 3.0, 8.0], [6.0, 3.0, 8.0]])
         np.testing.assert_allclose(col_sum.numpy(), [[9.0, 8.0, 0.0], [4.0, 5.0, 8.0]])
         np.testing.assert_allclose(
@@ -1059,7 +1042,6 @@ class TapasUtilitiesTest(unittest.TestCase):
         col_mean, _ = reduce_mean(values, col_index)
         cell_mean, _ = reduce_mean(values, cell_index)
 
-        # We use np.testing.assert_allclose rather than Tensorflow's assertAllClose
         np.testing.assert_allclose(
             row_mean.numpy(), [[6.0 / 3.0, 3.0 / 3.0, 8.0 / 3.0], [6.0 / 3.0, 3.0 / 3.0, 8.0 / 3.0]]
         )
@@ -1077,7 +1059,6 @@ class TapasUtilitiesTest(unittest.TestCase):
         index = IndexMap(indices=torch.as_tensor([0, 1, 0, 1]), num_segments=2)
         maximum, _ = reduce_max(values, index)
 
-        # We use np.testing.assert_array_equal rather than Tensorflow's assertAllEqual
         np.testing.assert_array_equal(maximum.numpy(), [2, 3])
 
     def test_reduce_sum_vectorized(self):
@@ -1085,9 +1066,7 @@ class TapasUtilitiesTest(unittest.TestCase):
         index = IndexMap(indices=torch.as_tensor([[0, 0, 1]]), num_segments=2, batch_dims=0)
         sums, new_index = reduce_sum(values, index)
 
-        # We use np.testing.assert_allclose rather than Tensorflow's assertAllClose
         np.testing.assert_allclose(sums.numpy(), [3.0, 3.0])
-        # We use np.testing.assert_array_equal rather than Tensorflow's assertAllEqual
         np.testing.assert_array_equal(new_index.indices.numpy(), [0, 1])
         np.testing.assert_array_equal(new_index.num_segments.numpy(), 2)
         np.testing.assert_array_equal(new_index.batch_dims, 0)
@@ -1103,7 +1082,6 @@ class TapasUtilitiesTest(unittest.TestCase):
         cell_sum = gather(sums, cell_index)
         assert cell_sum.size() == values.size()
 
-        # We use np.testing.assert_array_equal rather than Tensorflow's assertAllEqual
         np.testing.assert_allclose(
             cell_sum.numpy(),
             [[[3.0, 3.0, 3.0], [2.0, 2.0, 1.0], [4.0, 4.0, 4.0]], [[1.0, 2.0, 3.0], [2.0, 0.0, 1.0], [1.0, 3.0, 4.0]]],
@@ -1114,5 +1092,4 @@ class TapasUtilitiesTest(unittest.TestCase):
         index = IndexMap(indices=torch.as_tensor([[0, 1], [1, 0]]), num_segments=2, batch_dims=1)
         result = gather(values, index)
 
-        # We use np.testing.assert_array_equal rather than Tensorflow's assertAllEqual
         np.testing.assert_array_equal(result.numpy(), [[[1, 2], [3, 4]], [[7, 8], [5, 6]]])

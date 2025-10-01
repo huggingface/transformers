@@ -28,7 +28,7 @@ GPU가 제한된 환경에서 ZeRO는 최적화 메모리와 계산을 GPU에서
 
 ## 설치[[installation]]
 
-DeepSpeed는 PyPI 또는 Transformers에서 설치할 수 있습니다(자세한 설치 옵션은 DeepSpeed [설치 상세사항](https://www.deepspeed.ai/tutorials/advanced-install/) 또는 GitHub [README](https://github.com/microsoft/deepspeed#installation)를 참조하세요).
+DeepSpeed는 PyPI 또는 Transformers에서 설치할 수 있습니다(자세한 설치 옵션은 DeepSpeed [설치 상세사항](https://www.deepspeed.ai/tutorials/advanced-install/) 또는 GitHub [README](https://github.com/deepspeedai/DeepSpeed#installation)를 참조하세요).
 
 <Tip>
 
@@ -114,10 +114,10 @@ DeepSpeed는 트레이닝 실행 방법을 구성하는 모든 매개변수가 �
 
 <Tip>
 
-DeepSpeed 구성 옵션의 전체 목록은 [DeepSpeed Configuration JSON](https://www.deepspeed.ai/docs/config-json/)에서 확인할 수 있습니다. 또한 [DeepSpeedExamples](https://github.com/microsoft/DeepSpeedExamples) 리포지토리 또는 기본 [DeepSpeed](https://github.com/microsoft/DeepSpeed) 리포지토리에서 다양한 DeepSpeed 구성 예제에 대한 보다 실용적인 예제를 찾을 수 있습니다. 구체적인 예제를 빠르게 찾으려면 다음과 같이 하세요:
+DeepSpeed 구성 옵션의 전체 목록은 [DeepSpeed Configuration JSON](https://www.deepspeed.ai/docs/config-json/)에서 확인할 수 있습니다. 또한 [DeepSpeedExamples](https://github.com/deepspeedai/DeepSpeedExamples) 리포지토리 또는 기본 [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) 리포지토리에서 다양한 DeepSpeed 구성 예제에 대한 보다 실용적인 예제를 찾을 수 있습니다. 구체적인 예제를 빠르게 찾으려면 다음과 같이 하세요:
 
 ```bash
-git clone https://github.com/microsoft/DeepSpeedExamples
+git clone https://github.com/deepspeedai/DeepSpeedExamples
 cd DeepSpeedExamples
 find . -name '*json'
 # Lamb 옵티마이저 샘플 찾기
@@ -280,7 +280,7 @@ model = AutoModel.from_pretrained("google-t5/t5-small")
 trainer = Trainer(model=model, args=training_args, ...)
 ```
 
-fp16 가중치가 단일 GPU에 맞지 않는 경우 ZeRO-3이 필요합니다. fp16 가중치를 로드할 수 있는 경우, [`~PreTrainedModel.from_pretrained`]에 `torch_dtype=torch.float16`을 지정해야 합니다.
+fp16 가중치가 단일 GPU에 맞지 않는 경우 ZeRO-3이 필요합니다. fp16 가중치를 로드할 수 있는 경우, [`~PreTrainedModel.from_pretrained`]에 `dtype=torch.float16`을 지정해야 합니다.
 
 ZeRO-3의 또 다른 고려 사항은 여러 개의 GPU를 사용하는 경우 현재 실행 중인 레이어의 매개변수가 아닌 한 단일 GPU에 모든 매개변수가 없다는 것입니다. 사전 훈련된 모델 가중치를 [`~PreTrainedModel.from_pretrained`]에 로드하는 등 모든 레이어의 모든 매개변수에 한 번에 액세스하려면 한 번에 하나의 레이어를 로드하고 즉시 모든 GPU에 파티셔닝합니다. 이는 매우 큰 모델의 경우 메모리 제한으로 인해 하나의 GPU에 가중치를 로드한 다음 다른 GPU에 분산할 수 없기 때문입니다.
 
@@ -303,7 +303,7 @@ ZeRO-3로 대규모 모델을 초기화하고 매개변수에 액세스하는 �
 
 [ZeRO-Infinity](https://hf.co/papers/2104.07857)를 사용하면 모델 상태를 CPU 및/또는 NVMe로 오프로드하여 더 많은 메모리를 절약할 수 있습니다. 스마트 파티셔닝 및 타일링 알고리즘을 통해 각 GPU는 오프로딩 중에 매우 적은 양의 데이터를 주고받을 수 있으므로 최신 NVMe는 훈련 프로세스에 사용할 수 있는 것보다 훨씬 더 큰 총 메모리 풀에 맞출 수 있습니다. ZeRO-Infinity에는 ZeRO-3가 필요합니다.
 
-사용 가능한 CPU 및/또는 NVMe 메모리에 따라 [옵티마이저](https://www.deepspeed.ai/docs/config-json/#optimizer-offloading)와 [매개변수](https://www.deepspeed.ai/docs/config-json/#parameter-offloading) 중 하나만 오프로드하거나 아무것도 오프로드하지 않을 수 있습니다. 또한 일반 하드 드라이브나 솔리드 스테이트 드라이브에서도 작동하지만 속도가 현저히 느려지므로 `nvme_path`가 NVMe 장치를 가리키고 있는지 확인해야 합니다. 최신 NVMe를 사용하면 읽기 작업의 경우 최대 3.5GB/s, 쓰기 작업의 경우 최대 3GB/s의 전송 속도를 기대할 수 있습니다. 마지막으로, 트레이닝 설정에서 [벤치마크 실행하기](https://github.com/microsoft/DeepSpeed/issues/998)을 통해 최적의 'aio' 구성을 결정합니다.
+사용 가능한 CPU 및/또는 NVMe 메모리에 따라 [옵티마이저](https://www.deepspeed.ai/docs/config-json/#optimizer-offloading)와 [매개변수](https://www.deepspeed.ai/docs/config-json/#parameter-offloading) 중 하나만 오프로드하거나 아무것도 오프로드하지 않을 수 있습니다. 또한 일반 하드 드라이브나 솔리드 스테이트 드라이브에서도 작동하지만 속도가 현저히 느려지므로 `nvme_path`가 NVMe 장치를 가리키고 있는지 확인해야 합니다. 최신 NVMe를 사용하면 읽기 작업의 경우 최대 3.5GB/s, 쓰기 작업의 경우 최대 3GB/s의 전송 속도를 기대할 수 있습니다. 마지막으로, 트레이닝 설정에서 [벤치마크 실행하기](https://github.com/deepspeedai/DeepSpeed/issues/998)을 통해 최적의 'aio' 구성을 결정합니다.
 
 아래 예제 ZeRO-3/Infinity 구성 파일은 대부분의 매개변수 값을 `auto`으로 설정하고 있지만, 수동으로 값을 추가할 수도 있습니다.
 
@@ -508,17 +508,6 @@ PyTorch AMP와 같은 fp16 혼합 정밀도를 구성하면 메모리 사용량�
 ```
 
 추가 딥스피드 fp16 훈련 옵션은 [fp16 훈련 옵션](https://www.deepspeed.ai/docs/config-json/#fp16-training-options) 참조를 참조하세요.
-
-Apex와 같은 fp16 혼합 정밀도를 구성하려면 아래 그림과 같이 `"auto"` 또는 직접 값을 설정합니다.[`Trainer`]는 `args.fp16_backend` 및 `args.fp16_opt_level`의 값에 따라 `amp`를 자동으로 구성합니다. 다음 인수를 전달하면 명령줄에서 활성화할 수도 있습니다: `fp16`, `--fp16_backend apex` 또는 `--fp16_opt_level 01`.
-
-```yaml
-{
-    "amp": {
-        "enabled": "auto",
-        "opt_level": "auto"
-    }
-}
-```
 
 </hfoption>
 <hfoption id="bf16">
@@ -1141,7 +1130,7 @@ rank1:
 
 ## 트러블슈팅[[troubleshoot]]
 
-문제가 발생하면 DeepSpeed가 문제의 원인이 아닌 경우가 많으므로(아주 명백하고 예외적으로 DeepSpeed 모듈을 볼 수 있는 경우가 아니라면) DeepSpeed가 문제의 원인인지 고려해야 합니다! 첫 번째 단계는 DeepSpeed 없이 설정을 다시 시도하고 문제가 지속되면 문제를 신고하는 것입니다. 문제가 핵심적인 DeepSpeed 문제이고 transformers와 관련이 없는 경우, [DeepSpeed 리포지토리](https://github.com/microsoft/DeepSpeed)에서 이슈를 개설하세요.
+문제가 발생하면 DeepSpeed가 문제의 원인이 아닌 경우가 많으므로(아주 명백하고 예외적으로 DeepSpeed 모듈을 볼 수 있는 경우가 아니라면) DeepSpeed가 문제의 원인인지 고려해야 합니다! 첫 번째 단계는 DeepSpeed 없이 설정을 다시 시도하고 문제가 지속되면 문제를 신고하는 것입니다. 문제가 핵심적인 DeepSpeed 문제이고 transformers와 관련이 없는 경우, [DeepSpeed 리포지토리](https://github.com/deepspeedai/DeepSpeed)에서 이슈를 개설하세요.
 
 transformers와 관련된 이슈를 개설할 때에는 다음 정보를 제공해 주세요:
 
@@ -1165,7 +1154,7 @@ python -c 'import deepspeed; print(f"deepspeed: {deepspeed.__version__}")'
 
 ### DeepSpeed 프로세스가 시작 단계에서 종료되었을 경우[[deepspeed-process-killed-at-startup]]
 
-실행 중에 트레이스백 없이 DeepSpeed 프로세스가 종료되면 일반적으로 프로그램이 시스템보다 많은 CPU 메모리를 할당하려고 시도했거나 프로세스가 허용된 것보다 많은 CPU 메모리를 할당하려고 시도하여 OS 커널이 프로세스를 종료했음을 의미합니다. 이 경우 구성 파일에 `offload_optimizer`, `offload_param` 또는 둘 다 CPU로 오프로드하도록 구성되어 있는지 확인하세요.  
+실행 중에 트레이스백 없이 DeepSpeed 프로세스가 종료되면 일반적으로 프로그램이 시스템보다 많은 CPU 메모리를 할당하려고 시도했거나 프로세스가 허용된 것보다 많은 CPU 메모리를 할당하려고 시도하여 OS 커널이 프로세스를 종료했음을 의미합니다. 이 경우 구성 파일에 `offload_optimizer`, `offload_param` 또는 둘 다 CPU로 오프로드하도록 구성되어 있는지 확인하세요.
 
 NVMe 및 ZeRO-3를 설정한 경우 NVMe로 오프로드를 실험해 보세요(모델의 메모리 요구 사항을 [확인](https://deepspeed.readthedocs.io/en/latest/memory.html)하세요).
 
@@ -1211,7 +1200,7 @@ NVMe 및 ZeRO-3를 설정한 경우 NVMe로 오프로드를 실험해 보세요(
 
 ## 리소스[[resources]]
 
-DeepSpeed ZeRO는 제한된 GPU 리소스로 추론을 위해 매우 큰 모델을 훈련하고 로드하는 강력한 기술로, 누구나 쉽게 사용할 수 있습니다. DeepSpeed에 대해 자세히 알아보려면 [블로그 포스트](https://www.microsoft.com/en-us/research/search/?q=deepspeed), [공식 문서](https://www.deepspeed.ai/getting-started/), [깃허브 리포지토리](https://github.com/microsoft/deepspeed)를 참조하세요. 
+DeepSpeed ZeRO는 제한된 GPU 리소스로 추론을 위해 매우 큰 모델을 훈련하고 로드하는 강력한 기술로, 누구나 쉽게 사용할 수 있습니다. DeepSpeed에 대해 자세히 알아보려면 [블로그 포스트](https://www.microsoft.com/en-us/research/search/?q=deepspeed), [공식 문서](https://www.deepspeed.ai/getting-started/), [깃허브 리포지토리](https://github.com/deepspeedai/DeepSpeed)를 참조하세요.
 
 다음 문서도 ZeRO에 대해 자세히 알아볼 수 있는 훌륭한 자료입니다:
 

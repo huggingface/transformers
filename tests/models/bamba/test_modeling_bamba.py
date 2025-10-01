@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,13 +14,27 @@
 """Testing suite for the PyTorch Bamba model."""
 
 import inspect
+import tempfile
 import unittest
 
 import pytest
+from pytest import mark
 
-from transformers import AutoTokenizer, BambaConfig, is_torch_available
+from transformers import (
+    AutoTokenizer,
+    BambaConfig,
+    DataCollatorWithFlattening,
+    is_torch_available,
+)
 from transformers.testing_utils import (
+    DeviceProperties,
+    Expectations,
+    get_device_properties,
+    require_deterministic_for_xpu,
+    require_flash_attn,
     require_torch,
+    require_torch_accelerator,
+    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -45,6 +58,11 @@ if is_torch_available():
 
 
 class BambaModelTester:
+    config_class = BambaConfig
+    if is_torch_available():
+        model_class = BambaModel
+        for_causal_lm_class = BambaForCausalLM
+
     def __init__(
         self,
         parent,
@@ -55,7 +73,7 @@ class BambaModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=4,
+        num_hidden_layers=2,
         num_attention_heads=4,
         num_key_value_heads=2,
         intermediate_size=64,
@@ -116,6 +134,7 @@ class BambaModelTester:
         if self.use_labels:
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
 
+        self._update_layer_configs()
         config = self.get_config()
 
         return config, input_ids, input_mask, token_labels
@@ -131,10 +150,12 @@ class BambaModelTester:
         inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
         return config, inputs_dict
 
-    def get_config(self):
+    def _update_layer_configs(self):
+        """Configures hidden layers and attn layer indices if they are not set."""
         # Fix for SDPA tests, force at least 4 layers
         if self.num_hidden_layers < 4:
             self.num_hidden_layers = 4
+
         if self.attn_layer_indices is None:
             d = [x for x in range(2, self.num_hidden_layers) if self.num_hidden_layers % x == 0]
             if len(d) == 0:
@@ -142,7 +163,8 @@ class BambaModelTester:
             d = d[-1]  # get the largest divisor
             self.attn_layer_indices = [x + 1 for x in range(0, self.num_hidden_layers, d)]
 
-        return BambaConfig(
+    def get_config(self, **kwargs):
+        return self.config_class(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -162,6 +184,7 @@ class BambaModelTester:
             mamba_d_conv=self.mamba_d_conv,
             mamba_expand=self.mamba_expand,
             mamba_chunk_size=self.mamba_chunk_size,
+            **kwargs,
         )
 
     def create_and_check_model(
@@ -171,7 +194,7 @@ class BambaModelTester:
         input_mask,
         token_labels,
     ):
-        model = BambaModel(config=config)
+        model = self.model_class(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
@@ -185,7 +208,7 @@ class BambaModelTester:
         input_mask,
         token_labels,
     ):
-        model = BambaForCausalLM(config=config)
+        model = self.for_causal_lm_class(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
@@ -203,7 +226,7 @@ class BambaModelTester:
     ):
         # config.is_decoder = True
         # config.add_cross_attention = True
-        model = BambaForCausalLM(config=config)
+        model = self.for_causal_lm_class(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -256,15 +279,8 @@ class BambaModelTester:
 
 @require_torch
 class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (
-            BambaModel,
-            BambaForCausalLM,
-        )
-        if is_torch_available()
-        else ()
-    )
-    all_generative_model_classes = (BambaForCausalLM,) if is_torch_available() else ()
+    model_tester_class = BambaModelTester
+    all_model_classes = (BambaModel, BambaForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": BambaModel,
@@ -273,7 +289,6 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
     test_pruning = False
     fx_compatible = False
 
@@ -281,9 +296,29 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     # This is because we are hitting edge cases with the causal_mask buffer
     model_split_percents = [0.5, 0.7, 0.8]
 
+    def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
+        self.assertIsInstance(decoder_past_key_values, HybridMambaAttentionDynamicCache)
+
+        # (batch, head, seq_length, head_features)
+        expected_shape = (
+            batch_size,
+            config.num_key_value_heads if hasattr(config, "num_key_value_heads") else config.num_attention_heads,
+            cache_length,
+            config.hidden_size // config.num_attention_heads,
+        )
+
+        self.assertListEqual(
+            [key_tensor.shape for key_tensor in decoder_past_key_values.key_cache],
+            [expected_shape] * len(decoder_past_key_values.key_cache),
+        )
+        self.assertListEqual(
+            [value_cache.shape for value_cache in decoder_past_key_values.value_cache],
+            [expected_shape] * len(decoder_past_key_values.value_cache),
+        )
+
     def setUp(self):
-        self.model_tester = BambaModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BambaConfig, hidden_size=64)
+        self.model_tester = self.model_tester_class(self)
+        self.config_tester = ConfigTester(self, config_class=self.model_tester.config_class, hidden_size=64)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -292,7 +327,7 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_for_casual_lm(self):
+    def test_for_causal_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
 
@@ -312,24 +347,17 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             for name, param in model.named_parameters():
                 if param.requires_grad:
                     if "A_log" in name:
-                        A = torch.arange(1, config.mamba_n_heads + 1, dtype=torch.float32)[None, :]
-                        self.assertTrue(torch.allclose(param.data, torch.log(A), atol=1e-5, rtol=1e-5))
+                        A = torch.arange(1, config.mamba_n_heads + 1, dtype=torch.float32)
+                        torch.testing.assert_close(param.data, torch.log(A), rtol=1e-5, atol=1e-5)
                     elif "D" in name:
                         D = torch.ones(config.mamba_n_heads, dtype=torch.float32)
-                        self.assertTrue(torch.allclose(param.data, D, atol=1e-5, rtol=1e-5))
+                        torch.testing.assert_close(param.data, D, rtol=1e-5, atol=1e-5)
                     else:
                         self.assertIn(
                             ((param.data.mean() * 1e9).round() / 1e9).item(),
                             [0.0, 1.0],
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
-
-    def test_mismatched_shapes_have_properly_initialized_weights(self):
-        r"""
-        Overriding the test_mismatched_shapes_have_properly_initialized_weights test because A_log and D params of the
-        Bamba mixer are initialized differently and we tested that in test_initialization
-        """
-        self.skipTest(reason="Cumbersome and redundant for Bamba")
 
     def test_attention_outputs(self):
         r"""
@@ -348,7 +376,8 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
 
@@ -401,123 +430,146 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         super().test_batching_equivalence()
         self.model_tester.use_input_mask = orig
 
-    # essentially the same test in test_utils, just adjustment for rtol for this model
     @pytest.mark.generate
     def test_left_padding_compatibility(self):
-        # NOTE: left-padding results in small numerical differences. This is expected.
-        # See https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535
+        # TODO: document why a random attention mask causes this test to fail, but a full mask doesn't
+        unpadded_custom_inputs = {"attention_mask": None}
+        super().test_left_padding_compatibility(unpadded_custom_inputs=unpadded_custom_inputs)
 
-        # First, filter out models that don't support left padding
-        # - The model must have generative capabilities
-        if len(self.all_generative_model_classes) == 0:
-            self.skipTest(reason="No generative architecture available for this model.")
+    @unittest.skip(
+        "Bamba requires additionally specifying position_ids, seq_idx, and FlashAttentionKwargs for padding-free training."
+    )
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
 
-        # - The model must support padding
+    @unittest.skip(
+        "Bamba requires additionally specifying position_ids, seq_idx, and FlashAttentionKwargs for padding-free training."
+    )
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
+        pass
+
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    @slow
+    @unittest.skip(
+        "NotImplementedError: seq_idx support requires fast path support. Please install mamba_ssm and causal_conv1d"
+    )
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids_seq_idx_and_fa_kwargs(self):
         if not self.has_attentions:
-            self.skipTest(reason="This model doesn't support padding.")
+            self.skipTest(reason="Model architecture does not support attentions")
 
-        # - The model must be a decoder-only architecture (encoder-based architectures use right-padding)
-        decoder_only_classes = []
+        max_new_tokens = 30
+
         for model_class in self.all_generative_model_classes:
-            config, _ = self.prepare_config_and_inputs_for_generate()
-            if config.is_encoder_decoder:
-                continue
-            else:
-                decoder_only_classes.append(model_class)
-        if len(decoder_only_classes) == 0:
-            self.skipTest(reason="No decoder-only architecture available for this model.")
+            if not model_class._supports_flash_attn:
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
 
-        # - Decoder-only architectures derived from encoder-decoder models could support it in theory, but we haven't
-        #   added support for it yet. We skip these models for now.
-        has_encoder_attributes = any(
-            attr_name
-            for attr_name in config.to_dict().keys()
-            if attr_name.startswith("encoder") and attr_name != "encoder_no_repeat_ngram_size"
-        )
-        if has_encoder_attributes:
-            self.skipTest(
-                reason="The decoder-only derived from encoder-decoder models are not expected to support left-padding."
-            )
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            if 0 not in inputs_dict.get("attention_mask", []) or "attention_mask" not in inputs_dict:
+                self.skipTest("Model dummy inputs should contain padding in their attention mask")
 
-        # Then, test left-padding
-        def _prepare_model_kwargs(input_ids, attention_mask, signature):
-            model_kwargs = {"input_ids": input_ids, "attention_mask": attention_mask}
-            if "position_ids" in signature:
-                position_ids = torch.cumsum(attention_mask, dim=-1) - 1
-                position_ids.masked_fill_(attention_mask == 0, 1)
-                model_kwargs["position_ids"] = position_ids
-            if "cache_position" in signature:
-                cache_position = torch.arange(input_ids.shape[-1], device=torch_device)
-                model_kwargs["cache_position"] = cache_position
-            return model_kwargs
+            dummy_input = inputs_dict[model_class.main_input_name]
+            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
+                dummy_input = dummy_input.to(torch.float16)
 
-        for model_class in decoder_only_classes:
-            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-            input_ids = inputs_dict["input_ids"]
+            # make sure that all models have enough positions for generation
+            if hasattr(config, "max_position_embeddings"):
+                config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
 
-            # - for left padding we absolutely need to use an all ones
-            #   attention mask, so we do not use the one in inputs_dict
-            attention_mask = torch.ones_like(input_ids)
+            model = model_class(config)
+            if "position_ids" not in inspect.signature(model.forward).parameters:
+                self.skipTest("Model does not support position_ids")
 
-            model = model_class(config).to(torch_device).eval()
-            signature = inspect.signature(model.forward).parameters.keys()
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
 
-            # no cache as some models require special cache classes to be init outside forward
-            model.generation_config.use_cache = False
+                # ensure left padding, to adapt for some models
+                if 0 in inputs_dict["attention_mask"][:, -1]:
+                    inputs_dict["attention_mask"] = inputs_dict["attention_mask"].flip(1)
+                dummy_attention_mask = inputs_dict["attention_mask"]
+                inputs_dict["input_ids"][~dummy_attention_mask.bool()] = config.get_text_config().pad_token_id
+                # Ensure inputs_dict also has labels in it, as their presence/absence can induce
+                # dtype conversions. This also lets us compare losses.
+                labels = inputs_dict["input_ids"].clone()
+                # Mask padding tokens
+                labels[~dummy_attention_mask.bool()] = -100
+                # Also need to mask the first non-trivial token to match the padding-free batch.
+                first_nonneg_idx = (labels >= 0).int().argmax(dim=1)
+                labels[torch.arange(labels.size(0), device=labels.device), first_nonneg_idx] = -100
+                inputs_dict["labels"] = labels
 
-            # Without padding
-            model_kwargs = _prepare_model_kwargs(input_ids, attention_mask, signature)
-            next_logits_wo_padding = model(**model_kwargs).logits[:, -1, :]
+                model = (
+                    model_class.from_pretrained(
+                        tmpdirname,
+                        dtype=torch.float16,
+                        attn_implementation="flash_attention_2",
+                    )
+                    .to(torch_device)
+                    .eval()
+                )
 
-            # With left-padding (length 32)
-            # can hardcode pad_token to be 0 as we'll do attn masking anyway
-            pad_token_id = (
-                config.get_text_config().pad_token_id if config.get_text_config().pad_token_id is not None else 0
-            )
-            pad_size = (input_ids.shape[0], 32)
-            padding = torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device) * pad_token_id
-            padded_input_ids = torch.cat((padding, input_ids), dim=1)
-            padded_attention_mask = torch.cat((torch.zeros_like(padding), attention_mask), dim=1)
-            model_kwargs = _prepare_model_kwargs(padded_input_ids, padded_attention_mask, signature)
-            next_logits_with_padding = model(**model_kwargs).logits[:, -1, :]
+                # flatten
+                features = [
+                    {"input_ids": i[a.bool()].tolist()}
+                    for i, a in zip(inputs_dict["input_ids"], inputs_dict["attention_mask"])
+                ]
 
-            # They should result in very similar logits
-            torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, atol=1e-5, rtol=1e-1)
+                # add position_ids + fa_kwargs + seq_idx
+                data_collator = DataCollatorWithFlattening(
+                    return_tensors="pt", return_seq_idx=True, return_flash_attn_kwargs=True
+                )
+                batch = data_collator(features)
+                batch_accelerator = {k: t.to(torch_device) if torch.is_tensor(t) else t for k, t in batch.items()}
+
+                res_padded = model(**inputs_dict)
+                res_padfree = model(**batch_accelerator)
+
+                logits_padded = res_padded.logits[inputs_dict["attention_mask"].bool()]
+                logits_padfree = res_padfree.logits[0]
+
+                torch.testing.assert_close(logits_padded.argmax(-1), logits_padfree.argmax(-1), rtol=0, atol=0)
+                # acceptable numerical instability
+                tol = torch.finfo(torch.float16).eps
+                torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=tol)
+
+                loss_padded = res_padded.loss
+                loss_padfree = res_padfree.loss
+                torch.testing.assert_close(loss_padded, loss_padfree)
 
 
 @slow
 @require_torch
+@require_torch_accelerator
 class BambaModelIntegrationTest(unittest.TestCase):
     model = None
     tokenizer = None
     # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
     # Depending on the hardware we get different logits / generations
-    cuda_compute_capability_major_version = None
+    device_properties: DeviceProperties = (None, None, None)
 
     @classmethod
     def setUpClass(cls):
         model_id = "ibm-fms/Bamba-9B"
-        cls.model = BambaForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True)
+        cls.model = BambaForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16)
         cls.tokenizer = AutoTokenizer.from_pretrained(model_id)
 
         # feels a bit forced to have to do this for the generation test
         cls.tokenizer.pad_token_id = cls.model.config.pad_token_id
         cls.tokenizer.padding_side = "left"
 
-        if is_torch_available() and torch.cuda.is_available():
-            # 8 is for A100 / A10 and 7 for T4
-            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
+        cls.device_properties = get_device_properties()
 
     def test_simple_generate(self):
-        # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
-        #
-        # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
-        # considering differences in hardware processing and potential deviations in generated text.
-        EXPECTED_TEXTS = {
-            # 7: "",
-            8: "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are all having a good time.",
-            #  9: """,
-        }
+        # fmt: off
+        expectations = Expectations(
+            {
+                ("cuda", 8): "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are all having a good time.",
+                ("rocm", 9): "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are doing well. I am here",
+                ("xpu", 3): "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are all doing well. I am",
+            }
+        )
+        # fmt: on
 
         self.model.to(torch_device)
 
@@ -526,12 +578,13 @@ class BambaModelIntegrationTest(unittest.TestCase):
         ].to(torch_device)
         out = self.model.generate(input_ids, do_sample=False, max_new_tokens=10)
         output_sentence = self.tokenizer.decode(out[0, :])
-        self.assertEqual(output_sentence, EXPECTED_TEXTS[self.cuda_compute_capability_major_version])
+        expected = expectations.get_expectation()
+        self.assertEqual(output_sentence, expected)
 
         # TODO: there are significant differences in the logits across major cuda versions, which shouldn't exist
-        if self.cuda_compute_capability_major_version == 8:
+        if self.device_properties[0] == "cuda" and self.device_properties[1] == 8:
             with torch.no_grad():
-                logits = self.model(input_ids=input_ids, num_logits_to_keep=40).logits
+                logits = self.model(input_ids=input_ids, logits_to_keep=40).logits
 
             EXPECTED_LOGITS_NO_GRAD = torch.tensor(
                 [
@@ -544,19 +597,32 @@ class BambaModelIntegrationTest(unittest.TestCase):
 
             torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD, rtol=1e-3, atol=1)
 
+    @require_deterministic_for_xpu
     def test_simple_batched_generate_with_padding(self):
         # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
         #
         # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
         # considering differences in hardware processing and potential deviations in generated text.
-        EXPECTED_TEXTS = {
-            7: [],
-            8: [
-                "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are doing well. I am here",
-                "!!!<|begin_of_text|>I am late! I need to get to work! I have to get to the",
-            ],
-            9: [],
-        }
+        # fmt: off
+        EXPECTED_TEXTS = Expectations(
+            {
+                ("cuda", 7): [],
+                ("cuda", 8): [
+                    "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are doing well. I am here",
+                    "!!!<|begin_of_text|>I am late! I need to get to work! I have to get to the",
+                ],
+                ("rocm", 9): [
+                    "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are doing well. I am here",
+                    "!!!<|begin_of_text|>I am late! I need to be at the airport in 20 minutes! I",
+                ],
+                ("xpu", 3): [
+                    "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are all doing well. I am",
+                    "!!!<|begin_of_text|>I am late! I need to get to work! I have to get to the",
+                ],
+            }
+        )
+        # fmt: on
+        EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
 
         self.model.to(torch_device)
 
@@ -567,11 +633,11 @@ class BambaModelIntegrationTest(unittest.TestCase):
         ).to(torch_device)
         out = self.model.generate(**inputs, do_sample=False, max_new_tokens=10)
         output_sentences = self.tokenizer.batch_decode(out)
-        self.assertEqual(output_sentences[0], EXPECTED_TEXTS[self.cuda_compute_capability_major_version][0])
-        self.assertEqual(output_sentences[1], EXPECTED_TEXTS[self.cuda_compute_capability_major_version][1])
+        self.assertEqual(output_sentences[0], EXPECTED_TEXT[0])
+        self.assertEqual(output_sentences[1], EXPECTED_TEXT[1])
 
         # TODO: there are significant differences in the logits across major cuda versions, which shouldn't exist
-        if self.cuda_compute_capability_major_version == 8:
+        if self.device_properties[0] == "cuda" and self.device_properties[1] == 8:
             with torch.no_grad():
                 logits = self.model(input_ids=inputs["input_ids"]).logits
 

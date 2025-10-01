@@ -14,7 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import TYPE_CHECKING, Any, Mapping, Optional, OrderedDict
+from collections import OrderedDict
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any
 
 from packaging import version
 
@@ -25,7 +27,7 @@ from ..auto.configuration_auto import AutoConfig
 
 
 if TYPE_CHECKING:
-    from ... import PreTrainedTokenizerBase, TensorType
+    from ... import PreTrainedTokenizerBase
 
 logger = logging.get_logger(__name__)
 
@@ -79,13 +81,13 @@ class VisionEncoderDecoderConfig(PretrainedConfig):
 
     model_type = "vision-encoder-decoder"
     sub_configs = {"encoder": AutoConfig, "decoder": AutoConfig}
-    is_composition = True
+    has_no_defaults_at_init = True
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         if "encoder" not in kwargs or "decoder" not in kwargs:
             raise ValueError(
-                f"A configuraton of type {self.model_type} cannot be instantiated because "
+                f"A configuration of type {self.model_type} cannot be instantiated because "
                 f"not both `encoder` and `decoder` sub-configurations are passed, but only {kwargs}"
             )
 
@@ -152,14 +154,16 @@ class VisionEncoderDecoderDecoderOnnxConfig(OnnxConfig):
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
-        framework: Optional["TensorType"] = None,
     ) -> Mapping[str, Any]:
         import torch
 
         common_inputs = OrderedDict()
 
         dummy_input = super().generate_dummy_inputs(
-            tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
+            tokenizer,
+            batch_size=batch_size,
+            seq_length=seq_length,
+            is_pair=is_pair,
         )
 
         batch, encoder_sequence = dummy_input["input_ids"].shape

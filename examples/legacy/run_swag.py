@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -34,7 +33,6 @@ from tqdm import tqdm, trange
 import transformers
 from transformers import (
     WEIGHTS_NAME,
-    AdamW,
     AutoConfig,
     AutoModelForMultipleChoice,
     AutoTokenizer,
@@ -52,7 +50,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-class SwagExample(object):
+class SwagExample:
     """A single training/test example for the SWAG dataset."""
 
     def __init__(self, swag_id, context_sentence, start_ending, ending_0, ending_1, ending_2, ending_3, label=None):
@@ -72,22 +70,22 @@ class SwagExample(object):
 
     def __repr__(self):
         attributes = [
-            "swag_id: {}".format(self.swag_id),
-            "context_sentence: {}".format(self.context_sentence),
-            "start_ending: {}".format(self.start_ending),
-            "ending_0: {}".format(self.endings[0]),
-            "ending_1: {}".format(self.endings[1]),
-            "ending_2: {}".format(self.endings[2]),
-            "ending_3: {}".format(self.endings[3]),
+            f"swag_id: {self.swag_id}",
+            f"context_sentence: {self.context_sentence}",
+            f"start_ending: {self.start_ending}",
+            f"ending_0: {self.endings[0]}",
+            f"ending_1: {self.endings[1]}",
+            f"ending_2: {self.endings[2]}",
+            f"ending_3: {self.endings[3]}",
         ]
 
         if self.label is not None:
-            attributes.append("label: {}".format(self.label))
+            attributes.append(f"label: {self.label}")
 
         return ", ".join(attributes)
 
 
-class InputFeatures(object):
+class InputFeatures:
     def __init__(self, example_id, choices_features, label):
         self.example_id = example_id
         self.choices_features = [
@@ -98,7 +96,7 @@ class InputFeatures(object):
 
 
 def read_swag_examples(input_file, is_training=True):
-    with open(input_file, "r", encoding="utf-8") as f:
+    with open(input_file, encoding="utf-8") as f:
         lines = list(csv.reader(f))
 
     if is_training and lines[0][-1] != "label":
@@ -180,15 +178,15 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length, is_trainin
         label = example.label
         if example_index < 5:
             logger.info("*** Example ***")
-            logger.info("swag_id: {}".format(example.swag_id))
+            logger.info(f"swag_id: {example.swag_id}")
             for choice_idx, (tokens, input_ids, input_mask, segment_ids) in enumerate(choices_features):
-                logger.info("choice: {}".format(choice_idx))
+                logger.info(f"choice: {choice_idx}")
                 logger.info("tokens: {}".format(" ".join(tokens)))
                 logger.info("input_ids: {}".format(" ".join(map(str, input_ids))))
                 logger.info("input_mask: {}".format(" ".join(map(str, input_mask))))
                 logger.info("segment_ids: {}".format(" ".join(map(str, segment_ids))))
             if is_training:
-                logger.info("label: {}".format(label))
+                logger.info(f"label: {label}")
 
         features.append(InputFeatures(example_id=example.swag_id, choices_features=choices_features, label=label))
 
@@ -245,7 +243,7 @@ def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=Fal
     )
     if os.path.exists(cached_features_file) and not args.overwrite_cache and not output_examples:
         logger.info("Loading features from cached file %s", cached_features_file)
-        features = torch.load(cached_features_file)
+        features = torch.load(cached_features_file, weights_only=True)
     else:
         logger.info("Creating features from dataset file at %s", input_file)
         examples = read_swag_examples(input_file)
@@ -298,7 +296,7 @@ def train(args, train_dataset, model, tokenizer):
         },
         {"params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], "weight_decay": 0.0},
     ]
-    optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
+    optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
     scheduler = get_linear_schedule_with_warmup(
         optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total
     )
@@ -383,14 +381,14 @@ def train(args, train_dataset, model, tokenizer):
                     ):  # Only evaluate when single GPU otherwise metrics may not average well
                         results = evaluate(args, model, tokenizer)
                         for key, value in results.items():
-                            tb_writer.add_scalar("eval_{}".format(key), value, global_step)
+                            tb_writer.add_scalar(f"eval_{key}", value, global_step)
                     tb_writer.add_scalar("lr", scheduler.get_lr()[0], global_step)
                     tb_writer.add_scalar("loss", (tr_loss - logging_loss) / args.logging_steps, global_step)
                     logging_loss = tr_loss
 
                 if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
                     # Save model checkpoint
-                    output_dir = os.path.join(args.output_dir, "checkpoint-{}".format(global_step))
+                    output_dir = os.path.join(args.output_dir, f"checkpoint-{global_step}")
                     model_to_save = (
                         model.module if hasattr(model, "module") else model
                     )  # Take care of distributed/parallel training
@@ -424,7 +422,7 @@ def evaluate(args, model, tokenizer, prefix=""):
     eval_dataloader = DataLoader(dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
 
     # Eval!
-    logger.info("***** Running evaluation {} *****".format(prefix))
+    logger.info(f"***** Running evaluation {prefix} *****")
     logger.info("  Num examples = %d", len(dataset))
     logger.info("  Batch size = %d", args.eval_batch_size)
 
@@ -467,7 +465,7 @@ def evaluate(args, model, tokenizer, prefix=""):
         logger.info("***** Eval results *****")
         for key in sorted(result.keys()):
             logger.info("%s = %s", key, str(result[key]))
-            writer.write("%s = %s\n" % (key, str(result[key])))
+            writer.write("{} = {}\n".format(key, str(result[key])))
 
     return result
 
@@ -711,10 +709,10 @@ def main():
             # Evaluate
             result = evaluate(args, model, tokenizer, prefix=global_step)
 
-            result = {k + ("_{}".format(global_step) if global_step else ""): v for k, v in result.items()}
+            result = {k + (f"_{global_step}" if global_step else ""): v for k, v in result.items()}
             results.update(result)
 
-    logger.info("Results: {}".format(results))
+    logger.info(f"Results: {results}")
 
     return results
 

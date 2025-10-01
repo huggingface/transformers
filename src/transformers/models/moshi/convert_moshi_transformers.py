@@ -186,7 +186,7 @@ def _convert_model(
     hf_model.load_state_dict(state_dict, strict=True)
     n_params = param_count(hf_model)
 
-    logger.info(f"model loaded: {round(n_params/1e6,1)}M params")
+    logger.info(f"model loaded: {round(n_params / 1e6, 1)}M params")
 
     hf_model.eval()
     hf_model.to(device)
@@ -208,7 +208,7 @@ def convert_checkpoint(
     """
     device = _grab_best_device()
 
-    mimi_model = MimiModel.from_pretrained(mimi_repo_id, torch_dtype=torch.bfloat16)
+    mimi_model = MimiModel.from_pretrained(mimi_repo_id, dtype=torch.bfloat16)
 
     if config_path is not None:
         config = MoshiConfig.from_pretrained(config_path)

@@ -16,357 +16,318 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN, gelu
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    ModelOutput,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_longformer import LongformerConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "allenai/longformer-base-4096"
-_CONFIG_FOR_DOC = "LongformerConfig"
-
 
 @dataclass
-class LongformerBaseModelOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for Longformer's outputs, with potential hidden states, local and global attentions.
+    """
+)
+class LongformerBaseModelOutput(ModelOutput):
+    r"""
+    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x +
+        attention_window + 1)`, where `x` is the number of tokens with global attention mask.
 
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
+        Local attentions weights after the attention softmax, used to compute the weighted average in the
+        self-attention heads. Those are the attention weights from every token in the sequence to every token with
+        global attention (first `x` values) and to every token in the attention window (remaining `attention_window
+        + 1` values). Note that the first `x` values refer to tokens with fixed positions in the text, but the
+        remaining `attention_window + 1` values refer to tokens with relative positions: the attention weight of a
+        token to itself is located at index `x + attention_window / 2` and the `attention_window / 2` preceding
+        (succeeding) values are the attention weights to the `attention_window / 2` preceding (succeeding) tokens.
+        If the attention window contains a token with global attention, the attention weight at the corresponding
+        index is set to 0; the value should be accessed from the first `x` attention weights. If a token has global
+        attention, the attention weights to all other tokens in `attentions` is set to 0, the values should be
+        accessed from `global_attentions`.
+    global_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x)`,
+        where `x` is the number of tokens with global attention mask.
 
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x +
-            attention_window + 1)`, where `x` is the number of tokens with global attention mask.
-
-            Local attentions weights after the attention softmax, used to compute the weighted average in the
-            self-attention heads. Those are the attention weights from every token in the sequence to every token with
-            global attention (first `x` values) and to every token in the attention window (remaining `attention_window
-            + 1` values). Note that the first `x` values refer to tokens with fixed positions in the text, but the
-            remaining `attention_window + 1` values refer to tokens with relative positions: the attention weight of a
-            token to itself is located at index `x + attention_window / 2` and the `attention_window / 2` preceding
-            (succeeding) values are the attention weights to the `attention_window / 2` preceding (succeeding) tokens.
-            If the attention window contains a token with global attention, the attention weight at the corresponding
-            index is set to 0; the value should be accessed from the first `x` attention weights. If a token has global
-            attention, the attention weights to all other tokens in `attentions` is set to 0, the values should be
-            accessed from `global_attentions`.
-        global_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x)`,
-            where `x` is the number of tokens with global attention mask.
-
-            Global attentions weights after the attention softmax, used to compute the weighted average in the
-            self-attention heads. Those are the attention weights from every token with global attention to every token
-            in the sequence.
+        Global attentions weights after the attention softmax, used to compute the weighted average in the
+        self-attention heads. Those are the attention weights from every token with global attention to every token
+        in the sequence.
     """
 
     last_hidden_state: torch.FloatTensor
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    global_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    global_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
-class LongformerBaseModelOutputWithPooling(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for Longformer's outputs that also contains a pooling of the last hidden states.
+    """
+)
+class LongformerBaseModelOutputWithPooling(ModelOutput):
+    r"""
+    pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+        Last layer hidden-state of the first token of the sequence (classification token) further processed by a
+        Linear layer and a Tanh activation function. The Linear layer weights are trained from the next sentence
+        prediction (classification) objective during pretraining.
+    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x +
+        attention_window + 1)`, where `x` is the number of tokens with global attention mask.
 
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
-            Last layer hidden-state of the first token of the sequence (classification token) further processed by a
-            Linear layer and a Tanh activation function. The Linear layer weights are trained from the next sentence
-            prediction (classification) objective during pretraining.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
+        Local attentions weights after the attention softmax, used to compute the weighted average in the
+        self-attention heads. Those are the attention weights from every token in the sequence to every token with
+        global attention (first `x` values) and to every token in the attention window (remaining `attention_window
+        + 1` values). Note that the first `x` values refer to tokens with fixed positions in the text, but the
+        remaining `attention_window + 1` values refer to tokens with relative positions: the attention weight of a
+        token to itself is located at index `x + attention_window / 2` and the `attention_window / 2` preceding
+        (succeeding) values are the attention weights to the `attention_window / 2` preceding (succeeding) tokens.
+        If the attention window contains a token with global attention, the attention weight at the corresponding
+        index is set to 0; the value should be accessed from the first `x` attention weights. If a token has global
+        attention, the attention weights to all other tokens in `attentions` is set to 0, the values should be
+        accessed from `global_attentions`.
+    global_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x)`,
+        where `x` is the number of tokens with global attention mask.
 
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x +
-            attention_window + 1)`, where `x` is the number of tokens with global attention mask.
-
-            Local attentions weights after the attention softmax, used to compute the weighted average in the
-            self-attention heads. Those are the attention weights from every token in the sequence to every token with
-            global attention (first `x` values) and to every token in the attention window (remaining `attention_window
-            + 1` values). Note that the first `x` values refer to tokens with fixed positions in the text, but the
-            remaining `attention_window + 1` values refer to tokens with relative positions: the attention weight of a
-            token to itself is located at index `x + attention_window / 2` and the `attention_window / 2` preceding
-            (succeeding) values are the attention weights to the `attention_window / 2` preceding (succeeding) tokens.
-            If the attention window contains a token with global attention, the attention weight at the corresponding
-            index is set to 0; the value should be accessed from the first `x` attention weights. If a token has global
-            attention, the attention weights to all other tokens in `attentions` is set to 0, the values should be
-            accessed from `global_attentions`.
-        global_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x)`,
-            where `x` is the number of tokens with global attention mask.
-
-            Global attentions weights after the attention softmax, used to compute the weighted average in the
-            self-attention heads. Those are the attention weights from every token with global attention to every token
-            in the sequence.
+        Global attentions weights after the attention softmax, used to compute the weighted average in the
+        self-attention heads. Those are the attention weights from every token with global attention to every token
+        in the sequence.
     """
 
     last_hidden_state: torch.FloatTensor
-    pooler_output: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    global_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    pooler_output: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    global_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
-class LongformerMaskedLMOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for masked language models outputs.
+    """
+)
+class LongformerMaskedLMOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Masked language modeling (MLM) loss.
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x +
+        attention_window + 1)`, where `x` is the number of tokens with global attention mask.
 
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Masked language modeling (MLM) loss.
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
+        Local attentions weights after the attention softmax, used to compute the weighted average in the
+        self-attention heads. Those are the attention weights from every token in the sequence to every token with
+        global attention (first `x` values) and to every token in the attention window (remaining `attention_window
+        + 1` values). Note that the first `x` values refer to tokens with fixed positions in the text, but the
+        remaining `attention_window + 1` values refer to tokens with relative positions: the attention weight of a
+        token to itself is located at index `x + attention_window / 2` and the `attention_window / 2` preceding
+        (succeeding) values are the attention weights to the `attention_window / 2` preceding (succeeding) tokens.
+        If the attention window contains a token with global attention, the attention weight at the corresponding
+        index is set to 0; the value should be accessed from the first `x` attention weights. If a token has global
+        attention, the attention weights to all other tokens in `attentions` is set to 0, the values should be
+        accessed from `global_attentions`.
+    global_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x)`,
+        where `x` is the number of tokens with global attention mask.
 
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x +
-            attention_window + 1)`, where `x` is the number of tokens with global attention mask.
-
-            Local attentions weights after the attention softmax, used to compute the weighted average in the
-            self-attention heads. Those are the attention weights from every token in the sequence to every token with
-            global attention (first `x` values) and to every token in the attention window (remaining `attention_window
-            + 1` values). Note that the first `x` values refer to tokens with fixed positions in the text, but the
-            remaining `attention_window + 1` values refer to tokens with relative positions: the attention weight of a
-            token to itself is located at index `x + attention_window / 2` and the `attention_window / 2` preceding
-            (succeeding) values are the attention weights to the `attention_window / 2` preceding (succeeding) tokens.
-            If the attention window contains a token with global attention, the attention weight at the corresponding
-            index is set to 0; the value should be accessed from the first `x` attention weights. If a token has global
-            attention, the attention weights to all other tokens in `attentions` is set to 0, the values should be
-            accessed from `global_attentions`.
-        global_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x)`,
-            where `x` is the number of tokens with global attention mask.
-
-            Global attentions weights after the attention softmax, used to compute the weighted average in the
-            self-attention heads. Those are the attention weights from every token with global attention to every token
-            in the sequence.
+        Global attentions weights after the attention softmax, used to compute the weighted average in the
+        self-attention heads. Those are the attention weights from every token with global attention to every token
+        in the sequence.
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    global_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    logits: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    global_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
-class LongformerQuestionAnsweringModelOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for outputs of question answering Longformer models.
+    """
+)
+class LongformerQuestionAnsweringModelOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Total span extraction loss is the sum of a Cross-Entropy for the start and end positions.
+    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x +
+        attention_window + 1)`, where `x` is the number of tokens with global attention mask.
 
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Total span extraction loss is the sum of a Cross-Entropy for the start and end positions.
-        start_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Span-start scores (before SoftMax).
-        end_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Span-end scores (before SoftMax).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
+        Local attentions weights after the attention softmax, used to compute the weighted average in the
+        self-attention heads. Those are the attention weights from every token in the sequence to every token with
+        global attention (first `x` values) and to every token in the attention window (remaining `attention_window
+        + 1` values). Note that the first `x` values refer to tokens with fixed positions in the text, but the
+        remaining `attention_window + 1` values refer to tokens with relative positions: the attention weight of a
+        token to itself is located at index `x + attention_window / 2` and the `attention_window / 2` preceding
+        (succeeding) values are the attention weights to the `attention_window / 2` preceding (succeeding) tokens.
+        If the attention window contains a token with global attention, the attention weight at the corresponding
+        index is set to 0; the value should be accessed from the first `x` attention weights. If a token has global
+        attention, the attention weights to all other tokens in `attentions` is set to 0, the values should be
+        accessed from `global_attentions`.
+    global_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x)`,
+        where `x` is the number of tokens with global attention mask.
 
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x +
-            attention_window + 1)`, where `x` is the number of tokens with global attention mask.
-
-            Local attentions weights after the attention softmax, used to compute the weighted average in the
-            self-attention heads. Those are the attention weights from every token in the sequence to every token with
-            global attention (first `x` values) and to every token in the attention window (remaining `attention_window
-            + 1` values). Note that the first `x` values refer to tokens with fixed positions in the text, but the
-            remaining `attention_window + 1` values refer to tokens with relative positions: the attention weight of a
-            token to itself is located at index `x + attention_window / 2` and the `attention_window / 2` preceding
-            (succeeding) values are the attention weights to the `attention_window / 2` preceding (succeeding) tokens.
-            If the attention window contains a token with global attention, the attention weight at the corresponding
-            index is set to 0; the value should be accessed from the first `x` attention weights. If a token has global
-            attention, the attention weights to all other tokens in `attentions` is set to 0, the values should be
-            accessed from `global_attentions`.
-        global_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x)`,
-            where `x` is the number of tokens with global attention mask.
-
-            Global attentions weights after the attention softmax, used to compute the weighted average in the
-            self-attention heads. Those are the attention weights from every token with global attention to every token
-            in the sequence.
+        Global attentions weights after the attention softmax, used to compute the weighted average in the
+        self-attention heads. Those are the attention weights from every token with global attention to every token
+        in the sequence.
     """
 
     loss: Optional[torch.FloatTensor] = None
-    start_logits: torch.FloatTensor = None
-    end_logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    global_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    start_logits: Optional[torch.FloatTensor] = None
+    end_logits: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    global_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
-class LongformerSequenceClassifierOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for outputs of sentence classification models.
+    """
+)
+class LongformerSequenceClassifierOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Classification (or regression if config.num_labels==1) loss.
+    logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+        Classification (or regression if config.num_labels==1) scores (before SoftMax).
+    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x +
+        attention_window + 1)`, where `x` is the number of tokens with global attention mask.
 
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Classification (or regression if config.num_labels==1) loss.
-        logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
-            Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
+        Local attentions weights after the attention softmax, used to compute the weighted average in the
+        self-attention heads. Those are the attention weights from every token in the sequence to every token with
+        global attention (first `x` values) and to every token in the attention window (remaining `attention_window
+        + 1` values). Note that the first `x` values refer to tokens with fixed positions in the text, but the
+        remaining `attention_window + 1` values refer to tokens with relative positions: the attention weight of a
+        token to itself is located at index `x + attention_window / 2` and the `attention_window / 2` preceding
+        (succeeding) values are the attention weights to the `attention_window / 2` preceding (succeeding) tokens.
+        If the attention window contains a token with global attention, the attention weight at the corresponding
+        index is set to 0; the value should be accessed from the first `x` attention weights. If a token has global
+        attention, the attention weights to all other tokens in `attentions` is set to 0, the values should be
+        accessed from `global_attentions`.
+    global_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x)`,
+        where `x` is the number of tokens with global attention mask.
 
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x +
-            attention_window + 1)`, where `x` is the number of tokens with global attention mask.
-
-            Local attentions weights after the attention softmax, used to compute the weighted average in the
-            self-attention heads. Those are the attention weights from every token in the sequence to every token with
-            global attention (first `x` values) and to every token in the attention window (remaining `attention_window
-            + 1` values). Note that the first `x` values refer to tokens with fixed positions in the text, but the
-            remaining `attention_window + 1` values refer to tokens with relative positions: the attention weight of a
-            token to itself is located at index `x + attention_window / 2` and the `attention_window / 2` preceding
-            (succeeding) values are the attention weights to the `attention_window / 2` preceding (succeeding) tokens.
-            If the attention window contains a token with global attention, the attention weight at the corresponding
-            index is set to 0; the value should be accessed from the first `x` attention weights. If a token has global
-            attention, the attention weights to all other tokens in `attentions` is set to 0, the values should be
-            accessed from `global_attentions`.
-        global_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x)`,
-            where `x` is the number of tokens with global attention mask.
-
-            Global attentions weights after the attention softmax, used to compute the weighted average in the
-            self-attention heads. Those are the attention weights from every token with global attention to every token
-            in the sequence.
+        Global attentions weights after the attention softmax, used to compute the weighted average in the
+        self-attention heads. Those are the attention weights from every token with global attention to every token
+        in the sequence.
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    global_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    logits: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    global_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
-class LongformerMultipleChoiceModelOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for outputs of multiple choice Longformer models.
+    """
+)
+class LongformerMultipleChoiceModelOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape *(1,)*, *optional*, returned when `labels` is provided):
+        Classification loss.
+    logits (`torch.FloatTensor` of shape `(batch_size, num_choices)`):
+        *num_choices* is the second dimension of the input tensors. (see *input_ids* above).
 
-    Args:
-        loss (`torch.FloatTensor` of shape *(1,)*, *optional*, returned when `labels` is provided):
-            Classification loss.
-        logits (`torch.FloatTensor` of shape `(batch_size, num_choices)`):
-            *num_choices* is the second dimension of the input tensors. (see *input_ids* above).
+        Classification scores (before SoftMax).
+    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x +
+        attention_window + 1)`, where `x` is the number of tokens with global attention mask.
 
-            Classification scores (before SoftMax).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
+        Local attentions weights after the attention softmax, used to compute the weighted average in the
+        self-attention heads. Those are the attention weights from every token in the sequence to every token with
+        global attention (first `x` values) and to every token in the attention window (remaining `attention_window
+        + 1` values). Note that the first `x` values refer to tokens with fixed positions in the text, but the
+        remaining `attention_window + 1` values refer to tokens with relative positions: the attention weight of a
+        token to itself is located at index `x + attention_window / 2` and the `attention_window / 2` preceding
+        (succeeding) values are the attention weights to the `attention_window / 2` preceding (succeeding) tokens.
+        If the attention window contains a token with global attention, the attention weight at the corresponding
+        index is set to 0; the value should be accessed from the first `x` attention weights. If a token has global
+        attention, the attention weights to all other tokens in `attentions` is set to 0, the values should be
+        accessed from `global_attentions`.
+    global_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x)`,
+        where `x` is the number of tokens with global attention mask.
 
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x +
-            attention_window + 1)`, where `x` is the number of tokens with global attention mask.
-
-            Local attentions weights after the attention softmax, used to compute the weighted average in the
-            self-attention heads. Those are the attention weights from every token in the sequence to every token with
-            global attention (first `x` values) and to every token in the attention window (remaining `attention_window
-            + 1` values). Note that the first `x` values refer to tokens with fixed positions in the text, but the
-            remaining `attention_window + 1` values refer to tokens with relative positions: the attention weight of a
-            token to itself is located at index `x + attention_window / 2` and the `attention_window / 2` preceding
-            (succeeding) values are the attention weights to the `attention_window / 2` preceding (succeeding) tokens.
-            If the attention window contains a token with global attention, the attention weight at the corresponding
-            index is set to 0; the value should be accessed from the first `x` attention weights. If a token has global
-            attention, the attention weights to all other tokens in `attentions` is set to 0, the values should be
-            accessed from `global_attentions`.
-        global_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x)`,
-            where `x` is the number of tokens with global attention mask.
-
-            Global attentions weights after the attention softmax, used to compute the weighted average in the
-            self-attention heads. Those are the attention weights from every token with global attention to every token
-            in the sequence.
+        Global attentions weights after the attention softmax, used to compute the weighted average in the
+        self-attention heads. Those are the attention weights from every token with global attention to every token
+        in the sequence.
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    global_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    logits: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    global_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
-class LongformerTokenClassifierOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for outputs of token classification models.
+    """
+)
+class LongformerTokenClassifierOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Classification loss.
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`):
+        Classification scores (before SoftMax).
+    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x +
+        attention_window + 1)`, where `x` is the number of tokens with global attention mask.
 
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided) :
-            Classification loss.
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`):
-            Classification scores (before SoftMax).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
+        Local attentions weights after the attention softmax, used to compute the weighted average in the
+        self-attention heads. Those are the attention weights from every token in the sequence to every token with
+        global attention (first `x` values) and to every token in the attention window (remaining `attention_window
+        + 1` values). Note that the first `x` values refer to tokens with fixed positions in the text, but the
+        remaining `attention_window + 1` values refer to tokens with relative positions: the attention weight of a
+        token to itself is located at index `x + attention_window / 2` and the `attention_window / 2` preceding
+        (succeeding) values are the attention weights to the `attention_window / 2` preceding (succeeding) tokens.
+        If the attention window contains a token with global attention, the attention weight at the corresponding
+        index is set to 0; the value should be accessed from the first `x` attention weights. If a token has global
+        attention, the attention weights to all other tokens in `attentions` is set to 0, the values should be
+        accessed from `global_attentions`.
+    global_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x)`,
+        where `x` is the number of tokens with global attention mask.
 
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x +
-            attention_window + 1)`, where `x` is the number of tokens with global attention mask.
-
-            Local attentions weights after the attention softmax, used to compute the weighted average in the
-            self-attention heads. Those are the attention weights from every token in the sequence to every token with
-            global attention (first `x` values) and to every token in the attention window (remaining `attention_window
-            + 1` values). Note that the first `x` values refer to tokens with fixed positions in the text, but the
-            remaining `attention_window + 1` values refer to tokens with relative positions: the attention weight of a
-            token to itself is located at index `x + attention_window / 2` and the `attention_window / 2` preceding
-            (succeeding) values are the attention weights to the `attention_window / 2` preceding (succeeding) tokens.
-            If the attention window contains a token with global attention, the attention weight at the corresponding
-            index is set to 0; the value should be accessed from the first `x` attention weights. If a token has global
-            attention, the attention weights to all other tokens in `attentions` is set to 0, the values should be
-            accessed from `global_attentions`.
-        global_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, x)`,
-            where `x` is the number of tokens with global attention mask.
-
-            Global attentions weights after the attention softmax, used to compute the weighted average in the
-            self-attention heads. Those are the attention weights from every token with global attention to every token
-            in the sequence.
+        Global attentions weights after the attention softmax, used to compute the weighted average in the
+        self-attention heads. Those are the attention weights from every token with global attention to every token
+        in the sequence.
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    global_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    logits: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    global_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 def _get_question_end_index(input_ids, sep_token_id):
@@ -431,8 +392,6 @@ class LongformerEmbeddings(nn.Module):
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
-        # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
-        # any TensorFlow checkpoint file
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
@@ -510,12 +469,12 @@ class LongformerSelfAttention(nn.Module):
 
         self.layer_id = layer_id
         attention_window = config.attention_window[self.layer_id]
-        assert (
-            attention_window % 2 == 0
-        ), f"`attention_window` for layer {self.layer_id} has to be an even value. Given {attention_window}"
-        assert (
-            attention_window > 0
-        ), f"`attention_window` for layer {self.layer_id} has to be positive. Given {attention_window}"
+        assert attention_window % 2 == 0, (
+            f"`attention_window` for layer {self.layer_id} has to be an even value. Given {attention_window}"
+        )
+        assert attention_window > 0, (
+            f"`attention_window` for layer {self.layer_id} has to be positive. Given {attention_window}"
+        )
 
         self.one_sided_attn_window_size = attention_window // 2
 
@@ -525,7 +484,6 @@ class LongformerSelfAttention(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        layer_head_mask=None,
         is_index_masked=None,
         is_index_global_attn=None,
         is_global_attn=None,
@@ -549,9 +507,9 @@ class LongformerSelfAttention(nn.Module):
         value_vectors = self.value(hidden_states)
 
         seq_len, batch_size, embed_dim = hidden_states.size()
-        assert (
-            embed_dim == self.embed_dim
-        ), f"hidden_states should have embed_dim = {self.embed_dim}, but has {embed_dim}"
+        assert embed_dim == self.embed_dim, (
+            f"hidden_states should have embed_dim = {self.embed_dim}, but has {embed_dim}"
+        )
 
         # normalize query
         query_vectors /= math.sqrt(self.head_dim)
@@ -618,12 +576,6 @@ class LongformerSelfAttention(nn.Module):
             attn_scores, dim=-1, dtype=torch.float32
         )  # use fp32 for numerical stability
 
-        if layer_head_mask is not None:
-            assert layer_head_mask.size() == (
-                self.num_heads,
-            ), f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
-            attn_probs = layer_head_mask.view(1, 1, -1, 1) * attn_probs
-
         # softmax sometimes inserts NaN if all positions are masked, replace them with 0
         attn_probs = torch.masked_fill(attn_probs, is_index_masked[:, :, None, None], 0.0)
         attn_probs = attn_probs.type_as(attn_scores)
@@ -661,7 +613,6 @@ class LongformerSelfAttention(nn.Module):
             global_attn_output, global_attn_probs = self._compute_global_attn_output_from_hidden(
                 hidden_states=hidden_states,
                 max_num_global_attn_indices=max_num_global_attn_indices,
-                layer_head_mask=layer_head_mask,
                 is_local_index_global_attn_nonzero=is_local_index_global_attn_nonzero,
                 is_index_global_attn_nonzero=is_index_global_attn_nonzero,
                 is_local_index_no_global_attn_nonzero=is_local_index_no_global_attn_nonzero,
@@ -813,9 +764,9 @@ class LongformerSelfAttention(nn.Module):
         overlap of size window_overlap
         """
         batch_size, seq_len, num_heads, head_dim = query.size()
-        assert (
-            seq_len % (window_overlap * 2) == 0
-        ), f"Sequence length should be multiple of {window_overlap * 2}. Given {seq_len}"
+        assert seq_len % (window_overlap * 2) == 0, (
+            f"Sequence length should be multiple of {window_overlap * 2}. Given {seq_len}"
+        )
         assert query.size() == key.size()
 
         chunks_count = torch.div(seq_len, window_overlap, rounding_mode="trunc") - 1
@@ -1015,7 +966,6 @@ class LongformerSelfAttention(nn.Module):
         self,
         hidden_states,
         max_num_global_attn_indices,
-        layer_head_mask,
         is_local_index_global_attn_nonzero,
         is_index_global_attn_nonzero,
         is_local_index_no_global_attn_nonzero,
@@ -1083,18 +1033,6 @@ class LongformerSelfAttention(nn.Module):
         global_attn_probs_float = nn.functional.softmax(
             global_attn_scores, dim=-1, dtype=torch.float32
         )  # use fp32 for numerical stability
-
-        # apply layer head masking
-        if layer_head_mask is not None:
-            assert layer_head_mask.size() == (
-                self.num_heads,
-            ), f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
-            global_attn_probs_float = layer_head_mask.view(1, -1, 1, 1) * global_attn_probs_float.view(
-                batch_size, self.num_heads, max_num_global_attn_indices, seq_len
-            )
-            global_attn_probs_float = global_attn_probs_float.view(
-                batch_size * self.num_heads, max_num_global_attn_indices, seq_len
-            )
 
         global_attn_probs = nn.functional.dropout(
             global_attn_probs_float.type_as(global_attn_scores), p=self.dropout, training=self.training
@@ -1164,7 +1102,6 @@ class LongformerAttention(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        layer_head_mask=None,
         is_index_masked=None,
         is_index_global_attn=None,
         is_global_attn=None,
@@ -1173,7 +1110,6 @@ class LongformerAttention(nn.Module):
         self_outputs = self.self(
             hidden_states,
             attention_mask=attention_mask,
-            layer_head_mask=layer_head_mask,
             is_index_masked=is_index_masked,
             is_index_global_attn=is_index_global_attn,
             is_global_attn=is_global_attn,
@@ -1215,7 +1151,7 @@ class LongformerOutput(nn.Module):
         return hidden_states
 
 
-class LongformerLayer(nn.Module):
+class LongformerLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.attention = LongformerAttention(config, layer_id)
@@ -1228,7 +1164,6 @@ class LongformerLayer(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        layer_head_mask=None,
         is_index_masked=None,
         is_index_global_attn=None,
         is_global_attn=None,
@@ -1237,7 +1172,6 @@ class LongformerLayer(nn.Module):
         self_attn_outputs = self.attention(
             hidden_states,
             attention_mask=attention_mask,
-            layer_head_mask=layer_head_mask,
             is_index_masked=is_index_masked,
             is_index_global_attn=is_index_global_attn,
             is_global_attn=is_global_attn,
@@ -1269,7 +1203,6 @@ class LongformerEncoder(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        head_mask=None,
         padding_len=0,
         output_attentions=False,
         output_hidden_states=False,
@@ -1285,36 +1218,18 @@ class LongformerEncoder(nn.Module):
         all_attentions = () if output_attentions else None  # All local attentions.
         all_global_attentions = () if (output_attentions and is_global_attn) else None
 
-        # check if head_mask has a correct number of layers specified if desired
-        if head_mask is not None:
-            assert head_mask.size()[0] == (
-                len(self.layer)
-            ), f"The head_mask should be specified for {len(self.layer)} layers, but it is for {head_mask.size()[0]}."
         for idx, layer_module in enumerate(self.layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    attention_mask,
-                    head_mask[idx] if head_mask is not None else None,
-                    is_index_masked,
-                    is_index_global_attn,
-                    is_global_attn,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    attention_mask=attention_mask,
-                    layer_head_mask=head_mask[idx] if head_mask is not None else None,
-                    is_index_masked=is_index_masked,
-                    is_index_global_attn=is_index_global_attn,
-                    is_global_attn=is_global_attn,
-                    output_attentions=output_attentions,
-                )
+            layer_outputs = layer_module(
+                hidden_states,
+                attention_mask=attention_mask,
+                is_index_masked=is_index_masked,
+                is_index_global_attn=is_index_global_attn,
+                is_global_attn=is_global_attn,
+                output_attentions=output_attentions,
+            )
             hidden_states = layer_outputs[0]
 
             if output_attentions:
@@ -1333,10 +1248,10 @@ class LongformerEncoder(nn.Module):
         # unpad `hidden_states` because the calling function is expecting a length == input_ids.size(1)
         hidden_states = hidden_states[:, : hidden_states.shape[1] - padding_len]
         if output_hidden_states:
-            all_hidden_states = tuple([state[:, : state.shape[1] - padding_len] for state in all_hidden_states])
+            all_hidden_states = tuple(state[:, : state.shape[1] - padding_len] for state in all_hidden_states)
 
         if output_attentions:
-            all_attentions = tuple([state[:, :, : state.shape[2] - padding_len, :] for state in all_attentions])
+            all_attentions = tuple(state[:, :, : state.shape[2] - padding_len, :] for state in all_attentions)
 
         if not return_dict:
             return tuple(
@@ -1398,13 +1313,9 @@ class LongformerLMHead(nn.Module):
             self.bias = self.decoder.bias
 
 
+@auto_docstring
 class LongformerPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = LongformerConfig
+    config: LongformerConfig
     base_model_prefix = "longformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["LongformerSelfAttention"]
@@ -1412,8 +1323,6 @@ class LongformerPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -1426,98 +1335,12 @@ class LongformerPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-LONGFORMER_START_DOCSTRING = r"""
-
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`LongformerConfig`]): Model configuration class with all the parameters of the
-            model. Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-LONGFORMER_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `({0})`):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        global_attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
-            Mask to decide the attention given on each token, local attention or global attention. Tokens with global
-            attention attends to all other tokens, and all other tokens attend to them. This is important for
-            task-specific finetuning because it makes the model more flexible at representing the task. For example,
-            for classification, the <s> token should be given global attention. For QA, all question tokens should also
-            have global attention. Please refer to the [Longformer paper](https://arxiv.org/abs/2004.05150) for more
-            details. Mask values selected in `[0, 1]`:
-
-            - 0 for local attention (a sliding window attention),
-            - 1 for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
-
-        head_mask (`torch.Tensor` of shape `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        decoder_head_mask (`torch.Tensor` of shape `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
-            1]`:
-
-            - 0 corresponds to a *sentence A* token,
-            - 1 corresponds to a *sentence B* token.
-
-            [What are token type IDs?](../glossary#token-type-ids)
-        position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare Longformer Model outputting raw hidden-states without any specific head on top.",
-    LONGFORMER_START_DOCSTRING,
-)
+@auto_docstring
 class LongformerModel(LongformerPreTrainedModel):
     """
     This class copied code from [`RobertaModel`] and overwrote standard self-attention with longformer self-attention
     to provide the ability to process long sequences following the self-attention approach described in [Longformer:
-    the Long-Document Transformer](https://arxiv.org/abs/2004.05150) by Iz Beltagy, Matthew E. Peters, and Arman Cohan.
+    the Long-Document Transformer](https://huggingface.co/papers/2004.05150) by Iz Beltagy, Matthew E. Peters, and Arman Cohan.
     Longformer self-attention combines a local (sliding window) and global attention to extend to long documents
     without the O(n^2) increase in memory and compute.
 
@@ -1530,6 +1353,10 @@ class LongformerModel(LongformerPreTrainedModel):
     """
 
     def __init__(self, config, add_pooling_layer=True):
+        r"""
+        add_pooling_layer (bool, *optional*, defaults to `True`):
+            Whether to add a pooling layer
+        """
         super().__init__(config)
         self.config = config
 
@@ -1590,8 +1417,7 @@ class LongformerModel(LongformerPreTrainedModel):
         # this path should be recorded in the ONNX export, it is fine with padding_len == 0 as well
         if padding_len > 0:
             logger.warning_once(
-                f"Input ids are automatically padded to be a multiple of "
-                f"`config.attention_window`: {attention_window}"
+                f"Input ids are automatically padded to be a multiple of `config.attention_window`: {attention_window}"
             )
             if input_ids is not None:
                 input_ids = nn.functional.pad(input_ids, (0, padding_len), value=pad_token_id)
@@ -1626,24 +1452,30 @@ class LongformerModel(LongformerPreTrainedModel):
             attention_mask = global_attention_mask + 1
         return attention_mask
 
-    @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=LongformerBaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         global_attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, LongformerBaseModelOutputWithPooling]:
+    ) -> Union[tuple, LongformerBaseModelOutputWithPooling]:
         r"""
+        global_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to decide the attention given on each token, local attention or global attention. Tokens with global
+            attention attends to all other tokens, and all other tokens attend to them. This is important for
+            task-specific finetuning because it makes the model more flexible at representing the task. For example,
+            for classification, the <s> token should be given global attention. For QA, all question tokens should also
+            have global attention. Please refer to the [Longformer paper](https://huggingface.co/papers/2004.05150) for more
+            details. Mask values selected in `[0, 1]`:
 
-        Returns:
+            - 0 for local attention (a sliding window attention),
+            - 1 for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
 
         Examples:
 
@@ -1678,7 +1510,8 @@ class LongformerModel(LongformerPreTrainedModel):
         >>> outputs = model(input_ids, attention_mask=attention_mask, global_attention_mask=global_attention_mask)
         >>> sequence_output = outputs.last_hidden_state
         >>> pooled_output = outputs.pooler_output
-        ```"""
+        ```
+        """
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1729,7 +1562,6 @@ class LongformerModel(LongformerPreTrainedModel):
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
-            head_mask=head_mask,
             padding_len=padding_len,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1750,7 +1582,7 @@ class LongformerModel(LongformerPreTrainedModel):
         )
 
 
-@add_start_docstrings("""Longformer Model with a `language modeling` head on top.""", LONGFORMER_START_DOCSTRING)
+@auto_docstring
 class LongformerForMaskedLM(LongformerPreTrainedModel):
     _tied_weights_keys = ["lm_head.decoder"]
 
@@ -1769,14 +1601,12 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head.decoder = new_embeddings
 
-    @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=LongformerMaskedLMOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         global_attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
@@ -1784,18 +1614,24 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, LongformerMaskedLMOutput]:
+    ) -> Union[tuple, LongformerMaskedLMOutput]:
         r"""
+        global_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to decide the attention given on each token, local attention or global attention. Tokens with global
+            attention attends to all other tokens, and all other tokens attend to them. This is important for
+            task-specific finetuning because it makes the model more flexible at representing the task. For example,
+            for classification, the <s> token should be given global attention. For QA, all question tokens should also
+            have global attention. Please refer to the [Longformer paper](https://huggingface.co/papers/2004.05150) for more
+            details. Mask values selected in `[0, 1]`:
+
+            - 0 for local attention (a sliding window attention),
+            - 1 for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-        kwargs (`Dict[str, any]`, *optional*, defaults to `{}`):
-            Used to hide legacy arguments that have been deprecated.
 
-        Returns:
-
-        Mask filling example:
+        Example Mask filling:
 
         ```python
         >>> from transformers import AutoTokenizer, LongformerForMaskedLM
@@ -1820,14 +1656,14 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
 
         >>> tokenizer.decode(predictions).split()
         ['healthy', 'skinny', 'thin', 'good', 'vegetarian']
-        ```"""
+        ```
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.longformer(
             input_ids,
             attention_mask=attention_mask,
             global_attention_mask=global_attention_mask,
-            head_mask=head_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
@@ -1858,12 +1694,11 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     Longformer Model transformer with a sequence classification/regression head on top (a linear layer on top of the
     pooled output) e.g. for GLUE tasks.
-    """,
-    LONGFORMER_START_DOCSTRING,
+    """
 )
 class LongformerForSequenceClassification(LongformerPreTrainedModel):
     def __init__(self, config):
@@ -1877,20 +1712,12 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint="jpwahle/longformer-base-plagiarism-detection",
-        output_type=LongformerSequenceClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output="'ORIGINAL'",
-        expected_loss=5.44,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         global_attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
@@ -1898,8 +1725,18 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, LongformerSequenceClassifierOutput]:
+    ) -> Union[tuple, LongformerSequenceClassifierOutput]:
         r"""
+        global_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to decide the attention given on each token, local attention or global attention. Tokens with global
+            attention attends to all other tokens, and all other tokens attend to them. This is important for
+            task-specific finetuning because it makes the model more flexible at representing the task. For example,
+            for classification, the <s> token should be given global attention. For QA, all question tokens should also
+            have global attention. Please refer to the [Longformer paper](https://huggingface.co/papers/2004.05150) for more
+            details. Mask values selected in `[0, 1]`:
+
+            - 0 for local attention (a sliding window attention),
+            - 1 for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
@@ -1917,7 +1754,6 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             global_attention_mask=global_attention_mask,
-            head_mask=head_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
@@ -1985,13 +1821,7 @@ class LongformerClassificationHead(nn.Module):
         return output
 
 
-@add_start_docstrings(
-    """
-    Longformer Model with a span classification head on top for extractive question-answering tasks like SQuAD /
-    TriviaQA (a linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
-    """,
-    LONGFORMER_START_DOCSTRING,
-)
+@auto_docstring
 class LongformerForQuestionAnswering(LongformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -2003,14 +1833,12 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=LongformerQuestionAnsweringModelOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         global_attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
@@ -2019,18 +1847,18 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, LongformerQuestionAnsweringModelOutput]:
+    ) -> Union[tuple, LongformerQuestionAnsweringModelOutput]:
         r"""
-        start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
-        end_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
+        global_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to decide the attention given on each token, local attention or global attention. Tokens with global
+            attention attends to all other tokens, and all other tokens attend to them. This is important for
+            task-specific finetuning because it makes the model more flexible at representing the task. For example,
+            for classification, the <s> token should be given global attention. For QA, all question tokens should also
+            have global attention. Please refer to the [Longformer paper](https://huggingface.co/papers/2004.05150) for more
+            details. Mask values selected in `[0, 1]`:
 
-        Returns:
+            - 0 for local attention (a sliding window attention),
+            - 1 for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
 
         Examples:
 
@@ -2075,7 +1903,6 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             global_attention_mask=global_attention_mask,
-            head_mask=head_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
@@ -2122,13 +1949,7 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-    Longformer Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g.
-    for Named-Entity-Recognition (NER) tasks.
-    """,
-    LONGFORMER_START_DOCSTRING,
-)
+@auto_docstring
 class LongformerForTokenClassification(LongformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -2141,23 +1962,12 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint="brad1141/Longformer-finetuned-norm",
-        output_type=LongformerTokenClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=(
-            "['Evidence', 'Evidence', 'Evidence', 'Evidence', 'Evidence', 'Evidence', 'Evidence', 'Evidence',"
-            " 'Evidence', 'Evidence', 'Evidence', 'Evidence']"
-        ),
-        expected_loss=0.63,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         global_attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
@@ -2165,8 +1975,18 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, LongformerTokenClassifierOutput]:
+    ) -> Union[tuple, LongformerTokenClassifierOutput]:
         r"""
+        global_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to decide the attention given on each token, local attention or global attention. Tokens with global
+            attention attends to all other tokens, and all other tokens attend to them. This is important for
+            task-specific finetuning because it makes the model more flexible at representing the task. For example,
+            for classification, the <s> token should be given global attention. For QA, all question tokens should also
+            have global attention. Please refer to the [Longformer paper](https://huggingface.co/papers/2004.05150) for more
+            details. Mask values selected in `[0, 1]`:
+
+            - 0 for local attention (a sliding window attention),
+            - 1 for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
@@ -2176,7 +1996,6 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             global_attention_mask=global_attention_mask,
-            head_mask=head_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
@@ -2210,13 +2029,7 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-    Longformer Model with a multiple choice classification head on top (a linear layer on top of the pooled output and
-    a softmax) e.g. for RocStories/SWAG tasks.
-    """,
-    LONGFORMER_START_DOCSTRING,
-)
+@auto_docstring
 class LongformerForMultipleChoice(LongformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -2228,33 +2041,59 @@ class LongformerForMultipleChoice(LongformerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(
-        LONGFORMER_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
-    )
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=LongformerMultipleChoiceModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         global_attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, LongformerMultipleChoiceModelOutput]:
+    ) -> Union[tuple, LongformerMultipleChoiceModelOutput]:
         r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        token_type_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
+
+            - 0 corresponds to a *sentence A* token,
+            - 1 corresponds to a *sentence B* token.
+
+            [What are token type IDs?](../glossary#token-type-ids)
+        global_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length)`, *optional*):
+            Mask to decide the attention given on each token, local attention or global attention. Tokens with global
+            attention attends to all other tokens, and all other tokens attend to them. This is important for
+            task-specific finetuning because it makes the model more flexible at representing the task. For example,
+            for classification, the <s> token should be given global attention. For QA, all question tokens should also
+            have global attention. Please refer to the [Longformer paper](https://huggingface.co/papers/2004.05150) for more
+            details. Mask values selected in `[0, 1]`:
+
+            - 0 for local attention (a sliding window attention),
+            - 1 for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
             `input_ids` above)
+        position_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
         """
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -2292,7 +2131,6 @@ class LongformerForMultipleChoice(LongformerPreTrainedModel):
             token_type_ids=flat_token_type_ids,
             attention_mask=flat_attention_mask,
             global_attention_mask=flat_global_attention_mask,
-            head_mask=head_mask,
             inputs_embeds=flat_inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,

@@ -13,58 +13,89 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-07-28 and added to Hugging Face Transformers on 2021-03-30.*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white" >
+    </div>
+</div>
 
 # BigBird
 
-## Overview
+[BigBird](https://huggingface.co/papers/2007.14062) is a transformer model built to handle sequence lengths up to 4096 compared to 512 for [BERT](./bert). Traditional transformers struggle with long inputs because attention gets really expensive as the sequence length grows. BigBird fixes this by using a sparse attention mechanism, which means it doesn’t try to look at everything at once. Instead, it mixes in local attention, random attention, and a few global tokens to process the whole input. This combination gives it the best of both worlds. It keeps the computation efficient while still capturing enough of the sequence to understand it well. Because of this, BigBird is great at tasks involving long documents, like question answering, summarization, and genomic applications.
 
-The BigBird model was proposed in [Big Bird: Transformers for Longer Sequences](https://arxiv.org/abs/2007.14062) by
-Zaheer, Manzil and Guruganesh, Guru and Dubey, Kumar Avinava and Ainslie, Joshua and Alberti, Chris and Ontanon,
-Santiago and Pham, Philip and Ravula, Anirudh and Wang, Qifan and Yang, Li and others. BigBird, is a sparse-attention
-based transformer which extends Transformer based models, such as BERT to much longer sequences. In addition to sparse
-attention, BigBird also applies global attention as well as random attention to the input sequence. Theoretically, it
-has been shown that applying sparse, global, and random attention approximates full attention, while being
-computationally much more efficient for longer sequences. As a consequence of the capability to handle longer context,
-BigBird has shown improved performance on various long document NLP tasks, such as question answering and
-summarization, compared to BERT or RoBERTa.
+You can find all the original BigBird checkpoints under the [Google](https://huggingface.co/google?search_models=bigbird) organization.
 
-The abstract from the paper is the following:
+> [!TIP]
+> Click on the BigBird models in the right sidebar for more examples of how to apply BigBird to different language tasks.
 
-*Transformers-based models, such as BERT, have been one of the most successful deep learning models for NLP.
-Unfortunately, one of their core limitations is the quadratic dependency (mainly in terms of memory) on the sequence
-length due to their full attention mechanism. To remedy this, we propose, BigBird, a sparse attention mechanism that
-reduces this quadratic dependency to linear. We show that BigBird is a universal approximator of sequence functions and
-is Turing complete, thereby preserving these properties of the quadratic, full attention model. Along the way, our
-theoretical analysis reveals some of the benefits of having O(1) global tokens (such as CLS), that attend to the entire
-sequence as part of the sparse attention mechanism. The proposed sparse attention can handle sequences of length up to
-8x of what was previously possible using similar hardware. As a consequence of the capability to handle longer context,
-BigBird drastically improves performance on various NLP tasks such as question answering and summarization. We also
-propose novel applications to genomics data.*
+The example below demonstrates how to predict the `[MASK]` token with [`Pipeline`], [`AutoModel`], and from the command line.
 
-This model was contributed by [vasudevgupta](https://huggingface.co/vasudevgupta). The original code can be found
-[here](https://github.com/google-research/bigbird).
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-## Usage tips
+```py
+import torch
+from transformers import pipeline
 
-- For an in-detail explanation on how BigBird's attention works, see [this blog post](https://huggingface.co/blog/big-bird).
-- BigBird comes with 2 implementations: **original_full** & **block_sparse**. For the sequence length < 1024, using
-  **original_full** is advised as there is no benefit in using **block_sparse** attention.
-- The code currently uses window size of 3 blocks and 2 global blocks.
-- Sequence length must be divisible by block size.
-- Current implementation supports only **ITC**.
-- Current implementation doesn't support **num_random_blocks = 0**
-- BigBird is a model with absolute position embeddings so it's usually advised to pad the inputs on the right rather than
-  the left.
+pipeline = pipeline(
+    task="fill-mask",
+    model="google/bigbird-roberta-base",
+    dtype=torch.float16,
+    device=0
+)
+pipeline("Plants create [MASK] through a process known as photosynthesis.")
+```
 
+</hfoption>
+<hfoption id="AutoModel">
+
+```py
+import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained(
+    "google/bigbird-roberta-base",
+)
+model = AutoModelForMaskedLM.from_pretrained(
+    "google/bigbird-roberta-base",
+    dtype=torch.float16,
+    device_map="auto",
+)
+inputs = tokenizer("Plants create [MASK] through a process known as photosynthesis.", return_tensors="pt").to(model.device)
+
+with torch.no_grad():
+    outputs = model(**inputs)
+    predictions = outputs.logits
+
+masked_index = torch.where(inputs['input_ids'] == tokenizer.mask_token_id)[1]
+predicted_token_id = predictions[0, masked_index].argmax(dim=-1)
+predicted_token = tokenizer.decode(predicted_token_id)
+
+print(f"The predicted token is: {predicted_token}")
+```
+
+</hfoption>
+<hfoption id="transformers CLI">
+
+```bash
+!echo -e "Plants create [MASK] through a process known as photosynthesis." | transformers run --task fill-mask --model google/bigbird-roberta-base --device 0
+```
+
+</hfoption>
+</hfoptions>
+
+## Notes
+
+- Inputs should be padded on the right because BigBird uses absolute position embeddings.
+- BigBird supports `original_full` and `block_sparse` attention. If the input sequence length is less than 1024, it is recommended to use `original_full` since sparse patterns don't offer much benefit for smaller inputs.
+- The current implementation uses window size of 3 blocks and 2 global blocks, only supports the ITC-implementation, and doesn't support `num_random_blocks=0`.
+- The sequence length must be divisible by the block size.
 
 ## Resources
 
-- [Text classification task guide](../tasks/sequence_classification)
-- [Token classification task guide](../tasks/token_classification)
-- [Question answering task guide](../tasks/question_answering)
-- [Causal language modeling task guide](../tasks/language_modeling)
-- [Masked language modeling task guide](../tasks/masked_language_modeling)
-- [Multiple choice task guide](../tasks/multiple_choice)
+- Read the [BigBird](https://huggingface.co/blog/big-bird) blog post for more details about how its attention works.
 
 ## BigBirdConfig
 
@@ -85,9 +116,6 @@ This model was contributed by [vasudevgupta](https://huggingface.co/vasudevgupta
 ## BigBird specific outputs
 
 [[autodoc]] models.big_bird.modeling_big_bird.BigBirdForPreTrainingOutput
-
-<frameworkcontent>
-<pt>
 
 ## BigBirdModel
 
@@ -128,51 +156,3 @@ This model was contributed by [vasudevgupta](https://huggingface.co/vasudevgupta
 
 [[autodoc]] BigBirdForQuestionAnswering
     - forward
-
-</pt>
-<jax>
-
-## FlaxBigBirdModel
-
-[[autodoc]] FlaxBigBirdModel
-    - __call__
-
-## FlaxBigBirdForPreTraining
-
-[[autodoc]] FlaxBigBirdForPreTraining
-    - __call__
-
-## FlaxBigBirdForCausalLM
-
-[[autodoc]] FlaxBigBirdForCausalLM
-    - __call__
-
-## FlaxBigBirdForMaskedLM
-
-[[autodoc]] FlaxBigBirdForMaskedLM
-    - __call__
-
-## FlaxBigBirdForSequenceClassification
-
-[[autodoc]] FlaxBigBirdForSequenceClassification
-    - __call__
-
-## FlaxBigBirdForMultipleChoice
-
-[[autodoc]] FlaxBigBirdForMultipleChoice
-    - __call__
-
-## FlaxBigBirdForTokenClassification
-
-[[autodoc]] FlaxBigBirdForTokenClassification
-    - __call__
-
-## FlaxBigBirdForQuestionAnswering
-
-[[autodoc]] FlaxBigBirdForQuestionAnswering
-    - __call__
-
-</jax>
-</frameworkcontent>
-
-

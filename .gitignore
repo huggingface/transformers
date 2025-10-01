@@ -13,6 +13,7 @@ tests/fixtures/cached_*_text.txt
 logs/
 lightning_logs/
 lang_code_data/
+reports/
 
 # Distribution / packaging
 .Python
@@ -167,3 +168,6 @@ tags
 
 # ruff
 .ruff_cache
+
+# modular conversion
+*.modular_backup

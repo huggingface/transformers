@@ -3,7 +3,7 @@ import warnings
 from abc import ABC
 from collections import OrderedDict
 from copy import deepcopy
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -33,12 +33,13 @@ STOPPING_CRITERIA_INPUTS_DOCSTRING = r"""
             Prediction scores of a language modeling head. These can be scores for each vocabulary token before SoftMax
             or scores for each vocabulary token after SoftMax. If this stopping criteria depends on the `scores` input,
             make sure you pass `return_dict_in_generate=True, output_scores=True` to `generate`.
-        kwargs (`Dict[str, Any]`, *optional*):
+        kwargs (`dict[str, Any]`, *optional*):
             Additional stopping criteria specific kwargs.
 
     Return:
-        `torch.BoolTensor`. (`torch.BoolTensor` of shape `(batch_size, 1)`), where `True` indicates we stop generation
-            for a particular row, `True` indicates we should continue.
+        `torch.BoolTensor`. (`torch.BoolTensor` of shape `(batch_size, 1)`):
+            `True` indicates we stop generation for a particular row.
+            `False` indicates we should continue.
 
 """
 
@@ -73,11 +74,11 @@ class MaxLengthCriteria(StoppingCriteria):
 
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
-        cur_len = input_ids.shape[-1]
+        cur_len = input_ids.shape[1]
         is_done = cur_len >= self.max_length
-        if self.max_position_embeddings is not None and not is_done and cur_len >= self.max_position_embeddings:
+        if self.max_position_embeddings is not None and not is_done and cur_len > self.max_position_embeddings:
             logger.warning_once(
-                "This is a friendly reminder - the current text generation call will exceed the model's predefined "
+                "This is a friendly reminder - the current text generation call has exceeded the model's predefined "
                 f"maximum length ({self.max_position_embeddings}). Depending on the model, you may observe "
                 "exceptions, performance degradation, or nothing at all."
             )
@@ -208,7 +209,7 @@ class StopStringCriteria(StoppingCriteria):
     Args:
         tokenizer (`PreTrainedTokenizer`):
             The model's associated tokenizer (necessary to extract vocab and tokenize the termination sequences)
-        stop_strings (`Union[str, List[str]]`):
+        stop_strings (`Union[str, list[str]]`):
             A list of strings that should end generation. If a string is passed, it will be treated like a
             list with a single element.
 
@@ -238,33 +239,33 @@ class StopStringCriteria(StoppingCriteria):
     ```
     """
 
-    def __init__(self, tokenizer: PreTrainedTokenizerBase, stop_strings: Union[str, List[str]]):
+    def __init__(self, tokenizer: PreTrainedTokenizerBase, stop_strings: Union[str, list[str]]):
         if isinstance(stop_strings, str):
             stop_strings = [stop_strings]
-        self.stop_strings: Tuple[str, ...] = tuple(stop_strings)
+        self.stop_strings: tuple[str, ...] = tuple(stop_strings)
         vocab = tokenizer.get_vocab()
         token_list, token_indices = tuple(vocab.keys()), tuple(vocab.values())
         self.embedding_vec, self.max_valid_positions, self.max_valid_end_lens = self.clean_and_embed_tokens_with_cache(
-            token_list, token_indices, self.stop_strings, tokenizer
+            token_list, token_indices, tokenizer
         )
 
         self.maximum_token_len = max([len(stop_string) for stop_string in self.stop_strings])
         self.num_stop_strings = len(self.stop_strings)
         self.target_lens = torch.tensor([len(stop_string) for stop_string in stop_strings], dtype=torch.int32)
 
-    def clean_and_embed_tokens_with_cache(self, token_list, token_indices, stop_strings, tokenizer):
+    def clean_and_embed_tokens_with_cache(self, token_list, token_indices, tokenizer):
         # We don't use the tokenizer in the cache key, because I don't trust it to have well-behaved equality
-        if (token_list, token_indices, stop_strings) in STOP_STRING_EMBEDDING_CACHE:
+        if (token_list, token_indices, self.stop_strings) in STOP_STRING_EMBEDDING_CACHE:
             embedding_vec, max_valid_positions, max_valid_end_lens = STOP_STRING_EMBEDDING_CACHE[
                 (token_list, token_indices, self.stop_strings)
             ]
-            STOP_STRING_EMBEDDING_CACHE.move_to_end((token_list, token_indices, stop_strings))
+            STOP_STRING_EMBEDDING_CACHE.move_to_end((token_list, token_indices, self.stop_strings))
         else:
             clean_token_list, clean_token_indices = self.clean_tokenizer_vocab(tokenizer)
             embedding_vec, max_valid_positions, max_valid_end_lens = self._stop_string_create_embedding_vec(
-                clean_token_list, clean_token_indices, stop_strings
+                clean_token_list, clean_token_indices, self.stop_strings
             )
-            STOP_STRING_EMBEDDING_CACHE[(token_list, token_indices, stop_strings)] = (
+            STOP_STRING_EMBEDDING_CACHE[(token_list, token_indices, self.stop_strings)] = (
                 embedding_vec,
                 max_valid_positions,
                 max_valid_end_lens,
@@ -297,7 +298,7 @@ class StopStringCriteria(StoppingCriteria):
     @staticmethod
     def _stop_string_get_matching_positions(
         token_list, token_indices, stop_strings
-    ) -> Tuple[Dict[str, Dict[str, List[int]]], Dict[str, Dict[str, List[int]]]]:
+    ) -> tuple[dict[str, dict[str, list[int]]], dict[str, dict[str, list[int]]]]:
         """This function preprocesses stop strings and the tokenizer vocabulary to determine where tokens can
         validly appear in the stop strings. For each token, it computes a list of positions in the stop string where the
         token appears, as well as a list of the possible "end overlaps" for that token - that is, the number of characters
@@ -336,7 +337,7 @@ class StopStringCriteria(StoppingCriteria):
         return token_valid_positions, token_end_overlaps
 
     @staticmethod
-    def _stop_string_create_embedding_vec(token_list, token_indices, stop_strings) -> Dict[str, torch.tensor]:
+    def _stop_string_create_embedding_vec(token_list, token_indices, stop_strings) -> dict[str, torch.tensor]:
         """This function precomputes everything needed for the run-time checks in StopStringCriteria, and packs
         them into an embedding tensor that can be accessed with pure tensor operations. For the specifics of the values
         that are precomputed and what they are used for, please refer to the StopStringCriteria docstring!"""
@@ -357,7 +358,9 @@ class StopStringCriteria(StoppingCriteria):
             )
         max_valid_end_lens = max(valid_end_lens)
         vec_size = len(stop_strings) * (max_valid_positions + max_valid_end_lens) + 1
-        gather_vec = np.full((len(token_list), vec_size), dtype=np.int32, fill_value=-1)
+        # We use +2 instead of +1 so we can have a dummy entry at the end. We will clamp all token values
+        # over the max to this, ensuring they do not contribute to stop string matching.
+        gather_vec = np.full((max(token_indices) + 2, vec_size), dtype=np.int32, fill_value=-1)
 
         for i, stop_string in enumerate(stop_strings):
             positions = token_valid_positions[stop_string]
@@ -394,6 +397,9 @@ class StopStringCriteria(StoppingCriteria):
 
         # Flip input_ids because we're only matching strings at the end of the generated sequence
         flipped_ids = torch.flip(input_ids, (1,))
+
+        # Clip out-of-vocab values to the dummy value at the end of the embedding vector
+        flipped_ids = torch.clamp(flipped_ids, max=self.embedding_vec.size(0) - 1)
 
         # Size of the vector of positions a single token can match
         max_valid_positions = self.max_valid_positions
@@ -449,11 +455,11 @@ class EosTokenCriteria(StoppingCriteria):
     By default, it uses the `model.generation_config.eos_token_id`.
 
     Args:
-        eos_token_id (`Union[int, List[int], torch.Tensor]`):
+        eos_token_id (`Union[int, list[int], torch.Tensor]`):
             The id(s) of the *end-of-sequence* token.
     """
 
-    def __init__(self, eos_token_id: Union[int, List[int], torch.Tensor]):
+    def __init__(self, eos_token_id: Union[int, list[int], torch.Tensor]):
         if not isinstance(eos_token_id, torch.Tensor):
             if isinstance(eos_token_id, int):
                 eos_token_id = [eos_token_id]

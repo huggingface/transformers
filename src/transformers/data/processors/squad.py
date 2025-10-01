@@ -16,13 +16,15 @@ import json
 import os
 from functools import partial
 from multiprocessing import Pool, cpu_count
+from multiprocessing.pool import ThreadPool
+from typing import Optional
 
 import numpy as np
 from tqdm import tqdm
 
 from ...models.bert.tokenization_bert import whitespace_tokenize
 from ...tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase, TruncationStrategy
-from ...utils import is_tf_available, is_torch_available, logging
+from ...utils import is_torch_available, is_torch_hpu_available, logging
 from .utils import DataProcessor
 
 
@@ -34,8 +36,6 @@ if is_torch_available():
     import torch
     from torch.utils.data import TensorDataset
 
-if is_tf_available():
-    import tensorflow as tf
 
 logger = logging.get_logger(__name__)
 
@@ -242,14 +242,13 @@ def squad_convert_example_to_features(
         cls_index = span["input_ids"].index(tokenizer.cls_token_id)
 
         # p_mask: mask with 1 for token than cannot be in the answer (0 for token which can be in an answer)
-        # Original TF implementation also keep the classification token (set to 0)
         p_mask = np.ones_like(span["token_type_ids"])
         if tokenizer.padding_side == "right":
             p_mask[len(truncated_query) + sequence_added_tokens :] = 0
         else:
             p_mask[-len(span["tokens"]) : -(len(truncated_query) + sequence_added_tokens)] = 0
 
-        pad_token_indices = np.where(span["input_ids"] == tokenizer.pad_token_id)
+        pad_token_indices = np.where(np.atleast_1d(span["input_ids"] == tokenizer.pad_token_id))
         special_token_indices = np.asarray(
             tokenizer.get_special_tokens_mask(span["input_ids"], already_has_special_tokens=True)
         ).nonzero()
@@ -285,7 +284,6 @@ def squad_convert_example_to_features(
 
                 start_position = tok_start_position - doc_start + doc_offset
                 end_position = tok_end_position - doc_start + doc_offset
-
         features.append(
             SquadFeatures(
                 span["input_ids"],
@@ -337,8 +335,8 @@ def squad_convert_examples_to_features(
         max_query_length: The maximum length of the query.
         is_training: whether to create features for model evaluation or model training.
         padding_strategy: Default to "max_length". Which padding strategy to use
-        return_dataset: Default False. Either 'pt' or 'tf'.
-            if 'pt': returns a torch.data.TensorDataset, if 'tf': returns a tf.data.Dataset
+        return_dataset: Default False. Can also be 'pt'.
+            if 'pt': returns a torch.data.TensorDataset.
         threads: multiple processing threads.
 
 
@@ -360,11 +358,10 @@ def squad_convert_examples_to_features(
         is_training=not evaluate,
     )
     ```"""
-    # Defining helper methods
-    features = []
 
     threads = min(threads, cpu_count())
-    with Pool(threads, initializer=squad_convert_example_to_features_init, initargs=(tokenizer,)) as p:
+    pool_cls = ThreadPool if is_torch_hpu_available() else Pool
+    with pool_cls(threads, initializer=squad_convert_example_to_features_init, initargs=(tokenizer,)) as p:
         annotate_ = partial(
             squad_convert_example_to_features,
             max_seq_length=max_seq_length,
@@ -430,110 +427,6 @@ def squad_convert_examples_to_features(
             )
 
         return features, dataset
-    elif return_dataset == "tf":
-        if not is_tf_available():
-            raise RuntimeError("TensorFlow must be installed to return a TensorFlow dataset.")
-
-        def gen():
-            for i, ex in enumerate(features):
-                if ex.token_type_ids is None:
-                    yield (
-                        {
-                            "input_ids": ex.input_ids,
-                            "attention_mask": ex.attention_mask,
-                            "feature_index": i,
-                            "qas_id": ex.qas_id,
-                        },
-                        {
-                            "start_positions": ex.start_position,
-                            "end_positions": ex.end_position,
-                            "cls_index": ex.cls_index,
-                            "p_mask": ex.p_mask,
-                            "is_impossible": ex.is_impossible,
-                        },
-                    )
-                else:
-                    yield (
-                        {
-                            "input_ids": ex.input_ids,
-                            "attention_mask": ex.attention_mask,
-                            "token_type_ids": ex.token_type_ids,
-                            "feature_index": i,
-                            "qas_id": ex.qas_id,
-                        },
-                        {
-                            "start_positions": ex.start_position,
-                            "end_positions": ex.end_position,
-                            "cls_index": ex.cls_index,
-                            "p_mask": ex.p_mask,
-                            "is_impossible": ex.is_impossible,
-                        },
-                    )
-
-        # Why have we split the batch into a tuple? PyTorch just has a list of tensors.
-        if "token_type_ids" in tokenizer.model_input_names:
-            train_types = (
-                {
-                    "input_ids": tf.int32,
-                    "attention_mask": tf.int32,
-                    "token_type_ids": tf.int32,
-                    "feature_index": tf.int64,
-                    "qas_id": tf.string,
-                },
-                {
-                    "start_positions": tf.int64,
-                    "end_positions": tf.int64,
-                    "cls_index": tf.int64,
-                    "p_mask": tf.int32,
-                    "is_impossible": tf.int32,
-                },
-            )
-
-            train_shapes = (
-                {
-                    "input_ids": tf.TensorShape([None]),
-                    "attention_mask": tf.TensorShape([None]),
-                    "token_type_ids": tf.TensorShape([None]),
-                    "feature_index": tf.TensorShape([]),
-                    "qas_id": tf.TensorShape([]),
-                },
-                {
-                    "start_positions": tf.TensorShape([]),
-                    "end_positions": tf.TensorShape([]),
-                    "cls_index": tf.TensorShape([]),
-                    "p_mask": tf.TensorShape([None]),
-                    "is_impossible": tf.TensorShape([]),
-                },
-            )
-        else:
-            train_types = (
-                {"input_ids": tf.int32, "attention_mask": tf.int32, "feature_index": tf.int64, "qas_id": tf.string},
-                {
-                    "start_positions": tf.int64,
-                    "end_positions": tf.int64,
-                    "cls_index": tf.int64,
-                    "p_mask": tf.int32,
-                    "is_impossible": tf.int32,
-                },
-            )
-
-            train_shapes = (
-                {
-                    "input_ids": tf.TensorShape([None]),
-                    "attention_mask": tf.TensorShape([None]),
-                    "feature_index": tf.TensorShape([]),
-                    "qas_id": tf.TensorShape([]),
-                },
-                {
-                    "start_positions": tf.TensorShape([]),
-                    "end_positions": tf.TensorShape([]),
-                    "cls_index": tf.TensorShape([]),
-                    "p_mask": tf.TensorShape([None]),
-                    "is_impossible": tf.TensorShape([]),
-                },
-            )
-
-        return tf.data.Dataset.from_generator(gen, train_types, train_shapes)
     else:
         return features
 
@@ -800,8 +693,8 @@ class SquadFeatures:
         start_position,
         end_position,
         is_impossible,
-        qas_id: str = None,
-        encoding: BatchEncoding = None,
+        qas_id: Optional[str] = None,
+        encoding: Optional[BatchEncoding] = None,
     ):
         self.input_ids = input_ids
         self.attention_mask = attention_mask

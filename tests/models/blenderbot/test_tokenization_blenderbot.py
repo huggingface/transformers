@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,10 +15,10 @@
 """Tests for Blenderbot Tokenizers, including common tests for BlenderbotSmallTokenizer."""
 
 import unittest
+from functools import cached_property
 
 from transformers import BlenderbotTokenizer, BlenderbotTokenizerFast
 from transformers.testing_utils import require_jinja
-from transformers.utils import cached_property
 
 
 class Blenderbot3BTokenizerTests(unittest.TestCase):

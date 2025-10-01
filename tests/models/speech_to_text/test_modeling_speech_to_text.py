@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,6 +19,8 @@ import os
 import tempfile
 import unittest
 
+from datasets import load_dataset
+
 from transformers import Speech2TextConfig
 from transformers.testing_utils import (
     is_torch_available,
@@ -28,10 +29,8 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_fp16,
     require_torchaudio,
-    slow,
     torch_device,
 )
-from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -52,29 +51,18 @@ def prepare_speech_to_text_inputs_dict(
     decoder_input_ids,
     attention_mask=None,
     decoder_attention_mask=None,
-    head_mask=None,
-    decoder_head_mask=None,
-    cross_attn_head_mask=None,
 ):
     if attention_mask is None:
         attention_mask = input_features.ne(0)
     if decoder_attention_mask is None:
         decoder_attention_mask = decoder_input_ids.ne(config.pad_token_id)
-    if head_mask is None:
-        head_mask = torch.ones(config.encoder_layers, config.encoder_attention_heads, device=torch_device)
-    if decoder_head_mask is None:
-        decoder_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
-    if cross_attn_head_mask is None:
-        cross_attn_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
+
     return {
         # "input_ids": input_features,
         "input_features": input_features,
         "decoder_input_ids": decoder_input_ids,
         "attention_mask": attention_mask,
         "decoder_attention_mask": attention_mask,
-        "head_mask": head_mask,
-        "decoder_head_mask": decoder_head_mask,
-        "cross_attn_head_mask": cross_attn_head_mask,
     }
 
 
@@ -271,7 +259,6 @@ class Speech2TextModelTester:
 @require_torch
 class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Speech2TextModel, Speech2TextForConditionalGeneration) if is_torch_available() else ()
-    all_generative_model_classes = (Speech2TextForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"automatic-speech-recognition": Speech2TextForConditionalGeneration, "feature-extraction": Speech2TextModel}
         if is_torch_available()
@@ -325,13 +312,13 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -362,11 +349,7 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
                 "decoder_input_ids",
                 "decoder_attention_mask",
             ]
-            expected_arg_names.extend(
-                ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
-                if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
-                else ["encoder_outputs"]
-            )
+            expected_arg_names.extend(["encoder_outputs"])
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     def test_hidden_states_output(self):
@@ -436,7 +419,8 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
 
@@ -582,6 +566,7 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
             model = model_class(config).to(torch_device)
+            model.eval()
 
             # if no output embeddings -> leave test
             if model.get_output_embeddings() is None:
@@ -665,8 +650,8 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
             loaded_model_state_dict = loaded_model.state_dict()
 
             non_persistent_buffers = {}
-            for key in loaded_model_state_dict.keys():
-                if key not in model_state_dict.keys():
+            for key in loaded_model_state_dict:
+                if key not in model_state_dict:
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {
@@ -694,10 +679,6 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
 
             self.assertTrue(models_equal)
 
-    def test_pt_tf_model_equivalence(self, allow_missing_keys=True):
-        # Allow missing keys since TF doesn't cache the sinusoidal embeddings in an attribute
-        super().test_pt_tf_model_equivalence(allow_missing_keys=allow_missing_keys)
-
     @unittest.skip(reason="Test failing,  @RocketNight is looking into it")
     def test_tf_from_pt_safetensors(self):
         pass
@@ -707,32 +688,23 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
 @require_torchaudio
 @require_sentencepiece
 @require_tokenizers
-@slow
 class Speech2TextModelIntegrationTests(unittest.TestCase):
-    @cached_property
-    def default_processor(self):
-        return Speech2TextProcessor.from_pretrained("facebook/s2t-small-librispeech-asr")
-
-    def _load_datasamples(self, num_samples):
-        from datasets import load_dataset
-
+    @classmethod
+    def setUpClass(cls):
+        model_name = "facebook/s2t-small-librispeech-asr"
+        cls.model = Speech2TextForConditionalGeneration.from_pretrained(model_name, device_map="auto")
+        cls.processor = Speech2TextProcessor.from_pretrained(model_name)
+        # loads 4 samples
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        # automatic decoding with librispeech
-        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
-
-        return [x["array"] for x in speech_samples]
+        speech_samples = ds.sort("id").select(range(4))[:4]["audio"]
+        cls.dataset = [x["array"] for x in speech_samples]
 
     def test_generation_librispeech(self):
-        model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr")
-        model.to(torch_device)
-        processor = self.default_processor
+        input_speech = [self.dataset[0]]
+        input_features = self.processor(input_speech, return_tensors="pt").input_features.to(torch_device)
 
-        input_speech = self._load_datasamples(1)
-
-        input_features = processor(input_speech, return_tensors="pt").input_features.to(torch_device)
-
-        generated_ids = model.generate(input_features)
-        generated_transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)
+        generated_ids = self.model.generate(input_features)
+        generated_transcript = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
         EXPECTED_TRANSCRIPTIONS = [
             "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel"
@@ -740,19 +712,14 @@ class Speech2TextModelIntegrationTests(unittest.TestCase):
         self.assertListEqual(generated_transcript, EXPECTED_TRANSCRIPTIONS)
 
     def test_generation_librispeech_batched(self):
-        model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr")
-        model.to(torch_device)
-        processor = self.default_processor
-
-        input_speech = self._load_datasamples(4)
-
-        inputs = processor(input_speech, return_tensors="pt", padding=True)
+        input_speech = self.dataset
+        inputs = self.processor(input_speech, return_tensors="pt", padding=True)
 
         input_features = inputs.input_features.to(torch_device)
         attention_mask = inputs.attention_mask.to(torch_device)
 
-        generated_ids = model.generate(input_features, attention_mask=attention_mask)
-        generated_transcripts = processor.batch_decode(generated_ids, skip_special_tokens=True)
+        generated_ids = self.model.generate(input_features, attention_mask=attention_mask)
+        generated_transcripts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
         EXPECTED_TRANSCRIPTIONS = [
             "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel",

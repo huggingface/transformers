@@ -16,16 +16,14 @@ import unittest
 
 from huggingface_hub import VideoClassificationOutputElement, hf_hub_download
 
-from transformers import MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING, VideoMAEFeatureExtractor
+from transformers import MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING, VideoMAEImageProcessor
 from transformers.pipelines import VideoClassificationPipeline, pipeline
 from transformers.testing_utils import (
     compare_pipeline_output_to_hub_spec,
     is_pipeline_test,
     nested_simplify,
     require_av,
-    require_tf,
     require_torch,
-    require_torch_or_tf,
     require_vision,
 )
 
@@ -33,11 +31,20 @@ from .test_pipelines_common import ANY
 
 
 @is_pipeline_test
-@require_torch_or_tf
+@require_torch
 @require_vision
 @require_av
 class VideoClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING
+    example_video_filepath = None
+
+    @classmethod
+    def _load_dataset(cls):
+        # Lazy loading of the dataset. Because it is a class method, it will only be loaded once per pytest process.
+        if cls.example_video_filepath is None:
+            cls.example_video_filepath = hf_hub_download(
+                repo_id="nateraw/video-demo", filename="archery.mp4", repo_type="dataset"
+            )
 
     def get_test_pipeline(
         self,
@@ -46,23 +53,22 @@ class VideoClassificationPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        torch_dtype="float32",
+        dtype="float32",
     ):
-        example_video_filepath = hf_hub_download(
-            repo_id="nateraw/video-demo", filename="archery.mp4", repo_type="dataset"
-        )
+        self._load_dataset()
         video_classifier = VideoClassificationPipeline(
             model=model,
             tokenizer=tokenizer,
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             processor=processor,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
             top_k=2,
         )
         examples = [
-            example_video_filepath,
-            "https://huggingface.co/datasets/nateraw/video-demo/resolve/main/archery.mp4",
+            self.example_video_filepath,
+            # TODO: re-enable this once we have a stable hub solution for CI
+            # "https://huggingface.co/datasets/nateraw/video-demo/resolve/main/archery.mp4",
         ]
         return video_classifier, examples
 
@@ -83,7 +89,7 @@ class VideoClassificationPipelineTests(unittest.TestCase):
     @require_torch
     def test_small_model_pt(self):
         small_model = "hf-internal-testing/tiny-random-VideoMAEForVideoClassification"
-        small_feature_extractor = VideoMAEFeatureExtractor(
+        small_feature_extractor = VideoMAEImageProcessor(
             size={"shortest_edge": 10}, crop_size={"height": 10, "width": 10}
         )
         video_classifier = pipeline(
@@ -91,14 +97,13 @@ class VideoClassificationPipelineTests(unittest.TestCase):
         )
 
         video_file_path = hf_hub_download(repo_id="nateraw/video-demo", filename="archery.mp4", repo_type="dataset")
-        outputs = video_classifier(video_file_path, top_k=2)
+        output = video_classifier(video_file_path, top_k=2)
         self.assertEqual(
-            nested_simplify(outputs, decimals=4),
+            nested_simplify(output, decimals=4),
             [{"score": 0.5199, "label": "LABEL_0"}, {"score": 0.4801, "label": "LABEL_1"}],
         )
-        for output in outputs:
-            for element in output:
-                compare_pipeline_output_to_hub_spec(element, VideoClassificationOutputElement)
+        for element in output:
+            compare_pipeline_output_to_hub_spec(element, VideoClassificationOutputElement)
 
         outputs = video_classifier(
             [
@@ -117,8 +122,3 @@ class VideoClassificationPipelineTests(unittest.TestCase):
         for output in outputs:
             for element in output:
                 compare_pipeline_output_to_hub_spec(element, VideoClassificationOutputElement)
-
-    @require_tf
-    @unittest.skip
-    def test_small_model_tf(self):
-        pass

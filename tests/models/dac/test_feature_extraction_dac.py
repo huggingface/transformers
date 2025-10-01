@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -144,7 +143,7 @@ class DacFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Test
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
-        audio_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+        audio_samples = ds.sort("id")[:num_samples]["audio"]
 
         return [x["array"] for x in audio_samples]
 
@@ -165,9 +164,9 @@ class DacFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Test
         feature_extractor = DacFeatureExtractor()
         input_values = feature_extractor(input_audio, return_tensors="pt")["input_values"]
         self.assertEqual(input_values.shape, (1, 1, 93696))
-        self.assertTrue(torch.allclose(input_values[0, 0, :30], EXPECTED_INPUT_VALUES, atol=1e-4))
+        torch.testing.assert_close(input_values[0, 0, :30], EXPECTED_INPUT_VALUES, rtol=1e-4, atol=1e-4)
         audio_input_end = torch.tensor(input_audio[0][-30:], dtype=torch.float32)
-        self.assertTrue(torch.allclose(input_values[0, 0, -46:-16], audio_input_end, atol=1e-4))
+        torch.testing.assert_close(input_values[0, 0, -46:-16], audio_input_end, rtol=1e-4, atol=1e-4)
 
     # Ignore copy
     @unittest.skip("The DAC model doesn't support stereo logic")

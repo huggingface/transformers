@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -169,7 +168,6 @@ class EsmFoldModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     test_mismatched_shapes = False
 
     all_model_classes = (EsmForProteinFolding,) if is_torch_available() else ()
-    all_generative_model_classes = ()
     pipeline_model_mapping = {} if is_torch_available() else {}
     test_sequence_classification_problem_types = False
 
@@ -226,10 +224,6 @@ class EsmFoldModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_head_pruning_save_load_from_pretrained(self):
         pass
 
-    @unittest.skip(reason="ESMFold does not support head pruning.")
-    def test_headmasking(self):
-        pass
-
     @unittest.skip(reason="ESMFold does not output hidden states in the normal way.")
     def test_hidden_states_output(self):
         pass
@@ -240,10 +234,6 @@ class EsmFoldModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @unittest.skip(reason="ESMFold only has one output format.")
     def test_model_outputs_equivalence(self):
-        pass
-
-    @unittest.skip(reason="This test doesn't work for ESMFold and doesn't test core functionality")
-    def test_save_load_fast_init_from_base(self):
         pass
 
     @unittest.skip(reason="ESMFold does not support input chunking.")
@@ -282,4 +272,4 @@ class EsmModelIntegrationTest(TestCasePlus):
         input_ids = torch.tensor([[0, 6, 4, 13, 5, 4, 16, 12, 11, 7, 2]])
         position_outputs = model(input_ids)["positions"]
         expected_slice = torch.tensor([2.5828, 0.7993, -10.9334], dtype=torch.float32)
-        self.assertTrue(torch.allclose(position_outputs[0, 0, 0, 0], expected_slice, atol=1e-4))
+        torch.testing.assert_close(position_outputs[0, 0, 0, 0], expected_slice, rtol=1e-4, atol=1e-4)

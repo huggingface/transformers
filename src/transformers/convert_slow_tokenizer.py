@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,7 +19,7 @@ allow to make our dependency on SentencePiece optional.
 """
 
 import warnings
-from typing import Dict, List, Tuple
+from typing import Optional
 
 from packaging import version
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
@@ -91,7 +90,7 @@ class SentencePieceExtractor:
         self.sp = SentencePieceProcessor()
         self.sp.Load(model)
 
-    def extract(self, vocab_scores=None) -> Tuple[Dict[str, int], List[Tuple]]:
+    def extract(self, vocab_scores=None) -> tuple[dict[str, int], list[tuple]]:
         """
         By default will return vocab and merges with respect to their order, by sending `vocab_scores` we're going to
         order the merges with respect to the piece scores instead.
@@ -105,7 +104,7 @@ class SentencePieceExtractor:
 
 
 class GemmaSentencePieceExtractor(SentencePieceExtractor):
-    def extract(self, vocab_scores=None) -> Tuple[Dict[str, int], List[Tuple]]:
+    def extract(self, vocab_scores=None) -> tuple[dict[str, int], list[tuple]]:
         """
         By default will return vocab and merges with respect to their order, by sending `vocab_scores` we're going to
         order the merges with respect to the piece scores instead.
@@ -113,10 +112,10 @@ class GemmaSentencePieceExtractor(SentencePieceExtractor):
         sp = self.sp
         vocab = {sp.id_to_piece(index): index for index in range(sp.GetPieceSize())}
 
-        # there is a missing token in the vocab. We have to do this to support merges
+        # If "\t" is missing in the vocab, we have to do this to support merges
         # "<0x09>" is the bytefallback for `\t`
-        vocab["\t"] = vocab.get("<0x09>")
-
+        if "\t" not in vocab:
+            vocab["\t"] = vocab.get("<0x09>")
         merges = generate_merges(vocab, vocab_scores)
         return vocab, merges
 
@@ -328,7 +327,9 @@ class OpenAIGPTConverter(Converter):
 
 
 class GPT2Converter(Converter):
-    def converted(self, vocab: Dict[str, int] = None, merges: List[Tuple[str, str]] = None) -> Tokenizer:
+    def converted(
+        self, vocab: Optional[dict[str, int]] = None, merges: Optional[list[tuple[str, str]]] = None
+    ) -> Tokenizer:
         if not vocab:
             vocab = self.original_tokenizer.encoder
         if not merges:
@@ -397,7 +398,9 @@ class HerbertConverter(Converter):
 
 
 class Qwen2Converter(Converter):
-    def converted(self, vocab: Dict[str, int] = None, merges: List[Tuple[str, str]] = None) -> Tokenizer:
+    def converted(
+        self, vocab: Optional[dict[str, int]] = None, merges: Optional[list[tuple[str, str]]] = None
+    ) -> Tokenizer:
         if not vocab:
             vocab = self.original_tokenizer.encoder
         if not merges:
@@ -1296,12 +1299,14 @@ class GemmaConverter(SpmConverter):
             (self.original_tokenizer.eos_token, 0.0),
             (self.original_tokenizer.bos_token, 0.0),
         ]
-        for piece in proto.pieces[3:]:
-            if piece.piece == "<0x09>":
-                vocab += [("\t", piece.score)]
-            else:
-                vocab += [(piece.piece, piece.score)]
-        # vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
+        vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
+
+        # Older gemma tokenizers had a missing tab token, so we fix that here
+        if not any(x[0] == "\t" for x in vocab):
+            override_index = next((i for i, x in enumerate(vocab) if x[0] == "<0x09>"), None)
+            if override_index is not None:
+                vocab[override_index] = ("\t", 0.0)
+
         return vocab
 
     def pre_tokenizer(self, replacement, add_prefix_space):
@@ -1449,7 +1454,7 @@ class MoshiConverter(SpmConverter):
 class HeliumConverter(SpmConverter):
     handle_byte_fallback = True
 
-    def __init__(self, vocab_file=None, *args):
+    def __init__(self, vocab_file=None, **kwargs):
         requires_backends(self, "protobuf")
 
         Converter.__init__(self, vocab_file)
@@ -1535,6 +1540,54 @@ class HeliumConverter(SpmConverter):
         )
 
 
+class ParakeetConverter(SpmConverter):
+    handle_byte_fallback = True
+
+    def __init__(self, vocab_file=None, *args):
+        self.vocab_file = vocab_file
+
+        requires_backends(self, "protobuf")
+
+        Converter.__init__(self, vocab_file)
+
+        model_pb2 = import_protobuf()
+        m = model_pb2.ModelProto()
+        with open(vocab_file, "rb") as f:
+            m.ParseFromString(f.read())
+        self.proto = m
+
+    def tokenizer(self, proto):
+        vocab_scores = self.vocab(proto)
+
+        _, merges = self.SpmExtractor(self.vocab_file).extract(vocab_scores)
+        bpe_vocab = {word: i for i, (word, score) in enumerate(vocab_scores)}
+        tokenizer = Tokenizer(
+            BPE(
+                bpe_vocab,
+                merges,
+                unk_token=proto.trainer_spec.unk_piece,
+                fuse_unk=True,
+                byte_fallback=self.handle_byte_fallback,
+                dropout=None,
+            )
+        )
+
+        # Add user defined symbols and control tokens from sentencepiece model
+        spm_added_tokens = [
+            (id, p.piece, p.type == 3 or p.piece in self.special_tokens)
+            for id, p in enumerate(proto.pieces)
+            if p.type in [3, 4]
+        ]
+        tokenizer.add_tokens(
+            [
+                AddedToken(token, normalized=False, special=special)
+                for id, token, special in sorted(spm_added_tokens, key=lambda x: x[0])
+            ]
+        )
+
+        return tokenizer
+
+
 # Copied from transformers.models.gpt2.tokenization_gpt2.bytes_to_unicode
 def bytes_to_unicode():
     """
@@ -1571,21 +1624,23 @@ class TikTokenConverter:
         pattern=r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+""",
         add_prefix_space=False,
         additional_special_tokens=None,
-        *args,
         **kwargs,
     ):
-        super().__init__(*args)
         self.vocab_file = vocab_file
         self.pattern = pattern
         self.add_prefix_space = add_prefix_space
-        self.additional_special_tokens = additional_special_tokens
+        self.additional_special_tokens = (
+            additional_special_tokens.keys()
+            if isinstance(additional_special_tokens, dict)
+            else additional_special_tokens
+        )
 
     def extract_vocab_merges_from_model(self, tiktoken_url: str):
         try:
             from tiktoken.load import load_tiktoken_bpe
         except Exception:
             raise ValueError(
-                "`tiktoken` is required to read a `tiktoken` file. Install it with " "`pip install tiktoken`."
+                "`tiktoken` is required to read a `tiktoken` file. Install it with `pip install tiktoken`."
             )
 
         bpe_ranks = load_tiktoken_bpe(tiktoken_url)
@@ -1627,7 +1682,10 @@ class TikTokenConverter:
             ]
         )
         tokenizer.decoder = decoders.ByteLevel()
-        tokenizer.add_special_tokens(self.additional_special_tokens)
+
+        tokenizer.add_special_tokens(
+            [AddedToken(token, normalized=False, special=True) for token in self.additional_special_tokens]
+        )
 
         tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
 
@@ -1725,7 +1783,7 @@ def convert_slow_tokenizer(transformer_tokenizer, from_tiktoken=False) -> Tokeni
             ).converted()
         except Exception:
             raise ValueError(
-                f"Converting from Tiktoken failed, if a converter for SentencePiece is available, provide a model path "
+                f"Converting from SentencePiece and Tiktoken failed, if a converter for SentencePiece is available, provide a model path "
                 f"with a SentencePiece tokenizer.model file."
-                f"Currently available slow->fast convertors: {list(SLOW_TO_FAST_CONVERTERS.keys())}"
+                f"Currently available slow->fast converters: {list(SLOW_TO_FAST_CONVERTERS.keys())}"
             )

@@ -13,12 +13,17 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-05-09 and added to Hugging Face Transformers on 2021-09-20.*
 
 # FNet
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
-The FNet model was proposed in [FNet: Mixing Tokens with Fourier Transforms](https://arxiv.org/abs/2105.03824) by
+The FNet model was proposed in [FNet: Mixing Tokens with Fourier Transforms](https://huggingface.co/papers/2105.03824) by
 James Lee-Thorp, Joshua Ainslie, Ilya Eckstein, Santiago Ontanon. The model replaces the self-attention layer in a BERT
 model with a fourier transform which returns only the real parts of the transform. The model is significantly faster
 than the BERT model because it has fewer parameters and is more memory efficient. The model achieves about 92-97%
@@ -41,8 +46,8 @@ This model was contributed by [gchhablani](https://huggingface.co/gchhablani). T
 
 ## Usage tips
 
-The model was trained without an attention mask as it is based on Fourier Transform. The model was trained with 
-maximum sequence length 512 which includes pad tokens. Hence, it is highly recommended to use the same maximum 
+The model was trained without an attention mask as it is based on Fourier Transform. The model was trained with
+maximum sequence length 512 which includes pad tokens. Hence, it is highly recommended to use the same maximum
 sequence length for fine-tuning and inference.
 
 ## Resources

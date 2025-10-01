@@ -12,7 +12,7 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
 
 ## Writing metrics to the database
 
-`MetricRecorder` is thread-safe, in the sense of the python [`Thread`](https://docs.python.org/3/library/threading.html#threading.Thread). This means you can start a background thread to do the readings on the device measurements while not blocking the main thread to execute the model measurements.
+`MetricsRecorder` is thread-safe, in the sense of the python [`Thread`](https://docs.python.org/3/library/threading.html#threading.Thread). This means you can start a background thread to do the readings on the device measurements while not blocking the main thread to execute the model measurements.
 
 cf [`llama.py`](./llama.py) to see an example of this in practice.
 

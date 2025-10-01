@@ -13,12 +13,17 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-03-09 and added to Hugging Face Transformers on 2024-04-11.*
 
 # Grounding DINO
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
-The Grounding DINO model was proposed in [Grounding DINO: Marrying DINO with Grounded Pre-Training for Open-Set Object Detection](https://arxiv.org/abs/2303.05499) by Shilong Liu, Zhaoyang Zeng, Tianhe Ren, Feng Li, Hao Zhang, Jie Yang, Chunyuan Li, Jianwei Yang, Hang Su, Jun Zhu, Lei Zhang. Grounding DINO extends a closed-set object detection model with a text encoder, enabling open-set object detection. The model achieves remarkable results, such as 52.5 AP on COCO zero-shot.
+The Grounding DINO model was proposed in [Grounding DINO: Marrying DINO with Grounded Pre-Training for Open-Set Object Detection](https://huggingface.co/papers/2303.05499) by Shilong Liu, Zhaoyang Zeng, Tianhe Ren, Feng Li, Hao Zhang, Jie Yang, Chunyuan Li, Jianwei Yang, Hang Su, Jun Zhu, Lei Zhang. Grounding DINO extends a closed-set object detection model with a text encoder, enabling open-set object detection. The model achieves remarkable results, such as 52.5 AP on COCO zero-shot.
 
 The abstract from the paper is the following:
 
@@ -27,7 +32,7 @@ The abstract from the paper is the following:
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/grouding_dino_architecture.png"
 alt="drawing" width="600"/>
 
-<small> Grounding DINO overview. Taken from the <a href="https://arxiv.org/abs/2303.05499">original paper</a>. </small>
+<small> Grounding DINO overview. Taken from the <a href="https://huggingface.co/papers/2303.05499">original paper</a>. </small>
 
 This model was contributed by [EduardoPacheco](https://huggingface.co/EduardoPacheco) and [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/IDEA-Research/GroundingDINO).
@@ -45,10 +50,10 @@ Here's how to use the model for zero-shot object detection:
 
 >>> import torch
 >>> from PIL import Image
->>> from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection
+>>> from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection, infer_device
 
 >>> model_id = "IDEA-Research/grounding-dino-tiny"
->>> device = "cuda"
+>>> device = infer_device()
 
 >>> processor = AutoProcessor.from_pretrained(model_id)
 >>> model = AutoModelForZeroShotObjectDetection.from_pretrained(model_id).to(device)
@@ -58,29 +63,30 @@ Here's how to use the model for zero-shot object detection:
 >>> # Check for cats and remote controls
 >>> text_labels = [["a cat", "a remote control"]]
 
->>> inputs = processor(images=image, text=text_labels, return_tensors="pt").to(device)
+>>> inputs = processor(images=image, text=text_labels, return_tensors="pt").to(model.device)
 >>> with torch.no_grad():
 ...     outputs = model(**inputs)
 
 >>> results = processor.post_process_grounded_object_detection(
 ...     outputs,
+...     inputs.input_ids,
 ...     threshold=0.4,
 ...     text_threshold=0.3,
-...     target_sizes=[(image.height, image.width)]
+...     target_sizes=[image.size[::-1]]
 ... )
->>> # Retrieve the first image result
+
+# Retrieve the first image result
 >>> result = results[0]
->>> for box, score, text_label in zip(result["boxes"], result["scores"], result["text_labels"]):
+>>> for box, score, labels in zip(result["boxes"], result["scores"], result["labels"]):
 ...     box = [round(x, 2) for x in box.tolist()]
-...     print(f"Detected {text_label} with confidence {round(score.item(), 3)} at location {box}")
-Detected a cat with confidence 0.479 at location [344.7, 23.11, 637.18, 374.28]
-Detected a cat with confidence 0.438 at location [12.27, 51.91, 316.86, 472.44]
-Detected a remote control with confidence 0.478 at location [38.57, 70.0, 176.78, 118.18]
+...     print(f"Detected {labels} with confidence {round(score.item(), 3)} at location {box}")
+Detected a cat with confidence 0.468 at location [344.78, 22.9, 637.3, 373.62]
+Detected a cat with confidence 0.426 at location [11.74, 51.55, 316.51, 473.22]
 ```
 
 ## Grounded SAM
 
-One can combine Grounding DINO with the [Segment Anything](sam) model for text-based mask generation as introduced in [Grounded SAM: Assembling Open-World Models for Diverse Visual Tasks](https://arxiv.org/abs/2401.14159). You can refer to this [demo notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/Grounding%20DINO/GroundingDINO_with_Segment_Anything.ipynb) 🌍 for details.
+One can combine Grounding DINO with the [Segment Anything](sam) model for text-based mask generation as introduced in [Grounded SAM: Assembling Open-World Models for Diverse Visual Tasks](https://huggingface.co/papers/2401.14159). You can refer to this [demo notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/Grounding%20DINO/GroundingDINO_with_Segment_Anything.ipynb) 🌍 for details.
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/grounded_sam.png"
 alt="drawing" width="900"/>
@@ -96,6 +102,11 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 ## GroundingDinoImageProcessor
 
 [[autodoc]] GroundingDinoImageProcessor
+    - preprocess
+
+## GroundingDinoImageProcessorFast
+
+[[autodoc]] GroundingDinoImageProcessorFast
     - preprocess
     - post_process_object_detection
 

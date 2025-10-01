@@ -1,5 +1,5 @@
 albumentations >= 1.4.16
 timm
-datasets
+datasets>=4.0
 torchmetrics
 pycocotools

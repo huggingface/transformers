@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -78,57 +77,43 @@ class RopeTest(unittest.TestCase):
                     self.assertEqual(len(logs.output), 1)
                     self.assertIn(model_specific_kwarg, logs.output[0])
 
-    def test_default_rope_function_bc(self):
+    def test_yarn_original_original_max_position_embeddings_validation(self):
+        """Tests that models with no/bad `original_max_position_embeddings` raise a warning"""
         config = LlamaConfig()
-        device = torch_device
 
-        rope_kwargs = {
-            "rope_type": "default",
-            "dim": config.hidden_size // config.num_attention_heads,
-            "max_position_embeddings": config.max_position_embeddings,
-            "base": config.rope_theta,
+        # good rope config: has a factor AND original_max_position_embeddings -> no warnings
+        rope_config = {
+            "rope_type": "yarn",
+            "factor": 2.0,
+            "original_max_position_embeddings": int(config.max_position_embeddings / 2.0),
         }
+        config.rope_scaling = rope_config
+        with self.assertRaises(AssertionError):  # confirm that no warnings are thrown
+            with self.assertLogs("transformers.modeling_rope_utils", level="WARNING") as logs:
+                rope_config_validation(config)
 
-        rope_fn = ROPE_INIT_FUNCTIONS["default"]
-        config_freqs = rope_fn(config=config, device=device)[0]
-        kwargs_freqs = rope_fn(**rope_kwargs, device=device)[0]
-        torch.testing.assert_close(config_freqs, kwargs_freqs)
-
-    def test_linear_rope_function_bc(self):
-        config = LlamaConfig()
-        config.rope_scaling = {"rope_type": "linear", "factor": 10.0}
-        device = torch_device
-
-        rope_kwargs = {
-            "rope_type": "linear",
-            "dim": config.hidden_size // config.num_attention_heads,
-            "max_position_embeddings": config.max_position_embeddings,
-            "base": config.rope_theta,
-            "factor": 10.0,
+        # bad rope config, no `original_max_position_embeddings` -> warning
+        rope_config = {
+            "rope_type": "yarn",
+            "factor": 2.0,
         }
+        config.rope_scaling = rope_config
+        with self.assertLogs("transformers.modeling_rope_utils", level="WARNING") as logs:
+            rope_config_validation(config)
+            self.assertEqual(len(logs.output), 1)
+            self.assertIn("is unset", logs.output[0])
 
-        rope_fn = ROPE_INIT_FUNCTIONS["linear"]
-        config_freqs = rope_fn(config=config, device=device)[0]
-        kwargs_freqs = rope_fn(**rope_kwargs, device=device)[0]
-        torch.testing.assert_close(config_freqs, kwargs_freqs)
-
-    def test_dynamic_rope_function_bc(self):
-        config = LlamaConfig()
-        config.rope_scaling = {"rope_type": "dynamic", "factor": 10.0}
-        device = torch_device
-
-        rope_kwargs = {
-            "rope_type": "dynamic",
-            "dim": config.hidden_size // config.num_attention_heads,
-            "max_position_embeddings": config.max_position_embeddings,
-            "base": config.rope_theta,
-            "factor": 10.0,
+        # bad rope config, bad implicit fator -> warning
+        rope_config = {
+            "rope_type": "yarn",
+            "factor": 2.0,
+            "original_max_position_embeddings": 1,
         }
-
-        rope_fn = ROPE_INIT_FUNCTIONS["dynamic"]
-        config_freqs = rope_fn(config=config, device=device)[0]
-        kwargs_freqs = rope_fn(**rope_kwargs, device=device)[0]
-        torch.testing.assert_close(config_freqs, kwargs_freqs)
+        config.rope_scaling = rope_config
+        with self.assertLogs("transformers.modeling_rope_utils", level="WARNING") as logs:
+            rope_config_validation(config)
+            self.assertEqual(len(logs.output), 1)
+            self.assertIn("implicit factor", logs.output[0])
 
     def test_default_rope_numerically(self):
         # Note: some RoPE scaling methods start off by calling the default RoPE frequencies. If this test fails, then
@@ -219,6 +204,9 @@ class RopeTest(unittest.TestCase):
             torch.testing.assert_close(inv_freq, default_inv_freq)
 
             inv_freq, _ = rope_fn(config=config, device=torch_device, seq_len=1)
+            torch.testing.assert_close(inv_freq, default_inv_freq)
+
+            inv_freq, _ = rope_fn(config=config, device=torch_device, seq_len=torch.tensor(1, dtype=torch.int64))
             torch.testing.assert_close(inv_freq, default_inv_freq)
 
         # Check 2: if we provide `seq_len` larger than the model's original training sequence length, the frequencies
@@ -411,7 +399,7 @@ class RopeTest(unittest.TestCase):
             self.assertEqual(attention_scale, 1.0)
 
         # Check 2: based on `low_freq_factor` and `high_freq_factor`, the frequencies will be scaled between 1 and
-        # `factor` (similar to yarn). Low frequencies get scaled by `factor`, high frequences see no change, medium
+        # `factor` (similar to yarn). Low frequencies get scaled by `factor`, high frequencies see no change, medium
         # frequencies are scaled by a value in between. Changing `low_freq_factor` and `high_freq_factor` changes what
         # is considered low, medium, and high frequencies.
         factor = 10.0

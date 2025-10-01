@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import unittest
-from typing import List, Optional, Tuple, Union
+from typing import Literal, Optional, Union
 
 from transformers.utils import DocstringParsingException, TypeHintParsingException, get_json_schema
 
@@ -119,7 +119,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
         self.assertEqual(schema["function"], expected_schema)
 
     def test_nested_list(self):
-        def fn(x: List[List[Union[str, int]]]):
+        def fn(x: list[list[Union[str, int]]]):
             """
             Test function
 
@@ -173,7 +173,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
         self.assertEqual(schema["function"], expected_schema)
 
     def test_multiple_complex_arguments(self):
-        def fn(x: List[Union[int, float]], y: Optional[Union[int, str]] = None):
+        def fn(x: list[Union[int, float]], y: Optional[Union[int, str]] = None):
             """
             Test function
 
@@ -283,7 +283,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
         self.assertEqual(schema["function"], expected_schema)
 
     def test_tuple(self):
-        def fn(x: Tuple[int, str]):
+        def fn(x: tuple[int, str]):
             """
             Test function
 
@@ -315,7 +315,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
         self.assertEqual(schema["function"], expected_schema)
 
     def test_single_element_tuple_fails(self):
-        def fn(x: Tuple[int]):
+        def fn(x: tuple[int]):
             """
             Test function
 
@@ -333,7 +333,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             get_json_schema(fn)
 
     def test_ellipsis_type_fails(self):
-        def fn(x: Tuple[int, ...]):
+        def fn(x: tuple[int, ...]):
             """
             Test function
 
@@ -377,6 +377,49 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
                         "enum": ["celsius", "fahrenheit"],
                         "description": "The temperature format to use",
                     }
+                },
+                "required": ["temperature_format"],
+            },
+        }
+
+        self.assertEqual(schema["function"], expected_schema)
+
+    def test_literal(self):
+        def fn(
+            temperature_format: Literal["celsius", "fahrenheit"],
+            booleanish: Literal[True, False, 0, 1, "y", "n"] = False,
+        ):
+            """
+            Test function
+
+            Args:
+                temperature_format: The temperature format to use
+                booleanish: A value that can be regarded as boolean
+
+
+            Returns:
+                The temperature
+            """
+            return -40.0
+
+        # Let's see if that gets correctly parsed as an enum
+        schema = get_json_schema(fn)
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "temperature_format": {
+                        "type": "string",
+                        "enum": ["celsius", "fahrenheit"],
+                        "description": "The temperature format to use",
+                    },
+                    "booleanish": {
+                        "type": ["boolean", "integer", "string"],
+                        "enum": [True, False, 0, 1, "y", "n"],
+                        "description": "A value that can be regarded as boolean",
+                    },
                 },
                 "required": ["temperature_format"],
             },
@@ -446,8 +489,8 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
 
     def test_everything_all_at_once(self):
         def fn(
-            x: str, y: Optional[List[Union[str, int]]], z: Tuple[Union[str, int], str] = (42, "hello")
-        ) -> Tuple[int, str]:
+            x: str, y: Optional[list[Union[str, int]]], z: tuple[Union[str, int], str] = (42, "hello")
+        ) -> tuple[int, str]:
             """
             Test function with multiple args, and docstring args that we have to strip out.
 

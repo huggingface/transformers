@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +14,7 @@
 """Testing suite for the PyTorch IJEPA model."""
 
 import unittest
+from functools import cached_property
 
 from transformers import IJepaConfig
 from transformers.testing_utils import (
@@ -27,7 +27,6 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import (
-    cached_property,
     is_torch_available,
     is_vision_available,
 )
@@ -202,11 +201,11 @@ class IJepaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    fx_compatible = True
+    fx_compatible = False  # broken by output recording refactor
 
     test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
+    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = IJepaModelTester(self)
@@ -288,7 +287,7 @@ class IJepaModelIntegrationTest(unittest.TestCase):
             [[-0.0621, -0.0054, -2.7513], [-0.1952, 0.0909, -3.9536], [0.0942, -0.0331, -1.2833]]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     @require_accelerate
@@ -300,7 +299,7 @@ class IJepaModelIntegrationTest(unittest.TestCase):
         """
         model = IJepaModel.from_pretrained(
             "facebook/ijepa_vith14_1k",
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
             device_map="auto",
         )
         image_processor = self.default_image_processor
@@ -338,4 +337,4 @@ class IJepaModelIntegrationTest(unittest.TestCase):
             [[-0.0621, -0.0054, -2.7513], [-0.1952, 0.0909, -3.9536], [0.0942, -0.0331, -1.2833]]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

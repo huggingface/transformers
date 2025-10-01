@@ -65,13 +65,13 @@ def get_args():
         "--hf_input_path",
         type=str,
         default=None,
-        help="A HF model path, " "e.g. a folder containing https://huggingface.co/nvidia/Minitron-8B-Base",
+        help="A HF model path, e.g. a folder containing https://huggingface.co/nvidia/Minitron-8B-Base",
     )
     parser.add_argument(
         "--hf_output_path",
         type=str,
         default=None,
-        help="Output HF model path, " "with the same format as above but user's own weights",
+        help="Output HF model path, with the same format as above but user's own weights",
     )
     parser.add_argument(
         "--precision",
@@ -121,7 +121,7 @@ def convert_hf_config(nemo_config, tokenizer, vocab_size, dtype, hf_output_path,
         "rope_theta": nemo_config.get("rotary_base", 10000),
         "partial_rotary_factor": nemo_config.get("rotary_percentage", 1.0),
         "tie_word_embeddings": False,
-        "torch_dtype": DTYPE2HF[dtype],
+        "dtype": DTYPE2HF[dtype],
         "transformers_version": "4.32.0.dev0",  # TODO
         "use_cache": True,
         "vocab_size": vocab_size,

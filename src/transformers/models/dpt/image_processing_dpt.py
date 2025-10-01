@@ -15,7 +15,10 @@
 """Image processor class for DPT."""
 
 import math
-from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Tuple, Union
+from collections.abc import Iterable
+from typing import TYPE_CHECKING, Optional, Union
+
+from ...utils.import_utils import requires
 
 
 if TYPE_CHECKING:
@@ -36,7 +39,7 @@ from ...image_utils import (
     is_scaled_image,
     is_torch_available,
     is_torch_tensor,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -66,7 +69,7 @@ def get_resize_output_image_size(
     keep_aspect_ratio: bool,
     multiple: int,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     def constrain_to_multiple_of(val, multiple, min_val=0, max_val=None):
         x = round(val / multiple) * multiple
 
@@ -102,35 +105,36 @@ def get_resize_output_image_size(
     return (new_height, new_width)
 
 
+@requires(backends=("vision",))
 class DPTImageProcessor(BaseImageProcessor):
     r"""
     Constructs a DPT image processor.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image's (height, width) dimensions. Can be overidden by `do_resize` in `preprocess`.
-        size (`Dict[str, int]` *optional*, defaults to `{"height": 384, "width": 384}`):
-            Size of the image after resizing. Can be overidden by `size` in `preprocess`.
+            Whether to resize the image's (height, width) dimensions. Can be overridden by `do_resize` in `preprocess`.
+        size (`dict[str, int]` *optional*, defaults to `{"height": 384, "width": 384}`):
+            Size of the image after resizing. Can be overridden by `size` in `preprocess`.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
-            Defines the resampling filter to use if resizing the image. Can be overidden by `resample` in `preprocess`.
+            Defines the resampling filter to use if resizing the image. Can be overridden by `resample` in `preprocess`.
         keep_aspect_ratio (`bool`, *optional*, defaults to `False`):
             If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved. Can
-            be overidden by `keep_aspect_ratio` in `preprocess`.
+            be overridden by `keep_aspect_ratio` in `preprocess`.
         ensure_multiple_of (`int`, *optional*, defaults to 1):
-            If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overidden
+            If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overridden
             by `ensure_multiple_of` in `preprocess`.
         do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`. Can be overidden by `do_rescale` in
+            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by `do_rescale` in
             `preprocess`.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image. Can be overidden by `rescale_factor` in `preprocess`.
+            Scale factor to use if rescaling the image. Can be overridden by `rescale_factor` in `preprocess`.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
+        image_mean (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
+        image_std (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_pad (`bool`, *optional*, defaults to `False`):
@@ -139,6 +143,11 @@ class DPTImageProcessor(BaseImageProcessor):
         size_divisor (`int`, *optional*):
             If `do_pad` is `True`, pads the image dimensions to be divisible by this value. This was introduced in the
             DINOv2 paper, which uses the model in combination with DPT.
+        do_reduce_labels (`bool`, *optional*, defaults to `False`):
+            Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0 is
+            used for background, and background itself is not included in all classes of a dataset (e.g. ADE20k). The
+            background label will be replaced by 255. Can be overridden by the `do_reduce_labels` parameter in the
+            `preprocess` method.
     """
 
     model_input_names = ["pixel_values"]
@@ -146,17 +155,18 @@ class DPTImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         keep_aspect_ratio: bool = False,
         ensure_multiple_of: int = 1,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_pad: bool = False,
-        size_divisor: int = None,
+        size_divisor: Optional[int] = None,
+        do_reduce_labels: bool = False,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -174,11 +184,12 @@ class DPTImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.do_pad = do_pad
         self.size_divisor = size_divisor
+        self.do_reduce_labels = do_reduce_labels
 
     def resize(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
+        size: dict[str, int],
         keep_aspect_ratio: bool = False,
         ensure_multiple_of: int = 1,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
@@ -194,7 +205,7 @@ class DPTImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Target size of the output image.
             keep_aspect_ratio (`bool`, *optional*, defaults to `False`):
                 If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved.
@@ -203,8 +214,6 @@ class DPTImageProcessor(BaseImageProcessor):
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
                 Defines the resampling filter to use if resizing the image. Otherwise, the image is resized to size
                 specified in `size`.
-            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
-                Resampling filter to use when resiizing the image.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
             input_data_format (`str` or `ChannelDimension`, *optional*):
@@ -232,7 +241,7 @@ class DPTImageProcessor(BaseImageProcessor):
 
     def pad_image(
         self,
-        image: np.array,
+        image: np.ndarray,
         size_divisor: int,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -275,22 +284,173 @@ class DPTImageProcessor(BaseImageProcessor):
 
         return pad(image, ((pad_size_left, pad_size_right), (pad_size_top, pad_size_bottom)), data_format=data_format)
 
+    # Copied from transformers.models.beit.image_processing_beit.BeitImageProcessor.reduce_label
+    def reduce_label(self, label: ImageInput) -> np.ndarray:
+        label = to_numpy_array(label)
+        # Avoid using underflow conversion
+        label[label == 0] = 255
+        label = label - 1
+        label[label == 254] = 255
+        return label
+
+    def _preprocess(
+        self,
+        image: ImageInput,
+        do_reduce_labels: Optional[bool] = None,
+        do_resize: Optional[bool] = None,
+        size: Optional[dict[str, int]] = None,
+        resample: Optional[PILImageResampling] = None,
+        keep_aspect_ratio: Optional[bool] = None,
+        ensure_multiple_of: Optional[int] = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
+        do_pad: Optional[bool] = None,
+        size_divisor: Optional[int] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ):
+        if do_reduce_labels:
+            image = self.reduce_label(image)
+
+        if do_resize:
+            image = self.resize(
+                image=image,
+                size=size,
+                resample=resample,
+                keep_aspect_ratio=keep_aspect_ratio,
+                ensure_multiple_of=ensure_multiple_of,
+                input_data_format=input_data_format,
+            )
+
+        if do_rescale:
+            image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+
+        if do_normalize:
+            image = self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+
+        if do_pad:
+            image = self.pad_image(image=image, size_divisor=size_divisor, input_data_format=input_data_format)
+
+        return image
+
+    def _preprocess_image(
+        self,
+        image: ImageInput,
+        do_resize: Optional[bool] = None,
+        size: Optional[dict[str, int]] = None,
+        resample: Optional[PILImageResampling] = None,
+        keep_aspect_ratio: Optional[bool] = None,
+        ensure_multiple_of: Optional[int] = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
+        do_pad: Optional[bool] = None,
+        size_divisor: Optional[int] = None,
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ) -> np.ndarray:
+        """Preprocesses a single image."""
+        # All transformations expect numpy arrays.
+        image = to_numpy_array(image)
+        if do_rescale and is_scaled_image(image):
+            logger.warning_once(
+                "It looks like you are trying to rescale already rescaled images. If the input"
+                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+            )
+        if input_data_format is None:
+            # We assume that all images have the same channel dimension format.
+            input_data_format = infer_channel_dimension_format(image)
+
+        image = self._preprocess(
+            image,
+            do_reduce_labels=False,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+            keep_aspect_ratio=keep_aspect_ratio,
+            ensure_multiple_of=ensure_multiple_of,
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_pad=do_pad,
+            size_divisor=size_divisor,
+            input_data_format=input_data_format,
+        )
+        if data_format is not None:
+            image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+        return image
+
+    def _preprocess_segmentation_map(
+        self,
+        segmentation_map: ImageInput,
+        do_resize: Optional[bool] = None,
+        size: Optional[dict[str, int]] = None,
+        resample: Optional[PILImageResampling] = None,
+        keep_aspect_ratio: Optional[bool] = None,
+        ensure_multiple_of: Optional[int] = None,
+        do_reduce_labels: Optional[bool] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ):
+        """Preprocesses a single segmentation map."""
+        # All transformations expect numpy arrays.
+        segmentation_map = to_numpy_array(segmentation_map)
+        # Add an axis to the segmentation maps for transformations.
+        if segmentation_map.ndim == 2:
+            segmentation_map = segmentation_map[None, ...]
+            added_dimension = True
+            input_data_format = ChannelDimension.FIRST
+        else:
+            added_dimension = False
+            if input_data_format is None:
+                input_data_format = infer_channel_dimension_format(segmentation_map, num_channels=1)
+        segmentation_map = self._preprocess(
+            image=segmentation_map,
+            do_reduce_labels=do_reduce_labels,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+            keep_aspect_ratio=keep_aspect_ratio,
+            ensure_multiple_of=ensure_multiple_of,
+            do_normalize=False,
+            do_rescale=False,
+            input_data_format=input_data_format,
+        )
+        # Remove extra axis if added
+        if added_dimension:
+            segmentation_map = np.squeeze(segmentation_map, axis=0)
+        segmentation_map = segmentation_map.astype(np.int64)
+        return segmentation_map
+
+    # Copied from transformers.models.beit.image_processing_beit.BeitImageProcessor.__call__
+    def __call__(self, images, segmentation_maps=None, **kwargs):
+        # Overrides the `__call__` method of the `Preprocessor` class such that the images and segmentation maps can both
+        # be passed in as positional arguments.
+        return super().__call__(images, segmentation_maps=segmentation_maps, **kwargs)
+
     @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images: ImageInput,
-        do_resize: bool = None,
-        size: int = None,
-        keep_aspect_ratio: bool = None,
-        ensure_multiple_of: int = None,
-        resample: PILImageResampling = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        do_pad: bool = None,
-        size_divisor: int = None,
+        segmentation_maps: Optional[ImageInput] = None,
+        do_resize: Optional[bool] = None,
+        size: Optional[int] = None,
+        keep_aspect_ratio: Optional[bool] = None,
+        ensure_multiple_of: Optional[int] = None,
+        resample: Optional[PILImageResampling] = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
+        do_pad: Optional[bool] = None,
+        size_divisor: Optional[int] = None,
+        do_reduce_labels: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -302,9 +462,11 @@ class DPTImageProcessor(BaseImageProcessor):
             images (`ImageInput`):
                 Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
+            segmentation_maps (`ImageInput`, *optional*):
+                Segmentation map to preprocess.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`dict[str, int]`, *optional*, defaults to `self.size`):
                 Size of the image after reszing. If `keep_aspect_ratio` is `True`, the image is resized to the largest
                 possible size such that the aspect ratio is preserved. If `ensure_multiple_of` is set, the image is
                 resized to a size that is a multiple of this value.
@@ -322,17 +484,19 @@ class DPTImageProcessor(BaseImageProcessor):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
                 Image mean.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation.
+            do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
+                Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
+                is used for background, and background itself is not included in all classes of a dataset (e.g.
+                ADE20k). The background label will be replaced by 255.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                     - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -357,95 +521,85 @@ class DPTImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         do_pad = do_pad if do_pad is not None else self.do_pad
         size_divisor = size_divisor if size_divisor is not None else self.size_divisor
+        do_reduce_labels = do_reduce_labels if do_reduce_labels is not None else self.do_reduce_labels
 
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
+
+        if segmentation_maps is not None:
+            segmentation_maps = make_flat_list_of_images(segmentation_maps, expected_ndims=2)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
         validate_preprocess_arguments(
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,
             do_normalize=do_normalize,
             image_mean=image_mean,
             image_std=image_std,
-            do_pad=do_pad,
-            size_divisibility=size_divisor,
             do_resize=do_resize,
             size=size,
             resample=resample,
         )
-        # All transformations expect numpy arrays.
-        images = [to_numpy_array(image) for image in images]
 
-        if do_rescale and is_scaled_image(images[0]):
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+        images = [
+            self._preprocess_image(
+                image=img,
+                do_resize=do_resize,
+                do_rescale=do_rescale,
+                do_normalize=do_normalize,
+                do_pad=do_pad,
+                size=size,
+                resample=resample,
+                keep_aspect_ratio=keep_aspect_ratio,
+                ensure_multiple_of=ensure_multiple_of,
+                rescale_factor=rescale_factor,
+                image_mean=image_mean,
+                image_std=image_std,
+                size_divisor=size_divisor,
+                data_format=data_format,
+                input_data_format=input_data_format,
             )
+            for img in images
+        ]
 
-        if input_data_format is None:
-            # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images[0])
+        data = {"pixel_values": images}
 
-        if do_resize:
-            images = [
-                self.resize(
-                    image=image,
+        if segmentation_maps is not None:
+            segmentation_maps = [
+                self._preprocess_segmentation_map(
+                    segmentation_map=segmentation_map,
+                    do_reduce_labels=do_reduce_labels,
+                    do_resize=do_resize,
                     size=size,
                     resample=resample,
                     keep_aspect_ratio=keep_aspect_ratio,
                     ensure_multiple_of=ensure_multiple_of,
                     input_data_format=input_data_format,
                 )
-                for image in images
+                for segmentation_map in segmentation_maps
             ]
 
-        if do_rescale:
-            images = [
-                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
-                for image in images
-            ]
+            data["labels"] = segmentation_maps
 
-        if do_normalize:
-            images = [
-                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
-                for image in images
-            ]
-
-        if do_pad:
-            images = [
-                self.pad_image(image=image, size_divisor=size_divisor, input_data_format=input_data_format)
-                for image in images
-            ]
-
-        images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
-        ]
-
-        data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
 
     # Copied from transformers.models.beit.image_processing_beit.BeitImageProcessor.post_process_semantic_segmentation with Beit->DPT
-    def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple] = None):
+    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[list[tuple]] = None):
         """
-        Converts the output of [`DPTForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
+        Converts the output of [`DPTForSemanticSegmentation`] into semantic segmentation maps.
 
         Args:
             outputs ([`DPTForSemanticSegmentation`]):
                 Raw outputs of the model.
-            target_sizes (`List[Tuple]` of length `batch_size`, *optional*):
+            target_sizes (`list[Tuple]` of length `batch_size`, *optional*):
                 List of tuples corresponding to the requested final size (height, width) of each prediction. If unset,
                 predictions will not be resized.
 
         Returns:
-            semantic_segmentation: `List[torch.Tensor]` of length `batch_size`, where each item is a semantic
+            semantic_segmentation: `list[torch.Tensor]` of length `batch_size`, where each item is a semantic
             segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
             specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
         """
-        # TODO: add support for other frameworks
         logits = outputs.logits
 
         # Resize logits and compute semantic segmentation maps
@@ -475,8 +629,8 @@ class DPTImageProcessor(BaseImageProcessor):
     def post_process_depth_estimation(
         self,
         outputs: "DepthEstimatorOutput",
-        target_sizes: Optional[Union[TensorType, List[Tuple[int, int]], None]] = None,
-    ) -> List[Dict[str, TensorType]]:
+        target_sizes: Optional[Union[TensorType, list[tuple[int, int]], None]] = None,
+    ) -> list[dict[str, TensorType]]:
         """
         Converts the raw output of [`DepthEstimatorOutput`] into final depth predictions and depth PIL images.
         Only supports PyTorch.
@@ -484,12 +638,12 @@ class DPTImageProcessor(BaseImageProcessor):
         Args:
             outputs ([`DepthEstimatorOutput`]):
                 Raw outputs of the model.
-            target_sizes (`TensorType` or `List[Tuple[int, int]]`, *optional*):
-                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
+            target_sizes (`TensorType` or `list[tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
                 (height, width) of each image in the batch. If left to None, predictions will not be resized.
 
         Returns:
-            `List[Dict[str, TensorType]]`: A list of dictionaries of tensors representing the processed depth
+            `list[dict[str, TensorType]]`: A list of dictionaries of tensors representing the processed depth
             predictions.
         """
         requires_backends(self, "torch")

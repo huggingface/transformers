@@ -91,104 +91,17 @@ Usa la función [`~datasets.Dataset.map`] de 🤗 Datasets para aplicarle la fun
 tokenized_swag = swag.map(preprocess_function, batched=True)
 ```
 
-🤗 Transformers no tiene un collator de datos para la tarea de selección múltiple, así que tendrías que crear uno. Puedes adaptar el [`DataCollatorWithPadding`] para crear un lote de ejemplos para selección múltiple. Este también
-le *añadirá relleno de manera dinámica* a tu texto y a las etiquetas para que tengan la longitud del elemento más largo en su lote, de forma que tengan una longitud uniforme. Aunque es posible rellenar el texto en la función `tokenizer` haciendo
+Para crear un lote de ejemplos para selección múltiple, este también le *añadirá relleno de manera dinámica* a tu texto y a las etiquetas para que tengan la longitud del elemento más largo en su lote, de forma que tengan una longitud uniforme. Aunque es posible rellenar el texto en la función `tokenizer` haciendo
 `padding=True`, el rellenado dinámico es más eficiente.
 
-El `DataCollatorForMultipleChoice` aplanará todas las entradas del modelo, les aplicará relleno y luego des-aplanará los resultados:
-
-<frameworkcontent>
-<pt>
+El [`DataCollatorForMultipleChoice`] aplanará todas las entradas del modelo, les aplicará relleno y luego des-aplanará los resultados.
 ```py
->>> from dataclasses import dataclass
->>> from transformers.tokenization_utils_base import PreTrainedTokenizerBase, PaddingStrategy
->>> from typing import Optional, Union
->>> import torch
-
-
->>> @dataclass
-... class DataCollatorForMultipleChoice:
-...     """
-...     Collator de datos que le añadirá relleno de forma automática a las entradas recibidas para
-...     una tarea de selección múltiple.
-...     """
-
-...     tokenizer: PreTrainedTokenizerBase
-...     padding: Union[bool, str, PaddingStrategy] = True
-...     max_length: Optional[int] = None
-...     pad_to_multiple_of: Optional[int] = None
-
-...     def __call__(self, features):
-...         label_name = "label" if "label" in features[0].keys() else "labels"
-...         labels = [feature.pop(label_name) for feature in features]
-...         batch_size = len(features)
-...         num_choices = len(features[0]["input_ids"])
-...         flattened_features = [
-...             [{k: v[i] for k, v in feature.items()} for i in range(num_choices)] for feature in features
-...         ]
-...         flattened_features = sum(flattened_features, [])
-
-...         batch = self.tokenizer.pad(
-...             flattened_features,
-...             padding=self.padding,
-...             max_length=self.max_length,
-...             pad_to_multiple_of=self.pad_to_multiple_of,
-...             return_tensors="pt",
-...         )
-
-...         batch = {k: v.view(batch_size, num_choices, -1) for k, v in batch.items()}
-...         batch["labels"] = torch.tensor(labels, dtype=torch.int64)
-...         return batch
+>>> from transformers import DataCollatorForMultipleChoice
+>>> collator = DataCollatorForMultipleChoice(tokenizer=tokenizer)
 ```
-</pt>
-<tf>
-```py
->>> from dataclasses import dataclass
->>> from transformers.tokenization_utils_base import PreTrainedTokenizerBase, PaddingStrategy
->>> from typing import Optional, Union
->>> import tensorflow as tf
-
-
->>> @dataclass
-... class DataCollatorForMultipleChoice:
-...     """
-...     Data collator that will dynamically pad the inputs for multiple choice received.
-...     """
-
-...     tokenizer: PreTrainedTokenizerBase
-...     padding: Union[bool, str, PaddingStrategy] = True
-...     max_length: Optional[int] = None
-...     pad_to_multiple_of: Optional[int] = None
-
-...     def __call__(self, features):
-...         label_name = "label" if "label" in features[0].keys() else "labels"
-...         labels = [feature.pop(label_name) for feature in features]
-...         batch_size = len(features)
-...         num_choices = len(features[0]["input_ids"])
-...         flattened_features = [
-...             [{k: v[i] for k, v in feature.items()} for i in range(num_choices)] for feature in features
-...         ]
-...         flattened_features = sum(flattened_features, [])
-
-...         batch = self.tokenizer.pad(
-...             flattened_features,
-...             padding=self.padding,
-...             max_length=self.max_length,
-...             pad_to_multiple_of=self.pad_to_multiple_of,
-...             return_tensors="tf",
-...         )
-
-...         batch = {k: tf.reshape(v, (batch_size, num_choices, -1)) for k, v in batch.items()}
-...         batch["labels"] = tf.convert_to_tensor(labels, dtype=tf.int64)
-...         return batch
-```
-</tf>
-</frameworkcontent>
 
 ## Entrenamiento
 
-<frameworkcontent>
-<pt>
 Carga el modelo BERT con [`AutoModelForMultipleChoice`]:
 
 ```py
@@ -226,67 +139,8 @@ En este punto, solo quedan tres pasos:
 ...     train_dataset=tokenized_swag["train"],
 ...     eval_dataset=tokenized_swag["validation"],
 ...     processing_class=tokenizer,
-...     data_collator=DataCollatorForMultipleChoice(tokenizer=tokenizer),
+...     data_collator=collator,
 ... )
 
 >>> trainer.train()
 ```
-</pt>
-<tf>
-Para realizar el fine-tuning de un modelo en TensorFlow, primero convierte tus datasets al formato `tf.data.Dataset` con el método [`~TFPreTrainedModel.prepare_tf_dataset`].
-
-```py
->>> data_collator = DataCollatorForMultipleChoice(tokenizer=tokenizer)
->>> tf_train_set = model.prepare_tf_dataset(
-...     tokenized_swag["train"],
-...     shuffle=True,
-...     batch_size=batch_size,
-...     collate_fn=data_collator,
-... )
-
->>> tf_validation_set = model.prepare_tf_dataset(
-...     tokenized_swag["validation"],
-...     shuffle=False,
-...     batch_size=batch_size,
-...     collate_fn=data_collator,
-... )
-```
-
-<Tip>
-
-Para familiarizarte con el fine-tuning con Keras, ¡mira el tutorial básico [aquí](training#finetune-with-keras)!
-
-</Tip>
-
-Prepara una función de optimización, un programa para la tasa de aprendizaje y algunos hiperparámetros de entrenamiento:
-
-```py
->>> from transformers import create_optimizer
-
->>> batch_size = 16
->>> num_train_epochs = 2
->>> total_train_steps = (len(tokenized_swag["train"]) // batch_size) * num_train_epochs
->>> optimizer, schedule = create_optimizer(init_lr=5e-5, num_warmup_steps=0, num_train_steps=total_train_steps)
-```
-
-Carga el modelo BERT con [`TFAutoModelForMultipleChoice`]:
-
-```py
->>> from transformers import TFAutoModelForMultipleChoice
-
->>> model = TFAutoModelForMultipleChoice.from_pretrained("google-bert/bert-base-uncased")
-```
-
-Configura el modelo para entrenarlo con [`compile`](https://keras.io/api/models/model_training_apis/#compile-method):
-
-```py
->>> model.compile(optimizer=optimizer)
-```
-
-Invoca el método [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) para realizar el fine-tuning del modelo:
-
-```py
->>> model.fit(x=tf_train_set, validation_data=tf_validation_set, epochs=2)
-```
-</tf>
-</frameworkcontent>

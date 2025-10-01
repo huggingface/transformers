@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -115,30 +114,27 @@ class OpenAIGPTModelTester:
             pad_token_id=self.pad_token_id,
         )
 
-        head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
-
         return (
             config,
             input_ids,
-            head_mask,
             token_type_ids,
             sequence_labels,
             token_labels,
             choice_labels,
         )
 
-    def create_and_check_openai_gpt_model(self, config, input_ids, head_mask, token_type_ids, *args):
+    def create_and_check_openai_gpt_model(self, config, input_ids, token_type_ids, *args):
         model = OpenAIGPTModel(config=config)
         model.to(torch_device)
         model.eval()
 
-        result = model(input_ids, token_type_ids=token_type_ids, head_mask=head_mask)
+        result = model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids)
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    def create_and_check_lm_head_model(self, config, input_ids, head_mask, token_type_ids, *args):
+    def create_and_check_lm_head_model(self, config, input_ids, token_type_ids, *args):
         model = OpenAIGPTLMHeadModel(config)
         model.to(torch_device)
         model.eval()
@@ -147,7 +143,7 @@ class OpenAIGPTModelTester:
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
-    def create_and_check_double_lm_head_model(self, config, input_ids, head_mask, token_type_ids, *args):
+    def create_and_check_double_lm_head_model(self, config, input_ids, token_type_ids, *args):
         model = OpenAIGPTDoubleHeadsModel(config)
         model.to(torch_device)
         model.eval()
@@ -156,9 +152,7 @@ class OpenAIGPTModelTester:
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
-    def create_and_check_openai_gpt_for_sequence_classification(
-        self, config, input_ids, head_mask, token_type_ids, *args
-    ):
+    def create_and_check_openai_gpt_for_sequence_classification(self, config, input_ids, token_type_ids, *args):
         config.num_labels = self.num_labels
         model = OpenAIGPTForSequenceClassification(config)
         model.to(torch_device)
@@ -173,7 +167,6 @@ class OpenAIGPTModelTester:
         (
             config,
             input_ids,
-            head_mask,
             token_type_ids,
             sequence_labels,
             token_labels,
@@ -182,7 +175,6 @@ class OpenAIGPTModelTester:
         inputs_dict = {
             "input_ids": input_ids,
             "token_type_ids": token_type_ids,
-            "head_mask": head_mask,
         }
 
         return config, inputs_dict
@@ -195,9 +187,6 @@ class OpenAIGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (
-        (OpenAIGPTLMHeadModel,) if is_torch_available() else ()
-    )  # TODO (PVP): Add Double HeadsModel when generate() function is changed accordingly
     pipeline_model_mapping = (
         {
             "feature-extraction": OpenAIGPTModel,

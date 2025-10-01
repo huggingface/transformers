@@ -13,15 +13,22 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-04-14 and added to Hugging Face Transformers on 2021-09-01.*
 
 # Speech Encoder Decoder Models
+
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
 
 The [`SpeechEncoderDecoderModel`] can be used to initialize a speech-to-text model
 with any pretrained speech autoencoding model as the encoder (*e.g.* [Wav2Vec2](wav2vec2), [Hubert](hubert)) and any pretrained autoregressive model as the decoder.
 
 The effectiveness of initializing speech-sequence-to-text-sequence models with pretrained checkpoints for speech
 recognition and speech translation has *e.g.* been shown in [Large-Scale Self- and Semi-Supervised Learning for Speech
-Translation](https://arxiv.org/abs/2104.06678) by Changhan Wang, Anne Wu, Juan Pino, Alexei Baevski, Michael Auli,
+Translation](https://huggingface.co/papers/2104.06678) by Changhan Wang, Anne Wu, Juan Pino, Alexei Baevski, Michael Auli,
 Alexis Conneau.
 
 An example of how to use a [`SpeechEncoderDecoderModel`] for inference can be seen in [Speech2Text2](speech_to_text_2).
@@ -123,10 +130,4 @@ speech inputs) and `labels` (which are the `input_ids` of the encoded target seq
 
 [[autodoc]] SpeechEncoderDecoderModel
     - forward
-    - from_encoder_decoder_pretrained
-
-## FlaxSpeechEncoderDecoderModel
-
-[[autodoc]] FlaxSpeechEncoderDecoderModel
-    - __call__
     - from_encoder_decoder_pretrained

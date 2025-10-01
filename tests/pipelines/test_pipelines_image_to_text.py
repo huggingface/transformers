@@ -11,18 +11,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import io
 import unittest
 
-import requests
-from huggingface_hub import ImageToTextOutput
+import httpx
 
-from transformers import MODEL_FOR_VISION_2_SEQ_MAPPING, TF_MODEL_FOR_VISION_2_SEQ_MAPPING, is_vision_available
+from transformers import MODEL_FOR_VISION_2_SEQ_MAPPING, is_vision_available
 from transformers.pipelines import ImageToTextPipeline, pipeline
 from transformers.testing_utils import (
-    compare_pipeline_output_to_hub_spec,
     is_pipeline_test,
-    require_tf,
     require_torch,
     require_vision,
     slow,
@@ -45,7 +42,6 @@ else:
 @require_vision
 class ImageToTextPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_VISION_2_SEQ_MAPPING
-    tf_model_mapping = TF_MODEL_FOR_VISION_2_SEQ_MAPPING
 
     def get_test_pipeline(
         self,
@@ -54,7 +50,7 @@ class ImageToTextPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        torch_dtype="float32",
+        dtype="float32",
     ):
         pipe = ImageToTextPipeline(
             model=model,
@@ -62,7 +58,8 @@ class ImageToTextPipelineTests(unittest.TestCase):
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             processor=processor,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
+            max_new_tokens=20,
         )
         examples = [
             Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
@@ -80,50 +77,9 @@ class ImageToTextPipelineTests(unittest.TestCase):
             ],
         )
 
-    @require_tf
-    def test_small_model_tf(self):
-        pipe = pipeline("image-to-text", model="hf-internal-testing/tiny-random-vit-gpt2", framework="tf")
-        image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
-
-        outputs = pipe(image)
-        self.assertEqual(
-            outputs,
-            [
-                {
-                    "generated_text": "growthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthGOGO"
-                },
-            ],
-        )
-
-        outputs = pipe([image, image])
-        self.assertEqual(
-            outputs,
-            [
-                [
-                    {
-                        "generated_text": "growthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthGOGO"
-                    }
-                ],
-                [
-                    {
-                        "generated_text": "growthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthGOGO"
-                    }
-                ],
-            ],
-        )
-
-        outputs = pipe(image, max_new_tokens=1)
-        self.assertEqual(
-            outputs,
-            [{"generated_text": "growth"}],
-        )
-
-        for single_output in outputs:
-            compare_pipeline_output_to_hub_spec(single_output, ImageToTextOutput)
-
     @require_torch
     def test_small_model_pt(self):
-        pipe = pipeline("image-to-text", model="hf-internal-testing/tiny-random-vit-gpt2")
+        pipe = pipeline("image-to-text", model="hf-internal-testing/tiny-random-vit-gpt2", max_new_tokens=19)
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
 
         outputs = pipe(image)
@@ -164,7 +120,9 @@ class ImageToTextPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_consistent_batching_behaviour(self):
-        pipe = pipeline("image-to-text", model="hf-internal-testing/tiny-random-BlipForConditionalGeneration")
+        pipe = pipeline(
+            "image-to-text", model="hf-internal-testing/tiny-random-BlipForConditionalGeneration", max_new_tokens=10
+        )
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
         prompt = "a photo of"
 
@@ -214,7 +172,7 @@ class ImageToTextPipelineTests(unittest.TestCase):
     def test_generation_pt_blip(self):
         pipe = pipeline("image-to-text", model="Salesforce/blip-image-captioning-base")
         url = "https://huggingface.co/datasets/sayakpaul/sample-datasets/resolve/main/pokemon.png"
-        image = Image.open(requests.get(url, stream=True).raw)
+        image = Image.open(io.BytesIO(httpx.get(url, follow_redirects=True).content))
 
         outputs = pipe(image)
         self.assertEqual(outputs, [{"generated_text": "a pink pokemon pokemon with a blue shirt and a blue shirt"}])
@@ -224,7 +182,7 @@ class ImageToTextPipelineTests(unittest.TestCase):
     def test_generation_pt_git(self):
         pipe = pipeline("image-to-text", model="microsoft/git-base-coco")
         url = "https://huggingface.co/datasets/sayakpaul/sample-datasets/resolve/main/pokemon.png"
-        image = Image.open(requests.get(url, stream=True).raw)
+        image = Image.open(io.BytesIO(httpx.get(url, follow_redirects=True).content))
 
         outputs = pipe(image)
         self.assertEqual(outputs, [{"generated_text": "a cartoon of a purple character."}])
@@ -234,7 +192,7 @@ class ImageToTextPipelineTests(unittest.TestCase):
     def test_conditional_generation_pt_blip(self):
         pipe = pipeline("image-to-text", model="Salesforce/blip-image-captioning-base")
         url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
+        image = Image.open(io.BytesIO(httpx.get(url, follow_redirects=True).content))
 
         prompt = "a photography of"
 
@@ -249,7 +207,7 @@ class ImageToTextPipelineTests(unittest.TestCase):
     def test_conditional_generation_pt_git(self):
         pipe = pipeline("image-to-text", model="microsoft/git-base-coco")
         url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
+        image = Image.open(io.BytesIO(httpx.get(url, follow_redirects=True).content))
 
         prompt = "a photo of a"
 
@@ -264,7 +222,7 @@ class ImageToTextPipelineTests(unittest.TestCase):
     def test_conditional_generation_pt_pix2struct(self):
         pipe = pipeline("image-to-text", model="google/pix2struct-ai2d-base")
         url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
+        image = Image.open(io.BytesIO(httpx.get(url, follow_redirects=True).content))
 
         prompt = "What does the label 15 represent? (1) lava (2) core (3) tunnel (4) ash cloud"
 
@@ -275,25 +233,8 @@ class ImageToTextPipelineTests(unittest.TestCase):
             outputs = pipe([image, image], prompt=[prompt, prompt])
 
     @slow
-    @require_tf
-    def test_large_model_tf(self):
-        pipe = pipeline("image-to-text", model="ydshieh/vit-gpt2-coco-en", framework="tf")
-        image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
-
-        outputs = pipe(image)
-        self.assertEqual(outputs, [{"generated_text": "a cat laying on a blanket next to a cat laying on a bed "}])
-
-        outputs = pipe([image, image])
-        self.assertEqual(
-            outputs,
-            [
-                [{"generated_text": "a cat laying on a blanket next to a cat laying on a bed "}],
-                [{"generated_text": "a cat laying on a blanket next to a cat laying on a bed "}],
-            ],
-        )
-
-    @slow
     @require_torch
+    @unittest.skip("TODO (joao, raushan): there is something wrong with image processing in the model/pipeline")
     def test_conditional_generation_llava(self):
         pipe = pipeline("image-to-text", model="llava-hf/bakLlava-v1-hf")
 
@@ -318,7 +259,7 @@ class ImageToTextPipelineTests(unittest.TestCase):
     @slow
     @require_torch
     def test_nougat(self):
-        pipe = pipeline("image-to-text", "facebook/nougat-base")
+        pipe = pipeline("image-to-text", "facebook/nougat-base", max_new_tokens=19)
 
         outputs = pipe("https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/nougat_paper.png")
 

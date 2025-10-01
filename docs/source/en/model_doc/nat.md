@@ -13,8 +13,13 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2022-04-14 and added to Hugging Face Transformers on 2023-06-20.*
 
 # Neighborhood Attention Transformer
+
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
 
 <Tip warning={true}>
 
@@ -26,7 +31,7 @@ You can do so by running the following command: `pip install -U transformers==4.
 
 ## Overview
 
-NAT was proposed in [Neighborhood Attention Transformer](https://arxiv.org/abs/2204.07143)
+NAT was proposed in [Neighborhood Attention Transformer](https://huggingface.co/papers/2204.07143)
 by Ali Hassani, Steven Walton, Jiachen Li, Shen Li, and Humphrey Shi.
 
 It is a hierarchical vision transformer based on Neighborhood Attention, a sliding-window self attention pattern.
@@ -49,7 +54,7 @@ src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/ma
 alt="drawing" width="600"/>
 
 <small> Neighborhood Attention compared to other attention patterns.
-Taken from the <a href="https://arxiv.org/abs/2204.07143">original paper</a>.</small>
+Taken from the <a href="https://huggingface.co/papers/2204.07143">original paper</a>.</small>
 
 This model was contributed by [Ali Hassani](https://huggingface.co/alihassanijr).
 The original code can be found [here](https://github.com/SHI-Labs/Neighborhood-Attention-Transformer).
@@ -63,6 +68,7 @@ The `reshaped_hidden_states` have a shape of `(batch, num_channels, height, widt
 `(batch_size, height, width, num_channels)`.
 
 Notes:
+
 - NAT depends on [NATTEN](https://github.com/SHI-Labs/NATTEN/)'s implementation of Neighborhood Attention.
 You can install it with pre-built wheels for Linux by referring to [shi-labs.com/natten](https://shi-labs.com/natten),
 or build on your system by running `pip install natten`.

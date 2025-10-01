@@ -13,12 +13,19 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-06-08 and added to Hugging Face Transformers on 2024-03-18.*
 
 # MusicGen Melody
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
-The MusicGen Melody model was proposed in [Simple and Controllable Music Generation](https://arxiv.org/abs/2306.05284) by Jade Copet, Felix Kreuk, Itai Gat, Tal Remez, David Kant, Gabriel Synnaeve, Yossi Adi and Alexandre Défossez.
+The MusicGen Melody model was proposed in [Simple and Controllable Music Generation](https://huggingface.co/papers/2306.05284) by Jade Copet, Felix Kreuk, Itai Gat, Tal Remez, David Kant, Gabriel Synnaeve, Yossi Adi and Alexandre Défossez.
 
 MusicGen Melody is a single stage auto-regressive Transformer model capable of generating high-quality music samples conditioned on text descriptions or audio prompts. The text descriptions are passed through a frozen text encoder model to obtain a sequence of hidden-state representations. MusicGen is then trained to predict discrete audio tokens, or *audio codes*, conditioned on these hidden-states. These audio tokens are then decoded using an audio compression model, such as EnCodec, to recover the audio waveform.
 
@@ -28,13 +35,12 @@ The abstract from the paper is the following:
 
 *We tackle the task of conditional music generation. We introduce MusicGen, a single Language Model (LM) that operates over several streams of compressed discrete music representation, i.e., tokens. Unlike prior work, MusicGen is comprised of a single-stage transformer LM together with efficient token interleaving patterns, which eliminates the need for cascading several models, e.g., hierarchically or upsampling. Following this approach, we demonstrate how MusicGen can generate high-quality samples, while being conditioned on textual description or melodic features, allowing better controls over the generated output. We conduct extensive empirical evaluation, considering both automatic and human studies, showing the proposed approach is superior to the evaluated baselines on a standard text-to-music benchmark. Through ablation studies, we shed light over the importance of each of the components comprising MusicGen.*
 
-
 This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The original code can be found [here](https://github.com/facebookresearch/audiocraft). The pre-trained checkpoints can be found on the [Hugging Face Hub](https://huggingface.co/models?sort=downloads&search=facebook%2Fmusicgen).
-
 
 ## Difference with [MusicGen](https://huggingface.co/docs/transformers/main/en/model_doc/musicgen)
 
 There are two key differences with MusicGen:
+
 1. The audio prompt is used here as a conditional signal for the generated audio sample, whereas it's used for audio continuation in [MusicGen](https://huggingface.co/docs/transformers/main/en/model_doc/musicgen).
 2. Conditional text and audio signals are concatenated to the decoder's hidden states instead of being used as a cross-attention signal, as in MusicGen.
 
@@ -44,19 +50,19 @@ MusicGen Melody is compatible with two generation modes: greedy and sampling. In
 
 Transformers supports both mono (1-channel) and stereo (2-channel) variants of MusicGen Melody. The mono channel versions generate a single set of codebooks. The stereo versions generate 2 sets of codebooks, 1 for each channel (left/right), and each set of codebooks is decoded independently through the audio compression model. The audio streams for each channel are combined to give the final stereo output.
 
-
 #### Audio Conditional Generation
 
 The model can generate an audio sample conditioned on a text and an audio prompt through use of the [`MusicgenMelodyProcessor`] to pre-process the inputs.
 
 In the following examples, we load an audio file using the 🤗 Datasets library, which can be pip installed through the command below:
 
-```
+```bash
 pip install --upgrade pip
 pip install datasets[audio]
 ```
 
 The audio file we are about to use is loaded as follows:
+
 ```python
 >>> from datasets import load_dataset
 
@@ -137,10 +143,9 @@ Or save them as a `.wav` file using a third-party library, e.g. `soundfile`:
 >>> sf.write("musicgen_out.wav", audio_values[0].T.numpy(), sampling_rate)
 ```
 
-
 ### Text-only Conditional Generation
 
-The same [`MusicgenMelodyProcessor`] can be used to pre-process a text-only prompt. 
+The same [`MusicgenMelodyProcessor`] can be used to pre-process a text-only prompt.
 
 ```python
 >>> from transformers import AutoProcessor, MusicgenMelodyForConditionalGeneration
@@ -157,7 +162,6 @@ The same [`MusicgenMelodyProcessor`] can be used to pre-process a text-only prom
 ```
 
 The `guidance_scale` is used in classifier free guidance (CFG), setting the weighting between the conditional logits (which are predicted from the text prompts) and the unconditional logits (which are predicted from an unconditional or 'null' prompt). Higher guidance scale encourages the model to generate samples that are more closely linked to the input prompt, usually at the expense of poorer audio quality. CFG is enabled by setting `guidance_scale > 1`. For best results, use `guidance_scale=3` (default).
-
 
 You can also generate in batch:
 
@@ -221,6 +225,7 @@ Note that any arguments passed to the generate method will **supersede** those i
 ## Model Structure
 
 The MusicGen model can be de-composed into three distinct stages:
+
 1. Text encoder: maps the text inputs to a sequence of hidden-state representations. The pre-trained MusicGen models use a frozen text encoder from either T5 or Flan-T5.
 2. MusicGen Melody decoder: a language model (LM) that auto-regressively generates audio tokens (or codes) conditional on the encoder hidden-state representations
 3. Audio decoder: used to recover the audio waveform from the audio tokens predicted by the decoder.
@@ -250,9 +255,9 @@ python src/transformers/models/musicgen_melody/convert_musicgen_melody_transform
 ```
 
 Tips:
+
 * MusicGen is trained on the 32kHz checkpoint of Encodec. You should ensure you use a compatible version of the Encodec model.
 * Sampling mode tends to deliver better results than greedy - you can toggle sampling with the variable `do_sample` in the call to [`MusicgenMelodyForConditionalGeneration.generate`]
-
 
 ## MusicgenMelodyDecoderConfig
 

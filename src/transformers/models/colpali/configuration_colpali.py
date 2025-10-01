@@ -33,8 +33,6 @@ class ColPaliConfig(PretrainedConfig):
     Creating a configuration with the default settings will result in a configuration where the VLM backbone is set to the
     default PaliGemma configuration, i.e the one from [vidore/colpali-v1.2](https://huggingface.co/vidore/colpali-v1.2).
 
-    The ColPali config is very similar to [`PaligemmaConfig`], but with an extra attribute defining the embedding dimension.
-
     Note that contrarily to what the class name suggests (actually the name refers to the ColPali **methodology**), you can
     use a different VLM backbone model than PaliGemma by passing the corresponding VLM configuration to the class constructor.
 
@@ -85,17 +83,15 @@ class ColPaliConfig(PretrainedConfig):
                     f"The model type `{vlm_config['model_type']}` is not supported. Please provide a valid model type."
                 )
             vlm_config = CONFIG_MAPPING[vlm_config["model_type"]](**vlm_config)
-        elif isinstance(vlm_config, PretrainedConfig):
-            vlm_config = vlm_config
-        else:
+        elif not isinstance(vlm_config, PretrainedConfig):
             raise TypeError(
                 f"Invalid type for `vlm_config`. Expected `PretrainedConfig`, `dict`, or `None`, but got {type(vlm_config)}."
             )
 
         self.vlm_config = vlm_config
-        self.text_config = text_config = text_config if text_config is not None else vlm_config.text_config
+        self.text_config = text_config if text_config is not None else vlm_config.text_config
         if isinstance(self.text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "gemma"
+            text_config["model_type"] = text_config.get("model_type", "gemma")
             self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
 
         self.embedding_dim = embedding_dim

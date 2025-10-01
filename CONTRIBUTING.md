@@ -68,8 +68,7 @@ already reported** (use the search bar on GitHub under Issues). Your issue shoul
 
 Once you've confirmed the bug hasn't already been reported, please include the following information in your issue so we can quickly resolve it:
 
-* Your **OS type and version** and **Python**, **PyTorch** and
-  **TensorFlow** versions when applicable.
+* Your **OS type and version** and **Python**, and **PyTorch** versions when applicable.
 * A short, self-contained, code snippet that allows us to reproduce the bug in
   less than 30s.
 * The *full* traceback if an exception is raised.
@@ -78,7 +77,7 @@ Once you've confirmed the bug hasn't already been reported, please include the f
 To get the OS and software versions automatically, run the following command:
 
 ```bash
-transformers-cli env
+transformers env
 ```
 
 You can also run the same command from the root of the repository:
@@ -165,8 +164,7 @@ You'll need **[Python 3.9](https://github.com/huggingface/transformers/blob/main
    mode with the `-e` flag.
 
    Depending on your OS, and since the number of optional dependencies of Transformers is growing, you might get a
-   failure with this command. If that's the case make sure to install the Deep Learning framework you are working with
-   (PyTorch, TensorFlow and/or Flax) then do:
+   failure with this command. If that's the case make sure to install Pytorch then do:
 
    ```bash
    pip install -e ".[quality]"
@@ -221,10 +219,10 @@ You'll need **[Python 3.9](https://github.com/huggingface/transformers/blob/main
    [Checks on a Pull Request](https://huggingface.co/docs/transformers/pr_checks) guide.
 
    If you're modifying documents under the `docs/source` directory, make sure the documentation can still be built. This check will also run in the CI when you open a pull request. To run a local check
-   make sure you install the documentation builder:
+   make sure you install the [documentation builder](https://github.com/huggingface/doc-builder).
 
    ```bash
-   pip install ".[docs]"
+   pip install hf-doc-builder
    ```
 
    Run the following command from the root of the repository:
@@ -280,13 +278,14 @@ are working on it).<br>
 useful to avoid duplicated work, and to differentiate it from PRs ready to be merged.<br>
 ☐ Make sure existing tests pass.<br>
 ☐ If adding a new feature, also add tests for it.<br>
-   - If you are adding a new model, make sure you use
+
+- If you are adding a new model, make sure you use
      `ModelTester.all_model_classes = (MyModel, MyModelWithLMHead,...)` to trigger the common tests.
-   - If you are adding new `@slow` tests, make sure they pass using
+- If you are adding new `@slow` tests, make sure they pass using
      `RUN_SLOW=1 python -m pytest tests/models/my_new_model/test_my_new_model.py`.
-   - If you are adding a new tokenizer, write tests and make sure
+- If you are adding a new tokenizer, write tests and make sure
      `RUN_SLOW=1 python -m pytest tests/models/{your_model_name}/test_tokenization_{your_model_name}.py` passes.
-   - CircleCI does not run the slow tests, but GitHub Actions does every night!<br>
+- CircleCI does not run the slow tests, but GitHub Actions does every night!<br>
 
 ☐ All public methods must have informative docstrings (see
 [`modeling_bert.py`](https://github.com/huggingface/transformers/blob/main/src/transformers/models/bert/modeling_bert.py)
@@ -342,9 +341,8 @@ RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/t
 ```
 
 Like the slow tests, there are other environment variables available which are not enabled by default during testing:
+
 - `RUN_CUSTOM_TOKENIZERS`: Enables tests for custom tokenizers.
-- `RUN_PT_FLAX_CROSS_TESTS`: Enables tests for PyTorch + Flax integration.
-- `RUN_PT_TF_CROSS_TESTS`: Enables tests for TensorFlow + PyTorch integration.
 
 More environment variables and additional information can be found in the [testing_utils.py](https://github.com/huggingface/transformers/blob/main/src/transformers/testing_utils.py).
 

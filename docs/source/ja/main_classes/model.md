@@ -39,18 +39,7 @@ rendered properly in your Markdown viewer.
 
 Transformers 4.20.0では、[`~PreTrainedModel.from_pretrained`] メソッドが再設計され、[Accelerate](https://huggingface.co/docs/accelerate/big_modeling) を使用して大規模モデルを扱うことが可能になりました。これには Accelerate >= 0.9.0 と PyTorch >= 1.9.0 が必要です。以前の方法でフルモデルを作成し、その後事前学習の重みを読み込む代わりに（これにはメモリ内のモデルサイズが2倍必要で、ランダムに初期化されたモデル用と重み用の2つが必要でした）、モデルを空の外殻として作成し、事前学習の重みが読み込まれるときにパラメーターを実体化するオプションが追加されました。
 
-このオプションは `low_cpu_mem_usage=True` で有効にできます。モデルはまず空の重みを持つメタデバイス上に作成され、その後状態辞書が内部に読み込まれます（シャードされたチェックポイントの場合、シャードごとに読み込まれます）。この方法で使用される最大RAMは、モデルの完全なサイズだけです。
-
-
-```py
-from transformers import AutoModelForSeq2SeqLM
-
-t0pp = AutoModelForSeq2SeqLM.from_pretrained("bigscience/T0pp", low_cpu_mem_usage=True)
-```
-
 さらに、モデルが完全にRAMに収まらない場合（現時点では推論のみ有効）、異なるデバイスにモデルを直接配置できます。`device_map="auto"` を使用すると、Accelerateは各レイヤーをどのデバイスに配置するかを決定し、最速のデバイス（GPU）を最大限に活用し、残りの部分をCPU、あるいはGPU RAMが不足している場合はハードドライブにオフロードします。モデルが複数のデバイスに分割されていても、通常どおり実行されます。
-
-`device_map` を渡す際、`low_cpu_mem_usage` は自動的に `True` に設定されるため、それを指定する必要はありません。
 
 
 ```py
@@ -110,16 +99,16 @@ device_map = {"shared": 0, "encoder": 0, "decoder": 1, "lm_head": 1}
 
 Pytorch では、モデルは通常 `torch.float32` 形式でインスタンス化されます。これは、しようとすると問題になる可能性があります
 重みが fp16 にあるモデルをロードすると、2 倍のメモリが必要になるためです。この制限を克服するには、次のことができます。
-`torch_dtype` 引数を使用して、目的の `dtype` を明示的に渡します。
+`dtype` 引数を使用して、目的の `dtype` を明示的に渡します。
 
 ```python
-model = T5ForConditionalGeneration.from_pretrained("t5", torch_dtype=torch.float16)
+model = T5ForConditionalGeneration.from_pretrained("t5", dtype=torch.float16)
 ```
 または、モデルを常に最適なメモリ パターンでロードしたい場合は、特別な値 `"auto"` を使用できます。
 そして、`dtype` はモデルの重みから自動的に導出されます。
 
 ```python
-model = T5ForConditionalGeneration.from_pretrained("t5", torch_dtype="auto")
+model = T5ForConditionalGeneration.from_pretrained("t5", dtype="auto")
 ```
 
 スクラッチからインスタンス化されたモデルには、どの `dtype` を使用するかを指示することもできます。
@@ -134,22 +123,6 @@ Pytorch の設計により、この機能は浮動小数点 dtype でのみ使�
 ## ModuleUtilsMixin
 
 [[autodoc]] modeling_utils.ModuleUtilsMixin
-
-## TFPreTrainedModel
-
-[[autodoc]] TFPreTrainedModel
-    - push_to_hub
-    - all
-
-## TFModelUtilsMixin
-
-[[autodoc]] modeling_tf_utils.TFModelUtilsMixin
-
-## FlaxPreTrainedModel
-
-[[autodoc]] FlaxPreTrainedModel
-    - push_to_hub
-    - all
 
 ## Pushing to the Hub
 

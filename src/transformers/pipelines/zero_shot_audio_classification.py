@@ -13,10 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections import UserDict
-from typing import Union
+from typing import Any, Union
 
+import httpx
 import numpy as np
-import requests
 
 from ..utils import (
     add_end_docstrings,
@@ -49,8 +49,8 @@ class ZeroShotAudioClassificationPipeline(Pipeline):
     >>> dataset = load_dataset("ashraq/esc50")
     >>> audio = next(iter(dataset["train"]["audio"]))["array"]
     >>> classifier = pipeline(task="zero-shot-audio-classification", model="laion/clap-htsat-unfused")
-    >>> classifier(audio, candidate_labels=["Sound of a dog", "Sound of vaccum cleaner"])
-    [{'score': 0.9996, 'label': 'Sound of a dog'}, {'score': 0.0004, 'label': 'Sound of vaccum cleaner'}]
+    >>> classifier(audio, candidate_labels=["Sound of a dog", "Sound of vacuum cleaner"])
+    [{'score': 0.9996, 'label': 'Sound of a dog'}, {'score': 0.0004, 'label': 'Sound of vacuum cleaner'}]
     ```
 
 
@@ -60,24 +60,25 @@ class ZeroShotAudioClassificationPipeline(Pipeline):
     [huggingface.co/models](https://huggingface.co/models?filter=zero-shot-audio-classification).
     """
 
+    _load_processor = False
+    _load_image_processor = False
+    _load_feature_extractor = True
+    _load_tokenizer = True
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        if self.framework != "pt":
-            raise ValueError(f"The {self.__class__} is only available in PyTorch.")
-        # No specific FOR_XXX available yet
-
-    def __call__(self, audios: Union[np.ndarray, bytes, str], **kwargs):
+    def __call__(self, audios: Union[np.ndarray, bytes, str, dict], **kwargs: Any) -> list[dict[str, Any]]:
         """
         Assign labels to the audio(s) passed as inputs.
 
         Args:
-            audios (`str`, `List[str]`, `np.array` or `List[np.array]`):
+            audios (`str`, `list[str]`, `np.array` or `list[np.array]`):
                 The pipeline handles three types of inputs:
                 - A string containing a http link pointing to an audio
                 - A string containing a local path to an audio
                 - An audio loaded in numpy
-            candidate_labels (`List[str]`):
+            candidate_labels (`list[str]`):
                 The candidate labels for this audio. They will be formatted using *hypothesis_template*.
             hypothesis_template (`str`, *optional*, defaults to `"This is a sound of {}"`):
                 The format used in conjunction with *candidate_labels* to attempt the audio classification by
@@ -106,7 +107,7 @@ class ZeroShotAudioClassificationPipeline(Pipeline):
             if audio.startswith("http://") or audio.startswith("https://"):
                 # We need to actually check for a real protocol, otherwise it's impossible to use a local file
                 # like http_huggingface_co.png
-                audio = requests.get(audio).content
+                audio = httpx.get(audio, follow_redirects=True).content
             else:
                 with open(audio, "rb") as f:
                     audio = f.read()
@@ -122,11 +123,10 @@ class ZeroShotAudioClassificationPipeline(Pipeline):
         inputs = self.feature_extractor(
             [audio], sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
         )
-        if self.framework == "pt":
-            inputs = inputs.to(self.torch_dtype)
+        inputs = inputs.to(self.dtype)
         inputs["candidate_labels"] = candidate_labels
         sequences = [hypothesis_template.format(x) for x in candidate_labels]
-        text_inputs = self.tokenizer(sequences, return_tensors=self.framework, padding=True)
+        text_inputs = self.tokenizer(sequences, return_tensors="pt", padding=True)
         inputs["text_inputs"] = [text_inputs]
         return inputs
 
@@ -151,11 +151,8 @@ class ZeroShotAudioClassificationPipeline(Pipeline):
         candidate_labels = model_outputs.pop("candidate_labels")
         logits = model_outputs["logits"][0]
 
-        if self.framework == "pt":
-            probs = logits.softmax(dim=0)
-            scores = probs.tolist()
-        else:
-            raise ValueError("`tf` framework not supported.")
+        probs = logits.softmax(dim=0)
+        scores = probs.tolist()
 
         result = [
             {"score": score, "label": candidate_label}

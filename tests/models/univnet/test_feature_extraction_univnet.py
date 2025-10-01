@@ -248,7 +248,7 @@ class UnivNetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
-        # Test np.ndarray vs List[np.ndarray]
+        # Test np.ndarray vs list[np.ndarray]
         encoded_sequences_1 = feature_extractor(np_speech_inputs, return_tensors="np").input_features
         encoded_sequences_2 = feature_extractor([np_speech_inputs], return_tensors="np").input_features
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
@@ -330,7 +330,7 @@ class UnivNetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         ds = ds.cast_column("audio", Audio(sampling_rate=self.feat_extract_tester.sampling_rate))
         # automatic decoding with librispeech
-        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+        speech_samples = ds.sort("id")[:num_samples]["audio"]
 
         return [x["array"] for x in speech_samples], [x["sampling_rate"] for x in speech_samples]
 
@@ -360,6 +360,6 @@ class UnivNetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         EXPECTED_MEAN = torch.tensor(-6.18862009)
         EXPECTED_STDDEV = torch.tensor(2.80845642)
 
-        torch.testing.assert_close(input_features_mean, EXPECTED_MEAN, atol=5e-5, rtol=5e-6)
+        torch.testing.assert_close(input_features_mean, EXPECTED_MEAN, rtol=5e-5, atol=5e-5)
         torch.testing.assert_close(input_features_stddev, EXPECTED_STDDEV)
-        torch.testing.assert_close(input_features[0, :30, 0], EXPECTED_INPUT_FEATURES, atol=1e-4, rtol=1e-5)
+        torch.testing.assert_close(input_features[0, :30, 0], EXPECTED_INPUT_FEATURES, rtol=1e-4, atol=1e-4)

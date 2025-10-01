@@ -19,7 +19,7 @@ part from HuggingFace PyTorch version of Google AI Bert model (https://github.co
 """
 
 import math
-from typing import Dict, List, Optional, Set, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -30,6 +30,8 @@ from ...activations import get_activation
 from ...configuration_utils import PretrainedConfig
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask_for_sdpa
+from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
@@ -42,28 +44,20 @@ from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import (
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
-    is_torch_greater_or_equal_than_2_2,
     prune_linear_layer,
 )
 from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10,
+    auto_docstring,
     logging,
-    replace_return_docstrings,
 )
 from .configuration_distilbert import DistilBertConfig
 
 
-if is_flash_attn_2_available():
+if is_flash_attn_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
 logger = logging.get_logger(__name__)
-_CHECKPOINT_FOR_DOC = "distilbert-base-uncased"
-_CONFIG_FOR_DOC = "DistilBertConfig"
 
 
 # UTILS AND BUILDING BLOCKS OF THE ARCHITECTURE #
@@ -119,7 +113,7 @@ class Embeddings(nn.Module):
 
         # Setting the position-ids to the registered buffer in constructor, it helps
         # when tracing the model without passing position-ids, solves
-        # isues similar to issue #5664
+        # issues similar to issue #5664
         if hasattr(self, "position_ids"):
             position_ids = self.position_ids[:, :seq_length]
         else:
@@ -154,10 +148,10 @@ class MultiHeadSelfAttention(nn.Module):
         self.v_lin = nn.Linear(in_features=config.dim, out_features=config.dim)
         self.out_lin = nn.Linear(in_features=config.dim, out_features=config.dim)
 
-        self.pruned_heads: Set[int] = set()
+        self.pruned_heads: set[int] = set()
         self.attention_head_size = self.dim // self.n_heads
 
-    def prune_heads(self, heads: List[int]):
+    def prune_heads(self, heads: list[int]):
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(
@@ -179,9 +173,8 @@ class MultiHeadSelfAttention(nn.Module):
         key: torch.Tensor,
         value: torch.Tensor,
         mask: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, ...]:
+    ) -> tuple[torch.Tensor, ...]:
         """
         Parameters:
             query: torch.tensor(bs, seq_length, dim)
@@ -224,10 +217,6 @@ class MultiHeadSelfAttention(nn.Module):
         weights = nn.functional.softmax(scores, dim=-1)  # (bs, n_heads, q_length, k_length)
         weights = self.dropout(weights)  # (bs, n_heads, q_length, k_length)
 
-        # Mask heads if we want to
-        if head_mask is not None:
-            weights = weights * head_mask
-
         context = torch.matmul(weights, v)  # (bs, n_heads, q_length, dim_per_head)
         context = unshape(context)  # (bs, q_length, dim)
         context = self.out_lin(context)  # (bs, q_length, dim)
@@ -249,9 +238,9 @@ class DistilBertFlashAttention2(MultiHeadSelfAttention):
         super().__init__(*args, **kwargs)
 
         # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
-        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
+        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignment, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
-        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+        self._flash_attn_uses_top_left_mask = flash_attn_supports_top_left_mask()
 
     def forward(
         self,
@@ -259,9 +248,8 @@ class DistilBertFlashAttention2(MultiHeadSelfAttention):
         key: torch.Tensor,
         value: torch.Tensor,
         mask: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, ...]:
+    ) -> tuple[torch.Tensor, ...]:
         """
         Parameters:
             query: torch.tensor(bs, seq_length, dim)
@@ -295,9 +283,14 @@ class DistilBertFlashAttention2(MultiHeadSelfAttention):
         # This might slowdown training & inference so it is recommended to not cast the LayerNorms
         # in fp32. (LlamaRMSNorm handles it correctly)
 
+        device_type = query_states.device.type if query_states.device.type != "mps" else "cpu"
         if query_states.dtype == torch.float32:
             if torch.is_autocast_enabled():
-                target_dtype = torch.get_autocast_gpu_dtype()
+                target_dtype = (
+                    torch.get_autocast_dtype(device_type)
+                    if hasattr(torch, "get_autocast_dtype")
+                    else torch.get_autocast_gpu_dtype()
+                )
             # Handle the case where the model is quantized
             elif hasattr(self.config, "_pre_quantization_dtype"):
                 target_dtype = self.config._pre_quantization_dtype
@@ -338,7 +331,6 @@ class DistilBertSdpaAttention(MultiHeadSelfAttention):
     def __init__(self, config: PretrainedConfig):
         super().__init__(config=config)
         self.dropout_prob = config.attention_dropout
-        self.require_contiguous_qkv = not is_torch_greater_or_equal_than_2_2
 
     def forward(
         self,
@@ -346,9 +338,8 @@ class DistilBertSdpaAttention(MultiHeadSelfAttention):
         key: torch.Tensor,
         value: torch.Tensor,
         mask: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, ...]:
+    ) -> tuple[torch.Tensor, ...]:
         """
         Parameters:
             query: torch.tensor(bs, seq_length, dim)
@@ -360,10 +351,10 @@ class DistilBertSdpaAttention(MultiHeadSelfAttention):
             weights: torch.tensor(bs, n_heads, seq_length, seq_length) Attention weights context: torch.tensor(bs,
             seq_length, dim) Contextualized layer. Optional: only if `output_attentions=True`
         """
-        if output_attentions or head_mask is not None:
+        if output_attentions:
             logger.warning_once(
                 "DistilBertSdpaAttention is used but `torch.nn.functional.scaled_dot_product_attention` does not support"
-                " `output_attentions=True` or `head_mask`. Falling back to the manual attention implementation, but specifying"
+                " `output_attentions=True`. Falling back to the manual attention implementation, but specifying"
                 " the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be"
                 ' removed using the argument `attn_implementation="eager"` when loading the model.'
             )
@@ -372,7 +363,6 @@ class DistilBertSdpaAttention(MultiHeadSelfAttention):
                 key,
                 value,
                 mask,
-                head_mask,
                 output_attentions,
             )
 
@@ -390,14 +380,6 @@ class DistilBertSdpaAttention(MultiHeadSelfAttention):
         q = shape(self.q_lin(query))  # (bs, n_heads, q_length, dim_per_head)
         k = shape(self.k_lin(key))  # (bs, n_heads, k_length, dim_per_head)
         v = shape(self.v_lin(value))  # (bs, n_heads, k_length, dim_per_head)
-
-        # SDPA with memory-efficient backend is broken in torch==2.1.2 when using non-contiguous inputs and a custom
-        # attn_mask, so we need to call `.contiguous()` here. This was fixed in torch==2.2.0.
-        # Reference: https://github.com/pytorch/pytorch/issues/112577
-        if self.require_contiguous_qkv and q.device.type == "cuda" and mask is not None:
-            q = q.contiguous()
-            k = k.contiguous()
-            v = v.contiguous()
 
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             q,
@@ -442,7 +424,7 @@ DISTILBERT_ATTENTION_CLASSES = {
 }
 
 
-class TransformerBlock(nn.Module):
+class TransformerBlock(GradientCheckpointingLayer):
     def __init__(self, config: PretrainedConfig):
         super().__init__()
 
@@ -460,9 +442,8 @@ class TransformerBlock(nn.Module):
         self,
         x: torch.Tensor,
         attn_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, ...]:
+    ) -> tuple[torch.Tensor, ...]:
         """
         Parameters:
             x: torch.tensor(bs, seq_length, dim)
@@ -478,7 +459,6 @@ class TransformerBlock(nn.Module):
             key=x,
             value=x,
             mask=attn_mask,
-            head_mask=head_mask,
             output_attentions=output_attentions,
         )
         if output_attentions:
@@ -511,11 +491,10 @@ class Transformer(nn.Module):
         self,
         x: torch.Tensor,
         attn_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: Optional[bool] = None,
-    ) -> Union[BaseModelOutput, Tuple[torch.Tensor, ...]]:  # docstyle-ignore
+    ) -> Union[BaseModelOutput, tuple[torch.Tensor, ...]]:  # docstyle-ignore
         """
         Parameters:
             x: torch.tensor(bs, seq_length, dim) Input sequence embedded.
@@ -523,10 +502,10 @@ class Transformer(nn.Module):
 
         Returns:
             hidden_state: torch.tensor(bs, seq_length, dim) Sequence of hidden states in the last (top)
-            layer all_hidden_states: Tuple[torch.tensor(bs, seq_length, dim)]
+            layer all_hidden_states: tuple[torch.tensor(bs, seq_length, dim)]
                 Tuple of length n_layers with the hidden states from each layer.
                 Optional: only if output_hidden_states=True
-            all_attentions: Tuple[torch.tensor(bs, n_heads, seq_length, seq_length)]
+            all_attentions: tuple[torch.tensor(bs, n_heads, seq_length, seq_length)]
                 Tuple of length n_layers with the attention weights from each layer
                 Optional: only if output_attentions=True
         """
@@ -538,21 +517,11 @@ class Transformer(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_state,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_state,
-                    attn_mask,
-                    head_mask[i],
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(
-                    hidden_state,
-                    attn_mask,
-                    head_mask[i],
-                    output_attentions,
-                )
+            layer_outputs = layer_module(
+                hidden_state,
+                attn_mask,
+                output_attentions,
+            )
 
             hidden_state = layer_outputs[-1]
 
@@ -578,24 +547,17 @@ class Transformer(nn.Module):
 
 
 # INTERFACE FOR ENCODER AND TASK SPECIFIC MODEL #
+@auto_docstring
 class DistilBertPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = DistilBertConfig
-    load_tf_weights = None
+    config: DistilBertConfig
     base_model_prefix = "distilbert"
     supports_gradient_checkpointing = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_sdpa = True
 
     def _init_weights(self, module: nn.Module):
         """Initialize the weights."""
         if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -612,71 +574,13 @@ class DistilBertPreTrainedModel(PreTrainedModel):
             )
 
 
-DISTILBERT_START_DOCSTRING = r"""
-
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`DistilBertConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-DISTILBERT_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `({0})`):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare DistilBERT encoder/transformer outputting raw hidden-states without any specific head on top.",
-    DISTILBERT_START_DOCSTRING,
-)
+@auto_docstring
 class DistilBertModel(DistilBertPreTrainedModel):
     def __init__(self, config: PretrainedConfig):
         super().__init__(config)
 
         self.embeddings = Embeddings(config)  # Embeddings
         self.transformer = Transformer(config)  # Encoder
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
-        self._use_sdpa = config._attn_implementation == "sdpa"
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -735,7 +639,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
     def set_input_embeddings(self, new_embeddings: nn.Embedding):
         self.embeddings.word_embeddings = new_embeddings
 
-    def _prune_heads(self, heads_to_prune: Dict[int, List[List[int]]]):
+    def _prune_heads(self, heads_to_prune: dict[int, list[list[int]]]):
         """
         Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
         class PreTrainedModel
@@ -743,22 +647,29 @@ class DistilBertModel(DistilBertPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.transformer.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, num_choices"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[BaseModelOutput, Tuple[torch.Tensor, ...]]:
+    ) -> Union[BaseModelOutput, tuple[torch.Tensor, ...]]:
+        r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size, num_choices)`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -777,19 +688,15 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
-        head_mask_is_none = head_mask is None
-        # Prepare head mask if needed
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
         embeddings = self.embeddings(input_ids, inputs_embeds)  # (bs, seq_length, dim)
 
-        if self._use_flash_attention_2:
+        if self.config._attn_implementation == "flash_attention_2":
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         else:
             if attention_mask is None:
                 attention_mask = torch.ones(input_shape, device=device)  # (bs, seq_length)
 
-            if self._use_sdpa and head_mask_is_none and not output_attentions:
+            if self.config._attn_implementation == "sdpa" and not output_attentions:
                 attention_mask = _prepare_4d_attention_mask_for_sdpa(
                     attention_mask, embeddings.dtype, tgt_len=input_shape[1]
                 )
@@ -797,16 +704,16 @@ class DistilBertModel(DistilBertPreTrainedModel):
         return self.transformer(
             x=embeddings,
             attn_mask=attention_mask,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
 
 
-@add_start_docstrings(
-    """DistilBert Model with a `masked language modeling` head on top.""",
-    DISTILBERT_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    DistilBert Model with a `masked language modeling` head on top.
+    """
 )
 class DistilBertForMaskedLM(DistilBertPreTrainedModel):
     _tied_weights_keys = ["vocab_projector.weight"]
@@ -852,24 +759,29 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
     def set_output_embeddings(self, new_embeddings: nn.Module):
         self.vocab_projector = new_embeddings
 
-    @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, num_choices"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=MaskedLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[MaskedLMOutput, Tuple[torch.Tensor, ...]]:
+    ) -> Union[MaskedLMOutput, tuple[torch.Tensor, ...]]:
         r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size, num_choices)`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
@@ -880,7 +792,6 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
         dlbrt_output = self.distilbert(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -908,12 +819,11 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     DistilBert Model transformer with a sequence classification/regression head on top (a linear layer on top of the
     pooled output) e.g. for GLUE tasks.
-    """,
-    DISTILBERT_START_DOCSTRING,
+    """
 )
 class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
     def __init__(self, config: PretrainedConfig):
@@ -949,23 +859,17 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
         """
         self.distilbert.resize_position_embeddings(new_num_position_embeddings)
 
-    @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=SequenceClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[SequenceClassifierOutput, Tuple[torch.Tensor, ...]]:
+    ) -> Union[SequenceClassifierOutput, tuple[torch.Tensor, ...]]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -977,7 +881,6 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
         distilbert_output = self.distilbert(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1025,13 +928,7 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-    DistilBert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a
-    linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
-    """,
-    DISTILBERT_START_DOCSTRING,
-)
+@auto_docstring
 class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
     def __init__(self, config: PretrainedConfig):
         super().__init__(config)
@@ -1066,40 +963,36 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
         """
         self.distilbert.resize_position_embeddings(new_num_position_embeddings)
 
-    @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, num_choices"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=QuestionAnsweringModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         start_positions: Optional[torch.Tensor] = None,
         end_positions: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[QuestionAnsweringModelOutput, Tuple[torch.Tensor, ...]]:
+    ) -> Union[QuestionAnsweringModelOutput, tuple[torch.Tensor, ...]]:
         r"""
-        start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
-        end_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
+        input_ids (`torch.LongTensor` of shape `(batch_size, num_choices)`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         distilbert_output = self.distilbert(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1143,13 +1036,7 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-    DistilBert Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g.
-    for Named-Entity-Recognition (NER) tasks.
-    """,
-    DISTILBERT_START_DOCSTRING,
-)
+@auto_docstring
 class DistilBertForTokenClassification(DistilBertPreTrainedModel):
     def __init__(self, config: PretrainedConfig):
         super().__init__(config)
@@ -1182,23 +1069,17 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
         """
         self.distilbert.resize_position_embeddings(new_num_position_embeddings)
 
-    @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TokenClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[TokenClassifierOutput, Tuple[torch.Tensor, ...]]:
+    ) -> Union[TokenClassifierOutput, tuple[torch.Tensor, ...]]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -1208,7 +1089,6 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
         outputs = self.distilbert(
             input_ids,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1237,13 +1117,7 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-    DistilBert Model with a multiple choice classification head on top (a linear layer on top of the pooled output and
-    a softmax) e.g. for RocStories/SWAG tasks.
-    """,
-    DISTILBERT_START_DOCSTRING,
-)
+@auto_docstring
 class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
     def __init__(self, config: PretrainedConfig):
         super().__init__(config)
@@ -1276,28 +1150,33 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
         """
         self.distilbert.resize_position_embeddings(new_num_position_embeddings)
 
-    @add_start_docstrings_to_model_forward(
-        DISTILBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
-    )
-    @replace_return_docstrings(output_type=MultipleChoiceModelOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[MultipleChoiceModelOutput, Tuple[torch.Tensor, ...]]:
+    ) -> Union[MultipleChoiceModelOutput, tuple[torch.Tensor, ...]]:
         r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
             `input_ids` above)
-
-        Returns:
 
         Examples:
 
@@ -1334,7 +1213,6 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
         outputs = self.distilbert(
             input_ids,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,

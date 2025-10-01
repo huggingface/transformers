@@ -28,7 +28,7 @@ from pathlib import Path
 from check_config_docstrings import get_checkpoint_from_config_class
 from datasets import load_dataset
 from get_test_info import get_model_to_tester_mapping, get_tester_classes_for_model
-from huggingface_hub import Repository, create_repo, hf_api, upload_folder
+from huggingface_hub import Repository, create_repo, hf_api, upload_folder  # TODO: remove Repository
 
 from transformers import (
     CONFIG_MAPPING,
@@ -43,7 +43,7 @@ from transformers import (
     logging,
 )
 from transformers.feature_extraction_utils import FeatureExtractionMixin
-from transformers.file_utils import is_tf_available, is_torch_available
+from transformers.file_utils import is_torch_available
 from transformers.image_processing_utils import BaseImageProcessor
 from transformers.models.auto.configuration_auto import AutoConfig, model_type_to_module_name
 from transformers.models.fsmt import configuration_fsmt
@@ -58,16 +58,10 @@ logging.set_verbosity_error()
 logging.disable_progress_bar()
 logger = logging.get_logger(__name__)
 
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-
 if not is_torch_available():
     raise ValueError("Please install PyTorch.")
 
-if not is_tf_available():
-    raise ValueError("Please install TensorFlow.")
 
-
-FRAMEWORKS = ["pytorch", "tensorflow"]
 INVALID_ARCH = []
 TARGET_VOCAB_SIZE = 1024
 
@@ -94,13 +88,6 @@ UNCONVERTIBLE_MODEL_ARCHITECTURES = {
     "CamembertForTokenClassification",
     "CamembertForQuestionAnswering",
     "CamembertModel",
-    "TFCamembertForMultipleChoice",
-    "TFCamembertForTokenClassification",
-    "TFCamembertForQuestionAnswering",
-    "TFCamembertForSequenceClassification",
-    "TFCamembertForMaskedLM",
-    "TFCamembertModel",
-    "TFCamembertForCausalLM",
     "DecisionTransformerModel",
     "GraphormerModel",
     "InformerModel",
@@ -111,8 +98,6 @@ UNCONVERTIBLE_MODEL_ARCHITECTURES = {
     "MT5Model",
     "MT5ForConditionalGeneration",
     "UMT5ForConditionalGeneration",
-    "TFMT5ForConditionalGeneration",
-    "TFMT5Model",
     "QDQBertForSequenceClassification",
     "QDQBertForMaskedLM",
     "QDQBertModel",
@@ -137,13 +122,6 @@ UNCONVERTIBLE_MODEL_ARCHITECTURES = {
     "XLMRobertaForCausalLM",
     "XLMRobertaForSequenceClassification",
     "XLMRobertaForQuestionAnswering",
-    "TFXLMRobertaForSequenceClassification",
-    "TFXLMRobertaForMaskedLM",
-    "TFXLMRobertaForCausalLM",
-    "TFXLMRobertaForQuestionAnswering",
-    "TFXLMRobertaModel",
-    "TFXLMRobertaForMultipleChoice",
-    "TFXLMRobertaForTokenClassification",
 }
 
 
@@ -424,7 +402,7 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
     # `text_model_tester` via `text_kwargs`. The same trick is also necessary for `Flava`.
 
     if "vocab_size" in model_tester_kwargs:
-        if "text_kwargs" in inspect.signature(model_tester_class.__init__).parameters.keys():
+        if "text_kwargs" in inspect.signature(model_tester_class.__init__).parameters:
             vocab_size = model_tester_kwargs.pop("vocab_size")
             model_tester_kwargs["text_kwargs"] = {"vocab_size": vocab_size}
 
@@ -759,14 +737,8 @@ def convert_processors(processors, tiny_config, output_folder, result):
 
 
 def get_checkpoint_dir(output_dir, model_arch):
-    """Get framework-agnostic architecture name. Used to save all PT/TF/Flax models into the same directory."""
-
+    """Get architecture name."""
     arch_name = model_arch.__name__
-    if arch_name.startswith("TF"):
-        arch_name = arch_name[2:]
-    elif arch_name.startswith("Flax"):
-        arch_name = arch_name[4:]
-
     return os.path.join(output_dir, arch_name)
 
 
@@ -800,11 +772,11 @@ def fill_result_with_error(result, error, trace, models_to_create):
     """Fill `result` with errors for all target model arch if we can't build processor"""
     error = (error, trace)
     result["error"] = error
-    for framework in FRAMEWORKS:
-        if framework in models_to_create:
-            result[framework] = {}
-            for model_arch in models_to_create[framework]:
-                result[framework][model_arch.__name__] = {"model": None, "checkpoint": None, "error": error}
+
+    if "pytorch" in models_to_create:
+        result["pytorch"] = {}
+        for model_arch in models_to_create["pytorch"]:
+            result["pytorch"][model_arch.__name__] = {"model": None, "checkpoint": None, "error": error}
 
     result["processor"] = {p.__class__.__name__: p.__class__.__name__ for p in result["processor"].values()}
 
@@ -874,9 +846,6 @@ def build_composite_models(config_class, output_dir):
         GPT2Tokenizer,
         GPT2TokenizerFast,
         SpeechEncoderDecoderModel,
-        TFEncoderDecoderModel,
-        TFVisionEncoderDecoderModel,
-        TFVisionTextDualEncoderModel,
         VisionEncoderDecoderModel,
         VisionTextDualEncoderModel,
         ViTConfig,
@@ -898,7 +867,6 @@ def build_composite_models(config_class, output_dir):
         encoder_class = BertModel
         decoder_class = BertLMHeadModel
         model_class = EncoderDecoderModel
-        tf_model_class = TFEncoderDecoderModel
     elif config_class.model_type == "vision-encoder-decoder":
         encoder_config_class = ViTConfig
         decoder_config_class = GPT2Config
@@ -907,7 +875,6 @@ def build_composite_models(config_class, output_dir):
         encoder_class = ViTModel
         decoder_class = GPT2LMHeadModel
         model_class = VisionEncoderDecoderModel
-        tf_model_class = TFVisionEncoderDecoderModel
     elif config_class.model_type == "speech-encoder-decoder":
         encoder_config_class = Wav2Vec2Config
         decoder_config_class = BertConfig
@@ -916,7 +883,6 @@ def build_composite_models(config_class, output_dir):
         encoder_class = Wav2Vec2Model
         decoder_class = BertLMHeadModel
         model_class = SpeechEncoderDecoderModel
-        tf_model_class = None
     elif config_class.model_type == "vision-text-dual-encoder":
         # Not encoder-decoder, but encoder-encoder. We just keep the same name as above to make code easier
         encoder_config_class = ViTConfig
@@ -926,17 +892,16 @@ def build_composite_models(config_class, output_dir):
         encoder_class = ViTModel
         decoder_class = BertModel
         model_class = VisionTextDualEncoderModel
-        tf_model_class = TFVisionTextDualEncoderModel
 
     with tempfile.TemporaryDirectory() as tmpdir:
         try:
             # build encoder
-            models_to_create = {"processor": encoder_processor, "pytorch": (encoder_class,), "tensorflow": []}
+            models_to_create = {"processor": encoder_processor, "pytorch": (encoder_class,)}
             encoder_output_dir = os.path.join(tmpdir, "encoder")
             build(encoder_config_class, models_to_create, encoder_output_dir)
 
             # build decoder
-            models_to_create = {"processor": decoder_processor, "pytorch": (decoder_class,), "tensorflow": []}
+            models_to_create = {"processor": decoder_processor, "pytorch": (decoder_class,)}
             decoder_output_dir = os.path.join(tmpdir, "decoder")
             build(decoder_config_class, models_to_create, decoder_output_dir)
 
@@ -964,10 +929,6 @@ def build_composite_models(config_class, output_dir):
             )
             model.save_pretrained(model_path)
 
-            if tf_model_class is not None:
-                model = tf_model_class.from_pretrained(model_path)
-                model.save_pretrained(model_path)
-
             # copy the processors
             encoder_processor_path = os.path.join(encoder_output_dir, "processors")
             decoder_processor_path = os.path.join(decoder_output_dir, "processors")
@@ -981,11 +942,6 @@ def build_composite_models(config_class, output_dir):
 
             result["pytorch"] = {model_class.__name__: {"model": model_class.__name__, "checkpoint": model_path}}
 
-            result["tensorflow"] = {}
-            if tf_model_class is not None:
-                result["tensorflow"] = {
-                    tf_model_class.__name__: {"model": tf_model_class.__name__, "checkpoint": model_path}
-                }
         except Exception:
             result["error"] = (
                 f"Failed to build models for {config_class.__name__}.",
@@ -1098,7 +1054,7 @@ def build(config_class, models_to_create, output_dir):
             of the same model type which is associated to `config_class`.
         output_dir (`str`):
             The directory to save all the checkpoints. Each model architecture will be saved in a subdirectory under
-            it. Models in different frameworks with the same architecture will be saved in the same subdirectory.
+            it.
     """
     if data["training_ds"] is None or data["testing_ds"] is None:
         ds = load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1")
@@ -1226,42 +1182,6 @@ def build(config_class, models_to_create, output_dir):
             result["pytorch"][pytorch_arch.__name__]["error"] = (error, trace)
             logger.error(f"{pytorch_arch.__name__}: {error}")
 
-    for tensorflow_arch in models_to_create["tensorflow"]:
-        # Make PT/TF weights compatible
-        pt_arch_name = tensorflow_arch.__name__[2:]  # Remove `TF`
-        pt_arch = getattr(transformers_module, pt_arch_name)
-
-        result["tensorflow"][tensorflow_arch.__name__] = {}
-        error = None
-        if pt_arch.__name__ in result["pytorch"] and result["pytorch"][pt_arch.__name__]["checkpoint"] is not None:
-            ckpt = get_checkpoint_dir(output_dir, pt_arch)
-            # Use the same weights from PyTorch.
-            try:
-                model = tensorflow_arch.from_pretrained(ckpt)
-                model.save_pretrained(ckpt)
-            except Exception as e:
-                # Conversion may fail. Let's not create a model with different weights to avoid confusion (for now).
-                model = None
-                error = f"Failed to convert the pytorch model to the tensorflow model for {pt_arch}: {e}"
-                trace = traceback.format_exc()
-        else:
-            try:
-                model = build_model(tensorflow_arch, tiny_config, output_dir=output_dir)
-            except Exception as e:
-                model = None
-                error = f"Failed to create the tensorflow model for {tensorflow_arch}: {e}"
-                trace = traceback.format_exc()
-
-        result["tensorflow"][tensorflow_arch.__name__]["model"] = (
-            model.__class__.__name__ if model is not None else None
-        )
-        result["tensorflow"][tensorflow_arch.__name__]["checkpoint"] = (
-            get_checkpoint_dir(output_dir, tensorflow_arch) if model is not None else None
-        )
-        if error is not None:
-            result["tensorflow"][tensorflow_arch.__name__]["error"] = (error, trace)
-            logger.error(f"{tensorflow_arch.__name__}: {error}")
-
     if not result["error"]:
         del result["error"]
     if not result["warnings"]:
@@ -1287,40 +1207,40 @@ def build_tiny_model_summary(results, organization=None, token=None):
         processors = [key for key, value in results[config_name]["processor"].items()]
         tokenizer_classes = sorted([x for x in processors if x.endswith("TokenizerFast") or x.endswith("Tokenizer")])
         processor_classes = sorted([x for x in processors if x not in tokenizer_classes])
-        for framework in FRAMEWORKS:
-            if framework not in results[config_name]:
-                continue
-            for arch_name in results[config_name][framework]:
-                model_classes = [arch_name]
-                base_arch_name = arch_name[2:] if arch_name.startswith("TF") else arch_name
-                # tiny model is not created for `arch_name`
-                if results[config_name][framework][arch_name]["model"] is None:
-                    model_classes = []
-                if base_arch_name not in tiny_model_summary:
-                    tiny_model_summary[base_arch_name] = {}
-                tiny_model_summary[base_arch_name].update(
-                    {
-                        "tokenizer_classes": tokenizer_classes,
-                        "processor_classes": processor_classes,
-                    }
-                )
-                tiny_model_summary[base_arch_name]["model_classes"] = sorted(
-                    tiny_model_summary[base_arch_name].get("model_classes", []) + model_classes
-                )
-                if organization is not None:
-                    repo_name = f"tiny-random-{base_arch_name}"
-                    # composite models' checkpoints have more precise repo. names on the Hub.
-                    if base_arch_name in COMPOSITE_MODELS:
-                        repo_name = f"tiny-random-{COMPOSITE_MODELS[base_arch_name]}"
-                    repo_id = f"{organization}/{repo_name}"
-                    try:
-                        commit_hash = hf_api.repo_info(repo_id, token=token).sha
-                    except Exception:
-                        # The directory is not created, but processor(s) is/are included in `results`.
-                        logger.warning(f"Failed to get information for {repo_id}.\n{traceback.format_exc()}")
-                        del tiny_model_summary[base_arch_name]
-                        continue
-                    tiny_model_summary[base_arch_name]["sha"] = commit_hash
+
+        if "pytorch" not in results[config_name]:
+            continue
+        for arch_name in results[config_name]["pytorch"]:
+            model_classes = [arch_name]
+            base_arch_name = arch_name
+            # tiny model is not created for `arch_name`
+            if results[config_name]["pytorch"][arch_name]["model"] is None:
+                model_classes = []
+            if base_arch_name not in tiny_model_summary:
+                tiny_model_summary[base_arch_name] = {}
+            tiny_model_summary[base_arch_name].update(
+                {
+                    "tokenizer_classes": tokenizer_classes,
+                    "processor_classes": processor_classes,
+                }
+            )
+            tiny_model_summary[base_arch_name]["model_classes"] = sorted(
+                tiny_model_summary[base_arch_name].get("model_classes", []) + model_classes
+            )
+            if organization is not None:
+                repo_name = f"tiny-random-{base_arch_name}"
+                # composite models' checkpoints have more precise repo. names on the Hub.
+                if base_arch_name in COMPOSITE_MODELS:
+                    repo_name = f"tiny-random-{COMPOSITE_MODELS[base_arch_name]}"
+                repo_id = f"{organization}/{repo_name}"
+                try:
+                    commit_hash = hf_api.repo_info(repo_id, token=token).sha
+                except Exception:
+                    # The directory is not created, but processor(s) is/are included in `results`.
+                    logger.warning(f"Failed to get information for {repo_id}.\n{traceback.format_exc()}")
+                    del tiny_model_summary[base_arch_name]
+                    continue
+                tiny_model_summary[base_arch_name]["sha"] = commit_hash
 
     return tiny_model_summary
 
@@ -1338,19 +1258,18 @@ def build_failed_report(results, include_warning=True):
                 failed_results[config_name] = {}
             failed_results[config_name]["warnings"] = results[config_name]["warnings"]
 
-        for framework in FRAMEWORKS:
-            if framework not in results[config_name]:
-                continue
-            for arch_name in results[config_name][framework]:
-                if "error" in results[config_name][framework][arch_name]:
-                    if config_name not in failed_results:
-                        failed_results[config_name] = {}
-                    if framework not in failed_results[config_name]:
-                        failed_results[config_name][framework] = {}
-                    if arch_name not in failed_results[config_name][framework]:
-                        failed_results[config_name][framework][arch_name] = {}
-                    error = results[config_name][framework][arch_name]["error"]
-                    failed_results[config_name][framework][arch_name]["error"] = error
+        if "pytorch" not in results[config_name]:
+            continue
+        for arch_name in results[config_name]["pytorch"]:
+            if "error" in results[config_name]["pytorch"][arch_name]:
+                if config_name not in failed_results:
+                    failed_results[config_name] = {}
+                if "pytorch" not in failed_results[config_name]:
+                    failed_results[config_name]["pytorch"] = {}
+                if arch_name not in failed_results[config_name]["pytorch"]:
+                    failed_results[config_name]["pytorch"][arch_name] = {}
+                error = results[config_name]["pytorch"][arch_name]["error"]
+                failed_results[config_name]["pytorch"][arch_name]["error"] = error
 
     return failed_results
 
@@ -1359,16 +1278,15 @@ def build_simple_report(results):
     text = ""
     failed_text = ""
     for config_name in results:
-        for framework in FRAMEWORKS:
-            if framework not in results[config_name]:
-                continue
-            for arch_name in results[config_name][framework]:
-                if "error" in results[config_name][framework][arch_name]:
-                    result = results[config_name][framework][arch_name]["error"]
-                    failed_text += f"{arch_name}: {result[0]}\n"
-                else:
-                    result = ("OK",)
-                text += f"{arch_name}: {result[0]}\n"
+        if "pytorch" not in results[config_name]:
+            continue
+        for arch_name in results[config_name]["pytorch"]:
+            if "error" in results[config_name]["pytorch"][arch_name]:
+                result = results[config_name]["pytorch"][arch_name]["error"]
+                failed_text += f"{arch_name}: {result[0]}\n"
+            else:
+                result = ("OK",)
+            text += f"{arch_name}: {result[0]}\n"
 
     return text, failed_text
 
@@ -1423,12 +1341,8 @@ def create_tiny_models(
         for x in dir(transformers_module)
         if x.startswith("MODEL_") and x.endswith("_MAPPING") and x != "MODEL_NAMES_MAPPING"
     ]
-    _tensorflow_arch_mappings = [
-        x for x in dir(transformers_module) if x.startswith("TF_MODEL_") and x.endswith("_MAPPING")
-    ]
 
     pytorch_arch_mappings = [getattr(transformers_module, x) for x in _pytorch_arch_mappings]
-    tensorflow_arch_mappings = [getattr(transformers_module, x) for x in _tensorflow_arch_mappings]
 
     config_classes = CONFIG_MAPPING.values()
     if not all:
@@ -1441,9 +1355,8 @@ def create_tiny_models(
     for c in config_classes:
         processors = processor_type_map[c]
         models = get_architectures_from_config_class(c, pytorch_arch_mappings, models_to_skip)
-        tf_models = get_architectures_from_config_class(c, tensorflow_arch_mappings, models_to_skip)
-        if len(models) + len(tf_models) > 0:
-            to_create[c] = {"processor": processors, "pytorch": models, "tensorflow": tf_models}
+        if len(models) > 0:
+            to_create[c] = {"processor": processors, "pytorch": models}
 
     results = {}
     if num_workers <= 1:
@@ -1458,7 +1371,7 @@ def create_tiny_models(
             all_build_args.append((c, models_to_create, os.path.join(output_path, c.model_type)))
         with multiprocessing.Pool() as pool:
             results = pool.starmap(build, all_build_args)
-            results = {buid_args[0].__name__: result for buid_args, result in zip(all_build_args, results)}
+            results = {build_args[0].__name__: result for build_args, result in zip(all_build_args, results)}
 
     if upload:
         if organization is None:

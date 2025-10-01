@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -71,7 +70,7 @@ class LayoutLMv2ModelTester:
         type_vocab_size=16,
         type_sequence_label_size=2,
         initializer_range=0.02,
-        image_feature_pool_shape=[7, 7, 256],
+        image_feature_pool_shape=[7, 7, 32],
         coordinate_size=6,
         shape_size=6,
         num_labels=3,
@@ -107,6 +106,14 @@ class LayoutLMv2ModelTester:
         self.num_choices = num_choices
         self.scope = scope
         self.range_bbox = range_bbox
+        detectron2_config = LayoutLMv2Config.get_default_detectron2_config()
+        # We need to make the model smaller
+        detectron2_config["MODEL.RESNETS.DEPTH"] = 50
+        detectron2_config["MODEL.RESNETS.RES2_OUT_CHANNELS"] = 4
+        detectron2_config["MODEL.RESNETS.STEM_OUT_CHANNELS"] = 4
+        detectron2_config["MODEL.FPN.OUT_CHANNELS"] = 32
+        detectron2_config["MODEL.RESNETS.NUM_GROUPS"] = 1
+        self.detectron2_config = detectron2_config
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -159,12 +166,8 @@ class LayoutLMv2ModelTester:
             image_feature_pool_shape=self.image_feature_pool_shape,
             coordinate_size=self.coordinate_size,
             shape_size=self.shape_size,
+            detectron2_config_args=self.detectron2_config,
         )
-
-        # use smaller resnet backbone to make tests faster
-        config.detectron2_config_args["MODEL.RESNETS.DEPTH"] = 18
-        config.detectron2_config_args["MODEL.RESNETS.RES2_OUT_CHANNELS"] = 64
-        config.detectron2_config_args["MODEL.RESNETS.NUM_GROUPS"] = 1
 
         return config, input_ids, bbox, image, token_type_ids, input_mask, sequence_labels, token_labels
 
@@ -335,7 +338,8 @@ class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -422,10 +426,6 @@ class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    @unittest.skip(reason="We cannot configure detectron2 to output a smaller backbone")
-    def test_model_is_small(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "microsoft/layoutlmv2-base-uncased"
@@ -497,7 +497,7 @@ class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                     single_batch_shape = value.shape[0] // batch_size
                     single_row_input[key] = value[:single_batch_shape]
                 elif hasattr(value, "tensor"):
-                    # layoutlmv2uses ImageList intead of pixel values (needs for torchscript)
+                    # layoutlmv2uses ImageList instead of pixel values (needs for torchscript)
                     single_row_input[key] = value.tensor[:single_batch_shape]
 
             with torch.no_grad():
@@ -559,7 +559,7 @@ class LayoutLMv2ModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor(
             [[-0.1087, 0.0727, -0.3075], [0.0799, -0.0427, -0.0751], [-0.0367, 0.0480, -0.1358]], device=torch_device
         )
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-3))
+        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-3, atol=1e-3)
 
         # verify the pooled output
         expected_shape = torch.Size((2, model.config.hidden_size))

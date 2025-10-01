@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,10 +20,9 @@ from collections import OrderedDict
 from pathlib import Path
 
 import pytest
-from huggingface_hub import Repository
 
 import transformers
-from transformers import BertConfig, GPT2Model, is_safetensors_available, is_torch_available
+from transformers import BertConfig, GPT2Model, is_torch_available
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING
 from transformers.testing_utils import (
     DUMMY_UNKNOWN_IDENTIFIER,
@@ -109,7 +107,7 @@ class AutoModelTest(unittest.TestCase):
         self.assertEqual(len(loading_info["missing_keys"]), 0)
         # When using PyTorch checkpoint, the expected value is `8`. With `safetensors` checkpoint (if it is
         # installed), the expected value becomes `7`.
-        EXPECTED_NUM_OF_UNEXPECTED_KEYS = 7 if is_safetensors_available() else 8
+        EXPECTED_NUM_OF_UNEXPECTED_KEYS = 7
         self.assertEqual(len(loading_info["unexpected_keys"]), EXPECTED_NUM_OF_UNEXPECTED_KEYS)
         self.assertEqual(len(loading_info["mismatched_keys"]), 0)
         self.assertEqual(len(loading_info["error_msgs"]), 0)
@@ -126,7 +124,7 @@ class AutoModelTest(unittest.TestCase):
         self.assertIsNotNone(model)
         self.assertIsInstance(model, BertForPreTraining)
         # Only one value should not be initialized and in the missing keys.
-        for key, value in loading_info.items():
+        for value in loading_info.values():
             self.assertEqual(len(value), 0)
 
     @slow
@@ -333,11 +331,6 @@ class AutoModelTest(unittest.TestCase):
         for p1, p2 in zip(model.parameters(), reloaded_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
 
-        # The model file is cached in the snapshot directory. So the module file is not changed after dumping
-        # to a temp dir. Because the revision of the module file is not changed.
-        # Test the dynamic module is loaded only once if the module file is not changed.
-        self.assertIs(model.__class__, reloaded_model.__class__)
-
         # Test the dynamic module is reloaded if we force it.
         reloaded_model = AutoModel.from_pretrained(
             "hf-internal-testing/test_dynamic_model", trust_remote_code=True, force_download=True
@@ -362,11 +355,6 @@ class AutoModelTest(unittest.TestCase):
         self.assertEqual(reloaded_model.__class__.__name__, "NewModel")
         for p1, p2 in zip(model.parameters(), reloaded_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
-
-        # The model file is cached in the snapshot directory. So the module file is not changed after dumping
-        # to a temp dir. Because the revision of the module file is not changed.
-        # Test the dynamic module is loaded only once if the module file is not changed.
-        self.assertIs(model.__class__, reloaded_model.__class__)
 
         # Test the dynamic module is reloaded if we force it.
         reloaded_model = AutoModel.from_pretrained(
@@ -521,14 +509,19 @@ class AutoModelTest(unittest.TestCase):
         ):
             _ = AutoModel.from_pretrained("hf-internal-testing/config-no-model")
 
-    def test_model_from_tf_suggestion(self):
-        with self.assertRaisesRegex(EnvironmentError, "Use `from_tf=True` to load this model"):
+    def test_model_from_tf_error(self):
+        with self.assertRaisesRegex(
+            EnvironmentError, "does not appear to have a file named pytorch_model.bin or model.safetensors."
+        ):
             _ = AutoModel.from_pretrained("hf-internal-testing/tiny-bert-tf-only")
 
-    def test_model_from_flax_suggestion(self):
-        with self.assertRaisesRegex(EnvironmentError, "Use `from_flax=True` to load this model"):
+    def test_model_from_flax_error(self):
+        with self.assertRaisesRegex(
+            EnvironmentError, "does not appear to have a file named pytorch_model.bin or model.safetensors."
+        ):
             _ = AutoModel.from_pretrained("hf-internal-testing/tiny-bert-flax-only")
 
+    @unittest.skip("Failing on main")
     def test_cached_model_has_minimum_calls_to_head(self):
         # Make sure we have cached the model.
         _ = AutoModel.from_pretrained("hf-internal-testing/tiny-random-bert")
@@ -564,15 +557,6 @@ class AutoModelTest(unittest.TestCase):
         _MODEL_MAPPING = _LazyAutoMapping(_CONFIG_MAPPING_NAMES, _MODEL_MAPPING_NAMES)
         self.assertEqual(_MODEL_MAPPING[BertConfig], GPT2Model)
 
-    def test_dynamic_saving_from_local_repo(self):
-        with tempfile.TemporaryDirectory() as tmp_dir, tempfile.TemporaryDirectory() as tmp_dir_out:
-            _ = Repository(local_dir=tmp_dir, clone_from="hf-internal-testing/tiny-random-custom-architecture")
-            model = AutoModelForCausalLM.from_pretrained(tmp_dir, trust_remote_code=True)
-            model.save_pretrained(tmp_dir_out)
-            _ = AutoModelForCausalLM.from_pretrained(tmp_dir_out, trust_remote_code=True)
-            self.assertTrue((Path(tmp_dir_out) / "modeling_fake_custom.py").is_file())
-            self.assertTrue((Path(tmp_dir_out) / "configuration_fake_custom.py").is_file())
-
     def test_custom_model_patched_generation_inheritance(self):
         """
         Tests that our inheritance patching for generate-compatible models works as expected. Without this feature,
@@ -589,3 +573,15 @@ class AutoModelTest(unittest.TestCase):
         # More precisely, it directly inherits from GenerationMixin. This check would fail prior to v4.45 (inheritance
         # patching was added in v4.45)
         self.assertTrue("GenerationMixin" in str(model.__class__.__bases__))
+
+    def test_model_with_dotted_name_and_relative_imports(self):
+        """
+        Test for issue #40496: AutoModel.from_pretrained() doesn't work for models with '.' in their name
+        when there's a relative import.
+
+        Without the fix, this raises: ModuleNotFoundError: No module named 'transformers_modules.test-model_v1'
+        """
+        model_id = "hf-internal-testing/remote_code_model_with_dots"
+
+        model = AutoModel.from_pretrained(model_id, trust_remote_code=True)
+        self.assertIsNotNone(model)

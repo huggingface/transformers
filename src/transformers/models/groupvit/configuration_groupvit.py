@@ -15,7 +15,8 @@
 """GroupViT model configuration"""
 
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, Mapping, Optional
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
@@ -24,7 +25,6 @@ from ...utils import logging
 
 if TYPE_CHECKING:
     from ...processing_utils import ProcessorMixin
-    from ...utils import TensorType
 
 
 logger = logging.get_logger(__name__)
@@ -137,11 +137,11 @@ class GroupViTVisionConfig(PretrainedConfig):
             Dimensionality of the encoder layers and the pooler layer.
         intermediate_size (`int`, *optional*, defaults to 1536):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        depths (`List[int]`, *optional*, defaults to [6, 3, 3]):
+        depths (`list[int]`, *optional*, defaults to [6, 3, 3]):
             The number of layers in each encoder block.
-        num_group_tokens (`List[int]`, *optional*, defaults to [64, 8, 0]):
+        num_group_tokens (`list[int]`, *optional*, defaults to [64, 8, 0]):
             The number of group tokens for each stage.
-        num_output_groups (`List[int]`, *optional*, defaults to [64, 8, 8]):
+        num_output_groups (`list[int]`, *optional*, defaults to [64, 8, 8]):
             The number of output groups for each stage, 0 means no group.
         num_attention_heads (`int`, *optional*, defaults to 6):
             Number of attention heads for each attention layer in the Transformer encoder.
@@ -356,18 +356,6 @@ class GroupViTConfig(PretrainedConfig):
         self.initializer_factor = 1.0
         self.output_segmentation = False
 
-    @classmethod
-    def from_text_vision_configs(cls, text_config: GroupViTTextConfig, vision_config: GroupViTVisionConfig, **kwargs):
-        r"""
-        Instantiate a [`GroupViTConfig`] (or a derived class) from groupvit text model configuration and groupvit
-        vision model configuration.
-
-        Returns:
-            [`GroupViTConfig`]: An instance of a configuration object
-        """
-
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
-
 
 class GroupViTOnnxConfig(OnnxConfig):
     @property
@@ -400,13 +388,15 @@ class GroupViTOnnxConfig(OnnxConfig):
         processor: "ProcessorMixin",
         batch_size: int = -1,
         seq_length: int = -1,
-        framework: Optional["TensorType"] = None,
     ) -> Mapping[str, Any]:
         text_input_dict = super().generate_dummy_inputs(
-            processor.tokenizer, batch_size=batch_size, seq_length=seq_length, framework=framework
+            processor.tokenizer,
+            batch_size=batch_size,
+            seq_length=seq_length,
         )
         image_input_dict = super().generate_dummy_inputs(
-            processor.image_processor, batch_size=batch_size, framework=framework
+            processor.image_processor,
+            batch_size=batch_size,
         )
         return {**text_input_dict, **image_input_dict}
 

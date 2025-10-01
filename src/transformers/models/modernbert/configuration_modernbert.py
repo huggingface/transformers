@@ -129,6 +129,7 @@ class ModernBertConfig(PretrainedConfig):
     ```"""
 
     model_type = "modernbert"
+    attribute_map = {"rope_theta": "global_rope_theta"}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
@@ -213,6 +214,11 @@ class ModernBertConfig(PretrainedConfig):
             raise ValueError(
                 f'Invalid value for `classifier_pooling`, should be either "cls" or "mean", but is {self.classifier_pooling}.'
             )
+
+    def to_dict(self):
+        output = super().to_dict()
+        output.pop("reference_compile", None)
+        return output
 
 
 __all__ = ["ModernBertConfig"]

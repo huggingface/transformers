@@ -121,7 +121,7 @@ ViTが導入した主な変更点は、画像をTransformerに供給する方法
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/convolution.gif"/>
 </div>
 
-<small>[Convolution Arithmetic for Deep Learning](https://arxiv.org/abs/1603.07285) からの基本的なパディングやストライドのない畳み込み。</small>
+<small>[Convolution Arithmetic for Deep Learning](https://huggingface.co/papers/1603.07285) からの基本的なパディングやストライドのない畳み込み。</small>
 
 この出力を別の畳み込み層に供給し、各連続した層ごとに、ネットワークはホットドッグやロケットのようなより複雑で抽象的なものを学習します。畳み込み層の間には、特徴の次元を削減し、特徴の位置の変動に対してモデルをより堅牢にするためにプーリング層を追加するのが一般的です。
 
@@ -221,7 +221,7 @@ Transformerは最初に機械翻訳のために設計され、それ以降、ほ
 
 事前訓練済みモデルをテキスト分類に使用するには、ベースのBERTモデルの上にシーケンス分類ヘッドを追加します。シーケンス分類ヘッドは最終的な隠れた状態を受け入れ、それらをロジットに変換するための線形層です。クロスエントロピー損失は、ロジットとターゲット間で最も可能性の高いラベルを見つけるために計算されます。
 
-テキスト分類を試してみる準備はできましたか？DistilBERTを微調整し、推論に使用する方法を学ぶために、完全な[テキスト分類ガイド](tasks/sequence_classification)をチェックしてみてください！
+テキスト分類を試してみる準備はできましたか？DistilBERTを微調整し、推論に使用する方法を学ぶために、完全な[テキスト分類ガイド(英語版)](../en/tasks/sequence_classification)をチェックしてみてください！
 
 ### Token classification
 

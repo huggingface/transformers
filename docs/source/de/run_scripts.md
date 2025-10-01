@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 Neben den 🤗 Transformers [notebooks](./notebooks) gibt es auch Beispielskripte, die zeigen, wie man ein Modell für eine Aufgabe mit [PyTorch](https://github.com/huggingface/transformers/tree/main/examples/pytorch), [TensorFlow](https://github.com/huggingface/transformers/tree/main/examples/tensorflow) oder [JAX/Flax](https://github.com/huggingface/transformers/tree/main/examples/flax) trainiert.
 
-Sie werden auch Skripte finden, die wir in unseren [Forschungsprojekten](https://github.com/huggingface/transformers/tree/main/examples/research_projects) und [Legacy-Beispielen](https://github.com/huggingface/transformers/tree/main/examples/legacy) verwendet haben und die größtenteils von der Community stammen. Diese Skripte werden nicht aktiv gepflegt und erfordern eine bestimmte Version von 🤗 Transformers, die höchstwahrscheinlich nicht mit der neuesten Version der Bibliothek kompatibel ist.
+Sie werden auch Skripte finden, die wir in unseren [Forschungsprojekten](https://github.com/huggingface/transformers-research-projects/) und [Legacy-Beispielen](https://github.com/huggingface/transformers/tree/main/examples/legacy) verwendet haben und die größtenteils von der Community stammen. Diese Skripte werden nicht aktiv gepflegt und erfordern eine bestimmte Version von 🤗 Transformers, die höchstwahrscheinlich nicht mit der neuesten Version der Bibliothek kompatibel ist.
 
 Es wird nicht erwartet, dass die Beispielskripte bei jedem Problem sofort funktionieren. Möglicherweise müssen Sie das Skript an das Problem anpassen, das Sie zu lösen versuchen. Um Ihnen dabei zu helfen, legen die meisten Skripte vollständig offen, wie die Daten vorverarbeitet werden, so dass Sie sie nach Bedarf für Ihren Anwendungsfall bearbeiten können.
 
@@ -85,8 +85,6 @@ pip install -r requirements.txt
 
 ## Ein Skript ausführen
 
-<frameworkcontent>
-<pt>
 Das Beispielskript lädt einen Datensatz aus der 🤗 [Datasets](https://huggingface.co/docs/datasets/) Bibliothek herunter und verarbeitet ihn vor. Dann nimmt das Skript eine Feinabstimmung eines Datensatzes mit dem [Trainer](https://huggingface.co/docs/transformers/main_classes/trainer) auf einer Architektur vor, die eine Zusammenfassung unterstützt. Das folgende Beispiel zeigt, wie die Feinabstimmung von [T5-small](https://huggingface.co/google-t5/t5-small) auf dem Datensatz [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail) durchgeführt wird. Das T5-Modell benötigt aufgrund der Art und Weise, wie es trainiert wurde, ein zusätzliches Argument `source_prefix`. Mit dieser Eingabeaufforderung weiß T5, dass es sich um eine Zusammenfassungsaufgabe handelt.
 
 ```bash
@@ -103,24 +101,6 @@ python examples/pytorch/summarization/run_summarization.py \
     --overwrite_output_dir \
     --predict_with_generate
 ```
-</pt>
-<tf>
-Das Beispielskript lädt einen Datensatz aus der 🤗 [Datasets](https://huggingface.co/docs/datasets/) Bibliothek herunter und verarbeitet ihn vor. Anschließend nimmt das Skript die Feinabstimmung eines Datensatzes mit Keras auf einer Architektur vor, die die Zusammenfassung unterstützt. Das folgende Beispiel zeigt, wie die Feinabstimmung von [T5-small](https://huggingface.co/google-t5/t5-small) auf dem [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail) Datensatz durchgeführt wird. Das T5-Modell benötigt aufgrund der Art und Weise, wie es trainiert wurde, ein zusätzliches Argument `source_prefix`. Mit dieser Eingabeaufforderung weiß T5, dass es sich um eine Zusammenfassungsaufgabe handelt.
-
-```bash
-python examples/tensorflow/summarization/run_summarization.py  \
-    --model_name_or_path google-t5/t5-small \
-    --dataset_name cnn_dailymail \
-    --dataset_config "3.0.0" \
-    --output_dir /tmp/tst-summarization  \
-    --per_device_train_batch_size 8 \
-    --per_device_eval_batch_size 16 \
-    --num_train_epochs 3 \
-    --do_train \
-    --do_eval
-```
-</tf>
-</frameworkcontent>
 
 ## Verteiltes Training und gemischte Präzision
 
@@ -150,8 +130,6 @@ TensorFlow-Skripte verwenden eine [`MirroredStrategy`](https://www.tensorflow.or
 
 ## Ein Skript auf einer TPU ausführen
 
-<frameworkcontent>
-<pt>
 Tensor Processing Units (TPUs) sind speziell für die Beschleunigung der Leistung konzipiert. PyTorch unterstützt TPUs mit dem [XLA](https://www.tensorflow.org/xla) Deep Learning Compiler (siehe [hier](https://github.com/pytorch/xla/blob/master/README.md) für weitere Details). Um eine TPU zu verwenden, starten Sie das Skript `xla_spawn.py` und verwenden das Argument `num_cores`, um die Anzahl der TPU-Kerne festzulegen, die Sie verwenden möchten.
 
 ```bash
@@ -169,25 +147,6 @@ python xla_spawn.py --num_cores 8 \
     --overwrite_output_dir \
     --predict_with_generate
 ```
-</pt>
-<tf>
-Tensor Processing Units (TPUs) sind speziell für die Beschleunigung der Leistung konzipiert. TensorFlow Skripte verwenden eine [`TPUStrategy`](https://www.tensorflow.org/guide/distributed_training#tpustrategy) für das Training auf TPUs. Um eine TPU zu verwenden, übergeben Sie den Namen der TPU-Ressource an das Argument `tpu`.
-
-```bash
-python run_summarization.py  \
-    --tpu name_of_tpu_resource \
-    --model_name_or_path google-t5/t5-small \
-    --dataset_name cnn_dailymail \
-    --dataset_config "3.0.0" \
-    --output_dir /tmp/tst-summarization  \
-    --per_device_train_batch_size 8 \
-    --per_device_eval_batch_size 16 \
-    --num_train_epochs 3 \
-    --do_train \
-    --do_eval
-```
-</tf>
-</frameworkcontent>
 
 ## Führen Sie ein Skript mit 🤗 Accelerate aus.
 
@@ -324,7 +283,7 @@ python examples/pytorch/summarization/run_summarization.py
 Alle Skripte können Ihr endgültiges Modell in den [Model Hub](https://huggingface.co/models) hochladen. Stellen Sie sicher, dass Sie bei Hugging Face angemeldet sind, bevor Sie beginnen:
 
 ```bash
-huggingface-cli login
+hf auth login
 ```
 
 Dann fügen Sie dem Skript das Argument `push_to_hub` hinzu. Mit diesem Argument wird ein Repository mit Ihrem Hugging Face-Benutzernamen und dem in `output_dir` angegebenen Ordnernamen erstellt.

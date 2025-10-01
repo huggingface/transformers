@@ -13,16 +13,22 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-06-15 and added to Hugging Face Transformers on 2021-08-04.*
 
 # BEiT
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
-The BEiT model was proposed in [BEiT: BERT Pre-Training of Image Transformers](https://arxiv.org/abs/2106.08254) by
+The BEiT model was proposed in [BEiT: BERT Pre-Training of Image Transformers](https://huggingface.co/papers/2106.08254) by
 Hangbo Bao, Li Dong and Furu Wei. Inspired by BERT, BEiT is the first paper that makes self-supervised pre-training of
 Vision Transformers (ViTs) outperform supervised pre-training. Rather than pre-training the model to predict the class
-of an image (as done in the [original ViT paper](https://arxiv.org/abs/2010.11929)), BEiT models are pre-trained to
-predict visual tokens from the codebook of OpenAI's [DALL-E model](https://arxiv.org/abs/2102.12092) given masked
+of an image (as done in the [original ViT paper](https://huggingface.co/papers/2010.11929)), BEiT models are pre-trained to
+predict visual tokens from the codebook of OpenAI's [DALL-E model](https://huggingface.co/papers/2102.12092) given masked
 patches.
 
 The abstract from the paper is the following:
@@ -39,15 +45,14 @@ with previous pre-training methods. For example, base-size BEiT achieves 83.2% t
 significantly outperforming from-scratch DeiT training (81.8%) with the same setup. Moreover, large-size BEiT obtains
 86.3% only using ImageNet-1K, even outperforming ViT-L with supervised pre-training on ImageNet-22K (85.2%).*
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr). The JAX/FLAX version of this model was
-contributed by [kamalkraj](https://huggingface.co/kamalkraj). The original code can be found [here](https://github.com/microsoft/unilm/tree/master/beit).
+This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/microsoft/unilm/tree/master/beit).
 
 ## Usage tips
 
 - BEiT models are regular Vision Transformers, but pre-trained in a self-supervised way rather than supervised. They
   outperform both the [original model (ViT)](vit) as well as [Data-efficient Image Transformers (DeiT)](deit) when fine-tuned on ImageNet-1K and CIFAR-100. You can check out demo notebooks regarding inference as well as
   fine-tuning on custom data [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/VisionTransformer) (you can just replace
-  [`ViTFeatureExtractor`] by [`BeitImageProcessor`] and
+  [`ViTImageProcessor`] by [`BeitImageProcessor`] and
   [`ViTForImageClassification`] by [`BeitForImageClassification`]).
 - There's also a demo notebook available which showcases how to combine DALL-E's image tokenizer with BEiT for
   performing masked image modeling. You can find it [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/BEiT).
@@ -69,28 +74,28 @@ contributed by [kamalkraj](https://huggingface.co/kamalkraj). The original code 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/beit_architecture.jpg"
 alt="drawing" width="600"/>
 
-<small> BEiT pre-training. Taken from the <a href="https://arxiv.org/abs/2106.08254">original paper.</a> </small>
+<small> BEiT pre-training. Taken from the <a href="https://huggingface.co/papers/2106.08254">original paper.</a> </small>
 
 ### Using Scaled Dot Product Attention (SDPA)
 
-PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function 
-encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the 
-[official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) 
+PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function
+encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the
+[official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html)
 or the [GPU Inference](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention)
 page for more information.
 
-SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set 
+SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set
 `attn_implementation="sdpa"` in `from_pretrained()` to explicitly request SDPA to be used.
 
-```
+```py
 from transformers import BeitForImageClassification
-model = BeitForImageClassification.from_pretrained("microsoft/beit-base-patch16-224", attn_implementation="sdpa", torch_dtype=torch.float16)
+model = BeitForImageClassification.from_pretrained("microsoft/beit-base-patch16-224", attn_implementation="sdpa", dtype=torch.float16)
 ...
 ```
 
 For the best speedups, we recommend loading the model in half-precision (e.g. `torch.float16` or `torch.bfloat16`).
 
-On a local benchmark (NVIDIA GeForce RTX 2060-8GB, PyTorch 2.5.1, OS Ubuntu 20.04) with `float16` and 
+On a local benchmark (NVIDIA GeForce RTX 2060-8GB, PyTorch 2.5.1, OS Ubuntu 20.04) with `float16` and
 `microsoft/beit-base-patch16-224` model, we saw the following improvements during training and inference:
 
 #### Training
@@ -118,6 +123,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - See also: [Image classification task guide](../tasks/image_classification)
 
 **Semantic segmentation**
+
 - [Semantic segmentation task guide](../tasks/semantic_segmentation)
 
 If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
@@ -126,17 +132,9 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] models.beit.modeling_beit.BeitModelOutputWithPooling
 
-[[autodoc]] models.beit.modeling_flax_beit.FlaxBeitModelOutputWithPooling
-
 ## BeitConfig
 
 [[autodoc]] BeitConfig
-
-## BeitFeatureExtractor
-
-[[autodoc]] BeitFeatureExtractor
-    - __call__
-    - post_process_semantic_segmentation
 
 ## BeitImageProcessor
 
@@ -144,8 +142,11 @@ If you're interested in submitting a resource to be included here, please feel f
     - preprocess
     - post_process_semantic_segmentation
 
-<frameworkcontent>
-<pt>
+## BeitImageProcessorFast
+
+[[autodoc]] BeitImageProcessorFast
+    - preprocess
+    - post_process_semantic_segmentation
 
 ## BeitModel
 
@@ -166,24 +167,3 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] BeitForSemanticSegmentation
     - forward
-
-</pt>
-<jax>
-
-## FlaxBeitModel
-
-[[autodoc]] FlaxBeitModel
-    - __call__
-
-## FlaxBeitForMaskedImageModeling
-
-[[autodoc]] FlaxBeitForMaskedImageModeling
-    - __call__
-
-## FlaxBeitForImageClassification
-
-[[autodoc]] FlaxBeitForImageClassification
-    - __call__
-
-</jax>
-</frameworkcontent>

@@ -1,88 +1,49 @@
-# Modular transformers
+# Contributing a new model to Transformers
 
-`transformers` is an opinionated framework; our philosophy is defined in the following [conceptual guide](./philosophy).
+Modular Transformers lowers the bar for contributing models and significantly reduces the code required to add a model by allowing imports and inheritance.
 
-The core of that philosophy is exemplified by the [single model, single file](https://huggingface.co/blog/transformers-design-philosophy)
-aspect of the library. This component's downside is that it limits the inheritance and importability of components from
-files to others in the toolkit.
+One of Transformers' core design feature is the [single model, single file](https://huggingface.co/blog/transformers-design-philosophy) policy. Model components - such as attention layers - are repeated across many files and any independent implementations tend to diverge as fixes and changes are applied to specific parts of the code.
 
-As a result, model components tend to be repeated across many files. There are as many attention layers defined
-in `transformers` as there are models, and a significant number of those are identical to each other. 
-The unfortunate consequence is that independent implementations tend to diverge as fixes and changes get applied
-to specific parts of the code.
+The [`# Copied from`](./pr_checks#check-copies) statements prevents the code from diverging, and it is enforced by our continuous integration tests and local commands. The downside is that this approach is tedious and adds significantly more lines of code, most of which is boilerplate.
 
-In order to balance this issue, we introduced the concept of "copies" across the library. By adding a comment indicating
-that code is a copy of another, we can enforce through CI and local commands that copies do not diverge. However,
-while the complexity is low, this is often quite tedious to do.
+## Motivation
 
-And, finally, this contributes to adding a significant overhead to contributing models which we would like to remove.
-This approach often requires model contributions to add modeling code (~1k lines), processor (~500 lines), tests, docs,
-etc. Model contribution PRs rarely add less than 3-5k lines of code, with much of this code being boilerplate.
+Modular Transformers addresses these issues by adding a *modular* file to a model folder. The modular file can import code from other models and inherit code from other classes unlike traditional modeling and processing files.
 
-This raises the bar for contributions, and with Modular Transformers, we're aiming to lower the bar to a much more
-acceptable point.
+> [!TIP]
+> Modular Transformers isn't meant to replace the modeling code, and if your model isn't based on an existing model, you'll need to add a `modeling.py` file manually. Likewise, if a configuration, tokenization or processing file can't easily inherit from a similar file, you can add that file directly.
 
-If you plan to add a model to `transformers` make sure you read [How to add a model to 🤗 Transformers?](https://huggingface.co/docs/transformers/add_new_model).
-For any kind of contributions, see [CONTRIBUTING.md](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md).
+A modular file contains model, processor, and configuration class code that would otherwise be in separate files under the single model, single file policy.
 
-## What is it?
+Model users still import and use the single-file interface they've grown familiar with. In doing so, we hope to enable simpler contributions while sticking to our philosophy.
 
-Modular Transformers introduces the concept of a "modular" file to a model folder. This modular file accepts code
-that isn't typically accepted in modeling/processing files, as it allows importing from neighbouring models as well
-as inheritance from classes to others.
+## Create a modeling.py file
 
-This modular file defines models, processors, and the configuration class that would otherwise be defined in their
-respective modules.
+A linter "unravels" the modular file into a `modeling.py` file to preserve the single model, single file directory structure (modeling, processor, etc.). Inheritance is flattened to only a **single** level.
 
-Finally, this feature introduces a new `linter` which will "unravel" the modular file into the "single model, single 
-file" directory structure. These files will get auto-generated every time the script is run; reducing the required
-contributions to the modular file, and therefore only to the changes between the contributed model and others.
-
-Model users will end up importing and using the single-file interface, so no change is expected here. Doing this, we
-hope to combine the best of both worlds: enabling simple contributions while sticking to our philosophy.
-
-This is therefore a replacement for the `# Copied from` markers, and previously contributed models can be expected to
-be moved to the new Modular Transformers format in the coming months.
-
-### Details 
-
-To generate a single file from the modular file, run the following command.
+Run the command below to automatically generate a `modeling.py` file from a modular file (assuming the snake lowercase name of the model you want to convert is `your_model`).
 
 ```bash
-python utils/modular_model_converter.py --files-to-parse src/transformers/models/<your_model>/modular_<your_model>.py
+python utils/modular_model_converter.py  your_model
 ```
-
-The "linter", which unravels the inheritance and creates all single-files from the modular file, will flatten the 
-inheritance while trying to be invisible to Python users. At this time, the linter flattens a **single** level of
-inheritance.
 
 For example:
-- If a configuration class inherits from another and adds/deletes an argument, the generated file will either directly 
-  reference it (in case of addition) or completely remove it (in case of deletion).
-- If a class inherits from another, for example: `class GemmaModel(LlamaModel):`, dependencies are automatically 
-  inferred. All submodules will be automatically added from the superclass.
-- If you define new functions in the `modular` and use them inside classes, the linter will automatically infer the 
 
-You should be able to write everything (the tokenizer, the image processor, the model, the config) in this `modular` 
-file, and the corresponding files will be created for you. 
+- If a configuration class inherits from another class, but adds and deletes an argument, the generated file directly references it if an argument is added or completely removes it if an argument is deleted.
+- If a class inherits from another, like `GemmaModel(LlamaModel)`, the dependencies are automatically inferred. All submodules are also automatically inferred from the superclass.
+- If a new function is defined in the modular file and used inside classes, the linter automatically infers these as well.
 
-### Enforcement
+You should be able to write everything (tokenizer, image processor, model, config, etc.) in a modular and their corresponding single-files are generated.
 
-Run the command below to ensure the generated content matches `modular_<your_model>.py`
+The example below demonstrates how a model can be added with significantly fewer lines of code with Modular Transformers.
 
-```bash
-python utils/check_modular_conversion.py --files src/transformers/models/<your_model>/modular_<your_model>.py
-```
+### BERT and RoBERTa
 
-### Examples
+BERT and RoBERTa, two very similar models, differ solely in how the embedding layer is implemented.
 
-Here is a quick example with BERT and RoBERTa. The two models are intimately related: their modeling implementation 
-differs solely by a change in the embedding layer.
+Instead of redefining the model entirely, consider the `modular_roberta.py` file shown below for the modeling and configuration classes (the tokenizer isn't shown in this example).
 
-Instead of redefining the model entirely, here is what the `modular_roberta.py` file looks like for the modeling &
-configuration classes (for the sake of the example, the tokenizer is ignored at this time as very different).
-
-```python
+```py
 from torch import nn
 from ..bert.configuration_bert import BertConfig
 from ..bert.modeling_bert import (
@@ -91,11 +52,11 @@ from ..bert.modeling_bert import (
     BertForMaskedLM
 )
 
-# The RoBERTa config is identical to BERT's config
+# RoBERTa and BERT config is identical
 class RobertaConfig(BertConfig):
   model_type = 'roberta'
 
-# We redefine the embeddings here to highlight the padding ID difference, and we redefine the position embeddings
+# Redefine the embeddings to highlight the padding id difference, and redefine the position embeddings
 class RobertaEmbeddings(BertEmbeddings):
     def __init__(self, config):
         super().__init__(config())
@@ -105,57 +66,53 @@ class RobertaEmbeddings(BertEmbeddings):
             config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx
         )
 
-# The RoBERTa model is identical to the BERT model, except for the embedding layer. 
-# We redefine the embeddings above, so here there is no need to do additional work
+# RoBERTa and BERT model is identical except for the embedding layer, which is defined above, so no need for additional changes here
 class RobertaModel(BertModel):
   def __init__(self, config):
     super().__init__(config)
     self.embeddings = RobertaEmbeddings(config)
 
-      
-# The heads now only need to redefine the model inside to the correct `RobertaModel`
+
+# The model heads now only need to redefine the model inside to `RobertaModel`
 class RobertaForMaskedLM(BertForMaskedLM):
   def __init__(self, config):
     super().__init__(config)
     self.model = RobertaModel(config)
 ```
 
-## What it is not
+If you don't use the defined dependency, you'll receive the following error.
 
-It is not a replacement for the modeling code (yet?), and if your model is not based on anything else that ever existed, then you can add a `modeling` file as usual. Similarly, if you cannot easily inherit your `configuration` (or `tokenization` or `processing`) file from another model's similar file, you can add that filetype directly (even though defining it in the modular file would work, it would clutter it).
+```text
+ValueError: You defined `RobertaEmbeddings` in the modular_roberta.py, it should be used when you define `BertModel`, as it is one of it's direct dependencies. Make sure you use it in the `__init__` function.
+```
 
+## Implementing a modular file
 
-## Real world example breakdown
+The easiest way to start is by browsing Transformers for a model similar to yours in order to inherit from it. Some good starting points are [Mistral](./model_doc/mistral), [Qwen2](./model_doc/qwen2), [Cohere](./model_doc/cohere) and [Cohere2](./model_doc/cohere2), and [Llama](./model_doc/llama). Refer to the table below for components your model might be using and where you can inherit from.
 
-As explained, modular allows you to use regular Python inheritance from any other model's code in the library, in order to define your own. For this reason, it will work better/be easier if you first browse the library a bit to find models close to yours, in order to inherit from them. For example, are you using a sliding window in the `Attention` class? Then start by checking models that are well known to use it, e.g. `Mistral`, or `Qwen2`! Are you using interleaved `RotaryEmbedding` modules? Check out `Cohere`, `Cohere2` and `Glm` models! Otherwise a very strong starting point is to check out `Llama`. And if you are doing a bit of all of that at once, then you can mix and match!
+| Component | Model |
+|---|---|
+| Mixture of expert | SwitchTransformers or Mixtral |
+| Interleaved (and/or partial) rotary embedding | GLM, Phi |
+| State space models | Jamba, Bamba, Zamba, Mamba2 |
+| Recurrent hidden states | Gemma2 |
+| Sliding window attention/full attention patterns per layer | Gemma2, Cohere2 |
+| QKV clipping | Olmo |
+| QK normalization | Olmo2, Cohere |
+| Fused QKV (not recommended) | Phi3 |
 
-Here are some common properties that your model might be using, and corresponding modeling files to check as an example:
-- Mixture of expert: `SwitchTransformers` or `Mixtral`
-- Interleaved (and/or partial) rotary embedding: `Glm`, `Phi`
-- State space models: 
-    - Hybrid with attention: `Jamba` , `Bamba`, `Zamba`
-    - Mamba2: `Mamba2` 
-- Recurrent hidden states: `Gemma2`
-- Different sliding window attention/full attention patterns per layer: `Gemma2`, `Cohere2`
-- Clipping of QKV: `Olmo`
-- Normalization of QK: `Olmo2`, `Cohere`
-- Fused QKV (not recommended): `Phi3`
+This section will walk you through how to implement [Olmo2](./model_doc/olmo2) from [Olmo](./model_doc/olmo) with modular Transformers (you can refer to the original [modeling.py](https://github.com/huggingface/transformers/blob/main/src/transformers/models/olmo2/modular_olmo2.py) file).
 
-At Hugging Face, we feel that learning by example is usually (one of) the best way, so we will now go over a typical modular file, and the different features our linter provides (and its limitations)! 🤗 Let's use a real world example with Olmo2 model, which I feel provides a very good illustration of the modular mechanisms. The original file can be found [here](https://github.com/huggingface/transformers/blob/main/src/transformers/models/olmo2/modular_olmo2.py). For simplicity, we will go over it class by class, and repeat the modular's definition of ech class. For reference, the modeling and configuration of Olmo (v1) on which we will inherit a lot can be found [here](https://github.com/huggingface/transformers/blob/main/src/transformers/models/olmo/modeling_olmo.py) and [here](https://github.com/huggingface/transformers/blob/main/src/transformers/models/olmo/configuration_olmo.py) respectively. The final modeling of Olmo2 (generated by running our linter on the modular we will describe below) can be found [here](https://github.com/huggingface/transformers/blob/main/src/transformers/models/olmo2/modeling_olmo2.py)
+### Config
 
-Let's break it down!
-
-
-### Config class
-
-Here is the `Config` definition in modular:
+The modular `Olmo2Config` is shown below.
 
 ```py
 from ..olmo.configuration_olmo import OlmoConfig
 
 class Olmo2Config(OlmoConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Olmo2Model`].
+    This is the configuration class to store the configuration of a [Olmo2Model](/docs/transformers/main/en/model_doc/olmo2#transformers.Olmo2Model).
     """
 
     def __init__(
@@ -207,19 +164,21 @@ class Olmo2Config(OlmoConfig):
         del self.clip_qkv
 ```
 
-Here, we correctly identified that the `Config` in Olmo2 is similar to Olmo's, up to a few details:
-1. The default value of most arguments has changed
-2. we have a new argument, `rms_norm_eps`
-3. the argument `clip_qkv` is not used anymore
+There are three points where the `Olmo2Config` is different from the original `OlmoConfig`.
 
-To solve points 1. and 2., simply overwriting the `__init__` function with the new default arguments and adding the new one is enough, as you would expect when you want to overwrite a method in Python! Of course you also need to assign the new attribute `rms_norm_eps` to `self` in the `__init__`'s body.  
-For point 3., we use the special syntax `del self.clip_qkv`, which, has you can expect, removed the assignment of this attribute in the unravelled code (after the conversion with the linter).  
+1. The default value of most arguments have changed.
+2. There is a new argument, `rms_norm_eps`.
+3. The `clip_qkv` argument isn't used anymore.
 
-Now, there is a subtility here: as you can see, we used `super().__init__(...)`. Usually, in Python, it is simply used to call the parent's `__init__`. In modular terms, however, it has a _slightly_ different meaning. When we find a call such as `super().my_function(...)` in the modular file, the linter will take the body of the `my_function` function in the parent, and unravel it where the call to `super().my_function(...)` occured. Then, the `del self.clip_qkv` statement will remove the reference to `self.clip_qkv` from the unravelled body. Thus `del self.xxx` can only work in pair with `super().my_function(...)`, and should always be placed after it (but you can add whatever you want _before_ calling `super()`, and it will be placed, as you can expect, before the parent's body).
+For the new default values and argument, overwrite the `__init__` function with the new default values and add `rms_norm_eps`. Assign `rms_norm_eps` to `self` in the body of `__init__`. For the `clip_qkv` argument, use `del self.clip_qkv` to remove the assignment of this attribute in the unraveled code (post-linter conversion).
 
-### Norm class
+Notice how the `super().__init__(...)` is used. Typically, it calls the parent `__init__`.
 
-Here is the `Norm` class:
+But in modular Transformers, if there is a call like `super().my_function(...)`, the linter takes the body of `my_function` in the parent and unravels it where the call to `super().my_function(...)` occurred. The `del self.clip_qkv` statement removes the reference to `self.clip_qkv` in the unraveled body.
+
+`del self.` and `super().my_function(..)` work together, and it should always be placed after `super().my_function(...)`. You can add whatever you want *before* calling `super()`, and it is placed before the parents body.
+
+### Norm
 
 ```py
 from ..llama.modeling_llama import LlamaRMSNorm
@@ -228,11 +187,11 @@ class Olmo2RMSNorm(LlamaRMSNorm):
     pass
 ```
 
-What to say here, it is pretty explicit isn't it? We do not modify anything from the `LlamaRMSNorm` definition. Thus the linter will unravel exactly the content of the parent (`LlamaRMSNorm`). Only change will be that every reference to "llama" on the docstrings, type hints, and comments (basically everywhere) will be changed to references to "olmo2" for consistency!
+Nothing needs to be modified in `LlamaRMSNorm`. The linter unravels the exact content of `LlamaRMSNorm` into `Olmo2RMSNorm`. References to Llama in the docstrings, type hints, and comments are also changed to Olmo2.
 
-### Attention class
+### Attention
 
-Here is the `Attention` class:
+The modular `Olmo2Attention` is shown below.
 
 ```py
 from ..llama.modeling_llama import eager_attention_forward
@@ -251,12 +210,12 @@ class Olmo2Attention(OlmoAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor],
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -271,20 +230,14 @@ class Olmo2Attention(OlmoAttention):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_value is not None:
+        if past_key_values is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -302,12 +255,15 @@ class Olmo2Attention(OlmoAttention):
         return attn_output, attn_weights
 ```
 
-Now, what's happening here? In the `__init__`, we call `super().__init__(...)`, thus copying the parent's definition, then add 2 new layers of the `Olmo2RMSNorm` we just added previously. Indeed, those were not present in the original `Olmo` (v1) model. So, now, we also have to overwrite the `forward` method to use these 2 new layers right? Indeed, if you check carefully, the definition of `forward` is identical to `Olmo`'s, but we added a pass with the norm layers just before projecting with `q_proj` and `k_proj`. However, to help us, we directly imported the functions `eager_attention_forward` from llama, and `apply_rotary_pos_emb` from olmo. The linter will then automatically add these imported functions in the final `modeling_olmo2.py` file, by copying their definitions from the source (imported) files. And it will even add the `rotate_half` and `repeat_kv` functions (which are used inside `apply_rotary_pos_embed` and `eager_attention_forward` respectively) by figuring out the dependency automatically. Neat, right?  
-Note that we had to redefine this class, because we did not find any model defining the `Attention` layer with the added `RMSNorm` layer anywhere else in the library! Otherwise, we would have simply inherited from this model instead as we did for the `RMSNorm`!
+The `super().__init__(...)` copies the parent definition and adds 2 new layers from `Olmo2RMSNorm`. The forward pass needs to be overwritten to use these 2 new layers. A pass with the norm layers is added before projecting with `q_proj` and `k_proj`. To make it easier, the `eager_attention_forward` function is directly imported from Llama and the `apply_rotary_pos_emb` is imported from Olmo.
 
-### The DecoderLayer class
+The linter automatically adds these imported functions in the final `modeling_olmo2.py` file by copying their definitions from the source files. The `rotate_half` and `repeat_kv` functions are also added because they are used inside `apply_rotary_pos_emb` and `eager_attention_forward`.
 
-Here is the `DecoderLayer` class:
+The `Attention` class had to be redefined because there weren't any existing models with an `Attention` layer that included a `RMSNorm` layer.
+
+### DecoderLayer
+
+The modular `DecoderLayer` is shown below.
 
 ```py
 from ..olmo.modeling_olmo import OlmoDecoderLayer
@@ -328,13 +284,13 @@ class Olmo2DecoderLayer(OlmoDecoderLayer):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         **kwargs,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
 
         # Self Attention
@@ -342,7 +298,7 @@ class Olmo2DecoderLayer(OlmoDecoderLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
@@ -365,11 +321,13 @@ class Olmo2DecoderLayer(OlmoDecoderLayer):
         return outputs
 ```
 
-At this point, you should start to pick up what is happening for this class. We switched the type of norm in the `__init__` by overwriting `self.post_attention_layernorm` after the call to `super().__init__(...)`, thus going from a `LayerNorm` in the parent class, to our `RMSNorm` in this class. Then we simply deleted the `self.input_layernorm` attribute, and replaced it by `self.post_feedforward_layernorm`, because the name was not making sense anymore as we apply it after in `Olmo2` instead of before in `Olmo`. For this reason, we also need to overwrite the `forward` method, to reflect the logic change.
+The norm type is switched in `__init__` by overwriting `self.post_attention_layernorm` after the call to `super().__init__(...)`. Delete the `self.input_layernorm` attributed and replace it with `self.post_feedforward_layernorm` because it is applied after in Olmo2. The forward method is overwritten to reflect this change.
 
-Note however that if we had only switched `self.post_attention_layernorm` and `self.input_layernorm` from `LayerNorm`s to `RMSNorm`s (without the name and logic change of `elf.input_layernorm`), we would not have had to redefine the `forward` method!
+If you only switched `self.post_feedforward_layernorm` and `self.input_layernorm` from `LayerNorm` to `RMSNorm` without also changing the name and logic of `self.input_layernorm`, then you wouldn't have to rewrite the forward method.
 
-### The Model class
+### Model
+
+The modular `Olmo2Model` class is shown below.
 
 ```py
 from ..olmo.modeling_olmo import OlmoModel
@@ -385,11 +343,11 @@ class Olmo2Model(OlmoModel):
         )
 ```
 
-Here, this is exactly what I was pointing out before: we simply change the _type_ of the `self.norm` attribute (going from `LayerNorn` in `Olmo` to `RMSNorm` in `Olmo2`). Since this change does not reflect the logic of the `forward` method (the name of the layer and where it is used is identical to the parent's), then we do not even need to overwrite it! It will be unravelled automatically! Note that we redefined `self.layers` for the sake of being explicit, but this is not even strictly required here as the definition is similar to what is found in `Olmo` (v1).
+You only need to change the *type* of the `self.norm` attribute to use `RMSNorm` instead of `LayerNorm`. This change doesn't affect the logic in the forward method (layer name and usage is identical to the parent class), so you don't need to overwrite it. The linter automatically unravels it.
 
-### Finally... The ForCausalLM class
+### Model head
 
-Finally, here is the definition of the `ForCausalLM`:
+The modular causal modeling head is shown below.
 
 ```py
 from ..olmo.modeling_olmo import OlmoForCausalLM
@@ -398,15 +356,15 @@ class Olmo2ForCausalLM(OlmoForCausalLM):
     pass
 ```
 
-As for the `RMSNorm`, it is exactly similar to the parent's in logic, so we do not have anything to do, the linter will all figure it out by itself. Almost disappointing, no?
+The logic is identical to `OlmoForCausalLM` which means you don't need to make any changes here.
 
+### Other classes
 
-<a id="dependencies"></a>
-### But... What about the MLP, RotaryEmbedding and PreTrainedModel classes?
+The [modeling_olmo2.py](https://github.com/huggingface/transformers/blob/main/src/transformers/models/olmo2/modeling_olmo2.py) generated by the linter also contains some classes (`Olmo2MLP`, `Olmo2RotaryEmbedding`, `Olmo2PreTrainedModel`) that weren't explicitly defined in `modular_olmo2.py`.
 
-Indeed, if you inspect the file [modeling_olmo2.py](https://github.com/huggingface/transformers/blob/main/src/transformers/models/olmo2/modeling_olmo2.py) which is created by running the linter on `modular_olmo2.py`, you will notice that it also creates `Olmo2MLP`, `Olmo2RotaryEmbedding`, and `Olmo2PreTrainedModel` classes, that we did not define explicitly in `modular_olmo2.py`.  
+Classes that are a dependency of an inherited class but aren't explicitly defined are automatically added as a part of dependency tracing. This is similar to how some functions were added to the `Attention` class without directly importing them.
 
-Well, it is one of the main feature of our modular linter. Similarly to how some functions were added automatically with the `Attention` class (without directly importing them), classes that are a dependency of one of the class inherited class and which are not explicitly defined in the modular file, will be added automatically as part of the dependeny tracing. For example, in `OlmoDecoderLayer`, there is an attribute defined as `self.mlp = OlmoMLP(config)`. Because we never explicitly redefined a class named `Olmo2MLP` in `modular_olmo2.py`, the linter automatically created a class `Olmo2MLP`, similar to `OlmoMLP`. This is exactly the same as if we had done:
+For example, `OlmoDecoderLayer` has an attribute defined as `self.mlp = OlmoMLP(config)`. This class was never explicitly redefined in `Olmo2MLP`, so the linter automatically created a `Olmo2MLP` class similar to `OlmoMLP`. It is identical to the code below if it was explicitly written in `modular_olmo2.py`.
 
 ```py
 from ..olmo.modeling_olmo import OlmoMLP
@@ -415,9 +373,9 @@ class Olmo2MLP(OlmoMLP):
     pass
 ```
 
-but we did not even bother, because we _know_ this class is supposed to be exactly similar, and we never needed it anywhere else in the `modular_olmo2.py` file. In contrast, the class `Olmo2RMSNorm` was needed to (re)define the norms both in the `Attention` and `DecoderLayer` classes. The same logic is true for the `Olmo2PreTrainedModel` and `Olmo2RotaryEmbedding` classes.
+However, it was necessary to rewrite `Olmo2RMSNorm` because the layer norm needed to be redefined in the `Attention` and `DecoderLayer` classes. Similarly, this is why you didn't need to create the `Olmo2PreTrainedModel` and `Olmo2RotaryEmbedding` classes.
 
-Note however that if not redefined, classes will be copied from the file in which an inherited module uses them first. So if you wanted e.g. `Olmo2MLP` to inherit from, say, `MistralMLP` instead of `OlmoMLP` (here it was `OlmoMLP` because it was first implicitly used in `Olmo2DecoderLayer`, which inherited from `OlmoDecoderLayer`), you would need to be explicit and do:
+Classes that aren't rewritten are copied from the file where the inherited module first uses them. This means if you wanted `Olmo2MLP` to inherit from `MistralMLP` instead, you would need to be more explicit as shown below.
 
 ```py
 # switch to mistral definition
@@ -427,13 +385,9 @@ class Olmo2MLP(MistralMLP):
     pass
 ```
 
-## Advanced usage
+## Removing attributes
 
-Now that you should have a good grasp of how modular works, let's see some more advanced use cases and features you can use.
-
-### Removing attributes which are not just assignments
-
-As we have seen before, after using `super().__init__()`, we can use `del self.attribute` to remove a specific attribute which was defined in the parent. What if this attribute was used elsewhere though? Meaning it was not just "defined to be stored" as in the config for example. For example, consider the following case:
+You can `del` to remove attributes defined in the parent after using `super().__init__()`. However, this doesn't work if the attribute is also used somewhere else as shown below. It only suppresses the assignment. The `self.attribute = config.attribute` line is removed, but the `if` statement remains and references the attribute.
 
 ```py
 class DummyModel(nn.Module):
@@ -444,11 +398,7 @@ class DummyModel(nn.Module):
     if self.attribute:
       # do more stuff with `self.attribute` here
       ...
-```
 
-Then inheriting from this `DummyModel` and doing
-
-```py
 class MyNewDummyModel(DummyModel):
 
   def __init__(self, config: MyNewDummyConfig):
@@ -456,28 +406,24 @@ class MyNewDummyModel(DummyModel):
     del self.attribute
 ```
 
-is not supported, because it will only suppress the assignment, i.e. the line `self.attribute = config.attribute` will disappear, but the `if` statement will stay and reference the attribute. We tried to make it work by suppressing every mentions of the attribute, however it it not a sound solution in the general case (it can lead to very surprising effects and remove other important parts) and is therefore not possible. 
+## Calling parent methods without unravelling their definition
 
-But what if I still want to inherit from `DummyModel`? How to properly do it? How to use `super().__init__()` without copy/pasting the parent then? This brings us to the next point:
-
-### Avoiding super() special meaning
-
-Say you still want to inherit from `DummyModel` (because it is convenient for some other methods) but you do want to remove the `self.attribute`. How to properly override the `__init__` method, while calling `super()` but without unravelling the parent's code? Well, then be explicit about which class `super()`'s you are calling! If we want to call the `nn.Module`'s `super()` for example, we can do the following (unravelled code on the right):
+If you want to inherit from a module `DummyModule` and want to call `super()` WITHOUT unravelling the parent's code (that is, you want to call `super()` on the *generated* class parent), be explicit about which class' `super()` you're calling. The example below shows how to call the `super()` of `nn.Module` (unraveled code shown on the right). In this example, as `DummyModule` is itself a `nn.Module`, it makes sense to call `nn.Module.__init__(self)` as it's what was the initial intention. It's then unravelled as `super()` in `MyNewDummyModule` to follow Python's best-practices.
 
 ```py
-class MyNewDummyModel(DummyModel, nn.Module):        |     class MyNewDummyModel(nn.Module):
-                                                     |
-  def __init__(self, config: MyNewDummyConfig):      |       def __init__(self, config: MyNewDummyConfig):
-    nn.Module.__init__(config)                       |         super().__init__()
-    self.foo = config.foo                            |         self.foo = config.foo
-    ...                                              |         ...
+class MyNewDummyModule(DummyModule):                   |     class MyNewDummyModule(nn.Module):
+                                                       |
+  def __init__(self):                                  |       def __init__(self):
+    nn.Module.__init__(self)                           |         super().__init__()
+    self.foo = config.foo                              |         self.foo = config.foo
+    ...                                                |         ...
 ```
 
-### Deleting unused methods
+## Deleting unused methods
 
-Removing a class method is pretty similar to remove an attribute, you just need to overwrite it with a `raise AttributeError("")` to mimick the behaviour you actually want when you remove a parent function in python. For example, the following will remove the methods in the unravelled code:
+Remove an attribute by overwriting it with a `raise AttributeError("")` statement to mimic the behavior you want when you remove a parent function in Python. The example below removes the methods in the unraveled code.
 
-```python
+```py
 class GemmaTokenizer(LlamaTokenizer):
     ...
 
@@ -488,29 +434,11 @@ class GemmaTokenizer(LlamaTokenizer):
         raise AttributeError("Not needed for Gemma")
 ```
 
-### Define new functions
+## Defining new functions
 
-Of course, if you define a new function in the `modular` file, and use it inside an inherited class, say
+By default, if you inherit from a class and override a method with one or more decorators in the parent method, the decorators are also added to the unraveled code *only if you don't add any yourself*. Otherwise, the redefined decorator is used.
 
-```python
-def my_new_function(*args, **kwargs):
-  # Do something here
-  pass
-
-class DummyModel(LlamaModel):
-    def forward(*args, **kwargs):
-      # Call the function
-      example = my_new_function(*args, **kwargs)
-      # continue here
-```
-
-the `my_new_function` function (and, recursively, any other functions called in its body) will be automatically added to the unravelled code even if it is not present in the parent's file (here Llama).
-
-### Decorators
-
-By default, if you inherit from a class and override a method which has 1 (or more) decorators in the parent's method, the decorators will be added as well in the unravelled code, _but only if you do not add any yourself_. Otherwise, it will of course use whatever decorator your redefined.
-
-That, is, imagine the following parent class
+For example, if you had a parent class shown below and you overwrite it, the parent decorator is kept.
 
 ```py
 class DummyModel(nn.Module):
@@ -521,7 +449,7 @@ class DummyModel(nn.Module):
     # do stuff here
 ```
 
-Then, if you simply override the method it will produce (modular on the left, unravelled code on the right):
+Modular code is shown on the left, and the unraveled code is shown on the right.
 
 ```py
 class NewModel(DummyModel):       |   class NewModel(nn.Module):
@@ -532,7 +460,7 @@ class NewModel(DummyModel):       |   class NewModel(nn.Module):
                                   |       ...
 ```
 
-That is, it keeps the parent's decorators by default. However, if you do:
+But if you add a new decorator, your new decorator is used instead.
 
 ```py
 class NewModel(DummyModel):       |   class NewModel(nn.Module):
@@ -543,11 +471,11 @@ class NewModel(DummyModel):       |   class NewModel(nn.Module):
     ...                           |       ...
 ```
 
-Then it keeps you own new decorator.
+## super_kwargs
 
-### The super_kwargs special case
+In scenarios where a forward method is really long and you want to switch decorators, you don't need to redefine everything and copy/paste the function. You can use `super().forward(...)` to unravel the parent body. When there are a lot of arguments in the function signature, use the special `**super_kwargs` syntax in the overwritten signature.
 
-In the above case about decorators, what if the `forward` method is really long, and I just want to switch the decorators? Do I really have to redefine it all and copy/paste the body just for the decorator? Fortunately, no. If you followed until this point, you now that you can use `super().forward(...)`, and it will unravel the parent's body automatically. But what if there are plenty of arguments in the function's signature, and we are very lazy? For that use-case, we introduced the special syntax `**super_kwargs` in the overriden method signature. It basically mean: "unravel all the parent's signature arguments here". For example, a common signature in the `ForCausalLM` model is the following (copied from llama's modeling):
+This syntax indicates to the linter to unravel all the parent signature arguments here. An example signature in a [`AutoModelForCausalLM`] model is shown below, with lots of arguments.
 
 ```py
 class LlamaForCausalLM(nn.Module):
@@ -560,7 +488,7 @@ class LlamaForCausalLM(nn.Module):
       input_ids: torch.LongTensor = None,
       attention_mask: Optional[torch.Tensor] = None,
       position_ids: Optional[torch.LongTensor] = None,
-      past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+      past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
       inputs_embeds: Optional[torch.FloatTensor] = None,
       labels: Optional[torch.LongTensor] = None,
       use_cache: Optional[bool] = None,
@@ -574,7 +502,7 @@ class LlamaForCausalLM(nn.Module):
     ...
 ```
 
-As you can see, this is a rather long and complicated signature. But if you do the following (as usual, modular on the left, unravelled code by the linter on the right):
+Instead of rewriting and copying/pasting all of those arguments, use the `super().forward(**super_kwargs)` statement (modular code shown on the left, unraveled code on the right).
 
 ```py
 class NewModelForCausalLM(LlamaForCausalLM):    |    class LlamaForCausalLM(nn.Module):
@@ -586,7 +514,7 @@ class NewModelForCausalLM(LlamaForCausalLM):    |    class LlamaForCausalLM(nn.M
                                                 |         input_ids: torch.LongTensor = None,
                                                 |         attention_mask: Optional[torch.Tensor] = None,
                                                 |         position_ids: Optional[torch.LongTensor] = None,
-                                                |         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = |None,
+                                                |         past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = |None,
                                                 |         inputs_embeds: Optional[torch.FloatTensor] = None,
                                                 |         labels: Optional[torch.LongTensor] = None,
                                                 |         use_cache: Optional[bool] = None,
@@ -600,13 +528,18 @@ class NewModelForCausalLM(LlamaForCausalLM):    |    class LlamaForCausalLM(nn.M
                                                 |       ...
 ```
 
-and the `**super_kwargs` syntax unravelled all the arguments, while the `super().forward()` syntax unravelled the whole body! As you can see, this is  great combo when you just want to switch the decorators, as it is very easy to use, and make it explicit that the only change you want to apply is the decorator.  
+This makes it very easy to switch decorators and makes it explicit that the only change you want to apply is the decorator.
 
-However, we want to make it clear that the `**super_kwargs` syntax is not a replacement to being explicit when you redefine your methods: if you actually overwrite the method (i.e. you do not call `super().method()`), then we want you to explicitly write the signature as you would usually. This is only a short-cut when switching decorators, and a few other niche cases.
+`**super_kwargs` should not be used to avoid being explicit when redefining methods though. If you overwrite a method, you should explicitly write the signature as you normally would. The `**super_kwargs` syntax is a shortcut for switching decorators and a few other niche cases.
 
-### The DOCSTRING variables
+## Docstring variables
 
-Usually, if whatever object is defned both in the modular file and the modeling file from which we inherit, then the definition of the modular takes precedence. However, this is not the case for assignments containing the pattern `DOCSTRING`. Indeed, we usually have variables defined as `MODEL_START_DOCSTRING` and `MODEL_INPUT_DOCSTRING` in the modeling files. These are just very big blocks of, well, docstrings... But they are (almost) always exactly the same up to the model name! And modular automatically rewrite the names everywhere! For this reason, assignments containing the pattern will _always_ use the definition found in the source file instead of the modular file. This is extremely handy if we need the variable reference somewhere (e.g. to redefine a decorator) but we do not want to clutter the modular file with 100 lines of docstrings which are always the same. It allows to do the following (taken from [modular_starcoder2.py](https://github.com/huggingface/transformers/blob/main/src/transformers/models/starcoder2/modular_starcoder2.py#L146))
+> [!TIP]
+> Refer to the [Documeting a model](./auto_docstring) guide for more information about how you can use the `@auto_docstring` decorator to help automatically generate consistent docstring arguments.
+
+If an object defined in both the modular and modeling file from which it inherits, the modular definition has precedence unless for assignments containing the pattern `DOCSTRING`. These variables are typically used in `MODEL_START_DOCSTRING` and `MODEL_INPUT_DOCSTRING` in the modeling files. They are big blocks of docstrings and the linter rewrites the names everywhere. For this reason, assignments containing the `DOCSTRING` variable can use the definition found in the source file without copying the whole docstring, by simply setting the variable to `None` in the modular file.
+
+This is very useful if you need the variable reference somewhere but you don't want to clutter the modular file with docstrings which are always the same. The example code below allows you to automatically use the same docstrings from [Mistral](./model_doc/mistral) in [Starcoder2](./model_doc/starcoder2).
 
 ```py
 STARCODER2_INPUTS_DOCSTRING = None  # will be automatically redefined
@@ -619,15 +552,13 @@ class Starcoder2Model(MistralModel):
         ...
 ```
 
-and here, the linter will correctly take the same definition of the docstring as in `Mistral`, without having to clutter the modular file!
+Setting the variable to anything other than `None` will override the docstring, so that you can customize the docstrings if needed.
 
-## Limitations
+## Special naming
 
-Now, let's go over some of the limitations of modular.
+The linter automatically renames everything when inheriting from a class. For consistency, you should always use the same class name prefix when inheriting from different classes from the same file.
 
-### Special naming (essentially for multimodal models)
-
-Because our linter automatically renames everything when inheriting from a class (defining `class NewModelMLP(LlamaMLP)` will rename every mention of `Llama` to `NewModel`, and recursively for all dependencies grabbed), it has somewhat strict rules when it comes to naming. For consistency reasons, we require that you always use the same class name prefix when inheriting different classes from the same file. For example, doing:
+The example below is not recommended. It breaks standards in the library, `MyModelIncredibleMLP` instead of `LlamaMLP`, and because the linter doesn't know how to rename potential higher-order dependencies (`MyModelIncredible` or just `MyModel`).
 
 ```py
 class MyModelIncredibleMLP(LlamaMLP):
@@ -637,25 +568,21 @@ class MyModelDecoderLayer(LlamaDecoderLayer):
     ...
 ```
 
-is not recommended, first because it breaks standards in the library and we do not like it, and second because the linter will not know how to rename potential high-order dependencies (should we use `MyModelIncredible`, or `MyModel`?).
+However, if there aren't any [implicit dependencies](#other-classes), then you can locally rename a single class. Make sure you still explicitly redefine every other mention of the class with the new name pattern though. For example, all mentions of `LlamaMLP` should be renamed to `MyModelIncredibleMLP` otherwise the linter may add a new and unwanted `MyModelMLP` class.
 
-If there are no dependencies to grab implicitly however (see [this section](#dependencies) to understand implicit dependencies), local renaming (for a single class) will not be an issue and the linter will not complain. But make sure to explicitly redefine every other mentions of the class with the new name pattern! For example in the example above, all mentions of `LlamaMLP` in other modules inherited should be explicitly replaced by mentions to `MyModelIncredibleMLP`, otherwise the linter may add a new and unwanted `MyModelMLP` class!
+The linter raises a warning if an ambiguous case is detected. It explains what is happening and which prefix is used by default for getting the dependencies. These warning and renaming pattern complications usually only come up when defining multimodal models. For example, adding `Text` to class names in a multimodal model to make it clear which modality it refers to.
 
-In any way, if there is an ambiguous case detected, the linter will raise a warning such as
-
-```
+```py
 We detected multiple prefix names when inheriting from transformers.models.llama.modeling_llama: ('Emu3Text', 'Emu3'). We will only use the most used 'Emu3' prefix when grabbing args and dependencies. Make sure to subclass the intermediate classes with the prefix you want (if different from 'Emu3') or use a single prefix in all the modular (best).
 ```
 
-explaining what is happening, and which prefix is used by default for grabbing dependencies. As explained, if you see automatic dependencies appear with a prefix but you want another one, then explicitly rename these classes locally with a simple `pass` class, such as
+If there are automatic dependencies with a prefix, but you want another one, explicitly rename the classes locally with a `pass` class as shown in the following.
 
 ```py
-class Emu3TextMLP(LlamaMLP):                                 
+class Emu3TextMLP(LlamaMLP):
     pass
 ```
 
-Such warnings and renaming patterns complications usually only arise when defining multimodel models, when you want to define e.g. the text part of your model from an existing model, but want to add the part `Text` to the class names to make it clear what they refer to in the multimodal setup.
+## Config docstrings
 
-### Automatic docstrings issue (mostly for Configs)
-
-When inheriting a Config class and adding or deleting some attributes, it may be tempting to only redefine the new attributes in the docstring, and hoping that modular will do the rest. And similarly when deleting an argument, do nothing and hope that modular will remove itself from the docstring. However, due to current limitations of our linter, this is not yet supported. Thus, if you are in this case, you need to directly put the whole docstring (as it should appear in the end, with the correct arguments and default values) directly in the modular file under the class definition.
+When inheriting a `Config` class or adding and deleting attributes, you may want to only redefine the new attributes in the docstring. However, the linter doesn't support this yet. You need to directly add the while docstring directly in the modular file under the class definition.

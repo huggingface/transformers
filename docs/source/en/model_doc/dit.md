@@ -13,74 +13,85 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2022-03-04 and added to Hugging Face Transformers on 2022-03-10.*
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # DiT
 
-## Overview
+[DiT](https://huggingface.co/papers/2203.02378) is an image transformer pretrained on large-scale unlabeled document images. It learns to predict the missing visual tokens from a corrupted input image. The pretrained DiT model can be used as a backbone in other models for visual document tasks like document image classification and table detection.
 
-DiT was proposed in [DiT: Self-supervised Pre-training for Document Image Transformer](https://arxiv.org/abs/2203.02378) by Junlong Li, Yiheng Xu, Tengchao Lv, Lei Cui, Cha Zhang, Furu Wei.
-DiT applies the self-supervised objective of [BEiT](beit) (BERT pre-training of Image Transformers) to 42 million document images, allowing for state-of-the-art results on tasks including:
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/dit_architecture.jpg"/>
 
-- document image classification: the [RVL-CDIP](https://www.cs.cmu.edu/~aharley/rvl-cdip/) dataset (a collection of
-  400,000 images belonging to one of 16 classes).
-- document layout analysis: the [PubLayNet](https://github.com/ibm-aur-nlp/PubLayNet) dataset (a collection of more
-  than 360,000 document images constructed by automatically parsing PubMed XML files).
-- table detection: the [ICDAR 2019 cTDaR](https://github.com/cndplab-founder/ICDAR2019_cTDaR) dataset (a collection of
-  600 training images and 240 testing images).
+You can find all the original DiT checkpoints under the [Microsoft](https://huggingface.co/microsoft?search_models=dit) organization.
 
-The abstract from the paper is the following:
+> [!TIP]
+> Refer to the [BEiT](./beit) docs for more examples of how to apply DiT to different vision tasks.
 
-*Image Transformer has recently achieved significant progress for natural image understanding, either using supervised (ViT, DeiT, etc.) or self-supervised (BEiT, MAE, etc.) pre-training techniques. In this paper, we propose DiT, a self-supervised pre-trained Document Image Transformer model using large-scale unlabeled text images for Document AI tasks, which is essential since no supervised counterparts ever exist due to the lack of human labeled document images. We leverage DiT as the backbone network in a variety of vision-based Document AI tasks, including document image classification, document layout analysis, as well as table detection. Experiment results have illustrated that the self-supervised pre-trained DiT model achieves new state-of-the-art results on these downstream tasks, e.g. document image classification (91.11 → 92.69), document layout analysis (91.0 → 94.9) and table detection (94.23 → 96.55). *
+The example below demonstrates how to classify an image with [`Pipeline`] or the [`AutoModel`] class.
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/dit_architecture.jpg"
-alt="drawing" width="600"/> 
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-<small> Summary of the approach. Taken from the [original paper](https://arxiv.org/abs/2203.02378). </small>
+```py
+import torch
+from transformers import pipeline
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/microsoft/unilm/tree/master/dit).
-
-## Usage tips
-
-One can directly use the weights of DiT with the AutoModel API:
-
-```python
-from transformers import AutoModel
-
-model = AutoModel.from_pretrained("microsoft/dit-base")
+pipeline = pipeline(
+    task="image-classification",
+    model="microsoft/dit-base-finetuned-rvlcdip",
+    dtype=torch.float16,
+    device=0
+)
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/dit-example.jpg")
 ```
 
-This will load the model pre-trained on masked image modeling. Note that this won't include the language modeling head on top, used to predict visual tokens.
+</hfoption>
+<hfoption id="AutoModel">
 
-To include the head, you can load the weights into a `BeitForMaskedImageModeling` model, like so:
+```py
+import torch
+import requests
+from PIL import Image
+from transformers import AutoModelForImageClassification, AutoImageProcessor
 
-```python
-from transformers import BeitForMaskedImageModeling
+image_processor = AutoImageProcessor.from_pretrained(
+    "microsoft/dit-base-finetuned-rvlcdip",
+    use_fast=True,
+)
+model = AutoModelForImageClassification.from_pretrained(
+    "microsoft/dit-base-finetuned-rvlcdip",
+    device_map="auto",
+)
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/dit-example.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
+inputs = image_processor(image, return_tensors="pt").to(model.device)
 
-model = BeitForMaskedImageModeling.from_pretrained("microsoft/dit-base")
+with torch.no_grad():
+  logits = model(**inputs).logits
+predicted_class_id = logits.argmax(dim=-1).item()
+
+class_labels = model.config.id2label
+predicted_class_label = class_labels[predicted_class_id]
+print(f"The predicted class label is: {predicted_class_label}")
 ```
 
-You can also load a fine-tuned model from the [hub](https://huggingface.co/models?other=dit), like so:
+</hfoption>
+</hfoptions>
 
-```python
-from transformers import AutoModelForImageClassification
+## Notes
 
-model = AutoModelForImageClassification.from_pretrained("microsoft/dit-base-finetuned-rvlcdip")
-```
+- The pretrained DiT weights can be loaded in a [BEiT] model with a modeling head to predict visual tokens.
 
-This particular checkpoint was fine-tuned on [RVL-CDIP](https://www.cs.cmu.edu/~aharley/rvl-cdip/), an important benchmark for document image classification.
-A notebook that illustrates inference for document image classification can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/DiT/Inference_with_DiT_(Document_Image_Transformer)_for_document_image_classification.ipynb).
+   ```py
+   from transformers import BeitForMaskedImageModeling
+
+   model = BeitForMaskedImageModeling.from_pretraining("microsoft/dit-base")
+   ```
 
 ## Resources
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with DiT.
-
-<PipelineTag pipeline="image-classification"/>
-
-- [`BeitForImageClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
-
-If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
-
-<Tip>
-
-  As DiT's architecture is equivalent to that of BEiT, one can refer to [BEiT's documentation page](beit) for all tips, code examples and notebooks.
-</Tip>
+- Refer to this [notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/DiT/Inference_with_DiT_(Document_Image_Transformer)_for_document_image_classification.ipynb) for a document image classification inference example.

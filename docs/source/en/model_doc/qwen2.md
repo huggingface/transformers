@@ -13,45 +13,138 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-07-15 and added to Hugging Face Transformers on 2024-01-17.*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
+    </div>
+</div>
 
 # Qwen2
 
-## Overview
+[Qwen2](https://huggingface.co/papers/2407.10671) is a family of large language models (pretrained, instruction-tuned and mixture-of-experts) available in sizes from 0.5B to 72B parameters. The models are built on the Transformer architecture featuring enhancements like group query attention (GQA), rotary positional embeddings (RoPE), a mix of sliding window and full attention, and dual chunk attention with YARN for training stability. Qwen2 models support multiple languages and context lengths up to 131,072 tokens.
 
-Qwen2 is the new model series of large language models from the Qwen team. Previously, we released the Qwen series, including Qwen2-0.5B, Qwen2-1.5B, Qwen2-7B, Qwen2-57B-A14B, Qwen2-72B, Qwen2-Audio, etc.
+You can find all the official Qwen2 checkpoints under the [Qwen2](https://huggingface.co/collections/Qwen/qwen2-6659360b33528ced941e557f) collection.
 
-### Model Details
+> [!TIP]
+> Click on the Qwen2 models in the right sidebar for more examples of how to apply Qwen2 to different language tasks.
 
-Qwen2 is a language model series including decoder language models of different model sizes. For each size, we release the base language model and the aligned chat model. It is based on the Transformer architecture with SwiGLU activation, attention QKV bias, group query attention, mixture of sliding window attention and full attention, etc. Additionally, we have an improved tokenizer adaptive to multiple natural languages and codes.
+The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`], and from the command line using the instruction-tuned models.
 
-
-## Usage tips
-
-`Qwen2-7B` and `Qwen2-7B-Instruct` can be found on the [Huggingface Hub](https://huggingface.co/Qwen)
-
-In the following, we demonstrate how to use `Qwen2-7B-Instruct` for the inference. Note that we have used the ChatML format for dialog, in this demo we show how to leverage `apply_chat_template` for this purpose.
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
 ```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
->>> device = "cuda" # the device to load the model onto
+import torch
+from transformers import pipeline
 
->>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2-7B-Instruct", device_map="auto")
->>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-7B-Instruct")
+pipe = pipeline(
+    task="text-generation",
+    model="Qwen/Qwen2-1.5B-Instruct",
+    dtype=torch.bfloat16,
+    device_map=0
+)
 
->>> prompt = "Give me a short introduction to large language model."
-
->>> messages = [{"role": "user", "content": prompt}]
-
->>> text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-
->>> model_inputs = tokenizer([text], return_tensors="pt").to(device)
-
->>> generated_ids = model.generate(model_inputs.input_ids, max_new_tokens=512, do_sample=True)
-
->>> generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)]
-
->>> response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+messages = [
+    {"role": "system", "content": "You are a helpful assistant."},
+    {"role": "user", "content": "Tell me about the Qwen2 model family."},
+]
+outputs = pipe(messages, max_new_tokens=256, do_sample=True, temperature=0.7, top_k=50, top_p=0.95)
+print(outputs[0]["generated_text"][-1]['content'])
 ```
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```python
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen2-1.5B-Instruct",
+    dtype=torch.bfloat16,
+    device_map="auto",
+    attn_implementation="sdpa"
+)
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-1.5B-Instruct")
+
+prompt = "Give me a short introduction to large language models."
+messages = [
+    {"role": "system", "content": "You are a helpful assistant."},
+    {"role": "user", "content": prompt}
+]
+text = tokenizer.apply_chat_template(
+    messages,
+    tokenize=False,
+    add_generation_prompt=True
+)
+model_inputs = tokenizer([text], return_tensors="pt").to(model.device)
+
+generated_ids = model.generate(
+    model_inputs.input_ids,
+    cache_implementation="static",
+    max_new_tokens=512,
+    do_sample=True,
+    temperature=0.7,
+    top_k=50,
+    top_p=0.95
+)
+generated_ids = [
+    output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)
+]
+
+response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+print(response)
+```
+
+</hfoption>
+<hfoption id="transformers CLI">
+
+```bash
+# pip install -U flash-attn --no-build-isolation
+transformers chat Qwen/Qwen2-7B-Instruct --dtype auto --attn_implementation flash_attention_2 --device 0
+```
+
+</hfoption>
+</hfoptions>
+
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+
+The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize the weights to 4-bits.
+
+```python
+# pip install -U flash-attn --no-build-isolation
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+
+quantization_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_compute_dtype=torch.bfloat16,
+    bnb_4bit_quant_type="nf4",
+    bnb_4bit_use_double_quant=True,
+)
+
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-7B")
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen2-7B",
+    dtype=torch.bfloat16,
+    device_map="auto",
+    quantization_config=quantization_config,
+    attn_implementation="flash_attention_2"
+)
+
+inputs = tokenizer("The Qwen2 model family is", return_tensors="pt").to(model.device)
+outputs = model.generate(**inputs, max_new_tokens=100)
+print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+```
+
+## Notes
+
+- Ensure your Transformers library version is up-to-date. Qwen2 requires Transformers>=4.37.0 for full support.
 
 ## Qwen2Config
 
@@ -65,6 +158,11 @@ In the following, we demonstrate how to use `Qwen2-7B-Instruct` for the inferenc
 ## Qwen2TokenizerFast
 
 [[autodoc]] Qwen2TokenizerFast
+
+## Qwen2RMSNorm
+
+[[autodoc]] Qwen2RMSNorm
+    - forward
 
 ## Qwen2Model
 

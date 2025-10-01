@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -235,24 +234,6 @@ class BigBirdModelTester:
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    def create_and_check_for_causal_lm(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        model = BigBirdForCausalLM(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-
     def create_and_check_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
@@ -303,6 +284,7 @@ class BigBirdModelTester:
             attention_mask=next_attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
+            use_cache=False,
             output_hidden_states=True,
         )["hidden_states"][0]
         output_from_past = model(
@@ -311,6 +293,7 @@ class BigBirdModelTester:
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
+            use_cache=True,
             output_hidden_states=True,
         )["hidden_states"][0]
 
@@ -429,8 +412,7 @@ class BigBirdModelTester:
 
 @require_torch
 class BigBirdModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    # head masking & pruning is currently not supported for big bird
-    test_head_masking = False
+    # pruning is currently not supported for big bird
     test_pruning = False
 
     # torchscript should be possible, but takes prohibitively long to test.
@@ -451,7 +433,8 @@ class BigBirdModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (BigBirdForCausalLM,) if is_torch_available() else ()
+    # Doesn't run generation tests. There are interface mismatches when using `generate` -- TODO @gante
+    all_generative_model_classes = ()
     pipeline_model_mapping = (
         {
             "feature-extraction": BigBirdModel,
@@ -524,7 +507,6 @@ class BigBirdModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         self.model_tester.create_and_check_model_as_decoder(*config_and_inputs)
 
     def test_model_as_decoder_with_default_input_mask(self):
-        # This regression test was failing with PyTorch < 1.3
         (
             config,
             input_ids,
@@ -608,31 +590,22 @@ class BigBirdModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         self.model_tester.create_and_check_for_change_to_full_attn(*config_and_inputs)
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
-
-    # overwrite from common in order to skip the check on `attentions`
-    def check_pt_flax_outputs(self, fx_outputs, pt_outputs, model_class, tol=1e-5, name="outputs", attributes=None):
-        # `bigbird_block_sparse_attention` in `FlaxBigBird` returns `attention_probs = None`, while in PyTorch version,
-        # an effort was done to return `attention_probs` (yet to be verified).
-        if name.startswith("outputs.attentions"):
-            return
-        else:
-            super().check_pt_flax_outputs(fx_outputs, pt_outputs, model_class, tol, name, attributes)
 
 
 @require_torch
@@ -674,12 +647,12 @@ class BigBirdModelIntegrationTest(unittest.TestCase):
             device=torch_device,
         )
 
-        self.assertTrue(
-            torch.allclose(prediction_logits[0, 128:132, 128:132], expected_prediction_logits_slice, atol=1e-4)
+        torch.testing.assert_close(
+            prediction_logits[0, 128:132, 128:132], expected_prediction_logits_slice, rtol=1e-4, atol=1e-4
         )
 
         expected_seq_relationship_logits = torch.tensor([[46.9465, 47.9517]], device=torch_device)
-        self.assertTrue(torch.allclose(seq_relationship_logits, expected_seq_relationship_logits, atol=1e-4))
+        torch.testing.assert_close(seq_relationship_logits, expected_seq_relationship_logits, rtol=1e-4, atol=1e-4)
 
     def test_inference_full_pretraining(self):
         model = BigBirdForPreTraining.from_pretrained("google/bigbird-roberta-base", attention_type="original_full")
@@ -703,12 +676,12 @@ class BigBirdModelIntegrationTest(unittest.TestCase):
             ],
             device=torch_device,
         )
-        self.assertTrue(
-            torch.allclose(prediction_logits[0, 128:132, 128:132], expected_prediction_logits_slice, atol=1e-4)
+        torch.testing.assert_close(
+            prediction_logits[0, 128:132, 128:132], expected_prediction_logits_slice, rtol=1e-4, atol=1e-4
         )
 
         expected_seq_relationship_logits = torch.tensor([[41.4503, 41.2406]], device=torch_device)
-        self.assertTrue(torch.allclose(seq_relationship_logits, expected_seq_relationship_logits, atol=1e-4))
+        torch.testing.assert_close(seq_relationship_logits, expected_seq_relationship_logits, rtol=1e-4, atol=1e-4)
 
     def test_block_sparse_attention_probs(self):
         """
@@ -773,7 +746,7 @@ class BigBirdModelIntegrationTest(unittest.TestCase):
             cl = torch.einsum("bhqk,bhkd->bhqd", attention_probs, value_layer)
             cl = cl.view(context_layer.size())
 
-            self.assertTrue(torch.allclose(context_layer, cl, atol=0.001))
+            torch.testing.assert_close(context_layer, cl, rtol=0.001, atol=0.001)
 
     def test_block_sparse_context_layer(self):
         model = BigBirdModel.from_pretrained(
@@ -822,7 +795,7 @@ class BigBirdModelIntegrationTest(unittest.TestCase):
         context_layer = context_layer[0]
 
         self.assertEqual(context_layer.shape, torch.Size((1, 128, 768)))
-        self.assertTrue(torch.allclose(context_layer[0, 64:78, 300:310], targeted_cl, atol=0.0001))
+        torch.testing.assert_close(context_layer[0, 64:78, 300:310], targeted_cl, rtol=0.0001, atol=0.0001)
 
     def test_tokenizer_inference(self):
         tokenizer = BigBirdTokenizer.from_pretrained("google/bigbird-roberta-base")
@@ -871,7 +844,7 @@ class BigBirdModelIntegrationTest(unittest.TestCase):
             device=torch_device,
         )
 
-        self.assertTrue(torch.allclose(prediction[0, 52:64, 320:324], expected_prediction, atol=1e-4))
+        torch.testing.assert_close(prediction[0, 52:64, 320:324], expected_prediction, rtol=1e-4, atol=1e-4)
 
     def test_inference_question_answering(self):
         tokenizer = BigBirdTokenizer.from_pretrained("google/bigbird-base-trivia-itc")
@@ -918,13 +891,13 @@ class BigBirdModelIntegrationTest(unittest.TestCase):
         )
 
         target_end_logits = torch.tensor(
-            [[-12.1736, -8.8487, -14.8877, -11.6713, -15.1165, -12.2396, -7.6828, -15.4153, -12.2528, -14.3671, -12.3596, -7.4272, -14.9615, -13.6356, -11.7939, -9.9767, -14.8112, -8.9567, -15.8798, -11.5291, -9.4249, -14.7544, -7.9387, -16.2789, -8.9702, -15.3111, -11.5585, -7.9992, -4.1127, 10.3209, -8.3926, -10.2005], [-11.1375, -15.4027, -12.6861, -16.9884, -13.7093, -10.3560, -15.7228, -12.9290, -15.8519, -13.7953, -10.2460, -15.7198, -14.2078, -12.8477, -11.4861, -16.1017, -11.8900, -16.4488, -13.2959, -10.3980, -15.4874, -10.3539, -16.8263, -10.9973, -17.0344, -9.2751, -10.1196, -13.8907, -12.1025, -13.0628, -12.8530, -13.8173]], # noqa: E321
+            [[-12.1736, -8.8487, -14.8877, -11.6713, -15.1165, -12.2396, -7.6828, -15.4153, -12.2528, -14.3671, -12.3596, -7.4272, -14.9615, -13.6356, -11.7939, -9.9767, -14.8112, -8.9567, -15.8798, -11.5291, -9.4249, -14.7544, -7.9387, -16.2789, -8.9702, -15.3111, -11.5585, -7.9992, -4.1127, 10.3209, -8.3926, -10.2005], [-11.1375, -15.4027, -12.6861, -16.9884, -13.7093, -10.3560, -15.7228, -12.9290, -15.8519, -13.7953, -10.2460, -15.7198, -14.2078, -12.8477, -11.4861, -16.1017, -11.8900, -16.4488, -13.2959, -10.3980, -15.4874, -10.3539, -16.8263, -10.9973, -17.0344, -9.2751, -10.1196, -13.8907, -12.1025, -13.0628, -12.8530, -13.8173]],
             device=torch_device,
         )
         # fmt: on
 
-        self.assertTrue(torch.allclose(start_logits[:, 64:96], target_start_logits, atol=1e-4))
-        self.assertTrue(torch.allclose(end_logits[:, 64:96], target_end_logits, atol=1e-4))
+        torch.testing.assert_close(start_logits[:, 64:96], target_start_logits, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(end_logits[:, 64:96], target_end_logits, rtol=1e-4, atol=1e-4)
 
         input_ids = inputs["input_ids"].tolist()
         answer = [
@@ -966,4 +939,4 @@ class BigBirdModelIntegrationTest(unittest.TestCase):
         # fmt: on
 
         self.assertEqual(output.shape, torch.Size((1, 241, 768)))
-        self.assertTrue(torch.allclose(output[0, 64:78, 300:310], target, atol=0.0001))
+        torch.testing.assert_close(output[0, 64:78, 300:310], target, rtol=0.0001, atol=0.0001)

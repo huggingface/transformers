@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,6 +11,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+# /// script
+# dependencies = [
+#     "transformers @ git+https://github.com/huggingface/transformers.git",
+#     "datasets >= 2.0.0",
+#     "torch >= 1.3",
+#     "accelerate",
+#     "evaluate""
+#     "Pillow",
+#     "albumentations >= 1.4.16",
+# ]
+# ///
+
 """Finetuning any 🤗 Transformers model supported by AutoModelForSemanticSegmentation for semantic segmentation."""
 
 import argparse
@@ -45,12 +57,12 @@ from transformers import (
     default_data_collator,
     get_scheduler,
 )
-from transformers.utils import check_min_version, send_example_telemetry
+from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.49.0.dev0")
+check_min_version("4.57.0.dev0")
 
 logger = get_logger(__name__)
 
@@ -241,10 +253,6 @@ def parse_args():
 def main():
     args = parse_args()
 
-    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
-    # information sent is the one passed as arguments along with your Python/PyTorch versions.
-    send_example_telemetry("run_semantic_segmentation_no_trainer", args)
-
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
     # If we're using tracking, we also need to initialize it here and it will by default pick up all supported trackers
     # in the environment
@@ -302,7 +310,7 @@ def main():
         dataset = dataset.rename_columns({"annotation": "label"})
 
     # If we don't have a validation split, split off a percentage of train as validation.
-    args.train_val_split = None if "validation" in dataset.keys() else args.train_val_split
+    args.train_val_split = None if "validation" in dataset else args.train_val_split
     if isinstance(args.train_val_split, float) and args.train_val_split > 0.0:
         split = dataset["train"].train_test_split(args.train_val_split)
         dataset["train"] = split["train"]
@@ -316,7 +324,7 @@ def main():
     else:
         repo_id = args.dataset_name
         filename = "id2label.json"
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset")))
     id2label = {int(k): v for k, v in id2label.items()}
     label2id = {v: k for k, v in id2label.items()}
 
@@ -325,13 +333,12 @@ def main():
         args.model_name_or_path, id2label=id2label, label2id=label2id, trust_remote_code=args.trust_remote_code
     )
     image_processor = AutoImageProcessor.from_pretrained(
-        args.model_name_or_path, trust_remote_code=args.trust_remote_code
+        args.model_name_or_path, trust_remote_code=args.trust_remote_code, do_reduce_labels=args.do_reduce_labels
     )
     model = AutoModelForSemanticSegmentation.from_pretrained(
         args.model_name_or_path,
         config=config,
         trust_remote_code=args.trust_remote_code,
-        do_reduce_labels=args.do_reduce_labels,
     )
 
     # Define transforms to be applied to each image and target.
@@ -603,9 +610,6 @@ def main():
                 output_dir = os.path.join(args.output_dir, output_dir)
             accelerator.save_state(output_dir)
 
-    if args.with_tracking:
-        accelerator.end_training()
-
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
         unwrapped_model = accelerator.unwrap_model(model)
@@ -628,6 +632,9 @@ def main():
             }
             with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
                 json.dump(all_results, f, indent=2)
+
+    accelerator.wait_for_everyone()
+    accelerator.end_training()
 
 
 if __name__ == "__main__":

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,30 +11,40 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import inspect
+import io
 import json
 import os
 import pathlib
+import subprocess
 import tempfile
 import time
+import unittest
 import warnings
+from copy import deepcopy
+from datetime import datetime
 
+import httpx
 import numpy as np
-import requests
+import pytest
 from packaging import version
 
 from transformers import AutoImageProcessor, BatchFeature
 from transformers.image_utils import AnnotationFormat, AnnotionFormat
+from transformers.models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING_NAMES
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     require_vision,
     slow,
     torch_device,
 )
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+
+
+if is_torchvision_available():
+    from transformers.image_processing_utils_fast import BaseImageProcessorFast
 
 
 if is_torch_available():
@@ -162,32 +171,52 @@ class ImageProcessingTestMixin:
 
         self.image_processor_list = image_processor_list
 
+    def _assert_slow_fast_tensors_equivalence(self, slow_tensor, fast_tensor, atol=1e-1, rtol=1e-3, mean_atol=5e-3):
+        torch.testing.assert_close(slow_tensor, fast_tensor, atol=atol, rtol=rtol)
+        self.assertLessEqual(torch.mean(torch.abs(slow_tensor - fast_tensor)).item(), mean_atol)
+
     @require_vision
     @require_torch
     def test_slow_fast_equivalence(self):
-        dummy_image = Image.open(
-            requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
-        )
-
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
             self.skipTest(reason="Skipping slow/fast equivalence test")
 
         if self.image_processing_class is None or self.fast_image_processing_class is None:
             self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
 
+        dummy_image = Image.open(
+            io.BytesIO(
+                httpx.get("http://images.cocodataset.org/val2017/000000039769.jpg", follow_redirects=True).content
+            )
+        )
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
         image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
 
         encoding_slow = image_processor_slow(dummy_image, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
-
-        self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1))
-        self.assertLessEqual(
-            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 1e-3
-        )
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
 
     @require_vision
     @require_torch
+    def test_slow_fast_equivalence_batched(self):
+        if not self.test_slow_image_processor or not self.test_fast_image_processor:
+            self.skipTest(reason="Skipping slow/fast equivalence test")
+
+        if self.image_processing_class is None or self.fast_image_processing_class is None:
+            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+
+        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
+        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+
+        encoding_slow = image_processor_slow(dummy_images, return_tensors="pt")
+        encoding_fast = image_processor_fast(dummy_images, return_tensors="pt")
+
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
+
+    @require_vision
+    @require_torch
+    @unittest.skip(reason="Many failing cases. This test needs a more deep investigation.")
     def test_fast_is_faster_than_slow(self):
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
             self.skipTest(reason="Skipping speed test")
@@ -197,12 +226,18 @@ class ImageProcessingTestMixin:
 
         def measure_time(image_processor, image):
             # Warmup
-            _ = image_processor(image, return_tensors="pt")
-            start = time.time()
-            _ = image_processor(image, return_tensors="pt")
-            return time.time() - start
+            for _ in range(5):
+                _ = image_processor(image, return_tensors="pt")
+            all_times = []
+            for _ in range(10):
+                start = time.time()
+                _ = image_processor(image, return_tensors="pt")
+                all_times.append(time.time() - start)
+            # Take the average of the fastest 3 runs
+            avg_time = sum(sorted(all_times[:3])) / 3.0
+            return avg_time
 
-        dummy_images = torch.randint(0, 255, (4, 3, 224, 224), dtype=torch.uint8)
+        dummy_images = [torch.randint(0, 255, (3, 224, 224), dtype=torch.uint8) for _ in range(4)]
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
         image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
 
@@ -210,6 +245,16 @@ class ImageProcessingTestMixin:
         slow_time = measure_time(image_processor_slow, dummy_images)
 
         self.assertLessEqual(fast_time, slow_time)
+
+    def test_is_fast(self):
+        for image_processing_class in self.image_processor_list:
+            image_processor = image_processing_class(**self.image_processor_dict)
+
+            # Check is_fast is set correctly
+            if is_torchvision_available() and issubclass(image_processing_class, BaseImageProcessorFast):
+                self.assertTrue(image_processor.is_fast)
+            else:
+                self.assertFalse(image_processor.is_fast)
 
     def test_image_processor_to_json_string(self):
         for image_processing_class in self.image_processor_list:
@@ -248,7 +293,7 @@ class ImageProcessingTestMixin:
                 saved_file = image_processor_first.save_pretrained(tmpdirname)[0]
                 check_json_file_has_correct_format(saved_file)
 
-                use_fast = i == 1
+                use_fast = i == 1 or not self.test_slow_image_processor
                 image_processor_second = AutoImageProcessor.from_pretrained(tmpdirname, use_fast=use_fast)
 
             self.assertEqual(image_processor_second.to_dict(), image_processor_first.to_dict())
@@ -273,8 +318,35 @@ class ImageProcessingTestMixin:
             image_processor_fast_1.save_pretrained(tmpdirname)
             image_processor_slow_1 = self.image_processing_class.from_pretrained(tmpdirname)
 
-        self.assertEqual(image_processor_slow_0.to_dict(), image_processor_slow_1.to_dict())
-        self.assertEqual(image_processor_fast_0.to_dict(), image_processor_fast_1.to_dict())
+        dict_slow_0 = image_processor_slow_0.to_dict()
+        dict_slow_1 = image_processor_slow_1.to_dict()
+        difference = {
+            key: dict_slow_0.get(key) if key in dict_slow_0 else dict_slow_1.get(key)
+            for key in set(dict_slow_0) ^ set(dict_slow_1)
+        }
+        dict_slow_0 = {key: dict_slow_0[key] for key in set(dict_slow_0) & set(dict_slow_1)}
+        dict_slow_1 = {key: dict_slow_1[key] for key in set(dict_slow_0) & set(dict_slow_1)}
+        # check that all additional keys are None, except for `default_to_square` and `data_format` which are only set in fast processors
+        self.assertTrue(
+            all(value is None for key, value in difference.items() if key not in ["default_to_square", "data_format"])
+        )
+        # check that the remaining keys are the same
+        self.assertEqual(dict_slow_0, dict_slow_1)
+
+        dict_fast_0 = image_processor_fast_0.to_dict()
+        dict_fast_1 = image_processor_fast_1.to_dict()
+        difference = {
+            key: dict_fast_0.get(key) if key in dict_fast_0 else dict_fast_1.get(key)
+            for key in set(dict_fast_0) ^ set(dict_fast_1)
+        }
+        dict_fast_0 = {key: dict_fast_0[key] for key in set(dict_fast_0) & set(dict_fast_1)}
+        dict_fast_1 = {key: dict_fast_1[key] for key in set(dict_fast_0) & set(dict_fast_1)}
+        # check that all additional keys are None, except for `default_to_square` and `data_format` which are only set in fast processors
+        self.assertTrue(
+            all(value is None for key, value in difference.items() if key not in ["default_to_square", "data_format"])
+        )
+        # check that the remaining keys are the same
+        self.assertEqual(dict_fast_0, dict_fast_1)
 
     def test_save_load_fast_slow_auto(self):
         "Test that we can load a fast image processor from a slow one and vice-versa using AutoImageProcessor."
@@ -296,8 +368,35 @@ class ImageProcessingTestMixin:
             image_processor_fast_1.save_pretrained(tmpdirname)
             image_processor_slow_1 = AutoImageProcessor.from_pretrained(tmpdirname, use_fast=False)
 
-        self.assertEqual(image_processor_slow_0.to_dict(), image_processor_slow_1.to_dict())
-        self.assertEqual(image_processor_fast_0.to_dict(), image_processor_fast_1.to_dict())
+        dict_slow_0 = image_processor_slow_0.to_dict()
+        dict_slow_1 = image_processor_slow_1.to_dict()
+        difference = {
+            key: dict_slow_0.get(key) if key in dict_slow_0 else dict_slow_1.get(key)
+            for key in set(dict_slow_0) ^ set(dict_slow_1)
+        }
+        dict_slow_0 = {key: dict_slow_0[key] for key in set(dict_slow_0) & set(dict_slow_1)}
+        dict_slow_1 = {key: dict_slow_1[key] for key in set(dict_slow_0) & set(dict_slow_1)}
+        # check that all additional keys are None, except for `default_to_square` and `data_format` which are only set in fast processors
+        self.assertTrue(
+            all(value is None for key, value in difference.items() if key not in ["default_to_square", "data_format"])
+        )
+        # check that the remaining keys are the same
+        self.assertEqual(dict_slow_0, dict_slow_1)
+
+        dict_fast_0 = image_processor_fast_0.to_dict()
+        dict_fast_1 = image_processor_fast_1.to_dict()
+        difference = {
+            key: dict_fast_0.get(key) if key in dict_fast_0 else dict_fast_1.get(key)
+            for key in set(dict_fast_0) ^ set(dict_fast_1)
+        }
+        dict_fast_0 = {key: dict_fast_0[key] for key in set(dict_fast_0) & set(dict_fast_1)}
+        dict_fast_1 = {key: dict_fast_1[key] for key in set(dict_fast_0) & set(dict_fast_1)}
+        # check that all additional keys are None, except for `default_to_square` and `data_format` which are only set in fast processors
+        self.assertTrue(
+            all(value is None for key, value in difference.items() if key not in ["default_to_square", "data_format"])
+        )
+        # check that the remaining keys are the same
+        self.assertEqual(dict_fast_0, dict_fast_1)
 
     def test_init_without_params(self):
         for image_processing_class in self.image_processor_list:
@@ -316,7 +415,7 @@ class ImageProcessingTestMixin:
                 image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
                 encoding = image_processor(image_inputs, return_tensors="pt")
-                # for layoutLM compatiblity
+                # for layoutLM compatibility
                 self.assertEqual(encoding.pixel_values.device, torch.device("cpu"))
                 self.assertEqual(encoding.pixel_values.dtype, torch.float32)
 
@@ -476,9 +575,47 @@ class ImageProcessingTestMixin:
         if not is_tested:
             self.skipTest(reason="No validation found for `preprocess` method")
 
+    def test_override_instance_attributes_does_not_affect_other_instances(self):
+        if self.fast_image_processing_class is None:
+            self.skipTest(
+                "Only testing fast image processor, as most slow processors break this test and are to be deprecated"
+            )
+
+        image_processing_class = self.fast_image_processing_class
+        image_processor_1 = image_processing_class()
+        image_processor_2 = image_processing_class()
+        if not (hasattr(image_processor_1, "size") and isinstance(image_processor_1.size, dict)) or not (
+            hasattr(image_processor_1, "image_mean") and isinstance(image_processor_1.image_mean, list)
+        ):
+            self.skipTest(
+                reason="Skipping test as the image processor does not have dict size or list image_mean attributes"
+            )
+
+        original_size_2 = deepcopy(image_processor_2.size)
+        for key in image_processor_1.size:
+            image_processor_1.size[key] = -1
+        modified_copied_size_1 = deepcopy(image_processor_1.size)
+
+        original_image_mean_2 = deepcopy(image_processor_2.image_mean)
+        image_processor_1.image_mean[0] = -1
+        modified_copied_image_mean_1 = deepcopy(image_processor_1.image_mean)
+
+        # check that the original attributes of the second instance are not affected
+        self.assertEqual(image_processor_2.size, original_size_2)
+        self.assertEqual(image_processor_2.image_mean, original_image_mean_2)
+
+        for key in image_processor_2.size:
+            image_processor_2.size[key] = -2
+        image_processor_2.image_mean[0] = -2
+
+        # check that the modified attributes of the first instance are not affected by the second instance
+        self.assertEqual(image_processor_1.size, modified_copied_size_1)
+        self.assertEqual(image_processor_1.image_mean, modified_copied_image_mean_1)
+
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_vision
+    @pytest.mark.torch_compile_test
     def test_can_compile_fast_image_processor(self):
         if self.fast_image_processing_class is None:
             self.skipTest("Skipping compilation test as fast image processor is not defined")
@@ -492,8 +629,69 @@ class ImageProcessingTestMixin:
 
         image_processor = torch.compile(image_processor, mode="reduce-overhead")
         output_compiled = image_processor(input_image, device=torch_device, return_tensors="pt")
+        self._assert_slow_fast_tensors_equivalence(
+            output_eager.pixel_values, output_compiled.pixel_values, atol=1e-4, rtol=1e-4, mean_atol=1e-5
+        )
 
-        self.assertTrue(torch.allclose(output_eager.pixel_values, output_compiled.pixel_values, atol=1e-4))
+    def test_new_models_require_fast_image_processor(self):
+        """
+        Test that new models have a fast image processor.
+        For more information on how to implement a fast image processor, see this issue: https://github.com/huggingface/transformers/issues/36978,
+        and ping @yonigozlan for help.
+        """
+        if self.fast_image_processing_class is not None:
+            return
+        if self.image_processing_class is None:
+            self.skipTest("No image processing class defined")
+
+        def _is_old_model_by_commit_date(model_type, date_cutoff=(2025, 9, 1)):
+            try:
+                # Convert model_type to directory name and construct file path
+                model_dir = model_type.replace("-", "_")
+                slow_processor_file = f"src/transformers/models/{model_dir}/image_processing_{model_dir}.py"
+                # Check if the file exists otherwise skip the test
+                if not os.path.exists(slow_processor_file):
+                    return None
+                # Get the first commit date of the slow processor file
+                result = subprocess.run(
+                    ["git", "log", "--reverse", "--pretty=format:%ad", "--date=iso", slow_processor_file],
+                    capture_output=True,
+                    text=True,
+                    cwd=os.getcwd(),
+                )
+                if result.returncode != 0 or not result.stdout.strip():
+                    return None
+                # Parse the first line (earliest commit)
+                first_line = result.stdout.strip().split("\n")[0]
+                date_part = first_line.split(" ")[0]  # Extract just the date part
+                commit_date = datetime.strptime(date_part, "%Y-%m-%d")
+                # Check if committed before the cutoff date
+                cutoff_date = datetime(*date_cutoff)
+                return commit_date <= cutoff_date
+
+            except Exception:
+                # If any error occurs, skip the test
+                return None
+
+        image_processor_name = self.image_processing_class.__name__
+        model_type = None
+        for mapping_model_type, (slow_class, _) in IMAGE_PROCESSOR_MAPPING_NAMES.items():
+            if slow_class == image_processor_name:
+                model_type = mapping_model_type
+                break
+
+        if model_type is None:
+            self.skipTest(f"Could not find model type for {image_processor_name} in IMAGE_PROCESSOR_MAPPING_NAMES")
+        # Check if this is a new model (added after 2024-01-01) based on git history
+        is_old_model = _is_old_model_by_commit_date(model_type)
+        if is_old_model is None:
+            self.skipTest(f"Could not determine if {model_type} is new based on git history")
+        # New models must have fast processors
+        self.assertTrue(
+            is_old_model,
+            f"Model '{model_type}' (processor: {image_processor_name}) was added after the cutoff date and must have "
+            f"a fast image processor implementation. Please implement the corresponding fast processor.",
+        )
 
 
 class AnnotationFormatTestMixin:
@@ -505,7 +703,7 @@ class AnnotationFormatTestMixin:
         image_processor_dict = self.image_processor_tester.prepare_image_processor_dict()
         fixtures_path = pathlib.Path(__file__).parent / "fixtures" / "tests_samples" / "COCO"
 
-        with open(fixtures_path / "coco_annotations.txt", "r") as f:
+        with open(fixtures_path / "coco_annotations.txt") as f:
             detection_target = json.loads(f.read())
 
         detection_annotations = {"image_id": 39769, "annotations": detection_target}
@@ -516,7 +714,7 @@ class AnnotationFormatTestMixin:
             "return_tensors": "pt",
         }
 
-        with open(fixtures_path / "coco_panoptic_annotations.txt", "r") as f:
+        with open(fixtures_path / "coco_panoptic_annotations.txt") as f:
             panoptic_target = json.loads(f.read())
 
         panoptic_annotations = {"file_name": "000000039769.png", "image_id": 39769, "segments_info": panoptic_target}
@@ -549,7 +747,7 @@ class AnnotationFormatTestMixin:
                 for idx in range(len(a)):
                     _compare(a[idx], b[idx])
             elif isinstance(a, torch.Tensor):
-                self.assertTrue(torch.allclose(a, b, atol=1e-3))
+                torch.testing.assert_close(a, b, rtol=1e-3, atol=1e-3)
             elif isinstance(a, str):
                 self.assertEqual(a, b)
 

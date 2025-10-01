@@ -13,155 +13,105 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-01-22 and added to Hugging Face Transformers on 2020-11-16.*
 
-# MBart and MBart-50
-
-<div class="flex flex-wrap space-x-1">
-<a href="https://huggingface.co/models?filter=mbart">
-<img alt="Models" src="https://img.shields.io/badge/All_model_pages-mbart-blueviolet">
-</a>
-<a href="https://huggingface.co/spaces/docs-demos/mbart-large-50-one-to-many-mmt">
-<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
-</a>
+<div style="float: right;">
+  <div class="flex flex-wrap space-x-1">
+    <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+    <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+    <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+  </div>
 </div>
 
+# mBART
 
-## Overview of MBart
+[mBART](https://huggingface.co/papers/2001.08210) is a multilingual machine translation model that pretrains the entire translation model (encoder-decoder) unlike previous methods that only focused on parts of the model. The model is trained on a denoising objective which reconstructs the corrupted text. This allows mBART to handle the source language and the target text to translate to.
 
-The MBart model was presented in [Multilingual Denoising Pre-training for Neural Machine Translation](https://arxiv.org/abs/2001.08210) by Yinhan Liu, Jiatao Gu, Naman Goyal, Xian Li, Sergey Edunov Marjan
-Ghazvininejad, Mike Lewis, Luke Zettlemoyer.
+[mBART-50](https://huggingface.co/paper/2008.00401) is pretrained on an additional 25 languages.
 
-According to the abstract, MBART is a sequence-to-sequence denoising auto-encoder pretrained on large-scale monolingual
-corpora in many languages using the BART objective. mBART is one of the first methods for pretraining a complete
-sequence-to-sequence model by denoising full texts in multiple languages, while previous approaches have focused only
-on the encoder, decoder, or reconstructing parts of the text.
+You can find all the original mBART checkpoints under the [AI at Meta](https://huggingface.co/facebook?search_models=mbart) organization.
 
-This model was contributed by [valhalla](https://huggingface.co/valhalla). The Authors' code can be found [here](https://github.com/pytorch/fairseq/tree/master/examples/mbart)
+> [!TIP]
+> Click on the mBART models in the right sidebar for more examples of applying mBART to different language tasks.
 
-### Training of MBart
+The example below demonstrates how to translate text with [`Pipeline`] or the [`AutoModel`] class.
 
-MBart is a multilingual encoder-decoder (sequence-to-sequence) model primarily intended for translation task. As the
-model is multilingual it expects the sequences in a different format. A special language id token is added in both the
-source and target text. The source text format is `X [eos, src_lang_code]` where `X` is the source text. The
-target text format is `[tgt_lang_code] X [eos]`. `bos` is never used.
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The regular [`~MBartTokenizer.__call__`] will encode source text format passed as first argument or with the `text`
-keyword, and target text format passed with the `text_label` keyword argument.
+```py
+import torch
+from transformers import pipeline
 
-- Supervised training
-
-```python
->>> from transformers import MBartForConditionalGeneration, MBartTokenizer
-
->>> tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-en-ro", src_lang="en_XX", tgt_lang="ro_RO")
->>> example_english_phrase = "UN Chief Says There Is No Military Solution in Syria"
->>> expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
-
->>> inputs = tokenizer(example_english_phrase, text_target=expected_translation_romanian, return_tensors="pt")
-
->>> model = MBartForConditionalGeneration.from_pretrained("facebook/mbart-large-en-ro")
->>> # forward pass
->>> model(**inputs)
+pipeline = pipeline(
+    task="translation",
+    model="facebook/mbart-large-50-many-to-many-mmt",
+    device=0,
+    dtype=torch.float16,
+    src_lang="en_XX",
+    tgt_lang="fr_XX",
+)
+print(pipeline("UN Chief Says There Is No Military Solution in Syria"))
 ```
 
-- Generation
+</hfoption>
+<hfoption id="AutoModel">
 
-  While generating the target text set the `decoder_start_token_id` to the target language id. The following
-  example shows how to translate English to Romanian using the *facebook/mbart-large-en-ro* model.
+```py
+import torch
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-```python
->>> from transformers import MBartForConditionalGeneration, MBartTokenizer
+article_en = "UN Chief Says There Is No Military Solution in Syria"
 
->>> tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-en-ro", src_lang="en_XX")
->>> article = "UN Chief Says There Is No Military Solution in Syria"
->>> inputs = tokenizer(article, return_tensors="pt")
->>> translated_tokens = model.generate(**inputs, decoder_start_token_id=tokenizer.lang_code_to_id["ro_RO"])
->>> tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
-"Şeful ONU declară că nu există o soluţie militară în Siria"
+model = AutoModelForSeq2SeqLM.from_pretrained("facebook/mbart-large-50-many-to-many-mmt", dtype=torch.bfloat16, attn_implementation="sdpa", device_map="auto")
+tokenizer = AutoTokenizer.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
+
+tokenizer.src_lang = "en_XX"
+encoded_hi = tokenizer(article_en, return_tensors="pt").to(model.device)
+generated_tokens = model.generate(**encoded_hi, forced_bos_token_id=tokenizer.lang_code_to_id["fr_XX"], cache_implementation="static")
+print(tokenizer.batch_decode(generated_tokens, skip_special_tokens=True))
 ```
 
-## Overview of MBart-50
+</hfoption>
+</hfoptions>
 
-MBart-50 was introduced in the [Multilingual Translation with Extensible Multilingual Pretraining and Finetuning](https://arxiv.org/abs/2008.00401) paper by Yuqing Tang, Chau Tran, Xian Li, Peng-Jen Chen, Naman Goyal, Vishrav
-Chaudhary, Jiatao Gu, Angela Fan. MBart-50 is created using the original *mbart-large-cc25* checkpoint by extending
-its embedding layers with randomly initialized vectors for an extra set of 25 language tokens and then pretrained on 50
-languages.
+## Notes
 
-According to the abstract
+- You can check the full list of language codes via `tokenizer.lang_code_to_id.keys()`.
+- mBART requires a special language id token in the source and target text during training. The source text format is `X [eos, src_lang_code]` where `X` is the source text. The target text format is `[tgt_lang_code] X [eos]`. The `bos` token is never used. The [`~PreTrainedTokenizerBase._call_`] encodes the source text format passed as the first argument or with the `text` keyword. The target text format is passed with the `text_label` keyword.
+- Set the `decoder_start_token_id` to the target language id for mBART.
 
-*Multilingual translation models can be created through multilingual finetuning. Instead of finetuning on one
-direction, a pretrained model is finetuned on many directions at the same time. It demonstrates that pretrained models
-can be extended to incorporate additional languages without loss of performance. Multilingual finetuning improves on
-average 1 BLEU over the strongest baselines (being either multilingual from scratch or bilingual finetuning) while
-improving 9.3 BLEU on average over bilingual baselines from scratch.*
+    ```py
+    import torch
+    from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
+    model = AutoModelForSeq2SeqLM.from_pretrained("facebook/mbart-large-en-ro", dtype=torch.bfloat16, attn_implementation="sdpa", device_map="auto")
+    tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-en-ro", src_lang="en_XX")
 
-### Training of MBart-50
+    article = "UN Chief Says There Is No Military Solution in Syria"
+    inputs = tokenizer(article, return_tensors="pt")
 
-The text format for MBart-50 is slightly different from mBART. For MBart-50 the language id token is used as a prefix
-for both source and target text i.e the text format is `[lang_code] X [eos]`, where `lang_code` is source
-language id for source text and target language id for target text, with `X` being the source or target text
-respectively.
+    translated_tokens = model.generate(**inputs, decoder_start_token_id=tokenizer.lang_code_to_id["ro_RO"])
+    tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
+    ```
 
+- mBART-50 has a different text format. The language id token is used as the prefix for the source and target text. The text format is `[lang_code] X [eos]` where `lang_code` is the source language id for the source text and target language id for the target text. `X` is the source or target text respectively.
+- Set the `eos_token_id` as the `decoder_start_token_id` for mBART-50. The target language id is used as the first generated token by passing `forced_bos_token_id` to [`~GenerationMixin.generate`].
 
-MBart-50 has its own tokenizer [`MBart50Tokenizer`].
+    ```py
+    import torch
+    from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
--  Supervised training
+    model = AutoModelForSeq2SeqLM.from_pretrained("facebook/mbart-large-50-many-to-many-mmt", dtype=torch.bfloat16, attn_implementation="sdpa", device_map="auto")
+    tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
 
-```python
-from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
+    article_ar = "الأمين العام للأمم المتحدة يقول إنه لا يوجد حل عسكري في سوريا."
+    tokenizer.src_lang = "ar_AR"
 
-model = MBartForConditionalGeneration.from_pretrained("facebook/mbart-large-50")
-tokenizer = MBart50TokenizerFast.from_pretrained("facebook/mbart-large-50", src_lang="en_XX", tgt_lang="ro_RO")
-
-src_text = " UN Chief Says There Is No Military Solution in Syria"
-tgt_text = "Şeful ONU declară că nu există o soluţie militară în Siria"
-
-model_inputs = tokenizer(src_text, text_target=tgt_text, return_tensors="pt")
-
-model(**model_inputs)  # forward pass
-```
-
-- Generation
-
-  To generate using the mBART-50 multilingual translation models, `eos_token_id` is used as the
-  `decoder_start_token_id` and the target language id is forced as the first generated token. To force the
-  target language id as the first generated token, pass the *forced_bos_token_id* parameter to the *generate* method.
-  The following example shows how to translate between Hindi to French and Arabic to English using the
-  *facebook/mbart-50-large-many-to-many* checkpoint.
-
-```python
-from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
-
-article_hi = "संयुक्त राष्ट्र के प्रमुख का कहना है कि सीरिया में कोई सैन्य समाधान नहीं है"
-article_ar = "الأمين العام للأمم المتحدة يقول إنه لا يوجد حل عسكري في سوريا."
-
-model = MBartForConditionalGeneration.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
-tokenizer = MBart50TokenizerFast.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
-
-# translate Hindi to French
-tokenizer.src_lang = "hi_IN"
-encoded_hi = tokenizer(article_hi, return_tensors="pt")
-generated_tokens = model.generate(**encoded_hi, forced_bos_token_id=tokenizer.lang_code_to_id["fr_XX"])
-tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
-# => "Le chef de l 'ONU affirme qu 'il n 'y a pas de solution militaire en Syria."
-
-# translate Arabic to English
-tokenizer.src_lang = "ar_AR"
-encoded_ar = tokenizer(article_ar, return_tensors="pt")
-generated_tokens = model.generate(**encoded_ar, forced_bos_token_id=tokenizer.lang_code_to_id["en_XX"])
-tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
-# => "The Secretary-General of the United Nations says there is no military solution in Syria."
-```
-
-## Documentation resources
-
-- [Text classification task guide](../tasks/sequence_classification)
-- [Question answering task guide](../tasks/question_answering)
-- [Causal language modeling task guide](../tasks/language_modeling)
-- [Masked language modeling task guide](../tasks/masked_language_modeling)
-- [Translation task guide](../tasks/translation)
-- [Summarization task guide](../tasks/summarization)
+    encoded_ar = tokenizer(article_ar, return_tensors="pt")
+    generated_tokens = model.generate(**encoded_ar, forced_bos_token_id=tokenizer.lang_code_to_id["en_XX"])
+    tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
+    ```
 
 ## MBartConfig
 
@@ -184,9 +134,6 @@ tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
 
 [[autodoc]] MBart50TokenizerFast
 
-<frameworkcontent>
-<pt>
-
 ## MBartModel
 
 [[autodoc]] MBartModel
@@ -207,50 +154,3 @@ tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
 
 [[autodoc]] MBartForCausalLM
     - forward
-
-</pt>
-<tf>
-
-## TFMBartModel
-
-[[autodoc]] TFMBartModel
-    - call
-
-## TFMBartForConditionalGeneration
-
-[[autodoc]] TFMBartForConditionalGeneration
-    - call
-
-</tf>
-<jax>
-
-## FlaxMBartModel
-
-[[autodoc]] FlaxMBartModel
-    - __call__
-    - encode
-    - decode
-
-## FlaxMBartForConditionalGeneration
-
-[[autodoc]] FlaxMBartForConditionalGeneration
-    - __call__
-    - encode
-    - decode
-
-## FlaxMBartForSequenceClassification
-
-[[autodoc]] FlaxMBartForSequenceClassification
-    - __call__
-    - encode
-    - decode
-
-## FlaxMBartForQuestionAnswering
-
-[[autodoc]] FlaxMBartForQuestionAnswering
-    - __call__
-    - encode
-    - decode
-
-</jax>
-</frameworkcontent>

@@ -13,112 +13,73 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2018-06-11 and added to Hugging Face Transformers on 2023-06-20.*
 
-# OpenAI GPT
-
-<div class="flex flex-wrap space-x-1">
-<a href="https://huggingface.co/models?filter=openai-gpt">
-<img alt="Models" src="https://img.shields.io/badge/All_model_pages-openai--gpt-blueviolet">
-</a>
-<a href="https://huggingface.co/spaces/docs-demos/openai-gpt">
-<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
-</a>
+<div style="float: right;">
+  <div class="flex flex-wrap space-x-1">
+    <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+    <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+  </div>
 </div>
 
-## Overview
+# GPT
 
-OpenAI GPT model was proposed in [Improving Language Understanding by Generative Pre-Training](https://s3-us-west-2.amazonaws.com/openai-assets/research-covers/language-unsupervised/language_understanding_paper.pdf)
-by Alec Radford, Karthik Narasimhan, Tim Salimans and Ilya Sutskever. It's a causal (unidirectional) transformer
-pre-trained using language modeling on a large corpus with long range dependencies, the Toronto Book Corpus.
+[GPT (Generative Pre-trained Transformer)](https://cdn.openai.com/research-covers/language-unsupervised/language_understanding_paper.pdf) ([blog post](https://openai.com/index/language-unsupervised/)) focuses on effectively learning text representations and transferring them to tasks. This model trains the Transformer decoder to predict the next word, and then fine-tuned on labeled data.
 
-The abstract from the paper is the following:
+GPT can generate high-quality text, making it well-suited for a variety of natural language understanding tasks such as textual entailment, question answering, semantic similarity, and document classification.
 
-*Natural language understanding comprises a wide range of diverse tasks such as textual entailment, question answering,
-semantic similarity assessment, and document classification. Although large unlabeled text corpora are abundant,
-labeled data for learning these specific tasks is scarce, making it challenging for discriminatively trained models to
-perform adequately. We demonstrate that large gains on these tasks can be realized by generative pretraining of a
-language model on a diverse corpus of unlabeled text, followed by discriminative fine-tuning on each specific task. In
-contrast to previous approaches, we make use of task-aware input transformations during fine-tuning to achieve
-effective transfer while requiring minimal changes to the model architecture. We demonstrate the effectiveness of our
-approach on a wide range of benchmarks for natural language understanding. Our general task-agnostic model outperforms
-discriminatively trained models that use architectures specifically crafted for each task, significantly improving upon
-the state of the art in 9 out of the 12 tasks studied.*
+You can find all the original GPT checkpoints under the [OpenAI community](https://huggingface.co/openai-community/openai-gpt) organization.
 
-[Write With Transformer](https://transformer.huggingface.co/doc/gpt) is a webapp created and hosted by Hugging Face
-showcasing the generative capabilities of several models. GPT is one of them.
+> [!TIP]
+> Click on the GPT models in the right sidebar for more examples of how to apply GPT to different language tasks.
 
-This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The original code can be found [here](https://github.com/openai/finetune-transformer-lm).
+The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`], and from the command line.
 
-## Usage tips
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-- GPT is a model with absolute position embeddings so it's usually advised to pad the inputs on the right rather than
-  the left.
-- GPT was trained with a causal language modeling (CLM) objective and is therefore powerful at predicting the next
-  token in a sequence. Leveraging this feature allows GPT-2 to generate syntactically coherent text as it can be
-  observed in the *run_generation.py* example script.
+```python
+import torch
+from transformers import pipeline
 
-
-Note:
-
-If you want to reproduce the original tokenization process of the *OpenAI GPT* paper, you will need to install `ftfy`
-and `SpaCy`:
-
-```bash
-pip install spacy ftfy==4.4.3
-python -m spacy download en
+generator = pipeline(task="text-generation", model="openai-community/gpt", dtype=torch.float16, device=0)
+output = generator("The future of AI is", max_length=50, do_sample=True)
+print(output[0]["generated_text"])
 ```
 
-If you don't install `ftfy` and `SpaCy`, the [`OpenAIGPTTokenizer`] will default to tokenize
-using BERT's `BasicTokenizer` followed by Byte-Pair Encoding (which should be fine for most usage, don't worry).
+</hfoption>
+<hfoption id="AutoModel">
 
-## Resources
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with OpenAI GPT. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt")
+model = AutoModelForCausalLM.from_pretrained("openai-community/openai-gpt", dtype=torch.float16)
 
-<PipelineTag pipeline="text-classification"/>
+inputs = tokenizer("The future of AI is", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
+print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+```
 
-- A blog post on [outperforming OpenAI GPT-3 with SetFit for text-classification](https://www.philschmid.de/getting-started-setfit).
-- See also: [Text classification task guide](../tasks/sequence_classification)
+</hfoption>
+<hfoption id="transformers CLI">
 
-<PipelineTag pipeline="text-generation"/>
+```bash
+echo -e "The future of AI is" | transformers run --task text-generation --model openai-community/openai-gpt --device 0
 
-- A blog on how to [Finetune a non-English GPT-2 Model with Hugging Face](https://www.philschmid.de/fine-tune-a-non-english-gpt-2-model-with-huggingface).
-- A blog on [How to generate text: using different decoding methods for language generation with Transformers](https://huggingface.co/blog/how-to-generate) with GPT-2.
-- A blog on [Training CodeParrot 🦜 from Scratch](https://huggingface.co/blog/codeparrot), a large GPT-2 model.
-- A blog on [Faster Text Generation with TensorFlow and XLA](https://huggingface.co/blog/tf-xla-generate) with GPT-2.
-- A blog on [How to train a Language Model with Megatron-LM](https://huggingface.co/blog/megatron-training) with a GPT-2 model.
-- A notebook on how to [finetune GPT2 to generate lyrics in the style of your favorite artist](https://colab.research.google.com/github/AlekseyKorshuk/huggingartists/blob/master/huggingartists-demo.ipynb). 🌎
-- A notebook on how to [finetune GPT2 to generate tweets in the style of your favorite Twitter user](https://colab.research.google.com/github/borisdayma/huggingtweets/blob/master/huggingtweets-demo.ipynb). 🌎
-- [Causal language modeling](https://huggingface.co/course/en/chapter7/6?fw=pt#training-a-causal-language-model-from-scratch) chapter of the 🤗 Hugging Face Course.
-- [`OpenAIGPTLMHeadModel`] is supported by this [causal language modeling example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling#gpt-2gpt-and-causal-language-modeling), [text generation example script](https://github.com/huggingface/transformers/blob/main/examples/pytorch/text-generation/run_generation.py) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb).
-- [`TFOpenAIGPTLMHeadModel`] is supported by this [causal language modeling example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/language-modeling#run_clmpy) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb).
-- See also: [Causal language modeling task guide](../tasks/language_modeling)
+```
 
-<PipelineTag pipeline="token-classification"/>
+</hfoption>
+</hfoptions>
 
-- A course material on [Byte-Pair Encoding tokenization](https://huggingface.co/course/en/chapter6/5).
+## Notes
+
+- Inputs should be padded on the right because GPT uses absolute position embeddings.
 
 ## OpenAIGPTConfig
 
 [[autodoc]] OpenAIGPTConfig
-
-## OpenAIGPTTokenizer
-
-[[autodoc]] OpenAIGPTTokenizer
-    - save_vocabulary
-
-## OpenAIGPTTokenizerFast
-
-[[autodoc]] OpenAIGPTTokenizerFast
-
-## OpenAI specific outputs
-
-[[autodoc]] models.openai.modeling_openai.OpenAIGPTDoubleHeadsModelOutput
-
-[[autodoc]] models.openai.modeling_tf_openai.TFOpenAIGPTDoubleHeadsModelOutput
-
-<frameworkcontent>
-<pt>
 
 ## OpenAIGPTModel
 
@@ -140,28 +101,10 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 [[autodoc]] OpenAIGPTForSequenceClassification
     - forward
 
-</pt>
-<tf>
+## OpenAIGPTTokenizer
 
-## TFOpenAIGPTModel
+[[autodoc]] OpenAIGPTTokenizer
 
-[[autodoc]] TFOpenAIGPTModel
-    - call
+## OpenAIGPTTokenizerFast
 
-## TFOpenAIGPTLMHeadModel
-
-[[autodoc]] TFOpenAIGPTLMHeadModel
-    - call
-
-## TFOpenAIGPTDoubleHeadsModel
-
-[[autodoc]] TFOpenAIGPTDoubleHeadsModel
-    - call
-
-## TFOpenAIGPTForSequenceClassification
-
-[[autodoc]] TFOpenAIGPTForSequenceClassification
-    - call
-
-</tf>
-</frameworkcontent>
+[[autodoc]] OpenAIGPTTokenizerFast

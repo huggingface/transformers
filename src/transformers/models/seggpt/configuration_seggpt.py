@@ -47,7 +47,7 @@ class SegGptConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
-        image_size (`List[int]`, *optional*, defaults to `[896, 448]`):
+        image_size (`list[int]`, *optional*, defaults to `[896, 448]`):
             The size (resolution) of each image.
         patch_size (`int`, *optional*, defaults to 16):
             The size (resolution) of each patch.
@@ -68,7 +68,7 @@ class SegGptConfig(PretrainedConfig):
             Whether to use relative position embeddings in the attention layers.
         merge_index (`int`, *optional*, defaults to 2):
             The index of the encoder layer to merge the embeddings.
-        intermediate_hidden_state_indices (`List[int]`, *optional*, defaults to `[5, 11, 17, 23]`):
+        intermediate_hidden_state_indices (`list[int]`, *optional*, defaults to `[5, 11, 17, 23]`):
             The indices of the encoder layers which we store as features for the decoder.
         beta (`float`, *optional*, defaults to 0.01):
             Regularization factor for SegGptLoss (smooth-l1 loss).

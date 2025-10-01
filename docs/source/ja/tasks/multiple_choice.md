@@ -113,96 +113,11 @@ pip install transformers datasets evaluate
 tokenized_swag = swag.map(preprocess_function, batched=True)
 ```
 
-🤗 Transformers には多肢選択用のデータ照合器がないため、[`DataCollat​​orWithPadding`] を調整してサンプルのバッチを作成する必要があります。データセット全体を最大長までパディングするのではなく、照合中にバッチ内の最長の長さまで文を *動的にパディング* する方が効率的です。
-
-`DataCollat​​orForMultipleChoice` は、すべてのモデル入力を平坦化し、パディングを適用して、結果を非平坦化します。
-
-<frameworkcontent>
-<pt>
+[`DataCollatorForMultipleChoice`] は、すべてのモデル入力を平坦化し、パディングを適用して、結果を非平坦化します。
 ```py
->>> from dataclasses import dataclass
->>> from transformers.tokenization_utils_base import PreTrainedTokenizerBase, PaddingStrategy
->>> from typing import Optional, Union
->>> import torch
-
-
->>> @dataclass
-... class DataCollatorForMultipleChoice:
-...     """
-...     Data collator that will dynamically pad the inputs for multiple choice received.
-...     """
-
-...     tokenizer: PreTrainedTokenizerBase
-...     padding: Union[bool, str, PaddingStrategy] = True
-...     max_length: Optional[int] = None
-...     pad_to_multiple_of: Optional[int] = None
-
-...     def __call__(self, features):
-...         label_name = "label" if "label" in features[0].keys() else "labels"
-...         labels = [feature.pop(label_name) for feature in features]
-...         batch_size = len(features)
-...         num_choices = len(features[0]["input_ids"])
-...         flattened_features = [
-...             [{k: v[i] for k, v in feature.items()} for i in range(num_choices)] for feature in features
-...         ]
-...         flattened_features = sum(flattened_features, [])
-
-...         batch = self.tokenizer.pad(
-...             flattened_features,
-...             padding=self.padding,
-...             max_length=self.max_length,
-...             pad_to_multiple_of=self.pad_to_multiple_of,
-...             return_tensors="pt",
-...         )
-
-...         batch = {k: v.view(batch_size, num_choices, -1) for k, v in batch.items()}
-...         batch["labels"] = torch.tensor(labels, dtype=torch.int64)
-...         return batch
+>>> from transformers import DataCollatorForMultipleChoice
+>>> collator = DataCollatorForMultipleChoice(tokenizer=tokenizer)
 ```
-</pt>
-<tf>
-```py
->>> from dataclasses import dataclass
->>> from transformers.tokenization_utils_base import PreTrainedTokenizerBase, PaddingStrategy
->>> from typing import Optional, Union
->>> import tensorflow as tf
-
-
->>> @dataclass
-... class DataCollatorForMultipleChoice:
-...     """
-...     Data collator that will dynamically pad the inputs for multiple choice received.
-...     """
-
-...     tokenizer: PreTrainedTokenizerBase
-...     padding: Union[bool, str, PaddingStrategy] = True
-...     max_length: Optional[int] = None
-...     pad_to_multiple_of: Optional[int] = None
-
-...     def __call__(self, features):
-...         label_name = "label" if "label" in features[0].keys() else "labels"
-...         labels = [feature.pop(label_name) for feature in features]
-...         batch_size = len(features)
-...         num_choices = len(features[0]["input_ids"])
-...         flattened_features = [
-...             [{k: v[i] for k, v in feature.items()} for i in range(num_choices)] for feature in features
-...         ]
-...         flattened_features = sum(flattened_features, [])
-
-...         batch = self.tokenizer.pad(
-...             flattened_features,
-...             padding=self.padding,
-...             max_length=self.max_length,
-...             pad_to_multiple_of=self.pad_to_multiple_of,
-...             return_tensors="tf",
-...         )
-
-...         batch = {k: tf.reshape(v, (batch_size, num_choices, -1)) for k, v in batch.items()}
-...         batch["labels"] = tf.convert_to_tensor(labels, dtype=tf.int64)
-...         return batch
-```
-</tf>
-</frameworkcontent>
 
 ## Evaluate
 
@@ -230,8 +145,6 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 
 ## Train
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 [`Trainer`] を使用したモデルの微調整に慣れていない場合は、[ここ](../training#train-with-pytorch-trainer) の基本的なチュートリアルをご覧ください。
@@ -272,7 +185,7 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 ...     train_dataset=tokenized_swag["train"],
 ...     eval_dataset=tokenized_swag["validation"],
 ...     processing_class=tokenizer,
-...     data_collator=DataCollatorForMultipleChoice(tokenizer=tokenizer),
+...     data_collator=collator,
 ...     compute_metrics=compute_metrics,
 ... )
 
@@ -284,94 +197,6 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-<tf>
-<Tip>
-
-Keras を使用したモデルの微調整に慣れていない場合は、[こちら](../training#train-a-tensorflow-model-with-keras) の基本的なチュートリアルをご覧ください。
-
-</Tip>
-TensorFlow でモデルを微調整するには、オプティマイザー関数、学習率スケジュール、およびいくつかのトレーニング ハイパーパラメーターをセットアップすることから始めます。
-
-```py
->>> from transformers import create_optimizer
-
->>> batch_size = 16
->>> num_train_epochs = 2
->>> total_train_steps = (len(tokenized_swag["train"]) // batch_size) * num_train_epochs
->>> optimizer, schedule = create_optimizer(init_lr=5e-5, num_warmup_steps=0, num_train_steps=total_train_steps)
-```
-
-次に、[`TFAutoModelForMultipleChoice`] を使用して BERT をロードできます。
-
-```py
->>> from transformers import TFAutoModelForMultipleChoice
-
->>> model = TFAutoModelForMultipleChoice.from_pretrained("google-bert/bert-base-uncased")
-```
-
-[`~transformers.TFPreTrainedModel.prepare_tf_dataset`] を使用して、データセットを `tf.data.Dataset` 形式に変換します。
-
-```py
->>> data_collator = DataCollatorForMultipleChoice(tokenizer=tokenizer)
->>> tf_train_set = model.prepare_tf_dataset(
-...     tokenized_swag["train"],
-...     shuffle=True,
-...     batch_size=batch_size,
-...     collate_fn=data_collator,
-... )
-
->>> tf_validation_set = model.prepare_tf_dataset(
-...     tokenized_swag["validation"],
-...     shuffle=False,
-...     batch_size=batch_size,
-...     collate_fn=data_collator,
-... )
-```
-
-[`compile`](https://keras.io/api/models/model_training_apis/#compile-method) を使用してトレーニング用のモデルを設定します。 Transformers モデルにはすべてデフォルトのタスク関連の損失関数があるため、次の場合を除き、損失関数を指定する必要はないことに注意してください。
-
-```py
->>> model.compile(optimizer=optimizer)  # No loss argument!
-```
-
-トレーニングを開始する前にセットアップする最後の 2 つのことは、予測から精度を計算することと、モデルをハブにプッシュする方法を提供することです。どちらも [Keras コールバック](../main_classes/keras_callbacks) を使用して行われます。
-
-`compute_metrics` 関数を [`~transformers.KerasMetricCallback`] に渡します。
-
-```py
->>> from transformers.keras_callbacks import KerasMetricCallback
-
->>> metric_callback = KerasMetricCallback(metric_fn=compute_metrics, eval_dataset=tf_validation_set)
-```
-
-[`~transformers.PushToHubCallback`] でモデルとトークナイザーをプッシュする場所を指定します。
-
-```py
->>> from transformers.keras_callbacks import PushToHubCallback
-
->>> push_to_hub_callback = PushToHubCallback(
-...     output_dir="my_awesome_model",
-...     tokenizer=tokenizer,
-... )
-```
-
-次に、コールバックをまとめてバンドルします。
-
-```py
->>> callbacks = [metric_callback, push_to_hub_callback]
-```
-
-ついに、モデルのトレーニングを開始する準備が整いました。トレーニングおよび検証データセット、エポック数、コールバックを指定して [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) を呼び出し、モデルを微調整します。
-
-```py
->>> model.fit(x=tf_train_set, validation_data=tf_validation_set, epochs=2, callbacks=callbacks)
-```
-
-トレーニングが完了すると、モデルは自動的にハブにアップロードされ、誰でも使用できるようになります。
-
-</tf>
-</frameworkcontent>
 
 
 <Tip>
@@ -395,8 +220,6 @@ TensorFlow でモデルを微調整するには、オプティマイザー関数
 >>> candidate2 = "The law applies to baguettes."
 ```
 
-<frameworkcontent>
-<pt>
 
 各プロンプトと回答候補のペアをトークン化し、PyTorch テンソルを返します。いくつかの`lables`も作成する必要があります。
 
@@ -425,35 +248,3 @@ TensorFlow でモデルを微調整するには、オプティマイザー関数
 >>> predicted_class
 '0'
 ```
-</pt>
-<tf>
-
-各プロンプトと回答候補のペアをトークン化し、TensorFlow テンソルを返します。
-
-```py
->>> from transformers import AutoTokenizer
-
->>> tokenizer = AutoTokenizer.from_pretrained("my_awesome_swag_model")
->>> inputs = tokenizer([[prompt, candidate1], [prompt, candidate2]], return_tensors="tf", padding=True)
-```
-
-入力をモデルに渡し、`logits`を返します。
-
-```py
->>> from transformers import TFAutoModelForMultipleChoice
-
->>> model = TFAutoModelForMultipleChoice.from_pretrained("my_awesome_swag_model")
->>> inputs = {k: tf.expand_dims(v, 0) for k, v in inputs.items()}
->>> outputs = model(inputs)
->>> logits = outputs.logits
-```
-
-最も高い確率でクラスを取得します。
-
-```py
->>> predicted_class = int(tf.math.argmax(logits, axis=-1)[0])
->>> predicted_class
-'0'
-```
-</tf>
-</frameworkcontent>

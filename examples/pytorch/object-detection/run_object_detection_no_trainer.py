@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,6 +11,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+# /// script
+# dependencies = [
+#     "transformers @ git+https://github.com/huggingface/transformers.git",
+#     "albumentations >= 1.4.16",
+#     "timm",
+#     "datasets>=4.0",
+#     "torchmetrics",
+#     "pycocotools",
+# ]
+# ///
+
 """Finetuning 🤗 Transformers model for object detection with Accelerate."""
 
 import argparse
@@ -19,9 +30,10 @@ import json
 import logging
 import math
 import os
+from collections.abc import Mapping
 from functools import partial
 from pathlib import Path
-from typing import Any, List, Mapping, Tuple, Union
+from typing import Any, Union
 
 import albumentations as A
 import datasets
@@ -46,12 +58,12 @@ from transformers import (
 )
 from transformers.image_processing_utils import BatchFeature
 from transformers.image_transforms import center_to_corners_format
-from transformers.utils import check_min_version, send_example_telemetry
+from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.49.0.dev0")
+check_min_version("4.57.0.dev0")
 
 logging.basicConfig(level=logging.INFO)
 logger = get_logger(__name__)
@@ -61,15 +73,15 @@ require_version("datasets>=2.0.0", "To fix: pip install -r examples/pytorch/sema
 
 # Copied from examples/pytorch/object-detection/run_object_detection.format_image_annotations_as_coco
 def format_image_annotations_as_coco(
-    image_id: str, categories: List[int], areas: List[float], bboxes: List[Tuple[float]]
+    image_id: str, categories: list[int], areas: list[float], bboxes: list[tuple[float]]
 ) -> dict:
     """Format one set of image annotations to the COCO format
 
     Args:
         image_id (str): image id. e.g. "0001"
-        categories (List[int]): list of categories/class labels corresponding to provided bounding boxes
-        areas (List[float]): list of corresponding areas to provided bounding boxes
-        bboxes (List[Tuple[float]]): list of bounding boxes provided in COCO format
+        categories (list[int]): list of categories/class labels corresponding to provided bounding boxes
+        areas (list[float]): list of corresponding areas to provided bounding boxes
+        bboxes (list[tuple[float]]): list of bounding boxes provided in COCO format
             ([center_x, center_y, width, height] in absolute coordinates)
 
     Returns:
@@ -96,14 +108,14 @@ def format_image_annotations_as_coco(
 
 
 # Copied from examples/pytorch/object-detection/run_object_detection.convert_bbox_yolo_to_pascal
-def convert_bbox_yolo_to_pascal(boxes: torch.Tensor, image_size: Tuple[int, int]) -> torch.Tensor:
+def convert_bbox_yolo_to_pascal(boxes: torch.Tensor, image_size: tuple[int, int]) -> torch.Tensor:
     """
     Convert bounding boxes from YOLO format (x_center, y_center, width, height) in range [0, 1]
     to Pascal VOC format (x_min, y_min, x_max, y_max) in absolute coordinates.
 
     Args:
         boxes (torch.Tensor): Bounding boxes in YOLO format
-        image_size (Tuple[int, int]): Image size in format (height, width)
+        image_size (tuple[int, int]): Image size in format (height, width)
 
     Returns:
         torch.Tensor: Bounding boxes in Pascal VOC format (x_min, y_min, x_max, y_max)
@@ -152,7 +164,7 @@ def augment_and_transform_batch(
 
 
 # Copied from examples/pytorch/object-detection/run_object_detection.collate_fn
-def collate_fn(batch: List[BatchFeature]) -> Mapping[str, Union[torch.Tensor, List[Any]]]:
+def collate_fn(batch: list[BatchFeature]) -> Mapping[str, Union[torch.Tensor, list[Any]]]:
     data = {}
     data["pixel_values"] = torch.stack([x["pixel_values"] for x in batch])
     data["labels"] = [x["labels"] for x in batch]
@@ -255,6 +267,12 @@ def parse_args():
         type=int,
         default=1333,
         help="Image longest size will be resized to this value, then image will be padded to square.",
+    )
+    parser.add_argument(
+        "--use_fast",
+        type=bool,
+        default=True,
+        help="Use a fast torchvision-base image processor if it is supported for a given model.",
     )
     parser.add_argument(
         "--cache_dir",
@@ -393,10 +411,6 @@ def parse_args():
 def main():
     args = parse_args()
 
-    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
-    # information sent is the one passed as arguments along with your Python/PyTorch versions.
-    send_example_telemetry("run_object_detection_no_trainer", args)
-
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
     # If we're using tracking, we also need to initialize it here and it will by default pick up all supported trackers
     # in the environment
@@ -447,14 +461,17 @@ def main():
     dataset = load_dataset(args.dataset_name, cache_dir=args.cache_dir, trust_remote_code=args.trust_remote_code)
 
     # If we don't have a validation split, split off a percentage of train as validation.
-    args.train_val_split = None if "validation" in dataset.keys() else args.train_val_split
+    args.train_val_split = None if "validation" in dataset else args.train_val_split
     if isinstance(args.train_val_split, float) and args.train_val_split > 0.0:
         split = dataset["train"].train_test_split(args.train_val_split, seed=args.seed)
         dataset["train"] = split["train"]
         dataset["validation"] = split["test"]
 
     # Get dataset categories and prepare mappings for label_name <-> label_id
-    categories = dataset["train"].features["objects"].feature["category"].names
+    if isinstance(dataset["train"].features["objects"], dict):
+        categories = dataset["train"].features["objects"]["category"].feature.names
+    else:  # (for old versions of `datasets` that used Sequence({...}) of the objects)
+        categories = dataset["train"].features["objects"].feature["category"].names
     id2label = dict(enumerate(categories))
     label2id = {v: k for k, v in id2label.items()}
 
@@ -482,6 +499,7 @@ def main():
         size={"max_height": args.image_square_size, "max_width": args.image_square_size},
         do_pad=True,
         pad_size={"height": args.image_square_size, "width": args.image_square_size},
+        use_fast=args.use_fast,
         **common_pretrained_args,
     )
 
@@ -752,9 +770,6 @@ def main():
 
     logger.info(f"Test metrics: {metrics}")
 
-    if args.with_tracking:
-        accelerator.end_training()
-
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
         unwrapped_model = accelerator.unwrap_model(model)
@@ -776,6 +791,9 @@ def main():
                     token=args.hub_token,
                     ignore_patterns=["epoch_*"],
                 )
+
+    accelerator.wait_for_everyone()
+    accelerator.end_training()
 
 
 if __name__ == "__main__":

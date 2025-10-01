@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -127,7 +126,6 @@ class MgpstrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     test_attention_outputs = False
 
     def setUp(self):
@@ -140,6 +138,9 @@ class MgpstrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_batching_equivalence(self, atol=1e-4, rtol=1e-4):
+        super().test_batching_equivalence(atol=atol, rtol=rtol)
 
     @unittest.skip(reason="MgpstrModel does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -202,7 +203,7 @@ class MgpstrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    # override as the `logit_scale` parameter initilization is different for MgpstrModel
+    # override as the `logit_scale` parameter initialization is different for MgpstrModel
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -259,4 +260,4 @@ class MgpstrModelIntegrationTest(unittest.TestCase):
             device=torch_device,
         )
 
-        self.assertTrue(torch.allclose(outputs.logits[0][:, 1:4, 1:4], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0][:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4)

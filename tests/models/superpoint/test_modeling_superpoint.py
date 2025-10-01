@@ -13,11 +13,11 @@
 # limitations under the License.
 import inspect
 import unittest
-from typing import List
+from functools import cached_property
 
 from transformers.models.superpoint.configuration_superpoint import SuperPointConfig
 from transformers.testing_utils import is_flaky, require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
@@ -43,7 +43,7 @@ class SuperPointModelTester:
         batch_size=3,
         image_width=80,
         image_height=60,
-        encoder_hidden_sizes: List[int] = [32, 32, 64, 64],
+        encoder_hidden_sizes: list[int] = [32, 32, 64, 64],
         decoder_hidden_size: int = 128,
         keypoint_decoder_dim: int = 65,
         descriptor_decoder_dim: int = 128,
@@ -113,12 +113,10 @@ class SuperPointModelTester:
 @require_torch
 class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SuperPointForKeypointDetection,) if is_torch_available() else ()
-    all_generative_model_classes = () if is_torch_available() else ()
 
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     has_attentions = False
     from_pretrained_id = "magic-leap-community/superpoint"
 
@@ -297,7 +295,7 @@ class SuperPointModelIntegrationTest(unittest.TestCase):
                 atol=1e-4,
             )
         )
-        self.assertTrue(torch.allclose(predicted_scores_image0_values, expected_scores_image0_values, atol=1e-4))
+        torch.testing.assert_close(predicted_scores_image0_values, expected_scores_image0_values, rtol=1e-4, atol=1e-4)
         self.assertTrue(
             torch.allclose(
                 predicted_descriptors_image0_value,

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +18,7 @@ import unittest
 
 from transformers import pipeline
 from transformers.testing_utils import (
+    Expectations,
     require_bitsandbytes,
     require_timm,
     require_torch,
@@ -53,14 +53,15 @@ class TimmWrapperModelTester:
     def __init__(
         self,
         parent,
-        model_name="timm/resnet18.a1_in1k",
         batch_size=3,
         image_size=32,
         num_channels=3,
         is_training=True,
     ):
         self.parent = parent
-        self.model_name = model_name
+        self.architecture = "resnet26"
+        # We need this to make the model smaller
+        self.model_args = {"channels": (16, 16, 16, 16)}
         self.batch_size = batch_size
         self.image_size = image_size
         self.num_channels = num_channels
@@ -73,18 +74,7 @@ class TimmWrapperModelTester:
         return config, pixel_values
 
     def get_config(self):
-        return TimmWrapperConfig.from_pretrained(self.model_name)
-
-    def create_and_check_model(self, config, pixel_values):
-        model = TimmWrapperModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.no_grad():
-            result = model(pixel_values)
-        self.parent.assertEqual(
-            result.feature_map[-1].shape,
-            (self.batch_size, model.channels[-1], 14, 14),
-        )
+        return TimmWrapperConfig(architecture=self.architecture, model_args=self.model_args)
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -104,10 +94,8 @@ class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     )
 
     test_resize_embeddings = False
-    test_head_masking = False
     test_pruning = False
     has_attentions = False
-    test_model_parallel = False
 
     def setUp(self):
         self.config_class = TimmWrapperConfig
@@ -166,12 +154,22 @@ class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         pass
 
     @unittest.skip(reason="TimmWrapper initialization is managed on the timm side")
+    def test_can_init_all_missing_weights(self):
+        pass
+
+    @unittest.skip(reason="TimmWrapper initialization is managed on the timm side")
     def test_initialization(self):
         pass
 
-    @unittest.skip(reason="Need to use a timm model and there is no tiny model available.")
-    def test_model_is_small(self):
-        pass
+    def test_gradient_checkpointing(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = TimmWrapperModel._from_config(config)
+        self.assertTrue(model.supports_gradient_checkpointing)
+
+    def test_gradient_checkpointing_on_non_supported_model(self):
+        config = TimmWrapperConfig.from_pretrained("timm/hrnet_w18.ms_aug_in1k")
+        model = TimmWrapperModel._from_config(config)
+        self.assertFalse(model.supports_gradient_checkpointing)
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -249,6 +247,24 @@ class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         self.assertEqual(config.id2label, restored_config.id2label)
         self.assertEqual(config.label2id, restored_config.label2id)
 
+    def test_model_init_args(self):
+        # test init from config
+        config = TimmWrapperConfig.from_pretrained(
+            "timm/vit_base_patch32_clip_448.laion2b_ft_in12k_in1k",
+            model_args={"depth": 3},
+        )
+        model = TimmWrapperModel(config)
+        self.assertEqual(len(model.timm_model.blocks), 3)
+
+        cls_model = TimmWrapperForImageClassification(config)
+        self.assertEqual(len(cls_model.timm_model.blocks), 3)
+
+        # test save load
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            restored_model = TimmWrapperModel.from_pretrained(tmpdirname)
+            self.assertEqual(len(restored_model.timm_model.blocks), 3)
+
 
 # We will verify our results on an image of cute cats
 def prepare_img():
@@ -290,10 +306,16 @@ class TimmWrapperModelIntegrationTest(unittest.TestCase):
         expected_label = 281  # tabby cat
         self.assertEqual(torch.argmax(outputs.logits).item(), expected_label)
 
-        expected_slice = torch.tensor([-11.2618, -9.6192, -10.3205]).to(torch_device)
+        expectations = Expectations(
+            {
+                (None, None): [-11.2618, -9.6192, -10.3205],
+                ("cuda", 8): [-11.2634, -9.6208, -10.3199],
+            }
+        )
+        expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
+
         resulted_slice = outputs.logits[0, :3]
-        is_close = torch.allclose(resulted_slice, expected_slice, atol=1e-3)
-        self.assertTrue(is_close, f"Expected {expected_slice}, but got {resulted_slice}")
+        torch.testing.assert_close(resulted_slice, expected_slice, atol=1e-3, rtol=1e-3)
 
     @slow
     def test_inference_with_pipeline(self):
@@ -335,10 +357,16 @@ class TimmWrapperModelIntegrationTest(unittest.TestCase):
         expected_label = 281  # tabby cat
         self.assertEqual(torch.argmax(outputs.logits).item(), expected_label)
 
-        expected_slice = torch.tensor([-2.4043, 1.4492, -0.5127]).to(outputs.logits.dtype)
-        resulted_slice = outputs.logits[0, :3].cpu()
-        is_close = torch.allclose(resulted_slice, expected_slice, atol=0.1)
-        self.assertTrue(is_close, f"Expected {expected_slice}, but got {resulted_slice}")
+        expectations = Expectations(
+            {
+                (None, None): [-2.4043, 1.4492, -0.5127],
+                ("cuda", 8): [-2.2676, 1.5303, -0.4409],
+            }
+        )
+        expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
+
+        resulted_slice = outputs.logits[0, :3].to(dtype=torch.float32)
+        torch.testing.assert_close(resulted_slice, expected_slice, atol=0.1, rtol=0.1)
 
     @slow
     def test_transformers_model_for_classification_is_equivalent_to_timm(self):

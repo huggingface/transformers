@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 Salesforce and HuggingFace Inc. team.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -111,13 +110,10 @@ class CTRLModelTester:
 
         config = self.get_config()
 
-        head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
-
         return (
             config,
             input_ids,
             input_mask,
-            head_mask,
             token_type_ids,
             mc_token_ids,
             sequence_labels,
@@ -141,18 +137,18 @@ class CTRLModelTester:
             pad_token_id=self.pad_token_id,
         )
 
-    def create_and_check_ctrl_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_ctrl_model(self, config, input_ids, input_mask, token_type_ids, *args):
         model = CTRLModel(config=config)
         model.to(torch_device)
         model.eval()
 
-        model(input_ids, token_type_ids=token_type_ids, head_mask=head_mask)
+        model(input_ids, token_type_ids=token_type_ids)
         model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(len(result.past_key_values), config.n_layer)
 
-    def create_and_check_lm_head_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_lm_head_model(self, config, input_ids, input_mask, token_type_ids, *args):
         model = CTRLLMHeadModel(config)
         model.to(torch_device)
         model.eval()
@@ -168,7 +164,6 @@ class CTRLModelTester:
             config,
             input_ids,
             input_mask,
-            head_mask,
             token_type_ids,
             mc_token_ids,
             sequence_labels,
@@ -176,24 +171,14 @@ class CTRLModelTester:
             choice_labels,
         ) = config_and_inputs
 
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "head_mask": head_mask}
+        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids}
 
         return config, inputs_dict
-
-    def create_and_check_ctrl_for_sequence_classification(self, config, input_ids, head_mask, token_type_ids, *args):
-        config.num_labels = self.num_labels
-        model = CTRLForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-        result = model(input_ids, token_type_ids=token_type_ids, labels=sequence_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
 
 @require_torch
 class CTRLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (CTRLModel, CTRLLMHeadModel, CTRLForSequenceClassification) if is_torch_available() else ()
-    all_generative_model_classes = (CTRLLMHeadModel,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": CTRLModel,
@@ -206,7 +191,6 @@ class CTRLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     )
     test_pruning = True
     test_resize_embeddings = False
-    test_head_masking = False
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(

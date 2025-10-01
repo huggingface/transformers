@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +17,7 @@ import inspect
 import unittest
 
 from transformers import AutoBackbone
-from transformers.testing_utils import is_flaky, require_timm, require_torch, torch_device
+from transformers.testing_utils import require_timm, require_torch, torch_device
 from transformers.utils.import_utils import is_torch_available
 
 from ...test_backbone_common import BackboneTesterMixin
@@ -27,8 +26,6 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor
 
 
 if is_torch_available():
-    import torch
-
     from transformers import TimmBackbone, TimmBackboneConfig
 
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -76,17 +73,6 @@ class TimmBackboneModelTester:
             backbone=self.backbone,
         )
 
-    def create_and_check_model(self, config, pixel_values):
-        model = TimmBackbone(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.no_grad():
-            result = model(pixel_values)
-        self.parent.assertEqual(
-            result.feature_map[-1].shape,
-            (self.batch_size, model.channels[-1], 14, 14),
-        )
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
@@ -100,7 +86,6 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
     all_model_classes = (TimmBackbone,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": TimmBackbone} if is_torch_available() else {}
     test_resize_embeddings = False
-    test_head_masking = False
     test_pruning = False
     has_attentions = False
 
@@ -115,11 +100,9 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @is_flaky(
-        description="`TimmBackbone` has no `_init_weights`. Timm's way of weight init. seems to give larger magnitude in the intermediate values during `forward`."
-    )
-    def test_batching_equivalence(self):
-        super().test_batching_equivalence()
+    # `TimmBackbone` has no `_init_weights`. Timm's way of weight init. seems to give larger magnitude in the intermediate values during `forward`.
+    def test_batching_equivalence(self, atol=1e-4, rtol=1e-4):
+        super().test_batching_equivalence(atol=atol, rtol=rtol)
 
     def test_timm_transformer_backbone_equivalence(self):
         timm_checkpoint = "resnet18"
@@ -153,6 +136,10 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
         pass
 
     @unittest.skip(reason="TimmBackbone initialization is managed on the timm side")
+    def test_can_init_all_missing_weights(self):
+        pass
+
+    @unittest.skip(reason="TimmBackbone initialization is managed on the timm side")
     def test_initialization(self):
         pass
 
@@ -172,24 +159,20 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
     def test_save_load(self):
         pass
 
-    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
-    def test_save_load_low_cpu_mem_usage(self):
+    @unittest.skip(reason="TimmBackbone uses its own `from_pretrained` without device_map support")
+    def test_can_load_with_device_context_manager(self):
         pass
 
-    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
-    def test_save_load_low_cpu_mem_usage_checkpoints(self):
+    @unittest.skip(reason="TimmBackbone uses its own `from_pretrained` without device_map support")
+    def test_can_load_with_global_device_set(self):
         pass
 
-    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
-    def test_save_load_low_cpu_mem_usage_no_safetensors(self):
+    @unittest.skip(reason="TimmBackbone uses its own `from_pretrained` without device_map support")
+    def test_cannot_load_with_meta_device_context_manager(self):
         pass
 
     @unittest.skip(reason="model weights aren't tied in TimmBackbone.")
     def test_tie_model_weights(self):
-        pass
-
-    @unittest.skip(reason="model weights aren't tied in TimmBackbone.")
-    def test_tied_model_weights_key_ignore(self):
         pass
 
     @unittest.skip(reason="Only checkpoints on timm can be loaded into TimmBackbone")

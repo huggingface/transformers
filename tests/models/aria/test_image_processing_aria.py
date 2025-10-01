@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +17,7 @@ import unittest
 
 import numpy as np
 
-from transformers.image_utils import PILImageResampling
+from transformers.image_utils import ChannelDimension, PILImageResampling
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -35,7 +34,7 @@ if is_torch_available():
     import torch
 
 
-class AriaImageProcessingTester(unittest.TestCase):
+class AriaImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -55,7 +54,6 @@ class AriaImageProcessingTester(unittest.TestCase):
         do_convert_rgb=True,
         resample=PILImageResampling.BICUBIC,
     ):
-        super().__init__()
         self.size = size if size is not None else {"longest_edge": max_resolution}
         self.parent = parent
         self.batch_size = batch_size
@@ -266,3 +264,57 @@ class AriaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 tuple(encoded_images.shape),
                 (self.image_processor_tester.batch_size, *expected_output_image_shape),
             )
+
+    def test_pad_for_patching(self):
+        for image_processing_class in self.image_processor_list:
+            if image_processing_class == self.fast_image_processing_class:
+                numpify = False
+                torchify = True
+                input_data_format = image_processing_class.data_format
+            else:
+                numpify = True
+                torchify = False
+                input_data_format = ChannelDimension.LAST
+            image_processing = image_processing_class(**self.image_processor_dict)
+            # Create odd-sized images
+            image_input = self.image_processor_tester.prepare_image_inputs(
+                batch_size=1,
+                max_resolution=400,
+                num_images=1,
+                equal_resolution=True,
+                numpify=numpify,
+                torchify=torchify,
+            )[0][0]
+            self.assertIn(image_input.shape, [(3, 400, 400), (400, 400, 3)])
+
+            # Test odd-width
+            image_shape = (400, 601)
+            encoded_images = image_processing._pad_for_patching(image_input, image_shape, input_data_format)
+            encoded_image_shape = (
+                encoded_images.shape[:-1] if input_data_format == ChannelDimension.LAST else encoded_images.shape[1:]
+            )
+            self.assertEqual(encoded_image_shape, image_shape)
+
+            # Test odd-height
+            image_shape = (503, 400)
+            encoded_images = image_processing._pad_for_patching(image_input, image_shape, input_data_format)
+            encoded_image_shape = (
+                encoded_images.shape[:-1] if input_data_format == ChannelDimension.LAST else encoded_images.shape[1:]
+            )
+            self.assertEqual(encoded_image_shape, image_shape)
+
+    def test_get_num_patches_without_images(self):
+        for image_processing_class in self.image_processor_list:
+            image_processing = image_processing_class(**self.image_processor_dict)
+            num_patches = image_processing.get_number_of_image_patches(height=100, width=100, images_kwargs={})
+            self.assertEqual(num_patches, 1)
+
+            num_patches = image_processing.get_number_of_image_patches(
+                height=300, width=500, images_kwargs={"split_image": True}
+            )
+            self.assertEqual(num_patches, 1)
+
+            num_patches = image_processing.get_number_of_image_patches(
+                height=100, width=100, images_kwargs={"split_image": True, "max_image_size": 200}
+            )
+            self.assertEqual(num_patches, 19)

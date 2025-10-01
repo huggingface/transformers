@@ -15,14 +15,15 @@
 """Perceiver model configuration"""
 
 from collections import OrderedDict
-from typing import Any, Mapping, Optional, Union
+from collections.abc import Mapping
+from typing import Any, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import FeatureExtractionMixin
 from ...onnx import OnnxConfig
 from ...onnx.utils import compute_effective_axis_dimension
 from ...tokenization_utils_base import PreTrainedTokenizerBase
-from ...utils import TensorType, logging
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -84,7 +85,7 @@ class PerceiverConfig(PretrainedConfig):
             this to something large just in case (e.g., 512 or 1024 or 2048).
         image_size (`int`, *optional*, defaults to 56):
             Size of the images after preprocessing, for [`PerceiverForImageClassificationLearned`].
-        train_size (`List[int]`, *optional*, defaults to `[368, 496]`):
+        train_size (`list[int]`, *optional*, defaults to `[368, 496]`):
             Training size of the images for the optical flow model.
         num_frames (`int`, *optional*, defaults to 16):
             Number of video frames used for the multimodal autoencoding model.
@@ -92,7 +93,7 @@ class PerceiverConfig(PretrainedConfig):
             Number of audio samples per frame for the multimodal autoencoding model.
         samples_per_patch (`int`, *optional*, defaults to 16):
             Number of audio samples per patch when preprocessing the audio for the multimodal autoencoding model.
-        output_shape (`List[int]`, *optional*, defaults to `[1, 16, 224, 224]`):
+        output_shape (`list[int]`, *optional*, defaults to `[1, 16, 224, 224]`):
             Shape of the output (batch_size, num_frames, height, width) for the video decoder queries of the multimodal
             autoencoding model. This excludes the channel dimension.
         output_num_channels (`int`, *optional*, defaults to 512):
@@ -206,7 +207,6 @@ class PerceiverOnnxConfig(OnnxConfig):
         seq_length: int = -1,
         num_choices: int = -1,
         is_pair: bool = False,
-        framework: Optional[TensorType] = None,
         num_channels: int = 3,
         image_width: int = 40,
         image_height: int = 40,
@@ -225,14 +225,14 @@ class PerceiverOnnxConfig(OnnxConfig):
             )
             # Generate dummy inputs according to compute batch and sequence
             dummy_input = [" ".join(["a"]) * seq_length] * batch_size
-            inputs = dict(preprocessor(dummy_input, return_tensors=framework))
+            inputs = dict(preprocessor(dummy_input, return_tensors="pt"))
             inputs["inputs"] = inputs.pop("input_ids")
             return inputs
         elif isinstance(preprocessor, FeatureExtractionMixin) and preprocessor.model_input_names[0] == "pixel_values":
             # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
             batch_size = compute_effective_axis_dimension(batch_size, fixed_dimension=OnnxConfig.default_fixed_batch)
             dummy_input = self._generate_dummy_images(batch_size, num_channels, image_height, image_width)
-            inputs = dict(preprocessor(images=dummy_input, return_tensors=framework))
+            inputs = dict(preprocessor(images=dummy_input, return_tensors="pt"))
             inputs["inputs"] = inputs.pop("pixel_values")
             return inputs
         else:

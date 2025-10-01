@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Union
+from typing import Any, Union, overload
 
 import numpy as np
 
@@ -21,10 +21,6 @@ if is_torch_available():
 
 
 logger = logging.get_logger(__name__)
-
-
-Prediction = Dict[str, Any]
-Predictions = List[Prediction]
 
 
 @add_end_docstrings(build_pipeline_init_args(has_image_processor=True))
@@ -64,11 +60,13 @@ class ImageSegmentationPipeline(Pipeline):
     [huggingface.co/models](https://huggingface.co/models?filter=image-segmentation).
     """
 
+    _load_processor = False
+    _load_image_processor = True
+    _load_feature_extractor = False
+    _load_tokenizer = None  # Oneformer uses it but no-one else does
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-        if self.framework == "tf":
-            raise ValueError(f"The {self.__class__} is only available in PyTorch.")
 
         requires_backends(self, "vision")
         mapping = MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES.copy()
@@ -94,12 +92,20 @@ class ImageSegmentationPipeline(Pipeline):
 
         return preprocess_kwargs, {}, postprocess_kwargs
 
-    def __call__(self, inputs=None, **kwargs) -> Union[Predictions, List[Prediction]]:
+    @overload
+    def __call__(self, inputs: Union[str, "Image.Image"], **kwargs: Any) -> list[dict[str, Any]]: ...
+
+    @overload
+    def __call__(self, inputs: Union[list[str], list["Image.Image"]], **kwargs: Any) -> list[list[dict[str, Any]]]: ...
+
+    def __call__(
+        self, inputs: Union[str, "Image.Image", list[str], list["Image.Image"]], **kwargs: Any
+    ) -> Union[list[dict[str, Any]], list[list[dict[str, Any]]]]:
         """
         Perform segmentation (detect masks & classes) in the image(s) passed as inputs.
 
         Args:
-            inputs (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
+            inputs (`str`, `list[str]`, `PIL.Image` or `list[PIL.Image]`):
                 The pipeline handles three types of images:
 
                 - A string containing an HTTP(S) link pointing to an image
@@ -123,9 +129,8 @@ class ImageSegmentationPipeline(Pipeline):
                 the call may block forever.
 
         Return:
-            A dictionary or a list of dictionaries containing the result. If the input is a single image, will return a
-            list of dictionaries, if the input is a list of several images, will return a list of list of dictionaries
-            corresponding to each image.
+            If the input is a single image, will return a list of dictionaries, if the input is a list of several images,
+            will return a list of list of dictionaries corresponding to each image.
 
             The dictionaries contain the mask, label and score (where applicable) of each detected object and contains
             the following keys:
@@ -152,18 +157,16 @@ class ImageSegmentationPipeline(Pipeline):
             else:
                 kwargs = {"task_inputs": [subtask]}
             inputs = self.image_processor(images=[image], return_tensors="pt", **kwargs)
-            if self.framework == "pt":
-                inputs = inputs.to(self.torch_dtype)
+            inputs = inputs.to(self.dtype)
             inputs["task_inputs"] = self.tokenizer(
                 inputs["task_inputs"],
                 padding="max_length",
                 max_length=self.model.config.task_seq_len,
-                return_tensors=self.framework,
+                return_tensors="pt",
             )["input_ids"]
         else:
             inputs = self.image_processor(images=[image], return_tensors="pt")
-            if self.framework == "pt":
-                inputs = inputs.to(self.torch_dtype)
+            inputs = inputs.to(self.dtype)
         inputs["target_size"] = target_size
         return inputs
 

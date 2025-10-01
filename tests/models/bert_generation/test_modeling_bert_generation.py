@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,6 +13,8 @@
 # limitations under the License.
 
 
+import inspect
+import tempfile
 import unittest
 
 from transformers import BertGenerationConfig, is_torch_available
@@ -28,7 +29,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import BertGenerationDecoder, BertGenerationEncoder
+    from transformers import BertGenerationDecoder, BertGenerationEncoder, DataCollatorWithFlattening
 
 
 class BertGenerationEncoderTester:
@@ -243,12 +244,17 @@ class BertGenerationEncoderTester:
 @require_torch
 class BertGenerationEncoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (BertGenerationEncoder, BertGenerationDecoder) if is_torch_available() else ()
-    all_generative_model_classes = (BertGenerationDecoder,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"feature-extraction": BertGenerationEncoder, "text-generation": BertGenerationDecoder}
         if is_torch_available()
         else {}
     )
+
+    # Overwriting to add `is_decoder` flag
+    def prepare_config_and_inputs_for_generate(self, batch_size=2):
+        config, inputs = super().prepare_config_and_inputs_for_generate(batch_size)
+        config.is_decoder = True
+        return config, inputs
 
     def setUp(self):
         self.model_tester = BertGenerationEncoderTester(self)
@@ -275,7 +281,6 @@ class BertGenerationEncoderTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
     def test_model_as_decoder_with_default_input_mask(self):
-        # This regression test was failing with PyTorch < 1.3
         (
             config,
             input_ids,
@@ -305,12 +310,128 @@ class BertGenerationEncoderTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
         model = BertGenerationEncoder.from_pretrained("google/bert_for_seq_generation_L-24_bbc_encoder")
         self.assertIsNotNone(model)
 
+    def attention_mask_padding_matches_padding_free_with_position_ids(
+        self, attn_implementation: str, fa_kwargs: bool = False
+    ):
+        """
+        Overwritten to account for the embeddings that rely on position ids.
+        """
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        max_new_tokens = 30
+        support_flag = {
+            "sdpa": "_supports_sdpa",
+            "flash_attention_2": "_supports_flash_attn",
+            "flash_attention_3": "_supports_flash_attn",
+        }
+
+        for model_class in self.all_generative_model_classes:
+            if attn_implementation != "eager" and not getattr(model_class, support_flag[attn_implementation]):
+                self.skipTest(f"{model_class.__name__} does not support {attn_implementation}")
+
+            # can't infer if new attn mask API is supported by assume that only model with attention backend support it
+            if not model_class._supports_attention_backend:
+                self.skipTest(f"{model_class.__name__} does not support new attention mask API")
+
+            if model_class._is_stateful:  # non-transformer models most probably have no packing support
+                self.skipTest(f"{model_class.__name__} doesn't support packing!")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            if config.is_encoder_decoder:
+                self.skipTest("Model is an encoder-decoder")
+
+            if 0 not in inputs_dict.get("attention_mask", []) or "attention_mask" not in inputs_dict:
+                self.skipTest("Model dummy inputs should contain padding in their attention mask")
+
+            if "input_ids" not in inputs_dict or inputs_dict["input_ids"].ndim != 2:
+                self.skipTest("Model dummy inputs should contain text input ids")
+
+            # make sure that all models have enough positions for generation
+            dummy_input_ids = inputs_dict["input_ids"]
+            if hasattr(config, "max_position_embeddings"):
+                config.max_position_embeddings = max_new_tokens + dummy_input_ids.shape[1] + 1
+
+            model = model_class(config)
+            if "position_ids" not in inspect.signature(model.forward).parameters:
+                self.skipTest("Model does not support position_ids")
+
+            if (not fa_kwargs) and "position_ids" not in inspect.signature(model.forward).parameters:
+                continue  # this model doesn't accept position ids as input
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                # Drop all keys except for the minimal set. Hard to manipulate with multimodals etc
+                inputs_dict = {k: v for k, v in inputs_dict.items() if k in ["input_ids", "attention_mask"]}
+
+                # Ensure left padding, to adapt for some models
+                if 0 in inputs_dict["attention_mask"][:, -1]:
+                    inputs_dict["attention_mask"] = inputs_dict["attention_mask"].flip(1)
+                dummy_attention_mask = inputs_dict["attention_mask"]
+                dummy_input_ids[~dummy_attention_mask.bool()] = config.get_text_config().pad_token_id
+
+                # Main difference to other models, we need to prepare position ids according to the attention mask
+                # as we use it to extract embeddings that rely on the correct position - naively increasing sequences do
+                # not suffice anymore atp. The solution here calculates an increasing sequences for all 1s and puts 0s else.
+                inputs_dict["position_ids"] = ((inputs_dict["attention_mask"] == 1).long().cumsum(dim=1) - 1) * (
+                    inputs_dict["attention_mask"] == 1
+                ).long()
+
+                model = (
+                    model_class.from_pretrained(
+                        tmpdirname,
+                        dtype=torch.bfloat16,
+                        attn_implementation=attn_implementation,
+                    )
+                    .to(torch_device)
+                    .eval()
+                )
+
+                if fa_kwargs:
+                    # flatten
+                    features = [
+                        {"input_ids": i[a.bool()].tolist()} for i, a in zip(dummy_input_ids, dummy_attention_mask)
+                    ]
+
+                    # add position_ids + fa_kwargs
+                    data_collator = DataCollatorWithFlattening(return_tensors="pt", return_flash_attn_kwargs=True)
+                    batch = data_collator(features)
+                    padfree_inputs_dict = {
+                        k: t.to(torch_device) if torch.is_tensor(t) else t for k, t in batch.items()
+                    }
+                else:
+                    # create packed position_ids
+                    position_ids = (
+                        torch.cat([torch.arange(length) for length in dummy_attention_mask.sum(1).tolist()])
+                        .long()
+                        .unsqueeze(0)
+                        .to(torch_device)
+                    )
+                    padfree_inputs_dict = {
+                        "input_ids": dummy_input_ids[dummy_attention_mask.bool()].unsqueeze(0),
+                        "position_ids": position_ids,
+                    }
+
+                # We need to do simple forward without cache in order to trigger packed SDPA/flex/eager attention path
+                res_padded = model(**inputs_dict, use_cache=False)
+                res_padfree = model(**padfree_inputs_dict, use_cache=False)
+
+                logits_padded = res_padded.logits[dummy_attention_mask.bool()]
+                logits_padfree = res_padfree.logits[0]
+
+                # acceptable numerical instability
+                tol = torch.finfo(torch.bfloat16).eps
+                torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=tol)
+
 
 @require_torch
 class BertGenerationEncoderIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head_absolute_embedding(self):
-        model = BertGenerationEncoder.from_pretrained("google/bert_for_seq_generation_L-24_bbc_encoder")
+        model = BertGenerationEncoder.from_pretrained(
+            "google/bert_for_seq_generation_L-24_bbc_encoder", attn_implementation="eager"
+        )
         input_ids = torch.tensor([[101, 7592, 1010, 2026, 3899, 2003, 10140, 102]])
         with torch.no_grad():
             output = model(input_ids)[0]
@@ -319,14 +440,16 @@ class BertGenerationEncoderIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor(
             [[[0.1775, 0.0083, -0.0321], [1.6002, 0.1287, 0.3912], [2.1473, 0.5791, 0.6066]]]
         )
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
 
 @require_torch
 class BertGenerationDecoderIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head_absolute_embedding(self):
-        model = BertGenerationDecoder.from_pretrained("google/bert_for_seq_generation_L-24_bbc_encoder")
+        model = BertGenerationDecoder.from_pretrained(
+            "google/bert_for_seq_generation_L-24_bbc_encoder", attn_implementation="eager"
+        )
         input_ids = torch.tensor([[101, 7592, 1010, 2026, 3899, 2003, 10140, 102]])
         with torch.no_grad():
             output = model(input_ids)[0]
@@ -335,4 +458,4 @@ class BertGenerationDecoderIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor(
             [[[-0.5788, -2.5994, -3.7054], [0.0438, 4.7997, 1.8795], [1.5862, 6.6409, 4.4638]]]
         )
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

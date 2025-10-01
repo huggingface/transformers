@@ -17,7 +17,6 @@ import json
 import os
 import tempfile
 import warnings
-from typing import List
 
 import torch
 from tokenizers import AddedToken, processors
@@ -228,12 +227,17 @@ def write_model(
         if num_shards == 1:
             # Not sharded
             # (The sharded implementation would also work, but this is simpler.)
-            loaded = torch.load(os.path.join(input_base_path, "consolidated.00.pth"), map_location="cpu")
+            loaded = torch.load(
+                os.path.join(input_base_path, "consolidated.00.pth"), map_location="cpu", weights_only=True
+            )
         else:
             # Sharded
             checkpoint_list = sorted([file for file in os.listdir(input_base_path) if file.endswith(".pth")])
             print("Loading in order:", checkpoint_list)
-            loaded = [torch.load(os.path.join(input_base_path, file), map_location="cpu") for file in checkpoint_list]
+            loaded = [
+                torch.load(os.path.join(input_base_path, file), map_location="cpu", weights_only=True)
+                for file in checkpoint_list
+            ]
         param_count = 0
         index_dict = {"weight_map": {}}
         for layer_i in range(n_layers):
@@ -356,8 +360,8 @@ def write_model(
         # Write configs
         index_dict["metadata"] = {"total_size": param_count * 2}
         write_json(index_dict, os.path.join(tmp_model_path, "pytorch_model.bin.index.json"))
-        ffn_dim_multiplier = params["ffn_dim_multiplier"] if "ffn_dim_multiplier" in params else 1
-        multiple_of = params["multiple_of"] if "multiple_of" in params else 256
+        ffn_dim_multiplier = params.get("ffn_dim_multiplier", 1)
+        multiple_of = params.get("multiple_of", 256)
 
         if is_llama_3(llama_version):
             bos_token_id = 128000
@@ -394,7 +398,7 @@ def write_model(
             max_position_embeddings=max_position_embeddings,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
-            tie_word_embeddings=True if llama_version in ["3.2"] else False,
+            tie_word_embeddings=llama_version in ["3.2"],
         )
 
         config.save_pretrained(tmp_model_path)
@@ -414,11 +418,11 @@ def write_model(
         gc.collect()
 
         print("Loading the checkpoint in a Llama model.")
-        model = LlamaForCausalLM.from_pretrained(tmp_model_path, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True)
+        model = LlamaForCausalLM.from_pretrained(tmp_model_path, dtype=torch.bfloat16)
 
         # Avoid saving this as part of the config.
         del model.config._name_or_path
-        model.config.torch_dtype = torch.float16
+        model.config.dtype = torch.float16
 
         print("Saving in the Transformers format.")
         if push_to_hub:
@@ -523,7 +527,7 @@ def main():
     parser.add_argument(
         "--model_size",
         default=None,
-        help="'f' Deprecated in favor of `num_shards`: models correspond to the finetuned versions, and are specific to the Llama2 official release. For more details on Llama2, checkout the original repo: https://huggingface.co/meta-llama",
+        help="'f' Deprecated in favor of `num_shards`: models correspond to the finetuned versions, and are specific to the Llama2 official release. For more details on Llama2, check out the original repo: https://huggingface.co/meta-llama",
     )
     parser.add_argument(
         "--output_dir",
@@ -555,7 +559,7 @@ def main():
     parser.add_argument(
         "--special_tokens",
         default=None,
-        type=List[str],
+        type=list[str],
         help="The list of special tokens that should be added to the model.",
     )
     parser.add_argument(

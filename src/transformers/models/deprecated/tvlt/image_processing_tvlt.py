@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for TVLT."""
 
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -44,7 +44,7 @@ from ....utils import TensorType, logging
 logger = logging.get_logger(__name__)
 
 
-def make_batched(videos) -> List[List[ImageInput]]:
+def make_batched(videos) -> list[list[ImageInput]]:
     if isinstance(videos, (list, tuple)) and isinstance(videos[0], (list, tuple)):
         return videos
 
@@ -77,11 +77,11 @@ class TvltImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by the
             `do_resize` parameter in the `preprocess` method.
-        size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 224}`):
+        size (`dict[str, int]` *optional*, defaults to `{"shortest_edge": 224}`):
             Size of the output image after resizing. The shortest edge of the image will be resized to
-            `size["shortest_edge"]` while maintaining the aspect ratio of the original image. Can be overriden by
+            `size["shortest_edge"]` while maintaining the aspect ratio of the original image. Can be overridden by
             `size` in the `preprocess` method.
-        patch_size (`List[int]` *optional*, defaults to [16,16]):
+        patch_size (`list[int]` *optional*, defaults to [16,16]):
             The patch size of image patch embedding.
         num_frames (`int` *optional*, defaults to 8):
             The maximum number of video frames.
@@ -91,7 +91,7 @@ class TvltImageProcessor(BaseImageProcessor):
         do_center_crop (`bool`, *optional*, defaults to `True`):
             Whether to center crop the image to the specified `crop_size`. Can be overridden by the `do_center_crop`
             parameter in the `preprocess` method.
-        crop_size (`Dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
+        crop_size (`dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
             Size of the image after applying the center crop. Can be overridden by the `crop_size` parameter in the
             `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
@@ -103,10 +103,10 @@ class TvltImageProcessor(BaseImageProcessor):
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
+        image_mean (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
+        image_std (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
     """
@@ -121,17 +121,17 @@ class TvltImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
-        patch_size: List[int] = [16, 16],
+        size: Optional[dict[str, int]] = None,
+        patch_size: list[int] = [16, 16],
         num_frames: int = 8,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_center_crop: bool = True,
-        crop_size: Dict[str, int] = None,
+        crop_size: Optional[dict[str, int]] = None,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = IMAGENET_STANDARD_MEAN,
-        image_std: Optional[Union[float, List[float]]] = IMAGENET_STANDARD_STD,
+        image_mean: Optional[Union[float, list[float]]] = IMAGENET_STANDARD_MEAN,
+        image_std: Optional[Union[float, list[float]]] = IMAGENET_STANDARD_STD,
         init_mask_generator=False,
         **kwargs,
     ) -> None:
@@ -176,7 +176,7 @@ class TvltImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
+        size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -188,7 +188,7 @@ class TvltImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Size of the output image. If `size` is of the form `{"height": h, "width": w}`, the output image will
                 have the size `(h, w)`. If `size` is of the form `{"shortest_edge": s}`, the output image will have its
                 shortest edge of length `s` while keeping the aspect ratio of the original image.
@@ -220,16 +220,16 @@ class TvltImageProcessor(BaseImageProcessor):
     def _preprocess_image(
         self,
         image: ImageInput,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
-        resample: PILImageResampling = None,
-        do_center_crop: bool = None,
-        crop_size: Dict[str, int] = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        do_resize: Optional[bool] = None,
+        size: Optional[dict[str, int]] = None,
+        resample: Optional[PILImageResampling] = None,
+        do_center_crop: Optional[bool] = None,
+        crop_size: Optional[dict[str, int]] = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.ndarray:
@@ -277,18 +277,18 @@ class TvltImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         videos: ImageInput,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
-        patch_size: List[int] = None,
-        num_frames: int = None,
-        resample: PILImageResampling = None,
-        do_center_crop: bool = None,
-        crop_size: Dict[str, int] = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        do_resize: Optional[bool] = None,
+        size: Optional[dict[str, int]] = None,
+        patch_size: Optional[list[int]] = None,
+        num_frames: Optional[int] = None,
+        resample: Optional[PILImageResampling] = None,
+        do_center_crop: Optional[bool] = None,
+        crop_size: Optional[dict[str, int]] = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         is_mixed: bool = False,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
@@ -304,9 +304,9 @@ class TvltImageProcessor(BaseImageProcessor):
                 255. If passing in frames with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`dict[str, int]`, *optional*, defaults to `self.size`):
                 Size of the image after applying resize.
-            patch_size (`List[int]` *optional*, defaults to self.patch_size):
+            patch_size (`list[int]` *optional*, defaults to self.patch_size):
                 The patch size of image patch embedding.
             num_frames (`int` *optional*, defaults to self.num_frames):
                 The maximum number of video frames.
@@ -315,7 +315,7 @@ class TvltImageProcessor(BaseImageProcessor):
                 has an effect if `do_resize` is set to `True`.
             do_center_crop (`bool`, *optional*, defaults to `self.do_centre_crop`):
                 Whether to centre crop the image.
-            crop_size (`Dict[str, int]`, *optional*, defaults to `self.crop_size`):
+            crop_size (`dict[str, int]`, *optional*, defaults to `self.crop_size`):
                 Size of the image after applying the centre crop.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
                 Whether to rescale the image values between [0 - 1].
@@ -323,19 +323,17 @@ class TvltImageProcessor(BaseImageProcessor):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
                 Image mean.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation.
             is_mixed (`bool`, *optional*):
                 If the input video has negative samples.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                     - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -356,10 +354,10 @@ class TvltImageProcessor(BaseImageProcessor):
 
             - **pixel_mask** -- Pixel masks to be fed to a model, of shape (batch_size, num_pixel_patches).
 
-            - **pixel_values_mixed** -- Pixel values with both postive or negative to be fed to a model, of shape
+            - **pixel_values_mixed** -- Pixel values with both positive or negative to be fed to a model, of shape
               (batch_size, num_channels, height, width).
 
-            - **pixel_mask_mixed** -- Pixel masks with both postive or negative to be fed to a model, of shape
+            - **pixel_mask_mixed** -- Pixel masks with both positive or negative to be fed to a model, of shape
               (batch_size, num_pixel_patches).
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
@@ -382,8 +380,7 @@ class TvltImageProcessor(BaseImageProcessor):
 
         if not valid_images(videos):
             raise ValueError(
-                "Invalid image or video type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
+                "Invalid image or video type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor"
             )
 
         videos = make_batched(videos)
@@ -433,3 +430,6 @@ class TvltImageProcessor(BaseImageProcessor):
             data = {"pixel_values": videos, "pixel_mask": video_masks}
 
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+
+__all__ = ["TvltImageProcessor"]

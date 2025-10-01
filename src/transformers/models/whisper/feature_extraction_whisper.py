@@ -16,7 +16,7 @@
 Feature extractor class for Whisper
 """
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -49,14 +49,22 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         sampling_rate (`int`, *optional*, defaults to 16000):
             The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
         hop_length (`int`, *optional*, defaults to 160):
-            Length of the overlaping windows for the STFT used to obtain the Mel Frequency coefficients.
+            Length of the overlapping windows for the STFT used to obtain the Mel Frequency coefficients.
         chunk_length (`int`, *optional*, defaults to 30):
-            The maximum number of chuncks of `sampling_rate` samples used to trim and pad longer or shorter audio
+            The maximum number of chunks of `sampling_rate` samples used to trim and pad longer or shorter audio
             sequences.
         n_fft (`int`, *optional*, defaults to 400):
             Size of the Fourier transform.
         padding_value (`float`, *optional*, defaults to 0.0):
             Padding value used to pad the audio. Should correspond to silences.
+        dither (`float`, *optional*, defaults to 0.0):
+            Adds dithering. In other words, adds a small Gaussian noise to each frame.
+            E.g. use 0.0001 to add dithering with a normal distribution centered
+            around 0.0 with standard deviation 0.0001 (assuming [-1,+1] range of raw_speech).
+            The value 0.0 means no dithering.
+            Dithering has similar effect as `spectrogram(mel_floor=...)`. It reduces
+            the high log_mel_fbank values for signals with hard-zero sections,
+            when VAD cutoff is present in the signal.
     """
 
     model_input_names = ["input_features"]
@@ -69,6 +77,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         chunk_length=30,
         n_fft=400,
         padding_value=0.0,
+        dither=0.0,
         return_attention_mask=False,  # pad inputs to max length with silence token (zero) and no attention mask
         **kwargs,
     ):
@@ -85,6 +94,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         self.n_samples = chunk_length * sampling_rate
         self.nb_max_frames = self.n_samples // hop_length
         self.sampling_rate = sampling_rate
+        self.dither = dither
         self.mel_filters = mel_filter_bank(
             num_frequency_bins=1 + n_fft // 2,
             num_mel_filters=feature_size,
@@ -95,7 +105,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             mel_scale="slaney",
         )
 
-    def _np_extract_fbank_features(self, waveform_batch: np.array, device: str) -> np.ndarray:
+    def _np_extract_fbank_features(self, waveform_batch: np.ndarray, device: str) -> np.ndarray:
         """
         Compute the log-mel spectrogram of the provided audio, gives similar results to Whisper's original torch
         implementation with 1e-5 tolerance.
@@ -114,6 +124,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
                 frame_length=self.n_fft,
                 hop_length=self.hop_length,
                 power=2.0,
+                dither=self.dither,
                 mel_filters=self.mel_filters,
                 log_mel="log10",
             )
@@ -124,23 +135,24 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         log_spec_batch = np.array(log_spec_batch)
         return log_spec_batch
 
-    def _torch_extract_fbank_features(self, waveform: np.array, device: str = "cpu") -> np.ndarray:
+    def _torch_extract_fbank_features(self, waveform: np.ndarray, device: str = "cpu") -> np.ndarray:
         """
         Compute the log-mel spectrogram of the audio using PyTorch's GPU-accelerated STFT implementation with batching,
         yielding results similar to cpu computing with 1e-5 tolerance.
         """
-        waveform = torch.from_numpy(waveform).type(torch.float32)
+        waveform = torch.from_numpy(waveform).to(device, torch.float32)
+        window = torch.hann_window(self.n_fft, device=device)
 
-        window = torch.hann_window(self.n_fft)
-        if device != "cpu":
-            waveform = waveform.to(device)
-            window = window.to(device)
+        # Note: it would be better to dither the chunked waveform,
+        # so overlapping signal does not get the same dithering.
+        # But, chunking is happening inside pytorch, so it is here.
+        if self.dither != 0.0:
+            waveform += self.dither * torch.randn(waveform.shape, dtype=waveform.dtype, device=waveform.device)
+
         stft = torch.stft(waveform, self.n_fft, self.hop_length, window=window, return_complex=True)
         magnitudes = stft[..., :-1].abs() ** 2
 
-        mel_filters = torch.from_numpy(self.mel_filters).type(torch.float32)
-        if device != "cpu":
-            mel_filters = mel_filters.to(device)
+        mel_filters = torch.from_numpy(self.mel_filters).to(device, torch.float32)
         mel_spec = mel_filters.T @ magnitudes
 
         log_spec = torch.clamp(mel_spec, min=1e-10).log10()
@@ -157,8 +169,8 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
     @staticmethod
     # Copied from transformers.models.wav2vec2.feature_extraction_wav2vec2.Wav2Vec2FeatureExtractor.zero_mean_unit_var_norm
     def zero_mean_unit_var_norm(
-        input_values: List[np.ndarray], attention_mask: List[np.ndarray], padding_value: float = 0.0
-    ) -> List[np.ndarray]:
+        input_values: list[np.ndarray], attention_mask: list[np.ndarray], padding_value: float = 0.0
+    ) -> list[np.ndarray]:
         """
         Every array in the list is normalized to have zero mean and unit variance
         """
@@ -179,7 +191,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
+        raw_speech: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
         truncation: bool = True,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -197,7 +209,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         the STFT computation if available, otherwise a slower NumPy based one.
 
         Args:
-            raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
+            raw_speech (`np.ndarray`, `list[float]`, `list[np.ndarray]`, `list[list[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
                 values, a list of numpy arrays or a list of list of float values. Must be mono channel audio, not
                 stereo, i.e. single float per timestep.
@@ -224,7 +236,6 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
             sampling_rate (`int`, *optional*):
@@ -240,10 +251,11 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
                 Specifies the device for computation of the log-mel spectrogram of audio signals in the
                 `_torch_extract_fbank_features` method. (e.g., "cpu", "cuda")
             return_token_timestamps (`bool`, *optional*, defaults to `None`):
+                Deprecated. Use `return_attention_mask` instead from which the number of frames can be inferred.
+
                 Whether or not to return the number of frames of the input raw_speech.
                 These num_frames can be used by the model to compute word level timestamps.
         """
-
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
                 raise ValueError(
@@ -253,7 +265,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
                 )
         else:
             logger.warning(
-                "It is strongly recommended to pass the `sampling_rate` argument to this function. "
+                f"It is strongly recommended to pass the `sampling_rate` argument to `{self.__class__.__name__}()`. "
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
@@ -305,7 +317,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         )
         input_features = extract_fbank_features(input_features[0], device)
 
-        if isinstance(input_features[0], List):
+        if isinstance(input_features[0], list):
             padded_inputs["input_features"] = [np.asarray(feature, dtype=np.float32) for feature in input_features]
 
         else:
@@ -313,9 +325,19 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
         if return_attention_mask:
             # rescale from sample (48000) to feature (3000)
-            padded_inputs["attention_mask"] = padded_inputs["attention_mask"][:, :: self.hop_length]
+            rescaled_attention_mask = padded_inputs["attention_mask"][:, :: self.hop_length]
+
+            # The STFT computation produces L//hop_length + 1 frames, but we skip the last frame (see `_torch_extract_fbank_features`).
+            # This means we need to trim the rescaled attention mask to match the actual number of frames (L//hop_length) when the input length
+            # is not perfectly divisible by the hop length.
+            if padded_inputs["attention_mask"].shape[1] % self.hop_length != 0:
+                rescaled_attention_mask = rescaled_attention_mask[:, :-1]
+            padded_inputs["attention_mask"] = rescaled_attention_mask
 
         if return_token_timestamps is not None:
+            logger.warning_once(
+                f"`return_token_timestamps` is deprecated for {self.__class__.__name__} and will be removed in Transformers v5. Use `return_attention_mask` instead, as the number of frames can be inferred from it."
+            )
             padded_inputs["num_frames"] = [len(raw_speech_i) // self.hop_length for raw_speech_i in raw_speech]
 
         if return_tensors is not None:

@@ -47,6 +47,9 @@ CONFIG_CLASSES_TO_IGNORE_FOR_DOCSTRING_CHECKPOINT_CHECK = {
     "LlamaConfig",
     "GraniteConfig",
     "GraniteMoeConfig",
+    "GraniteMoeHybridConfig",
+    "Qwen3MoeConfig",
+    "GraniteSpeechConfig",
 }
 
 
@@ -61,8 +64,7 @@ def get_checkpoint_from_config_class(config_class):
     # For example, `('google-bert/bert-base-uncased', 'https://huggingface.co/google-bert/bert-base-uncased')`
     for ckpt_name, ckpt_link in checkpoints:
         # allow the link to end with `/`
-        if ckpt_link.endswith("/"):
-            ckpt_link = ckpt_link[:-1]
+        ckpt_link = ckpt_link.removesuffix("/")
 
         # verify the checkpoint name corresponds to the checkpoint link
         ckpt_link_from_name = f"https://huggingface.co/{ckpt_name}"

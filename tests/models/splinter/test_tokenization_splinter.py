@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,20 +14,12 @@
 import unittest
 
 from tests.test_tokenization_common import TokenizerTesterMixin
-from transformers import SplinterTokenizerFast, is_tf_available, is_torch_available
+from transformers import SplinterTokenizerFast
 from transformers.models.splinter import SplinterTokenizer
 from transformers.testing_utils import get_tests_dir, slow
 
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/vocab.txt")
-
-
-if is_torch_available():
-    FRAMEWORK = "pt"
-elif is_tf_available():
-    FRAMEWORK = "tf"
-else:
-    FRAMEWORK = "jax"
 
 
 class SplinterTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
@@ -40,20 +31,25 @@ class SplinterTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     pre_trained_model_path = "tau/splinter-base"
 
     # Copied from transformers.models.siglip.SiglipTokenizationTest.setUp
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
         tokenizer = SplinterTokenizer(SAMPLE_VOCAB)
         tokenizer.vocab["[UNK]"] = len(tokenizer.vocab)
         tokenizer.vocab["[QUESTION]"] = len(tokenizer.vocab)
         tokenizer.vocab["."] = len(tokenizer.vocab)
         tokenizer.add_tokens("this is a test thou shall not determine rigor truly".split())
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
-    def get_tokenizer(self, **kwargs) -> SplinterTokenizer:
-        return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    def get_tokenizer(cls, pretrained_name=None, **kwargs) -> SplinterTokenizer:
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return cls.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
-    def get_rust_tokenizer(self, **kwargs) -> SplinterTokenizerFast:
-        return self.rust_tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    def get_rust_tokenizer(cls, pretrained_name=None, **kwargs) -> SplinterTokenizerFast:
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return cls.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
     # Copied from transformers.models.siglip.SiglipTokenizationTest.test_get_vocab
     def test_get_vocab(self):
@@ -124,7 +120,7 @@ class SplinterTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             max_length=max_length,
             padding="max_length",
             truncation=True,
-            return_tensors=FRAMEWORK,
+            return_tensors="pt",
         )
         self.assertEqual(len(tokenized["input_ids"]), len(texts))
         self.assertEqual(len(tokenized["input_ids"][0]), max_length)

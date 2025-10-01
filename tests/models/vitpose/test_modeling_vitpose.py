@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,12 +15,14 @@
 
 import inspect
 import unittest
+from functools import cached_property
 
 import requests
 
 from transformers import VitPoseBackboneConfig, VitPoseConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils.import_utils import get_torch_major_and_minor_version
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -50,7 +51,7 @@ class VitPoseModelTester:
         is_training=True,
         use_labels=True,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -153,7 +154,8 @@ class VitPoseModelTest(ModelTesterMixin, unittest.TestCase):
 
     test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
+    test_torch_exportable = True
+    test_torch_exportable_strictly = get_torch_major_and_minor_version() != "2.7"
 
     def setUp(self):
         self.model_tester = VitPoseModelTester(self)
@@ -166,6 +168,9 @@ class VitPoseModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester.create_and_test_config_with_num_labels()
         self.config_tester.check_config_can_be_init_without_params()
         self.config_tester.check_config_arguments_init()
+
+    def test_batching_equivalence(self, atol=3e-4, rtol=3e-4):
+        super().test_batching_equivalence(atol=atol, rtol=rtol)
 
     @unittest.skip(reason="VitPose does not support input and output embeddings")
     def test_model_common_attributes(self):
@@ -275,9 +280,9 @@ class VitPoseModelIntegrationTest(unittest.TestCase):
         expected_scores = torch.tensor([8.7529e-01, 8.4315e-01, 9.2678e-01])
 
         self.assertEqual(len(pose_results), 2)
-        self.assertTrue(torch.allclose(pose_results[1]["bbox"].cpu(), expected_bbox, atol=1e-4))
-        self.assertTrue(torch.allclose(pose_results[1]["keypoints"][:3].cpu(), expected_keypoints, atol=1e-2))
-        self.assertTrue(torch.allclose(pose_results[1]["scores"][:3].cpu(), expected_scores, atol=1e-4))
+        torch.testing.assert_close(pose_results[1]["bbox"].cpu(), expected_bbox, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(pose_results[1]["keypoints"][:3].cpu(), expected_keypoints, rtol=1e-2, atol=1e-2)
+        torch.testing.assert_close(pose_results[1]["scores"][:3].cpu(), expected_scores, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_batched_inference(self):
@@ -323,6 +328,6 @@ class VitPoseModelIntegrationTest(unittest.TestCase):
 
         self.assertEqual(len(pose_results), 2)
         self.assertEqual(len(pose_results[0]), 2)
-        self.assertTrue(torch.allclose(pose_results[0][1]["bbox"].cpu(), expected_bbox, atol=1e-4))
-        self.assertTrue(torch.allclose(pose_results[0][1]["keypoints"][:3].cpu(), expected_keypoints, atol=1e-2))
-        self.assertTrue(torch.allclose(pose_results[0][1]["scores"][:3].cpu(), expected_scores, atol=1e-4))
+        torch.testing.assert_close(pose_results[0][1]["bbox"].cpu(), expected_bbox, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(pose_results[0][1]["keypoints"][:3].cpu(), expected_keypoints, rtol=1e-2, atol=1e-2)
+        torch.testing.assert_close(pose_results[0][1]["scores"][:3].cpu(), expected_scores, rtol=1e-4, atol=1e-4)

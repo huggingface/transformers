@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,6 +17,7 @@ import unittest
 
 from transformers import is_torch_available, is_vision_available
 from transformers.testing_utils import (
+    Expectations,
     require_accelerate,
     require_torch,
     require_torch_accelerator,
@@ -121,24 +121,6 @@ class PvtModelTester:
         result = model(pixel_values)
         self.parent.assertIsNotNone(result.last_hidden_state)
 
-    def create_and_check_for_image_classification(self, config, pixel_values, labels):
-        config.num_labels = self.type_sequence_label_size
-        model = PvtForImageClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(pixel_values, labels=labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
-
-        # test greyscale images
-        config.num_channels = 1
-        model = PvtForImageClassification(config)
-        model.to(torch_device)
-        model.eval()
-
-        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
-        result = model(pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values, labels = config_and_inputs
@@ -161,15 +143,18 @@ class PvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
 
-    test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
     test_torchscript = False
     has_attentions = False
+    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = PvtModelTester(self)
         self.config_tester = PvtConfigTester(self, config_class=PvtConfig)
+
+    def test_batching_equivalence(self, atol=1e-4, rtol=1e-4):
+        super().test_batching_equivalence(atol=atol, rtol=rtol)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -275,9 +260,15 @@ class PvtModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, model.config.num_labels))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-1.4192, -1.9158, -0.9702]).to(torch_device)
+        expectations = Expectations(
+            {
+                (None, None): [-1.4192, -1.9158, -0.9702],
+                ("cuda", 8): [-1.4194, -1.9161, -0.9705],
+            }
+        )
+        expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=2e-4, atol=2e-4)
 
     @slow
     def test_inference_model(self):
@@ -296,11 +287,15 @@ class PvtModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 50, 512))
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
-        expected_slice = torch.tensor(
-            [[-0.3086, 1.0402, 1.1816], [-0.2880, 0.5781, 0.6124], [0.1480, 0.6129, -0.0590]]
-        ).to(torch_device)
+        expectations = Expectations(
+            {
+                (None, None): [[-0.3086, 1.0402, 1.1816], [-0.2880, 0.5781, 0.6124], [0.1480, 0.6129, -0.0590]],
+                ("cuda", 8): [[-0.3086, 1.0402, 1.1816], [-0.2880, 0.5781, 0.6124], [0.1480, 0.6129, -0.0590]],
+            }
+        )
+        expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=2e-4, atol=2e-4)
 
     @slow
     @require_accelerate
@@ -310,7 +305,7 @@ class PvtModelIntegrationTest(unittest.TestCase):
         r"""
         A small test to make sure that inference work in half precision without any problem.
         """
-        model = PvtForImageClassification.from_pretrained("Zetatech/pvt-tiny-224", torch_dtype=torch.float16)
+        model = PvtForImageClassification.from_pretrained("Zetatech/pvt-tiny-224", dtype=torch.float16)
         model.to(torch_device)
         image_processor = PvtImageProcessor(size=224)
 

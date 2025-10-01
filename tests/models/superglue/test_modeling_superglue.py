@@ -13,13 +13,13 @@
 # limitations under the License.
 import inspect
 import unittest
-from typing import List
+from functools import cached_property
 
 from datasets import load_dataset
 
 from transformers.models.superglue.configuration_superglue import SuperGlueConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
@@ -43,8 +43,8 @@ class SuperGlueModelTester:
         image_height=60,
         keypoint_detector_config=None,
         hidden_size: int = 64,
-        keypoint_encoder_sizes: List[int] = [32, 64],
-        gnn_layers_types: List[str] = ["self", "cross"] * 2,
+        keypoint_encoder_sizes: list[int] = [32, 64],
+        gnn_layers_types: list[str] = ["self", "cross"] * 2,
         num_attention_heads: int = 4,
         sinkhorn_iterations: int = 100,
         matching_threshold: float = 0.2,
@@ -119,12 +119,10 @@ class SuperGlueModelTester:
 @require_torch
 class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SuperGlueForKeypointMatching,) if is_torch_available() else ()
-    all_generative_model_classes = () if is_torch_available() else ()
 
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     has_attentions = True
 
     def setUp(self):
@@ -425,3 +423,5 @@ class SuperGlueModelIntegrationTest(unittest.TestCase):
             torch.sum(~torch.isclose(predicted_matching_scores_values, expected_matching_scores_values, atol=1e-2)) < 4
         )
         self.assertTrue(torch.sum(predicted_matches_values != expected_matches_values) < 4)
+        self.assertTrue(torch.all(outputs.matches[0, 1] < torch.sum(outputs.mask[0, 0])))
+        self.assertTrue(torch.all(outputs.matches[0, 0] < torch.sum(outputs.mask[0, 1])))

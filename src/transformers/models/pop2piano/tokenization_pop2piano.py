@@ -16,13 +16,14 @@
 
 import json
 import os
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...tokenization_utils import AddedToken, BatchEncoding, PaddingStrategy, PreTrainedTokenizer, TruncationStrategy
 from ...utils import TensorType, is_pretty_midi_available, logging, requires_backends, to_numpy
+from ...utils.import_utils import requires
 
 
 if is_pretty_midi_available():
@@ -59,6 +60,7 @@ def token_note_to_note(number, current_velocity, default_velocity, note_onsets_r
     return notes
 
 
+@requires(backends=("pretty_midi", "torch"))
 class Pop2PianoTokenizer(PreTrainedTokenizer):
     """
     Constructs a Pop2Piano tokenizer. This tokenizer does not require training.
@@ -245,7 +247,9 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
 
     # Taken from the original code
     # Please see https://github.com/sweetcocoa/pop2piano/blob/fac11e8dcfc73487513f4588e8d0c22a22f2fdc5/midi_tokenizer.py#L257
-    def relative_tokens_ids_to_notes(self, tokens: np.ndarray, start_idx: float, cutoff_time_idx: float = None):
+    def relative_tokens_ids_to_notes(
+        self, tokens: np.ndarray, start_idx: float, cutoff_time_idx: Optional[float] = None
+    ):
         """
         Converts relative tokens to notes which will then be used to create Pretty Midi objects.
 
@@ -261,7 +265,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
 
         current_idx = start_idx
         current_velocity = 0
-        note_onsets_ready = [None for i in range(sum([k.endswith("NOTE") for k in self.encoder.keys()]) + 1)]
+        note_onsets_ready = [None for i in range(sum([k.endswith("NOTE") for k in self.encoder]) + 1)]
         notes = []
         for token_type, number in words:
             if token_type == "TOKEN_SPECIAL":
@@ -337,7 +341,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
         new_pm.remove_invalid_notes()
         return new_pm
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         """
         Saves the tokenizer's vocabulary dictionary to the provided save_directory.
 
@@ -362,7 +366,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
 
     def encode_plus(
         self,
-        notes: Union[np.ndarray, List[pretty_midi.Note]],
+        notes: Union[np.ndarray, list[pretty_midi.Note]],
         truncation_strategy: Optional[TruncationStrategy] = None,
         max_length: Optional[int] = None,
         **kwargs,
@@ -400,7 +404,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
         notes = np.round(notes).astype(np.int32)
         max_time_idx = notes[:, :2].max()
 
-        times = [[] for i in range((max_time_idx + 1))]
+        times = [[] for i in range(max_time_idx + 1)]
         for onset, offset, pitch, velocity in notes:
             times[onset].append([pitch, velocity])
             times[offset].append([pitch, 0])
@@ -433,7 +437,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
 
     def batch_encode_plus(
         self,
-        notes: Union[np.ndarray, List[pretty_midi.Note]],
+        notes: Union[np.ndarray, list[pretty_midi.Note]],
         truncation_strategy: Optional[TruncationStrategy] = None,
         max_length: Optional[int] = None,
         **kwargs,
@@ -474,8 +478,8 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
         self,
         notes: Union[
             np.ndarray,
-            List[pretty_midi.Note],
-            List[List[pretty_midi.Note]],
+            list[pretty_midi.Note],
+            list[list[pretty_midi.Note]],
         ],
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -538,7 +542,6 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
             return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
             verbose (`bool`, *optional*, defaults to `True`):
@@ -551,7 +554,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
         # check if it is batched or not
         # it is batched if its a list containing a list of `pretty_midi.Notes` where the outer list contains all the
         # batches and the inner list contains all Notes for a single batch. Otherwise if np.ndarray is passed it will be
-        # considered batched if it has shape of `[batch_size, seqence_length, 4]` or ndim=3.
+        # considered batched if it has shape of `[batch_size, sequence_length, 4]` or ndim=3.
         is_batched = notes.ndim == 3 if isinstance(notes, np.ndarray) else isinstance(notes[0], list)
 
         # get the truncation and padding strategy
@@ -605,7 +608,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
         transformer to midi_notes and returns them.
 
         Args:
-            token_ids (`Union[np.ndarray, torch.Tensor, tf.Tensor]`):
+            token_ids (`Union[np.ndarray, torch.Tensor]`):
                 Output token_ids of `Pop2PianoConditionalGeneration` model.
             feature_extractor_output (`BatchFeature`):
                 Denotes the output of `Pop2PianoFeatureExtractor.__call__`. It must contain `"beatstep"` and
@@ -665,7 +668,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
                 )
 
         if attention_masks_present:
-            # check for zeros(since token_ids are seperated by zero arrays)
+            # check for zeros(since token_ids are separated by zero arrays)
             batch_idx = np.where(feature_extractor_output["attention_mask"][:, 0] == 0)[0]
         else:
             batch_idx = [token_ids.shape[0]]
