@@ -311,6 +311,7 @@ class PhimoeSparseMoeBlock(nn.Module):
         self.router_jitter_noise = config.router_jitter_noise
         self.gate = PhimoeRouter(config)
         self.experts = PhimoeExperts(config)
+        self.input_jitter_noise = config.input_jitter_noise
 
     def route_tokens_to_experts(self, router_logits):
         routing_weights, selected_experts = sparsemixer(
@@ -321,6 +322,12 @@ class PhimoeSparseMoeBlock(nn.Module):
         return routing_weights, selected_experts
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        batch_size, sequence_length, hidden_dim = hidden_states.shape
+        if self.training and self.input_jitter_noise > 0:
+            hidden_states *= torch.empty_like(hidden_states).uniform_(
+                1.0 - self.input_jitter_noise, 1.0 + self.input_jitter_noise
+            )
+
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.reshape(-1, hidden_dim)
         router_logits = self.gate(hidden_states)
@@ -349,6 +356,9 @@ class PhimoeModel(MixtralModel):
 
 
 class PhimoeForCausalLM(MixtralForCausalLM):
+    def __init__(self, config):
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=self.config.lm_head_bias)
+
     # Copied from transformers.models.phi3.modeling_phi3.Phi3ForCausalLM.prepare_inputs_for_generation
     def prepare_inputs_for_generation(
         self,
