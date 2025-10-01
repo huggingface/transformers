@@ -297,6 +297,8 @@ class TorchAoHfQuantizer(HfQuantizer):
 
             # handle ModuleFqnToConfig, introduced in torchao 0.12.0+
             if self.quantization_config._get_ao_version() >= version.Version("0.12.0"):
+                import re
+
                 from torchao.quantization import ModuleFqnToConfig
 
                 config = self.quantization_config.get_apply_tensor_subclass()
@@ -306,7 +308,16 @@ class TorchAoHfQuantizer(HfQuantizer):
                     if module_fqn in config.module_fqn_to_config:
                         c = config.module_fqn_to_config[module_fqn]
                     else:
-                        c = config.module_fqn_to_config.get("_default", None)
+                        for maybe_module_fqn_pattern in config.module_fqn_to_config:
+                            if not maybe_module_fqn_pattern.startswith("re:"):
+                                continue
+                            elif re.fullmatch(maybe_module_fqn_pattern[3:], module_fqn):
+                                # we'll apply the config for first fully matched pattern
+                                c = config.module_fqn_to_config[maybe_module_fqn_pattern]
+                                break
+                        else:
+                            c = config.module_fqn_to_config.get("_default", None)
+
                     if c is not None:
                         # filter_fn: not filtering out any modules
                         quantize_(module, c, filter_fn=lambda x, fqn: True)
