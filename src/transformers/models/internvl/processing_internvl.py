@@ -40,7 +40,9 @@ class InternVLProcessorKwargs(ProcessingKwargs, total=False):
         "images_kwargs": {
             "crop_to_patches": True,
         },
-        "videos_kwargs": {},
+        "videos_kwargs": {
+            "return_tensors": "pt",
+        },
     }
 
 
@@ -221,7 +223,7 @@ class InternVLProcessor(ProcessorMixin):
         video_patch_indices = np.array([0])
         video_num_patches_indices = np.array([0])
         if videos is not None:
-            video_kwargs = {**output_kwargs["videos_kwargs"], "return_tensors": "pt"}
+            video_kwargs = output_kwargs["videos_kwargs"]
             video_inputs = self.video_processor(videos=videos, **video_kwargs)
             video_pixel_values = video_inputs.pop("pixel_values_videos")
 
