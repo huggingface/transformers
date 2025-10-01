@@ -19,6 +19,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from typing import Optional
 from ...configuration_utils import PretrainedConfig
 
 
@@ -80,6 +81,10 @@ class GemmaConfig(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        use_adarms (`bool`, *optional*, defaults to `False`):
+            Whether to use ADARMS.
+        adarms_cond_dim (`int`, *optional*, defaults to `None`):
+            The dimension of the ADARMS condition.
     ```python
     >>> from transformers import GemmaModel, GemmaConfig
     >>> # Initializing a Gemma gemma-7b style configuration
@@ -129,6 +134,8 @@ class GemmaConfig(PretrainedConfig):
         rope_theta=10000.0,
         attention_bias=False,
         attention_dropout=0.0,
+        use_adarms: bool = False,
+        adarms_cond_dim: Optional[int] = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -147,6 +154,12 @@ class GemmaConfig(PretrainedConfig):
         self.rope_theta = rope_theta
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
+        self.use_adarms = use_adarms
+        self.adarms_cond_dim = adarms_cond_dim
+
+        # Set default for adarms_cond_dim if use_adarms is True
+        if self.use_adarms and self.adarms_cond_dim is None:
+            self.adarms_cond_dim = self.hidden_size
 
         super().__init__(
             pad_token_id=pad_token_id,

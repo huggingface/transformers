@@ -242,7 +242,6 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
         image_outputs = self.vision_tower(pixel_values)
         selected_image_feature = image_outputs.last_hidden_state
         image_features = self.multi_modal_projector(selected_image_feature)
-        image_features = image_features / (self.config.text_config.hidden_size**0.5)
         return image_features
 
     @can_return_tuple
