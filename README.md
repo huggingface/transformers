@@ -255,6 +255,14 @@ incredible projects built with Transformers.
 
 If you own or use a project that you believe should be part of the list, please open a PR to add it!
 
+## Contributing
+
+We welcome contributions from the community! Whether you're fixing bugs, adding new features, improving documentation, or helping others, your contributions are valuable.
+
+Please read our [Contributing Guidelines](CONTRIBUTING.md) to learn how to contribute to Transformers. Make sure to also review our [Code of Conduct](https://github.com/huggingface/transformers/blob/main/CODE_OF_CONDUCT.md).
+
+For beginners, check out issues labeled with [good first issue](https://github.com/huggingface/transformers/labels/good%20first%20issue) to get started.
+
 ## Example models
 
 You can test most of our models directly on their [Hub model pages](https://huggingface.co/models).
@@ -333,3 +341,7 @@ We now have a [paper](https://www.aclweb.org/anthology/2020.emnlp-demos.6/) you 
     pages = "38--45"
 }
 ```
+
+## License
+
+Transformers is licensed under the [Apache License 2.0](LICENSE).
