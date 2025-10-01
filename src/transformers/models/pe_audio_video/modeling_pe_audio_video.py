@@ -602,18 +602,67 @@ class PEAudioVideoWithTextModel(PEAudioVideoPretrainedModel):
             return -F.logsigmoid(labels * logits).sum() / embeds1.size(0)
         return None
 
+    @auto_docstring
     def get_video_features(
         self, pixel_values_videos: torch.Tensor, padding_mask_videos: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
+        """
+        Returns:
+            video_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`): the video embedding
+                obtained by applying the projection layer to the pooled output of the video encoder.
+
+        Example:
+            ```python
+            from transformers import AutoModel, AutoProcessor
+
+            model = AutoModel.from_pretrained("facebook/pe-av-large")
+            processor = AutoProcessor.from_pretrained("facebook/pe-av-large")
+
+            inputs = processor(
+                videos=["<path to video file>"],
+                padding=True,
+                return_tensors="pt",
+            )
+
+            with torch.inference_mode():
+                video_features = model.get_video_features(**inputs)
+            ```
+        """
+
         return self.video_head(
             self.audio_video_model.video_model(pixel_values_videos, padding_mask_videos).pooler_output
         )
 
+    @auto_docstring
     def get_audio_features(
         self, input_values: torch.Tensor, padding_mask: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
+        """
+        Returns:
+            audio_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`): the audio embedding
+                obtained by applying the projection layer to the pooled output of the audio encoder.
+
+        Example:
+            ```python
+            from transformers import AutoModel, AutoProcessor
+
+            model = AutoModel.from_pretrained("facebook/pe-av-large")
+            processor = AutoProcessor.from_pretrained("facebook/pe-av-large")
+
+            inputs = processor(
+                audio=["<path to audio file>"],
+                padding=True,
+                return_tensors="pt",
+            )
+
+            with torch.inference_mode():
+                audio_features = model.get_audio_features(**inputs)
+            ```
+        """
+
         return self.audio_head(self.audio_video_model.audio_model(input_values, padding_mask).pooler_output)
 
+    @auto_docstring
     def get_audio_video_features(
         self,
         input_values: torch.Tensor,
@@ -621,6 +670,31 @@ class PEAudioVideoWithTextModel(PEAudioVideoPretrainedModel):
         padding_mask: Optional[torch.Tensor] = None,
         padding_mask_videos: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
+        """
+        Returns:
+            audio_video_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`): the audio-video embedding
+                obtained by applying the projection layer to the pooled output of the audio-video encoder.
+
+        Provides a single embedding representing both the audio and video
+
+        Example:
+            ```python
+            from transformers import AutoModel, AutoProcessor
+
+            model = AutoModel.from_pretrained("facebook/pe-av-large")
+            processor = AutoProcessor.from_pretrained("facebook/pe-av-large")
+
+            inputs = processor(
+                audio=["<path to audio file>"],
+                videos=["<path to video file>"],
+                padding=True,
+                return_tensors="pt",
+            )
+
+            with torch.inference_mode():
+                audio_video_features = model.get_audio_video_features(**inputs)
+            ```
+        """
         output = self.audio_video_model(
             input_values=input_values,
             pixel_values_videos=pixel_values_videos,
@@ -629,15 +703,79 @@ class PEAudioVideoWithTextModel(PEAudioVideoPretrainedModel):
         )
         return self.audio_video_head(output.pooler_output)
 
+    @auto_docstring
     def get_audio_text_features(self, input_ids: torch.Tensor, attention_mask: Optional[torch.Tensor] = None):
+        r"""
+        Returns:
+            audio_text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`): the audio-text embedding
+                obtained by applying the projection layer to the pooled output of the text encoder
+
+        This embedding is suitable for retrieving audios from a text description, but if you want to specifically
+        retrieve video from text, you should use `get_video_text_features` instead.
+
+        ```python
+        from transformers import AutoModel, AutoProcessor
+
+        model = AutoModel.from_pretrained("facebook/pe-av-large")
+        processor = AutoProcessor.from_pretrained("facebook/pe-av-large")
+
+        inputs = processor(text=["<text>"], return_tensors="pt", padding=True)
+
+        with torch.inference_mode():
+            audio_text_features = model.get_audio_text_features(**inputs)
+        ```
+        """
         return self.audio_text_head(self._get_text_output(input_ids, attention_mask).pooler_output)
 
+    @auto_docstring
     def get_video_text_features(self, input_ids: torch.Tensor, attention_mask: Optional[torch.Tensor] = None):
+        r"""
+        Returns:
+            video_text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`): the video-text embedding
+                obtained by applying the projection layer to the pooled output of the text encoder
+
+        This embedding is suitable for retrieving videos from a text description, but if you want to specifically
+        retrieve audio from text, you should use `get_audio_text_features` instead.
+
+        ```python
+        from transformers import AutoModel, AutoProcessor
+
+        model = AutoModel.from_pretrained("facebook/pe-av-large")
+        processor = AutoProcessor.from_pretrained("facebook/pe-av-large")
+
+        inputs = processor(text=["<text>"], return_tensors="pt", padding=True)
+
+        with torch.inference_mode():
+            video_text_features = model.get_video_text_features(**inputs)
+        ```
+        """
         return self.video_text_head(self._get_text_output(input_ids, attention_mask).pooler_output)
 
+    @auto_docstring
     def get_audio_video_text_features(self, input_ids: torch.Tensor, attention_mask: Optional[torch.Tensor] = None):
+        r"""
+        Returns:
+            audio_video_text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`): the audio-video text
+                embedding obtained by applying the projection layer to the pooled output of the text encoder
+
+        This is a good general purpose text embedding for, but if you want to specifically retrieve audio from
+        a text description, you should use `get_audio_text_features` instead (and similarly `get_video_text_features` for video).
+
+        ```python
+        from transformers import AutoModel, AutoProcessor
+
+        model = AutoModel.from_pretrained("facebook/pe-av-large)
+        processor = AutoProcessor.from_pretrained("facebook/pe-av-large)
+
+        inputs = processor(text=["<text>"], return_tensors="pt", padding=True)
+
+        with torch.inference_mode():
+            audio_video_text_features = model.get_audio_video_text_features(**inputs)
+        ```
+        """
         return self.audio_video_text_head(self._get_text_output(input_ids, attention_mask).pooler_output)
 
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -648,6 +786,35 @@ class PEAudioVideoWithTextModel(PEAudioVideoPretrainedModel):
         padding_mask: Optional[torch.Tensor] = None,
         return_loss=False,
     ) -> PEAudioVideoTextOutput:
+        r"""
+        Examples:
+
+        ```python
+        from transformers import AutoModel, AutoProcessor
+
+        model = AutoModel.from_pretrained("facebook/pe-av-large)
+        processor = AutoProcessor.from_pretrained("facebook/pe-av-large)
+
+        inputs = processor(
+            audio=["<path to audio file>"],
+            videos=["<path to video file>"],
+            text=["<text>"],
+            padding=True,
+            return_tensors="pt",
+        )
+
+        with torch.inference_mode():
+            outputs = model(**inputs)
+
+        audio_embeds = outputs.audio_embeds
+        video_embeds = outputs.video_embeds
+        audio_video_embeds = outputs.audio_video_embeds
+        audio_text_embeds = outputs.audio_text_embeds
+        audio_video_text_embeds = outputs.audio_video_text_embeds
+        video_text_embeds = outputs.video_text_embeds
+        ```
+        """
+
         # text embeddings
         audio_text_embeds = video_text_embeds = audio_video_text_embeds = None
         # media embeddings (audio, video, audio_video)
