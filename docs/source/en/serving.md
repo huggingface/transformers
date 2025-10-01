@@ -382,6 +382,35 @@ transformers serve \
   --attn_implementation sdpa_paged
 ```
 
+### Quantization
+
+transformers serve is compatible with all [quantization methods](https://huggingface.co/docs/transformers/main/quantization/overview) supported in transformers. Quantization can significantly reduce memory usage and improve inference speed, with two main workflows: pre-quantized models and on-the-fly quantization.
+
+#### Pre-quantized Models
+
+For models that are already quantized (e.g., GPTQ, AWQ, bitsandbytes), simply pass the quantized model name when serving.
+Make sure to install the required libraries listed in the quantization documentation.
+
+```sh
+transformers chat localhost:8000 --model-name-or-path Qwen/Qwen3-4B-bnb
+```
+
+> [!TIP]
+> Pre-quantized models generally provide the best balance of performance and accuracy.
+
+
+#### On the fly quantization
+
+If you want to quantize a model at runtime, you can specify the --quantization flag in the CLI. Note that not all quantization methods support on-the-fly conversion. The full list of supported methods is available in the quantization [overview](https://huggingface.co/docs/transformers/main/quantization/overview). 
+
+Currently, with transformers serve, we only supports the some methods: ["bitsandbytes-4bit", "bitsandbytes-8bit"]
+
+For example, to enable 4-bit quantization with bitsandbytes, you need to pass add `--quantization bitsandbytes-4bit`: 
+
+```sh
+transformers chat localhost:8000 --model-name-or-path Qwen/Qwen3-4B --quantization bitsandbytes-4bit
+```
+
 ### Performance tips
 
 - Use an efficient attention backend when available:
