@@ -726,7 +726,6 @@ def _preprocess_mask_arguments(
 
     # Move the mask to correct device, and potentially switch dtype for efficiency
     if attention_mask is not None and attention_mask.ndim == 2:
-        # TODO: check if this device is ok
         attention_mask = attention_mask.to(device=input_embeds.device, dtype=torch.bool)
 
     # If using a cache, it can give all information about mask sizes based on seen tokens
@@ -875,10 +874,9 @@ def create_bidirectional_mask(
             useful to easily overlay another mask on top, for example for image tokens handling.
     """
     embeds = encoder_hidden_states if encoder_hidden_states is not None else input_embeds
+    # We ignore a few irrelevant arguments at the end as we do not have a (growing) cache here
     early_exit, attention_mask, _, kv_length, kv_offset = _preprocess_mask_arguments(
-        config, embeds, attention_mask,
-        # Irrelevant arguments as we do not have a (growing) cache here
-        None, None, None, 0
+        config, embeds, attention_mask, None, None, None, 0
     )
     if early_exit:
         return attention_mask
