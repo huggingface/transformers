@@ -109,10 +109,11 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         # record shared tensors before weight loading
         shared_weights: defaultdict[int, List[Tuple[torch.nn.Module, str]]] = defaultdict(list)
         for module in model.modules():
-            shared_keys = getattr(module, "_dynamic_tied_weights_keys", set())
+            shared_keys = getattr(module, "_dynamic_tied_weights_keys", list())
             for key in shared_keys:
-                weight = getattr(module, key)
-                shared_weights[id(weight)].append((module, key))
+                weight = getattr(module, key, None)
+                if weight is not None:
+                    shared_weights[id(weight)].append((module, key))
 
         original_fn = model.tie_weights.__func__
 

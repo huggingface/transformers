@@ -17,7 +17,7 @@ class CompressedTensorsTest(unittest.TestCase):
     tinyllama_w4a16 = "nm-testing/tinyllama-w4a16-compressed-hf-quantizer"
     tinyllama_w8a8 = "nm-testing/tinyllama-w8a8-compressed-hf-quantizer"
     llama3_8b_fp8 = "nm-testing/Meta-Llama-3-8B-Instruct-fp8-hf_compat"
-    quip_w4a16 = "nm-testing/Llama-3.2-1B-Instruct-quipv-w4a16"
+    quip_w4a16 = "nm-testing/Llama-3.2-1B-Instruct-quip-w4a16"
 
     prompt = "The capital of France is Paris, the capital of Germany is Berlin"
 
