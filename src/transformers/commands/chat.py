@@ -53,9 +53,6 @@ if is_rich_available():
     from rich.live import Live
     from rich.markdown import Markdown
 
-if is_torch_available():
-    pass
-
 ALLOWED_KEY_CHARS = set(string.ascii_letters + string.whitespace)
 ALLOWED_VALUE_CHARS = set(
     string.ascii_letters + string.digits + string.whitespace + r".!\"#$%&'()*+,\-/:<=>?@[]^_`{|}~"
@@ -353,11 +350,6 @@ class ChatCommand(BaseTransformersCLICommand):
                 self.spawn_backend = True
                 args.model_name_or_path = args.model_name_or_path_or_address
 
-        SUPPORTED_QUANT_METHOD = ["bitsandbytes-4bit", "bitsandbytes-8bit"]
-        if args.quantization is not None and args.quantization not in SUPPORTED_QUANT_METHOD:
-            raise ValueError(
-                f"You have set a wrong value for quantization. Supported methods are {SUPPORTED_QUANT_METHOD}."
-            )
         if not is_rich_available() and (not is_torch_available() and self.spawn_backend):
             raise ImportError(
                 "You need to install rich to use the chat interface. Additionally, you have not specified a remote "
