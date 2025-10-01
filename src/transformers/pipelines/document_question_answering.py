@@ -103,11 +103,12 @@ class ModelType(ExplicitEnum):
 class DocumentQuestionAnsweringPipeline(ChunkPipeline):
     # TODO: Update task_summary docs to include an example with document QA and then update the first sentence
     """
-    Document Question Answering pipeline using any `AutoModelForDocumentQuestionAnswering`. The inputs/outputs are
-    similar to the (extractive) question answering pipeline; however, the pipeline takes an image (and optional OCR'd
-    words/boxes) as input instead of text context.
+    Document Question Answering pipeline using any `AutoModelForDocumentQuestionAnswering`. 
 
-    Unless the model you're using explicitly sets these generation parameters in its configuration files
+    The inputs/outputs are similar to the (extractive) question answering pipeline; however, this pipeline
+    takes an image (and optionally OCR'd words/boxes) as input instead of text context.
+
+    Unless the model you are using explicitly sets these generation parameters in its configuration files
     (`generation_config.json`), the following default values will be used:
     - max_new_tokens: 256
 
@@ -122,16 +123,6 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
     ...     question="What is the invoice number?",
     ... )
     [{'score': 0.425, 'answer': 'us-001', 'start': 16, 'end': 16}]
-    ```
-
-    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
-
-    This document question answering pipeline can currently be loaded from [`pipeline`] using the following task
-    identifier: `"document-question-answering"`.
-
-    The models that this pipeline can use are models that have been fine-tuned on a document question answering task.
-    See the up-to-date list of available models on
-    [huggingface.co/models](https://huggingface.co/models?filter=document-question-answering).
     """
 
     _pipeline_calls_generate = True
