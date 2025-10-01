@@ -269,6 +269,21 @@ def _ignore_causal_mask_sdpa(
     return False
 
 
+def _ignore_bidirectional_mask_sdpa(padding_mask: Optional[torch.Tensor]) -> bool:
+    """
+    Detects whether the bidirectional mask can be ignored in case PyTorch's SDPA is used, i.e. when there is full
+    attention with no padding.
+    """
+    is_tracing = torch.jit.is_tracing() or isinstance(padding_mask, torch.fx.Proxy) or is_torchdynamo_compiling()
+
+    # When using `torch.export` or `torch.onnx.dynamo_export`, we need to avoid to check the contents of the mask;
+    # otherwise, we will encounter dynamic control flows
+    if not is_tracing and (padding_mask is None or padding_mask.all()):
+        return True
+
+    return False
+
+
 def sdpa_mask_recent_torch(
     batch_size: int,
     cache_position: torch.Tensor,
@@ -278,6 +293,7 @@ def sdpa_mask_recent_torch(
     attention_mask: Optional[torch.Tensor] = None,
     local_size: Optional[int] = None,
     allow_is_causal_skip: bool = True,
+    allow_is_bidirectional_skip: bool = False,
     **kwargs,
 ) -> Optional[torch.Tensor]:
     """
@@ -307,6 +323,9 @@ def sdpa_mask_recent_torch(
         allow_torch_fix (`bool`, optional):
             Whether to update the mask in case a query is not attending to any tokens, to solve a bug in torch's older
             versions. We need an arg to skip it when using eager. By default `True`.
+        allow_is_bidirectional_skip (`bool`, optional):
+            Whether to allow to return `None` for the mask under conditions where we do not have to add any bias,
+            i.e. full attention without any padding. Default to `False`.
 
 
     ## Creating a simple causal mask:
@@ -377,8 +396,12 @@ def sdpa_mask_recent_torch(
     # Potentially pad the 2D mask, and slice it correctly
     padding_mask = prepare_padding_mask(attention_mask, kv_length, kv_offset, _slice=False)
 
-    # Under specific conditions, we can avoid materializing the mask, instead relying on the `is_causal` argument
+    # Under specific conditions, we can avoid materializing the mask
+    #   1. Causal masks can rely on the `is_causal` argument
+    #   2. Bidirectional do not need any further processing (no bias)
     if allow_is_causal_skip and _ignore_causal_mask_sdpa(padding_mask, q_length, kv_length, kv_offset, local_size):
+        return None
+    if allow_is_bidirectional_skip and _ignore_bidirectional_mask_sdpa(padding_mask):
         return None
 
     # Similar to `kv_arange = torch.arange(start=kv_offset, end=kv_offset + kv_length, device=cache_position.device)`
@@ -411,6 +434,7 @@ def sdpa_mask_older_torch(
     local_size: Optional[int] = None,
     allow_is_causal_skip: bool = True,
     allow_torch_fix: bool = True,
+    allow_is_bidirectional_skip: bool = False,
     **kwargs,
 ) -> Optional[torch.Tensor]:
     """
@@ -444,13 +468,20 @@ def sdpa_mask_older_torch(
         allow_torch_fix (`bool`, optional):
             Whether to update the mask in case a query is not attending to any tokens, to solve a bug in torch's older
             versions. We need an arg to skip it when using eager. By default `True`.
+        allow_is_bidirectional_skip (`bool`, optional):
+            Whether to allow to return `None` for the mask under conditions where we do not have to add any bias,
+            i.e. full attention without any padding. Default to `False`.
     """
     q_length = cache_position.shape[0]
     # Potentially pad the 2D mask, and slice it correctly
     padding_mask = prepare_padding_mask(attention_mask, kv_length, kv_offset)
 
-    # Under specific conditions, we can avoid materializing the mask, instead relying on the `is_causal` argument
+    # Under specific conditions, we can avoid materializing the mask
+    #   1. Causal masks can rely on the `is_causal` argument
+    #   2. Bidirectional do not need any further processing (no bias)
     if allow_is_causal_skip and _ignore_causal_mask_sdpa(padding_mask, q_length, kv_length, kv_offset, local_size):
+        return None
+    if allow_is_bidirectional_skip and _ignore_bidirectional_mask_sdpa(padding_mask):
         return None
 
     # Similar to `kv_arange = torch.arange(start=kv_offset, end=kv_offset + kv_length, device=cache_position.device)`
@@ -512,6 +543,7 @@ def eager_mask(
     """
     # The masks for eager attention are simply boolean mask from sdpa, casted to 0 and -inf
     _ = kwargs.pop("allow_is_causal_skip", None)
+    _ = kwargs.pop("allow_is_bidirectional_skip", None)
     mask = sdpa_mask(
         batch_size=batch_size,
         cache_position=cache_position,
@@ -520,6 +552,7 @@ def eager_mask(
         mask_function=mask_function,
         attention_mask=attention_mask,
         allow_is_causal_skip=False,
+        allow_is_bidirectional_skip=False,
         allow_torch_fix=False,
         **kwargs,
     )
@@ -886,6 +919,9 @@ def create_bidirectional_mask(
     mask_factory_function = bidirectional_mask_function
     mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation]
 
+    # Allow skipping the mask creation except we have additional masking operators (and/or masks)
+    allow_is_bidirectional_skip = True
+
     # Allow slight deviations from the base mask
     # Note that it is very important to apply this before any other deviations of the mask (such as packed sequence mask,
     # padding mask, etc) as the resulting mask may otherwise not be correct!
@@ -893,10 +929,12 @@ def create_bidirectional_mask(
         if not _is_torch_greater_or_equal_than_2_6:
             raise ValueError("Using `or_mask_function` or `and_mask_function` arguments require torch>=2.6")
         mask_factory_function = or_masks(mask_factory_function, or_mask_function)
+        allow_is_bidirectional_skip = False
     if and_mask_function is not None:
         if not _is_torch_greater_or_equal_than_2_6:
             raise ValueError("Using `or_mask_function` or `and_mask_function` arguments require torch>=2.6")
         mask_factory_function = and_masks(mask_factory_function, and_mask_function)
+        allow_is_bidirectional_skip = False
 
     # Due to the logic surrounding `cache_position` in inferring query-related information, we
     # construct a dummy tensor imitating initial positions
@@ -910,7 +948,9 @@ def create_bidirectional_mask(
         kv_offset=kv_offset,
         mask_function=mask_factory_function,
         attention_mask=attention_mask,
-        allow_is_causal_skip=False,  # additional kwarg for sdpa
+        # Additional kwargs for sdpa
+        allow_is_causal_skip=False,
+        allow_is_bidirectional_skip=allow_is_bidirectional_skip,
         dtype=dtype,  # Additional kwarg for eager
         config=config,  # Pass the config as well, in case someone wants to easily have their own mask_interface
     )
