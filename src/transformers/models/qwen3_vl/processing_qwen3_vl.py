@@ -196,7 +196,7 @@ class Qwen3VLProcessor(ProcessorMixin):
             index = 0
             for i in range(len(text)):
                 while self.video_token in text[i]:
-                    metadata = video_metadata[index]
+                    metadata = video_metadata[i]
                     if metadata.fps is None:
                         logger.warning_once(
                             "Qwen3VL requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "
