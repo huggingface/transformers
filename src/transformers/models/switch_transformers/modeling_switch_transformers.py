@@ -16,15 +16,14 @@
 
 import copy
 import math
-import warnings
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
+from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_layers import GradientCheckpointingLayer
@@ -39,14 +38,10 @@ from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_laye
 from ...utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
     auto_docstring,
-    is_torch_flex_attn_available,
     is_torch_fx_proxy,
     is_torchdynamo_compiling,
     logging,
-    replace_return_docstrings,
 )
 from ...utils.deprecation import deprecate_kwarg
 from .configuration_switch_transformers import SwitchTransformersConfig
@@ -1009,17 +1004,20 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        return module(*inputs)
+                    return custom_forward
+
                 layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.forward,
+                    create_custom_forward(layer_module),
                     hidden_states,
                     causal_mask,
                     position_bias,
                     encoder_hidden_states,
                     encoder_extended_attention_mask,
                     encoder_decoder_position_bias,
-                    layer_head_mask,
-                    cross_attn_layer_head_mask,
-                    None,  # past_key_value is always None with gradient checkpointing
+                    None,  # past_key_values is always None with gradient checkpointing
                     use_cache,
                     output_attentions,
                     output_router_logits,
