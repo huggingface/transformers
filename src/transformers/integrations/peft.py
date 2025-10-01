@@ -15,7 +15,6 @@
 import importlib
 import inspect
 import re
-import warnings
 from typing import Any, Optional, Union
 
 from packaging import version
