@@ -146,6 +146,7 @@ class BenchmarkRunner:
             max_length=config.sequence_length,
             truncation=True,
         ).to(config.device)
+        self.inputs["use_cache"] = config.use_cache
 
         # Prepare generation config
         gen_config = GenerationConfig(
@@ -163,7 +164,6 @@ class BenchmarkRunner:
             attn_implementation=config.attn_implementation,
             generation_config=gen_config,
         ).eval().to(config.device)
-
 
         # Kernelize the model if needed
         if config.kernelize:

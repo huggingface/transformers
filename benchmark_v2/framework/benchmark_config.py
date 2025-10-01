@@ -87,7 +87,8 @@ def cross_generate_configs(
     batch_size: int = 1,
     sequence_length: int = 128,
     num_tokens_to_generate: int = 128,
-    gpu_monitoring: bool = False,
+    use_cache: bool = True,  # no real interest in testing with cache disabled
+    gpu_monitoring: bool = False,  # this slows down the benchmark by a lot so we disable it by default
 ) -> list[BenchmarkConfig]:
     kwargs = {
         "warmup_iterations": warmup_iterations,
@@ -95,31 +96,30 @@ def cross_generate_configs(
         "batch_size": batch_size,
         "sequence_length": sequence_length,
         "num_tokens_to_generate": num_tokens_to_generate,
+        "use_cache": use_cache,
         "gpu_monitoring": gpu_monitoring,
     }
     configs = []
     for attn_implementation in [("flash_attention_2", None), ("eager", None), ("sdpa", "math"), ("sdpa", "flash_attention"), ("sdpa", "efficient_attention")]:
         for compiled_mode in [None, "default", "max-autotune", "reduce-overhead"]:
             for kernelized in {False, KERNELIZATION_AVAILABLE}:
-                for use_cache in [True, False]:
-                    name = [
-                        str(attn_implementation[0]),
-                        str(attn_implementation[1]),
-                        f"compiled_{compiled_mode}" if compiled_mode is not None else "uncompiled",
-                        "kernelized" if kernelized else "vanilla",
-                        "with_cache" if use_cache else "no_cache",
-                    ]
-                    config = BenchmarkConfig(
-                        name = "_".join(name),
-                        attn_implementation=attn_implementation[0],
-                        sdpa_backend=attn_implementation[1],
-                        compilation=compiled_mode is not None,
-                        kernelize=kernelized,
-                        compile_mode=compiled_mode,
-                        use_cache=use_cache,
-                        **kwargs,
-                    )
-                    configs.append(config)
+                name = [
+                    str(attn_implementation[0]),
+                    str(attn_implementation[1]),
+                    f"compiled_{compiled_mode}" if compiled_mode is not None else "uncompiled",
+                    "kernelized" if kernelized else "vanilla",
+                    "with_cache" if use_cache else "no_cache",
+                ]
+                config = BenchmarkConfig(
+                    name = "_".join(name),
+                    attn_implementation=attn_implementation[0],
+                    sdpa_backend=attn_implementation[1],
+                    compilation=compiled_mode is not None,
+                    kernelize=kernelized,
+                    compile_mode=compiled_mode,
+                    **kwargs,
+                )
+                configs.append(config)
     return configs
 
 
