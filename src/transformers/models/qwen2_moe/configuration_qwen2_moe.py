@@ -135,7 +135,8 @@ class Qwen2MoeConfig(PretrainedConfig):
             If `mlp_only_layers` is empty, `decoder_sparse_step` is used to determine the sparsity.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
-        layer_types (`<fill_type>`, *optional*): <fill_docstring>
+        layer_types (`dict[int, str]`, *optional*): a dictionarry that explicitly maps layer index with
+            the attention type. The attention type is one of `sliding_attention`, `full_attention`.
     ```python
     >>> from transformers import Qwen2MoeModel, Qwen2MoeConfig
 
