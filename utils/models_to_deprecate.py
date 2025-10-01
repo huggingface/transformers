@@ -23,12 +23,13 @@ import os
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
-from tqdm import tqdm
 
 from git import Repo
 from huggingface_hub import HfApi
+from tqdm import tqdm
 
-from transformers.models.auto.configuration_auto import MODEL_NAMES_MAPPING, DEPRECATED_MODELS
+from transformers.models.auto.configuration_auto import DEPRECATED_MODELS, MODEL_NAMES_MAPPING
+
 
 api = HfApi()
 
@@ -39,37 +40,37 @@ repo = Repo(PATH_TO_REPO)
 # Used when the folder name on the hub does not match the folder name in `transformers/models`
 # format = {folder name in `transformers/models`: expected tag on the hub}
 MODEL_FOLDER_NAME_TO_TAG_MAPPING = {
-    'audio_spectrogram_transformer': 'audio-spectrogram-transformer',
-    'bert_generation': 'bert-generation',
-    'blenderbot_small': 'blenderbot-small',
-    'blip_2': 'blip-2',
-    'dab_detr': 'dab-detr',
-    'data2vec': 'data2vec-audio',  # actually, the base model is never used as a tag, but the sub models are
-    'deberta_v2': 'deberta-v2',
-    'donut': 'donut-swin',
-    'encoder_decoder': 'encoder-decoder',
-    'grounding_dino': 'grounding-dino',
-    'kosmos2': 'kosmos-2',
-    'kosmos2_5': 'kosmos-2.5',
-    'megatron_bert': 'megatron-bert',
-    'mgp_str': 'mgp-str',
-    'mm_grounding_dino': 'mm-grounding-dino',
-    'modernbert_decoder': 'modernbert-decoder',
-    'nllb_moe': 'nllb-moe',
-    'omdet_turbo': 'omdet-turbo',
+    "audio_spectrogram_transformer": "audio-spectrogram-transformer",
+    "bert_generation": "bert-generation",
+    "blenderbot_small": "blenderbot-small",
+    "blip_2": "blip-2",
+    "dab_detr": "dab-detr",
+    "data2vec": "data2vec-audio",  # actually, the base model is never used as a tag, but the sub models are
+    "deberta_v2": "deberta-v2",
+    "donut": "donut-swin",
+    "encoder_decoder": "encoder-decoder",
+    "grounding_dino": "grounding-dino",
+    "kosmos2": "kosmos-2",
+    "kosmos2_5": "kosmos-2.5",
+    "megatron_bert": "megatron-bert",
+    "mgp_str": "mgp-str",
+    "mm_grounding_dino": "mm-grounding-dino",
+    "modernbert_decoder": "modernbert-decoder",
+    "nllb_moe": "nllb-moe",
+    "omdet_turbo": "omdet-turbo",
     "openai": "openai-gpt",
-    'roberta_prelayernorm': 'roberta-prelayernorm',
-    'sew_d': 'sew-d',
-    'speech_encoder_decoder': 'speech-encoder-decoder',
-    'table_transformer': 'table-transformer',
-    'unispeech_sat': 'unispeech-sat',
-    'vision_encoder_decoder': 'vision-encoder-decoder',
-    'vision_text_dual_encoder': 'vision-text-dual-encoder',
-    'wav2vec2_bert': 'wav2vec2-bert',
-    'wav2vec2_conformer': 'wav2vec2-conformer',
-    'x_clip': 'xclip',
-    'xlm_roberta': 'xlm-roberta',
-    'xlm_roberta_xl': 'xlm-roberta-xl',
+    "roberta_prelayernorm": "roberta-prelayernorm",
+    "sew_d": "sew-d",
+    "speech_encoder_decoder": "speech-encoder-decoder",
+    "table_transformer": "table-transformer",
+    "unispeech_sat": "unispeech-sat",
+    "vision_encoder_decoder": "vision-encoder-decoder",
+    "vision_text_dual_encoder": "vision-text-dual-encoder",
+    "wav2vec2_bert": "wav2vec2-bert",
+    "wav2vec2_conformer": "wav2vec2-conformer",
+    "x_clip": "xclip",
+    "xlm_roberta": "xlm-roberta",
+    "xlm_roberta_xl": "xlm-roberta-xl",
 }
 
 # Used on model architectures with multiple tags on the hub (e.g. on VLMs, we often support a text-only model).
@@ -239,7 +240,8 @@ def get_list_of_models_to_deprecate(
                     + str(sorted(non_deprecated_model_tags - all_model_tags))
                     + "\nExtra tags in `model_info`: "
                     + str(sorted(all_model_tags - non_deprecated_model_tags))
-                    + "\n\nYou need to update the `MODEL_NAMES_MAPPING` and/or `EXTRA_TAGS_MAPPING` dictionaries."
+                    + "\n\nYou need to update one or more of the following: `MODEL_NAMES_MAPPING`, "
+                    "`EXTRA_TAGS_MAPPING` or `DEPRECATED_MODELS_TAGS`."
                 )
 
         # Filter out models which were added less than a year ago
@@ -251,9 +253,7 @@ def get_list_of_models_to_deprecate(
         print("Making calls to the hub to find models below the threshold number of downloads...")
         num_models = len(models_info)
         for i, (model, model_info) in enumerate(models_info.items()):
-            if max_num_models != -1 and i > max_num_models:
-                break
-            print(f"{i+1}/{num_models}: getting hub downloads for model='{model}' (tags={model_info['tags']})")
+            print(f"{i + 1}/{num_models}: getting hub downloads for model='{model}' (tags={model_info['tags']})")
             for model_tag in model_info["tags"]:
                 if model_info["downloads"] > thresh_num_downloads:
                     break
