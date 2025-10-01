@@ -280,8 +280,7 @@ class ChatArguments:
 
     quantization: Optional[str] = field(
         default=None,
-        metadata={"help": "Which quantization method to use.",
-                  "choices": ["bitsandbytes-4bit","bitsandbytes-8bit"]}
+        metadata={"help": "Which quantization method to use.", "choices": ["bitsandbytes-4bit", "bitsandbytes-8bit"]},
     )
     # Serving settings
     host: str = field(default="localhost", metadata={"help": "Interface the server will listen to.."})
