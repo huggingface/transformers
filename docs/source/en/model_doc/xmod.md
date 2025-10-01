@@ -36,6 +36,7 @@ The original code can be found [here](https://github.com/facebookresearch/fairse
 ## Usage tips
 
 Tips:
+
 - X-MOD is similar to [XLM-R](xlm-roberta), but a difference is that the input language needs to be specified so that the correct language adapter can be activated.
 - The main models – base and large – have adapters for 81 languages.
 
@@ -44,6 +45,7 @@ Tips:
 ### Input language
 
 There are two ways to specify the input language:
+
 1. By setting a default language before using the model:
 
 ```python

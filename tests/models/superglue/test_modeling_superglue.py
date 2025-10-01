@@ -123,7 +123,6 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     has_attentions = True
 
     def setUp(self):

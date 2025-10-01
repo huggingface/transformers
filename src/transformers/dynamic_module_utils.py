@@ -285,8 +285,7 @@ def get_class_in_module(
         `typing.Type`: The class looked for.
     """
     name = os.path.normpath(module_path)
-    if name.endswith(".py"):
-        name = name[:-3]
+    name = name.removesuffix(".py")
     name = name.replace(os.path.sep, ".")
     module_file: Path = Path(HF_MODULES_CACHE) / module_path
     with _HF_REMOTE_CODE_LOCK:
@@ -396,7 +395,7 @@ def get_cached_module_file(
     if is_local:
         submodule = _sanitize_module_name(os.path.basename(pretrained_model_name_or_path))
     else:
-        submodule = _sanitize_module_name(pretrained_model_name_or_path.replace("/", os.path.sep))
+        submodule = os.path.sep.join(map(_sanitize_module_name, pretrained_model_name_or_path.split("/")))
         cached_module = try_to_load_from_cache(
             pretrained_model_name_or_path, module_file, cache_dir=cache_dir, revision=_commit_hash, repo_type=repo_type
         )

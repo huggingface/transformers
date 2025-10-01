@@ -74,16 +74,12 @@ class Qwen2_5_VLVisionText2TextModelTester:
         bos_token_id=0,
         eos_token_id=1,
         pad_token_id=2,
-        vision_start_token_id=3,
-        image_token_id=4,
-        video_token_id=5,
         hidden_act="silu",
         hidden_size=32,
         vocab_size=99,
         intermediate_size=37,
         max_position_embeddings=512,
         max_window_layers=3,
-        model_type="qwen2_5_vl",
         num_attention_heads=4,
         num_hidden_layers=2,
         num_key_value_heads=2,
@@ -91,27 +87,21 @@ class Qwen2_5_VLVisionText2TextModelTester:
         tie_word_embeddings=True,
         is_training=True,
         vision_config=None,
-        rope_scaling=None,
+        vision_start_token_id=3,
+        image_token_id=4,
+        video_token_id=5,
     ):
         self.parent = parent
         self.ignore_index = ignore_index
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.hidden_size = hidden_size
         self.vision_start_token_id = vision_start_token_id
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id
-        self.hidden_act = hidden_act
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.max_position_embeddings = max_position_embeddings
-        self.max_window_layers = max_window_layers
-        self.model_type = model_type
-        self.num_attention_heads = num_attention_heads
-        self.num_hidden_layers = num_hidden_layers
-        self.num_key_value_heads = num_key_value_heads
-        self.rope_theta = rope_theta
-        self.tie_word_embeddings = tie_word_embeddings
         self.batch_size = batch_size
         self.num_channels = num_channels
         self.image_size = image_size
@@ -135,32 +125,31 @@ class Qwen2_5_VLVisionText2TextModelTester:
                 "temporal_patch_size": 2,
             }
         self.vision_config = vision_config
-        # Same goes for rope scaling
-        if rope_scaling is None:
-            rope_scaling = {"type": "mrope", "mrope_section": [2, 1, 1]}
-        self.rope_scaling = rope_scaling
+        self.text_config = {
+            "bos_token_id": bos_token_id,
+            "eos_token_id": eos_token_id,
+            "pad_token_id": pad_token_id,
+            "hidden_act": hidden_act,
+            "hidden_size": hidden_size,
+            "intermediate_size": intermediate_size,
+            "max_position_embeddings": max_position_embeddings,
+            "max_window_layers": max_window_layers,
+            "num_attention_heads": num_attention_heads,
+            "num_hidden_layers": num_hidden_layers,
+            "num_key_value_heads": num_key_value_heads,
+            "rope_theta": rope_theta,
+            "tie_word_embeddings": tie_word_embeddings,
+            "vocab_size": vocab_size,
+            "rope_scaling": {"type": "mrope", "mrope_section": [2, 1, 1]},
+        }
 
     def get_config(self):
         return Qwen2_5_VLConfig(
-            hidden_size=self.hidden_size,
-            intermediate_size=self.intermediate_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            num_key_value_heads=self.num_key_value_heads,
-            hidden_act=self.hidden_act,
-            max_position_embeddings=self.max_position_embeddings,
+            text_config=self.text_config,
             vision_config=self.vision_config,
-            model_type=self.model_type,
-            max_window_layers=self.max_window_layers,
-            rope_scaling=self.rope_scaling,
-            tie_word_embeddings=self.tie_word_embeddings,
-            bos_token_id=self.bos_token_id,
-            eos_token_id=self.eos_token_id,
-            pad_token_id=self.pad_token_id,
             vision_start_token_id=self.vision_start_token_id,
             image_token_id=self.image_token_id,
             video_token_id=self.video_token_id,
-            vocab_size=self.vocab_size,
         )
 
     def prepare_config_and_inputs(self):
@@ -212,7 +201,6 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         else ()
     )
     test_pruning = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = Qwen2_5_VLVisionText2TextModelTester(self)
@@ -220,6 +208,33 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    def test_text_config(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        base_config_dict = config.to_dict()
+        base_config = Qwen2_5_VLConfig(**base_config_dict)
+
+        # Trying to get or set text related attributes happens via text config
+        vocab_size = base_config.vocab_size
+        text_vocab_size = base_config.text_config.vocab_size
+        self.assertEqual(vocab_size, text_vocab_size)
+
+        base_config.vocab_size = 55
+        self.assertEqual(base_config.vocab_size, 55)
+        self.assertEqual(base_config.text_config.vocab_size, 55)
+
+        # We can still initialize config from old-format json, i.e. flat structure
+        text_config_dict = base_config_dict.pop("text_config")
+        flat_config_dict = {**text_config_dict, **base_config_dict}
+        config_from_flat_dict = Qwen2_5_VLConfig(**flat_config_dict)
+        config_from_flat_dict.vocab_size = 78
+        self.assertEqual(config_from_flat_dict.vocab_size, 78)
+        self.assertEqual(config_from_flat_dict.text_config.vocab_size, 78)
+
+        # Vision config attributes are NOT force-set via vision config
+        base_config.patch_size = 8
+        self.assertEqual(base_config.patch_size, 8)
+        self.assertNotEqual(base_config.vision_config.patch_size, 8)
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

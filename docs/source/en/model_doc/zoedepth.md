@@ -109,6 +109,7 @@ Image.fromarray(depth.astype("uint8"))
    ```
 
 ## Resources
+
 - Refer to this [notebook](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/ZoeDepth) for an inference example.
 
 ## ZoeDepthConfig

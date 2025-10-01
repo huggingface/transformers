@@ -20,9 +20,9 @@ Quantization reduces the memory footprint and computational cost of large machin
 
 Reducing a model's precision offers several significant benefits:
 
--  Smaller model size: Lower-precision data types require less storage space. An int8 model, for example, is roughly 4 times smaller than its float32 counterpart.
--  Faster inference: Operations on lower-precision data types, especially integers, can be significantly faster on compatible hardware (CPUs and GPUs often have specialized instructions for int8 operations). This leads to lower latency.
--  Reduced energy consumption: Faster computations and smaller memory transfers often translate to lower power usage.
+- Smaller model size: Lower-precision data types require less storage space. An int8 model, for example, is roughly 4 times smaller than its float32 counterpart.
+- Faster inference: Operations on lower-precision data types, especially integers, can be significantly faster on compatible hardware (CPUs and GPUs often have specialized instructions for int8 operations). This leads to lower latency.
+- Reduced energy consumption: Faster computations and smaller memory transfers often translate to lower power usage.
 
 The primary trade-off in quantization is *efficiency* vs. *accuracy*. Reducing precision saves resources but inevitably introduces small errors (quantization noise). The goal is to minimize this error using appropriate schemes (affine/symmetric), granularity (per-tensor/channel), and techniques (PTQ/QAT) so that the model's performance on its target task degrades as little as possible.
 
