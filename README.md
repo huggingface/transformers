@@ -34,6 +34,13 @@ limitations under the License.
     <a href="https://zenodo.org/badge/latestdoi/155220641"><img src="https://zenodo.org/badge/155220641.svg" alt="DOI"></a>
 </p>
 
+
+<p align="center">
+  <a href="https://hacktoberfest.com/">
+    <img src="https://img.shields.io/badge/Hacktoberfest-2025-blueviolet?style=for-the-badge&logo=hackthebox" alt="Hacktoberfest 2025" />
+  </a>
+</p>
+
 <h4 align="center">
     <p>
         <b>English</b> |
