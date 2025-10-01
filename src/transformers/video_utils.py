@@ -196,7 +196,9 @@ def make_batched_videos(videos) -> list[Union[np.ndarray, "torch.Tensor", "URL",
         return convert_pil_frames_to_video([videos])
     # only one frame passed, thus we unsqueeze time dim
     elif is_valid_image(videos):
-        return [np.array(videos)[None, ...]]
+        if isinstance(videos, PIL.Image.Image):
+            videos = np.array(videos)
+        return [videos[None, ...]]
     elif not isinstance(videos, list):
         raise ValueError(
             f"Invalid video input. Expected either a list of video frames or an input of 4 or 5 dimensions, but got"

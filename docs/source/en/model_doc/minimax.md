@@ -35,12 +35,12 @@ The architecture of MiniMax is briefly described as follows:
 - Activated Parameters per Token: 45.9B
 - Number Layers: 80
 - Hybrid Attention: a softmax attention is positioned after every 7 lightning attention.
-    - Number of attention heads: 64
-    - Attention head dimension: 128
+  - Number of attention heads: 64
+  - Attention head dimension: 128
 - Mixture of Experts:
-    - Number of experts: 32
-    - Expert hidden dimension: 9216
-    - Top-2 routing strategy
+  - Number of experts: 32
+  - Expert hidden dimension: 9216
+  - Top-2 routing strategy
 - Positional Encoding: Rotary Position Embedding (RoPE) applied to half of the attention head dimension with a base frequency of 10,000,000
 - Hidden Size: 6144
 - Vocab Size: 200,064

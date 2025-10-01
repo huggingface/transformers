@@ -32,7 +32,7 @@ from transformers import (
     MBartTokenizerFast,
     set_seed,
 )
-from transformers.trainer_utils import EvaluationStrategy, is_main_process
+from transformers.trainer_utils import is_main_process
 from transformers.training_args import ParallelMode
 from utils import (
     Seq2SeqDataCollator,
@@ -271,7 +271,7 @@ def main():
             max_source_length=data_args.max_source_length,
             prefix=model.config.prefix or "",
         )
-        if training_args.do_eval or training_args.eval_strategy != EvaluationStrategy.NO
+        if training_args.do_eval
         else None
     )
     test_dataset = (

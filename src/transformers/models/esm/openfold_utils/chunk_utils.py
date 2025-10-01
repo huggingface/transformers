@@ -329,7 +329,7 @@ class ChunkSizeTuner:
         if min_chunk_size >= self.max_chunk_size:
             return min_chunk_size
 
-        candidates: list[int] = [2**l for l in range(int(math.log(self.max_chunk_size, 2)) + 1)]
+        candidates: list[int] = [2**l for l in range(int(math.log2(self.max_chunk_size)) + 1)]
         candidates = [c for c in candidates if c > min_chunk_size]
         candidates = [min_chunk_size] + candidates
         candidates[-1] += 4

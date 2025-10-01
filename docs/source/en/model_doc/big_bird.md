@@ -87,6 +87,7 @@ print(f"The predicted token is: {predicted_token}")
 </hfoptions>
 
 ## Notes
+
 - Inputs should be padded on the right because BigBird uses absolute position embeddings.
 - BigBird supports `original_full` and `block_sparse` attention. If the input sequence length is less than 1024, it is recommended to use `original_full` since sparse patterns don't offer much benefit for smaller inputs.
 - The current implementation uses window size of 3 blocks and 2 global blocks, only supports the ITC-implementation, and doesn't support `num_random_blocks=0`.

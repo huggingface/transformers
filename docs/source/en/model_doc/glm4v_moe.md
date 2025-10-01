@@ -35,6 +35,7 @@ Through our open-source work, we aim to explore the technological frontier toget
 ![bench_45](https://raw.githubusercontent.com/zai-org/GLM-V/refs/heads/main/resources/bench_45v.jpeg)
 
 Beyond benchmark performance, GLM-4.5V focuses on real-world usability. Through efficient hybrid training, it can handle diverse types of visual content, enabling full-spectrum vision reasoning, including:
+
 - **Image reasoning** (scene understanding, complex multi-image analysis, spatial recognition)
 - **Video understanding** (long video segmentation and event recognition)
 - **GUI tasks** (screen reading, icon recognition, desktop operation assistance)

@@ -23,6 +23,7 @@ Image-text-to-text models, also known as vision language models (VLMs), are lang
 In this guide, we provide a brief overview of VLMs and show how to use them with Transformers for inference.
 
 To begin with, there are multiple types of VLMs:
+
 - base models used for fine-tuning
 - chat fine-tuned models for conversation
 - instruction fine-tuned models

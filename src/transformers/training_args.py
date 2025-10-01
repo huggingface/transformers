@@ -25,7 +25,6 @@ from typing import Any, Optional, Union
 
 from .debug_utils import DebugOption
 from .trainer_utils import (
-    EvaluationStrategy,
     FSDPOption,
     HubStrategy,
     IntervalStrategy,
@@ -738,15 +737,8 @@ class TrainingArguments:
             Refer to the PyTorch doc for possible values and note that they may change across PyTorch versions.
 
             This flag is experimental and subject to change in future releases.
-        include_tokens_per_second (`bool`, *optional*, defaults to `False`):
-            Whether or not to compute the number of tokens per second per device for training speed metrics.
-
-            This will iterate over the entire training dataloader once beforehand,
-            and will slow down the entire process.
-
-        include_num_input_tokens_seen (`bool`, *optional*):
-            Whether or not to track the number of input tokens seen throughout training.
-
+        include_num_input_tokens_seen (`Optional[Union[str, bool]]`, *optional*, defaults to "no"):
+            Whether to track the number of input tokens seen. Must be one of ["all", "non_padding", "no"] or a boolean value which map to "all" or "no".
             May be slower in distributed training as gather operations must be called.
 
         neftune_noise_alpha (`Optional[float]`):
@@ -1254,9 +1246,6 @@ class TrainingArguments:
     skip_memory_metrics: bool = field(
         default=True, metadata={"help": "Whether or not to skip adding of memory profiler reports to metrics."}
     )
-    use_legacy_prediction_loop: bool = field(
-        default=False, metadata={"help": "Whether or not to use the legacy prediction_loop in the Trainer."}
-    )
     push_to_hub: bool = field(
         default=False, metadata={"help": "Whether or not to upload the trained model to the model hub after training."}
     )
@@ -1372,18 +1361,19 @@ class TrainingArguments:
         },
     )
 
-    include_tokens_per_second: bool = field(
-        default=False,
-        metadata={"help": "If set to `True`, the speed metrics will include `tgs` (tokens per second per device)."},
+    include_tokens_per_second: Optional[bool] = field(
+        default=None,
+        metadata={
+            "help": "This arg is deprecated and will be removed in v5 , use `include_num_input_tokens_seen` instead."
+        },
     )
 
     include_num_input_tokens_seen: Union[str, bool] = field(
-        default=False,
+        default="no",
         metadata={
             "help": (
                 "Whether to track the number of input tokens seen. "
-                "Can be `'all'` to count all tokens, `'non_padding'` to count only non-padding tokens, "
-                "or a boolean (`True` maps to `'all'`, `False` to `'no'`)."
+                "Must be one of [`all`, `non_padding`, `no`] or a boolean value which map to `all` or `no`"
             )
         },
     )
@@ -1480,15 +1470,6 @@ class TrainingArguments:
 
         if self.disable_tqdm is None:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
-
-        if isinstance(self.eval_strategy, EvaluationStrategy):
-            warnings.warn(
-                "using `EvaluationStrategy` for `eval_strategy` is deprecated and will be removed in version 5"
-                " of 🤗 Transformers. Use `IntervalStrategy` instead",
-                FutureWarning,
-            )
-            # Go back to the underlying string or we won't be able to instantiate `IntervalStrategy` on it.
-            self.eval_strategy = self.eval_strategy.value
 
         self.eval_strategy = IntervalStrategy(self.eval_strategy)
         self.logging_strategy = IntervalStrategy(self.logging_strategy)
@@ -1688,8 +1669,13 @@ class TrainingArguments:
                         torch.backends.cudnn.allow_tf32 = False
                 # no need to assert on else
 
-        # NOTE: Mixed precision environment variable setting moved to after DeepSpeed processing
-        # to ensure DeepSpeed config can override TrainingArguments defaults
+        # if training args is specified, it will override the one specified in the accelerate config
+        mixed_precision_dtype = os.environ.get("ACCELERATE_MIXED_PRECISION", "no")
+        if self.fp16:
+            mixed_precision_dtype = "fp16"
+        elif self.bf16:
+            mixed_precision_dtype = "bf16"
+        os.environ["ACCELERATE_MIXED_PRECISION"] = mixed_precision_dtype
 
         if self.report_to is None:
             logger.info(
@@ -1876,15 +1862,6 @@ class TrainingArguments:
             self.deepspeed_plugin.set_mixed_precision(mixed_precision)
             self.deepspeed_plugin.set_deepspeed_weakref()
 
-        # Set mixed precision environment variable after DeepSpeed processing
-        # This ensures DeepSpeed config overrides have been applied to fp16/bf16 settings
-        mixed_precision_dtype = os.environ.get("ACCELERATE_MIXED_PRECISION", "no")
-        if self.fp16:
-            mixed_precision_dtype = "fp16"
-        elif self.bf16:
-            mixed_precision_dtype = "bf16"
-        os.environ["ACCELERATE_MIXED_PRECISION"] = mixed_precision_dtype
-
         if self.use_cpu:
             self.dataloader_pin_memory = False
 
@@ -1907,10 +1884,14 @@ class TrainingArguments:
                     "This is not supported and we recommend you to update your version."
                 )
 
-        if self.include_num_input_tokens_seen is True:
-            self.include_num_input_tokens_seen = "all"
-        elif self.include_num_input_tokens_seen is False:
-            self.include_num_input_tokens_seen = "no"
+        if self.include_tokens_per_second is not None:
+            logger.warning(
+                "include_tokens_per_second is deprecated and will be removed in v5. Use `include_num_input_tokens_seen` instead. "
+            )
+            self.include_num_input_tokens_seen = self.include_tokens_per_second
+
+        if isinstance(self.include_num_input_tokens_seen, bool):
+            self.include_num_input_tokens_seen = "all" if self.include_num_input_tokens_seen else "no"
 
     def __str__(self):
         self_as_dict = asdict(self)

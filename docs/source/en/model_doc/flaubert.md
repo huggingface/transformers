@@ -44,6 +44,7 @@ community for further reproducible experiments in French NLP.*
 This model was contributed by [formiel](https://huggingface.co/formiel). The original code can be found [here](https://github.com/getalp/Flaubert).
 
 Tips:
+
 - Like RoBERTa, without the sentence ordering prediction (so just trained on the MLM objective).
 
 ## Resources

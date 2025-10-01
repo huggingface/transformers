@@ -330,7 +330,6 @@ class Glm4vConfig(PretrainedConfig):
         video_end_token_id=151342,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         if isinstance(vision_config, dict):
             self.vision_config = self.sub_configs["vision_config"](**vision_config)
         elif vision_config is None:
@@ -339,7 +338,6 @@ class Glm4vConfig(PretrainedConfig):
         if isinstance(text_config, dict):
             self.text_config = self.sub_configs["text_config"](**text_config)
         elif text_config is None:
-            # For BC use all kwargs to init `TextConfig`
             self.text_config = self.sub_configs["text_config"](**kwargs)
 
         self.image_token_id = image_token_id
@@ -348,6 +346,8 @@ class Glm4vConfig(PretrainedConfig):
         self.video_end_token_id = video_end_token_id
         self.image_start_token_id = image_start_token_id
         self.image_end_token_id = image_end_token_id
+
+        super().__init__(**kwargs)
 
 
 __all__ = ["Glm4vConfig", "Glm4vTextConfig"]

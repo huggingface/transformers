@@ -139,6 +139,7 @@ The architecture of this new version differs from the first in a few aspects:
 #### Improvements on the second-pass model
 
 The second seq2seq model, named text-to-unit model, is now non-auto regressive, meaning that it computes units in a **single forward pass**. This achievement is made possible by:
+
 - the use of **character-level embeddings**, meaning that each character of the predicted translated text has its own embeddings, which are then used to predict the unit tokens.
 - the use of an intermediate duration predictor, that predicts speech duration at the **character-level** on the predicted translated text.
 - the use of a new text-to-unit decoder mixing convolutions and self-attention to handle longer context.
@@ -146,6 +147,7 @@ The second seq2seq model, named text-to-unit model, is now non-auto regressive, 
 #### Difference in the speech encoder
 
 The speech encoder, which is used during the first-pass generation process to predict the translated text, differs mainly from the previous speech encoder through these mechanisms:
+
 - the use of chunked attention mask to prevent attention across chunks, ensuring that each position attends only to positions within its own chunk and a fixed number of previous chunks.
 - the use of relative position embeddings which only considers distance between sequence elements rather than absolute positions. Please refer to [Self-Attentionwith Relative Position Representations (Shaw et al.)](https://huggingface.co/papers/1803.02155) for more details.
 - the use of a causal depth-wise convolution instead of a non-causal one.

@@ -77,9 +77,9 @@ Mistral-7B-Instruct uses `[INST]` and `[/INST]` tokens to indicate the start and
 
 The input to `apply_chat_template` should be structured as a list of dictionaries with `role` and `content` keys. The `role` key specifies the speaker, and the `content` key contains the message. The common roles are:
 
- - `user` for messages from the user
- - `assistant` for messages from the model
- - `system` for directives on how the model should act (usually placed at the beginning of the chat)
+- `user` for messages from the user
+- `assistant` for messages from the model
+- `system` for directives on how the model should act (usually placed at the beginning of the chat)
 
 [`apply_chat_template`] takes this list and returns a formatted sequence. Set `tokenize=True` if you want to tokenize the sequence.
 

@@ -87,22 +87,18 @@ from .trainer_callback import (
     TrainerState,
 )
 from .trainer_pt_utils import (
-    DistributedTensorGatherer,
     EvalLoopContainer,
     IterableDatasetShard,
     LabelSmoother,
     LayerWiseDummyOptimizer,
     LengthGroupedSampler,
-    SequentialDistributedSampler,
     distributed_broadcast_scalars,
     distributed_concat,
     find_batch_size,
     get_model_param_count,
     get_module_class_from_name,
     get_parameter_names,
-    nested_concat,
     nested_detach,
-    nested_numpify,
     nested_xla_mesh_reduce,
     reissue_pt_warnings,
     remove_dummy_checkpoint,
@@ -177,7 +173,6 @@ from .utils import (
     logging,
     strtobool,
 )
-from .utils.deprecation import deprecate_kwarg
 from .utils.import_utils import requires
 from .utils.quantization_config import QuantizationMethod
 
@@ -208,13 +203,8 @@ else:
 
 if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
-    from smdistributed.modelparallel import __version__ as SMP_VERSION
-
-    IS_SAGEMAKER_MP_POST_1_10 = version.parse(SMP_VERSION) >= version.parse("1.10")
 
     from .trainer_pt_utils import smp_forward_backward, smp_forward_only, smp_gather, smp_nested_concat
-else:
-    IS_SAGEMAKER_MP_POST_1_10 = False
 
 
 if is_safetensors_available():
@@ -411,7 +401,6 @@ class Trainer:
     # Those are used as methods of the Trainer in examples.
     from .trainer_pt_utils import _get_learning_rate, log_metrics, metrics_format, save_metrics, save_state
 
-    @deprecate_kwarg("tokenizer", new_name="processing_class", version="5.0.0", raise_if_both_names=True)
     def __init__(
         self,
         model: Union[PreTrainedModel, nn.Module, None] = None,
@@ -710,23 +699,13 @@ class Trainer:
             # BF16 + model parallelism in SageMaker: currently not supported, raise an error
             if args.bf16:
                 raise ValueError("SageMaker Model Parallelism does not support BF16 yet. Please use FP16 instead ")
-
-            if IS_SAGEMAKER_MP_POST_1_10:
-                # When there's mismatch between SMP config and trainer argument, use SMP config as truth
-                if args.fp16 != smp.state.cfg.fp16:
-                    logger.warning(
-                        f"FP16 provided in SM_HP_MP_PARAMETERS is {smp.state.cfg.fp16}, "
-                        f"but FP16 provided in trainer argument is {args.fp16}, "
-                        f"setting to {smp.state.cfg.fp16}"
-                    )
-                    args.fp16 = smp.state.cfg.fp16
-            else:
-                # smp < 1.10 does not support fp16 in trainer.
-                if hasattr(smp.state.cfg, "fp16"):
-                    logger.warning(
-                        f"FP16 provided in SM_HP_MP_PARAMETERS is {smp.state.cfg.fp16}, "
-                        "but SageMaker Model Parallelism < 1.10 does not support FP16 in trainer."
-                    )
+            if args.fp16 != smp.state.cfg.fp16:
+                logger.warning(
+                    f"FP16 provided in SM_HP_MP_PARAMETERS is {smp.state.cfg.fp16}, "
+                    f"but FP16 provided in trainer argument is {args.fp16}, "
+                    f"setting to {smp.state.cfg.fp16}"
+                )
+                args.fp16 = smp.state.cfg.fp16
         if args.fp16 and args.device == torch.device("cpu") and not is_torch_greater_or_equal_than_2_3:
             raise ValueError("Tried to use `fp16` but it is not supported on cpu. You need to have torch>=2.3")
 
@@ -788,18 +767,6 @@ class Trainer:
             num_devices = xr.global_runtime_device_count()
             xs.set_global_mesh(xs.Mesh(np.array(range(num_devices)), (num_devices, 1), axis_names=("fsdp", "tensor")))
         self.is_fsdp_xla_v1_enabled = self.is_fsdp_xla_enabled and not self.is_fsdp_xla_v2_enabled
-
-    @property
-    def tokenizer(self) -> Optional[PreTrainedTokenizerBase]:
-        logger.warning("Trainer.tokenizer is now deprecated. You should use Trainer.processing_class instead.")
-        return self.processing_class
-
-    @tokenizer.setter
-    def tokenizer(self, processing_class) -> None:
-        logger.warning(
-            "Trainer.tokenizer is now deprecated. You should use `Trainer.processing_class = processing_class` instead."
-        )
-        self.processing_class = processing_class
 
     def _activate_neftune(self, model):
         r"""
@@ -1122,23 +1089,6 @@ class Trainer:
     def _get_eval_sampler(self, eval_dataset: Dataset) -> Optional[torch.utils.data.Sampler]:
         if eval_dataset is None or not has_length(eval_dataset):
             return None
-        # Build the sampler.
-
-        # Deprecated code
-        if self.args.use_legacy_prediction_loop:
-            if is_torch_xla_available():
-                return SequentialDistributedSampler(
-                    eval_dataset, num_replicas=xr.world_size(), rank=xr.global_ordinal()
-                )
-            elif is_sagemaker_mp_enabled():
-                return SequentialDistributedSampler(
-                    eval_dataset,
-                    num_replicas=smp.dp_size(),
-                    rank=smp.dp_rank(),
-                    batch_size=self.args.per_device_eval_batch_size,
-                )
-            else:
-                return SequentialSampler(eval_dataset)
 
         if self.args.group_by_length:
             if is_datasets_available() and isinstance(eval_dataset, datasets.Dataset):
@@ -1230,8 +1180,8 @@ class Trainer:
         `create_scheduler`) in a subclass.
         """
         self.create_optimizer()
-        if IS_SAGEMAKER_MP_POST_1_10 and smp.state.cfg.fp16:
-            # If smp >= 1.10 and fp16 is enabled, we unwrap the optimizer
+        if is_sagemaker_mp_enabled() and smp.state.cfg.fp16:
+            # If fp16 is enabled, we unwrap the optimizer
             optimizer = self.optimizer.optimizer
         else:
             optimizer = self.optimizer
@@ -2181,7 +2131,6 @@ class Trainer:
         resume_from_checkpoint: Optional[Union[str, bool]] = None,
         trial: Union["optuna.Trial", dict[str, Any], None] = None,
         ignore_keys_for_eval: Optional[list[str]] = None,
-        **kwargs: Any,
     ):
         """
         Main training entry point.
@@ -2196,8 +2145,6 @@ class Trainer:
             ignore_keys_for_eval (`list[str]`, *optional*)
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions for evaluation during the training.
-            kwargs (`dict[str, Any]`, *optional*):
-                Additional keyword arguments used to hide deprecated arguments
         """
         if resume_from_checkpoint is False:
             resume_from_checkpoint = None
@@ -2229,15 +2176,6 @@ class Trainer:
         ):
             self._move_model_to_device(self.model, args.device)
 
-        if "model_path" in kwargs:
-            resume_from_checkpoint = kwargs.pop("model_path")
-            warnings.warn(
-                "`model_path` is deprecated and will be removed in a future version. Use `resume_from_checkpoint` "
-                "instead.",
-                FutureWarning,
-            )
-        if len(kwargs) > 0:
-            raise TypeError(f"train() got unexpected keyword arguments: {', '.join(list(kwargs.keys()))}.")
         # This might change the seed so needs to run first.
         self._hp_search_setup(trial)
         self._train_batch_size = self.args.train_batch_size
@@ -2357,16 +2295,6 @@ class Trainer:
             len_dataloader,
             max_steps,
         ) = self.set_initial_training_values(args, train_dataloader, total_train_batch_size)
-
-        num_train_tokens = None
-        if self.args.include_tokens_per_second:
-            num_train_tokens = self.num_tokens(train_dataloader, None if epoch_based else max_steps)
-            # If going by epochs, multiply tokens linearly
-            if len_dataloader is not None and epoch_based:
-                num_train_tokens *= args.num_train_epochs
-            # Otherwise since its steps, we just multiply by grad accum
-            else:
-                num_train_tokens *= args.gradient_accumulation_steps
 
         if DebugOption.UNDERFLOW_OVERFLOW in self.args.debug:
             if self.args.n_gpu > 1:
@@ -2589,7 +2517,7 @@ class Trainer:
                     # Since we perform prefetching, we need to manually set sync_gradients
                     self.accelerator.gradient_state._set_sync_gradients(do_sync_step)
 
-                    if self.args.include_num_input_tokens_seen not in ["no", False]:
+                    if self.args.include_num_input_tokens_seen != "no":
                         main_input_name = getattr(self.model, "main_input_name", "input_ids")
                         if main_input_name not in inputs:
                             logger.warning(
@@ -2777,7 +2705,6 @@ class Trainer:
             start_time,
             num_samples=num_train_samples,
             num_steps=self.state.max_steps,
-            num_tokens=num_train_tokens,
         )
         self.store_flos()
         metrics["total_flos"] = self.state.total_flos
@@ -2902,26 +2829,9 @@ class Trainer:
         if os.path.isfile(weights_file) or os.path.isfile(safe_weights_file) or is_fsdp_ckpt:
             # If the model is on the GPU, it still works!
             if is_sagemaker_mp_enabled():
-                if os.path.isfile(os.path.join(resume_from_checkpoint, "user_content.pt")):
-                    # If the 'user_content.pt' file exists, load with the new smp api.
-                    # Checkpoint must have been saved with the new smp api.
-                    smp.resume_from_checkpoint(
-                        path=resume_from_checkpoint, tag=WEIGHTS_NAME, partial=False, load_optimizer=False
-                    )
-                else:
-                    # If the 'user_content.pt' file does NOT exist, load with the old smp api.
-                    # Checkpoint must have been saved with the old smp api.
-                    if hasattr(self.args, "fp16") and self.args.fp16 is True:
-                        logger.warning(
-                            "Enabling FP16 and loading from smp < 1.10 checkpoint together is not supported."
-                        )
-                    check_torch_load_is_safe()
-                    state_dict = torch.load(weights_file, map_location="cpu", weights_only=True)
-                    # Required for smp to not auto-translate state_dict from hf to smp (is already smp).
-                    state_dict["_smp_is_partial"] = False
-                    load_result = model.load_state_dict(state_dict, strict=True)
-                    # release memory
-                    del state_dict
+                smp.resume_from_checkpoint(
+                    path=resume_from_checkpoint, tag=WEIGHTS_NAME, partial=False, load_optimizer=False
+                )
             elif self.is_fsdp_enabled:
                 load_fsdp_model(
                     self.accelerator.state.fsdp_plugin,
@@ -3015,26 +2925,12 @@ class Trainer:
         ):
             has_been_loaded = True
             if is_sagemaker_mp_enabled():
-                if os.path.isfile(os.path.join(self.state.best_model_checkpoint, "user_content.pt")):
-                    # If the 'user_content.pt' file exists, load with the new smp api.
-                    # Checkpoint must have been saved with the new smp api.
-                    smp.resume_from_checkpoint(
-                        path=self.state.best_model_checkpoint,
-                        tag=WEIGHTS_NAME,
-                        partial=False,
-                        load_optimizer=False,
-                    )
-                else:
-                    # If the 'user_content.pt' file does NOT exist, load with the old smp api.
-                    # Checkpoint must have been saved with the old smp api.
-                    if self.args.save_safetensors and os.path.isfile(best_safe_model_path):
-                        state_dict = safetensors.torch.load_file(best_safe_model_path, device="cpu")
-                    else:
-                        check_torch_load_is_safe()
-                        state_dict = torch.load(best_model_path, map_location="cpu", weights_only=True)
-
-                    state_dict["_smp_is_partial"] = False
-                    load_result = model.load_state_dict(state_dict, strict=True)
+                smp.resume_from_checkpoint(
+                    path=self.state.best_model_checkpoint,
+                    tag=WEIGHTS_NAME,
+                    partial=False,
+                    load_optimizer=False,
+                )
             else:
                 if _is_peft_model(model):
                     # If train a model using PEFT & LoRA, assume that adapter have been saved properly.
@@ -3511,20 +3407,9 @@ class Trainer:
                 self.lr_scheduler.load_state_dict(lr_scheduler_state)
             else:
                 if is_sagemaker_mp_enabled():
-                    if os.path.isfile(os.path.join(checkpoint, "user_content.pt")):
-                        # Optimizer checkpoint was saved with smp >= 1.10
-                        def opt_load_hook(mod, opt):
-                            opt.load_state_dict(smp.load(os.path.join(checkpoint, OPTIMIZER_NAME), partial=True))
 
-                    else:
-                        # Optimizer checkpoint was saved with smp < 1.10
-                        def opt_load_hook(mod, opt):
-                            if IS_SAGEMAKER_MP_POST_1_10:
-                                opt.load_state_dict(
-                                    smp.load(os.path.join(checkpoint, OPTIMIZER_NAME), partial=True, back_compat=True)
-                                )
-                            else:
-                                opt.load_state_dict(smp.load(os.path.join(checkpoint, OPTIMIZER_NAME), partial=True))
+                    def opt_load_hook(mod, opt):
+                        opt.load_state_dict(smp.load(os.path.join(checkpoint, OPTIMIZER_NAME), partial=True))
 
                     self.model_wrapped.register_post_step_hook(opt_load_hook)
                 else:
@@ -4138,9 +4023,7 @@ class Trainer:
             state_dict = self.model_wrapped.state_dict()
             if self.args.should_save:
                 self._save(output_dir, state_dict=state_dict)
-            if IS_SAGEMAKER_MP_POST_1_10:
-                # 'user_content.pt' indicates model state_dict saved with smp >= 1.10
-                Path(os.path.join(output_dir, "user_content.pt")).touch()
+            Path(os.path.join(output_dir, "user_content.pt")).touch()
         # We are in N-D parallelism if we have parallelism_config set, so we check accelerate if we're on a to_save rank
         elif getattr(self.accelerator, "parallelism_config", None) is not None:
             if self.accelerator.should_save_model:
@@ -4431,8 +4314,7 @@ class Trainer:
 
         start_time = time.time()
 
-        eval_loop = self.prediction_loop if self.args.use_legacy_prediction_loop else self.evaluation_loop
-        output = eval_loop(
+        output = self.evaluation_loop(
             eval_dataloader,
             description="Evaluation",
             # No point gathering the predictions if there are no metrics, otherwise we defer to
@@ -4509,8 +4391,7 @@ class Trainer:
         test_dataloader = self.get_test_dataloader(test_dataset)
         start_time = time.time()
 
-        eval_loop = self.prediction_loop if self.args.use_legacy_prediction_loop else self.evaluation_loop
-        output = eval_loop(
+        output = self.evaluation_loop(
             test_dataloader, description="Prediction", ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix
         )
         total_batch_size = self.args.eval_batch_size * self.args.world_size
@@ -5139,212 +5020,6 @@ class Trainer:
             ignore_patterns=["_*", f"{PREFIX_CHECKPOINT_DIR}-*"],
             revision=revision,
         )
-
-    #
-    # Deprecated code
-    #
-
-    def prediction_loop(
-        self,
-        dataloader: DataLoader,
-        description: str,
-        prediction_loss_only: Optional[bool] = None,
-        ignore_keys: Optional[list[str]] = None,
-        metric_key_prefix: str = "eval",
-    ) -> EvalLoopOutput:
-        """
-        Prediction/evaluation loop, shared by `Trainer.evaluate()` and `Trainer.predict()`.
-
-        Works both with or without labels.
-        """
-        args = self.args
-
-        if not has_length(dataloader):
-            raise ValueError("dataloader must implement a working __len__")
-
-        prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else args.prediction_loss_only
-
-        # if eval is called w/o train, handle model prep here
-        if self.is_deepspeed_enabled and self.deepspeed is None:
-            _, _ = deepspeed_init(self, num_training_steps=0, inference=True)
-
-        model = self._wrap_model(self.model, training=False, dataloader=dataloader)
-
-        if len(self.accelerator._models) == 0 and model is self.model:
-            model = (
-                self.accelerator.prepare(model)
-                if self.is_deepspeed_enabled or self.is_fsdp_enabled
-                else self.accelerator.prepare_model(model, evaluation_mode=True)
-            )
-
-            if self.is_fsdp_enabled:
-                self.model = model
-
-            # for the rest of this function `model` is the outside model, whether it was wrapped or not
-            if model is not self.model:
-                self.model_wrapped = model
-
-            # backward compatibility
-            if self.is_deepspeed_enabled:
-                self.deepspeed = self.model_wrapped
-
-        # if full fp16 or bf16 eval is wanted and this ``evaluation`` or ``predict`` isn't called
-        # while ``train`` is running, cast it to the right dtype first and then put on device
-        if not self.is_in_train:
-            if args.fp16_full_eval:
-                model = model.to(dtype=torch.float16, device=args.device)
-            elif args.bf16_full_eval:
-                model = model.to(dtype=torch.bfloat16, device=args.device)
-
-        batch_size = (
-            dataloader.total_batch_size
-            if getattr(dataloader, "_is_accelerate_prepared", False)
-            else dataloader.batch_size
-        )
-
-        if batch_size is None:
-            raise ValueError(
-                "Batch size cannot be None. Ensure the dataloader has a valid batch_size or total_batch_size."
-            )
-
-        num_examples = self.num_examples(dataloader)
-        logger.info(f"\n***** Running {description} *****")
-        logger.info(f"  Num examples = {num_examples}")
-        logger.info(f"  Batch size = {batch_size}")
-
-        losses_host: Optional[torch.Tensor] = None
-        preds_host: Union[torch.Tensor, list[torch.Tensor], None] = None
-        labels_host: Union[torch.Tensor, list[torch.Tensor], None] = None
-        inputs_host: Union[torch.Tensor, list[torch.Tensor], None] = None
-        metrics: Optional[dict] = None
-        eval_set_kwargs: dict = {}
-
-        world_size = max(1, args.world_size)
-
-        eval_losses_gatherer = DistributedTensorGatherer(world_size, num_examples, make_multiple_of=batch_size)
-        if not prediction_loss_only:
-            # The actual number of eval_sample can be greater than num_examples in distributed settings (when we pass
-            # a batch size to the sampler)
-            make_multiple_of = None
-            if hasattr(dataloader, "sampler") and isinstance(dataloader.sampler, SequentialDistributedSampler):
-                make_multiple_of = dataloader.sampler.batch_size
-            preds_gatherer = DistributedTensorGatherer(world_size, num_examples, make_multiple_of=make_multiple_of)
-            labels_gatherer = DistributedTensorGatherer(world_size, num_examples, make_multiple_of=make_multiple_of)
-            inputs_gatherer = DistributedTensorGatherer(world_size, num_examples, make_multiple_of=make_multiple_of)
-
-        model.eval()
-        if hasattr(self.optimizer, "eval") and callable(self.optimizer.eval):
-            self.optimizer.eval()
-
-        if args.past_index >= 0:
-            self._past = None
-
-        self.callback_handler.eval_dataloader = dataloader
-
-        for step, inputs in enumerate(dataloader):
-            loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)
-            main_input_name = getattr(self.model, "main_input_name", "input_ids")
-            inputs_decode = (
-                self._prepare_input(inputs[main_input_name]) if "inputs" in args.include_for_metrics else None
-            )
-
-            if loss is not None:
-                losses = loss.repeat(batch_size)
-                losses_host = losses if losses_host is None else torch.cat((losses_host, losses), dim=0)
-            if logits is not None:
-                preds_host = logits if preds_host is None else nested_concat(preds_host, logits, padding_index=-100)
-            if labels is not None:
-                labels_host = labels if labels_host is None else nested_concat(labels_host, labels, padding_index=-100)
-            if inputs_decode is not None:
-                inputs_host = (
-                    inputs_decode
-                    if inputs_host is None
-                    else nested_concat(inputs_host, inputs_decode, padding_index=-100)
-                )
-            self.control = self.callback_handler.on_prediction_step(args, self.state, self.control)
-
-            if self.args.batch_eval_metrics:
-                if self.compute_metrics is not None and preds_host is not None and labels_host is not None:
-                    is_last_step = self.accelerator.gradient_state.end_of_dataloader
-                    batch_kwargs = {}
-                    batch_kwargs["losses"] = losses_host if "loss" in args.include_for_metrics else None
-                    batch_kwargs["inputs"] = inputs_host if "inputs" in args.include_for_metrics else None
-                    metrics = self.compute_metrics(
-                        EvalPrediction(predictions=preds_host, label_ids=labels_host, **batch_kwargs),
-                        compute_result=is_last_step,
-                    )
-
-            if self.args.batch_eval_metrics or (
-                args.eval_accumulation_steps is not None and (step + 1) % args.eval_accumulation_steps == 0
-            ):
-                # Gather all tensors and put them back on the CPU if we have done enough accumulation steps.
-                eval_losses_gatherer.add_arrays(self._gather_and_numpify(losses_host, "eval_losses"))
-                if not prediction_loss_only:
-                    preds_gatherer.add_arrays(self._gather_and_numpify(preds_host, "eval_preds"))
-                    labels_gatherer.add_arrays(self._gather_and_numpify(labels_host, "eval_label_ids"))
-                    inputs_gatherer.add_arrays(self._gather_and_numpify(inputs_host, "eval_inputs_ids"))
-
-                # Set back to None to begin a new accumulation
-                del losses_host, preds_host, labels_host, inputs_host
-                torch.cuda.empty_cache()
-                losses_host, preds_host, labels_host, inputs_host = None, None, None, None
-
-        if args.past_index and hasattr(self, "_past"):
-            # Clean the state at the end of the evaluation loop
-            delattr(self, "_past")
-
-        # Gather all remaining tensors and put them back on the CPU
-        eval_losses_gatherer.add_arrays(self._gather_and_numpify(losses_host, "eval_losses"))
-        if not prediction_loss_only:
-            preds_gatherer.add_arrays(self._gather_and_numpify(preds_host, "eval_preds"))
-            labels_gatherer.add_arrays(self._gather_and_numpify(labels_host, "eval_label_ids"))
-            inputs_gatherer.add_arrays(self._gather_and_numpify(inputs_host, "eval_inputs_ids"))
-
-        eval_loss = eval_losses_gatherer.finalize()
-        preds = preds_gatherer.finalize() if not prediction_loss_only else None
-        label_ids = labels_gatherer.finalize() if not prediction_loss_only else None
-        inputs_ids = inputs_gatherer.finalize() if not prediction_loss_only else None
-
-        if (
-            self.compute_metrics is not None
-            and preds is not None
-            and label_ids is not None
-            and not self.args.batch_eval_metrics
-        ):
-            eval_set_kwargs["losses"] = eval_loss if "loss" in args.include_for_metrics else None
-            eval_set_kwargs["inputs"] = inputs_ids if "inputs" in args.include_for_metrics else None
-            metrics = self.compute_metrics(EvalPrediction(predictions=preds, label_ids=label_ids, **eval_set_kwargs))
-        elif metrics is None:
-            metrics = {}
-
-        # To be JSON-serializable, we need to remove numpy types or zero-d tensors
-        metrics = denumpify_detensorize(metrics)
-
-        if eval_loss is not None:
-            metrics[f"{metric_key_prefix}_loss"] = eval_loss.mean().item()
-
-        # Prefix all keys with metric_key_prefix + '_'
-        for key in list(metrics.keys()):
-            if not key.startswith(f"{metric_key_prefix}_"):
-                metrics[f"{metric_key_prefix}_{key}"] = metrics.pop(key)
-
-        return EvalLoopOutput(predictions=preds, label_ids=label_ids, metrics=metrics, num_samples=num_examples)
-
-    def _gather_and_numpify(self, tensors, name):
-        """
-        Gather value of `tensors` (tensor or list/tuple of nested tensors) and convert them to numpy before
-        concatenating them to `gathered`
-        """
-        if tensors is None:
-            return
-        if is_torch_xla_available():
-            tensors = nested_xla_mesh_reduce(tensors, name)
-        elif is_sagemaker_mp_enabled():
-            tensors = smp_gather(tensors)
-        elif self.args.parallel_mode == ParallelMode.DISTRIBUTED:
-            tensors = distributed_concat(tensors)
-
-        return nested_numpify(tensors)
 
     def _add_sm_patterns_to_gitignore(self) -> None:
         """Add SageMaker Checkpointing patterns to .gitignore file."""

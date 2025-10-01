@@ -162,6 +162,7 @@ generated_ids = model.generate(**inputs, use_cache=True, max_new_tokens=10)
 Before the [`Cache`] class, the cache used to be stored as a tuple of tuples of tensors. This format is dynamic because it grows as text is generated, similar to [`DynamicCache`].
 
 The legacy format is essentially the same data structure but organized differently.
+
 - It's a tuple of tuples, where each inner tuple contains the key and value tensors for a layer.
 - The tensors have the same shape `[batch_size, num_heads, seq_len, head_dim]`.
 - The format is less flexible and doesn't support features like quantization or offloading.
