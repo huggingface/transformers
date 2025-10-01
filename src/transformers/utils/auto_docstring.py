@@ -287,42 +287,12 @@ class ModelArgs:
         "shape": "of shape `(batch_size, sequence_length)`",
     }
 
-    head_mask = {
-        "description": """
-    Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-    - 1 indicates the head is **not masked**,
-    - 0 indicates the head is **masked**.
-    """,
-        "shape": "of shape `(num_heads,)` or `(num_layers, num_heads)`",
-    }
-
-    cross_attn_head_mask = {
-        "description": """
-    Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
-
-    - 1 indicates the head is **not masked**,
-    - 0 indicates the head is **masked**.
-    """,
-        "shape": "of shape `(num_layers, num_heads)`",
-    }
-
     decoder_attention_mask = {
         "description": """
     Mask to avoid performing attention on certain token indices. By default, a causal mask will be used, to
     make sure the model can only look at previous inputs in order to predict the future.
     """,
         "shape": "of shape `(batch_size, target_sequence_length)`",
-    }
-
-    decoder_head_mask = {
-        "description": """
-    Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in `[0, 1]`:
-
-    - 1 indicates the head is **not masked**,
-    - 0 indicates the head is **masked**.
-    """,
-        "shape": "of shape `(decoder_layers, decoder_attention_heads)`",
     }
 
     encoder_hidden_states = {
@@ -1215,8 +1185,7 @@ def get_checkpoint_from_config_class(config_class):
     # For example, `('google-bert/bert-base-uncased', 'https://huggingface.co/google-bert/bert-base-uncased')`
     for ckpt_name, ckpt_link in checkpoints:
         # allow the link to end with `/`
-        if ckpt_link.endswith("/"):
-            ckpt_link = ckpt_link[:-1]
+        ckpt_link = ckpt_link.removesuffix("/")
 
         # verify the checkpoint name corresponds to the checkpoint link
         ckpt_link_from_name = f"https://huggingface.co/{ckpt_name}"

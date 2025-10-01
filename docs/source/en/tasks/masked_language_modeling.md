@@ -150,6 +150,7 @@ To apply this preprocessing function over the entire dataset, use the 🤗 Datas
 This dataset contains the token sequences, but some of these are longer than the maximum input length for the model.
 
 You can now use a second preprocessing function to
+
 - concatenate all the sequences
 - split the concatenated sequences into shorter chunks defined by `block_size`, which should be both shorter than the maximum input length and short enough for your GPU RAM.
 
