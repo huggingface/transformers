@@ -43,7 +43,6 @@ from ...utils import TensorType, auto_docstring
 from .image_processing_deepseek_vl_hybrid import DeepseekVLHybridImageProcessorKwargs
 
 
-
 @auto_docstring
 class DeepseekVLHybridImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC

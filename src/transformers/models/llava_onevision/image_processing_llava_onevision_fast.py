@@ -41,7 +41,7 @@ from ...image_utils import (
     get_image_size,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_v2_available
+from ...utils import TensorType, auto_docstring
 from .image_processing_llava_onevision import LlavaOnevisionImageProcessorKwargs
 
 

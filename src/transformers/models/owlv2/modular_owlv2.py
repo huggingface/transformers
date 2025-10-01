@@ -37,6 +37,7 @@ from ...utils import (
 )
 from ..owlvit.image_processing_owlvit_fast import OwlViTImageProcessorFast
 
+
 @auto_docstring
 class Owlv2ImageProcessorFast(OwlViTImageProcessorFast):
     resample = PILImageResampling.BILINEAR
