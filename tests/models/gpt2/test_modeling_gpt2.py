@@ -70,12 +70,10 @@ class GPT2ModelTester(CausalLMModelTester):
 
         if extra_inputs:
             mc_token_ids = ids_tensor([self.batch_size, self.num_choices], self.seq_length)
-            head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
             config_and_inputs = (
                 config,
                 input_ids,
                 input_mask,
-                head_mask,
                 token_type_ids,
                 mc_token_ids,
                 sequence_labels,
@@ -110,8 +108,8 @@ class GPT2ModelTester(CausalLMModelTester):
     def prepare_config_and_inputs_for_common(self):
         # Overwritten: we want `token_type_ids` as part of the common inputs
         config_and_inputs = self.prepare_config_and_inputs(extra_inputs=True)
-        config, input_ids, _, head_mask, token_type_ids, _, _, _, _ = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "head_mask": head_mask}
+        config, input_ids, _, token_type_ids, _, _, _, _ = config_and_inputs
+        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids}
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_decoder(self):
@@ -120,7 +118,6 @@ class GPT2ModelTester(CausalLMModelTester):
             config,
             input_ids,
             input_mask,
-            head_mask,
             token_type_ids,
             _,
             sequence_labels,
@@ -135,7 +132,6 @@ class GPT2ModelTester(CausalLMModelTester):
             config,
             input_ids,
             input_mask,
-            head_mask,
             token_type_ids,
             sequence_labels,
             token_labels,
@@ -202,7 +198,7 @@ class GPT2ModelTest(CausalLMModelTest, unittest.TestCase):
     def test_gpt2_double_lm_head_model(self):
         # extra test: model-specific class
         config_and_inputs = self.model_tester.prepare_config_and_inputs(extra_inputs=True)
-        config, input_ids, input_mask, _, token_type_ids, mc_token_ids, _, _, _ = config_and_inputs
+        config, input_ids, input_mask, token_type_ids, mc_token_ids, _, _, _ = config_and_inputs
         model = GPT2DoubleHeadsModel(config)
         model.to(torch_device)
         model.eval()

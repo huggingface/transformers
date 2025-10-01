@@ -40,11 +40,9 @@ This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The o
 ## Difference with [MusicGen](https://huggingface.co/docs/transformers/main/en/model_doc/musicgen)
 
 There are two key differences with MusicGen:
+
 1. The audio prompt is used here as a conditional signal for the generated audio sample, whereas it's used for audio continuation in [MusicGen](https://huggingface.co/docs/transformers/main/en/model_doc/musicgen).
 2. Conditional text and audio signals are concatenated to the decoder's hidden states instead of being used as a cross-attention signal, as in MusicGen.
-
-> [!NOTE]
-> The `head_mask` argument is ignored when using all attention implementation other than "eager". If you have a `head_mask` and want it to have effect, load the model with `XXXModel.from_pretrained(model_id, attn_implementation="eager")`
 
 ## Generation
 
@@ -227,6 +225,7 @@ Note that any arguments passed to the generate method will **supersede** those i
 ## Model Structure
 
 The MusicGen model can be de-composed into three distinct stages:
+
 1. Text encoder: maps the text inputs to a sequence of hidden-state representations. The pre-trained MusicGen models use a frozen text encoder from either T5 or Flan-T5.
 2. MusicGen Melody decoder: a language model (LM) that auto-regressively generates audio tokens (or codes) conditional on the encoder hidden-state representations
 3. Audio decoder: used to recover the audio waveform from the audio tokens predicted by the decoder.
@@ -256,6 +255,7 @@ python src/transformers/models/musicgen_melody/convert_musicgen_melody_transform
 ```
 
 Tips:
+
 * MusicGen is trained on the 32kHz checkpoint of Encodec. You should ensure you use a compatible version of the Encodec model.
 * Sampling mode tends to deliver better results than greedy - you can toggle sampling with the variable `do_sample` in the call to [`MusicgenMelodyForConditionalGeneration.generate`]
 
