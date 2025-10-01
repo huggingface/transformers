@@ -1469,18 +1469,3 @@ class HQQQuantizedCache(QuantizedCache):
             "Use `QuantizedCache(backend='hqq', ...)` instead."
         )
         super().__init__("hqq", config, nbits, axis_key, axis_value, q_group_size, residual_length)
-
-
-class SinkCache(Cache):
-    """
-    It is now a `custom_generate` repository on the Hub: https://huggingface.co/transformers-community/sink_cache.
-    See [these docs](https://huggingface.co/docs/transformers/generation_strategies#custom-decoding-methods) for
-    general `custom_generate`usage.
-    """
-
-    # TODO (joao, manuel): Remove this class in v4.59.0
-    def __init__(self, **kwargs) -> None:
-        raise NotImplementedError(
-            "`SinkCache` has been moved as a `custom_generate` repository on the Hub: "
-            "https://huggingface.co/transformers-community/sink_cache. See the repository for usage examples."
-        )
