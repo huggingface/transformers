@@ -285,8 +285,7 @@ def get_class_in_module(
         `typing.Type`: The class looked for.
     """
     name = os.path.normpath(module_path)
-    if name.endswith(".py"):
-        name = name[:-3]
+    name = name.removesuffix(".py")
     name = name.replace(os.path.sep, ".")
     module_file: Path = Path(HF_MODULES_CACHE) / module_path
     with _HF_REMOTE_CODE_LOCK:
