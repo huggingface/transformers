@@ -153,7 +153,7 @@ class PromptDepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
             self,
             config_class=PromptDepthAnythingConfig,
             has_text_modality=False,
-            hidden_size=37,
+            hidden_size=32,
             common_properties=["patch_size"],
         )
 

@@ -133,7 +133,7 @@ class LightGlueModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = LightGlueModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=LightGlueConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=LightGlueConfig, has_text_modality=False, hidden_size=32)
 
     def test_config(self):
         self.config_tester.create_and_test_config_to_json_string()

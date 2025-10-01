@@ -19,9 +19,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...configuration_utils import PretrainedConfig, layer_type_validation
+
+from dataclasses import dataclass
+from typing import Optional, Union
+
+from huggingface_hub.dataclasses import strict
+
+from ...configuration_utils import PretrainedConfig
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 class Gemma2Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Gemma2Model`]. It is used to instantiate an Gemma2
@@ -119,69 +127,39 @@ class Gemma2Config(PretrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
-    def __init__(
-        self,
-        vocab_size=256000,
-        hidden_size=2304,
-        intermediate_size=9216,
-        num_hidden_layers=26,
-        num_attention_heads=8,
-        num_key_value_heads=4,
-        head_dim=256,
-        hidden_activation="gelu_pytorch_tanh",
-        max_position_embeddings=8192,
-        initializer_range=0.02,
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        pad_token_id=0,
-        eos_token_id=1,
-        bos_token_id=2,
-        tie_word_embeddings=True,
-        rope_theta=10000.0,
-        attention_bias=False,
-        attention_dropout=0.0,
-        query_pre_attn_scalar=256,
-        sliding_window=4096,
-        layer_types=None,
-        final_logit_softcapping=30.0,
-        attn_logit_softcapping=50.0,
-        use_bidirectional_attention=None,
-        **kwargs,
-    ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.head_dim = head_dim
-        self.num_key_value_heads = num_key_value_heads
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.hidden_activation = hidden_activation
-        self.query_pre_attn_scalar = query_pre_attn_scalar
-        self.sliding_window = sliding_window
-        self.final_logit_softcapping = final_logit_softcapping
-        self.attn_logit_softcapping = attn_logit_softcapping
-        self.layer_types = layer_types
-        self.use_bidirectional_attention = use_bidirectional_attention
+    vocab_size: Optional[int] = 256000
+    hidden_size: Optional[int] = 2304
+    intermediate_size: Optional[int] = 9216
+    num_hidden_layers: Optional[int] = 26
+    num_attention_heads: Optional[int] = 8
+    num_key_value_heads: Optional[int] = 4
+    head_dim: Optional[int] = 256
+    hidden_activation: Optional[str] = "gelu_pytorch_tanh"
+    max_position_embeddings: Optional[int] = 8192
+    initializer_range: Optional[float] = 0.02
+    rms_norm_eps: Optional[float] = 1e-6
+    use_cache: Optional[bool] = True
+    pad_token_id: Optional[int] = 0
+    eos_token_id: Optional[int] = 1
+    bos_token_id: Optional[int] = 2
+    tie_word_embeddings: Optional[bool] = True
+    rope_theta: Optional[float] = 10000.0
+    attention_bias: Optional[bool] = False
+    attention_dropout: Optional[Union[int, float]] = 0.0
+    query_pre_attn_scalar: Optional[int] = 256
+    sliding_window: Optional[int] = 4096
+    layer_types: Optional[list[str]] = None
+    final_logit_softcapping: Optional[float] = 30.0
+    attn_logit_softcapping: Optional[float] = 50.0
+    use_bidirectional_attention: Optional[bool] = None
 
+    def __post_init__(self, **kwargs):
         if self.layer_types is None:
             self.layer_types = [
                 "sliding_attention" if bool((i + 1) % 2) else "full_attention" for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types, self.num_hidden_layers)
+
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["Gemma2Config"]

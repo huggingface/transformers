@@ -411,7 +411,7 @@ class XLMRobertaXLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
 
     def setUp(self):
         self.model_tester = XLMRobertaXLModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=XLMRobertaXLConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=XLMRobertaXLConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()

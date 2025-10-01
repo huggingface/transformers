@@ -19,7 +19,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...configuration_utils import PretrainedConfig, layer_type_validation
+from ...configuration_utils import PretrainedConfig
 
 
 class Exaone4Config(PretrainedConfig):
@@ -212,7 +212,6 @@ class Exaone4Config(PretrainedConfig):
             ]
         if "sliding_window" in self.layer_types:
             self.cache_implementation = "hybrid"
-        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         super().__init__(
             bos_token_id=bos_token_id, eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs

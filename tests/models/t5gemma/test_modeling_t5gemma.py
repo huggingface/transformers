@@ -610,7 +610,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             self,
             config_class=T5GemmaConfig,
             # For faking the testing.
-            hidden_size=37,
+            hidden_size=32,
             vocab_size=self.model_tester.vocab_size,
             num_attention_heads=self.model_tester.num_attention_heads,
             num_hidden_layers=self.model_tester.num_hidden_layers,
@@ -1472,7 +1472,7 @@ class T5GemmaEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
             self,
             config_class=T5GemmaConfig,
             # For faking the testing.
-            hidden_size=37,
+            hidden_size=32,
             vocab_size=self.model_tester.vocab_size,
             num_attention_heads=self.model_tester.num_attention_heads,
             num_hidden_layers=self.model_tester.num_hidden_layers,

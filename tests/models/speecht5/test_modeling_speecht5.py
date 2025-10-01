@@ -165,7 +165,7 @@ class SpeechT5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     def setUp(self):
         self.model_tester = SpeechT5ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SpeechT5Config, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=SpeechT5Config, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -358,7 +358,7 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase, Generatio
 
     def setUp(self):
         self.model_tester = SpeechT5ForSpeechToTextTester(self)
-        self.config_tester = ConfigTester(self, config_class=SpeechT5Config, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=SpeechT5Config, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -885,7 +885,7 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = SpeechT5ForTextToSpeechTester(self)
-        self.config_tester = ConfigTester(self, config_class=SpeechT5Config, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=SpeechT5Config, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -1430,7 +1430,7 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = SpeechT5ForSpeechToSpeechTester(self)
-        self.config_tester = ConfigTester(self, config_class=SpeechT5Config, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=SpeechT5Config, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()

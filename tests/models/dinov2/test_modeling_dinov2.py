@@ -235,7 +235,7 @@ class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = Dinov2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Dinov2Config, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Dinov2Config, has_text_modality=False, hidden_size=32)
 
     @is_flaky(max_attempts=3, description="`torch.nn.init.trunc_normal_` is flaky.")
     def test_initialization(self):

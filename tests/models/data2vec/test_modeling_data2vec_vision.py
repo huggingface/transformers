@@ -206,7 +206,7 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
     def setUp(self):
         self.model_tester = Data2VecVisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=Data2VecVisionConfig, has_text_modality=False, hidden_size=37
+            self, config_class=Data2VecVisionConfig, has_text_modality=False, hidden_size=32
         )
 
     def test_config(self):

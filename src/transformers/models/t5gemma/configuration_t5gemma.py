@@ -21,7 +21,7 @@
 # limitations under the License.
 from typing import Any, Optional, Union
 
-from ...configuration_utils import PretrainedConfig, layer_type_validation
+from ...configuration_utils import PretrainedConfig
 
 
 class T5GemmaModuleConfig(PretrainedConfig):
@@ -179,7 +179,6 @@ class T5GemmaModuleConfig(PretrainedConfig):
             self.layer_types = [
                 "sliding_attention" if bool((i + 1) % 2) else "full_attention" for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
 
 class T5GemmaConfig(PretrainedConfig):

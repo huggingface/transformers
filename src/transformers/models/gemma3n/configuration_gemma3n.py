@@ -22,7 +22,7 @@
 from collections.abc import Sequence
 from typing import Any, Optional, Union
 
-from ...configuration_utils import PretrainedConfig, layer_type_validation
+from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import is_timm_available, logging, requires_backends
 
@@ -276,8 +276,6 @@ class Gemma3nTextConfig(PretrainedConfig):
             ]
         else:
             self.layer_types = layer_types
-
-        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         self.hidden_size_per_layer_input = hidden_size_per_layer_input
         self.num_kv_shared_layers = num_kv_shared_layers

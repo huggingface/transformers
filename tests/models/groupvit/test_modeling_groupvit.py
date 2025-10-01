@@ -150,7 +150,7 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = GroupViTVisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=GroupViTVisionConfig, has_text_modality=False, hidden_size=37
+            self, config_class=GroupViTVisionConfig, has_text_modality=False, hidden_size=32
         )
 
     def test_config(self):
@@ -433,7 +433,7 @@ class GroupViTTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = GroupViTTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GroupViTTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=GroupViTTextConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()

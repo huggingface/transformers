@@ -16,7 +16,10 @@
 
 from collections import OrderedDict
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Optional, Union
+
+from huggingface_hub.dataclasses import strict
 
 
 if TYPE_CHECKING:
@@ -30,6 +33,8 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 class CLIPTextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`CLIPTextModel`]. It is used to instantiate a CLIP
@@ -94,43 +99,28 @@ class CLIPTextConfig(PretrainedConfig):
     model_type = "clip_text_model"
     base_config_key = "text_config"
 
-    def __init__(
-        self,
-        vocab_size=49408,
-        hidden_size=512,
-        intermediate_size=2048,
-        projection_dim=512,
-        num_hidden_layers=12,
-        num_attention_heads=8,
-        max_position_embeddings=77,
-        hidden_act="quick_gelu",
-        layer_norm_eps=1e-5,
-        attention_dropout=0.0,
-        initializer_range=0.02,
-        initializer_factor=1.0,
-        # This differs from `CLIPTokenizer`'s default and from openai/clip
-        # See https://github.com/huggingface/transformers/pull/24773#issuecomment-1632287538
-        pad_token_id=1,
-        bos_token_id=49406,
-        eos_token_id=49407,
-        **kwargs,
-    ):
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+    vocab_size: Optional[int] = 49408
+    hidden_size: Optional[int] = 512
+    intermediate_size: Optional[int] = 2048
+    projection_dim: Optional[int] = 512
+    num_hidden_layers: Optional[int] = 12
+    num_attention_heads: Optional[int] = 8
+    max_position_embeddings: Optional[int] = 77
+    hidden_act: Optional[str] = "quick_gelu"
+    layer_norm_eps: Optional[float] = 1e-5
+    attention_dropout: Optional[Union[int, float]] = 0.0
+    initializer_range: Optional[float] = 0.02
+    initializer_factor: Optional[float] = 1.0
 
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.projection_dim = projection_dim
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.max_position_embeddings = max_position_embeddings
-        self.layer_norm_eps = layer_norm_eps
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.initializer_factor = initializer_factor
-        self.attention_dropout = attention_dropout
+    # This differs from `CLIPTokenizer`'s default and from openai/clip
+    # See https://github.com/huggingface/transformers/pull/24773#issuecomment-1632287538
+    pad_token_id: Optional[int] = 1
+    bos_token_id: Optional[int] = 49406
+    eos_token_id: Optional[int] = 49407
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 class CLIPVisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`CLIPVisionModel`]. It is used to instantiate a
@@ -189,40 +179,23 @@ class CLIPVisionConfig(PretrainedConfig):
     model_type = "clip_vision_model"
     base_config_key = "vision_config"
 
-    def __init__(
-        self,
-        hidden_size=768,
-        intermediate_size=3072,
-        projection_dim=512,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        num_channels=3,
-        image_size=224,
-        patch_size=32,
-        hidden_act="quick_gelu",
-        layer_norm_eps=1e-5,
-        attention_dropout=0.0,
-        initializer_range=0.02,
-        initializer_factor=1.0,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.projection_dim = projection_dim
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_channels = num_channels
-        self.patch_size = patch_size
-        self.image_size = image_size
-        self.initializer_range = initializer_range
-        self.initializer_factor = initializer_factor
-        self.attention_dropout = attention_dropout
-        self.layer_norm_eps = layer_norm_eps
-        self.hidden_act = hidden_act
+    hidden_size: Optional[int] = 768
+    intermediate_size: Optional[int] = 3072
+    projection_dim: Optional[int] = 512
+    num_hidden_layers: Optional[int] = 12
+    num_attention_heads: Optional[int] = 12
+    num_channels: Optional[int] = 3
+    image_size: Optional[int] = 224
+    patch_size: Optional[int] = 32
+    hidden_act: Optional[str] = "quick_gelu"
+    layer_norm_eps: Optional[float] = 1e-5
+    attention_dropout: Optional[Union[int, float]] = 0.0
+    initializer_range: Optional[float] = 0.02
+    initializer_factor: Optional[float] = 1.0
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 class CLIPConfig(PretrainedConfig):
     r"""
     [`CLIPConfig`] is the configuration class to store the configuration of a [`CLIPModel`]. It is used to instantiate
@@ -272,24 +245,37 @@ class CLIPConfig(PretrainedConfig):
     model_type = "clip"
     sub_configs = {"text_config": CLIPTextConfig, "vision_config": CLIPVisionConfig}
 
-    def __init__(
-        self, text_config=None, vision_config=None, projection_dim=512, logit_scale_init_value=2.6592, **kwargs
-    ):
-        # If `_config_dict` exist, we use them for the backward compatibility.
-        # We pop out these 2 attributes before calling `super().__init__` to avoid them being saved (which causes a lot
-        # of confusion!).
-        text_config_dict = kwargs.pop("text_config_dict", None)
-        vision_config_dict = kwargs.pop("vision_config_dict", None)
+    text_config: Optional[Union[dict, CLIPTextConfig]] = None
+    vision_config: Optional[Union[dict, CLIPVisionConfig]] = None
+    projection_dim: Optional[int] = 512
+    logit_scale_init_value: Optional[float] = 2.6592
+    initializer_factor: Optional[float] = 1.0
 
-        super().__init__(**kwargs)
+    def __post_init__(self, **kwargs):
+        if self.text_config is None:
+            text_config = {}
+            logger.info("`text_config` is `None`. Initializing the `CLIPTextConfig` with default values.")
+        elif isinstance(self.text_config, CLIPTextConfig):
+            text_config = self.text_config.to_dict()
+        else:
+            text_config = self.text_config
 
+        if self.vision_config is None:
+            vision_config = {}
+            logger.info("`vision_config` is `None`. initializing the `CLIPVisionConfig` with default values.")
+        elif isinstance(self.vision_config, CLIPVisionConfig):
+            vision_config = self.vision_config.to_dict()
+        else:
+            vision_config = self.vision_config
+
+        # For backward compatibility check keyword args
         # Instead of simply assigning `[text|vision]_config_dict` to `[text|vision]_config`, we use the values in
         # `[text|vision]_config_dict` to update the values in `[text|vision]_config`. The values should be same in most
         # cases, but we don't want to break anything regarding `_config_dict` that existed before commit `8827e1b2`.
-        if text_config_dict is not None:
-            if text_config is None:
-                text_config = {}
+        text_config_dict = kwargs.pop("text_config_dict", None)
+        vision_config_dict = kwargs.pop("vision_config_dict", None)
 
+        if text_config_dict is not None:
             # This is the complete result when using `text_config_dict`.
             _text_config_dict = CLIPTextConfig(**text_config_dict).to_dict()
 
@@ -314,9 +300,6 @@ class CLIPConfig(PretrainedConfig):
             text_config.update(_text_config_dict)
 
         if vision_config_dict is not None:
-            if vision_config is None:
-                vision_config = {}
-
             # This is the complete result when using `vision_config_dict`.
             _vision_config_dict = CLIPVisionConfig(**vision_config_dict).to_dict()
             # convert keys to string instead of integer
@@ -345,20 +328,11 @@ class CLIPConfig(PretrainedConfig):
             # Update all values in `vision_config` with the ones in `_vision_config_dict`.
             vision_config.update(_vision_config_dict)
 
-        if text_config is None:
-            text_config = {}
-            logger.info("`text_config` is `None`. Initializing the `CLIPTextConfig` with default values.")
-
-        if vision_config is None:
-            vision_config = {}
-            logger.info("`vision_config` is `None`. initializing the `CLIPVisionConfig` with default values.")
-
+        # Finally we can convert back our unified text/vision configs to `PretrainedConfig`
         self.text_config = CLIPTextConfig(**text_config)
         self.vision_config = CLIPVisionConfig(**vision_config)
 
-        self.projection_dim = projection_dim
-        self.logit_scale_init_value = logit_scale_init_value
-        self.initializer_factor = 1.0
+        super().__post_init__(**kwargs)
 
 
 class CLIPOnnxConfig(OnnxConfig):

@@ -19,10 +19,16 @@
 # limitations under the License.
 """LLaMA model configuration"""
 
+from dataclasses import dataclass
+from typing import Any, Optional, Union
+
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 class LlamaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LlamaModel`]. It is used to instantiate an LLaMA
@@ -158,68 +164,34 @@ class LlamaConfig(PretrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
-    def __init__(
-        self,
-        vocab_size=32000,
-        hidden_size=4096,
-        intermediate_size=11008,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        num_key_value_heads=None,
-        hidden_act="silu",
-        max_position_embeddings=2048,
-        initializer_range=0.02,
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        pad_token_id=None,
-        bos_token_id=1,
-        eos_token_id=2,
-        pretraining_tp=1,
-        tie_word_embeddings=False,
-        rope_theta=10000.0,
-        rope_scaling=None,
-        attention_bias=False,
-        attention_dropout=0.0,
-        mlp_bias=False,
-        head_dim=None,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
+    vocab_size: Optional[int] = 32000
+    hidden_size: Optional[int] = 4096
+    intermediate_size: Optional[int] = 11008
+    num_hidden_layers: Optional[int] = 32
+    num_attention_heads: Optional[int] = 32
+    num_key_value_heads: Optional[int] = None
+    hidden_act: Optional[str] = "silu"
+    max_position_embeddings: Optional[int] = 2048
+    initializer_range: Optional[float] = 0.02
+    rms_norm_eps: Optional[float] = 1e-6
+    use_cache: Optional[bool] = True
+    pad_token_id: Optional[int] = None
+    bos_token_id: Optional[int] = 1
+    eos_token_id: Optional[int] = 2
+    pretraining_tp: Optional[int] = 1
+    tie_word_embeddings: Optional[bool] = False
+    rope_theta: Optional[float] = 10000.0
+    rope_scaling: Optional[dict[str, Any]] = None
+    attention_bias: Optional[bool] = False
+    attention_dropout: Optional[Union[int, float]] = 0.0
+    mlp_bias: Optional[bool] = False
+    head_dim: Optional[int] = None
 
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.pretraining_tp = pretraining_tp
-        self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.mlp_bias = mlp_bias
-        self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
-        # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, copy it it to 'rope_type'.
+    def __post_init__(self, **kwargs):
         if self.rope_scaling is not None and "type" in self.rope_scaling:
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
-        rope_config_validation(self)
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["LlamaConfig"]

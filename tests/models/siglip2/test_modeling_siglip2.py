@@ -280,7 +280,7 @@ class Siglip2VisionModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = Siglip2VisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=Siglip2VisionConfig, has_text_modality=False, hidden_size=37
+            self, config_class=Siglip2VisionConfig, has_text_modality=False, hidden_size=32
         )
 
     def test_config(self):
@@ -443,7 +443,7 @@ class Siglip2TextModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = Siglip2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Siglip2TextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Siglip2TextConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()

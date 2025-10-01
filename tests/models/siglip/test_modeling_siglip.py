@@ -188,7 +188,7 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = SiglipVisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=SiglipVisionConfig, has_text_modality=False, hidden_size=37
+            self, config_class=SiglipVisionConfig, has_text_modality=False, hidden_size=32
         )
 
     def test_config(self):
@@ -352,7 +352,7 @@ class SiglipTextModelTest(SiglipModelTesterMixin, unittest.TestCase):
     # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.setUp with CLIP->Siglip
     def setUp(self):
         self.model_tester = SiglipTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SiglipTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=SiglipTextConfig, hidden_size=32)
 
     # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_config
     def test_config(self):

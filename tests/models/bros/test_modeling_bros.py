@@ -306,7 +306,7 @@ class BrosModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = BrosModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BrosConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=BrosConfig, hidden_size=32)
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)

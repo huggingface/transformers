@@ -133,7 +133,7 @@ class DINOv3ConvNextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
             self,
             config_class=DINOv3ConvNextConfig,
             has_text_modality=False,
-            hidden_size=37,
+            hidden_size=32,
             common_properties=["num_channels", "hidden_sizes"],
         )
 

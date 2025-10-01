@@ -19,7 +19,7 @@ import torch
 import torch.nn as nn
 
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PretrainedConfig, layer_type_validation
+from ...configuration_utils import PretrainedConfig
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast
@@ -247,7 +247,6 @@ class Cohere2Config(PretrainedConfig):
                 "sliding_attention" if bool((i + 1) % self._sliding_window_pattern) else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
 
 class Cohere2RotaryEmbedding(CohereRotaryEmbedding):

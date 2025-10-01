@@ -241,7 +241,7 @@ class Dinov2WithRegistersModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
     def setUp(self):
         self.model_tester = Dinov2WithRegistersModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=Dinov2WithRegistersConfig, has_text_modality=False, hidden_size=37
+            self, config_class=Dinov2WithRegistersConfig, has_text_modality=False, hidden_size=32
         )
 
     def test_initialization(self):

@@ -21,7 +21,6 @@ import torch.nn as nn
 from transformers.utils.generic import TransformersKwargs
 
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import layer_type_validation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, rope_config_validation
@@ -223,7 +222,6 @@ class Olmo3Config(Olmo2Config):
             self.layer_types = [
                 "sliding_attention" if (i + 1) % 4 != 0 else "full_attention" for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types)
 
     def _rope_scaling_validation(self):
         """

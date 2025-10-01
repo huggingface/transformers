@@ -16,7 +16,7 @@
 
 import warnings
 
-from ...configuration_utils import PretrainedConfig, layer_type_validation
+from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
@@ -391,7 +391,6 @@ class Llama4TextConfig(PretrainedConfig):
             self.layer_types = [
                 "chunked_attention" if no_rope else "full_attention" for no_rope in self.no_rope_layers
             ]
-        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
 
 class Llama4Config(PretrainedConfig):

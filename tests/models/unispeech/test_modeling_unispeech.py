@@ -318,7 +318,7 @@ class UniSpeechRobustModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         self.model_tester = UniSpeechModelTester(
             self, conv_stride=(3, 3, 3), feat_extract_norm="layer", do_stable_layer_norm=True
         )
-        self.config_tester = ConfigTester(self, config_class=UniSpeechConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=UniSpeechConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()

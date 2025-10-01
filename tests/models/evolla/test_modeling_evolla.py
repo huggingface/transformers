@@ -207,7 +207,7 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = EvollaModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=EvollaConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=EvollaConfig, hidden_size=32)
 
     @property
     def is_encoder_decoder(self):

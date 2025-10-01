@@ -282,7 +282,7 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
 
     def setUp(self):
         self.model_tester = Gemma3Vision2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Gemma3Config, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Gemma3Config, hidden_size=32)
 
     def test_bidirectional_image_attention(self):
         """

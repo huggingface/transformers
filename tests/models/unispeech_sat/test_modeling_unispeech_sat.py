@@ -368,7 +368,7 @@ class UniSpeechSatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
 
     def setUp(self):
         self.model_tester = UniSpeechSatModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=UniSpeechSatConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=UniSpeechSatConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -579,7 +579,7 @@ class UniSpeechSatRobustModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester = UniSpeechSatModelTester(
             self, conv_stride=(3, 3, 3), feat_extract_norm="layer", do_stable_layer_norm=True
         )
-        self.config_tester = ConfigTester(self, config_class=UniSpeechSatConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=UniSpeechSatConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()

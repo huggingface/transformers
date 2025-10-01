@@ -165,7 +165,7 @@ class Blip2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = Blip2VisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=Blip2VisionConfig, has_text_modality=False, hidden_size=37
+            self, config_class=Blip2VisionConfig, has_text_modality=False, hidden_size=32
         )
 
     def test_config(self):

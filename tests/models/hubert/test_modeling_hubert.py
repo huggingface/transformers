@@ -317,7 +317,7 @@ class HubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = HubertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=HubertConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=HubertConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -579,7 +579,7 @@ class HubertRobustModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester = HubertModelTester(
             self, conv_stride=(3, 3, 3), feat_extract_norm="layer", do_stable_layer_norm=True
         )
-        self.config_tester = ConfigTester(self, config_class=HubertConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=HubertConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()

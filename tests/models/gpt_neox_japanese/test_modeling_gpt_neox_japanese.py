@@ -207,7 +207,7 @@ class GPTNeoXModelJapaneseTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
 
     def setUp(self):
         self.model_tester = GPTNeoXJapaneseModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GPTNeoXJapaneseConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=GPTNeoXJapaneseConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
