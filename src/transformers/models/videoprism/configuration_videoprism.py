@@ -91,6 +91,7 @@ class VideoPrismConfig(PretrainedConfig):
         vocabulary_size=32000,
         apply_l2_norm=True,
         num_hidden_layers=12,  #! this is just a placeholder value, num_hidden_layers will be later set from num spatial/temporal etc layers
+        num_labels=1000,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -118,6 +119,7 @@ class VideoPrismConfig(PretrainedConfig):
         self.num_unimodal_layers = num_unimodal_layers
         self.vocabulary_size = vocabulary_size
         self.apply_l2_norm = apply_l2_norm
+        self.num_labels = num_labels
 
 
 __all__ = ["VideoPrismConfig"]

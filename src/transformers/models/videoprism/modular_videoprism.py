@@ -1,4 +1,3 @@
-from ast import Num
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -8,10 +7,10 @@ from typing import Callable, Optional, Union
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+from ...processing_utils import Unpack
 from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepare_4d_attention_mask
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
-from ...utils import ModelOutput, auto_docstring, logging, torch_int
+from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
+from ...utils import ModelOutput, auto_docstring, logging, torch_int, TransformersKwargs
 from ..t5.tokenization_t5 import T5Tokenizer
 from ..t5.tokenization_t5_fast import T5TokenizerFast
 from ..vivit.configuration_vivit import VivitConfig
@@ -57,6 +56,7 @@ class VideoPrismConfig(VivitConfig):
         vocabulary_size=32000,
         apply_l2_norm=True,
         num_hidden_layers=12,  #! this is just a placeholder value, num_hidden_layers will be later set from num spatial/temporal etc layers
+        num_labels=1000,
         **kwargs,
     ):
         super().__init__()
@@ -70,6 +70,7 @@ class VideoPrismConfig(VivitConfig):
         self.num_unimodal_layers = num_unimodal_layers
         self.vocabulary_size = vocabulary_size
         self.apply_l2_norm = apply_l2_norm
+        self.num_labels = num_labels
 
 
 class VideoPrismTokenizer(T5Tokenizer):
@@ -799,12 +800,43 @@ class VideoPrismClipModel(VideoPrismPreTrainedModel):
 
         )
 
+class VideoPrismForVideoClassification(VideoPrismPreTrainedModel):
+    def __init__(self, config: VideoPrismConfig):
+        super().__init__(config)
+        self.encoder = VideoPrismModel(config)
+        self.contrastive_vision_pooler = VideoPrismMultiheadAttentionPoolingHead(config)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+        self.post_init()
+
+    def forward(
+        self,
+        pixel_values_videos: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> ImageClassifierOutput:
+        encoder_outputs = self.encoder(pixel_values_videos=pixel_values_videos)
+        sequence_output = encoder_outputs.last_hidden_state
+        pooled_output = self.contrastive_vision_pooler(sequence_output).pooled_output
+        logits = self.classifier(pooled_output)  #? (B, 1, num_labels) 
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(labels, logits, self.config, **kwargs)
+
+        return ImageClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=encoder_outputs.last_hidden_state,
+        )
+
+
+
 
 __all__ = [
     "VideoPrismConfig",
     "VideoPrismModel",
     "VideoPrismPreTrainedModel",
     "VideoPrismClipModel",
+    "VideoPrismForVideoClassification",
     "VideoPrismTokenizer",
     "VideoPrismTokenizerFast",
     "VideoPrismVideoProcessor",

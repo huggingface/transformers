@@ -14,10 +14,11 @@ import torch.nn.functional as F
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepare_4d_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput
+from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import ModelOutput, auto_docstring, torch_int
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_int
 from .configuration_videoprism import VideoPrismConfig
 
 
@@ -831,4 +832,33 @@ class VideoPrismClipModel(VideoPrismPreTrainedModel):
         )
 
 
-__all__ = ["VideoPrismModel", "VideoPrismPreTrainedModel", "VideoPrismClipModel"]
+class VideoPrismForVideoClassification(VideoPrismPreTrainedModel):
+    def __init__(self, config: VideoPrismConfig):
+        super().__init__(config)
+        self.encoder = VideoPrismModel(config)
+        self.contrastive_vision_pooler = VideoPrismMultiheadAttentionPoolingHead(config)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+        self.post_init()
+
+    def forward(
+        self,
+        pixel_values_videos: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> ImageClassifierOutput:
+        encoder_outputs = self.encoder(pixel_values_videos=pixel_values_videos)
+        sequence_output = encoder_outputs.last_hidden_state
+        pooled_output = self.contrastive_vision_pooler(sequence_output).pooled_output
+        logits = self.classifier(pooled_output)  # ? (B, 1, num_labels)
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(labels, logits, self.config, **kwargs)
+
+        return ImageClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=encoder_outputs.last_hidden_state,
+        )
+
+
+__all__ = ["VideoPrismModel", "VideoPrismPreTrainedModel", "VideoPrismClipModel", "VideoPrismForVideoClassification"]
