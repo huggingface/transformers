@@ -11,10 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import importlib
 from typing import TYPE_CHECKING, Optional, Union
-
-from packaging import version
 
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name

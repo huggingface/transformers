@@ -129,6 +129,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
 
     def adjust_target_dtype(self, target_dtype: "torch.dtype") -> "torch.dtype":
         from accelerate.utils import CustomDtype
+
         if target_dtype != torch.int8:
             logger.info("target_dtype {target_dtype} is replaced by `CustomDtype.INT4` for 4-bit BnB quantization")
         return CustomDtype.INT4
