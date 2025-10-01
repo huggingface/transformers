@@ -91,6 +91,11 @@ logger = logging.get_logger(__name__)
 
 class VideoLlama3VisionConfig(SiglipVisionConfig):
     """
+    This is the configuration class to store the configuration of a [`VideoLlama3VisionModel`]. It is used to instantiate a
+    VideoLLaMA3 vision encoder model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of
+    VideoLLaMA3-2B [lkhl/VideoLLaMA3-2B-Image-HF](https://huggingface.co/lkhl/VideoLLaMA3-2B-Image-HF).
+
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
@@ -151,6 +156,11 @@ class VideoLlama3VisionConfig(SiglipVisionConfig):
 
 class VideoLlama3Config(PretrainedConfig):
     """
+    This is the configuration class to store the configuration of a [`VideoLlama3Model`]. It is used to instantiate a
+    VideoLLaMA3 model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of
+    VideoLLaMA3-2B [lkhl/VideoLLaMA3-2B-Image-HF](https://huggingface.co/lkhl/VideoLLaMA3-2B-Image-HF).
+
     Args:
         text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `Qwen2Config`):
             The config object or dictionary of the text backbone.
@@ -675,7 +685,7 @@ class VideoLlama3Model(Qwen2VLModel):
             video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw, video_merge_sizes)
             video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             if video_compression_mask is not None:
-                video_embeds = video_embeds[video_compression_mask]
+                video_embeds = video_embeds[video_compression_mask.to(video_embeds.device)]
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )

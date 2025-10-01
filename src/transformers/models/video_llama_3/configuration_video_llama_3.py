@@ -23,6 +23,11 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 class VideoLlama3VisionConfig(PretrainedConfig):
     """
+    This is the configuration class to store the configuration of a [`VideoLlama3VisionModel`]. It is used to instantiate a
+    VideoLLaMA3 vision encoder model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of
+    VideoLLaMA3-2B [lkhl/VideoLLaMA3-2B-Image-HF](https://huggingface.co/lkhl/VideoLLaMA3-2B-Image-HF).
+
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
@@ -81,6 +86,11 @@ class VideoLlama3VisionConfig(PretrainedConfig):
 
 class VideoLlama3Config(PretrainedConfig):
     """
+    This is the configuration class to store the configuration of a [`VideoLlama3Model`]. It is used to instantiate a
+    VideoLLaMA3 model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of
+    VideoLLaMA3-2B [lkhl/VideoLLaMA3-2B-Image-HF](https://huggingface.co/lkhl/VideoLLaMA3-2B-Image-HF).
+
     Args:
         text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `Qwen2Config`):
             The config object or dictionary of the text backbone.

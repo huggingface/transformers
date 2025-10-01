@@ -682,7 +682,7 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
             video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw, video_merge_sizes)
             video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             if video_compression_mask is not None:
-                video_embeds = video_embeds[video_compression_mask]
+                video_embeds = video_embeds[video_compression_mask.to(video_embeds.device)]
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )
