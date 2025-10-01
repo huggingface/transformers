@@ -14,7 +14,6 @@
 
 
 import contextlib
-import importlib.util
 import io
 import os
 import platform
@@ -61,18 +60,13 @@ class EnvironmentCommand(BaseTransformersCLICommand):
         self._accelerate_config_file = accelerate_config_file
 
     def run(self):
-        safetensors_version = "not installed"
-        if is_safetensors_available():
-            import safetensors
+        import safetensors
 
-            safetensors_version = safetensors.__version__
-        elif importlib.util.find_spec("safetensors") is not None:
-            import safetensors
-
-            safetensors_version = f"{safetensors.__version__} but is ignored because of PyTorch version too old."
+        safetensors_version = safetensors.__version__
 
         accelerate_version = "not installed"
         accelerate_config = accelerate_config_str = "not found"
+
         if is_accelerate_available():
             import accelerate
             from accelerate.commands.config import default_config_file, load_config_from_file
