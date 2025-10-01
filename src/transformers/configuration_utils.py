@@ -169,8 +169,8 @@ class PretrainedConfig(PushToHubMixin):
             The id of the _beginning-of-stream_ token.
         pad_token_id (`int`, *optional*):
             The id of the _padding_ token.
-        eos_token_id (`int`, *optional*):
-            The id of the _end-of-stream_ token.
+        eos_token_id (`Union[int, list[int]]`, *optional*):
+            The id or ids of the _end-of-stream_ token.
         decoder_start_token_id (`int`, *optional*):
             If an encoder-decoder model starts decoding with a different token than _bos_, the id of that token.
         sep_token_id (`int`, *optional*):
@@ -201,7 +201,7 @@ class PretrainedConfig(PushToHubMixin):
     _auto_class: ClassVar[Optional[str]] = None
 
     # Common attributes for all models which are not a `ClassVar`
-    model_type: str = ""
+    model_type: ClassVar[str] = ""
     transformers_version: Optional[str] = None
 
     output_hidden_states: Optional[bool] = False
@@ -232,7 +232,7 @@ class PretrainedConfig(PushToHubMixin):
     prefix: Optional[str] = None
     bos_token_id: Optional[int] = None
     pad_token_id: Optional[int] = None
-    eos_token_id: Optional[int] = None
+    eos_token_id: Optional[Union[int, list[int]]] = None
     sep_token_id: Optional[int] = None
     decoder_start_token_id: Optional[int] = None
 
@@ -804,7 +804,7 @@ class PretrainedConfig(PushToHubMixin):
 
                 # To authorize passing a custom subconfig as kwarg in models that have nested configs.
                 # We need to update only custom kwarg values instead and keep other attributes in subconfig.
-                if value in cls.sub_configs and isinstance(value, dict) and isinstance(config_dict.get(key), dict):
+                if key in cls.sub_configs and isinstance(value, dict) and isinstance(config_dict.get(key), dict):
                     config_dict[key].update(value)
                 else:
                     config_dict[key] = value
@@ -1351,6 +1351,7 @@ ALLOWED_LAYER_TYPES = (
     "sliding_attention",
     "chunked_attention",
     "linear_attention",  # used in minimax
+    "conv",  # used in LFMv2
 )
 
 

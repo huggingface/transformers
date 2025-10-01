@@ -902,6 +902,7 @@ class SwitchTransformerRouterTest(unittest.TestCase):
         d_ff=16,
         router_jitter_noise=0,
         expert_capacity=4,
+        num_heads=4,
     )
 
     def test_equivalency_balancy_loss(self):
