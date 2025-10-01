@@ -146,6 +146,10 @@ class DACVAEConfig(PretrainedConfig):
 
 
 class PerceptionEncoderAudioConfig(PretrainedConfig):
+    r"""
+    PerceptionEncoderAudioConfig
+    """
+
     sub_configs = {"text_model": AutoConfig}
     model_type = "perception_encoder_audio"
 

@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_perception_encoder_audio_video.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-import math
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -16,13 +15,15 @@ from einops import rearrange
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...integrations import use_kernel_forward_from_hub
+from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring
 from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import check_model_inputs
 from ..auto import AutoModel
 from .configuration_perception_encoder_audio_video import (
     PerceptionEncoderAudioVideoConfig,
@@ -89,23 +90,12 @@ class MaskedGroupNorm(torch.nn.GroupNorm):
     def forward(self, x: torch.Tensor, padding_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         if padding_mask is None:
             return super().forward(x)
-
-        # x: (B, C, L), padding_mask: (B, 1, L) or (B, L)
-        if padding_mask.dim() == 2:
-            padding_mask = padding_mask.unsqueeze(1)  # (B, 1, L)
-
         B, C, L = x.shape
         G = self.num_groups
-
-        if padding_mask.shape != x.shape:
-            padding_mask = padding_mask.expand_as(x)
-
         x_grouped = x.view(B, G, C // G, L)
-        padding_mask_grouped = padding_mask.view(B, G, C // G, L)
-        padding_masked_x = x_grouped * padding_mask_grouped
-        padding_mask_sum = padding_mask_grouped.sum(dim=(2, 3), keepdim=True)  # (B, G, 1, 1)
-        mean = padding_masked_x.sum(dim=(2, 3), keepdim=True) / padding_mask_sum  # (B, G, 1, 1)
-        var = ((padding_masked_x - mean) ** 2 * padding_mask_grouped).sum(dim=(2, 3), keepdim=True) / padding_mask_sum
+        padding_mask_grouped = padding_mask.view(B, G, C // G, L).bool()
+        mean = torch.masked.mean(x_grouped, mask=padding_mask_grouped, dim=(2, 3), keepdim=True)
+        var = torch.masked.var(x_grouped, mask=padding_mask_grouped, dim=(2, 3), keepdim=True, unbiased=False)
         x_norm = (x_grouped - mean) / torch.sqrt(var + self.eps)
         x_norm = x_norm.view(B, C, L)
         if self.affine:
@@ -122,28 +112,13 @@ class ConvBlock1d(torch.nn.Module):
             in_channels=config.hidden_size,
             out_channels=config.hidden_size,
             kernel_size=3,
+            padding="same",
         )
-
-    def _pad(self, x: torch.Tensor) -> int:
-        kernel_size = 3
-        stride = 1
-        length = x.shape[-1]
-        padding_total = kernel_size - stride
-        n_frames = (length - kernel_size + padding_total) / stride + 1
-        ideal_length = (math.ceil(n_frames) - 1) * stride + (kernel_size - padding_total)
-        extra_padding = ideal_length - length
-
-        # Asymmetric padding required for odd strides
-        padding_right = padding_total // 2
-        padding_left = padding_total - padding_right
-        return F.pad(x, (padding_left, padding_right + extra_padding), mode="constant", value=0.0)
 
     def forward(self, x: torch.Tensor, padding_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         x = self.groupnorm(x, padding_mask=padding_mask)
         x = self.activation(x)
-        if padding_mask is not None:
-            x = x * padding_mask.unsqueeze(1)
-        return self.project(self._pad(x))
+        return self.project(x)
 
 
 class ResnetBlock1d(torch.nn.Module):
@@ -404,6 +379,22 @@ class PerceptionEncoderAudioVideoDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+class PerceptionEncoderAudioVideoEmbeddings(torch.nn.Module):
+    def __init__(self, config: PerceptionEncoderAudioVideoTransformerConfig):
+        super().__init__()
+        self.config = config
+        self.resnet_block = ResnetBlock1d(config)
+        self.cls_token = torch.nn.Parameter(torch.randn(1, 1, config.hidden_size))
+
+    def forward(self, x: torch.Tensor, padding_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+        x = torch.cat([self.cls_token.expand(x.size(0), -1, -1), x], dim=1)
+        if padding_mask is not None:
+            padding_mask = torch.cat([padding_mask[:, [0]], padding_mask], dim=1).unsqueeze(1).expand_as(x)
+        x = rearrange(x, "b l c-> b c l")
+        h = self.resnet_block(x, padding_mask=padding_mask)
+        return rearrange(h, "b c l -> b l c")
+
+
 def stack_freqs(cos: torch.Tensor, sin: torch.Tensor):
     dim = cos.size(-1)
     cos = cos.narrow(-1, 0, dim // 2)
@@ -413,58 +404,58 @@ def stack_freqs(cos: torch.Tensor, sin: torch.Tensor):
 
 
 class PerceptionEncoderAudioVideoTransformer(torch.nn.Module):
+    _can_record_outputs = {
+        "attentions": PerceptionEncoderAudioVideoAttention,
+        "hidden_states": PerceptionEncoderAudioVideoDecoderLayer,
+    }
+
     def __init__(self, config: PerceptionEncoderAudioVideoTransformerConfig):
         super().__init__()
         self.config = config
-        self.rope_embeddings = PerceptionEncoderAudioVideoRotaryEmbedding(config)
+        self.embeddings = PerceptionEncoderAudioVideoEmbeddings(config)
         self.layers = torch.nn.ModuleList(
-            [PerceptionEncoderAudioVideoDecoderLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)]
+            [
+                PerceptionEncoderAudioVideoDecoderLayer(config, layer_idx)
+                for layer_idx in range(config.num_hidden_layers)
+            ]
         )
         self.norm = PerceptionEncoderAudioVideoRMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.rope_embeddings = PerceptionEncoderAudioVideoRotaryEmbedding(config)
         self.output = torch.nn.Linear(config.hidden_size, config.hidden_size, bias=False)
-        self.x_embedder = ResnetBlock1d(config)
-        self.cls_token = torch.nn.Parameter(torch.randn(1, 1, config.hidden_size))
 
+    @check_model_inputs
+    @auto_docstring
     def forward(
         self,
-        x: torch.Tensor,
-        *,
-        padding_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: torch.FloatTensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
-        # Prepend the cls token
-        x = torch.cat([self.cls_token.expand(x.size(0), -1, -1), x], dim=1)
-        if padding_mask is not None:
-            padding_mask = torch.cat([padding_mask[:, [0]], padding_mask], dim=1)
+        inputs_embeds = self.embeddings(inputs_embeds, padding_mask=attention_mask)
 
-        x = rearrange(x, "b l c-> b c l")
-        h = self.x_embedder(x, padding_mask=padding_mask)
-        h = rearrange(h, "b c l -> b l c")
-        original_N = h.shape[1]
-        N = h.shape[1]
+        if attention_mask is not None:
+            attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
 
-        cos, sin = self.rope_embeddings(h, torch.arange(h.size(1), device=h.device)[None])
-        rope_embeddings = stack_freqs(cos, sin)
+        position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
+        cos, sin = self.rope_embeddings(inputs_embeds, position_ids)
+        position_embeddings = stack_freqs(cos, sin)
 
-        if padding_mask is not None:
-            padding_mask = padding_mask[:, None, None].bool()
-
-        for layer in self.layers:
-            h = layer(
-                hidden_states=h,
-                attention_mask=padding_mask,
-                position_embeddings=rope_embeddings,
+        hidden_states = inputs_embeds
+        for encoder_layer in self.layers[: self.config.num_hidden_layers]:
+            hidden_states = encoder_layer(
+                hidden_states,
+                attention_mask=attention_mask,
+                position_embeddings=position_embeddings,
+                **kwargs,
             )
 
-        # output layer
-        if self.norm is not None:
-            h = self.norm(h)
+        hidden_states = self.norm(hidden_states)
+        hidden_states = self.output(hidden_states)
 
-        output = self.output(h)
-        N = output.shape[1]
-        if original_N != N:
-            output = output[:, -original_N:]
-
-        return BaseModelOutputWithPooling(last_hidden_state=output[:, 1:], pooler_output=output[:, 0])
+        return BaseModelOutputWithPooling(
+            last_hidden_state=hidden_states[:, 1:],
+            pooler_output=hidden_states[:, 0],
+        )
 
 
 class PerceptionEncoderAudioVideoContrastiveHead(torch.nn.Module):

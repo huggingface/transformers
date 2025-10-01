@@ -20,6 +20,10 @@ class PerceptionEncoderAudioVideoTransformerConfig(PerceptionEncoderAudioTransfo
 
 
 class PerceptionEncoderAudioVideoConfig(PretrainedConfig):
+    r"""
+    PerceptionEncoderAudioVideoConfig
+    """
+
     sub_config = {"video_model": AutoConfig, "audio_model": AutoConfig, "text_model": AutoConfig}
     model_type = "perception_encoder_audio_video"
 

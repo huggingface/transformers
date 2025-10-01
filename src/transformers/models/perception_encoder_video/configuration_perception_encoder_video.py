@@ -58,6 +58,10 @@ class PerceptionEncoderVideoTransformerConfig(PretrainedConfig):
 
 
 class PerceptionEncoderVideoConfig(PretrainedConfig):
+    r"""
+    PerceptionEncoderVideoConfig
+    """
+
     sub_config = {"clip_vision_model": TimmWrapperConfig, "text_model": AutoConfig}
     model_type = "perception_encoder_video"
 

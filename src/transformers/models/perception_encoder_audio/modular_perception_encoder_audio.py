@@ -1,4 +1,3 @@
-import math
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -7,10 +6,13 @@ import torch.nn.functional as F
 from einops import rearrange
 
 from ...configuration_utils import PretrainedConfig
+from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput
+from ...processing_utils import Unpack
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring
+from ...utils.generic import check_model_inputs
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..dac.configuration_dac import DacConfig
 from ..dac.modeling_dac import DacEncoder
@@ -74,6 +76,10 @@ class DACVAEConfig(DacConfig): ...
 
 
 class PerceptionEncoderAudioConfig(PretrainedConfig):
+    r"""
+    PerceptionEncoderAudioConfig
+    """
+
     sub_configs = {"text_model": AutoConfig}
     model_type = "perception_encoder_audio"
 
@@ -102,23 +108,12 @@ class MaskedGroupNorm(torch.nn.GroupNorm):
     def forward(self, x: torch.Tensor, padding_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         if padding_mask is None:
             return super().forward(x)
-
-        # x: (B, C, L), padding_mask: (B, 1, L) or (B, L)
-        if padding_mask.dim() == 2:
-            padding_mask = padding_mask.unsqueeze(1)  # (B, 1, L)
-
         B, C, L = x.shape
         G = self.num_groups
-
-        if padding_mask.shape != x.shape:
-            padding_mask = padding_mask.expand_as(x)
-
         x_grouped = x.view(B, G, C // G, L)
-        padding_mask_grouped = padding_mask.view(B, G, C // G, L)
-        padding_masked_x = x_grouped * padding_mask_grouped
-        padding_mask_sum = padding_mask_grouped.sum(dim=(2, 3), keepdim=True)  # (B, G, 1, 1)
-        mean = padding_masked_x.sum(dim=(2, 3), keepdim=True) / padding_mask_sum  # (B, G, 1, 1)
-        var = ((padding_masked_x - mean) ** 2 * padding_mask_grouped).sum(dim=(2, 3), keepdim=True) / padding_mask_sum
+        padding_mask_grouped = padding_mask.view(B, G, C // G, L).bool()
+        mean = torch.masked.mean(x_grouped, mask=padding_mask_grouped, dim=(2, 3), keepdim=True)
+        var = torch.masked.var(x_grouped, mask=padding_mask_grouped, dim=(2, 3), keepdim=True, unbiased=False)
         x_norm = (x_grouped - mean) / torch.sqrt(var + self.eps)
         x_norm = x_norm.view(B, C, L)
         if self.affine:
@@ -135,28 +130,13 @@ class ConvBlock1d(torch.nn.Module):
             in_channels=config.hidden_size,
             out_channels=config.hidden_size,
             kernel_size=3,
+            padding="same",
         )
-
-    def _pad(self, x: torch.Tensor) -> int:
-        kernel_size = 3
-        stride = 1
-        length = x.shape[-1]
-        padding_total = kernel_size - stride
-        n_frames = (length - kernel_size + padding_total) / stride + 1
-        ideal_length = (math.ceil(n_frames) - 1) * stride + (kernel_size - padding_total)
-        extra_padding = ideal_length - length
-
-        # Asymmetric padding required for odd strides
-        padding_right = padding_total // 2
-        padding_left = padding_total - padding_right
-        return F.pad(x, (padding_left, padding_right + extra_padding), mode="constant", value=0.0)
 
     def forward(self, x: torch.Tensor, padding_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         x = self.groupnorm(x, padding_mask=padding_mask)
         x = self.activation(x)
-        if padding_mask is not None:
-            x = x * padding_mask.unsqueeze(1)
-        return self.project(self._pad(x))
+        return self.project(x)
 
 
 class ResnetBlock1d(torch.nn.Module):
@@ -199,11 +179,8 @@ class VAEBottleneck(torch.nn.Module):
     def forward(self, z: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         mean, scale = self.in_proj(z).chunk(2, dim=1)
         stdev = torch.nn.functional.softplus(scale) + 1e-4
-        var = stdev * stdev
-        logvar = torch.log(var)
         latents = torch.randn_like(mean) * stdev + mean
-        kl = (mean * mean + var - logvar - 1).sum(1).mean()
-        return latents, kl
+        return latents
 
 
 class DACVAEEncoder(DacEncoder): ...
@@ -216,15 +193,12 @@ class DacEncoderVAE(torch.nn.Module):
         self.encoder = DACVAEEncoder(config)
         self.bottleneck = VAEBottleneck(config.codebook_size, config.codebook_dim)
         self.hop_length = config.hop_length
-        self.mean = 0.0
-        self.std = 1.0
         self.sampling_rate = config.sampling_rate
 
     def forward(self, waveform: torch.Tensor) -> torch.Tensor:
         with torch.no_grad(), torch.backends.cudnn.flags(enabled=False):
             z = self.encoder(self._pad(waveform))
-            encoded_frames, _ = self.bottleneck(z)
-            encoded_frames = (encoded_frames - self.mean) / self.std
+            encoded_frames = self.bottleneck(z)
         return encoded_frames
 
     def _pad(self, wavs):
@@ -234,23 +208,6 @@ class DacEncoderVAE(torch.nn.Module):
             return torch.nn.functional.pad(wavs, p1d, "reflect")
         else:
             return wavs
-
-    def feature_idx_to_wav_idx(self, feature_idx, sampling_rate=None):
-        if sampling_rate is None:
-            sampling_rate = self.sampling_rate
-        orig_freq = sampling_rate
-        new_freq = self.sampling_rate
-        wav_idx = feature_idx * self.hop_length * (orig_freq / new_freq)
-        return wav_idx.int()
-
-    def wav_idx_to_feature_idx(self, wav_idx, sampling_rate=None):
-        if sampling_rate is None:
-            sampling_rate = self.sampling_rate
-        orig_freq = sampling_rate
-        new_freq = self.sampling_rate
-        target_length = torch.ceil(new_freq * wav_idx / orig_freq)
-        feature_idx = torch.ceil(target_length / self.hop_length)
-        return feature_idx.int()
 
 
 ## Transformer
@@ -333,59 +290,72 @@ class PerceptionEncoderAudioAttention(Qwen3Attention):
 class PerceptionEncoderAudioDecoderLayer(Qwen3DecoderLayer): ...
 
 
-class PerceptionEncoderAudioTransformer(torch.nn.Module):
+class PerceptionEncoderAudioEmbeddings(torch.nn.Module):
     def __init__(self, config: PerceptionEncoderAudioTransformerConfig):
         super().__init__()
         self.config = config
-        self.rope_embeddings = PerceptionEncoderAudioRotaryEmbedding(config)
-        self.layers = torch.nn.ModuleList(
-            [PerceptionEncoderAudioDecoderLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)]
-        )
-        self.norm = PerceptionEncoderAudioRMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.output = torch.nn.Linear(config.hidden_size, config.hidden_size, bias=False)
-        self.x_embedder = ResnetBlock1d(config)
+        self.resnet_block = ResnetBlock1d(config)
         self.cls_token = torch.nn.Parameter(torch.randn(1, 1, config.hidden_size))
 
-    def forward(
-        self,
-        x: torch.Tensor,
-        *,
-        padding_mask: Optional[torch.Tensor] = None,
-    ) -> BaseModelOutputWithPooling:
-        # Prepend the cls token
+    def forward(self, x: torch.Tensor, padding_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         x = torch.cat([self.cls_token.expand(x.size(0), -1, -1), x], dim=1)
         if padding_mask is not None:
-            padding_mask = torch.cat([padding_mask[:, [0]], padding_mask], dim=1)
-
+            padding_mask = torch.cat([padding_mask[:, [0]], padding_mask], dim=1).unsqueeze(1).expand_as(x)
         x = rearrange(x, "b l c-> b c l")
-        h = self.x_embedder(x, padding_mask=padding_mask)
-        h = rearrange(h, "b c l -> b l c")
-        original_N = h.shape[1]
-        N = h.shape[1]
+        h = self.resnet_block(x, padding_mask=padding_mask)
+        return rearrange(h, "b c l -> b l c")
 
-        cos, sin = self.rope_embeddings(h, torch.arange(h.size(1), device=h.device)[None])
-        rope_embeddings = stack_freqs(cos, sin)
 
-        if padding_mask is not None:
-            padding_mask = padding_mask[:, None, None].bool()
+class PerceptionEncoderAudioTransformer(torch.nn.Module):
+    _can_record_outputs = {
+        "attentions": PerceptionEncoderAudioAttention,
+        "hidden_states": PerceptionEncoderAudioDecoderLayer,
+    }
 
-        for layer in self.layers:
-            h = layer(
-                hidden_states=h,
-                attention_mask=padding_mask,
-                position_embeddings=rope_embeddings,
+    def __init__(self, config: PerceptionEncoderAudioTransformerConfig):
+        super().__init__()
+        self.config = config
+        self.embeddings = PerceptionEncoderAudioEmbeddings(config)
+        self.layers = torch.nn.ModuleList(
+            [PerceptionEncoderAudioDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = PerceptionEncoderAudioRMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.rope_embeddings = PerceptionEncoderAudioRotaryEmbedding(config)
+        self.output = torch.nn.Linear(config.hidden_size, config.hidden_size, bias=False)
+
+    @check_model_inputs
+    @auto_docstring
+    def forward(
+        self,
+        inputs_embeds: torch.FloatTensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
+        inputs_embeds = self.embeddings(inputs_embeds, padding_mask=attention_mask)
+
+        if attention_mask is not None:
+            attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
+
+        position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
+        cos, sin = self.rope_embeddings(inputs_embeds, position_ids)
+        position_embeddings = stack_freqs(cos, sin)
+
+        hidden_states = inputs_embeds
+        for encoder_layer in self.layers[: self.config.num_hidden_layers]:
+            hidden_states = encoder_layer(
+                hidden_states,
+                attention_mask=attention_mask,
+                position_embeddings=position_embeddings,
+                **kwargs,
             )
 
-        # output layer
-        if self.norm is not None:
-            h = self.norm(h)
+        hidden_states = self.norm(hidden_states)
+        hidden_states = self.output(hidden_states)
 
-        output = self.output(h)
-        N = output.shape[1]
-        if original_N != N:
-            output = output[:, -original_N:]
-
-        return BaseModelOutputWithPooling(last_hidden_state=output[:, 1:], pooler_output=output[:, 0])
+        return BaseModelOutputWithPooling(
+            last_hidden_state=hidden_states[:, 1:],
+            pooler_output=hidden_states[:, 0],
+        )
 
 
 class PerceptionEncoderAudioPretrainedModel(PreTrainedModel):
@@ -449,9 +419,7 @@ class PerceptionEncoderAudioWithTextModel(PerceptionEncoderAudioModel):
         super().__init__(config)
         self.text_model = AutoModel.from_config(config.text_model)
         self.audio_text_head = PerceptionEncoderAudioContrastiveHead(config.text_model.hidden_size, config.output_dim)
-        self.audio_head = PerceptionEncoderAudioContrastiveHead(
-            config.transformer.hidden_size, config.output_dim
-        )
+        self.audio_head = PerceptionEncoderAudioContrastiveHead(config.transformer.hidden_size, config.output_dim)
         self.logit_scale = torch.nn.Parameter(torch.tensor([10.0]).log())
         self.logit_bias = torch.nn.Parameter(torch.tensor([-10.0]))
 
@@ -504,4 +472,10 @@ class PerceptionEncoderAudioFrameWithText(PerceptionEncoderAudioWithTextModel):
     def _get_audio_head_input(self, audio_model_output):
         return audio_model_output.last_hidden_state
 
-__all__ = ["PerceptionEncoderAudioModel", "PerceptionEncoderAudioWithTextModel", "PerceptionEncoderAudioConfig", "PerceptionEncoderAudioFrameWithText"]
+
+__all__ = [
+    "PerceptionEncoderAudioModel",
+    "PerceptionEncoderAudioWithTextModel",
+    "PerceptionEncoderAudioConfig",
+    "PerceptionEncoderAudioFrameWithText",
+]
