@@ -23,6 +23,7 @@ from typing import Any, Optional, Union
 
 import torch
 from torch import nn
+from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
@@ -42,7 +43,7 @@ from ...image_utils import (
     PILImageResampling,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_v2_available, logging
+from ...utils import TensorType, auto_docstring, logging
 from .image_processing_mask2former import (
     compute_segments,
     convert_segmentation_to_rle,
@@ -50,11 +51,6 @@ from .image_processing_mask2former import (
     remove_low_and_no_objects,
 )
 
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
 
 logger = logging.get_logger(__name__)
 
@@ -348,9 +344,7 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
                         image=grouped_segmentation_maps[shape],
                         size=size,
                         size_divisor=size_divisor,
-                        interpolation=F.InterpolationMode.NEAREST_EXACT
-                        if is_torchvision_v2_available()
-                        else F.InterpolationMode.NEAREST,
+                        interpolation=F.InterpolationMode.NEAREST_EXACT,
                     )
             resized_images_grouped[shape] = stacked_images
             if segmentation_maps is not None:

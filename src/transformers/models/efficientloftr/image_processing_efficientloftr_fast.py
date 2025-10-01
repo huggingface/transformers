@@ -39,17 +39,13 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_v2_available,
 )
 
 
 if TYPE_CHECKING:
     from .modeling_efficientloftr import KeypointMatchingOutput
 
-if is_torchvision_v2_available():
-    import torchvision.transforms.v2.functional as F
-else:
-    import torchvision.transforms.functional as F
+import torchvision.transforms.v2.functional as F
 
 
 def _is_valid_image(image):

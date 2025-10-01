@@ -19,6 +19,7 @@ from typing import Optional, Union
 
 import numpy as np
 import torch
+from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -40,7 +41,6 @@ from ...utils import (
     TensorType,
     auto_docstring,
     filter_out_non_signature_kwargs,
-    is_torchvision_v2_available,
 )
 from .image_processing_eomt import (
     compute_segments,
@@ -48,12 +48,6 @@ from .image_processing_eomt import (
     get_size_with_aspect_ratio,
     remove_low_and_no_objects,
 )
-
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
 
 
 class EomtImageProcessorFastKwargs(DefaultFastImageProcessorKwargs):
@@ -204,9 +198,7 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
                     "do_normalize": False,
                     "do_rescale": False,
                     # Nearest interpolation is used for segmentation maps instead of BILINEAR.
-                    "interpolation": F.InterpolationMode.NEAREST_EXACT
-                    if is_torchvision_v2_available()
-                    else F.InterpolationMode.NEAREST,
+                    "interpolation": F.InterpolationMode.NEAREST_EXACT,
                 }
             )
 

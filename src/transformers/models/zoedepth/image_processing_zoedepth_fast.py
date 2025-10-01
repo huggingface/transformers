@@ -21,6 +21,7 @@ from typing import (
 
 import numpy as np
 import torch
+from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils import (
     BatchFeature,
@@ -44,18 +45,11 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_v2_available,
     logging,
     requires_backends,
 )
 from .image_processing_zoedepth import get_resize_output_image_size
 from .modeling_zoedepth import ZoeDepthDepthEstimatorOutput
-
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
 
 
 logger = logging.get_logger(__name__)

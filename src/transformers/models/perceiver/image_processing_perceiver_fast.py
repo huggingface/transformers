@@ -17,6 +17,7 @@
 from typing import Optional, Union
 
 import torch
+from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
@@ -24,14 +25,7 @@ from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImage
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_v2_available,
 )
-
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
 
 
 @auto_docstring

@@ -46,7 +46,6 @@ from .utils import (
     is_remote_url,
     is_torch_available,
     is_torchcodec_available,
-    is_torchvision_available,
     is_torchvision_v2_available,
     logging,
 )
@@ -70,8 +69,6 @@ if is_torch_available():
 
 if is_torchvision_v2_available():
     from torchvision.transforms.v2 import functional as F
-elif is_torchvision_available():
-    from torchvision.transforms import functional as F
 
 
 logger = logging.get_logger(__name__)
