@@ -531,14 +531,14 @@ class ChatCommand(BaseTransformersCLICommand):
     # Model loading and performance automation methods
     @staticmethod
     def get_quantization_config(model_args: ChatArguments) -> Optional[BitsAndBytesConfig]:
-        if model_args.load_in_4bit:
+        if model_args.quantization == "bitsandbytes-4bit":
             quantization_config = BitsAndBytesConfig(
                 load_in_4bit=True,
                 bnb_4bit_compute_dtype=model_args.torch_dtype,
                 bnb_4bit_quant_type="nf4",
                 bnb_4bit_use_double_quant=True,
             )
-        elif model_args.quantization == "bitandbytes-8bit":
+        elif model_args.quantization == "bitsandbytes-8bit":
             quantization_config = BitsAndBytesConfig(load_in_8bit=True)
         else:
             quantization_config = None
