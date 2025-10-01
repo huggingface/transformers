@@ -108,9 +108,6 @@ class Idefics3ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-Idefics3ProcessorKwargs.__annotations__["images_kwargs"] = Idefics3ImagesKwargs  # python 3.8 compatibility
-
-
 class Idefics3Processor(ProcessorMixin):
     r"""
     Constructs a Idefics3 processor which wraps a LLama tokenizer and Idefics3 image processor into a single processor.

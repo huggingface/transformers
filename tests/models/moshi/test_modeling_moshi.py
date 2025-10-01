@@ -157,7 +157,6 @@ class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     all_model_classes = (MoshiModel, MoshiForCausalLM) if is_torch_available() else ()
     test_pruning = False
     test_resize_embeddings = True
-    test_head_masking = False
     pipeline_model_mapping = (
         {
             "feature-extraction": MoshiModel,
@@ -533,7 +532,6 @@ class MoshiTester:
 class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (MoshiForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False  # training is not supported yet for Moshi
-    test_headmasking = False
     test_resize_embeddings = False
     test_torchscript = False
 

@@ -84,12 +84,13 @@ alt="drawing" width="600"/>
 The `DepthProForDepthEstimation` model uses a `DepthProEncoder`, for encoding the input image and a `FeatureFusionStage` for fusing the output features from encoder.
 
 The `DepthProEncoder` further uses two encoders:
+
 - `patch_encoder`
-   - Input image is scaled with multiple ratios, as specified in the `scaled_images_ratios` configuration.
-   - Each scaled image is split into smaller **patches** of size `patch_size` with overlapping areas determined by `scaled_images_overlap_ratios`.
-   - These patches are processed by the **`patch_encoder`**
+  - Input image is scaled with multiple ratios, as specified in the `scaled_images_ratios` configuration.
+  - Each scaled image is split into smaller **patches** of size `patch_size` with overlapping areas determined by `scaled_images_overlap_ratios`.
+  - These patches are processed by the **`patch_encoder`**
 - `image_encoder`
-   - Input image is also rescaled to `patch_size` and processed by the **`image_encoder`**
+  - Input image is also rescaled to `patch_size` and processed by the **`image_encoder`**
 
 Both these encoders can be configured via `patch_model_config` and `image_model_config` respectively, both of which are separate `Dinov2Model` by default.
 
@@ -159,8 +160,8 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - Official Implementation: [apple/ml-depth-pro](https://github.com/apple/ml-depth-pro)
 - DepthPro Inference Notebook: [DepthPro Inference](https://github.com/qubvel/transformers-notebooks/blob/main/notebooks/DepthPro_inference.ipynb)
 - DepthPro for Super Resolution and Image Segmentation
-    - Read blog on Medium: [Depth Pro: Beyond Depth](https://medium.com/@raoarmaghanshakir040/depth-pro-beyond-depth-9d822fc557ba)
-    - Code on Github: [geetu040/depthpro-beyond-depth](https://github.com/geetu040/depthpro-beyond-depth)
+  - Read blog on Medium: [Depth Pro: Beyond Depth](https://medium.com/@raoarmaghanshakir040/depth-pro-beyond-depth-9d822fc557ba)
+  - Code on Github: [geetu040/depthpro-beyond-depth](https://github.com/geetu040/depthpro-beyond-depth)
 
 If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 

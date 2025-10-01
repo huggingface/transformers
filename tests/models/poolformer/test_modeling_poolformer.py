@@ -126,7 +126,6 @@ class PoolFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         else {}
     )
 
-    test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
     test_torchscript = False
