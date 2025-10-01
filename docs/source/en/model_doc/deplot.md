@@ -64,8 +64,5 @@ optimizer = Adafactor(self.parameters(), scale_parameter=False, relative_step=Fa
 scheduler = get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=1000, num_training_steps=40000)
 ```
 
-<Tip>
-
-DePlot is a model trained using `Pix2Struct` architecture. For API reference, see [`Pix2Struct` documentation](pix2struct).
-
-</Tip>
+> [!TIP]
+> DePlot is a model trained using `Pix2Struct` architecture. For API reference, see [`Pix2Struct` documentation](pix2struct).
