@@ -23,7 +23,7 @@ import logging
 import sys
 import uuid
 
-from framework.benchmark_config import cross_generate_configs, smart_generate_configs
+from framework.benchmark_config import cross_generate_configs, generate_all_configs, generate_useful_configs
 from framework.benchmark_runner import BenchmarkRunner
 
 
@@ -63,7 +63,7 @@ if __name__ == "__main__":
     logger.info(f"Output directory: {args.output_dir}")
 
     # Create benchmark configs
-    benchmark_configs = cross_generate_configs(
+    benchmark_configs = generate_all_configs(
         warmup_iterations=args.warmup,
         measurement_iterations=args.iterations,
         batch_size=args.batch_size,

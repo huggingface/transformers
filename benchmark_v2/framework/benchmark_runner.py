@@ -165,7 +165,7 @@ class BenchmarkRunner:
         )
 
         # Prepare compile config
-        if config.compilation:
+        if config.compile_mode is not None:
             gen_config.compile_config = CompileConfig(mode=config.compile_mode, options=config.compile_options)
             if config.use_cache:
                 gen_config.cache_implementation = "static"
@@ -297,7 +297,7 @@ class BenchmarkRunner:
                 config.sdpa_backend = default_backend
 
             # Skip if already run
-            if config.name in all_results:
+            if config.hash in all_results:
                 self.logger.info(f"Skipping duplicate config {config.name} for model {model_id} ({i + 1}/{n_configs})")
                 continue
 
@@ -311,7 +311,7 @@ class BenchmarkRunner:
             try:
                 results = self.run_one_benchmark(model_id, config, num_tokens_to_profile)
                 if results is not None:
-                    all_results[config.name] = results
+                    all_results[config.hash] = results
 
             except Exception as e:
                 self.logger.error(f"Error running with scenario: {config.name}:\n{repr(e)}")
@@ -335,11 +335,11 @@ class BenchmarkRunner:
 
         # Convert results to dict
         converted_results = {}
-        for cfg_name in results.keys():
-            converted_results[cfg_name] = {
-                "metadata": results[cfg_name]["metadata"].to_dict(),
-                "measures": results[cfg_name]["measures"].to_dict(),
-                "config": results[cfg_name]["config"].to_dict(),
+        for cfg_hash in results.keys():
+            converted_results[cfg_hash] = {
+                "metadata": results[cfg_hash]["metadata"].to_dict(),
+                "measures": results[cfg_hash]["measures"].to_dict(),
+                "config": results[cfg_hash]["config"].to_dict(),
             }
 
         # Save to JSON file
