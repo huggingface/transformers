@@ -128,19 +128,10 @@ class Bnb4BitHfQuantizer(HfQuantizer):
                 )
 
     def adjust_target_dtype(self, target_dtype: "torch.dtype") -> "torch.dtype":
-        if version.parse(importlib.metadata.version("accelerate")) > version.parse("0.19.0"):
-            from accelerate.utils import CustomDtype
-
-            if target_dtype != torch.int8:
-                logger.info("target_dtype {target_dtype} is replaced by `CustomDtype.INT4` for 4-bit BnB quantization")
-            return CustomDtype.INT4
-        else:
-            raise ValueError(
-                "You are using `device_map='auto'` on a 4bit loaded version of the model. To automatically compute"
-                " the appropriate device map, you should upgrade your `accelerate` library,"
-                "`pip install --upgrade accelerate` or install it from source to support fp4 auto device map"
-                "calculation. You may encounter unexpected behavior, or pass your own device map"
-            )
+        from accelerate.utils import CustomDtype
+        if target_dtype != torch.int8:
+            logger.info("target_dtype {target_dtype} is replaced by `CustomDtype.INT4` for 4-bit BnB quantization")
+        return CustomDtype.INT4
 
     def update_unexpected_keys(self, model, unexpected_keys: list[str]) -> list[str]:
         return [k for k in unexpected_keys if not any(k.endswith(x) for x in self.bnb_keys)]

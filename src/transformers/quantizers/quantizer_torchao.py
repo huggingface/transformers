@@ -181,25 +181,24 @@ class TorchAoHfQuantizer(HfQuantizer):
             return None, {}
 
     def adjust_target_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
-        if version.parse(importlib.metadata.version("accelerate")) > version.parse("0.19.0"):
-            from accelerate.utils import CustomDtype
+        from accelerate.utils import CustomDtype
 
-            # Import AOBaseConfig directly since we know we have the right version
-            if self.quantization_config._get_ao_version() > version.Version("0.9.0"):
-                from torchao.core.config import AOBaseConfig
+        # Import AOBaseConfig directly since we know we have the right version
+        if self.quantization_config._get_ao_version() > version.Version("0.9.0"):
+            from torchao.core.config import AOBaseConfig
 
-                quant_type = self.quantization_config.quant_type
-                if isinstance(quant_type, AOBaseConfig):
-                    # Extract size digit using fuzzy match on the class name
-                    config_name = quant_type.__class__.__name__
-                    size_digit = fuzzy_match_size(config_name)
+            quant_type = self.quantization_config.quant_type
+            if isinstance(quant_type, AOBaseConfig):
+                # Extract size digit using fuzzy match on the class name
+                config_name = quant_type.__class__.__name__
+                size_digit = fuzzy_match_size(config_name)
 
-                    # Map the extracted digit to appropriate dtype
-                    if size_digit == "4":
-                        return CustomDtype.INT4
-                    else:
-                        # Default to int8
-                        return torch.int8
+                # Map the extracted digit to appropriate dtype
+                if size_digit == "4":
+                    return CustomDtype.INT4
+                else:
+                    # Default to int8
+                    return torch.int8
 
             # Original mapping for non-AOBaseConfig types
             map_to_target_dtype = {
