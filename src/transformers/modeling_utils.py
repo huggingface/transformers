@@ -2065,8 +2065,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if hasattr(self, "named_parameters"):
                 model_param_names = [name for name, _ in self.named_parameters()]
                 if model_param_names:  # Only validate if model has parameters
-                    import re
-
                     for layer_pattern in plan.keys():
                         # Convert pattern to regex (replace * with .*)
                         regex_pattern = layer_pattern.replace("*", r"\d+")
