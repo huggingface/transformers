@@ -275,7 +275,6 @@ class ChatArguments:
             "which case you must install this manually by running `pip install flash-attn --no-build-isolation`."
         },
     )
-
     quantization: Optional[str] = field(
         default=None,
         metadata={"help": "Which quantization method to use.", "choices": ["bitsandbytes-4bit", "bitsandbytes-8bit"]},
@@ -360,7 +359,7 @@ class ChatCommand(BaseTransformersCLICommand):
                 self.spawn_backend = True
                 args.model_name_or_path = args.model_name_or_path_or_address
 
-        SUPPORTED_QUANT_METHOD = ["bitandbytes-4bit", "bitandbytes-8bit"]
+        SUPPORTED_QUANT_METHOD = ["bitsandbytes-4bit", "bitsandbytes-8bit"]
         if args.quantization is not None and args.quantization not in SUPPORTED_QUANT_METHOD:
             raise ValueError(
                 f"You have set a wrong value for quantization. Supported methods are {SUPPORTED_QUANT_METHOD}."
@@ -528,49 +527,6 @@ class ChatCommand(BaseTransformersCLICommand):
         return pad_token_id, all_eos_token_ids
 
     # -----------------------------------------------------------------------------------------------------------------
-    # Model loading and performance automation methods
-    @staticmethod
-    def get_quantization_config(model_args: ChatArguments) -> Optional[BitsAndBytesConfig]:
-        if model_args.quantization == "bitsandbytes-4bit":
-            quantization_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_compute_dtype=model_args.torch_dtype,
-                bnb_4bit_quant_type="nf4",
-                bnb_4bit_use_double_quant=True,
-            )
-        elif model_args.quantization == "bitsandbytes-8bit":
-            quantization_config = BitsAndBytesConfig(load_in_8bit=True)
-        else:
-            quantization_config = None
-
-        return quantization_config
-
-    def load_model_and_tokenizer(self, args: ChatArguments) -> tuple["AutoModelForCausalLM", AutoTokenizer]:
-        tokenizer = AutoTokenizer.from_pretrained(
-            args.model_name_or_path_positional,
-            revision=args.model_revision,
-            trust_remote_code=args.trust_remote_code,
-        )
-
-        dtype = args.dtype if args.dtype in ["auto", None] else getattr(torch, args.dtype)
-        quantization_config = self.get_quantization_config(args)
-        model_kwargs = {
-            "revision": args.model_revision,
-            "attn_implementation": args.attn_implementation,
-            "dtype": dtype,
-            "device_map": "auto",
-            "quantization_config": quantization_config,
-        }
-        model = AutoModelForCausalLM.from_pretrained(
-            args.model_name_or_path_positional, trust_remote_code=args.trust_remote_code, **model_kwargs
-        )
-
-        if getattr(model, "hf_device_map", None) is None:
-            model = model.to(args.device)
-
-        return model, tokenizer
-
-    # -----------------------------------------------------------------------------------------------------------------
     # User commands
     def handle_non_exit_user_commands(
         self,
@@ -666,10 +622,7 @@ class ChatCommand(BaseTransformersCLICommand):
                 dtype=self.args.dtype,
                 trust_remote_code=self.args.trust_remote_code,
                 attn_implementation=self.args.attn_implementation,
-                load_in_8bit=self.args.load_in_8bit,
-                load_in_4bit=self.args.load_in_4bit,
-                bnb_4bit_quant_type=self.args.bnb_4bit_quant_type,
-                use_bnb_nested_quant=self.args.use_bnb_nested_quant,
+                quantization= self.args.quantization,
                 host=self.args.host,
                 port=self.args.port,
                 log_level="error",
