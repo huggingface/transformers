@@ -130,7 +130,6 @@ from .utils import (
     is_qutlass_available,
     is_rjieba_available,
     is_sacremoses_available,
-    is_safetensors_available,
     is_schedulefree_available,
     is_scipy_available,
     is_sentencepiece_available,
@@ -496,13 +495,6 @@ def require_g2p_en(test_case):
     Decorator marking a test that requires g2p_en. These tests are skipped when SentencePiece isn't installed.
     """
     return unittest.skipUnless(is_g2p_en_available(), "test requires g2p_en")(test_case)
-
-
-def require_safetensors(test_case):
-    """
-    Decorator marking a test that requires safetensors. These tests are skipped when safetensors isn't installed.
-    """
-    return unittest.skipUnless(is_safetensors_available(), "test requires safetensors")(test_case)
 
 
 def require_rjieba(test_case):

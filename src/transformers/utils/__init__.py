@@ -198,7 +198,6 @@ from .import_utils import (
     is_rjieba_available,
     is_rocm_platform,
     is_sacremoses_available,
-    is_safetensors_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_schedulefree_available,
