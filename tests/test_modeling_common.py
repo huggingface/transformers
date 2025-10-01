@@ -84,7 +84,6 @@ from transformers.testing_utils import (
     require_flash_attn_3,
     require_kernels,
     require_non_hpu,
-    require_safetensors,
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
@@ -2450,7 +2449,6 @@ class ModelTesterMixin:
             params_tied_2 = list(model_tied.parameters())
             self.assertEqual(len(params_tied_2), len(params_tied))
 
-    @require_safetensors
     def test_can_use_safetensors(self):
         for model_class in self.all_model_classes:
             config, _ = self.model_tester.prepare_config_and_inputs_for_common()
