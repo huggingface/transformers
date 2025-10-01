@@ -90,6 +90,8 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "torch_compile_test: mark test which tests torch compile functionality")
     config.addinivalue_line("markers", "torch_export_test: mark test which tests torch export functionality")
 
+    os.environ['DISABLE_SAFETENSORS_CONVERSION'] = 'false'
+
 
 def pytest_collection_modifyitems(items):
     for item in items:
