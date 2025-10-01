@@ -66,12 +66,6 @@ class JambaConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        num_logits_to_keep (`int` or `None`, *optional*, defaults to 1):
-            Number of prompt logits to calculate during generation. If `None`, all logits will be calculated. If an
-            integer value, only last `num_logits_to_keep` logits will be calculated. Default is 1 because only the
-            logits of the last prompt token are needed for generation. For long sequences, the logits for the entire
-            sequence may use a lot of memory so, setting `num_logits_to_keep=1` will reduce memory footprint
-            significantly.
         output_router_logits (`bool`, *optional*, defaults to `False`):
             Whether or not the router logits should be returned by the model. Enabling this will also
             allow the model to output the auxiliary loss. See [here]() for more details
@@ -139,7 +133,6 @@ class JambaConfig(PretrainedConfig):
         initializer_range=0.02,
         rms_norm_eps=1e-6,
         use_cache=True,
-        num_logits_to_keep=1,
         output_router_logits=False,
         router_aux_loss_coef=0.001,
         pad_token_id=0,
@@ -181,7 +174,6 @@ class JambaConfig(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
 
         self.use_cache = use_cache
-        self.num_logits_to_keep = num_logits_to_keep
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
 
