@@ -46,7 +46,6 @@ class RiceConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-05,
         text_hidden_size=2560,
-        attn_implementation="sdpa",
         attention_dropout=0.0,
         **kwargs,
     ):
@@ -65,7 +64,6 @@ class RiceConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.text_hidden_size = text_hidden_size
         self.attention_dropout = attention_dropout
-        self.attn_implementation = attn_implementation
 
 
 class LlavaOnevision1_5Config(PretrainedConfig):

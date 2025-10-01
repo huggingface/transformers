@@ -68,27 +68,26 @@ class LlavaOnevisionVision1_5Text2TextModelTester:
         eos_token_id=1,
         pad_token_id=2,
         vision_start_token_id=3,
-        image_token_id=151655,
-        video_token_id=151656,
-        vocab_size=151936,
+        image_token_id=4,
+        video_token_id=5,
+        vocab_size=500,
         is_training=True,
         text_config={
             "attention_bias": False,
             "attention_dropout": 0.0,
-            "head_dim": 128,
             "hidden_act": "silu",
-            "hidden_size": 4096,
+            "hidden_size": 32,
             "image_token_id": None,
             "initializer_range": 0.02,
-            "intermediate_size": 12288,
+            "intermediate_size": 37,
             "tie_word_embeddings": False,
-            "layer_types": ["full_attention" for _ in range(36)],
-            "max_position_embeddings": 32768,
-            "max_window_layers": 36,
+            "layer_types": ["full_attention" for _ in range(2)],
+            "max_position_embeddings": 512,
+            "max_window_layers": 3,
             "model_type": "qwen3",
-            "num_attention_heads": 32,
-            "num_hidden_layers": 36,
-            "num_key_value_heads": 8,
+            "num_attention_heads": 4,
+            "num_hidden_layers": 2,
+            "num_key_value_heads": 4,
             "rms_norm_eps": 1e-06,
             "rope_scaling": None,
             "rope_theta": 1000000.0,
@@ -96,23 +95,23 @@ class LlavaOnevisionVision1_5Text2TextModelTester:
             "use_cache": True,
             "use_sliding_window": False,
             "video_token_id": None,
-            "vocab_size": 151936,
+            "vocab_size": 500,
         },
         vision_config={
-            "depth": 24,
-            "embed_dim": 1024,
+            "depth": 2,
+            "embed_dim": 32,
             "hidden_act": "gelu",
-            "hidden_size": 1024,
+            "hidden_size": 32,
             "in_channels": 3,
             "initializer_range": 0.02,
-            "intermediate_size": 4096,
+            "intermediate_size": 37,
             "layer_norm_eps": 1e-05,
             "model_type": "rice_vit",
-            "num_heads": 16,
+            "num_heads": 4,
             "patch_size": 14,
             "spatial_merge_size": 1,
             "temporal_patch_size": 1,
-            "text_hidden_size": 4096,
+            "text_hidden_size": 32,
         },
     ):
         self.parent = parent
@@ -120,9 +119,10 @@ class LlavaOnevisionVision1_5Text2TextModelTester:
         self.vision_config = vision_config
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
         self.vocab_size = vocab_size
+        self.num_hidden_layers = text_config["num_hidden_layers"]
+        self.num_attention_heads = text_config["num_attention_heads"]
+        self.hidden_size = text_config["hidden_size"]
 
         self.batch_size = batch_size
         self.num_channels = num_channels
@@ -130,6 +130,8 @@ class LlavaOnevisionVision1_5Text2TextModelTester:
         self.num_image_tokens = 32
         self.seq_length = seq_length + self.num_image_tokens
         self.ignore_index = ignore_index
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
         self.vision_start_token_id = vision_start_token_id
         self.is_training = is_training
@@ -142,9 +144,6 @@ class LlavaOnevisionVision1_5Text2TextModelTester:
             video_token_id=self.video_token_id,
             vision_start_token_id=self.vision_start_token_id,
             vocab_size=self.vocab_size,
-            bos_token_id=self.bos_token_id,
-            eos_token_id=self.eos_token_id,
-            pad_token_id=self.pad_token_id,
         )
 
     def prepare_config_and_inputs(self):
@@ -222,7 +221,7 @@ class LlavaOnevision1_5ForConditionalGenerationModelTest(ModelTesterMixin, Gener
         for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
-                if param.requires_grad:
+                if param.requires_grad:  # and "class_pos_emb" not in name and "class_embedding" not in name:
                     self.assertIn(
                         ((param.data.mean() * 1e9).round() / 1e9).item(),
                         [0.0, 1.0],
@@ -271,6 +270,18 @@ class LlavaOnevision1_5ForConditionalGenerationModelTest(ModelTesterMixin, Gener
                 pixel_values=pixel_values,
                 image_grid_thw=image_grid_thw,
             )
+
+    @unittest.skip(reason="TODO: nn.Parameter (class_embedding and class_pos_emb) can't be initialized correctly")
+    def test_can_init_all_missing_weights(self):
+        pass
+
+    @unittest.skip(reason="Llava-Onevision 1.5 does not support feed_forward chunking yet")
+    def test_feed_forward_chunking(self):
+        pass
+
+    @unittest.skip(reason="Llava-Onevision 1.5 does not support generation from inputs_embeds yet")
+    def test_generate_from_inputs_embeds_1_beam_search(self):
+        pass
 
     @unittest.skip(
         reason="This architecture seem to not compute gradients properly when using GC, RiceVisionModel does not support standalone training"

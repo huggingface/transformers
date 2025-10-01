@@ -75,7 +75,6 @@ class RiceConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-05,
         text_hidden_size=2560,
-        attn_implementation="sdpa",
         attention_dropout=0.0,
         **kwargs,
     ):
@@ -94,7 +93,6 @@ class RiceConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.text_hidden_size = text_hidden_size
         self.attention_dropout = attention_dropout
-        self.attn_implementation = attn_implementation
 
 
 class LlavaOnevision1_5Config(PretrainedConfig):
@@ -265,8 +263,8 @@ class RiceAttention(nn.Module):
         v = v.transpose(0, 1).unsqueeze(0)
 
         attention_interface: Callable = eager_attention_forward
-        if self.config.attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config.attn_implementation]
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, _ = attention_interface(
             self,
@@ -321,9 +319,8 @@ class RicePretrainedModel(PreTrainedModel):
         head_dim = config.hidden_size // config.num_heads
         self.rotary_pos_emb = RiceRotaryEmbedding(head_dim // 2)
 
-        scale = config.hidden_size**-0.5
-        self.class_embedding = nn.Parameter(scale * torch.randn(config.hidden_size))
-        self.class_pos_emb = nn.Parameter(torch.randn(1, head_dim // 2))
+        self.class_embedding = nn.Parameter(torch.ones(config.hidden_size))
+        self.class_pos_emb = nn.Parameter(torch.ones(1, head_dim // 2))
         # self.window_size = config.window_size
         self.window_size = None
 
@@ -492,6 +489,13 @@ class LlavaOnevision1_5PreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_cache_class = True
     _supports_static_cache = True
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, RicePretrainedModel):
+            std_cls = float(module.config.hidden_size) ** -0.5
+            torch.nn.init.normal_(module.class_embedding, mean=0.0, std=std_cls)
+            torch.nn.init.normal_(module.class_pos_emb, mean=0.0, std=std_cls)
 
 
 # ------------------------- Top-level multi-modal Model -------------------------
@@ -782,42 +786,53 @@ class LlavaOnevision1_5Model(LlavaOnevision1_5PreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
-            if pixel_values is not None:
-                image_embeds = self.get_image_features(pixel_values, image_grid_thw)
-                n_image_tokens = (input_ids == self.config.image_token_id).sum().item()
-                n_image_features = image_embeds.shape[0]
-                if not is_torchdynamo_compiling() and n_image_tokens != n_image_features:
-                    raise ValueError(
-                        f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-                    )
-                image_mask = (
-                    (input_ids == self.config.image_token_id)
-                    .unsqueeze(-1)
-                    .expand_as(inputs_embeds)
-                    .to(inputs_embeds.device)
-                )
-                image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
-                inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
-            if pixel_values_videos is not None:
-                video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw)
-                n_video_tokens = (input_ids == self.config.video_token_id).sum().item()
-                n_video_features = video_embeds.shape[0]
-                if not is_torchdynamo_compiling() and n_video_tokens != n_video_features:
-                    raise ValueError(
-                        f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
-                    )
-                video_mask = (
-                    (input_ids == self.config.video_token_id)
-                    .unsqueeze(-1)
-                    .expand_as(inputs_embeds)
-                    .to(inputs_embeds.device)
-                )
-                video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
-                inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
+        if attention_mask is not None:
+            attention_mask = attention_mask.to(inputs_embeds.device)
 
-            if attention_mask is not None:
-                attention_mask = attention_mask.to(inputs_embeds.device)
+        def _build_token_mask_from_embeds(token_id: int, embeds: torch.Tensor) -> torch.Tensor:
+            ref = self.get_input_embeddings().weight[token_id].to(embeds.device, embeds.dtype)
+            return torch.max(torch.abs(embeds - ref), dim=-1).values < 1e-6
+
+        if pixel_values is not None:
+            image_embeds = self.get_image_features(pixel_values, image_grid_thw)
+            n_image_features = image_embeds.shape[0]
+            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+
+            if input_ids is not None:
+                image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1).expand_as(inputs_embeds)
+            else:
+                mask_1d = _build_token_mask_from_embeds(self.config.image_token_id, inputs_embeds)
+                image_mask = mask_1d.unsqueeze(-1).expand_as(inputs_embeds)
+
+            if not is_torchdynamo_compiling():
+                n_tokens = image_mask[..., 0].sum().item()
+                if n_tokens != n_image_features:
+                    raise ValueError(
+                        f"Image features and image tokens do not match: tokens: {n_tokens}, features {n_image_features}"
+                    )
+
+            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+
+        if pixel_values_videos is not None:
+            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw)
+            n_video_features = video_embeds.shape[0]
+            video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+
+            if input_ids is not None:
+                video_mask = (input_ids == self.config.video_token_id).unsqueeze(-1).expand_as(inputs_embeds)
+            else:
+                mask_1d = _build_token_mask_from_embeds(self.config.video_token_id, inputs_embeds)
+                video_mask = mask_1d.unsqueeze(-1).expand_as(inputs_embeds)
+
+            if not is_torchdynamo_compiling():
+                n_tokens = video_mask[..., 0].sum().item()
+                if n_tokens != n_video_features:
+                    raise ValueError(
+                        f"Video features and video tokens do not match: tokens: {n_tokens}, features {n_video_features}"
+                    )
+
+            inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache()
