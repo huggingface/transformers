@@ -68,6 +68,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "JetMoeConfig": ["output_router_logits"],
     # Dropout with this value was declared but never used
     "Phi3Config": ["embd_pdrop"],
+    "PhiMoeConfig": ["max_position_embeddings"],
     # used to compute the property `self.chunk_length`
     "EncodecConfig": ["overlap"],
     # used to compute `frame_rate`

@@ -16,6 +16,7 @@
 from typing import Optional
 
 import torch
+from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
