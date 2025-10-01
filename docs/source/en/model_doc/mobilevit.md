@@ -99,11 +99,6 @@ print(f"The predicted class label is:{predicted_class_label}")
 
 [[autodoc]] MobileViTConfig
 
-## MobileViTFeatureExtractor
-
-[[autodoc]] MobileViTFeatureExtractor
-    - __call__
-    - post_process_semantic_segmentation
 
 ## MobileViTImageProcessor
 

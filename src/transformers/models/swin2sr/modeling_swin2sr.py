@@ -835,7 +835,7 @@ class Upsample(nn.Module):
         self.scale = scale
         if (scale & (scale - 1)) == 0:
             # scale = 2^n
-            for i in range(int(math.log(scale, 2))):
+            for i in range(int(math.log2(scale))):
                 self.add_module(f"convolution_{i}", nn.Conv2d(num_features, 4 * num_features, 3, 1, 1))
                 self.add_module(f"pixelshuffle_{i}", nn.PixelShuffle(2))
         elif scale == 3:
@@ -846,7 +846,7 @@ class Upsample(nn.Module):
 
     def forward(self, hidden_state):
         if (self.scale & (self.scale - 1)) == 0:
-            for i in range(int(math.log(self.scale, 2))):
+            for i in range(int(math.log2(self.scale))):
                 hidden_state = self.__getattr__(f"convolution_{i}")(hidden_state)
                 hidden_state = self.__getattr__(f"pixelshuffle_{i}")(hidden_state)
 
