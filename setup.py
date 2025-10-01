@@ -124,7 +124,7 @@ _deps = [
     "natten>=0.14.6,<0.15.0",
     "nltk<=3.8.1",
     "num2words",
-    "numpy>=1.17",
+    "numpy>=1.17,<2.0.0",
     "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
     "onnxruntime>=1.4.0",
