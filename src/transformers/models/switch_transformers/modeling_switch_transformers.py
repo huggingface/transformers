@@ -1005,8 +1005,34 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
 
             if self.gradient_checkpointing and self.training:
                 def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs)
+                    def custom_forward(
+                        hidden_states,
+                        attention_mask,
+                        position_bias,
+                        encoder_hidden_states,
+                        encoder_attention_mask,
+                        encoder_decoder_position_bias,
+                        past_key_values,
+                        use_cache,
+                        output_attentions,
+                        output_router_logits,
+                        return_dict,
+                        cache_position,
+                    ):
+                        return module(
+                            hidden_states,
+                            attention_mask=attention_mask,
+                            position_bias=position_bias,
+                            encoder_hidden_states=encoder_hidden_states,
+                            encoder_attention_mask=encoder_attention_mask,
+                            encoder_decoder_position_bias=encoder_decoder_position_bias,
+                            past_key_values=past_key_values,
+                            use_cache=use_cache,
+                            output_attentions=output_attentions,
+                            output_router_logits=output_router_logits,
+                            return_dict=return_dict,
+                            cache_position=cache_position,
+                        )
                     return custom_forward
 
                 layer_outputs = self._gradient_checkpointing_func(
@@ -1100,7 +1126,6 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
             router_probs=all_router_probs,
         )
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaModel._update_causal_mask
     def _update_causal_mask(
         self,
         attention_mask: torch.Tensor,
@@ -1167,7 +1192,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         return causal_mask
 
     @staticmethod
-    # Copied from transformers.models.llama.modeling_llama.LlamaPreTrainedModel._prepare_4d_causal_attention_mask_with_cache_position
+    @staticmethod
     def _prepare_4d_causal_attention_mask_with_cache_position(
         attention_mask: torch.Tensor,
         sequence_length: int,
