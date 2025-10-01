@@ -37,6 +37,7 @@ Note that most of the aforementioned components are implemented generically to e
 This model was contributed by [Alexander Brooks](https://huggingface.co/abrooks9944), [Avihu Dekel](https://huggingface.co/Avihu), and [George Saon](https://huggingface.co/gsaon).
 
 ## Usage tips
+
 - This model bundles its own LoRA adapter, which will be automatically loaded and enabled/disabled as needed during inference calls. Be sure to install [PEFT](https://github.com/huggingface/peft) to ensure the LoRA is correctly applied!
 
 <!-- TODO (@alex-jw-brooks) Add an example here once the model compatible with the transformers implementation is released -->

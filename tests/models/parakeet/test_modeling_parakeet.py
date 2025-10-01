@@ -167,7 +167,6 @@ class ParakeetEncoderModelTest(ModelTesterMixin, unittest.TestCase):
 
     test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     test_torch_exportable = True
 
     def setUp(self):
@@ -252,7 +251,6 @@ class ParakeetForCTCModelTest(ModelTesterMixin, unittest.TestCase):
     test_attention_outputs = False
     test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     test_torch_exportable = True
 
     _is_composite = True

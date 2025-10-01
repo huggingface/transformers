@@ -575,7 +575,6 @@ class ModelTesterMixin:
     test_pruning = True
     test_resize_embeddings = True
     test_resize_position_embeddings = False
-    test_head_masking = True
     test_mismatched_shapes = True
     test_missing_keys = True
     test_torch_exportable = False
@@ -1706,77 +1705,6 @@ class ModelTesterMixin:
                 # (Even with this call, there are still memory leak by ~0.04MB)
                 self.clear_torch_jit_class_registry()
 
-    def test_headmasking(self):
-        if not self.test_head_masking:
-            self.skipTest(reason="Model does not support head masking")
-
-        global_rng.seed(42)
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        global_rng.seed()
-
-        inputs_dict["output_attentions"] = True
-        config.output_hidden_states = True
-        configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
-        configs_no_init._attn_implementation = "eager"  # head mask works only in eager mode and will be removed soon
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            model.to(torch_device)
-            model.eval()
-
-            # Prepare head_mask
-            # Set require_grad after having prepared the tensor to avoid error (leaf variable has been moved into the graph interior)
-            head_mask = torch.ones(
-                self.model_tester.num_hidden_layers,
-                self.model_tester.num_attention_heads,
-                device=torch_device,
-            )
-            head_mask[0, 0] = 0
-            head_mask[-1, :-1] = 0
-            head_mask.requires_grad_(requires_grad=True)
-            inputs = self._prepare_for_class(inputs_dict, model_class).copy()
-            inputs["head_mask"] = head_mask
-            if model.config.is_encoder_decoder:
-                signature = inspect.signature(model.forward)
-                arg_names = [*signature.parameters.keys()]
-                if "decoder_head_mask" in arg_names:  # necessary differentiation because of T5 model
-                    inputs["decoder_head_mask"] = head_mask
-                if "cross_attn_head_mask" in arg_names:
-                    inputs["cross_attn_head_mask"] = head_mask
-            outputs = model(**inputs, return_dict=True)
-
-            # Test that we can get a gradient back for importance score computation
-            output = sum(t.sum() for t in outputs[0])
-            output = output.sum()
-            output.backward()
-            multihead_outputs = head_mask.grad
-
-            self.assertIsNotNone(multihead_outputs)
-            self.assertEqual(len(multihead_outputs), self.model_tester.num_hidden_layers)
-
-            def check_attentions_validity(attentions):
-                # Remove Nan
-                for t in attentions:
-                    self.assertLess(
-                        torch.sum(torch.isnan(t)), t.numel() / 4
-                    )  # Check we don't have more than 25% nans (arbitrary)
-                attentions = [
-                    t.masked_fill(torch.isnan(t), 0.0) for t in attentions
-                ]  # remove them (the test is less complete)
-
-                self.assertAlmostEqual(attentions[0][..., 0, :, :].flatten().sum().item(), 0.0)
-                self.assertNotEqual(attentions[0][..., -1, :, :].flatten().sum().item(), 0.0)
-                if len(attentions) > 2:  # encoder-decoder models have only 2 layers in each module
-                    self.assertNotEqual(attentions[1][..., 0, :, :].flatten().sum().item(), 0.0)
-                self.assertAlmostEqual(attentions[-1][..., -2, :, :].flatten().sum().item(), 0.0)
-                self.assertNotEqual(attentions[-1][..., -1, :, :].flatten().sum().item(), 0.0)
-
-            if model.config.is_encoder_decoder:
-                check_attentions_validity(outputs.encoder_attentions)
-                check_attentions_validity(outputs.decoder_attentions)
-                check_attentions_validity(outputs.cross_attentions)
-            else:
-                check_attentions_validity(outputs.attentions)
-
     def test_head_pruning(self):
         if not self.test_pruning:
             self.skipTest(reason="Pruning is not activated")
@@ -1786,9 +1714,6 @@ class ModelTesterMixin:
                 config,
                 inputs_dict,
             ) = self.model_tester.prepare_config_and_inputs_for_common()
-
-            if "head_mask" in inputs_dict:
-                del inputs_dict["head_mask"]
 
             inputs_dict["output_attentions"] = True
             config.output_hidden_states = False
@@ -1821,9 +1746,6 @@ class ModelTesterMixin:
                 config,
                 inputs_dict,
             ) = self.model_tester.prepare_config_and_inputs_for_common()
-
-            if "head_mask" in inputs_dict:
-                del inputs_dict["head_mask"]
 
             inputs_dict["output_attentions"] = True
             config.output_hidden_states = False
@@ -1861,9 +1783,6 @@ class ModelTesterMixin:
                 inputs_dict,
             ) = self.model_tester.prepare_config_and_inputs_for_common()
 
-            if "head_mask" in inputs_dict:
-                del inputs_dict["head_mask"]
-
             inputs_dict["output_attentions"] = True
             config.output_hidden_states = False
             config._attn_implementation = "eager"
@@ -1897,9 +1816,6 @@ class ModelTesterMixin:
                 config,
                 inputs_dict,
             ) = self.model_tester.prepare_config_and_inputs_for_common()
-
-            if "head_mask" in inputs_dict:
-                del inputs_dict["head_mask"]
 
             inputs_dict["output_attentions"] = True
             config.output_hidden_states = False
@@ -2844,12 +2760,6 @@ class ModelTesterMixin:
     @require_torch_multi_gpu
     def test_multi_gpu_data_parallel_forward(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        # some params shouldn't be scattered by nn.DataParallel
-        # so just remove them if they are present.
-        blacklist_non_batched_params = ["head_mask", "decoder_head_mask", "cross_attn_head_mask"]
-        for k in blacklist_non_batched_params:
-            inputs_dict.pop(k, None)
 
         # move input tensors to accelerator O
         for k, v in inputs_dict.items():
@@ -3989,8 +3899,7 @@ class ModelTesterMixin:
             # Set sliding window to `True` and check that all tokens beyond window size are masked
             config.use_sliding_window = True
             config_dict = config.to_diff_dict()
-            if hasattr(config, "layer_types"):
-                del config_dict["layer_types"]
+            config_dict.pop("layer_types", None)
             new_config = config.__class__(**config_dict)
             # We need to set eager as otherwise `output_attentions` is not supported
             model = model_class._from_config(new_config, attn_implementation="eager").to(torch_device)
@@ -4007,8 +3916,7 @@ class ModelTesterMixin:
             # Check that all tokens beyond window size are not masked
             config.use_sliding_window = False
             config_dict = config.to_diff_dict()
-            if hasattr(config, "layer_types"):
-                del config_dict["layer_types"]
+            config_dict.pop("layer_types", None)
             new_config = config.__class__(**config_dict)
             # We need to set eager as otherwise `output_attentions` is not supported
             model = model_class._from_config(new_config, attn_implementation="eager").to(torch_device)

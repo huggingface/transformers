@@ -123,6 +123,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - See also: [Image classification task guide](../tasks/image_classification)
 
 **Semantic segmentation**
+
 - [Semantic segmentation task guide](../tasks/semantic_segmentation)
 
 If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
