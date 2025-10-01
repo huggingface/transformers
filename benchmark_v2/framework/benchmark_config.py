@@ -164,7 +164,7 @@ def generate_all_configs(
     ]
     return cross_generate_configs(
         attn_impl_and_sdpa_backend=all_attn_implementations,
-        compiled_mode=[None, "reduce-overhead", "max-autotune"],
+        compiled_mode=[None, "default", "reduce-overhead", "max-autotune"],
         kernelized=[False, KERNELIZATION_AVAILABLE],
         warmup_iterations=warmup_iterations,
         measurement_iterations=measurement_iterations,

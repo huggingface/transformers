@@ -132,13 +132,10 @@ class BenchmarkRunner:
         self._setup_for = ""
         # Attributes that are reset for each run
         self.model: Optional[GenerationMixin] = None
-        self.past_key_values: Optional[StaticCache] = None
 
     def cleanup(self) -> None:
         del self.model
         self.model = None
-        del self.past_key_values
-        self.past_key_values = None
         flush_memory()
 
     def setup_one_run(self, model_id: str, config: BenchmarkConfig) -> None:
@@ -244,7 +241,6 @@ class BenchmarkRunner:
             **self.inputs,
             max_new_tokens=max_new_tokens,
             streamer=streamer,
-            past_key_values=self.past_key_values,
         )
         wall_time_1 = time.perf_counter()
         # Stop gpu monitoring if needed
@@ -272,7 +268,6 @@ class BenchmarkRunner:
             _ = self.model.generate(
                 **self.inputs,
                 max_new_tokens=num_tokens_to_profile,
-                past_key_values=self.past_key_values,
             )
         if self.profile_dir is None:
             self.profile_dir = self.output_dir + "_profiles"
@@ -291,7 +286,7 @@ class BenchmarkRunner:
         n_configs = len(benchmark_configs)
         for i, config in enumerate(benchmark_configs):
             # Handle SDPA backend if not determined by the config (needs to be done before skipping duplicates)
-            if config.sdpa_backend is None:
+            if config.attn_implementation == "sdpa" and config.sdpa_backend is None:
                 default_backend = "flash_attention"  # FIXME: torch has a _cur_sdpa_kernel_backends but it fails
                 self.logger.warning(f"No SDPA backend provided, using {default_backend} instead.")
                 config.sdpa_backend = default_backend
