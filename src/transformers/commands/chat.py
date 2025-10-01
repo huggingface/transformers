@@ -277,13 +277,11 @@ class ChatArguments:
             "which case you must install this manually by running `pip install flash-attn --no-build-isolation`."
         },
     )
-    
-    quantization: Optional[str]= field(
+
+    quantization: Optional[str] = field(
         default=None,
-        metadata={
-            "help": "Which quantization method to use."
-                    "choices: [`bitsandbytes-4bit`,`bitsandbytes-8bit`]"
-        },
+        metadata={"help": "Which quantization method to use.",
+                  "choices": ["bitsandbytes-4bit","bitsandbytes-8bit"]}
     )
     # Serving settings
     host: str = field(default="localhost", metadata={"help": "Interface the server will listen to.."})
@@ -367,7 +365,9 @@ class ChatCommand(BaseTransformersCLICommand):
 
         SUPPORTED_QUANT_METHOD = ["bitandbytes-4bit", "bitandbytes-8bit"]
         if args.quantization is not None and args.quantization not in SUPPORTED_QUANT_METHOD:
-            raise ValueError(f"You have set a wrong value for quantization. Supported methods are {SUPPORTED_QUANT_METHOD}.")
+            raise ValueError(
+                f"You have set a wrong value for quantization. Supported methods are {SUPPORTED_QUANT_METHOD}."
+            )
         if not is_rich_available() and (not is_torch_available() and self.spawn_backend):
             raise ImportError(
                 "You need to install rich to use the chat interface. Additionally, you have not specified a remote "
@@ -536,15 +536,16 @@ class ChatCommand(BaseTransformersCLICommand):
     @staticmethod
     def get_quantization_config(model_args: ChatArguments) -> Optional["BitsAndBytesConfig"]:
         if model_args.quantization == "bitandbytes-4bit":
-            quantization_config = BitsAndBytesConfig(load_in_4bit=True,
-                                                     bnb_4bit_compute_dtype=model_args.torch_dtype,
-                                                     bnb_4bit_quant_type="nf4",
-                                                     bnb_4bit_use_double_quant=True
-                                                     )
+            quantization_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_compute_dtype=model_args.torch_dtype,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_use_double_quant=True,
+            )
         elif model_args.quantization == "bitandbytes-8bit":
             quantization_config = BitsAndBytesConfig(load_in_8bit=True)
         else:
-            quantization_config = None 
+            quantization_config = None
 
         return quantization_config
 
