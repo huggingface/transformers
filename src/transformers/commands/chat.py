@@ -31,7 +31,6 @@ import yaml
 from huggingface_hub import AsyncInferenceClient, ChatCompletionStreamOutput
 
 from transformers import (
-    AutoTokenizer,
     GenerationConfig,
     PreTrainedTokenizer,
 )
@@ -55,12 +54,7 @@ if is_rich_available():
     from rich.markdown import Markdown
 
 if is_torch_available():
-    import torch
-
-    from transformers import (
-        AutoModelForCausalLM,
-        BitsAndBytesConfig,
-    )
+    pass
 
 ALLOWED_KEY_CHARS = set(string.ascii_letters + string.whitespace)
 ALLOWED_VALUE_CHARS = set(
@@ -622,7 +616,7 @@ class ChatCommand(BaseTransformersCLICommand):
                 dtype=self.args.dtype,
                 trust_remote_code=self.args.trust_remote_code,
                 attn_implementation=self.args.attn_implementation,
-                quantization= self.args.quantization,
+                quantization=self.args.quantization,
                 host=self.args.host,
                 port=self.args.port,
                 log_level="error",

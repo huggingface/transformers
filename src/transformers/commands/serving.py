@@ -402,7 +402,7 @@ class ServeArguments:
         default=None,
         metadata={"help": "Which quantization method to use.", "choices": ["bitsandbytes-4bit", "bitsandbytes-8bit"]},
     )
-    
+
     # Serving settings
     host: str = field(default="localhost", metadata={"help": "Interface the server will listen to."})
     port: int = field(default=8000, metadata={"help": "Port the server will listen to."})
@@ -1605,7 +1605,7 @@ class ServeCommand(BaseTransformersCLICommand):
             "dtype": dtype,
             "device_map": args.device,
             "trust_remote_code": args.trust_remote_code,
-            "quantization_config": quantization_config
+            "quantization_config": quantization_config,
         }
 
         config = AutoConfig.from_pretrained(model_id, **model_kwargs)
