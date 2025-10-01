@@ -84,7 +84,6 @@ from transformers.testing_utils import (
     require_flash_attn_3,
     require_kernels,
     require_non_hpu,
-    require_safetensors,
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
@@ -2450,7 +2449,6 @@ class ModelTesterMixin:
             params_tied_2 = list(model_tied.parameters())
             self.assertEqual(len(params_tied_2), len(params_tied))
 
-    @require_safetensors
     def test_can_use_safetensors(self):
         for model_class in self.all_model_classes:
             config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -3899,8 +3897,7 @@ class ModelTesterMixin:
             # Set sliding window to `True` and check that all tokens beyond window size are masked
             config.use_sliding_window = True
             config_dict = config.to_diff_dict()
-            if hasattr(config, "layer_types"):
-                del config_dict["layer_types"]
+            config_dict.pop("layer_types", None)
             new_config = config.__class__(**config_dict)
             # We need to set eager as otherwise `output_attentions` is not supported
             model = model_class._from_config(new_config, attn_implementation="eager").to(torch_device)
@@ -3917,8 +3914,7 @@ class ModelTesterMixin:
             # Check that all tokens beyond window size are not masked
             config.use_sliding_window = False
             config_dict = config.to_diff_dict()
-            if hasattr(config, "layer_types"):
-                del config_dict["layer_types"]
+            config_dict.pop("layer_types", None)
             new_config = config.__class__(**config_dict)
             # We need to set eager as otherwise `output_attentions` is not supported
             model = model_class._from_config(new_config, attn_implementation="eager").to(torch_device)
@@ -4149,7 +4145,7 @@ class ModelTesterMixin:
                 if key in inputs_dict:
                     dummy_inputs[key] = inputs_dict[key].to(torch_device)
 
-            if config.get_text_config(decoder=True).is_encoder_decoder:
+            if config.is_encoder_decoder:
                 dummy_inputs["decoder_input_ids"] = inputs_dict["decoder_input_ids"].to(torch_device)
                 dummy_inputs["decoder_attention_mask"] = inputs_dict["decoder_attention_mask"].to(torch_device)
 

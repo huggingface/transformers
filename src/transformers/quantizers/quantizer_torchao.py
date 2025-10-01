@@ -26,12 +26,9 @@ from .quantizers_utils import get_module_from_name
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
+from safetensors import safe_open
 
-from ..utils import is_safetensors_available, is_torch_available, is_torchao_available, logging
-
-
-if is_safetensors_available():
-    from safetensors import safe_open
+from ..utils import is_torch_available, is_torchao_available, logging
 
 
 if is_torch_available():
@@ -435,7 +432,7 @@ class TorchAoHfQuantizer(HfQuantizer):
         return True
 
     def set_metadata(self, checkpoint_files: list[str]):
-        if checkpoint_files[0].endswith(".safetensors") and is_safetensors_available():
+        if checkpoint_files[0].endswith(".safetensors"):
             metadata = {}
             for checkpoint in checkpoint_files:
                 with safe_open(checkpoint, framework="pt") as f:

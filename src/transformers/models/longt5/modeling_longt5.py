@@ -1243,8 +1243,7 @@ class LongT5PreTrainedModel(PreTrainedModel):
 
     def _try_load_missing_tied_module(self, key):
         module = self
-        if key.endswith(".weight"):
-            key = key[: -len(".weight")]
+        key = key.removesuffix(".weight")
         for sub_key in key.split("."):
             if not hasattr(module, sub_key):
                 return

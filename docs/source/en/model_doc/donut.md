@@ -214,11 +214,6 @@ print(answer)
 [[autodoc]] DonutImageProcessorFast
     - preprocess
 
-## DonutFeatureExtractor
-
-[[autodoc]] DonutFeatureExtractor
-    - __call__
-
 ## DonutProcessor
 
 [[autodoc]] DonutProcessor
