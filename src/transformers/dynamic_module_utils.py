@@ -396,7 +396,7 @@ def get_cached_module_file(
     if is_local:
         submodule = _sanitize_module_name(os.path.basename(pretrained_model_name_or_path))
     else:
-        submodule = _sanitize_module_name(pretrained_model_name_or_path.replace("/", os.path.sep))
+        submodule = os.path.sep.join(map(_sanitize_module_name, pretrained_model_name_or_path.split("/")))
         cached_module = try_to_load_from_cache(
             pretrained_model_name_or_path, module_file, cache_dir=cache_dir, revision=_commit_hash, repo_type=repo_type
         )
