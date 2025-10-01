@@ -433,11 +433,11 @@ class DeepseekV2DecoderLayer(LlamaDecoderLayer):
         self.post_attention_layernorm = DeepseekV2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
-class DeepseekV2PreTrainedModel(LlamaPreTrainedModel, PreTrainedModel):
+class DeepseekV2PreTrainedModel(LlamaPreTrainedModel):
     _can_compile_fullgraph = False
 
     def _init_weights(self, module):
-        PreTrainedModel._init_weights(module)
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, DeepseekV2Moe):
             module.gate.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
 
