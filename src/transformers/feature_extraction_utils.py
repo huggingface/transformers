@@ -221,7 +221,7 @@ class BatchFeature(UserDict):
 
 class FeatureExtractionMixin(PushToHubMixin):
     """
-    This is a feature extraction mixin used to provide saving/loading functionality for sequential and image feature
+    This is a feature extraction mixin used to provide saving/loading functionality for sequential and audio feature
     extractors.
     """
 

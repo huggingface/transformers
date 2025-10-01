@@ -210,9 +210,9 @@ There are some rules for documenting different types of arguments and they're li
         This can span multiple lines.
     ```
 
-    * Include `type` in backticks.
-    * Add *optional* if the argument is not required or has a default value.
-    * Add "defaults to X" if it has a default value. You don't need to add "defaults to `None`" if the default value is `None`.
+  * Include `type` in backticks.
+  * Add *optional* if the argument is not required or has a default value.
+  * Add "defaults to X" if it has a default value. You don't need to add "defaults to `None`" if the default value is `None`.
 
     These arguments can also be passed to `@auto_docstring` as a `custom_args` argument. It is used to define the docstring block for new arguments once if they are repeated in multiple places in the modeling file.
 

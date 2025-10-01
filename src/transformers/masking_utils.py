@@ -632,6 +632,7 @@ class AttentionMaskInterface(GeneralInterface):
         "sdpa": sdpa_mask,
         "eager": eager_mask,
         "flash_attention_2": flash_attention_mask,
+        "flash_attention_3": flash_attention_mask,
         "flex_attention": flex_attention_mask,
     }
 
