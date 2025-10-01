@@ -1075,7 +1075,7 @@ def _get_resolved_checkpoint_files(
                         # we set `DISABLE_SAFETENSORS_CONVERSION=false` to prevent to conversion.
                         if (
                             filename in [WEIGHTS_NAME, WEIGHTS_INDEX_NAME]
-                            and os.getenv("DISABLE_SAFETENSORS_CONVERSION", None) != "false"
+                            and os.getenv("DISABLE_SAFETENSORS_CONVERSION", None) != "true"
                         ):
                             # If the PyTorch file was found, check if there is a safetensors file on the repository
                             # If there is no safetensors file on the repositories, start an auto conversion
