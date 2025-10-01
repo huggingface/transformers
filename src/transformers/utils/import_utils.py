@@ -759,9 +759,6 @@ def is_habana_gaudi1() -> bool:
 
 
 def is_torchdynamo_compiling() -> bool:
-    if not is_torch_available():
-        return False
-
     # Importing torch._dynamo causes issues with PyTorch profiler (https://github.com/pytorch/pytorch/issues/130622)
     # hence rather relying on `torch.compiler.is_compiling()` when possible (torch>=2.3)
     try:
@@ -778,9 +775,6 @@ def is_torchdynamo_compiling() -> bool:
 
 
 def is_torchdynamo_exporting() -> bool:
-    if not is_torch_available():
-        return False
-
     try:
         import torch
 
