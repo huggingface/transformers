@@ -709,7 +709,7 @@ class ChatCommand(BaseTransformersCLICommand):
 
         # Starts the session with a minimal help message at the top, so that a user doesn't get stuck
         interface.print_help(minimal=True)
-    
+
         async with AsyncInferenceClient(f"{host}:{self.args.port}") as client:
             while True:
                 try:
@@ -750,6 +750,7 @@ class ChatCommand(BaseTransformersCLICommand):
                     chat.append({"role": "assistant", "content": model_output})
                 except KeyboardInterrupt:
                     break
+
 
 if __name__ == "__main__":
     args = ChatArguments()
