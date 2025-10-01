@@ -471,7 +471,6 @@ else:
         "prune_layer",
         "infer_device",
     ]
-    _import_structure["sagemaker"] = []
     _import_structure["time_series_utils"] = []
     _import_structure["trainer"] = ["Trainer"]
     _import_structure["trainer_pt_utils"] = ["torch_distributed_zero_first"]
