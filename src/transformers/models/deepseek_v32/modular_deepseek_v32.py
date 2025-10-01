@@ -123,16 +123,12 @@ class DeepseekV32Indexer(nn.Module):
         # We store as: keys = k_fp8 (as [B, 1, S, D] or [B, H, S, D]? We keep [B, 1, S, D] like original)
         # For compactness, collapse heads to 1 for the indexer (you can keep H if your fp8_index expects it).
         k_1h = k_states.mean(dim=1, keepdim=True)  # [B, 1, S, D]  (cheap head merge; adjust if needed)
-        past_key_values_index.update(k_1h, self.layer_idx, cache_kwargs={"cache_position": cache_position})
+        k_cache = past_key_values_index.update(k_1h, self.layer_idx, cache_kwargs={"cache_position": cache_position})
 
         # Weights per head
         head_weights = self.weight_proj(hidden_states) * (self.num_heads**-0.5)  # [B, S, H]
         head_weights = head_weights.unsqueeze(-1) * self.softmax_scale  # [B, S, H, *]
-
-        # Build score via provided kernel
-        k_cache_fp8, k_cache_scale = past_key_values_index[self.layer_idx]  # (keys, values)
-
-        logits = torch.matmul(k_1h.unsqueeze(1), q_states.transpose(-1, -2))  # [B, M, N, H]
+        logits = torch.matmul(k_cache.unsqueeze(1), q_states.transpose(-1, -2))  # [B, M, N, H]
 
         # ReLU and sum over heads -> [B, M, N]
         logits.clamp_min_(0)
@@ -144,10 +140,6 @@ class DeepseekV32Indexer(nn.Module):
         T = index_scores.shape[-1]
         topk = min(self.index_topk, T)
         topk_indices = index_scores.topk(topk, dim=-1).indices  # [..., topk]
-
-        # sanity clone (kept from original)
-        _topk = topk_indices.clone()
-        assert torch.equal(topk_indices, _topk), f"{topk_indices=} {_topk=}"
         return topk_indices
 
 
