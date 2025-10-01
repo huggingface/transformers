@@ -300,6 +300,14 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def test_model_3d_mask_shapes(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        # manipulate input_mask
+        config_and_inputs = list(config_and_inputs)
+        batch_size, seq_length = config_and_inputs[2].shape
+        config_and_inputs[2] = random_attention_mask([batch_size, seq_length, seq_length])
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 

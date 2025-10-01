@@ -982,7 +982,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
                 position_ids = torch.arange(seq_len, device=device).unsqueeze(0)
 
             attention_mask, sliding_window_mask = self._update_attention_mask(
-                attention_mask, output_attentions=output_attentions
+                attention_mask, output_attentions=output_attentions, input_shape=[batch_size, seq_len]
             )
 
         hidden_states = self.embeddings(input_ids=input_ids, inputs_embeds=inputs_embeds)
@@ -1036,7 +1036,9 @@ class ModernBertModel(ModernBertPreTrainedModel):
             attentions=all_self_attentions,
         )
 
-    def _update_attention_mask(self, attention_mask: torch.Tensor, output_attentions: bool) -> torch.Tensor:
+    def _update_attention_mask(
+        self, attention_mask: torch.Tensor, input_shape: Tuple[int], output_attentions: bool
+    ) -> torch.Tensor:
         if output_attentions:
             if self.config._attn_implementation == "sdpa":
                 logger.warning_once(
@@ -1051,7 +1053,15 @@ class ModernBertModel(ModernBertPreTrainedModel):
                     " Setting `output_attentions=False`."
                 )
 
-        global_attention_mask = _prepare_4d_attention_mask(attention_mask, self.dtype)
+        # Expand the attention mask
+        if attention_mask.dim() == 2:
+            # Expand the attention mask
+            # [bsz, seq_len] -> [bsz, 1, seq_len, seq_len]
+            global_attention_mask = _prepare_4d_attention_mask(attention_mask, self.dtype, tgt_len=input_shape[1])
+        else:
+            # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
+            # ourselves in which case we just need to make it broadcastable to all heads.
+            global_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
 
         # Create position indices
         rows = torch.arange(global_attention_mask.shape[2]).unsqueeze(0)
