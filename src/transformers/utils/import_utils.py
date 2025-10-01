@@ -88,6 +88,7 @@ AUTOROUND_MIN_VERSION = "0.5.0"
 TRITON_MIN_VERSION = "1.0.0"
 
 
+@lru_cache
 def is_torch_available() -> bool:
     _torch_available, _torch_version = _is_package_available("torch", return_version=True)
     if _torch_available and version.parse(_torch_version) < version.parse("2.2.0"):
@@ -95,31 +96,38 @@ def is_torch_available() -> bool:
     return _torch_available and version.parse(_torch_version) >= version.parse("2.2.0")
 
 
+@lru_cache
 def is_kenlm_available() -> bool:
     return _is_package_available("kenlm")
 
 
+@lru_cache
 def is_kernels_available() -> bool:
     return _is_package_available("kernels")
 
 
+@lru_cache
 def is_cv2_available() -> bool:
     return _is_package_available("cv2")
 
 
+@lru_cache
 def is_yt_dlp_available() -> bool:
     return _is_package_available("yt_dlp")
 
 
+@lru_cache
 def is_libcst_available() -> bool:
     return _is_package_available("libcst")
 
 
+@lru_cache
 def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION) -> bool:
     _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
     return _accelerate_available and version.parse(_accelerate_version) >= version.parse(min_version)
 
 
+@lru_cache
 def is_torch_accelerator_available() -> bool:
     if is_torch_available():
         import torch
@@ -144,29 +152,35 @@ def is_torch_deterministic() -> bool:
     return False
 
 
+@lru_cache
 def is_triton_available(min_version: str = TRITON_MIN_VERSION) -> bool:
     _triton_available, _triton_version = _is_package_available("triton", return_version=True)
     return _triton_available and version.parse(_triton_version) >= version.parse(min_version)
 
 
+@lru_cache
 def is_hadamard_available() -> bool:
     return _is_package_available("fast_hadamard_transform")
 
 
+@lru_cache
 def is_hqq_available(min_version: str = HQQ_MIN_VERSION) -> bool:
     _hqq_available, _hqq_version = _is_package_available("hqq", return_version=True)
     return _hqq_available and version.parse(_hqq_version) >= version.parse(min_version)
 
 
+@lru_cache
 def is_pygments_available() -> bool:
     return _is_package_available("pygments")
 
 
+@lru_cache
 def get_torch_version() -> str:
     _, _torch_version = _is_package_available("torch", return_version=True)
     return _torch_version
 
 
+@lru_cache
 def get_torch_major_and_minor_version() -> str:
     _torch_version = get_torch_version()
     if _torch_version == "N/A":
@@ -175,80 +189,99 @@ def get_torch_major_and_minor_version() -> str:
     return str(parsed_version.major) + "." + str(parsed_version.minor)
 
 
+@lru_cache
 def is_torch_sdpa_available():
     # Mostly retained for backward compatibility in remote code, since sdpa works correctly on all torch versions >= 2.2
     return is_torch_available()
 
 
+@lru_cache
 def is_torch_flex_attn_available() -> bool:
     return is_torch_available() and version.parse(get_torch_version()) >= version.parse("2.5.0")
 
 
+@lru_cache
 def is_torchvision_available() -> bool:
     return _is_package_available("torchvision")
 
 
+@lru_cache
 def is_torchvision_v2_available() -> bool:
     return is_torchvision_available()
 
 
+@lru_cache
 def is_galore_torch_available() -> bool:
     return _is_package_available("galore_torch")
 
 
+@lru_cache
 def is_apollo_torch_available() -> bool:
     return _is_package_available("apollo_torch")
 
 
+@lru_cache
 def is_torch_optimi_available() -> bool:
     return _is_package_available("optimi")
 
 
+@lru_cache
 def is_lomo_available() -> bool:
     return _is_package_available("lomo_optim")
 
 
+@lru_cache
 def is_grokadamw_available() -> bool:
     return _is_package_available("grokadamw")
 
 
+@lru_cache
 def is_schedulefree_available(min_version: str = SCHEDULEFREE_MIN_VERSION) -> bool:
     _schedulefree_available, _schedulefree_version = _is_package_available("schedulefree", return_version=True)
     return _schedulefree_available and version.parse(_schedulefree_version) >= version.parse(min_version)
 
 
+@lru_cache
 def is_pyctcdecode_available() -> bool:
     return _is_package_available("pyctcdecode")
 
 
+@lru_cache
 def is_librosa_available() -> bool:
     return _is_package_available("librosa")
 
 
+@lru_cache
 def is_essentia_available() -> bool:
     return _is_package_available("essentia")
 
 
+@lru_cache
 def is_pydantic_available() -> bool:
     return _is_package_available("pydantic")
 
 
+@lru_cache
 def is_fastapi_available() -> bool:
     return _is_package_available("fastapi")
 
 
+@lru_cache
 def is_uvicorn_available() -> bool:
     return _is_package_available("uvicorn")
 
 
+@lru_cache
 def is_openai_available() -> bool:
     return _is_package_available("openai")
 
 
+@lru_cache
 def is_pretty_midi_available() -> bool:
     return _is_package_available("pretty_midi")
 
 
+@lru_cache
 def is_torch_cuda_available() -> bool:
     if is_torch_available():
         import torch
@@ -258,6 +291,7 @@ def is_torch_cuda_available() -> bool:
         return False
 
 
+@lru_cache
 def is_cuda_platform() -> bool:
     if is_torch_available():
         import torch
@@ -267,6 +301,7 @@ def is_cuda_platform() -> bool:
         return False
 
 
+@lru_cache
 def is_rocm_platform() -> bool:
     if is_torch_available():
         import torch
@@ -276,6 +311,7 @@ def is_rocm_platform() -> bool:
         return False
 
 
+@lru_cache
 def is_mamba_ssm_available() -> bool:
     if is_torch_available():
         import torch
@@ -287,6 +323,7 @@ def is_mamba_ssm_available() -> bool:
     return False
 
 
+@lru_cache
 def is_mamba_2_ssm_available() -> bool:
     if is_torch_available():
         import torch
@@ -302,6 +339,7 @@ def is_mamba_2_ssm_available() -> bool:
     return False
 
 
+@lru_cache
 def is_flash_linear_attention_available():
     if is_torch_available():
         import torch
@@ -319,6 +357,7 @@ def is_flash_linear_attention_available():
     return False
 
 
+@lru_cache
 def is_causal_conv1d_available() -> bool:
     if is_torch_available():
         import torch
@@ -329,18 +368,21 @@ def is_causal_conv1d_available() -> bool:
     return False
 
 
+@lru_cache
 def is_xlstm_available() -> bool:
     if is_torch_available():
         return _is_package_available("xlstm")
     return False
 
 
+@lru_cache
 def is_mambapy_available() -> bool:
     if is_torch_available():
         return _is_package_available("mambapy")
     return False
 
 
+@lru_cache
 def is_torch_mps_available(min_version: Optional[str] = None) -> bool:
     if is_torch_available():
         import torch
@@ -354,6 +396,7 @@ def is_torch_mps_available(min_version: Optional[str] = None) -> bool:
     return False
 
 
+@lru_cache
 def is_torch_bf16_gpu_available() -> bool:
     if not is_torch_available():
         return False
@@ -376,10 +419,12 @@ def is_torch_bf16_gpu_available() -> bool:
     return False
 
 
+@lru_cache
 def is_torch_bf16_cpu_available() -> bool:
     return is_torch_available()
 
 
+@lru_cache
 def is_torch_bf16_available() -> bool:
     # the original bf16 check was for gpu only, but later a cpu/bf16 combo has emerged so this util
     # has become ambiguous and therefore deprecated
@@ -447,6 +492,7 @@ def is_torch_bf16_available_on_device(device: str) -> bool:
     return True
 
 
+@lru_cache
 def is_torch_tf32_available() -> bool:
     if not is_torch_available():
         return False
@@ -465,37 +511,43 @@ def is_torch_tf32_available() -> bool:
     return True
 
 
+@lru_cache
 def is_torch_fx_available() -> bool:
     return is_torch_available()
 
 
+@lru_cache
 def is_peft_available() -> bool:
     return _is_package_available("peft")
 
 
+@lru_cache
 def is_bs4_available() -> bool:
     return _is_package_available("bs4")
 
 
+@lru_cache
 def is_coloredlogs_available() -> bool:
     return _is_package_available("coloredlogs")
 
 
+@lru_cache
 def is_onnx_available() -> bool:
     return _is_package_available("onnx")
 
 
+@lru_cache
 def is_flute_available() -> bool:
-    try:
-        return importlib.util.find_spec("flute") is not None and importlib.metadata.version("flute-kernel") >= "0.4.1"
-    except importlib.metadata.PackageNotFoundError:
-        return False
+    is_available, flute_version = _is_package_available("flute", return_version=True)
+    return is_available and version.parse(flute_version) >= version.parse("0.4.1")
 
 
+@lru_cache
 def is_ftfy_available() -> bool:
     return _is_package_available("ftfy")
 
 
+@lru_cache
 def is_g2p_en_available() -> bool:
     return _is_package_available("g2p_en")
 
@@ -742,61 +794,73 @@ def is_torchdynamo_exporting() -> bool:
             return False
 
 
+@lru_cache
 def is_torch_tensorrt_fx_available() -> bool:
-    if importlib.util.find_spec("torch_tensorrt") is None:
-        return False
-    return importlib.util.find_spec("torch_tensorrt.fx") is not None
+    return _is_package_available("torch_tensorrt") and _is_package_available("torch_tensorrt.fx")
 
 
+@lru_cache
 def is_datasets_available() -> bool:
     return _is_package_available("datasets")
 
 
+@lru_cache
 def is_detectron2_available() -> bool:
     return _is_package_available("detectron2")
 
 
+@lru_cache
 def is_rjieba_available() -> bool:
     return _is_package_available("rjieba")
 
 
+@lru_cache
 def is_psutil_available() -> bool:
     return _is_package_available("psutil")
 
 
+@lru_cache
 def is_py3nvml_available() -> bool:
     return _is_package_available("py3nvml")
 
 
+@lru_cache
 def is_sacremoses_available() -> bool:
     return _is_package_available("sacremoses")
 
 
+@lru_cache
 def is_apex_available() -> bool:
     return _is_package_available("apex")
 
 
+@lru_cache
 def is_aqlm_available() -> bool:
     return _is_package_available("aqlm")
 
 
+@lru_cache
 def is_vptq_available(min_version: str = VPTQ_MIN_VERSION) -> bool:
     _vptq_available, _vptq_version = _is_package_available("vptq", return_version=True)
     return _vptq_available and version.parse(_vptq_version) >= version.parse(min_version)
 
 
+@lru_cache
 def is_av_available() -> bool:
     return _is_package_available("av")
 
 
+@lru_cache
 def is_decord_available() -> bool:
     return _is_package_available("decord")
 
 
+@lru_cache
 def is_torchcodec_available() -> bool:
     return _is_package_available("torchcodec")
 
 
+@lru_cache
 def is_ninja_available() -> bool:
     r"""
     Code comes from *torch.utils.cpp_extension.is_ninja_available()*. Returns `True` if the
@@ -810,6 +874,7 @@ def is_ninja_available() -> bool:
         return True
 
 
+@lru_cache
 def is_ipex_available(min_version: str = "") -> bool:
     def get_major_and_minor_from_version(full_version):
         return str(version.parse(full_version).major) + "." + str(version.parse(full_version).minor)
@@ -884,6 +949,7 @@ def is_bitsandbytes_available(check_library_only: bool = False) -> bool:
     return True
 
 
+@lru_cache
 def is_bitsandbytes_multi_backend_available() -> bool:
     if not is_bitsandbytes_available():
         return False
@@ -893,6 +959,7 @@ def is_bitsandbytes_multi_backend_available() -> bool:
     return "multi_backend" in getattr(bnb, "features", set())
 
 
+@lru_cache
 def is_flash_attn_2_available() -> bool:
     if not is_torch_available():
         return False
@@ -946,10 +1013,8 @@ def is_flash_attn_greater_or_equal_2_10() -> bool:
 
 @lru_cache
 def is_flash_attn_greater_or_equal(library_version: str) -> bool:
-    if not _is_package_available("flash_attn"):
-        return False
-
-    return version.parse(importlib.metadata.version("flash_attn")) >= version.parse(library_version)
+    is_available, flash_attn_version = _is_package_available("flash_attn", return_version=True)
+    return is_available and version.parse(flash_attn_version) >= version.parse(library_version)
 
 
 @lru_cache
@@ -1019,124 +1084,151 @@ def is_quanto_greater(library_version: str, accept_dev: bool = False) -> bool:
         return version.parse(importlib.metadata.version("optimum-quanto")) > version.parse(library_version)
 
 
+@lru_cache
 def is_torchdistx_available():
     return _is_package_available("torchdistx")
 
 
+@lru_cache
 def is_faiss_available() -> bool:
     return _is_package_available("faiss")
 
 
+@lru_cache
 def is_scipy_available() -> bool:
     return _is_package_available("scipy")
 
 
+@lru_cache
 def is_sklearn_available() -> bool:
     return _is_package_available("sklearn")
 
 
+@lru_cache
 def is_sentencepiece_available() -> bool:
     return _is_package_available("sentencepiece")
 
 
+@lru_cache
 def is_seqio_available() -> bool:
     return _is_package_available("seqio")
 
 
+@lru_cache
 def is_gguf_available(min_version: str = GGUF_MIN_VERSION) -> bool:
     _is_gguf_available, _gguf_version = _is_package_available("gguf", return_version=True)
     return _is_gguf_available and version.parse(_gguf_version) >= version.parse(min_version)
 
 
+@lru_cache
 def is_protobuf_available() -> bool:
-    if importlib.util.find_spec("google") is None:
-        return False
-    return importlib.util.find_spec("google.protobuf") is not None
+    return _is_package_available("google") and _is_package_available("google.protobuf")
 
 
+@lru_cache
 def is_fsdp_available(min_version: str = FSDP_MIN_VERSION) -> bool:
     return is_torch_available() and version.parse(get_torch_version()) >= version.parse(min_version)
 
 
+@lru_cache
 def is_optimum_available() -> bool:
     return _is_package_available("optimum")
 
 
+@lru_cache
 def is_auto_awq_available() -> bool:
     return _is_package_available("awq")
 
 
+@lru_cache
 def is_auto_round_available(min_version: str = AUTOROUND_MIN_VERSION) -> bool:
     _auto_round_available, _auto_round_version = _is_package_available("auto_round", return_version=True)
     return _auto_round_available and version.parse(_auto_round_version) >= version.parse(min_version)
 
 
+@lru_cache
 def is_optimum_quanto_available():
     return is_optimum_available() and _is_package_available("optimum.quanto")
 
 
+@lru_cache
 def is_quark_available() -> bool:
     return _is_package_available("quark")
 
 
+@lru_cache
 def is_fp_quant_available():
     _fp_quant_available, _fp_quant_version = _is_package_available("fp_quant", return_version=True)
     return _fp_quant_available and version.parse(_fp_quant_version) >= version.parse("0.2.0")
 
 
+@lru_cache
 def is_qutlass_available():
     _qutlass_available, _qutlass_version = _is_package_available("qutlass", return_version=True)
     return _qutlass_available and version.parse(_qutlass_version) >= version.parse("0.1.0")
 
 
+@lru_cache
 def is_compressed_tensors_available() -> bool:
     return _is_package_available("compressed_tensors")
 
 
+@lru_cache
 def is_auto_gptq_available() -> bool:
     return _is_package_available("auto_gptq")
 
 
+@lru_cache
 def is_gptqmodel_available() -> bool:
     return _is_package_available("gptqmodel")
 
 
+@lru_cache
 def is_eetq_available() -> bool:
     return _is_package_available("eetq")
 
 
+@lru_cache
 def is_fbgemm_gpu_available() -> bool:
     return _is_package_available("fbgemm_gpu")
 
 
+@lru_cache
 def is_levenshtein_available() -> bool:
     return _is_package_available("Levenshtein")
 
 
+@lru_cache
 def is_optimum_neuron_available() -> bool:
     return is_optimum_available() and _is_package_available("optimum.neuron")
 
 
+@lru_cache
 def is_tokenizers_available() -> bool:
     return _is_package_available("tokenizers")
 
 
+@lru_cache
 def is_vision_available() -> bool:
     return _is_package_available("PIL")
 
 
+@lru_cache
 def is_pytesseract_available() -> bool:
     return _is_package_available("pytesseract")
 
 
+@lru_cache
 def is_pytest_available() -> bool:
     return _is_package_available("pytest")
 
 
+@lru_cache
 def is_spacy_available() -> bool:
     return _is_package_available("spacy")
 
 
+@lru_cache
 def is_in_notebook() -> bool:
     try:
         # Check if we are running inside Marimo
@@ -1157,10 +1249,12 @@ def is_in_notebook() -> bool:
         return False
 
 
+@lru_cache
 def is_pytorch_quantization_available() -> bool:
     return _is_package_available("pytorch_quantization")
 
 
+@lru_cache
 def is_pandas_available() -> bool:
     return _is_package_available("pandas")
 
@@ -1207,44 +1301,54 @@ def is_training_run_on_sagemaker() -> bool:
     return "SAGEMAKER_JOB_NAME" in os.environ
 
 
+@lru_cache
 def is_soundfile_available() -> bool:
     return _is_package_available("soundfile")
 
 
+@lru_cache
 def is_timm_available() -> bool:
     return _is_package_available("timm")
 
 
+@lru_cache
 def is_natten_available() -> bool:
     return _is_package_available("natten")
 
 
+@lru_cache
 def is_nltk_available() -> bool:
     return _is_package_available("nltk")
 
 
+@lru_cache
 def is_torchaudio_available() -> bool:
     return _is_package_available("torchaudio")
 
 
+@lru_cache
 def is_torchao_available(min_version: str = TORCHAO_MIN_VERSION) -> bool:
     _torchao_available, _torchao_version = _is_package_available("torchao", return_version=True)
     return _torchao_available and version.parse(_torchao_version) >= version.parse(min_version)
 
 
+@lru_cache
 def is_speech_available() -> bool:
     # For now this depends on torchaudio but the exact dependency might evolve in the future.
     return is_torchaudio_available()
 
 
+@lru_cache
 def is_spqr_available() -> bool:
     return _is_package_available("spqr_quant")
 
 
+@lru_cache
 def is_phonemizer_available() -> bool:
     return _is_package_available("phonemizer")
 
 
+@lru_cache
 def is_uroman_available() -> bool:
     return _is_package_available("uroman")
 
@@ -1259,14 +1363,17 @@ def torch_only_method(fn: Callable) -> Callable:
     return wrapper
 
 
+@lru_cache
 def is_ccl_available() -> bool:
     return _is_package_available("torch_ccl") or _is_package_available("oneccl_bindings_for_pytorch")
 
 
+@lru_cache
 def is_sudachi_available() -> bool:
     return _is_package_available("sudachipy")
 
 
+@lru_cache
 def is_sudachi_projection_available() -> bool:
     if not is_sudachi_available():
         return False
@@ -1278,43 +1385,53 @@ def is_sudachi_projection_available() -> bool:
     return version.parse(_sudachipy_version) >= version.parse("0.6.8")
 
 
+@lru_cache
 def is_jumanpp_available() -> bool:
-    return (importlib.util.find_spec("rhoknp") is not None) and (shutil.which("jumanpp") is not None)
+    return _is_package_available("rhoknp") and shutil.which("jumanpp") is not None
 
 
+@lru_cache
 def is_cython_available() -> bool:
     return importlib.util.find_spec("pyximport") is not None
 
 
+@lru_cache
 def is_jinja_available() -> bool:
     return _is_package_available("jinja2")
 
 
+@lru_cache
 def is_mlx_available() -> bool:
     return _is_package_available("mlx")
 
 
+@lru_cache
 def is_num2words_available() -> bool:
     return _is_package_available("num2words")
 
 
+@lru_cache
 def is_tiktoken_available() -> bool:
     return _is_package_available("tiktoken") and _is_package_available("blobfile")
 
 
+@lru_cache
 def is_liger_kernel_available() -> bool:
     _liger_kernel_available, _liger_kernel_version = _is_package_available("liger_kernel", return_version=True)
     return _liger_kernel_available and version.parse(_liger_kernel_version) >= version.parse("0.3.0")
 
 
+@lru_cache
 def is_rich_available() -> bool:
     return _is_package_available("rich")
 
 
+@lru_cache
 def is_matplotlib_available() -> bool:
     return _is_package_available("matplotlib")
 
 
+@lru_cache
 def is_mistral_common_available() -> bool:
     return _is_package_available("mistral_common")
 
