@@ -277,17 +277,14 @@ class ChatArguments:
             "which case you must install this manually by running `pip install flash-attn --no-build-isolation`."
         },
     )
-    load_in_8bit: bool = field(
-        default=False,
-        metadata={"help": "Whether to use 8 bit precision for the base model - works only with LoRA."},
+    
+    quantization: Optional[str]= field(
+        default=None,
+        metadata={
+            "help": "Which quantization method to use."
+                    "choices: [`bitsandbytes-4bit`,`bitsandbytes-8bit`]"
+        },
     )
-    load_in_4bit: bool = field(
-        default=False,
-        metadata={"help": "Whether to use 4 bit precision for the base model - works only with LoRA."},
-    )
-    bnb_4bit_quant_type: str = field(default="nf4", metadata={"help": "Quantization type.", "choices": ["fp4", "nf4"]})
-    use_bnb_nested_quant: bool = field(default=False, metadata={"help": "Whether to use nested quantization."})
-
     # Serving settings
     host: str = field(default="localhost", metadata={"help": "Interface the server will listen to.."})
     port: int = field(default=8000, metadata={"help": "Port the server will listen to."})
@@ -368,6 +365,9 @@ class ChatCommand(BaseTransformersCLICommand):
                 self.spawn_backend = True
                 args.model_name_or_path = args.model_name_or_path_or_address
 
+        SUPPORTED_QUANT_METHOD = ["bitandbytes-4bit", "bitandbytes-8bit"]
+        if args.quantization is not None and args.quantization not in SUPPORTED_QUANT_METHOD:
+            raise ValueError(f"You have set a wrong value for quantization. Supported methods are {SUPPORTED_QUANT_METHOD}.")
         if not is_rich_available() and (not is_torch_available() and self.spawn_backend):
             raise ImportError(
                 "You need to install rich to use the chat interface. Additionally, you have not specified a remote "
@@ -535,21 +535,16 @@ class ChatCommand(BaseTransformersCLICommand):
     # Model loading and performance automation methods
     @staticmethod
     def get_quantization_config(model_args: ChatArguments) -> Optional["BitsAndBytesConfig"]:
-        if model_args.load_in_4bit:
-            quantization_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                # For consistency with model weights, we use the same value as `dtype`
-                bnb_4bit_compute_dtype=model_args.dtype,
-                bnb_4bit_quant_type=model_args.bnb_4bit_quant_type,
-                bnb_4bit_use_double_quant=model_args.use_bnb_nested_quant,
-                bnb_4bit_quant_storage=model_args.dtype,
-            )
-        elif model_args.load_in_8bit:
-            quantization_config = BitsAndBytesConfig(
-                load_in_8bit=True,
-            )
+        if model_args.quantization == "bitandbytes-4bit":
+            quantization_config = BitsAndBytesConfig(load_in_4bit=True,
+                                                     bnb_4bit_compute_dtype=model_args.torch_dtype,
+                                                     bnb_4bit_quant_type="nf4",
+                                                     bnb_4bit_use_double_quant=True
+                                                     )
+        elif model_args.quantization == "bitandbytes-8bit":
+            quantization_config = BitsAndBytesConfig(load_in_8bit=True)
         else:
-            quantization_config = None
+            quantization_config = None 
 
         return quantization_config
 
