@@ -4795,6 +4795,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         )
 
         is_quantized = hf_quantizer is not None
+        is_from_file = pretrained_model_name_or_path is not None or gguf_file is not None
+
+        # Just a helpful message in case we try to load safetensors files coming from old Transformers tf/flax classes
+        if is_from_file and checkpoint_files[0].endswith(".safetensors"):
+            with safe_open(checkpoint_files[0], framework="pt") as f:
+                metadata = f.metadata()
+            if metadata is not None and metadata.get("format") in ["tf", "flax"]:
+                logger.warning(
+                    "The safetensors checkpoint found has format `tf` or `flax`. This mean that the keys will very"
+                    "likely not match to the model you are trying to load, and will be newly initialized. If it's the case "
+                    "another warning will be raised later. Consider converting your checkpoint to the correct format."
+                )
 
         if gguf_file:
             from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
