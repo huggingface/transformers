@@ -1072,7 +1072,8 @@ def _get_resolved_checkpoint_files(
                 if not local_files_only and not is_offline_mode():
                     if resolved_archive_file is not None:
                         # In a CI environment (CircleCI / Github Actions workflow runs) or in a pytest run,
-                        # we set `DISABLE_SAFETENSORS_CONVERSION=false` to prevent to conversion.
+                        # we set `DISABLE_SAFETENSORS_CONVERSION=true` to prevent to conversion.
+                        breakpoint()
                         if (
                             filename in [WEIGHTS_NAME, WEIGHTS_INDEX_NAME]
                             and os.getenv("DISABLE_SAFETENSORS_CONVERSION", None) != "true"
