@@ -12,7 +12,14 @@ from typing import Any, Optional
 import torch
 from tqdm import trange
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig, GenerationMixin, StaticCache
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    CompileConfig,
+    GenerationConfig,
+    GenerationMixin,
+    StaticCache,
+)
 from transformers.generation.streamers import BaseStreamer
 
 from .benchmark_config import BenchmarkConfig
@@ -46,14 +53,14 @@ DEFAULT_PROMPT = "\n".join([
 
 def compact_json_numeric_arrays(data: dict):
     # Match arrays that contain only numbers (ints/floats), whitespace, commas, and newlines
-    pattern = r'\[\s*\n\s*((?:\d+(?:\.\d+)?\s*,\s*)*\d+(?:\.\d+)?)\s*\n\s*\]'
+    pattern = r"\[\s*\n\s*((?:\d+(?:\.\d+)?\s*,\s*)*\d+(?:\.\d+)?)\s*\n\s*\]"
 
     def replace_numeric_array(match):
         # Get the array content
         content = match.group(1)
         # Remove extra whitespace but keep commas
-        compact_content = re.sub(r'\s+', ' ', content).strip()
-        return f'[{compact_content}]'
+        compact_content = re.sub(r"\s+", " ", content).strip()
+        return f"[{compact_content}]"
 
     return re.sub(pattern, replace_numeric_array, json.dumps(data, indent=4, default=str), flags=re.DOTALL)
 
@@ -85,8 +92,8 @@ def flush_memory():
         torch.cuda.reset_peak_memory_stats()
         torch.cuda.synchronize()
 
-class BenchmarkStreamer(BaseStreamer):
 
+class BenchmarkStreamer(BaseStreamer):
     def __init__(self, **kwargs) -> None:
         self.timestamps = []
         self.text_queue = Queue()
@@ -112,12 +119,15 @@ class BenchmarkStreamer(BaseStreamer):
 class BenchmarkRunner:
     """Main benchmark runner that coordinates benchmark execution."""
 
-    def __init__(self, logger: logging.Logger, output_dir: str = "benchmark_results", commit_id: Optional[str] = None):
+    def __init__(
+        self, logger: logging.Logger, output_dir: str = "benchmark_results", commit_id: Optional[str] = None
+    ) -> None:
         # Those stay constant for the whole run
         self.logger = logger
         self.output_dir = output_dir
         self.commit_id = commit_id
         os.makedirs(self.output_dir, exist_ok=True)
+        self.profile_dir = None
         # Attributes that are reset for each model
         self._setup_for = ""
         # Attributes that are reset for each run
@@ -145,49 +155,37 @@ class BenchmarkRunner:
             return_tensors="pt",
             max_length=config.sequence_length,
             truncation=True,
+            return_attention_mask=True,
         ).to(config.device)
         self.inputs["use_cache"] = config.use_cache
 
         # Prepare generation config
         gen_config = GenerationConfig(
-            do_sample=False,
-            top_p=1.0,
-            temperature=1.0,
-            max_new_tokens=config.num_tokens_to_generate,
+            do_sample=False, top_p=1.0, temperature=1.0, max_new_tokens=config.num_tokens_to_generate
         )
+
+        # Prepare compile config
+        if config.compilation:
+            gen_config.compile_config = CompileConfig(mode=config.compile_mode, options=config.compile_options)
+            if config.use_cache:
+                gen_config.cache_implementation = "static"
+
         # Load model
         self.logger.debug(f"Loading model {model_id} on device {config.device}...")
         dtype = getattr(torch, config.dtype.removeprefix("torch."))
         self.model = AutoModelForCausalLM.from_pretrained(
-            model_id,
-            dtype=dtype,
-            attn_implementation=config.attn_implementation,
-            generation_config=gen_config,
-        ).eval().to(config.device)
+            model_id, dtype=dtype, attn_implementation=config.attn_implementation, generation_config=gen_config
+        )
+        self.model = self.model.eval().to(config.device)
 
         # Kernelize the model if needed
         if config.kernelize:
             self.model = kernelize(self.model, mode=Mode.INFERENCE)
 
-        # Compile the model if needed
-        if config.compile_mode is not None:
-            self.model = torch.compile(self.model, mode=config.compile_mode, **config.compile_options)
-            # Setup static cache for compiled mode if needed
-            if config.use_cache:
-                seq_length = self.inputs["input_ids"].shape[1]
-                self.past_key_values = StaticCache(
-                    config=self.model.config,
-                    max_batch_size=config.batch_size,
-                    max_cache_len=seq_length + config.num_tokens_to_generate,
-                    device=config.device,
-                    dtype=dtype,
-                )
-                self.logger.debug(f"StaticCache created on device: {config.device} with dtype: {dtype}")
-
-    def run_one_benchmark(self, model_id: str, config: BenchmarkConfig) -> None:
+    def run_one_benchmark(self, model_id: str, config: BenchmarkConfig, num_tokens_to_profile: int = 0) -> None:
         sdpa_ctx = nullcontext()
-        sdpa_backend = get_sdpa_backend(config.sdpa_backend)
-        if sdpa_backend is not None:
+        if config.attn_implementation == "sdpa":
+            sdpa_backend = get_sdpa_backend(config.sdpa_backend)
             sdpa_ctx = torch.nn.attention.sdpa_kernel(sdpa_backend)
 
         with sdpa_ctx, torch.no_grad():
@@ -195,7 +193,9 @@ class BenchmarkRunner:
 
             # Quick validation: try one measurement first to see if this scenario works
             flush_memory()
-            wall_time_0, e2e_latency, dt_tokens, decoded_output, gpu_metrics = self.time_generate(max_new_tokens=1, gpu_monitor=None)
+            wall_time_0, e2e_latency, dt_tokens, decoded_output, gpu_metrics = self.time_generate(
+                max_new_tokens=1, gpu_monitor=None
+            )
             if e2e_latency < 0:
                 self.logger.warning(f"Skipping config {config.name}: {e2e_latency = } (no GPU monitoring)")
                 return None
@@ -217,6 +217,10 @@ class BenchmarkRunner:
                 result.accumulate(wall_time_0, e2e_latency, dt_tokens, decoded_output, gpu_metrics)
             self.logger.info("Benchmarking done. Cleaning up.")
 
+            # Profile if needed
+            if num_tokens_to_profile > 0:
+                self.profile_generate(num_tokens_to_profile, config.name)
+
             return {
                 "metadata": BenchmarkMetadata(model_id=model_id, commit_id=self.commit_id),
                 "measures": result,
@@ -226,10 +230,9 @@ class BenchmarkRunner:
     def time_generate(
         self,
         max_new_tokens: int,
-        gpu_monitor: Optional[GPUMonitor] = None
+        gpu_monitor: Optional[GPUMonitor] = None,
     ) -> tuple[float, float, list[float], str, Optional[GPURawMetrics]]:
-        """Time the latency of a call to model.generate() with the given (inputs) and (max_new_tokens). Returns both wall
-        time and cuda time."""
+        """Time the latency of a call to model.generate() with the given (inputs) and (max_new_tokens)."""
         # Prepare gpu monitoring if needed
         if gpu_monitor is not None:
             gpu_monitor.start()
@@ -259,32 +262,59 @@ class BenchmarkRunner:
         dt_tokens = [t - wall_time_0 for t in streamer.timestamps[1:]]
         return wall_time_0, e2e_latency, dt_tokens, decoded_output, gpu_metrics
 
-    def run_benchmarks(self, model_id: str, benchmark_configs: list[BenchmarkConfig]) -> dict[str, Any]:
+    def profile_generate(self, num_tokens_to_profile: int, config_name: str) -> None:
+        """Profile the latency of a call to model.generate() with the given (inputs) and (max_new_tokens)."""
+        profiler = torch.profiler.profile(
+            activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
+            record_shapes=True,
+        )
+        with profiler as prof:
+            _ = self.model.generate(
+                **self.inputs,
+                max_new_tokens=num_tokens_to_profile,
+                past_key_values=self.past_key_values,
+            )
+        if self.profile_dir is None:
+            self.profile_dir = self.output_dir + "_profiles"
+            os.makedirs(self.profile_dir, exist_ok=True)
+        prof.export_chrome_trace(f"{self.profile_dir}/{config_name}.json")
+
+    def run_benchmarks(
+        self,
+        model_id: str,
+        benchmark_configs: list[BenchmarkConfig],
+        num_tokens_to_profile: int = 0,
+    ) -> dict[str, Any]:
         all_results = {}
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
+        n_configs = len(benchmark_configs)
         for i, config in enumerate(benchmark_configs):
+            # Handle SDPA backend if not determined by the config (needs to be done before skipping duplicates)
+            if config.sdpa_backend is None:
+                default_backend = "flash_attention"  # FIXME: torch has a _cur_sdpa_kernel_backends but it fails
+                self.logger.warning(f"No SDPA backend provided, using {default_backend} instead.")
+                config.sdpa_backend = default_backend
 
             # Skip if already run
             if config.name in all_results:
-                self.logger.info(f"Skipping duplicate config {config.name} for model {model_id} ({i+1}/{len(benchmark_configs)})")
+                self.logger.info(f"Skipping duplicate config {config.name} for model {model_id} ({i + 1}/{n_configs})")
                 continue
 
             # Otherwise, run the benchmark
             self.setup_one_run(model_id, config)
             self.logger.info(
-                f"Running benchmark of model {model_id} with scenario: {config.name} ({i+1}/{len(benchmark_configs)})"
+                f"Running benchmark of model {model_id} with scenario: {config.name} ({i + 1}/{n_configs})"
             )
 
             # Launch benchmark in a try/except block to avoid stopping the whole run if one benchmark fails
             try:
-                results = self.run_one_benchmark(model_id, config)
+                results = self.run_one_benchmark(model_id, config, num_tokens_to_profile)
                 if results is not None:
                     all_results[config.name] = results
 
             except Exception as e:
-                self.logger.error(f"Error running benchmark of model {model_id} with scenario: {config.name} ({i+1}/{len(benchmark_configs)}): {e}")
-
+                self.logger.error(f"Error running with scenario: {config.name}:\n{repr(e)}")
             # Cleanup model and save results
             self.cleanup()
             self.save_results(model_id, all_results, timestamp=timestamp)

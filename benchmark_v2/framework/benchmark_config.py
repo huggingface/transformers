@@ -90,6 +90,7 @@ def cross_generate_configs(
     use_cache: bool = True,  # no real interest in testing with cache disabled
     gpu_monitoring: bool = False,  # this slows down the benchmark by a lot so we disable it by default
 ) -> list[BenchmarkConfig]:
+    configs = []
     kwargs = {
         "warmup_iterations": warmup_iterations,
         "measurement_iterations": measurement_iterations,
@@ -99,9 +100,16 @@ def cross_generate_configs(
         "use_cache": use_cache,
         "gpu_monitoring": gpu_monitoring,
     }
-    configs = []
-    for attn_implementation in [("flash_attention_2", None), ("eager", None), ("sdpa", "math"), ("sdpa", "flash_attention"), ("sdpa", "efficient_attention")]:
-        for compiled_mode in [None, "default", "max-autotune", "reduce-overhead"]:
+    all_attn_implementations = [
+        ("flash_attention_2", None),
+        ("eager", None),
+        ("sdpa", "math"),
+        ("sdpa", "flash_attention"),
+        ("sdpa", "efficient_attention"),
+        ("sdpa", "cudnn_attention"),
+    ]
+    for attn_implementation in all_attn_implementations:
+        for compiled_mode in [None, "reduce-overhead", "max-autotune"]:
             for kernelized in {False, KERNELIZATION_AVAILABLE}:
                 name = [
                     str(attn_implementation[0]),
@@ -140,7 +148,7 @@ def smart_generate_configs(
         "num_tokens_to_generate": num_tokens_to_generate,
     }
     configs = []
-    for attn_implementation in [("eager", None), ("sdpa", None)]:
+    for attn_implementation in [("eager", None), ("sdpa", "flash_attention")]:
         for compiled_mode in [None, "max-autotune"]:
             for kernelized in {False, KERNELIZATION_AVAILABLE}:
                 name = [

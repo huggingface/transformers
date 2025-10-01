@@ -42,6 +42,8 @@ if __name__ == "__main__":
     parser.add_argument("--sequence-length", "-s", type=int, default=128, help="Sequence length")
     parser.add_argument("--num-tokens-to-generate", "-n", type=int, default=128, help="Number of tokens to generate")
 
+    parser.add_argument("--num-tokens-to-profile", "-p", type=int, default=0, help="Number of tokens to profile")
+
     parser.add_argument("--commit-id", type=str, help="Git commit ID (if not provided, will auto-detect from git)")
     args = parser.parse_args()
 
@@ -70,5 +72,5 @@ if __name__ == "__main__":
     )
 
     runner = BenchmarkRunner(logger, args.output_dir, args.commit_id)
-    results = runner.run_benchmarks(args.model_id, benchmark_configs)
+    results = runner.run_benchmarks(args.model_id, benchmark_configs, args.num_tokens_to_profile)
     # runner.save_results(args.model_id, results)
