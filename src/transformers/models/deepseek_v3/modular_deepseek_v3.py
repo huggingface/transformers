@@ -174,20 +174,21 @@ class DeepseekV3MoE(nn.Module):
         expert_mask = torch.nn.functional.one_hot(topk_indices, num_classes=len(self.experts))
         expert_mask = expert_mask.permute(2, 0, 1)
 
-        for expert_idx in range(len(self.experts)):
+        # Loop over all available experts in the model and perform the computation on each expert
+        matched_experts = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+        for expert_idx in matched_experts:
             expert = self.experts[expert_idx]
             mask = expert_mask[expert_idx]
-            token_indices, weight_indices = torch.where(mask)
+            token_indices, weight_indices = torch.where(mask.squeeze(0))
 
-            if token_indices.numel() > 0:
-                expert_weights = topk_weights[token_indices, weight_indices]
-                expert_input = hidden_states[token_indices]
-                expert_output = expert(expert_input)
-                weighted_output = expert_output * expert_weights.unsqueeze(-1)
-                final_hidden_states.index_add_(0, token_indices, weighted_output)
+            expert_weights = topk_weights[token_indices, weight_indices]
+            expert_input = hidden_states[token_indices]
+            expert_output = expert(expert_input)
+            weighted_output = expert_output * expert_weights.unsqueeze(-1)
+            final_hidden_states.index_add_(0, token_indices, weighted_output)
 
         # in original deepseek, the output of the experts are gathered once we leave this module
-        # thus the moe module is itelsf an IsolatedParallel module
+        # thus the moe module is itself an IsolatedParallel module
         # and all expert are "local" meaning we shard but we don't gather
         return final_hidden_states.type(hidden_states.dtype)
 
