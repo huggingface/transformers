@@ -48,6 +48,19 @@ def infer_device(model):
 
     return dev_type
 
+def add_to_mapping(layer_name, device, repo_name, mode, compatible_mapping):
+    if device not in ["cuda", "rocm", "xpu"]:
+        raise ValueError(f"Only cuda, rocm, and xpu devices supported, got: {device}")
+    repo_layer_name = repo_name.split(":")[1]
+    repo_id = repo_name.split(":")[0]
+    compatible_mapping[layer_name] = {
+        device: {
+            mode: LayerRepository(
+                repo_id=repo_id,
+                layer_name=repo_layer_name,
+            )
+        }
+    }
 
 class KernelConfig:
     def __init__(self, kernel_mapping={}):
@@ -184,26 +197,12 @@ class KernelConfig:
             if compile:
                 mode = mode | Mode.TORCH_COMPILE
 
-            def add_to_mapping(layer_name, device, repo_name):
-                if device not in ["cuda", "rocm", "xpu"]:
-                    raise ValueError(f"Only cuda, rocm, and xpu devices supported, got: {device}")
-                repo_layer_name = repo_name.split(":")[1]
-                repo_id = repo_name.split(":")[0]
-                compatible_mapping[layer_name] = {
-                    device: {
-                        mode: LayerRepository(
-                            repo_id=repo_id,
-                            layer_name=repo_layer_name,
-                        )
-                    }
-                }
-
             if isinstance(kernel, str):
                 repo_name = kernel
                 device = infer_device(model)
-                add_to_mapping(layer_name, device, repo_name)
+                add_to_mapping(layer_name, device, repo_name, mode, compatible_mapping)
             elif isinstance(kernel, dict):
                 for device, repo_name in kernel.items():
-                    add_to_mapping(layer_name, device, repo_name)
+                    add_to_mapping(layer_name, device, repo_name, mode, compatible_mapping)
 
         self.kernel_mapping = compatible_mapping
