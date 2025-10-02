@@ -90,10 +90,16 @@ TRITON_MIN_VERSION = "1.0.0"
 
 @lru_cache
 def is_torch_available() -> bool:
-    _torch_available, _torch_version = _is_package_available("torch", return_version=True)
-    if _torch_available and version.parse(_torch_version) < version.parse("2.2.0"):
-        logger.warning_once(f"Disabling PyTorch because PyTorch >= 2.2 is required but found {_torch_version}")
-    return _torch_available and version.parse(_torch_version) >= version.parse("2.2.0")
+    is_available, torch_version = _is_package_available("torch", return_version=True)
+    if is_available and version.parse(torch_version) < version.parse("2.2.0"):
+        logger.warning_once(f"Disabling PyTorch because PyTorch >= 2.2 is required but found {torch_version}")
+    return is_available and version.parse(torch_version) >= version.parse("2.2.0")
+
+
+@lru_cache
+def get_torch_version() -> str:
+    _, torch_version = _is_package_available("torch", return_version=True)
+    return torch_version
 
 
 @lru_cache
@@ -123,8 +129,8 @@ def is_libcst_available() -> bool:
 
 @lru_cache
 def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION) -> bool:
-    _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
-    return _accelerate_available and version.parse(_accelerate_version) >= version.parse(min_version)
+    is_available, accelerate_version = _is_package_available("accelerate", return_version=True)
+    return is_available and version.parse(accelerate_version) >= version.parse(min_version)
 
 
 @lru_cache
@@ -154,8 +160,8 @@ def is_torch_deterministic() -> bool:
 
 @lru_cache
 def is_triton_available(min_version: str = TRITON_MIN_VERSION) -> bool:
-    _triton_available, _triton_version = _is_package_available("triton", return_version=True)
-    return _triton_available and version.parse(_triton_version) >= version.parse(min_version)
+    is_available, triton_version = _is_package_available("triton", return_version=True)
+    return is_available and version.parse(triton_version) >= version.parse(min_version)
 
 
 @lru_cache
@@ -165,8 +171,8 @@ def is_hadamard_available() -> bool:
 
 @lru_cache
 def is_hqq_available(min_version: str = HQQ_MIN_VERSION) -> bool:
-    _hqq_available, _hqq_version = _is_package_available("hqq", return_version=True)
-    return _hqq_available and version.parse(_hqq_version) >= version.parse(min_version)
+    is_available, hqq_version = _is_package_available("hqq", return_version=True)
+    return is_available and version.parse(hqq_version) >= version.parse(min_version)
 
 
 @lru_cache
@@ -175,17 +181,11 @@ def is_pygments_available() -> bool:
 
 
 @lru_cache
-def get_torch_version() -> str:
-    _, _torch_version = _is_package_available("torch", return_version=True)
-    return _torch_version
-
-
-@lru_cache
 def get_torch_major_and_minor_version() -> str:
-    _torch_version = get_torch_version()
-    if _torch_version == "N/A":
+    torch_version = get_torch_version()
+    if torch_version == "N/A":
         return "N/A"
-    parsed_version = version.parse(_torch_version)
+    parsed_version = version.parse(torch_version)
     return str(parsed_version.major) + "." + str(parsed_version.minor)
 
 
@@ -237,8 +237,8 @@ def is_grokadamw_available() -> bool:
 
 @lru_cache
 def is_schedulefree_available(min_version: str = SCHEDULEFREE_MIN_VERSION) -> bool:
-    _schedulefree_available, _schedulefree_version = _is_package_available("schedulefree", return_version=True)
-    return _schedulefree_available and version.parse(_schedulefree_version) >= version.parse(min_version)
+    is_available, schedulefree_version = _is_package_available("schedulefree", return_version=True)
+    return is_available and version.parse(schedulefree_version) >= version.parse(min_version)
 
 
 @lru_cache
@@ -635,8 +635,8 @@ def is_torch_musa_available(check_device=False) -> bool:
     import torch_musa  # noqa: F401
 
     torch_musa_min_version = "0.33.0"
-    _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
-    if _accelerate_available and version.parse(_accelerate_version) < version.parse(torch_musa_min_version):
+    accelerate_available, accelerate_version = _is_package_available("accelerate", return_version=True)
+    if accelerate_available and version.parse(accelerate_version) < version.parse(torch_musa_min_version):
         return False
 
     if check_device:
@@ -660,8 +660,8 @@ def is_torch_hpu_available() -> bool:
         return False
 
     torch_hpu_min_accelerate_version = "1.5.0"
-    _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
-    if _accelerate_available and version.parse(_accelerate_version) < version.parse(torch_hpu_min_accelerate_version):
+    accelerate_available, accelerate_version = _is_package_available("accelerate", return_version=True)
+    if accelerate_available and version.parse(accelerate_version) < version.parse(torch_hpu_min_accelerate_version):
         return False
 
     import torch
@@ -835,8 +835,8 @@ def is_aqlm_available() -> bool:
 
 @lru_cache
 def is_vptq_available(min_version: str = VPTQ_MIN_VERSION) -> bool:
-    _vptq_available, _vptq_version = _is_package_available("vptq", return_version=True)
-    return _vptq_available and version.parse(_vptq_version) >= version.parse(min_version)
+    is_available, vptq_version = _is_package_available("vptq", return_version=True)
+    return is_available and version.parse(vptq_version) >= version.parse(min_version)
 
 
 @lru_cache
@@ -873,13 +873,13 @@ def is_ipex_available(min_version: str = "") -> bool:
     def get_major_and_minor_from_version(full_version):
         return str(version.parse(full_version).major) + "." + str(version.parse(full_version).minor)
 
-    _ipex_available, _ipex_version = _is_package_available("intel_extension_for_pytorch", return_version=True)
+    ipex_available, ipex_version = _is_package_available("intel_extension_for_pytorch", return_version=True)
 
-    if not is_torch_available() or not _ipex_available:
+    if not is_torch_available() or not ipex_available:
         return False
 
     torch_major_and_minor = get_major_and_minor_from_version(get_torch_version())
-    ipex_major_and_minor = get_major_and_minor_from_version(_ipex_version)
+    ipex_major_and_minor = get_major_and_minor_from_version(ipex_version)
     if torch_major_and_minor != ipex_major_and_minor:
         logger.warning(
             f"Intel Extension for PyTorch {ipex_major_and_minor} needs to work with PyTorch {ipex_major_and_minor}.*,"
@@ -887,7 +887,7 @@ def is_ipex_available(min_version: str = "") -> bool:
         )
         return False
     if min_version:
-        return version.parse(_ipex_version) >= version.parse(min_version)
+        return version.parse(ipex_version) >= version.parse(min_version)
     return True
 
 
@@ -922,8 +922,8 @@ def is_torch_xpu_available(check_device: bool = False) -> bool:
 
 @lru_cache
 def is_bitsandbytes_available(check_library_only: bool = False) -> bool:
-    _bitsandbytes_available, _bitsandbytes_version = _is_package_available("bitsandbytes", return_version=True)
-    if not _bitsandbytes_available:
+    bitsandbytes_available, bitsandbytes_version = _is_package_available("bitsandbytes", return_version=True)
+    if not bitsandbytes_available:
         return False
 
     if check_library_only:
@@ -936,7 +936,7 @@ def is_bitsandbytes_available(check_library_only: bool = False) -> bool:
 
     # `bitsandbytes` versions older than 0.43.1 eagerly require CUDA at import time,
     # so those versions of the library are practically only available when CUDA is too.
-    if version.parse(_bitsandbytes_version) < version.parse("0.43.1"):
+    if version.parse(bitsandbytes_version) < version.parse("0.43.1"):
         return torch.cuda.is_available()
 
     # Newer versions of `bitsandbytes` can be imported on systems without CUDA.
@@ -955,10 +955,9 @@ def is_bitsandbytes_multi_backend_available() -> bool:
 
 @lru_cache
 def is_flash_attn_2_available() -> bool:
-    if not is_torch_available():
-        return False
+    is_available, flash_attn_version = _is_package_available("flash_attn", return_version=True)
 
-    if not _is_package_available("flash_attn"):
+    if not (is_available and is_torch_available()):
         return False
 
     # Let's add an extra check to see if cuda is available
@@ -968,12 +967,12 @@ def is_flash_attn_2_available() -> bool:
         return False
 
     if torch.version.cuda:
-        return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.1.0")
+        return version.parse(flash_attn_version) >= version.parse("2.1.0")
     elif torch.version.hip:
         # TODO: Bump the requirement to 2.1.0 once released in https://github.com/ROCmSoftwarePlatform/flash-attention
-        return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.0.4")
+        return version.parse(flash_attn_version) >= version.parse("2.0.4")
     elif is_torch_mlu_available():
-        return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.3.3")
+        return version.parse(flash_attn_version) >= version.parse("2.3.3")
     else:
         return False
 
@@ -999,10 +998,8 @@ def is_flash_attn_3_available() -> bool:
 
 @lru_cache
 def is_flash_attn_greater_or_equal_2_10() -> bool:
-    if not _is_package_available("flash_attn"):
-        return False
-
-    return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.1.0")
+    _, flash_attn_version = _is_package_available("flash_attn", return_version=True)
+    return is_flash_attn_2_available() and version.parse(flash_attn_version) >= version.parse("2.1.0")
 
 
 @lru_cache
@@ -1018,15 +1015,13 @@ def is_torch_greater_or_equal(library_version: str, accept_dev: bool = False) ->
     given version. If `accept_dev` is True, it will also accept development versions (e.g. 2.7.0.dev20250320 matches
     2.7.0).
     """
-    if not _is_package_available("torch"):
+    if not is_torch_available():
         return False
 
     if accept_dev:
-        return version.parse(version.parse(importlib.metadata.version("torch")).base_version) >= version.parse(
-            library_version
-        )
+        return version.parse(version.parse(get_torch_version()).base_version) >= version.parse(library_version)
     else:
-        return version.parse(importlib.metadata.version("torch")) >= version.parse(library_version)
+        return version.parse(get_torch_version()) >= version.parse(library_version)
 
 
 @lru_cache
@@ -1036,28 +1031,25 @@ def is_torch_less_or_equal(library_version: str, accept_dev: bool = False) -> bo
     given version. If `accept_dev` is True, it will also accept development versions (e.g. 2.7.0.dev20250320 matches
     2.7.0).
     """
-    if not _is_package_available("torch"):
+    if not is_torch_available():
         return False
 
     if accept_dev:
-        return version.parse(version.parse(importlib.metadata.version("torch")).base_version) <= version.parse(
-            library_version
-        )
+        return version.parse(version.parse(get_torch_version()).base_version) <= version.parse(library_version)
     else:
-        return version.parse(importlib.metadata.version("torch")) <= version.parse(library_version)
+        return version.parse(get_torch_version()) <= version.parse(library_version)
 
 
 @lru_cache
 def is_huggingface_hub_greater_or_equal(library_version: str, accept_dev: bool = False) -> bool:
-    if not _is_package_available("huggingface_hub"):
+    is_available, hub_version = _is_package_available("huggingface_hub", return_version=True)
+    if not is_available:
         return False
 
     if accept_dev:
-        return version.parse(
-            version.parse(importlib.metadata.version("huggingface_hub")).base_version
-        ) >= version.parse(library_version)
+        return version.parse(version.parse(hub_version).base_version) >= version.parse(library_version)
     else:
-        return version.parse(importlib.metadata.version("huggingface_hub")) >= version.parse(library_version)
+        return version.parse(hub_version) >= version.parse(library_version)
 
 
 @lru_cache
@@ -1067,15 +1059,14 @@ def is_quanto_greater(library_version: str, accept_dev: bool = False) -> bool:
     given version. If `accept_dev` is True, it will also accept development versions (e.g. 2.7.0.dev20250320 matches
     2.7.0).
     """
-    if not _is_package_available("optimum.quanto"):
+    if not is_optimum_quanto_available():
         return False
 
+    _, quanto_version = _is_package_available("optimum.quanto", return_version=True)
     if accept_dev:
-        return version.parse(version.parse(importlib.metadata.version("optimum-quanto")).base_version) > version.parse(
-            library_version
-        )
+        return version.parse(version.parse(quanto_version).base_version) > version.parse(library_version)
     else:
-        return version.parse(importlib.metadata.version("optimum-quanto")) > version.parse(library_version)
+        return version.parse(quanto_version) > version.parse(library_version)
 
 
 @lru_cache
@@ -1110,8 +1101,8 @@ def is_seqio_available() -> bool:
 
 @lru_cache
 def is_gguf_available(min_version: str = GGUF_MIN_VERSION) -> bool:
-    _is_gguf_available, _gguf_version = _is_package_available("gguf", return_version=True)
-    return _is_gguf_available and version.parse(_gguf_version) >= version.parse(min_version)
+    is_available, gguf_version = _is_package_available("gguf", return_version=True)
+    return is_available and version.parse(gguf_version) >= version.parse(min_version)
 
 
 @lru_cache
@@ -1136,8 +1127,8 @@ def is_auto_awq_available() -> bool:
 
 @lru_cache
 def is_auto_round_available(min_version: str = AUTOROUND_MIN_VERSION) -> bool:
-    _auto_round_available, _auto_round_version = _is_package_available("auto_round", return_version=True)
-    return _auto_round_available and version.parse(_auto_round_version) >= version.parse(min_version)
+    is_available, auto_round_version = _is_package_available("auto_round", return_version=True)
+    return is_available and version.parse(auto_round_version) >= version.parse(min_version)
 
 
 @lru_cache
@@ -1152,14 +1143,14 @@ def is_quark_available() -> bool:
 
 @lru_cache
 def is_fp_quant_available():
-    _fp_quant_available, _fp_quant_version = _is_package_available("fp_quant", return_version=True)
-    return _fp_quant_available and version.parse(_fp_quant_version) >= version.parse("0.2.0")
+    is_available, fp_quant_version = _is_package_available("fp_quant", return_version=True)
+    return is_available and version.parse(fp_quant_version) >= version.parse("0.2.0")
 
 
 @lru_cache
 def is_qutlass_available():
-    _qutlass_available, _qutlass_version = _is_package_available("qutlass", return_version=True)
-    return _qutlass_available and version.parse(_qutlass_version) >= version.parse("0.1.0")
+    is_available, qutlass_version = _is_package_available("qutlass", return_version=True)
+    return is_available and version.parse(qutlass_version) >= version.parse("0.1.0")
 
 
 @lru_cache
@@ -1322,8 +1313,8 @@ def is_torchaudio_available() -> bool:
 
 @lru_cache
 def is_torchao_available(min_version: str = TORCHAO_MIN_VERSION) -> bool:
-    _torchao_available, _torchao_version = _is_package_available("torchao", return_version=True)
-    return _torchao_available and version.parse(_torchao_version) >= version.parse(min_version)
+    is_available, torchao_version = _is_package_available("torchao", return_version=True)
+    return is_available and version.parse(torchao_version) >= version.parse(min_version)
 
 
 @lru_cache
@@ -1372,11 +1363,11 @@ def is_sudachi_projection_available() -> bool:
     if not is_sudachi_available():
         return False
 
-    _, _sudachipy_version = _is_package_available("sudachipy", return_version=True)
+    _, sudachipy_version = _is_package_available("sudachipy", return_version=True)
 
     # NOTE: We require sudachipy>=0.6.8 to use projection option in sudachi_kwargs for the constructor of BertJapaneseTokenizer.
     # - `projection` option is not supported in sudachipy<0.6.8, see https://github.com/WorksApplications/sudachi.rs/issues/230
-    return version.parse(_sudachipy_version) >= version.parse("0.6.8")
+    return version.parse(sudachipy_version) >= version.parse("0.6.8")
 
 
 @lru_cache
@@ -1386,7 +1377,7 @@ def is_jumanpp_available() -> bool:
 
 @lru_cache
 def is_cython_available() -> bool:
-    return importlib.util.find_spec("pyximport") is not None
+    return _is_package_available("pyximport")
 
 
 @lru_cache
@@ -1411,8 +1402,8 @@ def is_tiktoken_available() -> bool:
 
 @lru_cache
 def is_liger_kernel_available() -> bool:
-    _liger_kernel_available, _liger_kernel_version = _is_package_available("liger_kernel", return_version=True)
-    return _liger_kernel_available and version.parse(_liger_kernel_version) >= version.parse("0.3.0")
+    is_available, liger_kernel_version = _is_package_available("liger_kernel", return_version=True)
+    return is_available and version.parse(liger_kernel_version) >= version.parse("0.3.0")
 
 
 @lru_cache
