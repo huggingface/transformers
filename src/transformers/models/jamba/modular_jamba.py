@@ -23,8 +23,8 @@ from ...utils import (
 )
 from ...utils.generic import OutputRecorder, check_model_inputs
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available
-from ..llama.modeling_llama import LlamaRMSNorm, eager_attention_forward
-from ..mixtral.modeling_mixtral import MixtralExperts, MixtralForCausalLM, MixtralMLP
+from ..llama.modeling_llama import LlamaMLP, LlamaRMSNorm, eager_attention_forward
+from ..mixtral.modeling_mixtral import MixtralExperts, MixtralForCausalLM
 from .configuration_jamba import JambaConfig
 
 
@@ -492,7 +492,7 @@ class JambaMambaMixer(nn.Module):
         return self.slow_forward(hidden_states, cache_params, attention_mask)
 
 
-class JambaMLP(MixtralMLP):
+class JambaMLP(LlamaMLP):
     pass
 
 
