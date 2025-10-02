@@ -1375,7 +1375,7 @@ class DummyMeta(type):
     def __subclasscheck__(cls, sub):
         """Implement issubclass(sub, cls)."""
         logger.warning_once(
-            "`PretrainedConfig` is deprecated and will be removed in v5. Please use `PreTrainedConfig` instead!"
+            "`PretrainedConfig` is deprecated and will be removed in the future. Please use `PreTrainedConfig` instead!"
         )
         candidates = {cls, PreTrainedConfig}
         return any(c in candidates for c in sub.mro())
@@ -1384,7 +1384,7 @@ class DummyMeta(type):
 class PretrainedConfig(PreTrainedConfig, metaclass=DummyMeta):
     def __init__(self, *args, **kwargs):
         logger.warning_once(
-            "`PretrainedConfig` is deprecated and will be removed in v5. Please use `PreTrainedConfig` instead!"
+            "`PretrainedConfig` is deprecated and will be removed in the future. Please use `PreTrainedConfig` instead!"
         )
         super().__init__(*args, **kwargs)
 
