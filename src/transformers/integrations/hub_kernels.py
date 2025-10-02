@@ -111,6 +111,27 @@ try:
                 )
             }
         },
+        "SiLU": {
+            "cuda": {
+                Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                    repo_id="kernels-community/activation", layer_name="Silu", version=">=0.1.0"
+                )
+            }
+        },
+        "GeLU": {
+            "cuda": {
+                Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                    repo_id="kernels-community/activation", layer_name="Gelu", version=">=0.1.0"
+                )
+            }
+        },
+        "GeluTanh": {
+            "cuda": {
+                Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                    repo_id="kernels-community/activation", layer_name="GeluTanh", version=">=0.1.0"
+                )
+            }
+        },
     }
 
     register_kernel_mapping(_KERNEL_MAPPING)
