@@ -25,21 +25,39 @@ import numpy as np
 from transformers.image_transforms import get_size_with_aspect_ratio
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_processing_utils import BaseImageProcessor, get_size_dict
-from ...image_transforms import (PaddingMode, center_to_corners_format,
-                                 corners_to_center_format, id_to_rgb, pad,
-                                 rescale, resize, rgb_to_id,
-                                 to_channel_dimension_format)
-from ...image_utils import (IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD,
-                            AnnotationFormat, AnnotationType, ChannelDimension,
-                            ImageInput, PILImageResampling, get_image_size,
-                            infer_channel_dimension_format, is_scaled_image,
-                            make_flat_list_of_images, to_numpy_array,
-                            valid_images, validate_annotations,
-                            validate_kwargs, validate_preprocess_arguments)
-from ...utils import (TensorType, is_scipy_available, is_torch_available,
-                      is_torch_tensor, is_vision_available, logging)
+from ...image_processing_utils import BaseImageProcessor, ImagesKwargs, get_size_dict
+from ...image_transforms import (
+    PaddingMode,
+    center_to_corners_format,
+    corners_to_center_format,
+    id_to_rgb,
+    pad,
+    rescale,
+    resize,
+    rgb_to_id,
+    to_channel_dimension_format,
+)
+from ...image_utils import (
+    IMAGENET_DEFAULT_MEAN,
+    IMAGENET_DEFAULT_STD,
+    AnnotationFormat,
+    AnnotationType,
+    ChannelDimension,
+    ImageInput,
+    PILImageResampling,
+    get_image_size,
+    infer_channel_dimension_format,
+    is_scaled_image,
+    make_flat_list_of_images,
+    to_numpy_array,
+    valid_images,
+    validate_annotations,
+    validate_kwargs,
+    validate_preprocess_arguments,
+)
+from ...utils import TensorType, is_scipy_available, is_torch_available, is_torch_tensor, is_vision_available, logging
 from ...utils.import_utils import requires
+
 
 if is_torch_available():
     import torch
