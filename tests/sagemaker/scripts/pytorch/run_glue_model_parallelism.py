@@ -26,7 +26,7 @@ import numpy as np
 from datasets import load_dataset, load_metric
 
 import transformers
-from transformers import (  # Trainer,; TrainingArguments,
+from transformers import (
     AutoConfig,
     AutoModelForSequenceClassification,
     AutoTokenizer,
@@ -37,11 +37,9 @@ from transformers import (  # Trainer,; TrainingArguments,
     default_data_collator,
     set_seed,
 )
-
-# Will import SageMaker Model parallelism specific Trainer
-from transformers.sagemaker import SageMakerTrainer as Trainer
-from transformers.sagemaker import SageMakerTrainingArguments as TrainingArguments
+from transformers.trainer import Trainer
 from transformers.trainer_utils import get_last_checkpoint
+from transformers.training_args import TrainingArguments
 from transformers.utils import check_min_version
 
 
