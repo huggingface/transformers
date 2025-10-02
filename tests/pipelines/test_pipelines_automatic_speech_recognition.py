@@ -615,7 +615,9 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             {"text": " Nor is Mr. Quilters' manner less interesting than his matter."},
         ]
 
-        output = speech_recognizer(ds["audio"], batch_size=2)
+
+        audio_arrays = [x.get_all_samples().data for x in ds["audio"]]
+        output = speech_recognizer(audio_arrays, batch_size=2)
         self.assertEqual(output, EXPECTED_OUTPUT)
 
     @slow
@@ -1763,11 +1765,11 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         pipe = pipeline("automatic-speech-recognition", model=model, assistant_model=model)
 
         # We can run the pipeline
-        prompt = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:1]")["audio"]
-        _ = pipe(prompt)
+        prompt = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:1]")[0]["audio"]
+        _ = pipe(prompt, generate_kwargs={"num_beams": 1})
 
         # It is running assisted generation under the hood (e.g. flags incompatible with assisted gen will crash)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             _ = pipe(prompt, generate_kwargs={"num_beams": 2})
 
     @require_torch
