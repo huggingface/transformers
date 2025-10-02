@@ -18,13 +18,12 @@ import copy
 from typing import Any, Optional, Union
 
 import numpy as np
-import torch
 import torch.nn.functional as F
 
-from ...audio_utils import mel_filter_bank, spectrogram, window_function
+from ...audio_utils import mel_filter_bank, spectrogram, window_function, make_list_of_audio, AudioInput
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
-from ...utils import PaddingStrategy, TensorType, is_torch_available, logging
+from ...utils import PaddingStrategy, TensorType, logging
 
 
 logger = logging.get_logger(__name__)
@@ -65,6 +64,8 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
         self,
         feature_size=80,
         sampling_rate=16000,
+        n_fft=512,
+        window_len=400,
         num_mel_bins=80,
         padding_value=1.0,
         stride=2,
@@ -81,8 +82,6 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
             **kwargs
         )
         self.return_attention_mask = return_attention_mask
-        self.num_mel_bins = num_mel_bins
-        self.stride = stride 
 
         # For DAC-like padding before Mel feature extraction
         self.n_channels = n_channels
@@ -97,8 +96,12 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
         self.initial_padder.model_input_names = ["audio", "padding_mask"]
 
         # filter bank like SeamlessM4T
-        mel_filters = mel_filter_bank(
-            num_frequency_bins=257,
+        self.n_fft = n_fft
+        self.num_mel_bins = num_mel_bins
+        self.stride = stride 
+        self.win_length = window_len
+        self.mel_filters = mel_filter_bank(
+            num_frequency_bins=self.n_fft // 2 + 1,
             num_mel_filters=self.num_mel_bins,
             min_frequency=20,
             max_frequency=sampling_rate // 2,
@@ -107,9 +110,7 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
             mel_scale="kaldi",
             triangularize_in_mel_space=True,
         )
-
-        self.mel_filters = mel_filters
-        self.window = window_function(400, "povey", periodic=False)
+        self.window = window_function(self.win_length, "povey", periodic=False)
 
     def _extract_fbank_features(
         self,
@@ -127,9 +128,9 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
         features = spectrogram(
             waveform,
             self.window,
-            frame_length=400,
+            frame_length=self.win_length,
             hop_length=160,
-            fft_length=512,
+            fft_length=self.n_fft,
             power=2.0,
             center=False,
             preemphasis=0.97,
@@ -142,7 +143,7 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        audio: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
+        audio: AudioInput,
         padding: Union[bool, str, PaddingStrategy] = True,
         pad_to_multiple_of: Optional[int] = 2,
         max_length: Optional[int] = None,
@@ -156,17 +157,9 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
         Main method to featurize and prepare for the model one or several sequence(s).
 
         Args:
-            audio (`np.ndarray`, `torch.Tensor`, `list[float]`, `list[np.ndarray]`, `list[torch.Tensor]`,
-            `list[list[float]]`, `list[list[list[float]]]`):
-                The sequence or batch of sequences to be padded. Each sequence can be a numpy array,
-                a torch tensor, a list of float values, a list of numpy arrays, a list of torch tensors,
-                a list of list of float values or a list of a list of list of float values.
-                If `audio` is a one-dimensional `np.ndarray`, `torch.Tensor` or a `list[float]`, `audio` is
-                considered a single-channel, single-sample sound. In all other cases, the first dimension of
-                `audio`, whether from an `np.ndarray`, a `torch.Tensor` or a `list[...]`,
-                corresponds to the number of samples in the batch, and the number of channels
-                (i.e. mono or stereo character) is derived from the other dimensions
-                (1D -> single-channel waveform batches; 2D-> stereo-channel waveform batches).
+            audio (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
+                Numpy array or torch tensor with shape (num_channels, sequence_length). A list of such arrays or
+                tensors can also be provided for a batch of inputs.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
                 index) among:
@@ -227,30 +220,11 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
-        is_batched_numpy = isinstance(audio, np.ndarray) and len(audio.shape) > 1
-        if is_batched_numpy and len(audio.shape) > 3:
-            raise ValueError(f"Only mono-channel or stereo-channel audio is supported for input to {self}")
-
-        acceptable_types = (
-            (torch.Tensor, np.ndarray, tuple, list) if is_torch_available() else (np.ndarray, tuple, list)
-        )
-        is_batched = is_batched_numpy or (
-            isinstance(audio, (list, tuple)) and (isinstance(audio[0], acceptable_types))
-        )
-
-        if is_batched:
-            audio = [np.asarray(speech, dtype=np.float32) for speech in audio]
-        elif not is_batched and not isinstance(audio, np.ndarray):
-            audio = np.asarray(audio, dtype=np.float32)
-        elif isinstance(audio, np.ndarray) and audio.dtype is np.dtype(np.float64):
-            audio = audio.astype(np.float32)
-
-        # always return batch
-        if not is_batched:
-            audio = [audio]
+        # ensure batch
+        audio = make_list_of_audio(audio)
 
         # DAC-like padding
-        for idx, example in enumerate(audio):
+        for _, example in enumerate(audio):
             if example.ndim > 2:
                 raise ValueError(f"Expected input shape (channels, length) but got shape {example.shape}")
             if self.feature_size == 1 and example.ndim != 1:
@@ -270,23 +244,14 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
         if padding:
             padded_inputs["padding_mask"] = padded_inputs.pop("attention_mask")
             
-        # Process audio dimensions consistently
-        input_values = []
-        for example in padded_inputs.pop("audio"):
-            if padding:
-                # Add channel dimension if needed for padded inputs
-                if example.ndim == 1:
-                    example = example[np.newaxis, :]
-            if self.feature_size == 1 and example.ndim == 1:
-                example = example[..., None]
-            input_values.append(example) 
-        padded_inputs["audio"] = input_values
+        # Add channel dimension: (batch_size, sequence_length) -> (batch_size, 1, sequence_length)
+        padded_inputs["audio"] = padded_inputs["audio"][:, np.newaxis, :]
         
-        # Convert to tensors early if requested for consistent processing
+        # Convert to tensors to use torch operations below
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
 
-        # Xcodec2 processing between the two feature extractors
+        # Xcodec2 processing between DAC and SeamlessM4T feature extractors
         # See: https://github.com/huggingface/transformers/pull/37868#discussion_r2382396644
         # 1) redundant padding inside modeling of PyPI version (xcodec2==0.1.3)
         # probably accidental on their part, but it is needed to get same results
