@@ -138,10 +138,6 @@ CLIP を使い始めるのに役立つ公式 Hugging Face およびコミュニ�
 [[autodoc]] CLIPImageProcessorFast
     - preprocess
 
-## CLIPFeatureExtractor
-
-[[autodoc]] CLIPFeatureExtractor
-
 ## CLIPProcessor
 
 [[autodoc]] CLIPProcessor
@@ -173,4 +169,3 @@ CLIP を使い始めるのに役立つ公式 Hugging Face およびコミュニ�
 
 [[autodoc]] CLIPVisionModel
     - forward
-
