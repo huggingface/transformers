@@ -29,8 +29,6 @@
     title: Addestramento con script
   - local: multilingual
     title: Modelli multilingua per l'inferenza
-  - local: serialization
-    title: Esporta modelli Transformers
   - local: perf_train_cpu
     title: Addestramento efficiente su CPU
   - local: perf_train_cpu_many
@@ -66,4 +64,3 @@
   - local: pr_checks
     title: Controlli su una Pull Request
   title: Guide How-to
-  

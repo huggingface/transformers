@@ -508,7 +508,7 @@ class FlavaConfig(PretrainedConfig):
 
             # Give a warning if the values exist in both `_text_config_dict` and `text_config` but being different.
             for key, value in _text_config_dict.items():
-                if key in text_config and value != text_config[key] and key not in ["transformers_version"]:
+                if key in text_config and value != text_config[key] and key != "transformers_version":
                     # If specified in `text_config_dict`
                     if key in text_config_dict:
                         message = (
@@ -540,7 +540,7 @@ class FlavaConfig(PretrainedConfig):
 
             # Give a warning if the values exist in both `_image_config_dict` and `image_config` but being different.
             for key, value in _image_config_dict.items():
-                if key in image_config and value != image_config[key] and key not in ["transformers_version"]:
+                if key in image_config and value != image_config[key] and key != "transformers_version":
                     # If specified in `image_config_dict`
                     if key in image_config_dict:
                         message = (
@@ -568,11 +568,7 @@ class FlavaConfig(PretrainedConfig):
             # Give a warning if the values exist in both `_multimodal_config_dict` and `multimodal_config` but being
             # different.
             for key, value in _multimodal_config_dict.items():
-                if (
-                    key in multimodal_config
-                    and value != multimodal_config[key]
-                    and key not in ["transformers_version"]
-                ):
+                if key in multimodal_config and value != multimodal_config[key] and key != "transformers_version":
                     # If specified in `multimodal_config_dict`
                     if key in multimodal_config_dict:
                         message = (
@@ -603,7 +599,7 @@ class FlavaConfig(PretrainedConfig):
                 if (
                     key in image_codebook_config
                     and value != image_codebook_config[key]
-                    and key not in ["transformers_version"]
+                    and key != "transformers_version"
                 ):
                     # If specified in `image_codebook_config_dict`
                     if key in image_codebook_config_dict:

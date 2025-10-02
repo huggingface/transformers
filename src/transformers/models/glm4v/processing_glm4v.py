@@ -178,7 +178,7 @@ class Glm4vProcessor(ProcessorMixin):
                     num_frames = video_grid_thw[video_index][0]
                     video_structure = ""
 
-                    metadata = video_metadata[i]
+                    metadata = video_metadata[video_index]
                     if metadata.fps is None:
                         logger.warning_once(
                             "SmolVLM requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "

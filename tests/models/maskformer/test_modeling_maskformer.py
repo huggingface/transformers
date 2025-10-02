@@ -218,7 +218,7 @@ class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         inputs_dict = copy.deepcopy(inputs_dict)
 
         if return_labels:
-            if model_class in [MaskFormerForInstanceSegmentation]:
+            if model_class == MaskFormerForInstanceSegmentation:
                 inputs_dict["mask_labels"] = torch.zeros(
                     (
                         self.model_tester.batch_size,

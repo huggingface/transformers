@@ -169,10 +169,6 @@ class Cohere2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="Siglip backbone uses a non-standard initialization scheme")
-    def test_initialization(self):
-        pass
-
 
 @require_read_token
 @require_torch

@@ -37,7 +37,7 @@ class FPQuantHfQuantizer(HfQuantizer):
 
     requires_calibration = False
     requires_parameters_quantization = True
-    is_qat_trainable = False
+    is_qat_trainable = True
     required_packages = ["fp_quant"]
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
@@ -63,12 +63,16 @@ class FPQuantHfQuantizer(HfQuantizer):
         if not is_fp_quant_available():
             raise ImportError("Using `fp_quant` quantization requires fp_quant: `pip install fp_quant`")
 
-        if device_map is None:
+        if device_map is None and not self.quantization_config.pseudoquantization:
             raise ValueError(
                 "You are attempting to load a FPQuant model without setting device_map."
                 " Please set device_map comprised of 'cuda' devices."
             )
-        elif isinstance(device_map, dict) and ("cpu" in device_map.values() or "disk" in device_map.values()):
+        elif (
+            isinstance(device_map, dict)
+            and ("cpu" in device_map.values() or "disk" in device_map.values())
+            and not self.quantization_config.pseudoquantization
+        ):
             raise ValueError(
                 "You are attempting to load a FPQuant model with a device_map that contains a CPU or disk device."
                 " This is not supported. Please remove the CPU or disk device from the device_map."
@@ -154,7 +158,12 @@ class FPQuantHfQuantizer(HfQuantizer):
 
     @property
     def is_trainable(self, model: Optional["PreTrainedModel"] = None):
-        return False
+        trainable = self.quantization_config.store_master_weights
+        if not trainable:
+            logger.warning(
+                "You are attempting to train a model with FPQuant quantization. This is only supported when `store_master_weights=True`. Please set `store_master_weights=True` to train the model."
+            )
+        return trainable
 
     def is_serializable(self, safe_serialization=None):
         return True

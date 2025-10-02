@@ -186,11 +186,6 @@ class DeepseekVLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
             torch.testing.assert_close(out_embeds, out_ids)
 
-    @unittest.skip(reason="Siglip uses a non-standard initialization scheme")
-    # Copied from tests.models.siglip.test_modeling_siglip.SiglipVisionModelTest.test_initialization
-    def test_initialization(self):
-        pass
-
     # Copied from tests.models.janus.test_modeling_janus.JanusVisionText2TextModelTest.test_sdpa_can_dispatch_composite_models
     def test_sdpa_can_dispatch_composite_models(self):
         for model_class in self.all_model_classes:

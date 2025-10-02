@@ -26,24 +26,24 @@ The library was designed with two strong goals in mind:
 
 1. Be as easy and fast to use as possible:
 
-  - We strongly limited the number of user-facing abstractions to learn, in fact, there are almost no abstractions,
+- We strongly limited the number of user-facing abstractions to learn, in fact, there are almost no abstractions,
     just three standard classes required to use each model: [configuration](main_classes/configuration),
     [models](main_classes/model), and a preprocessing class ([tokenizer](main_classes/tokenizer) for NLP, [image processor](main_classes/image_processor) for vision, [feature extractor](main_classes/feature_extractor) for audio, and [processor](main_classes/processors) for multimodal inputs).
-  - All of these classes can be initialized in a simple and unified way from pretrained instances by using a common
+- All of these classes can be initialized in a simple and unified way from pretrained instances by using a common
     `from_pretrained()` method which downloads (if needed), caches and
     loads the related class instance and associated data (configurations' hyperparameters, tokenizers' vocabulary,
     and models' weights) from a pretrained checkpoint provided on [Hugging Face Hub](https://huggingface.co/models) or your own saved checkpoint.
-  - On top of those three base classes, the library provides two APIs: [`pipeline`] for quickly
+- On top of those three base classes, the library provides two APIs: [`pipeline`] for quickly
     using a model for inference on a given task and [`Trainer`] to quickly train or fine-tune a PyTorch model.
-  - As a consequence, this library is NOT a modular toolbox of building blocks for neural nets. If you want to
+- As a consequence, this library is NOT a modular toolbox of building blocks for neural nets. If you want to
     extend or build upon the library, just use regular Python or PyTorch and inherit from the base
     classes of the library to reuse functionalities like model loading and saving. If you'd like to learn more about our coding philosophy for models, check out our [Repeat Yourself](https://huggingface.co/blog/transformers-design-philosophy) blog post.
 
 2. Provide state-of-the-art models with performances as close as possible to the original models:
 
-  - We provide at least one example for each architecture which reproduces a result provided by the official authors
+- We provide at least one example for each architecture which reproduces a result provided by the official authors
     of said architecture.
-  - The code is usually as close to the original code base as possible which means some PyTorch code may be not as
+- The code is usually as close to the original code base as possible which means some PyTorch code may be not as
     *pytorchic* as it could be as a result of being converted from other Deep Learning frameworks.
 
 A few other goals:

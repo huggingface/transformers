@@ -1066,8 +1066,7 @@ class ServeCommand(BaseTransformersCLICommand):
                 for result in streamer:
                     # Temporary hack for GPTOS 3: don't emit the final "<|return|>"
                     if "gptoss" in model.config.architectures[0].lower():
-                        if result.endswith("<|return|>"):
-                            result = result[: -len("<|return|>")]
+                        result = result.removesuffix("<|return|>")
                     results += result
 
                     # (related to temporary hack 2)
@@ -1325,8 +1324,7 @@ class ServeCommand(BaseTransformersCLICommand):
                 for result in streamer:
                     # Temporary hack for GPTOS 3: don't emit the final "<|return|>"
                     if "gptoss" in model.config.architectures[0].lower():
-                        if result.endswith("<|return|>"):
-                            result = result[: -len("<|return|>")]
+                        result = result.removesuffix("<|return|>")
                     results += result
 
                     # (related to temporary hack 2)

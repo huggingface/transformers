@@ -327,7 +327,7 @@ def build_aspect_ratio_mask(aspect_ratios: list[list[tuple[int, int]]], max_imag
             The mask contains 1s for valid tiles and 0s for padding.
     """
     batch_size = len(aspect_ratios)
-    max_num_images = max([len(row) for row in aspect_ratios])
+    max_num_images = max(len(row) for row in aspect_ratios)
 
     aspect_ratio_mask = np.zeros((batch_size, max_num_images, max_image_tiles), dtype=np.int64)
 
@@ -374,7 +374,7 @@ def pack_images(
 
     # Determine output shape
     batch_size = len(batch_images)
-    max_num_images = max([len(images) for images in batch_images])
+    max_num_images = max(len(images) for images in batch_images)
     shapes = [image.shape for images in batch_images for image in images]
     _, channels, tile_height, tile_width = shapes[0]
 
@@ -412,7 +412,7 @@ def pack_aspect_ratios(aspect_ratios: list[list[tuple[int, int]]], pad_value: in
             The aspect ratios stacked into a numpy array with shape (batch_size, max_num_images, 2).
     """
     batch_size = len(aspect_ratios)
-    max_num_images = max([len(row) for row in aspect_ratios])
+    max_num_images = max(len(row) for row in aspect_ratios)
 
     aspect_ratios_stacked = np.full((batch_size, max_num_images, 2), pad_value, dtype=np.int64)
     for i, row in enumerate(aspect_ratios):
@@ -442,7 +442,7 @@ def convert_aspect_ratios_to_ids(aspect_ratios: list[list[tuple[int, int]]], max
     """
 
     batch_size = len(aspect_ratios)
-    max_num_images = max([len(row) for row in aspect_ratios])
+    max_num_images = max(len(row) for row in aspect_ratios)
     supported_aspect_ratios = get_all_supported_aspect_ratios(max_image_tiles)
 
     aspect_ratios_ids = np.zeros((batch_size, max_num_images), dtype=np.int64)

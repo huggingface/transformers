@@ -18,6 +18,7 @@ from typing import Optional, Union
 
 import torch
 from torch import nn
+from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
@@ -39,16 +40,10 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_v2_available,
     logging,
 )
 from .image_processing_oneformer import load_metadata, prepare_metadata
 
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
 
 logger = logging.get_logger(__name__)
 
@@ -453,11 +448,7 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
             for shape, stacked_segmentation_maps in grouped_segmentation_maps.items():
                 if do_resize:
                     stacked_segmentation_maps = self.resize(
-                        stacked_segmentation_maps,
-                        size=size,
-                        interpolation=F.InterpolationMode.NEAREST_EXACT
-                        if is_torchvision_v2_available()
-                        else F.InterpolationMode.NEAREST,
+                        stacked_segmentation_maps, size=size, interpolation=F.InterpolationMode.NEAREST_EXACT
                     )
                 processed_segmentation_maps_grouped[shape] = stacked_segmentation_maps
             processed_segmentation_maps = reorder_images(
