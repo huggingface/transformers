@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Optional, Union
 
 import torch
 from torchvision.io import read_image
+from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
@@ -32,19 +33,13 @@ from ...image_utils import (
     validate_annotations,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_v2_available, logging
+from ...utils import TensorType, auto_docstring, logging
 from ...utils.import_utils import requires
 from .image_processing_grounding_dino import get_size_with_aspect_ratio
 
 
 if TYPE_CHECKING:
     from .modeling_grounding_dino import GroundingDinoObjectDetectionOutput
-
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
 
 
 logger = logging.get_logger(__name__)
@@ -459,13 +454,7 @@ class GroundingDinoImageProcessorFast(BaseImageProcessorFast):
             resample (`InterpolationMode`, defaults to `F.InterpolationMode.NEAREST_EXACT`):
                 The resampling filter to use when resizing the masks.
         """
-        interpolation = (
-            interpolation
-            if interpolation is not None
-            else F.InterpolationMode.NEAREST_EXACT
-            if is_torchvision_v2_available()
-            else F.InterpolationMode.NEAREST
-        )
+        interpolation = interpolation if interpolation is not None else F.InterpolationMode.NEAREST_EXACT
         ratio_height, ratio_width = [target / orig for target, orig in zip(target_size, orig_size)]
 
         new_annotation = {}
