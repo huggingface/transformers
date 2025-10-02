@@ -139,10 +139,6 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
     def test_can_init_all_missing_weights(self):
         pass
 
-    @unittest.skip(reason="TimmBackbone initialization is managed on the timm side")
-    def test_initialization(self):
-        pass
-
     @unittest.skip(reason="TimmBackbone models doesn't have inputs_embeds")
     def test_inputs_embeds(self):
         pass
