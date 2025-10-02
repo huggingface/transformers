@@ -89,36 +89,12 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
 
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
 
-    @staticmethod
-    # Copied from transformers.models.wav2vec2.feature_extraction_wav2vec2.Wav2Vec2FeatureExtractor.zero_mean_unit_var_norm
-    def zero_mean_unit_var_norm(
-        input_values: list[np.ndarray], attention_mask: list[np.ndarray], padding_value: float = 0.0
-    ) -> list[np.ndarray]:
-        """
-        Every array in the list is normalized to have zero mean and unit variance
-        """
-        if attention_mask is not None:
-            attention_mask = np.array(attention_mask, np.int32)
-            normed_input_values = []
-
-            for vector, length in zip(input_values, attention_mask.sum(-1)):
-                normed_slice = (vector - vector[:length].mean()) / np.sqrt(vector[:length].var() + 1e-7)
-                if length < normed_slice.shape[0]:
-                    normed_slice[length:] = padding_value
-
-                normed_input_values.append(normed_slice)
-        else:
-            normed_input_values = [(x - x.mean()) / np.sqrt(x.var() + 1e-7) for x in input_values]
-
-        return normed_input_values
-
     def _extract_fbank_features(
         self,
         waveform: np.ndarray,
     ) -> np.ndarray:
         """
-        Get mel-filter bank features using TorchAudio. Note that TorchAudio requires 16-bit signed integers as inputs
-        and hence the waveform should not be normalized before feature extraction.
+        Get mel-filter bank features using Numpy method to mimic Kaldi.
         """
         # by default, it extracts the left channel if stereo
         if len(waveform.shape) == 2:
