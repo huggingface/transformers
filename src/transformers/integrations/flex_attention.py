@@ -36,7 +36,7 @@ from ..utils.import_utils import _torch_version, is_torch_less_or_equal, is_torc
 
 
 if is_torch_flex_attn_available():
-    from torch.nn.attention.flex_attention import _DEFAULT_SPARSE_BLOCK_SIZE as flex_default_block_size  # noqa: N811
+    from torch.nn.attention.flex_attention import _DEFAULT_SPARSE_BLOCK_SIZE as flex_default_block_size
     from torch.nn.attention.flex_attention import BlockMask, create_block_mask, flex_attention
 
 
@@ -240,15 +240,9 @@ def flex_attention_forward(
     attention_mask: Union[torch.Tensor, "BlockMask"],
     scaling: Optional[float] = None,
     softcap: Optional[float] = None,
-    head_mask: Optional[torch.Tensor] = None,
     s_aux: Optional[torch.Tensor] = None,
     **kwargs,
 ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
-    if head_mask is not None:
-        logger.warning_once(
-            "`flex_attention` does not support `head_mask`. Please set your attention to `eager` if you want this feature."
-        )
-
     if kwargs.get("dropout", 0.0) > 0:
         raise ValueError(
             "`flex_attention` does not support `dropout`. Please use it with inference"
@@ -270,14 +264,9 @@ def flex_attention_forward(
             score = softcap * torch.tanh(score / softcap)
         if score_mask is not None:
             score = score + score_mask[batch_idx][0][q_idx][kv_idx]
-        if head_mask is not None:
-            score = score + head_mask[batch_idx][head_idx][0][0]
-        if s_aux is not None:
-            logits_max = torch.max(score, dim=-1, keepdim=True).values
-            sinks = torch.exp(s_aux - logits_max)
-            unnormalized_scores = torch.exp(score - logits_max)
-            normalizer = unnormalized_scores.sum(dim=-1, keepdim=True) + sinks
-            score = unnormalized_scores / normalizer
+        # Note: attention sinks cannot be correctly implemented in score_mod
+        # because it requires operating on the full attention matrix before softmax.
+        # ==> this is done after flex attention
         return score
 
     enable_gqa = True
@@ -292,6 +281,11 @@ def flex_attention_forward(
     kernel_options = kwargs.get("kernel_options")
     # On CPU we must skip returning LSE due to a runtime issue; elsewhere, follow PyTorch API and return it
     return_lse = query.device.type != "cpu"
+
+    # Validate that s_aux is not silently ignored
+    if not return_lse and s_aux is not None:
+        logger.warning_once("s_aux provided with return_lse=False - forcing return_lse=True to avoid silent failure")
+        return_lse = True
 
     flex_attention_output = compile_friendly_flex_attention(
         query,
@@ -311,6 +305,21 @@ def flex_attention_forward(
     if return_lse:
         attention_output, lse = flex_attention_output  # type: ignore[misc]
         lse = lse.to(value.dtype)
+
+        if s_aux is not None:
+            # Apply attention sinks by renormalizing using LSE
+            batch_size, num_heads, seq_len_q, _ = attention_output.shape  # batch, num_heads, seq_len, head_dim
+            sinks = s_aux.view(1, -1, 1, 1).expand(batch_size, num_heads, seq_len_q, 1)
+
+            # We need to compute the normalization that includes the sinks
+            # since log(sum(exp(scores))) = lse, exp(log(sum(exp(scores)))) = exp(lse)
+            # NB: log(sum(exp(scores)) + exp(sink)) = log(exp(lse) + exp(sink))
+            lse_expanded = lse.unsqueeze(-1)  # [batch, num_heads, seq_len, 1]
+            combined_lse = torch.logsumexp(torch.cat([lse_expanded, sinks], dim=-1), dim=-1, keepdim=True)
+
+            # Use new_norm / old_norm = exp(combined_lse - lse) to compute renorm and apply
+            renorm_factor = torch.exp(lse_expanded - combined_lse)
+            attention_output = attention_output * renorm_factor
     else:
         attention_output = flex_attention_output  # type: ignore[assignment]
         lse = None

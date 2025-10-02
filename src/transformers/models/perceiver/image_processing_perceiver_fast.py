@@ -16,26 +16,22 @@
 
 from typing import Optional, Union
 
+import torch
+
 from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling, SizeDict
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
     is_torchvision_v2_available,
 )
 
 
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
+if is_torchvision_v2_available():
+    from torchvision.transforms.v2 import functional as F
+else:
+    from torchvision.transforms import functional as F
 
 
 @auto_docstring
@@ -81,7 +77,7 @@ class PerceiverImageProcessorFast(BaseImageProcessorFast):
         min_dim = min(height, width)
         cropped_height = int((size.height / crop_size.height) * min_dim)
         cropped_width = int((size.width / crop_size.width) * min_dim)
-        return F.center_crop(image, (cropped_height, cropped_width))
+        return super().center_crop(image, SizeDict(height=cropped_height, width=cropped_width))
 
     def _preprocess(
         self,

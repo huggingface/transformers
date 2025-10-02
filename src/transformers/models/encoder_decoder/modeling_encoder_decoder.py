@@ -14,10 +14,7 @@
 # limitations under the License.
 """Classes to support Encoder-Decoder architectures"""
 
-import gc
 import inspect
-import os
-import tempfile
 import warnings
 from typing import Optional, Union
 
@@ -25,11 +22,13 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from ...cache_utils import Cache
 from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput, Seq2SeqLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
+from ...utils.generic import can_return_tuple
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_auto import AutoModel, AutoModelForCausalLM
 from .configuration_encoder_decoder import EncoderDecoderConfig
@@ -204,99 +203,6 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
         return self.decoder.set_output_embeddings(new_embeddings)
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r"""
-        Example:
-
-        ```python
-        >>> from transformers import EncoderDecoderModel
-
-        >>> model = EncoderDecoderModel.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16")
-        ```"""
-
-        from_tf = kwargs.pop("from_tf", False)
-        if from_tf:
-            from transformers import TFEncoderDecoderModel
-
-            # a workaround to load from tensorflow checkpoint
-            # Using `_tf_model` won't work, because the weight names in the encoder/decoder of `_tf_model` get
-            # extended before saving those components. For example, The name of `_tf_model.encoder.vit` is
-            # `[top model name]/encoder/vit`, but the name of `tf_model.encoder.vit` is `[top model name]/vit`. The
-            # [top model name] is handled (stripped) by the conversion method, and the former case gets extra `encoder`,
-            # which should not occur when we want to save the components alone.
-            # There was a (very) ugly potential fix, which wasn't integrated to `transformers`: see
-            #   https://github.com/huggingface/transformers/pull/13222/commits/dbb3c9de76eee235791d2064094654637c99f36d#r697304245
-            #   (the change in `src/transformers/modeling_tf_utils.py`)
-            _tf_model = TFEncoderDecoderModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-            config = _tf_model.config
-
-            # Using `tf_model` instead
-            encoder = _tf_model.encoder.__class__(_tf_model.config.encoder)
-            decoder = _tf_model.decoder.__class__(_tf_model.config.decoder)
-            # Make sure models are built
-            encoder(encoder.dummy_inputs)
-            decoder(decoder.dummy_inputs)
-
-            # Get the variable correspondence between `_tf_model` and `encoder` and `decoder`
-            encoder_variables = {}
-            for v in encoder.trainable_variables + encoder.non_trainable_variables:
-                encoder_variables["/".join(v.name.split("/")[1:])] = v
-            decoder_variables = {}
-            for v in decoder.trainable_variables + decoder.non_trainable_variables:
-                decoder_variables["/".join(v.name.split("/")[1:])] = v
-
-            _encoder_variables = {}
-            for v in _tf_model.encoder.trainable_variables + _tf_model.encoder.non_trainable_variables:
-                _encoder_variables["/".join(v.name.split("/")[2:])] = v
-            _decoder_variables = {}
-            for v in _tf_model.decoder.trainable_variables + _tf_model.decoder.non_trainable_variables:
-                _decoder_variables["/".join(v.name.split("/")[2:])] = v
-
-            # assign weight values to `encoder` and `decoder` from `_tf_model`
-            for name, v in encoder_variables.items():
-                v.assign(_encoder_variables[name])
-            for name, v in decoder_variables.items():
-                v.assign(_decoder_variables[name])
-
-            tf_model = TFEncoderDecoderModel(encoder=encoder, decoder=decoder)
-
-            # Deal with `enc_to_dec_proj`
-            if hasattr(_tf_model, "enc_to_dec_proj"):
-                tf_model(tf_model.dummy_inputs)
-                tf_model.enc_to_dec_proj.kernel.assign(_tf_model.enc_to_dec_proj.kernel)
-                tf_model.enc_to_dec_proj.bias.assign(_tf_model.enc_to_dec_proj.bias)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                encoder_dir = os.path.join(tmpdirname, "encoder")
-                decoder_dir = os.path.join(tmpdirname, "decoder")
-                tf_model.encoder.save_pretrained(encoder_dir)
-                tf_model.decoder.save_pretrained(decoder_dir)
-
-                if hasattr(tf_model, "enc_to_dec_proj"):
-                    enc_to_dec_proj_weight = torch.transpose(
-                        torch.from_numpy(tf_model.enc_to_dec_proj.kernel.numpy()), 1, 0
-                    )
-                    enc_to_dec_proj_bias = torch.from_numpy(tf_model.enc_to_dec_proj.bias.numpy())
-
-                del _tf_model
-                del tf_model
-                gc.collect()
-
-                model = EncoderDecoderModel.from_encoder_decoder_pretrained(
-                    encoder_dir, decoder_dir, encoder_from_tf=True, decoder_from_tf=True
-                )
-                # This is only for copying some specific attributes of this particular model.
-                model.config = config
-
-                if hasattr(model, "enc_to_dec_proj"):
-                    model.enc_to_dec_proj.weight.data = enc_to_dec_proj_weight.contiguous()
-                    model.enc_to_dec_proj.bias.data = enc_to_dec_proj_bias.contiguous()
-
-                return model
-
-        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-
-    @classmethod
     def from_encoder_decoder_pretrained(
         cls,
         encoder_pretrained_model_name_or_path: Optional[str] = None,
@@ -319,10 +225,6 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
-                    - A path or url to a *tensorflow index checkpoint file* (e.g, `./tf_model/model.ckpt.index`). In
-                      this case, `from_tf` should be set to `True` and a configuration object should be provided as
-                      `config` argument. This loading path is slower than converting the TensorFlow checkpoint in a
-                      PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
 
             decoder_pretrained_model_name_or_path (`str`, *optional*, defaults to `None`):
                 Information necessary to initiate the decoder. Can be either:
@@ -330,10 +232,6 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
-                    - A path or url to a *tensorflow index checkpoint file* (e.g, `./tf_model/model.ckpt.index`). In
-                      this case, `from_tf` should be set to `True` and a configuration object should be provided as
-                      `config` argument. This loading path is slower than converting the TensorFlow checkpoint in a
-                      PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
 
             model_args (remaining positional arguments, *optional*):
                 All remaining positional arguments will be passed to the underlying model's `__init__` method.
@@ -442,6 +340,7 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
         config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config, **kwargs)
         return cls(encoder=encoder, decoder=decoder, config=config)
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -450,14 +349,12 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.BoolTensor] = None,
         encoder_outputs: Optional[tuple[torch.FloatTensor]] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> Union[tuple, Seq2SeqLMOutput]:
         r"""
@@ -514,24 +411,26 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
         >>> # generation
         >>> generated = model.generate(input_ids)
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        # `record outputs` can rely on the absence of the kwarg to retrieve whether the config should be used or not
+        # Hence, we use this workaround to allow for defaults to work as expected
+        kwargs_shared = {key: kwargs[key] for key in ["output_attentions", "output_hidden_states"] if key in kwargs}
 
         kwargs_encoder = {argument: value for argument, value in kwargs.items() if not argument.startswith("decoder_")}
+        kwargs_encoder = kwargs_encoder | kwargs_shared
 
         kwargs_decoder = {
             argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
         }
         if "num_items_in_batch" in kwargs_encoder:
             kwargs_decoder["num_items_in_batch"] = kwargs_encoder.pop("num_items_in_batch", None)
+        kwargs_decoder = kwargs_decoder | kwargs_shared
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 inputs_embeds=inputs_embeds,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
+                return_dict=True,
                 **kwargs_encoder,
             )
         elif isinstance(encoder_outputs, tuple):
@@ -560,11 +459,10 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=attention_mask,
             inputs_embeds=decoder_inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             use_cache=use_cache,
             past_key_values=past_key_values,
-            return_dict=return_dict,
+            cache_position=cache_position,
+            return_dict=True,
             **kwargs_decoder,
         )
 
@@ -572,15 +470,9 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
         loss = None
         if labels is not None:
             warnings.warn(DEPRECATION_WARNING, FutureWarning)
-            logits = decoder_outputs.logits if return_dict else decoder_outputs[0]
+            logits = decoder_outputs.logits
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.reshape(-1, self.decoder.config.vocab_size), labels.view(-1))
-
-        if not return_dict:
-            if loss is not None:
-                return (loss,) + decoder_outputs + encoder_outputs
-            else:
-                return decoder_outputs + encoder_outputs
 
         return Seq2SeqLMOutput(
             loss=loss,

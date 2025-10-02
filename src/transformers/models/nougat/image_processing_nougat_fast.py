@@ -16,6 +16,8 @@
 
 from typing import Optional, Union
 
+import torch
+
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
@@ -38,20 +40,14 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
     is_torchvision_v2_available,
 )
 
 
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
+if is_torchvision_v2_available():
+    from torchvision.transforms.v2 import functional as F
+else:
+    from torchvision.transforms import functional as F
 
 
 class NougatFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
@@ -63,14 +59,11 @@ class NougatFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
             Whether to resize the image using thumbnail method.
     do_align_long_axis (`bool`, *optional*, defaults to `False`):
             Whether to align the long axis of the image with the long axis of `size` by rotating by 90 degrees.
-    do_pad (`bool`, *optional*, defaults to `True`):
-            Whether to pad the images to the largest image size in the batch.
     """
 
     do_crop_margin: Optional[bool]
     do_thumbnail: Optional[bool]
     do_align_long_axis: Optional[bool]
-    do_pad: Optional[bool]
 
 
 @auto_docstring

@@ -9,6 +9,7 @@ transformers serve --enable-cors
 ```
 
 Before you can speak into Open WebUI, you need to update its settings to use your server for speech to text (STT) tasks. Launch Open WebUI, and navigate to the audio tab inside the admin settings. If you're using Open WebUI with the default ports, [this link (default)](http://localhost:3000/admin/settings/audio) or [this link (python deployment)](http://localhost:8080/admin/settings/audio) will take you there. Do the following changes there:
+
 1. Change the type of "Speech-to-Text Engine" to "OpenAI";
 2. Update the address to your server's address -- `http://localhost:8000/v1` by default;
 3. Type your model of choice into the "STT Model" field, e.g. `openai/whisper-large-v3` ([available models](https://huggingface.co/models?pipeline_tag=automatic-speech-recognition&sort=trending)).

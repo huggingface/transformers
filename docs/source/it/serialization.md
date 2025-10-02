@@ -181,8 +181,6 @@ Per esportare un modello memorizzato localmente, devi disporre dei pesi del mode
 e file tokenizer memorizzati in una directory. Ad esempio, possiamo caricare e salvare un
 checkpoint come segue:
 
-<frameworkcontent>
-<pt>
 ```python
 >>> from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
@@ -200,27 +198,6 @@ del pacchetto `transformers.onnx` nella directory desiderata:
 ```bash
 python -m transformers.onnx --model=local-pt-checkpoint onnx/
 ```
-</pt>
-<tf>
-```python
->>> from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
-
->>> # Load tokenizer and TensorFlow weights from the Hub
->>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
->>> tf_model = TFAutoModelForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
->>> # Save to disk
->>> tokenizer.save_pretrained("local-tf-checkpoint")
->>> tf_model.save_pretrained("local-tf-checkpoint")
-```
-
-Once the checkpoint is saved, we can export it to ONNX by pointing the `--model`
-argument of the `transformers.onnx` package to the desired directory:
-
-```bash
-python -m transformers.onnx --model=local-tf-checkpoint onnx/
-```
-</tf>
-</frameworkcontent>
 
 ### Selezione delle caratteristiche per diverse topologie di modello
 

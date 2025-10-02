@@ -1390,8 +1390,6 @@ Ampere アーキテクチャ ベースの GPU を使用している場合、pyto
 
 ### Automatic Mixed Precision
 
-pytorch のような AMP の方法または apex のような方法で自動混合精度を使用できます。
-
 ### fp16
 
 fp16 (float16) を設定して pytorch AMP のようなモードを設定するには:
@@ -1490,40 +1488,6 @@ bf16 が有効な状態で [勾配累積](#gradient-accumulation) を使用す�
 この記事の執筆時点での有効な値は、"fp16"、"bfp16"、"fp32"です。
 
 注: ステージ ゼロ 3 には、bf16 通信タイプに関するバグがあり、`deepspeed==0.8.1`で修正されました。
-
-### apex
-
-apex AMP のようなモード セットを設定するには:
-
-```json
-"amp": {
-    "enabled": "auto",
-    "opt_level": "auto"
-}
-```
-
-[`Trainer`] は `args.fp16_backend` の値に基づいて自動的に設定します。
-`args.fp16_opt_level`。
-
-このモードは、`--fp16 --fp16_backend apex --fp16_opt_level 01`コマンド ライン引数が渡されると有効になります。
-
-このモードを明示的に構成することもできます。
-
-```json
-{
-    "amp": {
-        "enabled": true,
-        "opt_level": "O1"
-    }
-}
-```
-
-ただし、[`Trainer`] コマンドライン引数と DeepSpeed を自分で同期することになります。
-構成。
-
-これは[ドキュメント](https://www.deepspeed.ai/docs/config-json/#automatic-mixed-precision-amp-training-options)です。
-
-<a id='deepspeed-bs'></a>
 
 ### Batch Size
 

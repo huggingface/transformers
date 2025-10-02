@@ -196,7 +196,6 @@ class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     all_model_classes = (OmDetTurboForObjectDetection,) if is_torch_available() else ()
     is_encoder_decoder = True
     test_pruning = False
-    test_head_masking = False
     pipeline_model_mapping = (
         {"zero-shot-object-detection": OmDetTurboForObjectDetection} if is_torch_available() else {}
     )

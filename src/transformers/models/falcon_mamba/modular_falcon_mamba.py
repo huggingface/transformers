@@ -17,7 +17,6 @@
 from typing import Optional
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...utils import auto_docstring, logging

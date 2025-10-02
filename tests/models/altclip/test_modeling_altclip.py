@@ -137,7 +137,6 @@ class AltCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = AltCLIPVisionModelTester(self)
@@ -299,7 +298,6 @@ class AltCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (AltCLIPTextModel,) if is_torch_available() else ()
     fx_compatible = False  # Cannot support if `can_return_tuple`
     test_pruning = False
-    test_head_masking = False
 
     # TODO (@SunMarc): Fix me
     @unittest.skip(reason="It's broken.")
@@ -414,7 +412,6 @@ class AltCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     all_model_classes = (AltCLIPModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": AltCLIPModel} if is_torch_available() else {}
     fx_compatible = False  # Cannot support if `can_return_tuple`
-    test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False

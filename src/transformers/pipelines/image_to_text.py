@@ -18,7 +18,6 @@ from typing import Any, Union, overload
 from ..generation import GenerationConfig
 from ..utils import (
     add_end_docstrings,
-    is_tf_available,
     is_torch_available,
     is_vision_available,
     logging,
@@ -31,9 +30,6 @@ if is_vision_available():
     from PIL import Image
 
     from ..image_utils import load_image
-
-if is_tf_available():
-    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES
 
 if is_torch_available():
     import torch
@@ -84,9 +80,7 @@ class ImageToTextPipeline(Pipeline):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         requires_backends(self, "vision")
-        self.check_model_type(
-            TF_MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES if self.framework == "tf" else MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES
-        )
+        self.check_model_type(MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES)
 
     def _sanitize_parameters(self, max_new_tokens=None, generate_kwargs=None, prompt=None, timeout=None):
         forward_params = {}
@@ -174,34 +168,30 @@ class ImageToTextPipeline(Pipeline):
             model_type = self.model.config.model_type
 
             if model_type == "git":
-                model_inputs = self.image_processor(images=image, return_tensors=self.framework)
-                if self.framework == "pt":
-                    model_inputs = model_inputs.to(self.dtype)
+                model_inputs = self.image_processor(images=image, return_tensors="pt")
+                model_inputs = model_inputs.to(self.dtype)
                 input_ids = self.tokenizer(text=prompt, add_special_tokens=False).input_ids
                 input_ids = [self.tokenizer.cls_token_id] + input_ids
                 input_ids = torch.tensor(input_ids).unsqueeze(0)
                 model_inputs.update({"input_ids": input_ids})
 
             elif model_type == "pix2struct":
-                model_inputs = self.image_processor(images=image, header_text=prompt, return_tensors=self.framework)
-                if self.framework == "pt":
-                    model_inputs = model_inputs.to(self.dtype)
+                model_inputs = self.image_processor(images=image, header_text=prompt, return_tensors="pt")
+                model_inputs = model_inputs.to(self.dtype)
 
             elif model_type != "vision-encoder-decoder":
                 # vision-encoder-decoder does not support conditional generation
-                model_inputs = self.image_processor(images=image, return_tensors=self.framework)
-                if self.framework == "pt":
-                    model_inputs = model_inputs.to(self.dtype)
-                text_inputs = self.tokenizer(prompt, return_tensors=self.framework)
+                model_inputs = self.image_processor(images=image, return_tensors="pt")
+                model_inputs = model_inputs.to(self.dtype)
+                text_inputs = self.tokenizer(prompt, return_tensors="pt")
                 model_inputs.update(text_inputs)
 
             else:
                 raise ValueError(f"Model type {model_type} does not support conditional text generation")
 
         else:
-            model_inputs = self.image_processor(images=image, return_tensors=self.framework)
-            if self.framework == "pt":
-                model_inputs = model_inputs.to(self.dtype)
+            model_inputs = self.image_processor(images=image, return_tensors="pt")
+            model_inputs = model_inputs.to(self.dtype)
 
         if self.model.config.model_type == "git" and prompt is None:
             model_inputs["input_ids"] = None
@@ -222,10 +212,6 @@ class ImageToTextPipeline(Pipeline):
         if "generation_config" not in generate_kwargs:
             generate_kwargs["generation_config"] = self.generation_config
 
-        # FIXME: We need to pop here due to a difference in how `generation.py` and `generation.tf_utils.py`
-        #  parse inputs. In the Tensorflow version, `generate` raises an error if we don't use `input_ids` whereas
-        #  the PyTorch version matches it with `self.model.main_input_name` or `self.model.encoder.main_input_name`
-        #  in the `_prepare_model_inputs` method.
         inputs = model_inputs.pop(self.model.main_input_name)
         model_outputs = self.model.generate(inputs, **model_inputs, **generate_kwargs)
         return model_outputs

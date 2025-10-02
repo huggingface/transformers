@@ -21,7 +21,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.utils.checkpoint
 
 from ...activations import ACT2FN
 from ...image_processing_utils import BatchFeature, get_size_dict
@@ -42,7 +41,6 @@ from ...utils import (
     ModelOutput,
     TensorType,
     auto_docstring,
-    is_torch_available,
     logging,
 )
 from ...utils.generic import TransformersKwargs, check_model_inputs
@@ -67,11 +65,6 @@ from .configuration_sam2 import (
     Sam2PromptEncoderConfig,
     Sam2VisionConfig,
 )
-
-
-if is_torch_available():
-    import torch
-    from torch.nn import functional as F
 
 
 logger = logging.get_logger(__name__)

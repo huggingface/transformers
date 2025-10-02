@@ -21,7 +21,7 @@ from typing import Callable, Optional, Union
 
 import numpy as np
 import torch
-import torch.utils.checkpoint
+from safetensors.torch import load_file as safe_load_file
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
@@ -51,7 +51,6 @@ from ...utils import (
     cached_file,
     check_torch_load_is_safe,
     is_peft_available,
-    is_safetensors_available,
     is_torch_flex_attn_available,
     logging,
 )
@@ -60,10 +59,6 @@ from .configuration_wav2vec2 import Wav2Vec2Config
 
 WAV2VEC2_ADAPTER_PT_FILE = "adapter.{}.bin"
 WAV2VEC2_ADAPTER_SAFE_FILE = "adapter.{}.safetensors"
-
-if is_safetensors_available():
-    from safetensors.torch import load_file as safe_load_file
-
 
 if is_torch_flex_attn_available():
     from ...integrations.flex_attention import make_flex_block_causal_mask
@@ -468,7 +463,6 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: Optional[float] = None,
     dropout: float = 0.0,
-    head_mask: Optional[torch.Tensor] = None,
     **kwargs,
 ):
     if scaling is None:
@@ -479,9 +473,6 @@ def eager_attention_forward(
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-    if head_mask is not None:
-        attn_weights = attn_weights * head_mask.view(1, -1, 1, 1)
 
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value)
@@ -529,7 +520,6 @@ class Wav2Vec2Attention(nn.Module):
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
@@ -568,7 +558,6 @@ class Wav2Vec2Attention(nn.Module):
             dropout=0.0 if not self.training else self.dropout,
             scaling=self.scaling,
             output_attentions=output_attentions,
-            head_mask=layer_head_mask,
             **kwargs,
         )
 
@@ -761,11 +750,9 @@ class Wav2Vec2Encoder(nn.Module):
         inputs_embeds: torch.Tensor,
     ):
         if attention_mask is not None:
-            if self.config._attn_implementation == "flash_attention_2":
+            if "flash" in self.config._attn_implementation:
                 attention_mask = attention_mask if 0 in attention_mask else None
             elif self.config._attn_implementation == "sdpa":
-                # output_attentions=True & head_mask can not be supported when using SDPA, fall back to
-                # the manual implementation that requires a 4D causal mask in all cases.
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
                 attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
             elif self.config._attn_implementation == "flex_attention":
@@ -859,11 +846,9 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
         inputs_embeds: torch.Tensor,
     ):
         if attention_mask is not None:
-            if self.config._attn_implementation == "flash_attention_2":
+            if "flash" in self.config._attn_implementation:
                 attention_mask = attention_mask if 0 in attention_mask else None
             elif self.config._attn_implementation == "sdpa":
-                # output_attentions=True & head_mask can not be supported when using SDPA, fall back to
-                # the manual implementation that requires a 4D causal mask in all cases.
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
                 attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
             elif self.config._attn_implementation == "flex_attention":
@@ -1225,7 +1210,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
         token = kwargs.pop("token", None)
         use_auth_token = kwargs.pop("use_auth_token", None)
         revision = kwargs.pop("revision", None)
-        use_safetensors = kwargs.pop("use_safetensors", None if is_safetensors_available() else False)
+        use_safetensors = kwargs.pop("use_safetensors", None)
 
         if use_auth_token is not None:
             warnings.warn(

@@ -16,6 +16,9 @@
 
 from typing import Optional, Union
 
+import torch
+from torch import nn
+
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     BatchFeature,
@@ -36,25 +39,18 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
     is_torchvision_v2_available,
     logging,
 )
 from .image_processing_oneformer import load_metadata, prepare_metadata
 
 
+if is_torchvision_v2_available():
+    from torchvision.transforms.v2 import functional as F
+else:
+    from torchvision.transforms import functional as F
+
 logger = logging.get_logger(__name__)
-
-if is_torch_available():
-    import torch
-    from torch import nn
-
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
 
 
 def make_pixel_mask(image: "torch.Tensor", output_size: tuple[int, int]) -> "torch.Tensor":
@@ -530,24 +526,9 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
         Returns:
             `BatchFeature`: Padded images and optional pixel masks.
         """
-        pad_size = get_max_height_width(images)
-
-        padded_images = []
-        pixel_masks = []
-
-        for image in images:
-            padded_image = self._pad_image_fast(
-                image=image,
-                output_size=pad_size,
-                constant_values=0,
-            )
-            padded_images.append(padded_image)
-
-            if return_pixel_mask:
-                input_height, input_width = image.shape[1], image.shape[2]
-                mask = torch.zeros(pad_size, dtype=torch.int64, device=image.device)
-                mask[:input_height, :input_width] = 1
-                pixel_masks.append(mask)
+        outputs = super().pad(images, return_mask=return_pixel_mask)
+        padded_images = outputs[0] if return_pixel_mask else outputs
+        pixel_masks = outputs[1] if return_pixel_mask else None
 
         if return_tensors:
             padded_images = torch.stack(padded_images, dim=0)

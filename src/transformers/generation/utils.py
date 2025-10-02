@@ -22,7 +22,6 @@ from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
 import torch
 import torch.distributed as dist
-from huggingface_hub import file_exists
 from packaging import version
 from torch import nn
 
@@ -46,6 +45,7 @@ from ..pytorch_utils import isin_mps_friendly
 from ..tokenization_utils import ExtensionsTrie
 from ..utils import (
     ModelOutput,
+    TransformersKwargs,
     is_accelerate_available,
     is_hqq_available,
     is_optimum_quanto_available,
@@ -166,7 +166,7 @@ class GenerateDecoderOnlyOutput(ModelOutput):
         hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size, generated_length, hidden_size)`.
-        past_key_values (`tuple(tuple(torch.FloatTensor)))`, *optional*, returned when `use_cache=True`):
+        past_key_values (`Cache`, *optional*, returned when `use_cache=True`):
             Returns the model cache, used to speed up decoding. Different models have a different cache format, check
             the model's documentation. Usually, a [`~cache_utils.Cache`] instance.
     """
@@ -176,7 +176,7 @@ class GenerateDecoderOnlyOutput(ModelOutput):
     logits: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[tuple[tuple[torch.FloatTensor]]] = None
-    past_key_values: Optional[tuple[tuple[tuple[torch.FloatTensor]]]] = None
+    past_key_values: Optional[Cache] = None
 
 
 @dataclass
@@ -211,7 +211,7 @@ class GenerateEncoderDecoderOutput(ModelOutput):
         decoder_hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size, generated_length, hidden_size)`.
-        past_key_values (`tuple(tuple(torch.FloatTensor)))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`Cache`, *optional*, returned when `use_cache=True`):
             Returns the model cache, used to speed up decoding. Different models have a different cache format, check
             the model's documentation. Usually, a [`~cache_utils.Cache`] instance.
     """
@@ -224,7 +224,7 @@ class GenerateEncoderDecoderOutput(ModelOutput):
     decoder_attentions: Optional[tuple[tuple[torch.FloatTensor]]] = None
     cross_attentions: Optional[tuple[tuple[torch.FloatTensor]]] = None
     decoder_hidden_states: Optional[tuple[tuple[torch.FloatTensor]]] = None
-    past_key_values: Optional[tuple[tuple[tuple[torch.FloatTensor]]]] = None
+    past_key_values: Optional[Cache] = None
 
 
 @dataclass
@@ -256,7 +256,7 @@ class GenerateBeamDecoderOnlyOutput(ModelOutput):
         hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size*num_beams*num_return_sequences, generated_length, hidden_size)`.
-        past_key_values (`tuple(tuple(torch.FloatTensor)))`, *optional*, returned when `use_cache=True`):
+        past_key_values (`Cache`, *optional*, returned when `use_cache=True`):
             Returns the model cache, used to speed up decoding. Different models have a different cache format, check
             the model's documentation. Usually, a [`~cache_utils.Cache`] instance.
     """
@@ -268,7 +268,7 @@ class GenerateBeamDecoderOnlyOutput(ModelOutput):
     beam_indices: Optional[torch.LongTensor] = None
     attentions: Optional[tuple[tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[tuple[tuple[torch.FloatTensor]]] = None
-    past_key_values: Optional[tuple[tuple[tuple[torch.FloatTensor]]]] = None
+    past_key_values: Optional[Cache] = None
 
 
 @dataclass
@@ -310,7 +310,7 @@ class GenerateBeamEncoderDecoderOutput(ModelOutput):
         decoder_hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size*num_beams*num_return_sequences, generated_length, hidden_size)`.
-        past_key_values (`tuple(tuple(torch.FloatTensor)))`, *optional*, returned when `use_cache=True`):
+        past_key_values (`Cache`, *optional*, returned when `use_cache=True`):
             Returns the model cache, used to speed up decoding. Different models have a different cache format, check
             the model's documentation. Usually, a [`~cache_utils.Cache`] instance.
     """
@@ -325,30 +325,8 @@ class GenerateBeamEncoderDecoderOutput(ModelOutput):
     decoder_attentions: Optional[tuple[tuple[torch.FloatTensor]]] = None
     cross_attentions: Optional[tuple[tuple[torch.FloatTensor]]] = None
     decoder_hidden_states: Optional[tuple[tuple[torch.FloatTensor]]] = None
-    past_key_values: Optional[tuple[tuple[tuple[torch.FloatTensor]]]] = None
+    past_key_values: Optional[Cache] = None
 
-
-# TODO (joao): remove the equivalent classes and typing shortcuts below in v5
-# Equivalent classes (kept for retrocompatibility purposes)
-GreedySearchDecoderOnlyOutput = GenerateDecoderOnlyOutput
-ContrastiveSearchDecoderOnlyOutput = GenerateDecoderOnlyOutput
-SampleDecoderOnlyOutput = GenerateDecoderOnlyOutput
-
-ContrastiveSearchEncoderDecoderOutput = GenerateEncoderDecoderOutput
-GreedySearchEncoderDecoderOutput = GenerateEncoderDecoderOutput
-SampleEncoderDecoderOutput = GenerateEncoderDecoderOutput
-
-BeamSearchDecoderOnlyOutput = GenerateBeamDecoderOnlyOutput
-BeamSampleDecoderOnlyOutput = GenerateBeamDecoderOnlyOutput
-
-BeamSearchEncoderDecoderOutput = GenerateBeamEncoderDecoderOutput
-BeamSampleEncoderDecoderOutput = GenerateBeamEncoderDecoderOutput
-
-GreedySearchOutput = Union[GreedySearchEncoderDecoderOutput, GreedySearchDecoderOnlyOutput]
-SampleOutput = Union[SampleEncoderDecoderOutput, SampleDecoderOnlyOutput]
-BeamSearchOutput = Union[BeamSearchEncoderDecoderOutput, BeamSearchDecoderOnlyOutput]
-BeamSampleOutput = Union[BeamSampleEncoderDecoderOutput, BeamSampleDecoderOnlyOutput]
-ContrastiveSearchOutput = Union[ContrastiveSearchEncoderDecoderOutput, ContrastiveSearchDecoderOnlyOutput]
 
 # Typing shortcuts
 GenerateNonBeamOutput = Union[GenerateDecoderOnlyOutput, GenerateEncoderDecoderOutput]
@@ -413,23 +391,20 @@ class GenerationMixin(ContinuousMixin):
         Returns:
             A callable that can be used to generate text.
         """
-        # Does `pretrained_model_name_or_path` have a `custom_generate` subdirectory? If not -> OSError
-        is_local_code = os.path.exists(pretrained_model_name_or_path)
-        has_custom_generate_folder = True
-        if is_local_code:
-            if not os.path.exists(os.path.join(pretrained_model_name_or_path, "custom_generate/generate.py")):
-                has_custom_generate_folder = False
-        else:
-            if not file_exists(pretrained_model_name_or_path, "custom_generate/generate.py"):
-                has_custom_generate_folder = False
-
-        if not has_custom_generate_folder:
+        # Fetches the generate.py file from the model repo. If it doesn't exist, a file in `.no_exist` cache directory
+        # is created (preventing future hub requests), and an OSError is raised.
+        try:
+            module = get_cached_module_file(
+                pretrained_model_name_or_path, module_file="custom_generate/generate.py", **kwargs
+            )
+        except OSError:
             raise OSError(
                 f"`{pretrained_model_name_or_path}` does not contain a `custom_generate` subdirectory with a "
                 "`generate.py` file, can't load the custom generate function."
             )
 
         # Handle opt-in `trust_remote_code` and related exceptions
+        is_local_code = os.path.exists(pretrained_model_name_or_path)
         error_message = (
             f"The repository `{pretrained_model_name_or_path}` contains custom generation code that will override "
             "the default `generate` method."
@@ -445,9 +420,6 @@ class GenerationMixin(ContinuousMixin):
         # Load the custom generate function
         check_python_requirements(
             pretrained_model_name_or_path, requirements_file="custom_generate/requirements.txt", **kwargs
-        )
-        module = get_cached_module_file(
-            pretrained_model_name_or_path, module_file="custom_generate/generate.py", **kwargs
         )
         custom_generate_function = get_class_in_module("generate", module)
         return custom_generate_function
@@ -559,8 +531,9 @@ class GenerationMixin(ContinuousMixin):
         **kwargs,
     ):
         """
-        Prepare the model inputs for generation. It includes operations like computing the 4D attention mask or
-        slicing inputs given the existing cache.
+        Prepare the model inputs for generation. Notable steps include selecting the correct input key and cloning when appropriate,
+        creating position_ids from the attention_mask when missing, slicing inputs and converting 2D attention masks to 4D for
+        compilable caches, and finally forwarding all additional keyword arguments unchanged to the model's forward pass.
 
         See the forward pass in the model documentation for expected arguments (different models might have different
         requirements for e.g. `past_key_values`). This function should work as is for most LLMs.
@@ -573,6 +546,9 @@ class GenerationMixin(ContinuousMixin):
         # 2. Generic cache-dependent input preparation
         if past_key_values is not None:
             model_inputs["past_key_values"] = past_key_values
+            # TODO (joao): handle the case where cache length == input_ids length. The function below results in an
+            # exception because we get empty input_ids after slicing. In essence, we need to roll back the cache 1
+            # token to recompute the logits for the first token to be generated (but not all caches support roll backs)
             inputs_embeds, input_ids = self._cache_dependant_input_preparation(
                 input_ids, inputs_embeds, cache_position
             )
@@ -1013,7 +989,7 @@ class GenerationMixin(ContinuousMixin):
         input_ids: torch.LongTensor,
         inputs_tensor: torch.Tensor,
         logits_processor: LogitsProcessorList,
-        model_kwargs: dict,
+        model_kwargs: dict[str, Any],
         assistant_model: Optional["PreTrainedModel"] = None,
         target_tokenizer: Optional["PreTrainedTokenizerBase"] = None,
         assistant_tokenizer: Optional["PreTrainedTokenizerBase"] = None,
@@ -1592,8 +1568,9 @@ class GenerationMixin(ContinuousMixin):
                 decoder_model_args = set(inspect.signature(decoder.forward).parameters)
                 model_args |= {f"decoder_{x}" for x in decoder_model_args}
 
+        # TransformersKwargs are model-agnostic attention and generation arguments such as 'output_attentions'
         for key, value in model_kwargs.items():
-            if value is not None and key not in model_args:
+            if value is not None and key not in model_args and key not in TransformersKwargs.__optional_keys__:
                 unused_model_args.append(key)
 
         if unused_model_args:
@@ -1703,7 +1680,10 @@ class GenerationMixin(ContinuousMixin):
         return generation_config
 
     def _prepare_generation_config(
-        self, generation_config: Optional[GenerationConfig], use_model_defaults: Optional[bool] = None, **kwargs: dict
+        self,
+        generation_config: Optional[GenerationConfig],
+        use_model_defaults: Optional[bool] = None,
+        **kwargs: Any,
     ) -> tuple[GenerationConfig, dict]:
         """
         Prepares the base generation config, then applies any generation configuration options from kwargs. This
@@ -1798,6 +1778,11 @@ class GenerationMixin(ContinuousMixin):
 
         # Finally, apply any passed kwargs
         model_kwargs = generation_config.update(**kwargs)
+        # And keep in model_kwargs variable output controls
+        output_attentions = generation_config.output_attentions
+        output_hidden_states = generation_config.output_hidden_states
+        model_kwargs.update({"output_attentions": output_attentions} if output_attentions else {})
+        model_kwargs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
 
         return generation_config, model_kwargs
 
@@ -1892,6 +1877,7 @@ class GenerationMixin(ContinuousMixin):
                 "minimax",
                 "xlnet",
                 "lfm2",
+                "lfm2-vl",
             ]
         )
 
@@ -1926,6 +1912,10 @@ class GenerationMixin(ContinuousMixin):
                     "Cache object) is unsupported. Please use only one of the two."
                 )
             if isinstance(user_defined_cache, tuple) and self._supports_default_dynamic_cache():
+                logger.warning_once(
+                    "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
+                    "You should pass an instance of `Cache` instead."
+                )
                 model_kwargs[cache_name] = (
                     DynamicCache.from_legacy_cache(user_defined_cache)
                     if not requires_cross_attention_cache
@@ -1938,14 +1928,13 @@ class GenerationMixin(ContinuousMixin):
         if generation_config.use_cache is False:
             return
 
-        # Quick escape route 3: model that only supports legacy caches or models that supply it in `prepare_inputs_for_generation` (mamba, zamba, ...)
+        # Quick escape route 3: model that only supports legacy caches or models that supply it in
+        # `prepare_inputs_for_generation` (mamba, zamba, ...)
         if not self._supports_default_dynamic_cache():
             if generation_config.cache_implementation is not None:
-                warnings.warn(
-                    "This model does not support `Cache` instances, it only supports the legacy cache format (tuple "
-                    f"of tuples). `cache_implementation` (set to {generation_config.cache_implementation}) will be "
-                    "ignored.",
-                    UserWarning,
+                logger.warning_once(
+                    "This model does not support `Cache` instances. `cache_implementation` (set to "
+                    f"{generation_config.cache_implementation}) will be ignored.",
                 )
             return
 
@@ -1977,8 +1966,9 @@ class GenerationMixin(ContinuousMixin):
             if generation_config.cache_implementation in ALL_STATIC_CACHE_IMPLEMENTATIONS:
                 if generation_config.cache_implementation in DEPRECATED_STATIC_CACHE_IMPLEMENTATIONS:
                     logger.warning_once(
-                        f"Using `cache_implementation='{generation_config.cache_implementation}' is deprecated. Please only "
-                        f"use one of {STATIC_CACHE_IMPLEMENTATIONS}, and the layer structure will be inferred automatically."
+                        f"Using `cache_implementation='{generation_config.cache_implementation}' is deprecated. "
+                        f"Please only use one of {STATIC_CACHE_IMPLEMENTATIONS}, and the layer structure will be "
+                        "inferred automatically."
                     )
                 model_kwargs[cache_name] = self._get_cache(
                     cache_implementation=generation_config.cache_implementation,
@@ -2002,8 +1992,8 @@ class GenerationMixin(ContinuousMixin):
 
                 if backend == "quanto" and not is_optimum_quanto_available():
                     raise ImportError(
-                        "You need to install optimum-quanto in order to use KV cache quantization with optimum-quanto backend. "
-                        "Please install it via  with `pip install optimum-quanto`"
+                        "You need to install optimum-quanto in order to use KV cache quantization with optimum-quanto "
+                        "backend. Please install it via  with `pip install optimum-quanto`"
                     )
                 elif backend == "HQQ" and not is_hqq_available():
                     raise ImportError(
@@ -2018,11 +2008,18 @@ class GenerationMixin(ContinuousMixin):
 
         # Use DynamicCache instance by default. This will avoid back and forth from legacy format that
         # keeps copying the cache thus using much more memory
+        # TODO (joao): remove this `else` when we remove the last traces of the legacy cache format (v4.58.0, search
+        # for `instance(past_key_values, Cache)` as well). In general, if `cache_implementation` is unset, cache
+        # initialization should happen inside the model at prefill time.
         else:
-            model_kwargs[cache_name] = (
-                DynamicCache(**dynamic_cache_kwargs)
-                if not requires_cross_attention_cache
-                else EncoderDecoderCache(DynamicCache(**dynamic_cache_kwargs), DynamicCache(**dynamic_cache_kwargs))
+            model_kwargs[cache_name] = DynamicCache(**dynamic_cache_kwargs)
+
+        # TODO (joao): this logic is incomplete, e.g. `offloaded` should apply to both caches. Refactor this function
+        # to correctly pass parameterization to both caches.
+        if requires_cross_attention_cache and not isinstance(model_kwargs[cache_name], EncoderDecoderCache):
+            model_kwargs[cache_name] = EncoderDecoderCache(
+                model_kwargs[cache_name],  # self-attention cache
+                DynamicCache(**dynamic_cache_kwargs),  # cross-attention cache
             )
 
     def _supports_logits_to_keep(self) -> bool:
@@ -2114,7 +2111,7 @@ class GenerationMixin(ContinuousMixin):
         generation_config._pad_token_tensor = pad_token_tensor
         generation_config._decoder_start_token_tensor = decoder_start_token_tensor
 
-    def _valid_auto_compile_criteria(self, model_kwargs: dict, generation_config: GenerationConfig) -> bool:
+    def _valid_auto_compile_criteria(self, model_kwargs: dict[str, Any], generation_config: GenerationConfig) -> bool:
         """
         Determines whether to trigger auto-compilation of the model's forward pass at generation time.
         """
@@ -2612,19 +2609,19 @@ class GenerationMixin(ContinuousMixin):
         # replace bos with pad to not condition healing on it
         input_ids = torch.where(input_ids == bos_token_id, pad_token_id, input_ids)
 
-        """
-        the latter code assumes the input_ids is not empty,
-        input_id has to be checked if contains elements
-		"""
+        # the latter code assumes the input_ids is not empty, input_id has to be checked if contains elements
         if input_ids.numel() == 0:
             return input_ids
 
         tail_ids = input_ids[:, -1].tolist()
 
-        space_tok = tokenizer.convert_ids_to_tokens(tokenizer.convert_tokens_to_ids(" "))[0]
         # tail tokens are used for a prefix search, thus, whitespaces are replaced with
         # their tokenization (e.g. 'Ġ') to enable search for tokens prefixed with a whitespace
-        tail_toks = (tokenizer.decode(t).replace(" ", space_tok) for t in tail_ids)
+        if tokenizer.convert_tokens_to_ids(" ") is not None:
+            space_tok = tokenizer.convert_ids_to_tokens(tokenizer.convert_tokens_to_ids(" "))[0]
+            tail_toks = (tokenizer.decode(t).replace(" ", space_tok) for t in tail_ids)
+        else:
+            tail_toks = (tokenizer.decode(t) for t in tail_ids)
 
         for batch_idx, (tail_id, tail_tok) in enumerate(zip(tail_ids, tail_toks)):
             batch_ids = input_ids[batch_idx]
@@ -2760,10 +2757,6 @@ class GenerationMixin(ContinuousMixin):
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-
-            # prepare variable output controls (note: some models won't accept all output controls)
-            model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
-            model_inputs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
 
             if is_prefill:
                 outputs = self(**model_inputs, return_dict=True)
@@ -3247,10 +3240,6 @@ class GenerationMixin(ContinuousMixin):
             flat_running_sequences = self._flatten_beam_dim(running_sequences[:, :, :cur_len])
             model_inputs = self.prepare_inputs_for_generation(flat_running_sequences, **model_kwargs)
 
-            # prepare variable output controls (note: some models won't accept all output controls)
-            model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
-            model_inputs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
-
             model_outputs = self(**model_inputs, return_dict=True)
 
             # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
@@ -3439,7 +3428,7 @@ class GenerationMixin(ContinuousMixin):
         generation_config: GenerationConfig,
         synced_gpus: bool = False,
         streamer: Optional["BaseStreamer"] = None,
-        inputs_tensor: torch.FloatTensor = None,
+        inputs_tensor: Optional[torch.FloatTensor] = None,
         assistant_model: Optional["PreTrainedModel"] = None,
         assistant_tokenizer: Optional["PreTrainedTokenizerBase"] = None,
         tokenizer: Optional["PreTrainedTokenizerBase"] = None,
@@ -3575,9 +3564,6 @@ class GenerationMixin(ContinuousMixin):
                 model_inputs["logits_to_keep"] = candidate_length + 1
 
             # 2.2. Run a forward pass on the candidate sequence
-            # prepare variable output controls (note: some models won't accept all output controls)
-            model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
-            model_inputs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
 
             outputs = self(**model_inputs)
 

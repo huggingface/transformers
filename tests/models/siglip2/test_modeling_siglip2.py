@@ -270,7 +270,6 @@ class Siglip2VisionModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     # MP works but offload doesn't work when the MultiheadAttention is offloaded
     # TODO: One potential solution would be to add to set preload_module_classes = ["Siglip2MultiheadAttentionPoolingHead"]
     # in the dispatch_model function
@@ -332,7 +331,7 @@ class Siglip2VisionModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="Siglip2 uses the same initialization scheme as the Flax original implementation")
+    @unittest.skip(reason="Siglip2 uses a non-standard initialization scheme")
     def test_initialization(self):
         pass
 
@@ -440,7 +439,6 @@ class Siglip2TextModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_resize_embeddings = False
     test_pruning = False
-    test_head_masking = False
     model_split_percents = [0.5, 0.8, 0.9]
 
     def setUp(self):
@@ -474,7 +472,7 @@ class Siglip2TextModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="Siglip2 uses the same initialization scheme as the Flax original implementation")
+    @unittest.skip(reason="Siglip2 uses a non-standard initialization scheme")
     def test_initialization(self):
         pass
 
@@ -552,7 +550,6 @@ class Siglip2ModelTest(Siglip2ModelTesterMixin, PipelineTesterMixin, unittest.Te
         "spatial_shapes",
     ]
     fx_compatible = False
-    test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
@@ -591,7 +588,7 @@ class Siglip2ModelTest(Siglip2ModelTesterMixin, PipelineTesterMixin, unittest.Te
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="Siglip2 uses the same initialization scheme as the Flax original implementation")
+    @unittest.skip(reason="Siglip2 uses a non-standard initialization scheme")
     def test_initialization(self):
         pass
 
@@ -654,7 +651,6 @@ class Siglip2ForImageClassificationModelTest(Siglip2ModelTesterMixin, PipelineTe
     pipeline_model_mapping = {"image-classification": Siglip2ForImageClassification} if is_torch_available() else {}
     additional_model_inputs = ["pixel_values", "pixel_attention_mask", "spatial_shapes"]
     fx_compatible = False
-    test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
@@ -689,7 +685,7 @@ class Siglip2ForImageClassificationModelTest(Siglip2ModelTesterMixin, PipelineTe
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="Siglip2 uses the same initialization scheme as the Flax original implementation")
+    @unittest.skip(reason="Siglip2 uses a non-standard initialization scheme")
     def test_initialization(self):
         pass
 

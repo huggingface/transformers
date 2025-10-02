@@ -65,7 +65,6 @@ values. Here, for instance, it has two keys that are `sequences` and `scores`.
 
 We document here all output types.
 
-
 [[autodoc]] generation.GenerateDecoderOnlyOutput
 
 [[autodoc]] generation.GenerateEncoderDecoderOutput
@@ -74,12 +73,10 @@ We document here all output types.
 
 [[autodoc]] generation.GenerateBeamEncoderDecoderOutput
 
-
 ## LogitsProcessor
 
 A [`LogitsProcessor`] can be used to modify the prediction scores of a language model head for
 generation.
-
 
 [[autodoc]] AlternatingCodebooksLogitsProcessor
     - __call__
@@ -174,8 +171,6 @@ generation.
 [[autodoc]] WatermarkLogitsProcessor
     - __call__
 
-
-
 ## StoppingCriteria
 
 A [`StoppingCriteria`] can be used to change when to stop generation (other than EOS token). Please note that this is exclusively available to our PyTorch implementations.
@@ -250,7 +245,7 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
     - update
     - lazy_initialization
 
-[[autodoc]] SlidingWindowLayer
+[[autodoc]] StaticSlidingWindowLayer
     - update
     - lazy_initialization
 
@@ -299,7 +294,6 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 [[autodoc]] EncoderDecoderCache
     - to_legacy_cache
     - from_legacy_cache
-
 
 ## Watermark Utils
 

@@ -17,7 +17,6 @@
 from typing import Callable, Optional
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
@@ -210,9 +209,7 @@ class VivitSelfAttention(nn.Module):
         self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
         self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
 
-    def forward(
-        self, hidden_states: torch.Tensor, head_mask: Optional[torch.Tensor] = None
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size = hidden_states.shape[0]
         new_shape = batch_size, -1, self.num_attention_heads, self.attention_head_size
 
@@ -229,7 +226,7 @@ class VivitSelfAttention(nn.Module):
             query_layer,
             key_layer,
             value_layer,
-            head_mask,
+            None,
             is_causal=self.is_causal,
             scaling=self.scaling,
             dropout=0.0 if not self.training else self.dropout_prob,
@@ -285,8 +282,8 @@ class VivitAttention(nn.Module):
         self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def forward(self, hidden_states: torch.Tensor, head_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
-        self_attn_output, _ = self.attention(hidden_states, head_mask)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        self_attn_output, _ = self.attention(hidden_states)
         output = self.output(self_attn_output, hidden_states)
         return output
 
@@ -335,9 +332,9 @@ class VivitLayer(GradientCheckpointingLayer):
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states: torch.Tensor, head_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states_norm = self.layernorm_before(hidden_states)
-        attention_output = self.attention(hidden_states_norm, head_mask)
+        attention_output = self.attention(hidden_states_norm)
 
         # first residual connection
         hidden_states = attention_output + hidden_states
@@ -359,10 +356,9 @@ class VivitEncoder(nn.Module):
         self.layer = nn.ModuleList([VivitLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    def forward(self, hidden_states: torch.Tensor, head_mask: Optional[torch.Tensor] = None) -> BaseModelOutput:
+    def forward(self, hidden_states: torch.Tensor) -> BaseModelOutput:
         for i, layer_module in enumerate(self.layer):
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-            hidden_states = layer_module(hidden_states, layer_head_mask)
+            hidden_states = layer_module(hidden_states)
 
         return BaseModelOutput(last_hidden_state=hidden_states)
 
@@ -401,8 +397,6 @@ class VivitPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv3d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -456,7 +450,6 @@ class VivitModel(VivitPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
@@ -538,10 +531,8 @@ class VivitModel(VivitPreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
         embedding_output = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
-        encoder_outputs: BaseModelOutput = self.encoder(embedding_output, head_mask=head_mask)
+        encoder_outputs: BaseModelOutput = self.encoder(embedding_output)
         sequence_output = encoder_outputs.last_hidden_state
         sequence_output = self.layernorm(sequence_output)
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
@@ -581,7 +572,6 @@ class VivitForVideoClassification(VivitPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
@@ -670,7 +660,7 @@ class VivitForVideoClassification(VivitPreTrainedModel):
         ```"""
 
         outputs: BaseModelOutput = self.vivit(
-            pixel_values, head_mask=head_mask, interpolate_pos_encoding=interpolate_pos_encoding, **kwargs
+            pixel_values, interpolate_pos_encoding=interpolate_pos_encoding, **kwargs
         )
         sequence_output = outputs.last_hidden_state
         logits = self.classifier(sequence_output[:, 0, :])

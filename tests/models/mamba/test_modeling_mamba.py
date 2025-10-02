@@ -242,9 +242,7 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     fx_compatible = False  # FIXME let's try to support this @ArthurZucker
     test_torchscript = False  # FIXME let's try to support this @ArthurZucker
     test_missing_keys = False
-    test_model_parallel = False
     test_pruning = False
-    test_head_masking = False  # Mamba does not have attention heads
     pipeline_model_mapping = (
         {"feature-extraction": MambaModel, "text-generation": MambaForCausalLM} if is_torch_available() else {}
     )

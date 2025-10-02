@@ -845,7 +845,7 @@ class GPTQConfig(QuantizationConfigMixin):
                     "You current version of `optimum` does not support `modules_in_block_to_quantize` quantization argument, please upgrade `optimum` package to a version superior than 1.15.0 ."
                 )
 
-    def to_dict(self):
+    def to_dict(self) -> dict[str, Any]:
         config_dict = super().to_dict()
         config_dict.pop("disable_exllama", None)
         return config_dict
@@ -1557,7 +1557,7 @@ class FPQuantConfig(QuantizationConfigMixin):
     FPQuantConfig is a configuration class for quantization using the FPQuant method.
 
     Args:
-        forward_dtype (`str`, *optional*, defaults to `"mxfp4"`):
+        forward_dtype (`str`, *optional*, defaults to `"nvfp4"`):
             The dtype to use for the forward pass.
         forward_method (`str`, *optional*, defaults to `"abs_max"`):
             The scaling to use for the forward pass. Can be `"abs_max"` or `"quest"`. `"abs_max"` is better for PTQ, `"quest"` is better for QAT.
@@ -1565,10 +1565,11 @@ class FPQuantConfig(QuantizationConfigMixin):
             The dtype to use for the backward pass.
         store_master_weights (`bool`, *optional*, defaults to `False`):
             Whether to store the master weights. Needed for QAT over layer weights.
-        hadamard_group_size (`int`, *optional*, defaults to 32):
-            The group size for the hadamard transform before quantization for `"quest"` it matches the MXFP4 group size (32).
+        hadamard_group_size (`int`, *optional*):
+            The group size for the hadamard transform before quantization for `"quest"` it matches the MXFP4 group size (32). If `None`, it will be set to 16 for `"nvfp4"` and 32 for `"mxfp4"`.
         pseudoquantization (`bool`, *optional*, defaults to `False`):
             Whether to use Triton-based pseudo-quantization. Is mandatory for non-Blackwell GPUs. Doesn't provide any speedup. For debugging purposes.
+        transform_init (`str`, *optional*, defaults to `"hadamard"`): a method to initialize the pre-processing matrix with. Can be `"hadamard"`, `"identity"` or `"gsr"`.
         modules_to_not_convert (`list`, *optional*):
             The list of modules to not quantize, useful for quantizing models that explicitly require to have
             some modules left in their original precision.
@@ -1576,12 +1577,13 @@ class FPQuantConfig(QuantizationConfigMixin):
 
     def __init__(
         self,
-        forward_dtype: str = "mxfp4",
+        forward_dtype: str = "nvfp4",
         forward_method: str = "abs_max",
         backward_dtype: str = "bf16",
         store_master_weights: bool = False,
-        hadamard_group_size: int = 32,
+        hadamard_group_size: Optional[int] = None,
         pseudoquantization: bool = False,
+        transform_init: str = "hadamard",
         modules_to_not_convert: Optional[list[str]] = None,
         **kwargs,
     ):
@@ -1591,6 +1593,7 @@ class FPQuantConfig(QuantizationConfigMixin):
         self.store_master_weights = store_master_weights
         self.hadamard_group_size = hadamard_group_size
         self.pseudoquantization = pseudoquantization
+        self.transform_init = transform_init
         self.modules_to_not_convert = modules_to_not_convert
 
         self.quant_method = QuantizationMethod.FPQUANT
@@ -1600,14 +1603,35 @@ class FPQuantConfig(QuantizationConfigMixin):
         r"""
         Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
         """
-        if self.forward_dtype not in ["mxfp4"]:
-            raise ValueError("Only 'mxfp4' is supported for forward_dtype for now.")
-        if self.forward_method not in ["abs_max", "quest"]:
-            raise ValueError("Only 'abs_max' and 'quest' are supported for forward_method for now.")
+
+        if self.hadamard_group_size is None:
+            if self.forward_dtype == "nvfp4":
+                self.hadamard_group_size = 16
+            else:
+                self.hadamard_group_size = 32
+
+        if self.forward_dtype == "mxfp4":
+            if self.forward_method not in ["abs_max", "quest"]:
+                raise ValueError("Only 'abs_max' and 'quest' are supported for forward_method for 'mxfp4'.")
+            if self.hadamard_group_size is None:
+                self.hadamard_group_size = 32
+            if self.hadamard_group_size not in [32, 64, 128]:
+                raise ValueError("Only a `hadamard_group_size` of [32, 64, 128] is supported for 'mxfp4'.")
+        elif self.forward_dtype == "nvfp4":
+            if self.forward_method not in ["abs_max"]:
+                raise ValueError("Only 'abs_max' is supported for forward_method for 'nvfp4'.")
+            if self.hadamard_group_size is None:
+                self.hadamard_group_size = 16
+            if self.hadamard_group_size not in [16, 32, 64, 128]:
+                raise ValueError("Only a `hadamard_group_size` of [16, 32, 64, 128] is supported for 'nvfp4'.")
+        else:
+            raise ValueError("Only 'mxfp4' and 'nvfp4' are supported for forward_dtype for now.")
+
         if self.backward_dtype not in ["bf16"]:
             raise ValueError("Only 'bf16' is supported for backward_dtype for now.")
-        if self.hadamard_group_size not in [32]:
-            raise ValueError("Only a hadamard_group_size of 32 is supported for now.")
+        if self.transform_init not in ["hadamard", "identity", "gsr"]:
+            raise ValueError("Only 'hadamard', 'identity' and 'gsr' are supported for transform_init.")
+
         if self.modules_to_not_convert is None:
             self.modules_to_not_convert = ["lm_head"]
 
@@ -1882,9 +1906,9 @@ class BitNetQuantConfig(QuantizationConfigMixin):
     def __init__(
         self,
         modules_to_not_convert: Optional[list] = None,
-        linear_class: Optional[str] = "bitlinear",
-        quantization_mode: Optional[str] = "offline",
-        use_rms_norm: Optional[bool] = False,
+        linear_class: str = "bitlinear",
+        quantization_mode: str = "offline",
+        use_rms_norm: bool = False,
         rms_norm_eps: Optional[float] = 1e-6,
         **kwargs,
     ):

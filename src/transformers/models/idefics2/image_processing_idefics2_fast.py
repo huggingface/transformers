@@ -109,12 +109,9 @@ class Idefics2FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     """
     do_image_splitting (`bool`, *optional*, defaults to `False`):
         Whether to split the image into a sequence 4 equal sub-images concatenated with the original image.
-    do_pad (`bool`, *optional*, defaults to `True`):
-        Whether to pad images to the largest height and width in the batch.
     """
 
     do_image_splitting: Optional[bool]
-    do_pad: Optional[bool]
 
 
 @auto_docstring

@@ -746,7 +746,7 @@ class Phi4MultimodalAudioAttention(nn.Module):
         return attn_output
 
 
-class Phi4MultimodalAudioDepthWiseSeperableConv1d(nn.Module):
+class Phi4MultimodalAudioDepthWiseSeparableConv1d(nn.Module):
     def __init__(self, config: Phi4MultimodalAudioConfig, padding: int = 0):
         super().__init__()
         self.dw_conv = nn.Conv1d(
@@ -758,7 +758,7 @@ class Phi4MultimodalAudioDepthWiseSeperableConv1d(nn.Module):
             groups=config.hidden_size,
         )
         self.pw_conv = nn.Conv1d(
-            config.hidden_size * config.depthwise_multiplier, config.depthwise_seperable_out_channel, 1, 1, 0
+            config.hidden_size * config.depthwise_multiplier, config.depthwise_separable_out_channel, 1, 1, 0
         )
 
     def forward(self, hidden_states):
@@ -794,7 +794,7 @@ class Phi4MultimodalAudioConvModule(nn.Module):
 
         self.layer_norm = nn.LayerNorm(config.hidden_size)
         self.glu = Phi4MultimodalAudioGluPointWiseConv(config)
-        self.dw_sep_conv_1d = Phi4MultimodalAudioDepthWiseSeperableConv1d(config, padding=config.kernel_size - 1)
+        self.dw_sep_conv_1d = Phi4MultimodalAudioDepthWiseSeparableConv1d(config, padding=config.kernel_size - 1)
         self.act = ACT2FN[config.conv_activation]
         self.ext_pw_conv_1d = nn.Conv1d(config.hidden_size, config.ext_pw_out_channel, kernel_size=1, stride=1)
         self.dropout = nn.Dropout(config.dropout_rate)
@@ -844,7 +844,7 @@ class Phi4MultimodalAudioNemoConvSubsampling(torch.nn.Module):
     def __init__(self, config: Phi4MultimodalAudioConfig):
         super().__init__()
         self.subsampling_factor = config.time_reduction
-        self.sampling_num = int(math.log(self.subsampling_factor, 2))
+        self.sampling_num = int(math.log2(self.subsampling_factor))
         self.act_fn = ACT2FN[config.nemo_activation]
         conv_channels = config.nemo_conv_channels
 

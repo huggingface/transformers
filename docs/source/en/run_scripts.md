@@ -52,6 +52,7 @@ Start with a smaller dataset by including the `max_train_samples`, `max_eval_sam
 
 > [!WARNING]
 > Not all example scripts support the `max_predict_samples` parameter. Run the command below to check whether a script supports it or not.
+>
 > ```bash
 > examples/pytorch/summarization/run_summarization.py -h
 > ```
@@ -104,7 +105,7 @@ torchrun \
     ...
 ```
 
-PyTorch supports TPUs, hardware designed to accelerate performance, through the [PyTorch/XLA](https://github.com/pytorch/xla/blob/master/README.md) package. Launch the `xla_spawn.py` script and use `num _cores` to set the number of TPU cores to train with.
+PyTorch supports TPUs, hardware designed to accelerate performance, through the [PyTorch/XLA](https://github.com/pytorch/xla/blob/master/README.md) package. Launch the `xla_spawn.py` script and use `num_cores` to set the number of TPU cores to train with.
 
 ```bash
 python xla_spawn.py --num_cores 8 pytorch/summarization/run_summarization.py \

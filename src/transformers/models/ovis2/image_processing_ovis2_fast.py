@@ -15,6 +15,8 @@
 
 from typing import Optional, Union
 
+import torch
+
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
@@ -33,21 +35,15 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
     is_torchvision_v2_available,
 )
 from .image_processing_ovis2 import get_min_tile_covering_grid, get_optimal_tiled_canvas
 
 
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
+if is_torchvision_v2_available():
+    from torchvision.transforms.v2 import functional as F
+else:
+    from torchvision.transforms import functional as F
 
 
 class Ovis2ImageProcessorKwargs(DefaultFastImageProcessorKwargs):
@@ -202,6 +198,7 @@ class Ovis2ImageProcessorFast(BaseImageProcessorFast):
         image_std: Optional[Union[float, list[float]]],
         disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
+        **kwargs,
     ) -> BatchFeature:
         if crop_to_patches and max_patches > 1:
             grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)

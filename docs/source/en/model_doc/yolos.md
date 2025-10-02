@@ -26,13 +26,11 @@ rendered properly in your Markdown viewer.
 
 [YOLOS](https://huggingface.co/papers/2106.00666) uses a [Vision Transformer (ViT)](./vit) for object detection with minimal modifications and region priors. It can achieve performance comparable to specialized object detection models and frameworks with knowledge about 2D spatial structures.
 
-
 You can find all the original YOLOS checkpoints under the [HUST Vision Lab](https://huggingface.co/hustvl/models?search=yolos) organization.
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/yolos_architecture.png" alt="drawing" width="600"/>
 
 <small> YOLOS architecture. Taken from the <a href="https://huggingface.co/papers/2106.00666">original paper</a>.</small>
-
 
 > [!TIP]
 > This model wasa contributed by [nielsr](https://huggingface.co/nielsr).
@@ -98,8 +96,8 @@ for score, label, box in zip(filtered_scores, filtered_labels, pixel_boxes):
 </hfoption>
 </hfoptions>
 
-
 ## Notes
+
 - Use [`YolosImageProcessor`] for preparing images (and optional targets) for the model. Contrary to [DETR](./detr), YOLOS doesn't require a `pixel_mask`.
 
 ## Resources
@@ -119,13 +117,6 @@ for score, label, box in zip(filtered_scores, filtered_labels, pixel_boxes):
 
 [[autodoc]] YolosImageProcessorFast
     - preprocess
-    - pad
-    - post_process_object_detection
-
-## YolosFeatureExtractor
-
-[[autodoc]] YolosFeatureExtractor
-    - __call__
     - pad
     - post_process_object_detection
 

@@ -219,7 +219,7 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                         {
                             "type": "video",
                             "url": url_to_local_path(
-                                "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4"
+                                "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4"
                             ),
                         },
                         {"type": "text", "text": "What is shown in this video?"},
@@ -251,7 +251,7 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_tensors="pt",
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 300)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 11)
 
         # Load video as a list of frames (i.e. images). NOTE: each frame should have same size
         # because we assume they come from one video

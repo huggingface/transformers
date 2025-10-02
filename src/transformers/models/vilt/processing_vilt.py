@@ -17,11 +17,17 @@ Processor class for ViLT.
 """
 
 import warnings
+from typing import Optional
 
-from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin
+
+
+class ViltImagesKwargs(ImagesKwargs):
+    size_divisor: Optional[int]
 
 
 class ViltProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: ViltImagesKwargs
     _defaults = {
         "text_kwargs": {
             "add_special_tokens": True,

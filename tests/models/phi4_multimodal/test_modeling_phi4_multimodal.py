@@ -85,7 +85,7 @@ class Phi4MultimodalModelTester:
             hidden_size=32,
             num_attention_heads=8,
             intermediate_size=48,
-            depthwise_seperable_out_channel=128,
+            depthwise_separable_out_channel=128,
             nemo_conv_channels=128,
             initializer_range=1e-5,
         ),
@@ -202,7 +202,6 @@ class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
 
     all_model_classes = (Phi4MultimodalForCausalLM, Phi4MultimodalModel) if is_torch_available() else ()
     test_pruning = False
-    test_head_masking = False
     _is_composite = True
 
     def setUp(self):

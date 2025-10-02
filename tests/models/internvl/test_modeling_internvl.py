@@ -74,7 +74,7 @@ class InternVLVisionText2TextModelTester:
             "vocab_size": 99,
             "hidden_size": 128,
             "intermediate_size": 37,
-            "num_hidden_layers": 4,
+            "num_hidden_layers": 2,
             "num_attention_heads": 4,
             "num_key_value_heads": 2,
             "output_channels": 64,
@@ -192,7 +192,6 @@ class InternVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
     test_pruning = False
 
     def setUp(self):

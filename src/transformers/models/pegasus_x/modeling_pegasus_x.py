@@ -20,7 +20,6 @@ from typing import Callable, Optional, Union
 
 import numpy as np
 import torch
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
@@ -67,9 +66,6 @@ class DimensionInfo:
     num_blocks: int  # num blocks
     global_len: int  # global length
     padded_seq_len: int  # padded token seq length
-
-    # Note: Compared to the original Flax implementation, we will pad the token representations to
-    #       a multiple of block size at the start of the encoder layers, so T=P always.
 
 
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right
@@ -142,7 +138,6 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: Optional[float] = None,
     dropout: float = 0.0,
-    head_mask: Optional[torch.Tensor] = None,
     **kwargs,
 ):
     if scaling is None:
@@ -153,9 +148,6 @@ def eager_attention_forward(
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-    if head_mask is not None:
-        attn_weights = attn_weights * head_mask.view(1, -1, 1, 1)
 
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value)
@@ -214,7 +206,6 @@ class PegasusXAttention(nn.Module):
         key_value_states: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         cache_position: Optional[torch.Tensor] = None,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
@@ -283,7 +274,6 @@ class PegasusXAttention(nn.Module):
             dropout=0.0 if not self.training else self.dropout,
             scaling=self.scaling,
             output_attentions=output_attentions,
-            head_mask=layer_head_mask,
             **kwargs,
         )
 
@@ -696,7 +686,7 @@ class PegasusXDecoderLayer(GradientCheckpointingLayer):
                 cross attention input to the layer of shape *(seq_len, batch, embed_dim)*
             encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
                 *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
-            past_key_values (`Tuple(torch.FloatTensor)`): cached past key and value projection states
+            past_key_values (`Cache`): cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -783,11 +773,9 @@ class PegasusXPreTrainedModel(PreTrainedModel):
         inputs_embeds: torch.Tensor,
     ):
         if attention_mask is not None:
-            if self.config._attn_implementation == "flash_attention_2":
+            if "flash" in self.config._attn_implementation:
                 attention_mask = attention_mask if 0 in attention_mask else None
             elif self.config._attn_implementation == "sdpa":
-                # output_attentions=True & head_mask can not be supported when using SDPA, fall back to
-                # the manual implementation that requires a 4D causal mask in all cases.
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
                 attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
             elif self.config._attn_implementation == "flex_attention":
@@ -821,7 +809,7 @@ class PegasusXPreTrainedModel(PreTrainedModel):
                 )
             return attention_mask
 
-        if self.config._attn_implementation == "flash_attention_2":
+        if "flash" in self.config._attn_implementation:
             if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
@@ -942,11 +930,9 @@ class PegasusXPreTrainedModel(PreTrainedModel):
     ):
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            if self.config._attn_implementation == "flash_attention_2":
+            if "flash" in self.config._attn_implementation:
                 encoder_attention_mask = encoder_attention_mask if 0 in encoder_attention_mask else None
             elif self.config._attn_implementation == "sdpa":
-                # output_attentions=True & cross_attn_head_mask can not be supported when using SDPA, and we fall back on
-                # the manual implementation that requires a 4D causal mask in all cases.
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
                 encoder_attention_mask = _prepare_4d_attention_mask_for_sdpa(
                     encoder_attention_mask,
@@ -1248,9 +1234,7 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
                 [What are attention masks?](../glossary#attention-mask)
 
             past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-                Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
-                shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of
-                shape `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+                It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
                 Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
                 cross-attention blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
@@ -1469,7 +1453,7 @@ class PegasusXModel(PegasusXPreTrainedModel):
         decoder_input_ids: Optional[torch.Tensor] = None,
         decoder_attention_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[tuple[torch.FloatTensor]] = None,
-        past_key_values: Optional[tuple[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
@@ -1619,7 +1603,7 @@ class PegasusXForConditionalGeneration(PegasusXPreTrainedModel, GenerationMixin)
         decoder_input_ids: Optional[torch.Tensor] = None,
         decoder_attention_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[tuple[torch.FloatTensor]] = None,
-        past_key_values: Optional[tuple[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,

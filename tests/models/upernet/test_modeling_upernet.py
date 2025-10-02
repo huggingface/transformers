@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch UperNet framework."""
+"""Testing suite for the PyTorch UperNet."""
 
 import unittest
 
@@ -152,7 +152,6 @@ class UperNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     test_torchscript = False
     has_attentions = False
     test_torch_exportable = True

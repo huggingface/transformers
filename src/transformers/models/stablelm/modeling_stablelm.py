@@ -23,7 +23,6 @@ import math
 from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
@@ -546,7 +545,7 @@ class StableLmDecoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[torch.Tensor]] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
@@ -562,7 +561,7 @@ class StableLmDecoderLayer(GradientCheckpointingLayer):
                 `[0, config.n_positions - 1]`.
 
                 [What are position IDs?](../glossary#position-ids)
-            past_key_values (`Tuple(torch.FloatTensor)`, *optional*):
+            past_key_values (`Cache`, *optional*):
                 cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under

@@ -86,7 +86,6 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
     all_model_classes = (TimmBackbone,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": TimmBackbone} if is_torch_available() else {}
     test_resize_embeddings = False
-    test_head_masking = False
     test_pruning = False
     has_attentions = False
 
@@ -169,7 +168,7 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
         pass
 
     @unittest.skip(reason="TimmBackbone uses its own `from_pretrained` without device_map support")
-    def test_can_load_with_meta_device_context_manager(self):
+    def test_cannot_load_with_meta_device_context_manager(self):
         pass
 
     @unittest.skip(reason="model weights aren't tied in TimmBackbone.")

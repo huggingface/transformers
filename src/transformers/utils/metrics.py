@@ -105,8 +105,6 @@ def traced(
         if not _has_opentelemetry:
             return func
 
-        import functools
-
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             instance = args[0] if args and (hasattr(func, "__self__") and func.__self__ is not None) else None
@@ -339,7 +337,7 @@ class ContinuousBatchProcessorMetrics:
             page_size = cache.head_dim * cache.num_key_value_heads
             page_mem_in_bytes = page_size * cache.dtype.itemsize
             # When a block is allocated, it is for both K and V, so we multiply by 2
-            # It's also allocated accross all cache tensors, so we multiply by the nb of tensors: len(cache.key_cache)
+            # It's also allocated across all cache tensors, so we multiply by the nb of tensors: len(cache.key_cache)
             block_mem_in_bytes = 2 * len(cache.key_cache) * cache.block_size * page_mem_in_bytes
 
             # Retrieve the number of used and free blocks

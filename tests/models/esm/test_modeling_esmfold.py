@@ -224,10 +224,6 @@ class EsmFoldModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_head_pruning_save_load_from_pretrained(self):
         pass
 
-    @unittest.skip(reason="ESMFold does not support head pruning.")
-    def test_headmasking(self):
-        pass
-
     @unittest.skip(reason="ESMFold does not output hidden states in the normal way.")
     def test_hidden_states_output(self):
         pass

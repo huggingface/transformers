@@ -16,6 +16,7 @@
 # by pytest before any tests are run
 
 import doctest
+import os
 import sys
 import warnings
 from os.path import abspath, dirname, join
@@ -27,6 +28,7 @@ from transformers.testing_utils import (
     HfDoctestModule,
     HfDocTestParser,
     is_torch_available,
+    patch_testing_methods_to_collect_info,
     patch_torch_compile_force_graph,
 )
 
@@ -62,11 +64,8 @@ NOT_DEVICE_TESTS = {
     "test_load_save_without_tied_weights",
     "test_tied_weights_keys",
     "test_model_weights_reload_no_missing_tied_weights",
-    "test_mismatched_shapes_have_properly_initialized_weights",
-    "test_matched_shapes_have_loaded_weights_when_some_mismatched_shapes_exist",
+    "test_can_load_ignoring_mismatched_shapes",
     "test_model_is_small",
-    "test_tf_from_pt_safetensors",
-    "test_flax_from_pt_safetensors",
     "ModelTest::test_pipeline_",  # None of the pipeline tests from PipelineTesterMixin (of which XxxModelTest inherits from) are running on device
     "ModelTester::test_pipeline_",
     "/repo_utils/",
@@ -90,6 +89,8 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "not_device_test: mark the tests always running on cpu")
     config.addinivalue_line("markers", "torch_compile_test: mark test which tests torch compile functionality")
     config.addinivalue_line("markers", "torch_export_test: mark test which tests torch export functionality")
+
+    os.environ['DISABLE_SAFETENSORS_CONVERSION'] = 'true'
 
 
 def pytest_collection_modifyitems(items):
@@ -145,3 +146,7 @@ if is_torch_available():
     # patch `torch.compile`: if `TORCH_COMPILE_FORCE_FULLGRAPH=1` (or values considered as true, e.g. yes, y, etc.),
     # the patched version will always run with `fullgraph=True`.
     patch_torch_compile_force_graph()
+
+
+if os.environ.get("PATCH_TESTING_METHODS_TO_COLLECT_OUTPUTS", "").lower() in ("yes", "true", "on", "y", "1"):
+    patch_testing_methods_to_collect_info()

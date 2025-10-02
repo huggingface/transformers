@@ -23,7 +23,6 @@ def sdpa_attention_paged_forward(
     attention_mask: Optional[torch.Tensor],
     dropout: float = 0.0,
     scaling: Optional[float] = None,
-    is_causal: Optional[bool] = None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
     # Add KV cache to the key and value tensors
@@ -40,12 +39,7 @@ def sdpa_attention_paged_forward(
         value = repeat_kv(value, module.num_key_value_groups)
 
     # Get the right causal mask for the current layer
-    if isinstance(attention_mask, dict):
-        sliding_window = getattr(module, "sliding_window", 1)
-        layer_type = "full_attention" if sliding_window == 1 or sliding_window is None else "sliding_attention"
-        causal_mask = attention_mask[layer_type]
-    else:
-        causal_mask = attention_mask
+    causal_mask = attention_mask
 
     # Run the actual attention
     query = query.contiguous()
@@ -58,6 +52,7 @@ def sdpa_attention_paged_forward(
         attn_mask=causal_mask,
         dropout_p=dropout,
         scale=scaling,
+        # Packed sequence format is used for input, so that it can never be causal.
         is_causal=False,
     )
     attn_output = attn_output.transpose(1, 2).contiguous()

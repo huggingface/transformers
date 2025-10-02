@@ -573,7 +573,6 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     # Addition keys that are required for forward. MusicGen isn't encoder-decoder in config so we have to pass decoder ids as additional
     additional_model_inputs = ["decoder_input_ids"]
     test_pruning = False  # training is not supported yet for MusicGen
-    test_headmasking = False
     test_resize_embeddings = False
     # not to test torchscript as the model tester doesn't prepare `input_values` and `padding_mask`
     # (and `torchscript` hates `None` values).
@@ -756,11 +755,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 "decoder_input_ids",
                 "decoder_attention_mask",
             ]
-            expected_arg_names.extend(
-                ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
-                if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
-                else ["encoder_outputs"]
-            )
+            expected_arg_names.extend(["encoder_outputs"])
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     # override since changing `gradient_checkpointing` from the top-level model config won't work

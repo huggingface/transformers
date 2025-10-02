@@ -293,7 +293,6 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     test_torchscript = False
     test_pruning = False
-    test_head_masking = False
     test_missing_keys = False
     test_torch_exportable = True
 
@@ -359,10 +358,6 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="DFine does not use token embeddings")
     def test_resize_tokens_embeddings(self):
-        pass
-
-    @unittest.skip(reason="Not relevant for the model")
-    def test_can_init_all_missing_weights(self):
         pass
 
     @unittest.skip(reason="Feed forward chunking is not implemented")

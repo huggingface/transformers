@@ -21,8 +21,7 @@ import unittest.mock as mock
 import warnings
 from pathlib import Path
 
-from huggingface_hub import HfFolder
-from requests.exceptions import HTTPError
+import httpx
 
 from transformers import AutoConfig, BertConfig, Florence2Config, GPT2Config
 from transformers.configuration_utils import PretrainedConfig
@@ -40,8 +39,6 @@ config_common_kwargs = {
     "output_attentions": True,
     "torchscript": True,
     "dtype": "float16",
-    "use_bfloat16": True,
-    "tf_legacy_loss": True,
     "pruned_heads": {"a": 1},
     "tie_word_embeddings": False,
     "is_decoder": True,
@@ -95,7 +92,6 @@ class ConfigPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = TOKEN
-        HfFolder.save_token(TOKEN)
 
     def test_push_to_hub(self):
         with TemporaryHubRepo(token=self._token) as tmp_repo:
@@ -224,14 +220,16 @@ class ConfigTestUtils(unittest.TestCase):
         response_mock = mock.Mock()
         response_mock.status_code = 500
         response_mock.headers = {}
-        response_mock.raise_for_status.side_effect = HTTPError
+        response_mock.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "failed", request=mock.Mock(), response=mock.Mock()
+        )
         response_mock.json.return_value = {}
 
         # Download this model to make sure it's in the cache.
         _ = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
 
         # Under the mock environment we get a 500 error when trying to reach the model.
-        with mock.patch("requests.Session.request", return_value=response_mock) as mock_head:
+        with mock.patch("httpx.Client.request", return_value=response_mock) as mock_head:
             _ = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
             # This check we did call the fake head request
             mock_head.assert_called()
