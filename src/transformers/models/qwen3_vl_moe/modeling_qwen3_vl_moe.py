@@ -37,7 +37,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling
+from ...utils import TransformersKwargs, auto_docstring, is_torchdynamo_compiling
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import OutputRecorder, check_model_inputs
 from .configuration_qwen3_vl_moe import Qwen3VLMoeConfig, Qwen3VLMoeTextConfig, Qwen3VLMoeVisionConfig
@@ -1246,7 +1246,6 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
         return special_image_mask, special_video_mask
 
     @auto_docstring
-    @can_return_tuple
     @check_model_inputs
     def forward(
         self,

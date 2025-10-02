@@ -1006,7 +1006,6 @@ class Qwen3VLModel(Qwen2_5_VLModel):
         return self.get_image_features(pixel_values_videos, video_grid_thw)
 
     @auto_docstring
-    @can_return_tuple
     @check_model_inputs
     def forward(
         self,
