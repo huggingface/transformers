@@ -1084,11 +1084,13 @@ def require_torch_large_accelerator(test_case, memory: float = 20):
         f"test requires a GPU or XPU with more than {memory} GiB of memory",
     )(test_case)
 
+
 def require_torch_accelerator(test_case):
     """Decorator marking a test that requires an accessible accelerator and PyTorch."""
     return unittest.skipUnless(torch_device is not None and torch_device != "cpu", "test requires accelerator")(
         test_case
     )
+
 
 def require_torch_fp16(test_case):
     """Decorator marking a test that requires a device that supports fp16"""
@@ -1293,6 +1295,7 @@ def require_bitsandbytes(test_case):
     Decorator marking a test that requires the bitsandbytes library. Will be skipped when the library or its hard dependency torch is not installed.
     """
     return unittest.skipUnless(is_bitsandbytes_available(), "test requires bitsandbytes")(test_case)
+
 
 def require_optimum(test_case):
     """

@@ -1465,8 +1465,10 @@ class Trainer:
             OptimizerNames.RMSPROP_32BIT,
         ]:
             if not is_bitsandbytes_available():
-                raise ImportError("You need to install `bitsandbytes` in order to use bitsandbytes optimizers: `pip install -U bitsandbytes`")
-    
+                raise ImportError(
+                    "You need to install `bitsandbytes` in order to use bitsandbytes optimizers: `pip install -U bitsandbytes`"
+                )
+
             from bitsandbytes.optim import AdamW, Lion, RMSprop
 
             is_paged = False

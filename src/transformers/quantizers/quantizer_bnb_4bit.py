@@ -40,9 +40,11 @@ from ..utils import (
 
 if is_torch_available():
     import torch
+
     from ..pytorch_utils import Conv1D
 
 logger = logging.get_logger(__name__)
+
 
 class Bnb4BitHfQuantizer(HfQuantizer):
     """
@@ -87,6 +89,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             )
 
         from ..integrations import validate_bnb_backend_availability
+
         validate_bnb_backend_availability(raise_exception=True)
 
         device_map = kwargs.get("device_map")

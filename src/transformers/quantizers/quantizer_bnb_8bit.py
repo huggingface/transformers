@@ -73,6 +73,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             )
 
         from ..integrations import validate_bnb_backend_availability
+
         validate_bnb_backend_availability(raise_exception=True)
 
         device_map = kwargs.get("device_map")

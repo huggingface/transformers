@@ -28,6 +28,7 @@ if is_accelerate_available():
 
 logger = logging.get_logger(__name__)
 
+
 def _replace_with_bnb_linear(
     model,
     modules_to_not_convert=None,
@@ -148,6 +149,7 @@ def replace_with_bnb_linear(model, modules_to_not_convert=None, current_key_name
             " a bug."
         )
     return model
+
 
 def get_keys_to_not_convert(model):
     r"""
@@ -336,6 +338,7 @@ def dequantize_and_replace(
         )
 
     return model
+
 
 def validate_bnb_backend_availability(raise_exception=False):
     """
