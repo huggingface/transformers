@@ -29,10 +29,8 @@ Usage:
 
 ```bash
 cd transformers
-# build the index first (requires a large enough GPU)
-python utils/modular_model_detector.py --build
 
-# or use directly the index available online (needs an HF token and PRO subscription)
+# Use directly the util, it will download the index embedding from the hub. It will require some RAM/VRAM.
 
 >>> python utils/modular_model_detector.py --modeling-file my_new_beit3_modeling_file.py
 Loading checkpoint shards: 100%|███████████████████████████████████████████████████████████████████████████████████████████████| 2/2 [00:00<00:00, 33.62it/s]
@@ -88,6 +86,12 @@ intersection:
 
 ```
 
+
+# If you wish to build the index first, you can run
+
+python utils/modular_model_detector.py --build
+
+# You can also change the embedding model for a larger/smaller one.
 """
 
 import argparse
