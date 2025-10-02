@@ -43,12 +43,12 @@ from ...modeling_flash_attention_utils import _flash_attention_forward
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
+from .configuration_hrm import HrmConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-from .configuration_hrm import HrmConfig
 @dataclass
 class HrmModelOutput(ModelOutput):
     """
