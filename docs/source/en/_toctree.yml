@@ -373,6 +373,8 @@
       title: Image Processor
     - local: main_classes/video_processor
       title: Video Processor
+    - local: main_classes/kernels
+      title: Kernels
     title: Main Classes
   - sections:
     - sections:

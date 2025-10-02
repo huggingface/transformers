@@ -43,11 +43,9 @@ def infer_device(model):
     if dev_type == "cuda":
         # Refine based on actual platform
         if torch.version.hip is not None:
-            return Device(type="rocm")
-        elif torch.version.cuda is not None:
-            return Device(type="cuda")
+            return "rocm"
 
-    return Device(type=dev_type)
+    return dev_type
 
 
 class KernelConfig:
@@ -118,10 +116,11 @@ class KernelConfig:
                     f"Layer {layer_name} is not registered in the model, please register it first using register_kernel_forward_from_hub"
                 )
 
-            if isinstance(kernel, str) and ("/" not in kernel or ":" not in kernel):
-                raise ValueError(
-                    f"Kernel mapping for '{layer_name}' must be a valid repo name with a layer name (e.g., 'org/repo:layer_name'), got: {kernel}"
-                )
+            if isinstance(kernel, str):
+                if ("/" not in kernel or ":" not in kernel):
+                    raise ValueError(
+                        f"Kernel mapping for '{layer_name}' must be a valid repo name with a layer name (e.g., 'org/repo:layer_name'), got: {kernel}"
+                    )
 
             elif isinstance(kernel, dict):
                 for device, repo_name in kernel.items():

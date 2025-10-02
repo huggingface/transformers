@@ -769,7 +769,6 @@ if TYPE_CHECKING:
     from .utils import is_torch_npu_available as is_torch_npu_available
     from .utils import is_torch_xla_available as is_torch_xla_available
     from .utils import is_torch_xpu_available as is_torch_xpu_available
-    from .utils import logging as logging
     from .utils.kernel_config import KernelConfig as KernelConfig
 
     # bitsandbytes config
