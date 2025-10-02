@@ -128,7 +128,6 @@ from .import_utils import (
     is_auto_round_available,
     is_av_available,
     is_bitsandbytes_available,
-    is_bitsandbytes_multi_backend_available,
     is_bs4_available,
     is_ccl_available,
     is_coloredlogs_available,
