@@ -124,7 +124,7 @@ def _lazy_define_process_function(flash_function):
     return partial(_process_flash_attention_kwargs, supports_mapping=supports_mapping)
 
 
-def lazy_import_flash_attention(implementation: Optional[str]):
+def lazy_import_flash_attention(implementation: Optional[str], force_import: Optional[bool] = False):
     """
     Lazily import flash attention and return the respective functions + flags.
 
@@ -132,11 +132,11 @@ def lazy_import_flash_attention(implementation: Optional[str]):
     work without preloading. See `load_and_register_kernel` in `integrations.hub_kernels`.
     """
     global _flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn
-    if any(k is None for k in [_flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn]):
+    if force_import or any(k is None for k in [_flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn]):
         _flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn = _lazy_imports(implementation)
 
     global _process_flash_kwargs_fn
-    if _process_flash_kwargs_fn is None:
+    if force_import or _process_flash_kwargs_fn is None:
         _process_flash_kwargs_fn = _lazy_define_process_function(_flash_varlen_fn)
 
     return (_flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn), _process_flash_kwargs_fn

@@ -370,7 +370,6 @@ else:
         "OffloadedStaticCache",
         "QuantizedCache",
         "QuantoQuantizedCache",
-        "SinkCache",
         "SlidingWindowCache",
         "StaticCache",
     ]
@@ -495,7 +494,6 @@ if TYPE_CHECKING:
     from .cache_utils import QuantizedCache as QuantizedCache
     from .cache_utils import QuantoQuantizedCache as QuantoQuantizedCache
     from .cache_utils import QuantoQuantizedLayer as QuantoQuantizedLayer
-    from .cache_utils import SinkCache as SinkCache
     from .cache_utils import SlidingWindowCache as SlidingWindowCache
     from .cache_utils import SlidingWindowLayer as SlidingWindowLayer
     from .cache_utils import StaticCache as StaticCache
@@ -770,7 +768,6 @@ if TYPE_CHECKING:
     from .utils import is_torch_npu_available as is_torch_npu_available
     from .utils import is_torch_xla_available as is_torch_xla_available
     from .utils import is_torch_xpu_available as is_torch_xpu_available
-    from .utils import logging as logging
 
     # bitsandbytes config
     from .utils.quantization_config import AqlmConfig as AqlmConfig

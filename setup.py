@@ -125,9 +125,6 @@ _deps = [
     "nltk<=3.8.1",
     "num2words",
     "numpy>=1.17",
-    "onnxconverter-common",
-    "onnxruntime-tools>=1.4.2",
-    "onnxruntime>=1.4.0",
     "openai>=1.98.0",
     "opencv-python",
     "optimum-benchmark>=0.3.0",
@@ -271,8 +268,6 @@ else:
 
 extras["tokenizers"] = deps_list("tokenizers")
 extras["ftfy"] = deps_list("ftfy")
-extras["onnxruntime"] = deps_list("onnxruntime", "onnxruntime-tools")
-extras["onnx"] = deps_list("onnxconverter-common") + extras["onnxruntime"]
 extras["modelcreation"] = deps_list("cookiecutter")
 
 extras["sagemaker"] = deps_list("sagemaker")
@@ -376,7 +371,6 @@ extras["dev-torch"] = (
     + extras["ja"]
     + extras["sklearn"]
     + extras["modelcreation"]
-    + extras["onnxruntime"]
     + extras["num2words"]
 )
 
@@ -463,7 +457,6 @@ setup(
 extras["tests_torch"] = deps_list()
 extras["tests_hub"] = deps_list()
 extras["tests_pipelines_torch"] = deps_list()
-extras["tests_onnx"] = deps_list()
 extras["tests_examples_torch"] = deps_list()
 extras["tests_custom_tokenizers"] = deps_list()
 extras["tests_exotic_models"] = deps_list()

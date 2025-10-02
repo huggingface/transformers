@@ -369,7 +369,6 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
 
         if scores.dim() == 3:
             if self.logits_indices is not None and self.cu_seq_lens_q is not None:
-                batch_size, seq_len, vocab_size = scores.shape
                 last_positions = self.logits_indices
                 last_scores = scores[0, last_positions, :]
 

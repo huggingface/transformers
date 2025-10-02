@@ -566,9 +566,7 @@ class AutoImageProcessor:
                     )
                 image_processor_class = get_image_processor_class_from_name(image_processor_type)
             else:
-                image_processor_type_slow = (
-                    image_processor_type[:-4] if image_processor_type.endswith("Fast") else image_processor_type
-                )
+                image_processor_type_slow = image_processor_type.removesuffix("Fast")
                 image_processor_class = get_image_processor_class_from_name(image_processor_type_slow)
                 if image_processor_class is None and image_processor_type.endswith("Fast"):
                     raise ValueError(

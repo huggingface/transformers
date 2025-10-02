@@ -178,7 +178,7 @@ _auto_round_available, _auto_round_version = _is_package_available("auto_round",
 _auto_awq_available = importlib.util.find_spec("awq") is not None
 _quark_available = _is_package_available("quark")
 _fp_quant_available, _fp_quant_version = _is_package_available("fp_quant", return_version=True)
-_qutlass_available = _is_package_available("qutlass")
+_qutlass_available, _qutlass_version = _is_package_available("qutlass", return_version=True)
 _is_optimum_quanto_available = False
 try:
     importlib.metadata.version("optimum_quanto")
@@ -1289,12 +1289,12 @@ def is_quark_available() -> Union[tuple[bool, str], bool]:
     return _quark_available
 
 
-def is_fp_quant_available() -> bool:
-    return _fp_quant_available and version.parse(_fp_quant_version) >= version.parse("0.1.6")
+def is_fp_quant_available():
+    return _fp_quant_available and version.parse(_fp_quant_version) >= version.parse("0.2.0")
 
 
-def is_qutlass_available() -> Union[tuple[bool, str], bool]:
-    return _qutlass_available
+def is_qutlass_available():
+    return _qutlass_available and version.parse(_qutlass_version) >= version.parse("0.1.0")
 
 
 def is_compressed_tensors_available() -> bool:

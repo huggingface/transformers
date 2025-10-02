@@ -52,7 +52,7 @@ This model was contributed by [nielsr](https://huggingface.co/nielsr). The origi
 - BEiT models are regular Vision Transformers, but pre-trained in a self-supervised way rather than supervised. They
   outperform both the [original model (ViT)](vit) as well as [Data-efficient Image Transformers (DeiT)](deit) when fine-tuned on ImageNet-1K and CIFAR-100. You can check out demo notebooks regarding inference as well as
   fine-tuning on custom data [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/VisionTransformer) (you can just replace
-  [`ViTFeatureExtractor`] by [`BeitImageProcessor`] and
+  [`ViTImageProcessor`] by [`BeitImageProcessor`] and
   [`ViTForImageClassification`] by [`BeitForImageClassification`]).
 - There's also a demo notebook available which showcases how to combine DALL-E's image tokenizer with BEiT for
   performing masked image modeling. You can find it [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/BEiT).
@@ -135,12 +135,6 @@ If you're interested in submitting a resource to be included here, please feel f
 ## BeitConfig
 
 [[autodoc]] BeitConfig
-
-## BeitFeatureExtractor
-
-[[autodoc]] BeitFeatureExtractor
-    - __call__
-    - post_process_semantic_segmentation
 
 ## BeitImageProcessor
 

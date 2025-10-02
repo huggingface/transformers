@@ -87,7 +87,6 @@ from transformers.testing_utils import (
     require_optuna,
     require_peft,
     require_ray,
-    require_safetensors,
     require_schedulefree,
     require_sentencepiece,
     require_sigopt,
@@ -123,7 +122,6 @@ from transformers.utils import (
     is_accelerate_available,
     is_apex_available,
     is_bitsandbytes_available,
-    is_safetensors_available,
     is_torchao_available,
     is_torchdistx_available,
 )
@@ -138,6 +136,7 @@ else:
     ATOL = 1e-5
 
 if is_torch_available():
+    import safetensors.torch
     import torch
     from torch import nn
     from torch.utils.data import IterableDataset
@@ -159,9 +158,6 @@ if is_torch_available():
         TrainerState,
     )
     from transformers.trainer_pt_utils import AcceleratorConfig
-
-    if is_safetensors_available():
-        import safetensors.torch
 
 if is_datasets_available():
     import datasets
@@ -3177,7 +3173,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         trainer.train()
         self.check_saved_checkpoints(tmp_dir, 5, int(self.n_epochs * 64 / self.batch_size), False)
 
-    @require_safetensors
     def test_safe_checkpoints(self):
         for save_safetensors in [True, False]:
             tmp_dir = self.get_auto_remove_tmp_dir()
@@ -3628,7 +3623,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(b, b1)
             self.check_trainer_state_are_the_same(state, state1)
 
-    @require_safetensors
     @require_torch_up_to_2_accelerators
     def test_resume_training_with_safe_checkpoint(self):
         # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
@@ -3813,7 +3807,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.check_saved_checkpoints(tmpdir, 5, total, is_pretrained=False)
             self.check_best_model_has_been_loaded(tmpdir, 5, total, trainer, "eval_loss", is_pretrained=False)
 
-    @require_safetensors
     def test_load_best_model_from_safetensors(self):
         total = int(self.n_epochs * 64 / self.batch_size)
         for save_safetensors, pretrained in product([False, True], [False, True]):
@@ -5203,7 +5196,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             )
             trainer.train()
 
-    @require_safetensors
     def test_resume_from_interrupted_training(self):
         """
         Tests resuming training from a checkpoint after a simulated interruption.
