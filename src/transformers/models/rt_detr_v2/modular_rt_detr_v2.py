@@ -377,23 +377,6 @@ class RTDetrV2Config(PretrainedConfig):
             else {}
         )
 
-    @classmethod
-    def from_backbone_configs(cls, backbone_config: PretrainedConfig, **kwargs):
-        """Instantiate a [`RTDetrV2Config`] (or a derived class) from a pre-trained backbone model configuration and DETR model
-        configuration.
-
-            Args:
-                backbone_config ([`PretrainedConfig`]):
-                    The backbone configuration.
-
-            Returns:
-                [`RTDetrV2Config`]: An instance of a configuration object
-        """
-        return cls(
-            backbone_config=backbone_config,
-            **kwargs,
-        )
-
 
 def multi_scale_deformable_attention_v2(
     value: Tensor,

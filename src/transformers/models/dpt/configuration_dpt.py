@@ -181,8 +181,6 @@ class DPTConfig(PretrainedConfig):
         pooler_act="tanh",
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         self.hidden_size = hidden_size
         self.is_hybrid = is_hybrid
 
@@ -274,6 +272,7 @@ class DPTConfig(PretrainedConfig):
         self.semantic_classifier_dropout = semantic_classifier_dropout
         self.pooler_output_size = pooler_output_size if pooler_output_size else hidden_size
         self.pooler_act = pooler_act
+        super().__init__(**kwargs)
 
     def to_dict(self):
         """

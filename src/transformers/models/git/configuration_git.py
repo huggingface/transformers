@@ -192,8 +192,6 @@ class GitConfig(PretrainedConfig):
         num_image_with_embedding=None,
         **kwargs,
     ):
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, pad_token_id=pad_token_id, **kwargs)
-
         if vision_config is None:
             vision_config = {}
             logger.info("vision_config is None. initializing the GitVisionConfig with default values.")
@@ -217,6 +215,7 @@ class GitConfig(PretrainedConfig):
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, pad_token_id=pad_token_id, **kwargs)
 
 
 __all__ = ["GitConfig", "GitVisionConfig"]

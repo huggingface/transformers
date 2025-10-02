@@ -274,7 +274,7 @@ class AltCLIPConfig(PretrainedConfig):
     >>> config_text = AltCLIPTextConfig()
     >>> config_vision = AltCLIPVisionConfig()
 
-    >>> config = AltCLIPConfig.from_text_vision_configs(config_text, config_vision)
+    >>> config = AltCLIPConfig(text_config=config_text, vision_config=config_vision)
     ```"""
 
     model_type = "altclip"
@@ -288,8 +288,6 @@ class AltCLIPConfig(PretrainedConfig):
         # of confusion!).
         text_config_dict = kwargs.pop("text_config_dict", None)
         vision_config_dict = kwargs.pop("vision_config_dict", None)
-
-        super().__init__(**kwargs)
 
         # Instead of simply assigning `[text|vision]_config_dict` to `[text|vision]_config`, we use the values in
         # `[text|vision]_config_dict` to update the values in `[text|vision]_config`. The values should be same in most
@@ -354,19 +352,24 @@ class AltCLIPConfig(PretrainedConfig):
             vision_config.update(_vision_config_dict)
 
         if text_config is None:
-            text_config = {}
+            text_config = AltCLIPTextConfig()
             logger.info("`text_config` is `None`. Initializing the `AltCLIPTextConfig` with default values.")
+        elif isinstance(text_config, dict):
+            text_config = AltCLIPTextConfig(**text_config)
 
         if vision_config is None:
-            vision_config = {}
+            vision_config = AltCLIPVisionConfig()
             logger.info("`vision_config` is `None`. initializing the `AltCLIPVisionConfig` with default values.")
+        elif isinstance(vision_config, dict):
+            vision_config = AltCLIPVisionConfig(**vision_config)
 
-        self.text_config = AltCLIPTextConfig(**text_config)
-        self.vision_config = AltCLIPVisionConfig(**vision_config)
+        self.text_config = text_config
+        self.vision_config = vision_config
 
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
         self.initializer_factor = 1.0
+        super().__init__(**kwargs)
 
 
 __all__ = ["AltCLIPTextConfig", "AltCLIPVisionConfig", "AltCLIPConfig"]

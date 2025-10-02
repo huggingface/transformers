@@ -526,7 +526,6 @@ class Qwen3OmniMoeTalkerConfig(PretrainedConfig):
         speaker_id=None,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         if code_predictor_config is None:
             code_predictor_config = {}
             self.code_predictor_config = Qwen3OmniMoeTalkerCodePredictorConfig()
@@ -560,6 +559,7 @@ class Qwen3OmniMoeTalkerConfig(PretrainedConfig):
         self.audio_start_token_id = audio_start_token_id
         self.vision_start_token_id = vision_start_token_id
         self.speaker_id = speaker_id
+        super().__init__(**kwargs)
 
 
 class Qwen3OmniMoeCode2WavConfig(PretrainedConfig):
@@ -738,7 +738,6 @@ class Qwen3OmniMoeConfig(PretrainedConfig):
         assistant_token_id=77091,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         if thinker_config is None:
             thinker_config = {}
             logger.info("thinker_config is None. Initializing thinker model with default values")
@@ -763,6 +762,7 @@ class Qwen3OmniMoeConfig(PretrainedConfig):
         self.system_token_id = system_token_id
         self.user_token_id = user_token_id
         self.assistant_token_id = assistant_token_id
+        super().__init__(**kwargs)
 
     def get_text_config(self, decoder=False) -> "PretrainedConfig":
         """

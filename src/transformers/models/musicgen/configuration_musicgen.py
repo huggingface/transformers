@@ -198,7 +198,6 @@ class MusicgenConfig(PretrainedConfig):
     has_no_defaults_at_init = True
 
     def __init__(self, **kwargs):
-        super().__init__(**kwargs)
         if "text_encoder" not in kwargs or "audio_encoder" not in kwargs or "decoder" not in kwargs:
             raise ValueError("Config has to be initialized with text_encoder, audio_encoder and decoder config")
 
@@ -216,28 +215,7 @@ class MusicgenConfig(PretrainedConfig):
         self.is_encoder_decoder = True
         self.initializer_factor = self.decoder.initializer_factor
 
-    @classmethod
-    def from_sub_models_config(
-        cls,
-        text_encoder_config: PretrainedConfig,
-        audio_encoder_config: PretrainedConfig,
-        decoder_config: MusicgenDecoderConfig,
-        **kwargs,
-    ):
-        r"""
-        Instantiate a [`MusicgenConfig`] (or a derived class) from text encoder, audio encoder and decoder
-        configurations.
-
-        Returns:
-            [`MusicgenConfig`]: An instance of a configuration object
-        """
-
-        return cls(
-            text_encoder=text_encoder_config.to_dict(),
-            audio_encoder=audio_encoder_config.to_dict(),
-            decoder=decoder_config.to_dict(),
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
     @property
     # This is a property because you might want to change the codec model on the fly

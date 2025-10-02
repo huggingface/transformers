@@ -209,7 +209,6 @@ class MusicgenMelodyConfig(PretrainedConfig):
         chroma_length=235,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         if "text_encoder" not in kwargs or "audio_encoder" not in kwargs or "decoder" not in kwargs:
             raise ValueError("Config has to be initialized with text_encoder, audio_encoder and decoder config")
 
@@ -228,6 +227,7 @@ class MusicgenMelodyConfig(PretrainedConfig):
 
         self.num_chroma = num_chroma
         self.chroma_length = chroma_length
+        super().__init__(**kwargs)
 
     @classmethod
     def from_sub_models_config(

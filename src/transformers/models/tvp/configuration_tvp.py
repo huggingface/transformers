@@ -129,7 +129,6 @@ class TvpConfig(PretrainedConfig):
         attention_probs_dropout_prob=0.1,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         if backbone_config is None and backbone is None:
             logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
             backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage4"])
@@ -172,6 +171,8 @@ class TvpConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
 
+        super().__init__(**kwargs)
+
     @property
     def sub_configs(self):
         return (
@@ -179,18 +180,6 @@ class TvpConfig(PretrainedConfig):
             if getattr(self, "backbone_config", None) is not None
             else {}
         )
-
-    @classmethod
-    def from_backbone_config(cls, backbone_config: PretrainedConfig, **kwargs):
-        """Instantiate a [`TvpConfig`] (or a derived class) from a pre-trained backbone model configuration.
-
-        Args:
-            backbone_config ([`PretrainedConfig`]):
-                The backbone configuration.
-        Returns:
-            [`TvpConfig`]: An instance of a configuration object
-        """
-        return cls(backbone_config=backbone_config, **kwargs)
 
     def to_dict(self):
         """
