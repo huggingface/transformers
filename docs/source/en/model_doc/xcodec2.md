@@ -57,13 +57,13 @@ Here is a quick example of how to encode and decode an audio using this model:
 >>> audio = dataset[0]["audio"]["array"]
 
 >>> # prepare data
->>> inputs = feature_extractor(raw_audio=audio, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt").to(torch_device)
+>>> inputs = feature_extractor(audio=audio, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt").to(torch_device)
 
->>> # encoder and decode
->>> audio_codes = model.encode(inputs["input_values"]).audio_codes
+>>> # encoder and decoder
+>>> audio_codes = model.encode(**inputs).audio_codes
 >>> audio_values = model.decode(audio_codes).audio_values
 >>> # or the equivalent with a forward pass
->>> model_output = model(inputs["input_values"])
+>>> model_output = model(**inputs)
 >>> audio_codes = model_output.audio_codes
 >>> audio_values = model_output.audio_values
 ```

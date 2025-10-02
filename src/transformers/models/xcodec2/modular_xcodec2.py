@@ -1616,7 +1616,7 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         >>> from datasets import load_dataset
         >>> from transformers import AutoFeatureExtractor, Xcodec2Model
 
-        >>> dataset = load_dataset("hf-internal-testing/ashraq-esc50-1-dog-example")
+        >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> audio = dataset["train"]["audio"][0]["array"]
 
         >>> model_id = "hf-audio/xcodec2"
