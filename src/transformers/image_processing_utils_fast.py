@@ -46,7 +46,6 @@ from .utils import (
     auto_docstring,
     is_torch_available,
     is_torchvision_available,
-    is_torchvision_v2_available,
     is_vision_available,
     logging,
 )
@@ -60,14 +59,13 @@ if is_torch_available():
     import torch
 
 if is_torchvision_available():
+    from torchvision.transforms.v2 import functional as F
+
     from .image_utils import pil_torch_interpolation_mapping
+
 else:
     pil_torch_interpolation_mapping = None
 
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-elif is_torchvision_available():
-    from torchvision.transforms import functional as F
 
 logger = logging.get_logger(__name__)
 
