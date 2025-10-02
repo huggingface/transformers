@@ -558,6 +558,7 @@ class PeftAdapterMixin:
         """
 
         check_peft_version(min_version=MIN_PEFT_VERSION)
+        min_version_delete_adapter = "0.18.0"
 
         if not self._hf_peft_config_loaded:
             raise ValueError("No adapter loaded. Please load an adapter first.")
@@ -565,8 +566,13 @@ class PeftAdapterMixin:
         # TODO: delete old version once support for PEFT < 0.18.0 is dropped
         def old_delete_adapter(model, adapter_name, prefix=None):
             from peft.tuners.tuners_utils import BaseTunerLayer
+            from peft.utils import ModulesToSaveWrapper
 
+            has_modules_to_save = False
             for module in model.modules():
+                if isinstance(module, ModulesToSaveWrapper):
+                    has_modules_to_save |= True
+                    continue
                 if isinstance(module, BaseTunerLayer):
                     if hasattr(module, "delete_adapter"):
                         module.delete_adapter(adapter_name)
@@ -575,7 +581,12 @@ class PeftAdapterMixin:
                             "The version of PEFT you are using is not compatible, please use a version that is greater than 0.6.1"
                         )
 
-        min_version_delete_adapter = "0.18.0"
+            if has_modules_to_save:
+                logger.warning(
+                    "The deleted adapter contains modules_to_save, which could not be deleted. For this to work, PEFT version "
+                    f">= {min_version_delete_adapter} is required."
+                )
+
         if version.parse(importlib.metadata.version("peft")) >= version.parse(min_version_delete_adapter):
             from peft.functional import delete_adapter
         else:
