@@ -308,7 +308,7 @@ class FlexOlmoSparseMoeBlock(nn.Module):
         self.experts = FlexOlmoExperts(config)
 
     def route_tokens_to_experts(self, hidden_states, router_logits):
-        routing_weights = torch.nn.functional.softmax(router_logits, dim=-1)
+        routing_weights = torch.nn.functional.softmax(router_logits.float(), dim=-1)
         top_k_weights, top_k_index = torch.topk(routing_weights, self.top_k, dim=-1)
         if self.norm_topk_prob:
             top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
