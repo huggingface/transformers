@@ -131,6 +131,7 @@ class DeepseekV3MoE(nn.Module):
         self.top_k = config.num_experts_per_tok
 
     def route_tokens_to_experts(self, router_logits):
+        router_logits = router_logits.sigmoid()
         router_logits = router_logits + self.gate.e_score_correction_bias
         group_scores = (
             router_logits.view(-1, self.n_group, self.n_routed_experts // self.n_group).topk(2, dim=-1)[0].sum(dim=-1)
@@ -155,7 +156,7 @@ class DeepseekV3MoE(nn.Module):
     def forward(self, hidden_states):
         residuals = hidden_states
         orig_shape = hidden_states.shape
-        router_logits = self.gate(hidden_states)
+        router_logits = nn.functional.linear(hidden_states.float(), self.gate.weight.float())
         topk_indices, topk_weights = self.route_tokens_to_experts(router_logits)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
