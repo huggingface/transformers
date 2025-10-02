@@ -51,7 +51,7 @@ from .configuration_mbart import MBartConfig
 
 
 if is_torch_flex_attn_available():
-    from ...integrations.flex_attention import BlockMask, make_flex_block_causal_mask
+    pass
 
 
 logger = logging.get_logger(__name__)

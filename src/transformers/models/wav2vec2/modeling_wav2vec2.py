@@ -738,7 +738,6 @@ class Wav2Vec2Encoder(nn.Module):
         )
 
 
-
 class Wav2Vec2EncoderStableLayerNorm(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -813,7 +812,6 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
-
 
 
 class Wav2Vec2GumbelVectorQuantizer(nn.Module):

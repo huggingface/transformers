@@ -687,7 +687,6 @@ class MobileBertModel(MobileBertPreTrainedModel):
         )
 
 
-
 @auto_docstring(
     custom_intro="""
     MobileBert Model with two heads on top as done during the pretraining: a `masked language modeling` head and a
