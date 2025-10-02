@@ -190,7 +190,7 @@ class SamProcessor(ProcessorMixin):
         r"""
         The method pads the 2D points and labels to the maximum number of points in the batch.
         """
-        expected_nb_points = max([point.shape[0] for point in input_points])
+        expected_nb_points = max(point.shape[0] for point in input_points)
         processed_input_points = []
         for i, point in enumerate(input_points):
             if point.shape[0] != expected_nb_points:
