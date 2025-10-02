@@ -615,7 +615,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             {"text": " Nor is Mr. Quilters' manner less interesting than his matter."},
         ]
 
-
         audio_arrays = [x.get_all_samples().data for x in ds["audio"]]
         output = speech_recognizer(audio_arrays, batch_size=2)
         self.assertEqual(output, EXPECTED_OUTPUT)
