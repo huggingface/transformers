@@ -243,11 +243,10 @@ class CodeSimilarityAnalyzer:
             if self.device.type == "cuda"
             else torch.float32
         )
-        self.tokenizer = AutoTokenizer.from_pretrained(EMBEDDING_MODEL, trust_remote_code=True)
+        self.tokenizer = AutoTokenizer.from_pretrained(EMBEDDING_MODEL)
         self.model = (
             AutoModel.from_pretrained(
                 EMBEDDING_MODEL,
-                trust_remote_code=True,
                 torch_dtype=self.dtype if self.device.type == "cuda" else torch.float32,
             )
             .eval()
