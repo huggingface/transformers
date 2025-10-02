@@ -121,7 +121,6 @@ class DPTImageProcessorFast(BeitImageProcessorFast):
     do_reduce_labels = False
     crop_size = None
     do_center_crop = None
-    do_reduce_labels = None
 
     valid_kwargs = DPTFastImageProcessorKwargs
 

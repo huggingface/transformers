@@ -84,7 +84,6 @@ class TextToAudioPipeline(Pipeline):
     _load_processor = True
 
     _pipeline_calls_generate = True
-    _load_processor = False
     _load_image_processor = False
     _load_feature_extractor = False
     _load_tokenizer = True
