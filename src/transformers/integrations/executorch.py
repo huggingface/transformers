@@ -192,6 +192,101 @@ class TorchExportableModuleForVLM:
         pass
 
 
+class TorchExportableModuleForEncoderOnlyLM(torch.nn.Module):
+    """
+    A recipe module designed to make a `PreTrainedModel` exportable with `torch.export`,
+    specifically for encoder-only LM. This module ensures that the exported model is compatible
+    with further lowering and execution in `ExecuTorch`.
+    """
+
+    def __init__(self, model: PreTrainedModel) -> None:
+        """
+        Initializes the exportable module.
+
+        Args:
+            model (`PreTrainedModel`): The pretrained model to wrap.
+        """
+        super().__init__()
+
+        self.model = model
+        # This is the same as sdpa, but mask creation does not use `vmap` which is not exportable
+        ALL_MASK_ATTENTION_FUNCTIONS.register(
+            "sdpa_bidirectional_mask_without_vmap", sdpa_bidirectional_mask_without_vmap
+        )
+        ALL_ATTENTION_FUNCTIONS.register("sdpa_bidirectional_mask_without_vmap", ALL_ATTENTION_FUNCTIONS["sdpa"])
+        self.model.config._attn_implementation = "sdpa_bidirectional_mask_without_vmap"
+
+    def forward(
+        self,
+        input_ids: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """
+        Forward pass of the module, which is compatible with the ExecuTorch llm runner.
+
+        Args:
+            input_ids (`torch.Tensor`): Tensor representing current input token id to the module.
+            inputs_embeds (`torch.Tensor`): Tensor representing current input embeddings to the module.
+            cache_position (`torch.Tensor`): Tensor representing current input position in the cache.
+
+        Returns:
+            torch.Tensor: Logits output from the model.
+        """
+        return self.model.forward(
+            input_ids=input_ids,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+        )
+
+    def export(
+        self,
+        input_ids: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        strict: Optional[bool] = None,
+    ) -> torch.export.ExportedProgram:
+        """
+        Export the wrapped module using `torch.export`.
+
+        Args:
+            input_ids (`Optional[torch.Tensor]`):
+                Tensor representing current input token id to the module. Must specify either this or inputs_embeds.
+            inputs_embeds (`Optional[torch.Tensor]`):
+                Tensor representing current input embeddings to the module. Must specify either this or input_ids.
+            strict(`Optional[bool]`):
+                Flag to instruct `torch.export` to use `torchdynamo`.
+
+        Returns:
+            torch.export.ExportedProgram: The exported program that can be used for inference.
+
+        """
+        if not (input_ids is None) ^ (inputs_embeds is None):
+            raise ValueError("Need to specify either input_ids or inputs_embeds.")
+
+        if input_ids is not None:
+            input_kwargs = {
+                "input_ids": input_ids,
+                "attention_mask": attention_mask if attention_mask is not None else torch.ones_like(input_ids),
+            }
+        else:
+            input_kwargs = {
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask
+                if attention_mask is not None
+                else torch.ones_like(inputs_embeds)[..., 0],
+            }
+
+        exported_program = torch.export.export(
+            self.model,
+            args=(),
+            kwargs=input_kwargs,
+            strict=strict if strict is not None else True,
+        )
+
+        return exported_program
+
+
 class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
     """
     A recipe module designed to make a `PreTrainedModel` exportable with `torch.export`,

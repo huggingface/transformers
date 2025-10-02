@@ -395,9 +395,7 @@ class MobileBertModelIntegrationTests(unittest.TestCase):
         if version.parse(torch.__version__) < version.parse("2.4.0"):
             self.skipTest(reason="This test requires torch >= 2.4 to run.")
 
-        from transformers.integrations.executorch import sdpa_bidirectional_mask_without_vmap
-        from transformers.masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
-        from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
+        from transformers.integrations.executorch import TorchExportableModuleForEncoderOnlyLM
 
         mobilebert_model = "google/mobilebert-uncased"
         device = "cpu"
@@ -422,20 +420,15 @@ class MobileBertModelIntegrationTests(unittest.TestCase):
         eg_predicted_mask = tokenizer.decode(logits[0, 6].topk(5).indices)
         self.assertEqual(eg_predicted_mask.split(), ["carpenter", "waiter", "mechanic", "teacher", "clerk"])
 
-        # Reset attention implementation to executorch friendly one
-        ALL_MASK_ATTENTION_FUNCTIONS.register(
-            "sdpa_bidirectional_mask_without_vmap", sdpa_bidirectional_mask_without_vmap
-        )
-        ALL_ATTENTION_FUNCTIONS.register("sdpa_bidirectional_mask_without_vmap", ALL_ATTENTION_FUNCTIONS["sdpa"])
-        model.config._attn_implementation = "sdpa_bidirectional_mask_without_vmap"
-
-        exported_program = torch.export.export(
-            model,
-            args=(inputs["input_ids"],),
-            kwargs={"attention_mask": inputs["attention_mask"]},
+        exportable_module = TorchExportableModuleForEncoderOnlyLM(model)
+        exported_program = exportable_module.export(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
             strict=True,
         )
 
-        result = exported_program.module().forward(inputs["input_ids"], inputs["attention_mask"])
+        result = exported_program.module().forward(
+            input_ids=inputs["input_ids"], attention_mask=inputs["attention_mask"]
+        )
         ep_predicted_mask = tokenizer.decode(result.logits[0, 6].topk(5).indices)
         self.assertEqual(eg_predicted_mask, ep_predicted_mask)
