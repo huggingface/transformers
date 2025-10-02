@@ -463,7 +463,7 @@ class MiniMaxSparseMoeBlock(nn.Module):
         routing_weights = torch.nn.functional.softmax(router_logits.float(), dim=-1)
         top_k_weights, top_k_index = torch.topk(routing_weights, self.top_k, dim=-1)
         top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
-        return top_k_index, top_k_weights
+        return top_k_index, top_k_weights.to(router_logits.dtype)
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
