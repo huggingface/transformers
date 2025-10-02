@@ -80,6 +80,7 @@ ALWAYS_OVERRIDE = ["labels"]
 # line before the docstring.
 OBJECTS_TO_IGNORE = {
     "ApertusConfig",
+    "HrmConfig",
     "Mxfp4Config",
     "Qwen3OmniMoeConfig",
     "Exaone4Config",
