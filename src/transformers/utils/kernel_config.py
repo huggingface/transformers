@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..utils import is_kernels_available, is_torch_available, PushToHubMixin
+from ..utils import PushToHubMixin, is_kernels_available, is_torch_available
 
 
 if is_kernels_available():
