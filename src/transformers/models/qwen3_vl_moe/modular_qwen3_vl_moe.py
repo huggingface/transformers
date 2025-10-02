@@ -369,6 +369,9 @@ class Qwen3VLMoeTextSparseMoeBlock(nn.Module):
         self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
         self.experts = Qwen3VLMoeTextExperts(config)
 
+        # since all the models use norm_topk_prob, we don't need to have a extra check for it
+        # self.norm_topk_prob = config.norm_topk_prob
+
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size = hidden_states.shape[0]
         hidden_states = hidden_states.reshape(-1, self.hidden_size)
