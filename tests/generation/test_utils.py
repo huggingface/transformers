@@ -4897,6 +4897,7 @@ class TestAssistedCandidateGeneratorDifferentTokenizers(unittest.TestCase):
         np.testing.assert_array_equal(new_tokens_only, np.array([[]]))
         np.testing.assert_array_equal(discrep_only, np.array([[]]))
 
+
 class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
     def setUp(self):
         checkpoint = "EleutherAI/pythia-160m-deduped"
