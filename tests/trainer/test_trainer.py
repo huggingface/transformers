@@ -1493,7 +1493,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # loading and let torch throw the
         tiny_model = AutoModelForCausalLM.from_pretrained(
             "hf-internal-testing/tiny-random-LlamaForCausalLM",
-            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
         )
 
         peft_config = LoraConfig(
