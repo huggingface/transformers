@@ -38,6 +38,7 @@ from ..llama.modeling_llama import (
     eager_attention_forward,
 )
 from ..llama4.modeling_llama4 import Llama4TextRotaryEmbedding
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts
 
 
 logger = logging.get_logger(__name__)
@@ -95,8 +96,6 @@ class DeepseekV2Config(LlamaConfig):
             The dropout probability applied to attention weights.
         mlp_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias term in the MLP layers.
-        aux_loss_alpha (`float`, *optional*, defaults to 0.001):
-            Weight coefficient for auxiliary loss in Mixture of Experts (MoE) models.
         first_k_dense_replace (`int`, *optional*, defaults to 0):
             Number of dense layers in the shallow layers before switching to MoE layers.
         kv_lora_rank (`int`, *optional*, defaults to 512):
@@ -117,8 +116,6 @@ class DeepseekV2Config(LlamaConfig):
             The head dimension for QK projections when using RoPE.
         routed_scaling_factor (`float`, *optional*, defaults to 1.0):
             Scaling factor for routed experts in MoE models.
-        seq_aux (`bool`, *optional*, defaults to `True`):
-            Whether to compute the auxiliary loss for each individual sequence.
         topk_group (`int`, *optional*):
             Number of selected groups per token for expert selection.
         topk_method (`str`, *optional*, defaults to `"greedy"`):
@@ -127,8 +124,6 @@ class DeepseekV2Config(LlamaConfig):
             The dimension of value projections in the attention layers.
         num_experts_per_tok (`int`, *optional*):
             The number of experts selected per token. If `None`, the model behaves as a dense Transformer.
-        norm_topk_prob (`bool`, *optional*, defaults to `False`):
-            Whether to normalize the probability distribution over top-k selected experts.
         moe_intermediate_size (`int`, *optional*, defaults to 1407):
             Dimension of the MoE (Mixture of Experts) representations.
 
@@ -178,7 +173,6 @@ class DeepseekV2Config(LlamaConfig):
         attention_bias=False,
         attention_dropout=0.0,
         mlp_bias=False,
-        aux_loss_alpha=0.001,
         first_k_dense_replace=0,
         kv_lora_rank=512,
         q_lora_rank=1536,
@@ -188,19 +182,16 @@ class DeepseekV2Config(LlamaConfig):
         qk_nope_head_dim=128,
         qk_rope_head_dim=64,
         routed_scaling_factor=1.0,
-        seq_aux=True,
         topk_group=None,
         topk_method="greedy",
         v_head_dim=128,
         num_experts_per_tok=None,
-        norm_topk_prob=False,
         moe_intermediate_size=1407,
         **kwargs,
     ):
         super().__init__(**kwargs)
 
         del self.pretraining_tp
-        self.aux_loss_alpha = aux_loss_alpha
         self.first_k_dense_replace = first_k_dense_replace
         self.kv_lora_rank = kv_lora_rank
         self.q_lora_rank = q_lora_rank
@@ -210,12 +201,10 @@ class DeepseekV2Config(LlamaConfig):
         self.qk_nope_head_dim = qk_nope_head_dim
         self.qk_rope_head_dim = qk_rope_head_dim
         self.routed_scaling_factor = routed_scaling_factor
-        self.seq_aux = seq_aux
         self.topk_group = topk_group
         self.topk_method = topk_method
         self.v_head_dim = v_head_dim
         self.num_experts_per_tok = num_experts_per_tok
-        self.norm_topk_prob = norm_topk_prob
         self.moe_intermediate_size = moe_intermediate_size
         self.head_dim = qk_rope_head_dim
 
@@ -236,117 +225,59 @@ def apply_rotary_emb(
     return xq_out, xk_out
 
 
-class DeepseekV2MoEGate(nn.Module):
+class DeepseekV2Experts(Qwen2MoeExperts, nn.ModuleList):
+    def __init__(self, config):
+        nn.ModuleList.__init__(self)
+        self.num_experts = config.n_routed_experts
+        for _ in range(config.n_routed_experts):
+            self.append(DeepseekV2MLP(config, intermediate_size=config.moe_intermediate_size))
+
+
+class DeepseekV2Moe(nn.Module):
     def __init__(self, config: DeepseekV2Config):
         super().__init__()
         self.config = config
-        self.top_k = config.num_experts_per_tok
-        self.num_experts = config.n_routed_experts
+        self.experts = DeepseekV2Experts(config)
+        self.gate = nn.Linear(config.hidden_size, config.n_routed_experts, bias=False)
+        if config.n_shared_experts is not None:
+            intermediate_size = config.moe_intermediate_size * config.n_shared_experts
+            self.shared_experts = DeepseekV2MLP(config=config, intermediate_size=intermediate_size)
         self.routed_scaling_factor = config.routed_scaling_factor
-        self.alpha = config.aux_loss_alpha
-        self.seq_aux = config.seq_aux
         self.topk_method = config.topk_method
         self.num_group = config.n_group
+        self.top_k = config.num_experts_per_tok
         self.topk_group = config.topk_group
 
-        # topk selection algorithm
-        self.norm_topk_prob = config.norm_topk_prob
-        self.gating_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.empty((self.num_experts, self.gating_dim)))
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch_size, seq_len, hidden_dim = hidden_states.shape
-        ### compute gating score
-        hidden_states = hidden_states.view(-1, hidden_dim)
-        logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32), None)
-        scores = logits.softmax(dim=-1, dtype=torch.float32)
-
-        # select top-k experts
-        # greedy method is used for DeepSeek-V2-Lite
-        # group_limited_greedy for DeepSeek-V2 and DeepSeek-V2-Chat
+    def route_tokens_to_experts(self, router_logits):
+        batch_size, seq_len, hidden_dim = router_logits.shape
+        router_logits = router_logits.view(-1, hidden_dim)
+        router_logits = router_logits.softmax(dim=-1, dtype=torch.float32)
         if self.topk_method == "greedy":
-            topk_weight, topk_idx = torch.topk(scores, k=self.top_k, dim=-1, sorted=False)
+            topk_weight, topk_idx = torch.topk(router_logits, k=self.top_k, dim=-1, sorted=False)
         elif self.topk_method == "group_limited_greedy":
-            group_scores = scores.view(batch_size * seq_len, self.num_group, -1).max(dim=-1).values  # [n, num_group]
-            group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]  # [n, top_k_group]
-            group_mask = torch.zeros_like(group_scores)  # [n, num_group]
-            group_mask.scatter_(1, group_idx, 1)  # [n, num_group]
+            group_scores = router_logits.view(batch_size * seq_len, self.num_group, -1).max(dim=-1).values
+            group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
+            group_mask = torch.zeros_like(group_scores)
+            group_mask.scatter_(1, group_idx, 1)
             score_mask = (
                 group_mask.unsqueeze(-1)
                 .expand(batch_size * seq_len, self.num_group, self.num_experts // self.num_group)
                 .reshape(batch_size * seq_len, -1)
-            )  # [n, e]
-            tmp_scores = scores.masked_fill(~score_mask.bool(), 0.0)  # [n, e]
+            )
+            tmp_scores = router_logits.masked_fill(~score_mask.bool(), 0.0)
             topk_weight, topk_idx = torch.topk(tmp_scores, k=self.top_k, dim=-1, sorted=False)
 
         topk_weight = topk_weight * self.routed_scaling_factor
-        ### expert-level computation auxiliary loss
         return topk_idx, topk_weight
-
-
-class DeepseekV2MoE(nn.Module):
-    """
-    A mixed expert module containing shared experts.
-    """
-
-    def __init__(self, config: DeepseekV2Config):
-        super().__init__()
-        self.config = config
-        self.num_experts_per_tok = config.num_experts_per_tok
-
-        self.experts = nn.ModuleList(
-            [
-                (DeepseekV2MLP(config, intermediate_size=config.moe_intermediate_size))
-                for _ in range(config.n_routed_experts)
-            ]
-        )
-        self.gate = DeepseekV2MoEGate(config)
-        if config.n_shared_experts is not None:
-            intermediate_size = config.moe_intermediate_size * config.n_shared_experts
-            self.shared_experts = DeepseekV2MLP(config=config, intermediate_size=intermediate_size)
-        self.ep_rank = 0
-        self.experts_per_rank = config.n_routed_experts
-
-    def moe(self, hidden_states: torch.Tensor, topk_ids: torch.Tensor, topk_weight: torch.Tensor) -> torch.Tensor:
-        cnts = topk_ids.new_zeros((topk_ids.shape[0], len(self.experts)))
-        cnts.scatter_(1, topk_ids, 1)
-        tokens_per_expert = cnts.sum(dim=0)
-        indices = topk_ids.view(-1).argsort()
-        sorted_tokens = hidden_states[indices // topk_ids.shape[1]]
-
-        # Process experts
-        outputs = []
-        start_idx = 0
-        for i, num_tokens in enumerate(tokens_per_expert):
-            if num_tokens == 0:
-                continue
-            end_idx = start_idx + num_tokens
-            expert = self.experts[i + self.ep_rank * self.experts_per_rank]
-            tokens_for_this_expert = sorted_tokens[start_idx:end_idx]
-            expert_out = expert(tokens_for_this_expert)
-            outputs.append(expert_out)
-            start_idx = end_idx
-
-        outs = torch.cat(outputs, dim=0) if outputs else sorted_tokens.new_empty(0)
-
-        # Reorder and combine outputs
-        new_x = torch.empty_like(outs)
-        new_x[indices] = outs
-        hidden_states = (
-            new_x.view(*topk_ids.shape, -1)
-            .type(topk_weight.dtype)
-            .mul_(topk_weight.unsqueeze(dim=-1))
-            .sum(dim=1)
-            .type(new_x.dtype)
-        )
-        return hidden_states
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residuals = hidden_states
         orig_shape = hidden_states.shape
-        topk_indices, topk_weights = self.gate(hidden_states)
+        router_logits = nn.functional.linear(hidden_states.type(torch.float32), self.gate.weight.type(torch.float32))
+        router_logits = self.gate(hidden_states)
+        topk_indices, topk_weights = self.route_tokens_to_experts(router_logits)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.moe(hidden_states, topk_indices, topk_weights).view(*orig_shape)
+        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
         hidden_states = hidden_states + self.shared_experts(residuals)
         return hidden_states
 
@@ -497,7 +428,7 @@ class DeepseekV2DecoderLayer(LlamaDecoderLayer):
         super().__init__(config, layer_idx)
 
         self.self_attn = DeepseekV2Attention(config=config, layer_idx=layer_idx)
-        self.mlp = DeepseekV2MoE(config) if layer_idx >= config.first_k_dense_replace else DeepseekV2MLP(config)
+        self.mlp = DeepseekV2Moe(config) if layer_idx >= config.first_k_dense_replace else DeepseekV2MLP(config)
 
         self.input_layernorm = DeepseekV2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = DeepseekV2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -508,8 +439,8 @@ class DeepseekV2PreTrainedModel(LlamaPreTrainedModel):
 
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
-        if isinstance(module, DeepseekV2MoEGate):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        if isinstance(module, DeepseekV2Moe):
+            module.gate.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
 
 
 class DeepseekV2Model(LlamaModel):

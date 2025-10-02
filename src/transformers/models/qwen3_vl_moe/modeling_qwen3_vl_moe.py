@@ -156,7 +156,7 @@ class Qwen3VLMoeTextSparseMoeBlock(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         router_weights, router_logits, router_indices = self.gate(hidden_states)
         routed_out = self.experts(hidden_states, router_weights, router_indices)
-        return routed_out, router_logits
+        return routed_out
 
 
 def rotate_half(x):
@@ -313,7 +313,7 @@ class Qwen3VLMoeTextMLP(nn.Module):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
-        self.intermediate_size = intermediate_size if intermediate_size is not None else config.intermediate_size
+        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
@@ -327,67 +327,40 @@ class Qwen3VLMoeTextMLP(nn.Module):
 class Qwen3VLMoeTextDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Qwen3VLMoeTextConfig, layer_idx: int):
         super().__init__()
-        self.hidden_size = config.hidden_size
-
         self.self_attn = Qwen3VLMoeTextAttention(config, layer_idx)
-
         if (layer_idx not in config.mlp_only_layers) and (
             config.num_experts > 0 and (layer_idx + 1) % config.decoder_sparse_step == 0
         ):
             self.mlp = Qwen3VLMoeTextSparseMoeBlock(config)
         else:
             self.mlp = Qwen3VLMoeTextMLP(config, intermediate_size=config.intermediate_size)
-
         self.input_layernorm = Qwen3VLMoeTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Qwen3VLMoeTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.hidden_size = config.hidden_size
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
+        use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> torch.FloatTensor:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
-                `(batch, sequence_length)` where padding elements are indicated by 0.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_router_logits (`bool`, *optional*):
-                Whether or not to return the logits of all the routers. They are useful for computing the router loss,
-                and should not be returned during inference.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            past_key_values (`Cache`, *optional*): cached past key and value projection states
-            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence.
-            position_embeddings (`tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
-                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
-                with `head_dim` being the embedding dimension of each attention head.
-            kwargs (`dict`, *optional*):
-                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
-                into the model
-        """
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
         residual = hidden_states
-
         hidden_states = self.input_layernorm(hidden_states)
-
         # Self Attention
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
-            position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
+            use_cache=use_cache,
             cache_position=cache_position,
+            position_embeddings=position_embeddings,
             **kwargs,
         )
         hidden_states = residual + hidden_states
@@ -396,11 +369,7 @@ class Qwen3VLMoeTextDecoderLayer(GradientCheckpointingLayer):
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        # For the MoE layers, we need to unpack
-        if isinstance(hidden_states, tuple):
-            hidden_states, _ = hidden_states
         hidden_states = residual + hidden_states
-
         return hidden_states
 
 
@@ -417,7 +386,7 @@ class Qwen3VLMoePreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
     _supports_attention_backend = True
     _can_record_outputs = {
-        "router_logits": OutputRecorder(Qwen3VLMoeTextSparseMoeBlock, index=1),
+        "router_logits": OutputRecorder(nn.Linear, layer_name="mlp.gate", index=0),
         "hidden_states": Qwen3VLMoeTextDecoderLayer,
         "attentions": Qwen3VLMoeTextAttention,
     }
