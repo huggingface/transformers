@@ -404,7 +404,7 @@ class PixtralPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
     _no_split_modules = ["PixtralAttentionLayer"]
-    
+
     def _init_weights(self, module):
         std = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d)):
