@@ -329,11 +329,11 @@ def _gguf_parse_value(_value, data_type):
         _value = int(_value[0])
     elif data_type in [6, 12]:
         _value = float(_value[0])
-    elif data_type in [7]:
+    elif data_type == 7:
         _value = bool(_value[0])
-    elif data_type in [8]:
+    elif data_type == 8:
         _value = array("B", list(_value)).tobytes().decode()
-    elif data_type in [9]:
+    elif data_type == 9:
         _value = _gguf_parse_value(_value, array_data_type)
     return _value
 

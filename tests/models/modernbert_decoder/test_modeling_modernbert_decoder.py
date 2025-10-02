@@ -63,7 +63,7 @@ class ModernBertDecoderModelTest(CausalLMModelTest, unittest.TestCase):
                 # The classifier.weight from ModernBertDecoderForSequenceClassification
                 # is initialized without `initializer_range`, so it's not set to ~0 via the _config_zero_init
                 if param.requires_grad and not (
-                    name == "classifier.weight" and model_class in [ModernBertDecoderForSequenceClassification]
+                    name == "classifier.weight" and model_class == ModernBertDecoderForSequenceClassification
                 ):
                     data = torch.flatten(param.data)
                     n_elements = torch.numel(data)

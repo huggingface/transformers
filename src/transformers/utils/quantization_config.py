@@ -1618,7 +1618,7 @@ class FPQuantConfig(QuantizationConfigMixin):
             if self.hadamard_group_size not in [32, 64, 128]:
                 raise ValueError("Only a `hadamard_group_size` of [32, 64, 128] is supported for 'mxfp4'.")
         elif self.forward_dtype == "nvfp4":
-            if self.forward_method not in ["abs_max"]:
+            if self.forward_method != "abs_max":
                 raise ValueError("Only 'abs_max' is supported for forward_method for 'nvfp4'.")
             if self.hadamard_group_size is None:
                 self.hadamard_group_size = 16
@@ -1627,7 +1627,7 @@ class FPQuantConfig(QuantizationConfigMixin):
         else:
             raise ValueError("Only 'mxfp4' and 'nvfp4' are supported for forward_dtype for now.")
 
-        if self.backward_dtype not in ["bf16"]:
+        if self.backward_dtype != "bf16":
             raise ValueError("Only 'bf16' is supported for backward_dtype for now.")
         if self.transform_init not in ["hadamard", "identity", "gsr"]:
             raise ValueError("Only 'hadamard', 'identity' and 'gsr' are supported for transform_init.")
@@ -2026,7 +2026,7 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         Safety checker that arguments are correct
         """
         self.activation_scheme = self.activation_scheme.lower()
-        if self.activation_scheme not in ["dynamic"]:
+        if self.activation_scheme != "dynamic":
             raise ValueError(f"Activation scheme {self.activation_scheme} not supported")
         if len(self.weight_block_size) != 2:
             raise ValueError("weight_block_size must be a tuple of two integers")
