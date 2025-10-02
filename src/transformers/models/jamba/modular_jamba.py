@@ -523,7 +523,7 @@ class JambaSparseMoeBlock(nn.Module):
         self.experts = JambaExperts(config)
 
     def route_tokens_to_experts(self, hidden_states, router_logits):
-        routing_weights = torch.nn.functional.softmax(router_logits, dim=-1)
+        routing_weights = torch.nn.functional.softmax(router_logits, dim=-1, dtype=torch.float)
         top_k_weights, top_k_index = torch.topk(routing_weights, self.top_k, dim=-1)
         return top_k_index, top_k_weights
 
