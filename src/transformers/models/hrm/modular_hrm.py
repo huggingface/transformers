@@ -27,7 +27,7 @@ This implementation follows the architecture described in the paper: https://arx
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -123,7 +123,7 @@ def rotate_half(x: torch.Tensor) -> torch.Tensor:
 
 def apply_rotary_pos_emb(
     q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Apply Rotary Position Embeddings to query and key tensors."""
     orig_dtype = q.dtype
     q = q.to(cos.dtype)
@@ -189,7 +189,7 @@ class HrmRotaryEmbedding(nn.Module):
         self.register_buffer("cos_cached", emb.cos(), persistent=False)
         self.register_buffer("sin_cached", emb.sin(), persistent=False)
 
-    def forward(self) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self) -> tuple[torch.Tensor, torch.Tensor]:
         return self.cos_cached, self.sin_cached
 
 
@@ -212,9 +212,7 @@ class HrmAttention(nn.Module):
         )
         self.o_proj = HrmLinear(self.output_size, self.hidden_size, bias=False)
 
-    def _eager_attention(
-        self, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor
-    ) -> torch.Tensor:
+    def _eager_attention(self, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor) -> torch.Tensor:
         """Pure PyTorch fallback attention when FlashAttention is not available."""
         batch, seq_len, num_heads, head_dim = query.shape
         # Transpose to (batch, num_heads, seq_len, head_dim)
@@ -238,7 +236,7 @@ class HrmAttention(nn.Module):
         return output.transpose(1, 2).contiguous()
 
     def forward(
-        self, hidden_states: torch.Tensor, cos_sin: Optional[Tuple[torch.Tensor, torch.Tensor]] = None
+        self, hidden_states: torch.Tensor, cos_sin: Optional[tuple[torch.Tensor, torch.Tensor]] = None
     ) -> torch.Tensor:
         batch_size, seq_len, _ = hidden_states.shape
         qkv = self.qkv_proj(hidden_states)
@@ -296,7 +294,7 @@ class HrmBlock(nn.Module):
         self.norm_eps = config.rms_norm_eps
 
     def forward(
-        self, hidden_states: torch.Tensor, cos_sin: Optional[Tuple[torch.Tensor, torch.Tensor]] = None
+        self, hidden_states: torch.Tensor, cos_sin: Optional[tuple[torch.Tensor, torch.Tensor]] = None
     ) -> torch.Tensor:
         # Post-normalization
         hidden_states = rms_norm(
@@ -314,7 +312,10 @@ class HrmReasoningModule(nn.Module):
         self.layers = nn.ModuleList(layers)
 
     def forward(
-        self, hidden_states: torch.Tensor, input_injection: torch.Tensor, cos_sin: Optional[Tuple[torch.Tensor, torch.Tensor]] = None
+        self,
+        hidden_states: torch.Tensor,
+        input_injection: torch.Tensor,
+        cos_sin: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
     ) -> torch.Tensor:
         # Input injection (add)
         hidden_states = hidden_states + input_injection
@@ -348,7 +349,9 @@ class HrmInner(nn.Module):
     def __init__(self, config: HrmConfig):
         super().__init__()
         self.config = config
-        self.forward_dtype = getattr(torch, config.torch_dtype) if isinstance(config.torch_dtype, str) else config.torch_dtype
+        self.forward_dtype = (
+            getattr(torch, config.torch_dtype) if isinstance(config.torch_dtype, str) else config.torch_dtype
+        )
 
         # Embeddings
         self.embed_scale = math.sqrt(config.hidden_size)
@@ -389,10 +392,14 @@ class HrmInner(nn.Module):
 
         # Initial states
         self.register_buffer(
-            "H_init", truncated_normal_init_(torch.empty(config.hidden_size, dtype=self.forward_dtype), std=1), persistent=True
+            "H_init",
+            truncated_normal_init_(torch.empty(config.hidden_size, dtype=self.forward_dtype), std=1),
+            persistent=True,
         )
         self.register_buffer(
-            "L_init", truncated_normal_init_(torch.empty(config.hidden_size, dtype=self.forward_dtype), std=1), persistent=True
+            "L_init",
+            truncated_normal_init_(torch.empty(config.hidden_size, dtype=self.forward_dtype), std=1),
+            persistent=True,
         )
 
         # Q head special init
@@ -400,7 +407,9 @@ class HrmInner(nn.Module):
             self.q_head.weight.zero_()
             self.q_head.bias.fill_(-5)
 
-    def _input_embeddings(self, input: torch.Tensor, puzzle_identifiers: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def _input_embeddings(
+        self, input: torch.Tensor, puzzle_identifiers: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
         """Compute input embeddings with token, puzzle, and position encoding."""
         embedding = self.embed_tokens(input.to(torch.int32))
 
@@ -451,14 +460,12 @@ class HrmInner(nn.Module):
 
     def forward(
         self, carry: HrmInnerCarry, batch: dict
-    ) -> Tuple[HrmInnerCarry, torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+    ) -> tuple[HrmInnerCarry, torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
         """Execute hierarchical reasoning forward pass with 1-step gradient."""
         cos_sin = self.rotary_emb() if hasattr(self, "rotary_emb") else None
 
         # Input encoding
-        input_embeddings = self._input_embeddings(
-            batch["input_ids"], batch.get("puzzle_identifiers")
-        )
+        input_embeddings = self._input_embeddings(batch["input_ids"], batch.get("puzzle_identifiers"))
 
         # Forward iterations
         with torch.no_grad():
@@ -558,9 +565,9 @@ class HrmModel(HrmPreTrainedModel):
             if self.training and self.config.halt_max_steps > 1:
                 halted = halted | (q_halt_logits > q_continue_logits)
                 # Exploration
-                min_halt_steps = (torch.rand_like(q_halt_logits.float()) < self.config.halt_exploration_prob) * torch.randint_like(
-                    new_steps, low=2, high=self.config.halt_max_steps + 1
-                )
+                min_halt_steps = (
+                    torch.rand_like(q_halt_logits.float()) < self.config.halt_exploration_prob
+                ) * torch.randint_like(new_steps, low=2, high=self.config.halt_max_steps + 1)
                 halted = halted & (new_steps >= min_halt_steps)
 
         new_carry = HrmCarry(new_inner_carry, new_steps, halted, new_current_data)
@@ -589,7 +596,9 @@ class HrmForCausalLM(HrmPreTrainedModel):
         carry: Optional[HrmCarry] = None,
         **kwargs,
     ):
-        outputs = self.model(input_ids=input_ids, puzzle_identifiers=puzzle_identifiers, labels=labels, carry=carry, **kwargs)
+        outputs = self.model(
+            input_ids=input_ids, puzzle_identifiers=puzzle_identifiers, labels=labels, carry=carry, **kwargs
+        )
 
         loss = None
         if labels is not None:

@@ -148,9 +148,7 @@ class HrmConfig(PretrainedConfig):
         self.l_layers = l_layers if l_layers is not None else num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.expansion = expansion
-        self.intermediate_size = (
-            intermediate_size if intermediate_size is not None else int(hidden_size * expansion)
-        )
+        self.intermediate_size = intermediate_size if intermediate_size is not None else int(hidden_size * expansion)
         self.max_position_embeddings = max_position_embeddings
         self.h_cycles = h_cycles
         self.l_cycles = l_cycles
