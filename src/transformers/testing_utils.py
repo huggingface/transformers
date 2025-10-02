@@ -1599,7 +1599,7 @@ def evaluate_side_effect_factory(
 # final message
 # it can handle a single string or a multiline buffer
 def apply_print_resets(buf):
-    return re.sub(r"^.*\r", "", buf, 0, re.M)
+    return re.sub(r"^.*\r", "", buf, 0, re.MULTILINE)
 
 
 def assert_screenout(out, what):
@@ -2316,7 +2316,7 @@ def pytest_terminal_summary_main(tr, id):
             msg = tr._getfailureheadline(rep)
             tr.write_sep("_", msg, red=True, bold=True)
             # chop off the optional leading extra frames, leaving only the last one
-            longrepr = re.sub(r".*_ _ _ (_ ){10,}_ _ ", "", rep.longreprtext, 0, re.M | re.S)
+            longrepr = re.sub(r".*_ _ _ (_ ){10,}_ _ ", "", rep.longreprtext, 0, re.MULTILINE | re.DOTALL)
             tr._tw.line(longrepr)
             # note: not printing out any rep.sections to keep the report short
 
@@ -2464,7 +2464,7 @@ def pytest_xdist_worker_id():
     if `-n 1` or `pytest-xdist` isn't being used.
     """
     worker = os.environ.get("PYTEST_XDIST_WORKER", "gw0")
-    worker = re.sub(r"^gw", "", worker, 0, re.M)
+    worker = re.sub(r"^gw", "", worker, 0, re.MULTILINE)
     return int(worker)
 
 
