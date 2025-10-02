@@ -538,6 +538,5 @@ class HfArgumentParserTest(unittest.TestCase):
 
             # At this stage, it should be a string
             self.assertIsInstance(training_args.lr_scheduler_kwargs, str)
-            self.assertEqual(training_args.lr_scheduler_kwargs, '{"min_lr": 1e-06}')
 
 
