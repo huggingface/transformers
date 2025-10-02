@@ -4896,6 +4896,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 # This will make sure the mapping is valid, and the layers are registered in the model
                 kernel_config.sanitize_kernel_mapping(model)
 
+                # This will create a compatible mapping for the model with the kernels library
+                kernel_config.create_compatible_mapping(model)
+
                 # This is a context manager to override the default kernel mapping
                 # We are calling kernelize inside this context manager using the use_kernels setter
                 with use_kernel_mapping(kernel_config.kernel_mapping):

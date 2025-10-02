@@ -11,11 +11,43 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ..utils import is_kernels_available
+from ..utils import is_kernels_available, is_torch_available
 
 
 if is_kernels_available():
-    from kernels import LayerRepository, Mode
+    from kernels import Device, LayerRepository, Mode
+
+if is_torch_available():
+    import torch
+
+
+def infer_device(model):
+    EXAMPLE_MAPPING = """
+    {
+        "RMSNorm": {
+            "cuda":
+                "kernels-community/layer_norm:LlamaRMSNorm",
+            ...
+        },
+        ...
+    }
+    """
+    try:
+        param = next(model.parameters())
+    except StopIteration:
+        raise ValueError(
+            f"Cannot determine model device, please provide a device to the mapping. Example: {EXAMPLE_MAPPING}"
+        )
+
+    dev_type = param.device.type
+    if dev_type == "cuda":
+        # Refine based on actual platform
+        if torch.version.hip is not None:
+            return Device(type="rocm")
+        elif torch.version.cuda is not None:
+            return Device(type="cuda")
+
+    return Device(type=dev_type)
 
 
 class KernelConfig:
@@ -34,36 +66,143 @@ class KernelConfig:
         }
 
     def check_if_layer_name_registered(self, layer_name, model):
-        for name, module in model.named_modules():
+        for _, module in model.named_modules():
             if hasattr(module, "kernel_layer_name") and module.kernel_layer_name == layer_name:
                 return True
         return False
 
     def sanitize_kernel_mapping(self, model):
-        for layer_name, mapping in self.kernel_mapping.items():
-            if not self.check_if_layer_name_registered(layer_name, model):
-                raise ValueError(f"Layer {layer_name} is not registered in the model")
-            if not isinstance(mapping, dict):
-                raise ValueError(f"Mapping for layer {layer_name} must be a dict")
-            for device, mode_dict in mapping.items():
-                if device not in ["cuda", "rocm", "xpu"]:
-                    raise ValueError(f"Device {device} is not supported")
-                if not isinstance(mode_dict, dict):
-                    raise ValueError(f"Device mapping for {device} in layer {layer_name} must be a dict")
-                for mode, repo in mode_dict.items():
-                    valid_modes = [
-                        Mode.INFERENCE,
-                        Mode.TRAINING,
-                        Mode.TORCH_COMPILE,
-                        Mode.TRAINING | Mode.TORCH_COMPILE,
-                        Mode.INFERENCE | Mode.TORCH_COMPILE,
-                        Mode.FALLBACK,
-                    ]
-                    if mode not in valid_modes:
-                        raise ValueError(f"Mode {mode} is not supported")
-                    # Check that the value is a LayerRepository
+        """
+        Validates the kernel_mapping to ensure that:
+        1. Each layer_name in the mapping is registered in the model (i.e., the model contains a module with a matching kernel_layer_name).
+        2. Each kernel value is either a string of the form 'org/repo:layer_name' or a dict mapping device types ("cuda", "rocm", "xpu") to such strings.
+        3. Each device key in a dict is one of "cuda", "rocm", or "xpu".
+        4. Each repo_name is a valid repository and layer name in the format 'org/repo:layer_name' (i.e., a string containing both a slash and a colon).
 
-                    if not repo.__class__.__name__ == "LayerRepository1":
+        Args:
+            model: The model instance whose modules are checked for registered kernel_layer_name attributes.
+
+        Raises:
+            ValueError: If a layer_name is not registered in the model, if a device is not supported,
+                        or if a repo_name is not a valid 'org/repo:layer_name' string.
+        """
+        MAPPING_FORMAT = """
+        {
+            "RMSNorm":
+                "kernels-community/layer_norm:LlamaRMSNorm",
+            ...
+        },
+
+        or
+
+        {
+            "RMSNorm": {
+                "cuda":
+                    "kernels-community/layer_norm:LlamaRMSNorm",
+                "rocm":
+                    "kernels-community/layer_norm:LlamaRMSNorm",
+                ...
+            },
+            ...
+        }
+        """
+        # Validate that the kernel mapping is a dict
+        if not isinstance(self.kernel_mapping, dict):
+            raise ValueError(
+                f"Kernel mapping must be a dict of the following format: {MAPPING_FORMAT}, got: {type(self.kernel_mapping)}"
+            )
+
+        for layer_name, kernel in self.kernel_mapping.items():
+            if not self.check_if_layer_name_registered(layer_name, model):
+                raise ValueError(
+                    f"Layer {layer_name} is not registered in the model, please register it first using register_kernel_forward_from_hub"
+                )
+
+            if isinstance(kernel, str) and ("/" not in kernel or ":" not in kernel):
+                raise ValueError(
+                    f"Kernel mapping for '{layer_name}' must be a valid repo name with a layer name (e.g., 'org/repo:layer_name'), got: {kernel}"
+                )
+
+            elif isinstance(kernel, dict):
+                for device, repo_name in kernel.items():
+                    if device not in ["cuda", "rocm", "xpu"]:
+                        raise ValueError(f"Only cuda, rocm, and xpu devices supported, got: {device}")
+
+                    if not isinstance(repo_name, str) or "/" not in repo_name or ":" not in repo_name:
                         raise ValueError(
-                            f"Value for {layer_name} -> {device} -> {mode} must be a LayerRepository instance"
+                            f"Kernel mapping for '{layer_name}' must be a valid repo name with a layer name (e.g., 'org/repo:layer_name'), got: {repo_name}"
                         )
+
+            else:
+                raise ValueError(f"Kernel mapping must follow the format: {MAPPING_FORMAT}, got: {kernel}")
+
+    def create_compatible_mapping(self, model, compile=False):
+        """
+        Transforms a simple kernel_mapping of the form:
+            {
+                "RMSNorm":
+                    "kernels-community/layer_norm:LlamaRMSNorm",
+                ...
+            },
+
+            or
+
+            {
+                "RMSNorm": {
+                    "cuda":
+                        "kernels-community/layer_norm:LlamaRMSNorm",
+                    "rocm":
+                        "kernels-community/layer_norm:LlamaRMSNorm",
+                    ...
+                },
+                ...
+            }
+
+        into a nested mapping:
+
+            {
+                "RMSNorm": {
+                    "cuda": {
+                        Mode.INFERENCE: LayerRepository(
+                            repo_id="kernels-community/layer_norm",
+                            layer_name="LlamaRMSNorm",
+                        )
+                    }
+                }
+            }
+
+        that's compatible with the kernels library.
+
+        The device is inferred from the model's parameters if not provided.
+        The Mode is inferred from the model's training state.
+        """
+        compatible_mapping = {}
+        for layer_name, kernel in self.kernel_mapping.items():
+            # Infer Mode: use Mode.TRAINING if model is training, else use Mode.INFERENCE
+            mode = Mode.TRAINING if model.training else Mode.INFERENCE
+            if compile:
+                mode = mode | Mode.TORCH_COMPILE
+
+            def add_to_mapping(layer_name, device, repo_name):
+                if device not in ["cuda", "rocm", "xpu"]:
+                    raise ValueError(f"Only cuda, rocm, and xpu devices supported, got: {device}")
+                repo_layer_name = repo_name.split(":")[1]
+                repo_id = repo_name.split(":")[0]
+                compatible_mapping[layer_name] = {
+                    device: {
+                        mode: LayerRepository(
+                            repo_id=repo_id,
+                            layer_name=repo_layer_name,
+                        )
+                    }
+                }
+
+            if isinstance(kernel, str):
+                repo_name = kernel
+                device = infer_device(model)
+                add_to_mapping(layer_name, device, repo_name)
+            elif isinstance(kernel, dict):
+                for device, repo_name in kernel.items():
+                    add_to_mapping(layer_name, device, repo_name)
+
+        self.kernel_mapping = compatible_mapping
