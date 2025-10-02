@@ -17,13 +17,11 @@ from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..dac.configuration_dac import DacConfig
 from ..dac.modeling_dac import DacEncoder
 from ..qwen3.modeling_qwen3 import (
-    ALL_ATTENTION_FUNCTIONS,
     Qwen3Attention,
     Qwen3DecoderLayer,
     Qwen3MLP,
     Qwen3RMSNorm,
     Qwen3RotaryEmbedding,
-    eager_attention_forward,
 )
 
 
@@ -247,7 +245,8 @@ def stack_freqs(cos: torch.Tensor, sin: torch.Tensor):
     return freqs_cis
 
 
-def apply_rotary_pos_emb(q, k, freqs_cis, unsqueeze_dim=1):
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    freqs_cis = stack_freqs(cos, sin)
     freqs_cis = freqs_cis.unsqueeze(unsqueeze_dim)
     q_ = q.reshape(*q.shape[:-1], -1, 1, 2)
     k_ = k.reshape(*k.shape[:-1], -1, 1, 2)
@@ -258,52 +257,6 @@ class PEAudioAttention(Qwen3Attention):
     def __init__(self, config, layer_idx):
         super().__init__(config, layer_idx)
         self.is_causal = False
-
-    def _reshape_heads(self, x: torch.Tensor, heads: int) -> torch.Tensor:
-        B, T, C = x.shape
-        # B x T x C -> B x T x C/H x H
-        x = x.reshape(B, T, C // heads, heads)
-        # B x T x C/H x H -> B x H x T x C/H
-        return x.permute(0, 3, 1, 2)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask,
-        **kwargs,
-    ):
-        # The only difference from `Qwen3Attention` is the reshape of Q/K/V
-        # We reshape # B x T x C -> B x T x C/H x H, and then permute...
-        # Qwen3 reshapes # B x T x C -> B x T x H x C/H
-
-        input_shape = hidden_states.shape[:-1]
-        nheads = hidden_states.size(-1) // self.head_dim
-
-        query_states = self.q_norm(self._reshape_heads(self.q_proj(hidden_states), nheads))
-        key_states = self.k_norm(self._reshape_heads(self.k_proj(hidden_states), nheads))
-        value_states = self._reshape_heads(self.v_proj(hidden_states), nheads)
-
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, position_embeddings)
-
-        attention_interface = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            **kwargs,
-        )
-
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
 
 
 class PEAudioDecoderLayer(Qwen3DecoderLayer): ...
@@ -356,8 +309,7 @@ class PEAudioTransformer(torch.nn.Module):
             attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
 
         position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
-        cos, sin = self.rope_embeddings(inputs_embeds, position_ids)
-        position_embeddings = stack_freqs(cos, sin)
+        position_embeddings = self.rope_embeddings(inputs_embeds, position_ids)
 
         hidden_states = inputs_embeds
         for encoder_layer in self.layers[: self.config.num_hidden_layers]:

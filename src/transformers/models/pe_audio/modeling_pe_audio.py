@@ -6,7 +6,7 @@
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 import math
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import torch
 import torch.nn as nn
@@ -17,6 +17,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -357,7 +358,16 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-def apply_rotary_pos_emb(q, k, freqs_cis, unsqueeze_dim=1):
+def stack_freqs(cos: torch.Tensor, sin: torch.Tensor):
+    dim = cos.size(-1)
+    cos = cos.narrow(-1, 0, dim // 2)
+    sin = sin.narrow(-1, 0, dim // 2)
+    freqs_cis = torch.stack((cos, -sin, sin, cos), dim=-1).view(*cos.size(), 2, 2)
+    return freqs_cis
+
+
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    freqs_cis = stack_freqs(cos, sin)
     freqs_cis = freqs_cis.unsqueeze(unsqueeze_dim)
     q_ = q.reshape(*q.shape[:-1], -1, 1, 2)
     k_ = k.reshape(*k.shape[:-1], -1, 1, 2)
@@ -398,23 +408,27 @@ class PEAudioAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask,
-        **kwargs,
+        attention_mask: Optional[torch.Tensor],
+        past_key_values: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
-        # The only difference from `Qwen3Attention` is the reshape of Q/K/V
-        # We reshape # B x T x C -> B x T x C/H x H, and then permute...
-        # Qwen3 reshapes # B x T x C -> B x T x H x C/H
-
         input_shape = hidden_states.shape[:-1]
-        nheads = hidden_states.size(-1) // self.head_dim
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_norm(self._reshape_heads(self.q_proj(hidden_states), nheads))
-        key_states = self.k_norm(self._reshape_heads(self.k_proj(hidden_states), nheads))
-        value_states = self._reshape_heads(self.v_proj(hidden_states), nheads)
+        query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, position_embeddings)
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        attention_interface = eager_attention_forward
+        if past_key_values is not None:
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+        attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
@@ -426,19 +440,13 @@ class PEAudioAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
+            sliding_window=self.sliding_window,  # diff with Llama
             **kwargs,
         )
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
-
-    def _reshape_heads(self, x: torch.Tensor, heads: int) -> torch.Tensor:
-        B, T, C = x.shape
-        # B x T x C -> B x T x C/H x H
-        x = x.reshape(B, T, C // heads, heads)
-        # B x T x C/H x H -> B x H x T x C/H
-        return x.permute(0, 3, 1, 2)
 
 
 class PEAudioDecoderLayer(GradientCheckpointingLayer):
@@ -504,14 +512,6 @@ class PEAudioEmbeddings(torch.nn.Module):
         return rearrange(h, "b c l -> b l c"), padding_mask
 
 
-def stack_freqs(cos: torch.Tensor, sin: torch.Tensor):
-    dim = cos.size(-1)
-    cos = cos.narrow(-1, 0, dim // 2)
-    sin = sin.narrow(-1, 0, dim // 2)
-    freqs_cis = torch.stack((cos, -sin, sin, cos), dim=-1).view(*cos.size(), 2, 2)
-    return freqs_cis
-
-
 class PEAudioTransformer(torch.nn.Module):
     _can_record_outputs = {
         "attentions": PEAudioAttention,
@@ -543,8 +543,7 @@ class PEAudioTransformer(torch.nn.Module):
             attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
 
         position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
-        cos, sin = self.rope_embeddings(inputs_embeds, position_ids)
-        position_embeddings = stack_freqs(cos, sin)
+        position_embeddings = self.rope_embeddings(inputs_embeds, position_ids)
 
         hidden_states = inputs_embeds
         for encoder_layer in self.layers[: self.config.num_hidden_layers]:
