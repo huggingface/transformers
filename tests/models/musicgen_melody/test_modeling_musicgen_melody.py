@@ -968,7 +968,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 self.skipTest(
                     reason="Llava-like models currently (transformers==4.39.1) requires an attention_mask input"
                 )
-            if config.model_type in ["paligemma"]:
+            if config.model_type == "paligemma":
                 self.skipTest(
                     "PaliGemma-like models currently (transformers==4.41.0) requires an attention_mask input"
                 )
