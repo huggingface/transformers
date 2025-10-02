@@ -86,11 +86,26 @@ def get_sdpa_backend(backend_name: Optional[str]) -> Optional[torch.nn.attention
 def flush_memory():
     """Flush GPU memory and run garbage collection."""
     gc.collect()
-    if hasattr(torch, "cuda") and torch.cuda.is_available():
+    # Dynamo resets
+    torch._dynamo.reset()
+    torch._dynamo.reset_code_caches()
+     # Clear FX graph cache
+    if hasattr(torch._inductor.codecache, 'FxGraphCache'):
+        torch._inductor.codecache.FxGraphCache.clear()
+    # Clear PyCodeCache
+    if hasattr(torch._inductor.codecache, 'PyCodeCache'):
+        torch._inductor.codecache.PyCodeCache.cache_clear()
+    # Clear TritonFuture cache (for async compilation)
+    if hasattr(torch._inductor.codecache, 'TritonFuture'):
+        if hasattr(torch._inductor.codecache.TritonFuture, '_compile_cache'):
+            torch._inductor.codecache.TritonFuture._compile_cache.clear()
+    # Clear CUDA cache
+    if torch.cuda.is_available():
         torch.cuda.empty_cache()
         torch.cuda.reset_max_memory_allocated()
         torch.cuda.reset_peak_memory_stats()
         torch.cuda.synchronize()
+    gc.collect()
 
 
 class BenchmarkStreamer(BaseStreamer):

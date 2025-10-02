@@ -1,6 +1,7 @@
 import hashlib
 import json
 from typing import Any, Optional, Union
+import logging
 
 
 KERNELIZATION_AVAILABLE = False
@@ -10,6 +11,8 @@ try:
     KERNELIZATION_AVAILABLE = True
 except ImportError:
     pass
+
+logger = logging.getLogger(__name__)
 
 
 class BenchmarkConfig:
@@ -29,6 +32,7 @@ class BenchmarkConfig:
         compile_options: Optional[dict[str, Any]] = None,
         kernelize: bool = False,
         name: Optional[str] = None,
+        skip_validity_check: bool = False,
     ) -> None:
         # Benchmark parameters
         self.warmup_iterations = warmup_iterations
@@ -45,7 +49,20 @@ class BenchmarkConfig:
         self.compile_mode = compile_mode
         self.compile_options = compile_options if compile_options is not None else {}
         self.kernelize = kernelize
+
+        self.check_validity(skip_validity_check)
         self.name = name if name is not None else self.infer_name()
+
+    def check_validity(self, skip_validity_check: bool = False) -> None:
+        if skip_validity_check:
+            return
+        # Flash attention does not support compile mode, so we turn it off # FIXME: it would be better to support it
+        is_fa = self.attn_implementation == "flash_attention_2"
+        is_fa |= self.attn_implementation == "sdpa" and self.sdpa_backend == "flash_attention"
+        is_compiled = self.compile_mode is not None
+        if is_fa and is_compiled:
+            logger.warning("Flash attention does not support compile mode. Turning off compile mode.")
+            self.compile_mode = None
 
     @property
     def device(self) -> str:
@@ -127,9 +144,9 @@ def cross_generate_configs(
     }
     # Cross-generate all combinations of attn_implementation, compiled_mode, and kernelized
     configs = []
-    for attn_implementation, sdpa_backend in list(set(attn_impl_and_sdpa_backend)):
-        for cm in list(set(compiled_mode)):
-            for kernelize_on in list(set(kernelized)):
+    for attn_implementation, sdpa_backend in list(dict.fromkeys(attn_impl_and_sdpa_backend)):
+        for cm in list(dict.fromkeys(compiled_mode)):
+            for kernelize_on in list(dict.fromkeys(kernelized)):
                 config = BenchmarkConfig(
                     attn_implementation=attn_implementation,
                     sdpa_backend=sdpa_backend,
@@ -153,6 +170,7 @@ def generate_all_configs(
         ("eager", None),
         ("sdpa", "math"),
         ("sdpa", "flash_attention"),
+        ("flex_attention", None),
     ]
     return cross_generate_configs(
         attn_impl_and_sdpa_backend=all_attn_implementations,
