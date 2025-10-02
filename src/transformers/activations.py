@@ -50,7 +50,9 @@ class GELUTanh(nn.Module):
     def forward(self, input: Tensor) -> Tensor:
         return self.act(input)
 
+
 PytorchGELUTanh = GELUTanh
+
 
 @use_kernel_forward_from_hub("NewGELU")
 class NewGELUActivation(nn.Module):
