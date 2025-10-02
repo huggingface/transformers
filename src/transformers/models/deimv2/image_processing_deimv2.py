@@ -36,3 +36,10 @@ class Deimv2ImageProcessor(BaseImageProcessor):
             keep = prob.max(dim=-1).values > threshold
             results.append({"scores": prob[keep].max(dim=-1).values, "labels": prob[keep].argmax(dim=-1), "boxes": box[keep]})
         return results
+        if target_sizes is not None:
+            for result, size in zip(results, target_sizes):
+                img_h, img_w = size
+                boxes = result["boxes"]
+                boxes = boxes * torch.tensor([img_w, img_h, img_w, img_h], dtype=boxes.dtype, device=boxes.device)
+                result["boxes"] = boxes
+        return results

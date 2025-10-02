@@ -115,7 +115,7 @@ This module wires the backbone to STA and the decoder, returning decoder hidden 
 
 This head predicts class logits and normalized bounding boxes for a fixed set of queries. [web:25][web:28]
 
-## Image processor
+## Image Processor
 
 [[autodoc]] Deimv2ImageProcessor
   - preprocess

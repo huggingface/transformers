@@ -42,3 +42,16 @@ class Deimv2Config(PretrainedConfig):
         self.use_dense_o2o = use_dense_o2o
         self.layer_norm_type = layer_norm_type
         self.activation = activation
+    @classmethod
+    def from_preset(cls, preset_name: str, **kwargs) -> "Deimv2Config":
+        if preset_name not in DEIMV2_PRESETS:
+            raise ValueError(f"Preset '{preset_name}' not found. Available presets: {list(DEIMV2_PRESETS.keys())}")
+        preset = DEIMV2_PRESETS[preset_name]
+        backbone_config = AutoBackboneConfig.from_pretrained(preset.backbone).to_dict()
+        return cls(
+            backbone_config=backbone_config,
+            hidden_dim=preset.hidden_dim,
+            num_queries=preset.num_queries,
+            num_decoder_layers=preset.num_decoder_layers,
+            **kwargs,
+        )

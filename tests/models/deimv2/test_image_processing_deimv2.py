@@ -11,3 +11,4 @@ def test_preprocess_postprocess():
     dummy = {"logits": torch.randn(1, 300, 91), "pred_boxes": torch.rand(1, 300, 4)}
     res = proc.post_process_object_detection(dummy, threshold=0.9)
     assert isinstance(res, list)
+    assert "scores" in res[0]

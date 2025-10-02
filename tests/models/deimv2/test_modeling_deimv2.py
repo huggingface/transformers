@@ -9,3 +9,4 @@ def test_forward_shapes():
     out = model(pixel_values)
     assert out["logits"].shape[:2] == (2, cfg.num_queries)
     assert out["pred_boxes"].shape[-1] == 4
+    

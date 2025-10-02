@@ -83,3 +83,11 @@ class Deimv2ForObjectDetection(Deimv2PreTrainedModel):
         out = {"logits": logits, "pred_boxes": boxes}
         # TODO: compute loss if labels provided
         return out
+    
+    def freeze_backbone(self):
+        for param in self.model.backbone.parameters():
+            param.requires_grad = False
+        logger.info("Backbone frozen.")
+        self.model.backbone.eval()
+    
+    
