@@ -5,6 +5,7 @@ on:
     branches:
       - build_ci_docker_image*
   repository_dispatch:
+  workflow_dispatch:
   workflow_call:
     inputs:
       image_postfix:
