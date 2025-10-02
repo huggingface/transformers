@@ -14,13 +14,12 @@
 # limitations under the License.
 """VitMatte model configuration"""
 
-import copy
 from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto.configuration_auto import CONFIG_MAPPING
+from ..auto.configuration_auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -78,6 +77,7 @@ class VitMatteConfig(PretrainedConfig):
     ```"""
 
     model_type = "vitmatte"
+    sub_configs = {"backbone_config": AutoConfig}
 
     def __init__(
         self,
@@ -121,24 +121,6 @@ class VitMatteConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.convstream_hidden_sizes = convstream_hidden_sizes
         self.fusion_hidden_sizes = fusion_hidden_sizes
-
-    @property
-    def sub_configs(self):
-        return (
-            {"backbone_config": type(self.backbone_config)}
-            if getattr(self, "backbone_config", None) is not None
-            else {}
-        )
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`]. Returns:
-            `dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["backbone_config"] = self.backbone_config.to_dict()
-        output["model_type"] = self.__class__.model_type
-        return output
 
 
 __all__ = ["VitMatteConfig"]

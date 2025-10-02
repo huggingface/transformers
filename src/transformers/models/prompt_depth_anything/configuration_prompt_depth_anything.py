@@ -17,12 +17,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto.configuration_auto import CONFIG_MAPPING
+from ..auto.configuration_auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -92,6 +91,7 @@ class PromptDepthAnythingConfig(PretrainedConfig):
     ```"""
 
     model_type = "prompt_depth_anything"
+    sub_configs = {"backbone_config": AutoConfig}
 
     def __init__(
         self,
@@ -153,27 +153,6 @@ class PromptDepthAnythingConfig(PretrainedConfig):
             raise ValueError("depth_estimation_type must be one of ['relative', 'metric']")
         self.depth_estimation_type = depth_estimation_type
         self.max_depth = max_depth if max_depth else 1
-
-    @property
-    def sub_configs(self):
-        return (
-            {"backbone_config": type(self.backbone_config)}
-            if getattr(self, "backbone_config", None) is not None
-            else {}
-        )
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`]. Returns:
-            `dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-
-        if output["backbone_config"] is not None:
-            output["backbone_config"] = self.backbone_config.to_dict()
-
-        output["model_type"] = self.__class__.model_type
-        return output
 
 
 __all__ = ["PromptDepthAnythingConfig"]

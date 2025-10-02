@@ -23,7 +23,7 @@ from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -133,6 +133,7 @@ class DetrConfig(PretrainedConfig):
     ```"""
 
     model_type = "detr"
+    sub_configs = {"backbone_config": AutoConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "hidden_size": "d_model",
@@ -243,22 +244,6 @@ class DetrConfig(PretrainedConfig):
         self.giou_loss_coefficient = giou_loss_coefficient
         self.eos_coefficient = eos_coefficient
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
-
-    @property
-    def num_attention_heads(self) -> int:
-        return self.encoder_attention_heads
-
-    @property
-    def hidden_size(self) -> int:
-        return self.d_model
-
-    @property
-    def sub_configs(self):
-        return (
-            {"backbone_config": type(self.backbone_config)}
-            if getattr(self, "backbone_config", None) is not None
-            else {}
-        )
 
     @classmethod
     def from_backbone_config(cls, backbone_config: PretrainedConfig, **kwargs):

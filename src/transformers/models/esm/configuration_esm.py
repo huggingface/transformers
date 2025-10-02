@@ -157,18 +157,6 @@ class EsmConfig(PretrainedConfig):
         if self.esmfold_config is not None and getattr(self.esmfold_config, "use_esm_attn_map", False):
             raise ValueError("The HuggingFace port of ESMFold does not support use_esm_attn_map at this time!")
 
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-
-        Returns:
-            `dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = super().to_dict()
-        if isinstance(self.esmfold_config, EsmFoldConfig):
-            output["esmfold_config"] = self.esmfold_config.to_dict()
-        return output
-
 
 @dataclass
 class EsmFoldConfig:

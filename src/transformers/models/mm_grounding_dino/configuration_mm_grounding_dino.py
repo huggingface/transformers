@@ -22,7 +22,7 @@
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -146,6 +146,7 @@ class MMGroundingDinoConfig(PretrainedConfig):
     ```"""
 
     model_type = "mm-grounding-dino"
+    sub_configs = {"backbone_config": AutoConfig, "text_config": AutoConfig}
     attribute_map = {
         "hidden_size": "d_model",
         "num_attention_heads": "encoder_attention_heads",
@@ -279,25 +280,6 @@ class MMGroundingDinoConfig(PretrainedConfig):
         self.positional_embedding_temperature = positional_embedding_temperature
         self.init_std = init_std
         self.layer_norm_eps = layer_norm_eps
-
-    @property
-    def num_attention_heads(self) -> int:
-        return self.encoder_attention_heads
-
-    @property
-    def hidden_size(self) -> int:
-        return self.d_model
-
-    @property
-    def sub_configs(self):
-        sub_configs = {}
-        backbone_config = getattr(self, "backbone_config", None)
-        text_config = getattr(self, "text_config", None)
-        if isinstance(backbone_config, PretrainedConfig):
-            sub_configs["backbone_config"] = type(backbone_config)
-        if isinstance(text_config, PretrainedConfig):
-            sub_configs["text_config"] = type(self.text_config)
-        return sub_configs
 
 
 __all__ = ["MMGroundingDinoConfig"]
