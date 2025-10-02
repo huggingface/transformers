@@ -48,7 +48,7 @@ logger = logging.get_logger(__name__)
 
 class Bnb4BitHfQuantizer(HfQuantizer):
     """
-    4-bit quantization from bitsandbytes.py quantization method:
+    4-bit quantization from bitsandbytes quantization method:
         before loading: converts transformer layers into Linear4bit during loading: load 16bit weight and pass to the
         layer object after: quantizes individual weights in Linear4bit into 4bit at the first .cuda() call
         saving:
