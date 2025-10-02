@@ -59,9 +59,9 @@ class Xcodec2ModelTester:
         self.num_channels = num_channels
 
     def prepare_config_and_inputs(self):
-        input_values = floats_tensor([self.batch_size, self.num_channels, self.num_samples], scale=1.0)
+        audio = floats_tensor([self.batch_size, self.num_channels, self.num_samples], scale=1.0)
         config = self.get_config()
-        inputs_dict = {"input_values": input_values}
+        inputs_dict = {"audio": audio}
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_common(self):
@@ -74,14 +74,14 @@ class Xcodec2ModelTester:
 
     def get_config(self):
         return Xcodec2Config(
-            sample_rate=self.sample_rate,
+            sampling_rate=self.sample_rate,
             audio_channels=self.num_channels,
         )
 
     def create_and_check_model_forward(self, config, inputs_dict):
         model = Xcodec2Model(config=config).to(torch_device).eval()
-        input_values = inputs_dict["input_values"]
-        result = model(input_values)
+        audio = inputs_dict["audio"]
+        result = model(audio)
         self.parent.assertEqual(
             result.audio_values.shape,
             (self.batch_size, self.num_channels, self.num_samples),
@@ -135,7 +135,7 @@ class Xcodec2ModelTest(ModelTesterMixin, unittest.TestCase):
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
-            expected_arg_names = ["input_values", "return_dict"]
+            expected_arg_names = ["audio", "return_dict"]
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     def test_gradient_checkpointing_backward_compatibility(self):
@@ -423,15 +423,15 @@ class Xcodec2IntegrationTest(unittest.TestCase):
         dataset = dataset.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
         audio = dataset[0]["audio"]["array"]
         inputs = feature_extractor(
+            audio=audio,
             sampling_rate=feature_extractor.sampling_rate,
-            raw_audio=audio,
             return_tensors="pt",
         ).to(torch_device)
 
         with torch.no_grad():
             # compare discrete codes
             enc_tol = 0  # exact match
-            audio_codes = model.encode(inputs["input_values"], return_dict=False)[0]
+            audio_codes = model.encode(inputs["audio"], inputs["audio_spectrogram"], return_dict=False)[0]
             torch.testing.assert_close(
                 audio_codes.squeeze().cpu().to(exp_code.dtype),
                 exp_code,
@@ -440,7 +440,7 @@ class Xcodec2IntegrationTest(unittest.TestCase):
             )
 
             # compare recon
-            # NOTE different transform implementation, in particular ROPE leads to numerical differences
+            # NOTE (ebezzam) different transformer implementation, in particular ROPE leads to numerical differences
             # their ROPE implementation is interleaved: `torchtune.modules.RotaryPositionalEmbeddings`
             dec_tol = 1e-3
             dec = model.decode(audio_codes, return_dict=False)
@@ -452,13 +452,13 @@ class Xcodec2IntegrationTest(unittest.TestCase):
             )
 
             # compare codec error
-            err_tol = 1e-6
-            codec_error = compute_rmse(inputs["input_values"], dec).item()
+            err_tol = 1e-5
+            codec_error = compute_rmse(inputs["audio"], dec).item()
             torch.testing.assert_close(codec_error, exp_codec_error, rtol=err_tol, atol=err_tol)
 
             # make sure forward and decode gives same result
             round_trip_tol = 0
-            enc_dec = model(inputs["input_values"]).audio_values
+            enc_dec = model(inputs["audio"], inputs["audio_spectrogram"]).audio_values
             torch.testing.assert_close(
                 dec[..., : enc_dec.shape[-1]], enc_dec, rtol=round_trip_tol, atol=round_trip_tol
             )

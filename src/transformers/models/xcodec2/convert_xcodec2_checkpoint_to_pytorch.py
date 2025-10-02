@@ -24,10 +24,9 @@ import torch
 from transformers import (
     AutoConfig,
     AutoFeatureExtractor,
-    DacFeatureExtractor,
     Xcodec2Config,
     Xcodec2Model,
-    Xcodec2Processor,
+    Xcodec2FeatureExtractor,
     logging,
 )
 
@@ -247,20 +246,34 @@ def convert_checkpoint(
     model = _convert_model(original_checkpoint, model)
     model.remove_weight_norm()
 
-    # create processor
-    processor = Xcodec2Processor(
-        semantic_feature_extractor=AutoFeatureExtractor.from_pretrained(semantic_model_id),
-        feature_extractor=DacFeatureExtractor(hop_length=320),
+    # create feature extractor
+    dac_id = "descript/dac_16khz"
+    semantic_model_id = "facebook/w2v-bert-2.0"
+    dac_fe = AutoFeatureExtractor.from_pretrained(dac_id)
+    semantic_fe = AutoFeatureExtractor.from_pretrained(semantic_model_id)
+    if semantic_fe.sampling_rate != dac_fe.sampling_rate:
+        raise ValueError(
+            f"Sampling rates for DAC and semantic feature extractor must match, got {dac_fe.sampling_rate} and {semantic_fe.sampling_rate}."
+        )
+    feature_extractor = Xcodec2FeatureExtractor(
+        feature_size=semantic_fe.feature_size,
+        sampling_rate=semantic_fe.sampling_rate,
+        num_mel_bins=semantic_fe.num_mel_bins,
+        padding_value=semantic_fe.padding_value,
+        stride=semantic_fe.stride,
+        n_channels=dac_fe.feature_size,
+        hop_length=dac_fe.hop_length,
+        pre_padding_value=dac_fe.padding_value,
     )
 
     # save and upload
     if pytorch_dump_folder_path is not None:
         model.save_pretrained(pytorch_dump_folder_path)
-        processor.save_pretrained(pytorch_dump_folder_path)
+        feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
     if repo_id:
         print("Pushing to the hub...")
-        processor.push_to_hub(repo_id)
+        feature_extractor.push_to_hub(repo_id)
         model.push_to_hub(repo_id)
 
 

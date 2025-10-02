@@ -1547,7 +1547,7 @@ class Xcodec2PreTrainedModel(PreTrainedModel):
 
     config_class = Xcodec2Config
     base_model_prefix = "xcodec2"
-    main_input_name = "input_values"
+    main_input_name = "audio"
 
     def _init_weights(self, module):
         if isinstance(module, (nn.Linear, nn.Conv1d)):
@@ -1582,8 +1582,10 @@ class Xcodec2PreTrainedModel(PreTrainedModel):
 
 XCODEC2_INPUTS_DOCSTRING = r"""
     args:
-        input_values (`torch.FloatTensor` of shape `(batch_size, channels, num_samples)`):
-            The raw float values of the input audio waveform.
+        audio (`torch.FloatTensor` of shape `(batch_size, channels, num_samples)`):
+            Audio waveform.
+        audio_spectrogram (`torch.FloatTensor` of shape `(batch_size, mel_bins, time_steps)`):
+            Mel spectrogram.
         return_dict (`bool`, *optional*):
             whether to return a `Xcodec2Output` or a plain tuple.
 """
@@ -1664,8 +1666,8 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
 
     def encode(
         self,
-        input_values: torch.Tensor,
-        semantic_input_values: torch.Tensor,
+        audio: torch.Tensor,
+        audio_spectrogram: torch.Tensor,
         padding_mask: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor, torch.Tensor], Xcodec2EncoderOutput]:
@@ -1673,12 +1675,12 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         Encodes the input audio waveform into discrete codes.
 
         Args:
-            input_values (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
-                Float values of the input audio waveform.
-            semantic_input_values (`torch.Tensor` of shape `(batch_size, mel_bins, time_steps)`):
-                Float values of the input audio waveform to be used for semantic encoding. This can be the
+            audio (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
+                Input audio waveform.
+            audio_spectrogram (`torch.Tensor` of shape `(batch_size, mel_bins, time_steps)`):
+                Input audio mel spectrogram for semantic encoding.
             padding_mask (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
-                Padding mask used to pad the `input_values`.
+                Padding mask used to pad `audio`.
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 
@@ -1692,13 +1694,13 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # 1) Semantic embedding: 16th layer of pretrained model: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/modeling_xcodec2.py#L64
-        semantic_output = self.semantic_model(semantic_input_values, output_hidden_states=True)
+        semantic_output = self.semantic_model(audio_spectrogram, output_hidden_states=True)
         semantic_hidden_16 = semantic_output.hidden_states[16]
         semantic_hidden_16 = semantic_hidden_16.transpose(1, 2)
         semantic_encoded = self.semantic_encoder(semantic_hidden_16)
 
         # 2) Get acoustic embedding
-        vq_emb = self.acoustic_encoder(input_values)
+        vq_emb = self.acoustic_encoder(audio)
         vq_emb = vq_emb.transpose(1, 2)
 
         # 3) Concat embeddings and apply final layers
@@ -1712,6 +1714,8 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         # 4) Get codes for decoder
         quantized_representation, audio_codes = self.decoder.quantize(concat_emb)
 
+        # If provided, compute corresponding padding mask for audio codes
+        codes_padding_mask = None
         if padding_mask is not None:
             # Expected token length, as in: https://github.com/zhenye234/X-Codec-2.0/blob/ccbbf340ff143dfa6a0ea7cd61ec34a8ba2f1c3d/inference_save_code.py#L89
             audio_length = padding_mask.sum(dim=-1, keepdim=True).cpu()
@@ -1770,8 +1774,8 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
     @replace_return_docstrings(output_type=Xcodec2Output, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_values: torch.Tensor,
-        semantic_input_values: torch.Tensor,
+        audio: torch.Tensor,
+        audio_spectrogram: torch.Tensor,
         padding_mask: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor, torch.Tensor], Xcodec2Output]:
@@ -1794,25 +1798,25 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         >>> from transformers import AutoFeatureExtractor, Xcodec2Model
 
         >>> dataset = load_dataset("hf-internal-testing/ashraq-esc50-1-dog-example")
-        >>> audio_sample = dataset["train"]["audio"][0]["array"]
+        >>> audio = dataset["train"]["audio"][0]["array"]
 
-        >>> model_id = "bezzam/xcodec2"
+        >>> model_id = "hf-audio/xcodec2"
         >>> model = Xcodec2Model.from_pretrained(model_id)
         >>> feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 
-        >>> inputs = feature_extractor(raw_audio=audio_sample, return_tensors="pt")
+        >>> inputs = feature_extractor(audio=audio, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt")
 
-        >>> outputs = model(inputs["input_values"])
+        >>> outputs = model(**inputs)
         >>> audio_codes = outputs.audio_codes
         >>> audio_values = outputs.audio_values
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-        # TODO (ebezzam) use padding_mask to actually remove padded values?
-        length = input_values.shape[-1]
+        # for truncating output audio to original length
+        length = audio.shape[-1]
 
         audio_codes, quantized_representation, codes_padding_mask = self.encode(
-            input_values, semantic_input_values=semantic_input_values, padding_mask=padding_mask, return_dict=False
+            audio, audio_spectrogram=audio_spectrogram, padding_mask=padding_mask, return_dict=False
         )
         audio_values = self.decode(audio_codes, return_dict=False)[..., :length]
 
