@@ -62,7 +62,7 @@ class HrmConfig(PretrainedConfig):
     For more details, see: https://arxiv.org/abs/2506.21734
 
     This model was contributed by [sapientinc](https://huggingface.co/sapientinc). The original code can be found
-    [here](https://github.com/google-deepmind/hierarchical_reasoning_model). Checkpoints for this model can be found
+    [sapientinc/HRM-checkpoint-ARC-2](https://huggingface.co/sapientinc/HRM-checkpoint-ARC-2). Checkpoints for this model can be found
     on the Hugging Face Hub at [sapientinc/HRM-checkpoint-ARC-2](https://huggingface.co/sapientinc/HRM-checkpoint-ARC-2).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -453,9 +453,13 @@ class HrmSwiGLU(nn.Module):
 
     def __init__(self, config: HrmConfig):
         super().__init__()
-        inter = int(config.expansion * config.hidden_size * 2 / 3)
-        # Round up to multiple of 256 for efficiency
-        inter = ((inter + 255) // 256) * 256
+        # Use intermediate_size if provided, otherwise calculate from expansion
+        if config.intermediate_size is not None:
+            inter = config.intermediate_size
+        else:
+            inter = int(config.expansion * config.hidden_size * 2 / 3)
+            # Round up to multiple of 256 for efficiency
+            inter = ((inter + 255) // 256) * 256
         self.gate_up_proj = HrmLinear(config.hidden_size, inter * 2, bias=False)
         self.down_proj = HrmLinear(inter, config.hidden_size, bias=False)
 

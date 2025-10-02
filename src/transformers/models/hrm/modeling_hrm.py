@@ -282,9 +282,13 @@ class HrmSwiGLU(nn.Module):
 
     def __init__(self, config: HrmConfig):
         super().__init__()
-        inter = int(config.expansion * config.hidden_size * 2 / 3)
-        # Round up to multiple of 256 for efficiency
-        inter = ((inter + 255) // 256) * 256
+        # Use intermediate_size if provided, otherwise calculate from expansion
+        if config.intermediate_size is not None:
+            inter = config.intermediate_size
+        else:
+            inter = int(config.expansion * config.hidden_size * 2 / 3)
+            # Round up to multiple of 256 for efficiency
+            inter = ((inter + 255) // 256) * 256
         self.gate_up_proj = HrmLinear(config.hidden_size, inter * 2, bias=False)
         self.down_proj = HrmLinear(inter, config.hidden_size, bias=False)
 

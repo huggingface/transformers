@@ -40,7 +40,7 @@ class HrmConfig(PretrainedConfig):
     For more details, see: https://arxiv.org/abs/2506.21734
 
     This model was contributed by [sapientinc](https://huggingface.co/sapientinc). The original code can be found
-    [here](https://github.com/sapientinc/HRM). Checkpoints for this model can be found
+    [sapientinc/HRM-checkpoint-ARC-2](https://huggingface.co/sapientinc/HRM-checkpoint-ARC-2). Checkpoints for this model can be found
     on the Hugging Face Hub at [sapientinc/HRM-checkpoint-ARC-2](https://huggingface.co/sapientinc/HRM-checkpoint-ARC-2).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
