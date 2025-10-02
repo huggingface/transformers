@@ -1830,7 +1830,7 @@ class _LazyModule(ModuleType):
                     try:
                         if not callable():
                             missing_backends.append(backend)
-                    except (importlib.metadata.PackageNotFoundError, ModuleNotFoundError, RuntimeError):
+                    except (ModuleNotFoundError, RuntimeError):
                         missing_backends.append(backend)
 
                 self._modules = self._modules.union(module_keys)
@@ -2011,9 +2011,16 @@ class Backend:
                 f"Backends should be defined in the BACKENDS_MAPPING. Offending backend: {self.package_name}"
             )
 
+    def get_installed_version(self) -> str:
+        """Return the currently installed version of the backend"""
+        is_available, current_version = _is_package_available(self.package_name, return_version=True)
+        if not is_available:
+            raise RuntimeError(f"Backend {self.package_name} is not available.")
+        return current_version
+
     def is_satisfied(self) -> bool:
         return VersionComparison.from_string(self.version_comparison)(
-            version.parse(importlib.metadata.version(self.package_name)), version.parse(self.version)
+            version.parse(self.get_installed_version()), version.parse(self.version)
         )
 
     def __repr__(self) -> str:
