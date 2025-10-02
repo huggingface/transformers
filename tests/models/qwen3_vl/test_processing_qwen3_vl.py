@@ -293,7 +293,7 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertListEqual(list(out_dict.keys()), ["input_ids", "attention_mask"])
 
         # for fast test, set the longest edge to 4096
-        processor.video_processor.size['longest_edge'] = 8192
+        processor.video_processor.size["longest_edge"] = 8192
 
         # Add video URL for return dict and load with `num_frames` arg
         messages[0][0]["content"][0] = {
@@ -307,7 +307,7 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenize=True,
             return_dict=True,
             num_frames=num_frames,
-            fps=None, # if pass num_frames, fps should be None
+            fps=None,  # if pass num_frames, fps should be None
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 256)
