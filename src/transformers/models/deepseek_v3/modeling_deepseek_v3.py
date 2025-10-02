@@ -175,6 +175,7 @@ class DeepseekV3MoE(nn.Module):
         self.top_k = config.num_experts_per_tok
 
     def route_tokens_to_experts(self, router_logits):
+        router_logits = router_logits.sigmoid()
         router_logits = router_logits + self.gate.e_score_correction_bias
         group_scores = (
             router_logits.view(-1, self.n_group, self.n_routed_experts // self.n_group).topk(2, dim=-1)[0].sum(dim=-1)
