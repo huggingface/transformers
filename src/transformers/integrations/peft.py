@@ -337,9 +337,7 @@ class PeftAdapterMixin:
                 # Therefore, it needs to be called here
                 from peft.utils.hotswap import prepare_model_for_compiled_hotswap
 
-                prepare_model_for_compiled_hotswap(
-                    self, config=peft_config, **self._prepare_peft_hotswap_kwargs
-                )
+                prepare_model_for_compiled_hotswap(self, config=peft_config, **self._prepare_peft_hotswap_kwargs)
                 # We only want to call prepare_model_for_compiled_hotswap once
                 self._prepare_peft_hotswap_kwargs = None
         else:
