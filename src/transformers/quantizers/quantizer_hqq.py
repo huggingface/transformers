@@ -86,6 +86,7 @@ class HqqHfQuantizer(HfQuantizer):
     def update_missing_keys(
         self, model: "PreTrainedModel", missing_keys: list[str], prefix: str, **kwargs
     ) -> list[str]:
+        missing_keys = super().update_missing_keys(model, missing_keys, prefix)
         if self.pre_quantized:
             return [key for key in missing_keys if ("weight" not in key)]
         else:
