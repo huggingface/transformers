@@ -519,7 +519,7 @@ class HfArgumentParserTest(unittest.TestCase):
             look_for_args_file=False,
         )
         self.assertEqual(args[0].scheduler_kwargs, {"min_lr": 0.000001, "num_cycles": 3})
-    
+
     @require_torch
     def test_18_lr_scheduler_kwargs_parsing(self):
         """Test that lr_scheduler_kwargs in TrainingArguments can be parsed from CLI (regression test for #41252)"""
