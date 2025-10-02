@@ -170,10 +170,6 @@ class Cohere2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="Siglip backbone uses the same initialization scheme as the Flax original implementation")
-    def test_initialization(self):
-        pass
-
 
 @require_read_token
 @require_torch
