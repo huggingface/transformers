@@ -34,6 +34,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from ...configuration_utils import PretrainedConfig
+from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import _flash_attention_forward
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -205,12 +206,20 @@ class HrmModelOutput(ModelOutput):
             Q-values for continuing in the Adaptive Computation Time mechanism.
         carry (`HrmCarry`, *optional*):
             Carry state for recurrent computation, containing hidden states and halting information.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape
+            `(batch_size, num_heads, sequence_length, sequence_length)`.
     """
 
     logits: torch.FloatTensor = None
     q_halt_logits: torch.FloatTensor = None
     q_continue_logits: torch.FloatTensor = None
     carry: Optional["HrmCarry"] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -229,6 +238,12 @@ class HrmCausalLMOutput(ModelOutput):
             Q-values for continuing in the Adaptive Computation Time mechanism.
         carry (`HrmCarry`, *optional*):
             Carry state for recurrent computation, containing hidden states and halting information.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape
+            `(batch_size, num_heads, sequence_length, sequence_length)`.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -236,6 +251,8 @@ class HrmCausalLMOutput(ModelOutput):
     q_halt_logits: torch.FloatTensor = None
     q_continue_logits: torch.FloatTensor = None
     carry: Optional["HrmCarry"] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 # Helper functions
@@ -328,8 +345,14 @@ class HrmEmbedding(nn.Module):
 class HrmRotaryEmbedding(nn.Module):
     """Rotary Position Embedding (RoPE) precomputation."""
 
-    def __init__(self, dim, max_position_embeddings, base=10000.0, device=None):
+    def __init__(self, dim=None, max_position_embeddings=None, base=10000.0, device=None, config=None):
         super().__init__()
+        # Support both direct parameters and config-based initialization
+        if config is not None:
+            dim = config.hidden_size // config.num_attention_heads
+            max_position_embeddings = config.max_position_embeddings
+            base = config.rope_theta
+
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float32, device=device) / dim))
         t = torch.arange(max_position_embeddings, dtype=torch.float32, device=device)
         freqs = torch.outer(t, inv_freq)
@@ -650,8 +673,22 @@ class HrmPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = ["H_init", "L_init"]
 
     def _init_weights(self, module):
-        """Initialize the weights - already handled by HRM's custom init."""
-        pass  # HRM uses custom initialization in the model itself
+        """Initialize the weights using truncated normal initialization."""
+        std = self.config.initializer_range
+        if isinstance(module, HrmLinear):
+            # HrmLinear already initializes its own weights in __init__
+            pass
+        elif isinstance(module, HrmEmbedding):
+            # HrmEmbedding already initializes its own weights in __init__
+            pass
+        elif isinstance(module, nn.Embedding):
+            # For puzzle embeddings
+            module.weight.data.normal_(mean=0.0, std=std)
+        elif isinstance(module, nn.Linear):
+            # For any standard linear layers
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
 
 
 class HrmModel(HrmPreTrainedModel):
@@ -662,6 +699,12 @@ class HrmModel(HrmPreTrainedModel):
         self.config = config
         self.inner = HrmInner(config)
         self.post_init()
+
+    def get_input_embeddings(self):
+        return self.inner.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.inner.embed_tokens = value
 
     def initial_carry(self, batch: dict) -> HrmCarry:
         """Initialize carry state for a new batch."""
@@ -680,9 +723,16 @@ class HrmModel(HrmPreTrainedModel):
         puzzle_identifiers: Optional[torch.LongTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         carry: Optional[HrmCarry] = None,
+        output_hidden_states: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
         **kwargs,
     ):
         """Execute one ACT step with halting logic."""
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+
         batch = {"input_ids": input_ids}
         if puzzle_identifiers is not None:
             batch["puzzle_identifiers"] = puzzle_identifiers
@@ -720,15 +770,30 @@ class HrmModel(HrmPreTrainedModel):
 
         new_carry = HrmCarry(new_inner_carry, new_steps, halted, new_current_data)
 
+        # Prepare hidden states and attentions if requested
+        all_hidden_states = None
+        all_attentions = None
+
+        if output_hidden_states:
+            # Return the final hidden states from both H and L levels
+            all_hidden_states = (new_inner_carry.z_H, new_inner_carry.z_L)
+
+        # Note: HRM doesn't explicitly compute attention weights in the current implementation
+        # so attentions will be None for now
+        if output_attentions:
+            all_attentions = ()  # Empty tuple as HRM doesn't expose attention weights
+
         return HrmModelOutput(
             logits=logits,
             q_halt_logits=q_halt_logits,
             q_continue_logits=q_continue_logits,
             carry=new_carry,
+            hidden_states=all_hidden_states,
+            attentions=all_attentions,
         )
 
 
-class HrmForCausalLM(HrmPreTrainedModel):
+class HrmForCausalLM(HrmPreTrainedModel, GenerationMixin):
     """HRM Model with a language modeling head."""
 
     def __init__(self, config: HrmConfig):
@@ -736,16 +801,30 @@ class HrmForCausalLM(HrmPreTrainedModel):
         self.model = HrmModel(config)
         self.post_init()
 
+    def prepare_inputs_for_generation(self, input_ids, carry=None, **kwargs):
+        """Prepare inputs for generation."""
+        model_inputs = {"input_ids": input_ids, "carry": carry}
+        model_inputs.update(kwargs)
+        return model_inputs
+
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
         puzzle_identifiers: Optional[torch.LongTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         carry: Optional[HrmCarry] = None,
+        output_hidden_states: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
         **kwargs,
     ):
         outputs = self.model(
-            input_ids=input_ids, puzzle_identifiers=puzzle_identifiers, labels=labels, carry=carry, **kwargs
+            input_ids=input_ids,
+            puzzle_identifiers=puzzle_identifiers,
+            labels=labels,
+            carry=carry,
+            output_hidden_states=output_hidden_states,
+            output_attentions=output_attentions,
+            **kwargs,
         )
 
         loss = None
@@ -763,6 +842,8 @@ class HrmForCausalLM(HrmPreTrainedModel):
             q_halt_logits=outputs.q_halt_logits,
             q_continue_logits=outputs.q_continue_logits,
             carry=outputs.carry,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
     def generate(self, input_ids: torch.LongTensor, max_new_tokens: int = 50, **kwargs):
