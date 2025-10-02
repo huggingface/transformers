@@ -118,6 +118,14 @@ class CLIPTextConfig(PretrainedConfig):
     bos_token_id: Optional[int] = 49406
     eos_token_id: Optional[int] = 49407
 
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.hidden_size % self.num_attention_heads != 0:
+            raise ValueError(
+                f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({self.num_attention_heads})."
+            )
+
 
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
@@ -192,6 +200,14 @@ class CLIPVisionConfig(PretrainedConfig):
     attention_dropout: Optional[Union[int, float]] = 0.0
     initializer_range: Optional[float] = 0.02
     initializer_factor: Optional[float] = 1.0
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.hidden_size % self.num_attention_heads != 0:
+            raise ValueError(
+                f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({self.num_attention_heads})."
+            )
 
 
 @strict(accept_kwargs=True)

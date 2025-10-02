@@ -380,15 +380,6 @@ class PretrainedConfig(PushToHubMixin):
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
-        # if (
-        #     hasattr(self, "hidden_size")
-        #     and hasattr(self, "num_attention_heads")
-        #     and self.hidden_size % self.num_attention_heads != 0
-        # ):
-        #     raise ValueError(
-        #         f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
-        #         f"heads ({self.num_attention_heads})."
-        #     )
 
         if (
             hasattr(self, "head_dim")
@@ -403,7 +394,7 @@ class PretrainedConfig(PushToHubMixin):
 
     def validate_token_ids(self):
         """Part of `@strict`-powered validation. Validates the contents of the special tokens."""
-        text_config = self.get_text_config()
+        text_config = self.get_text_config(decoder=True)
         vocab_size = getattr(text_config, "vocab_size", None)
         if vocab_size is not None:
             # Check for all special tokens, e..g. pad_token_id, image_token_id, audio_token_id
@@ -1352,6 +1343,8 @@ ALLOWED_LAYER_TYPES = (
     "chunked_attention",
     "linear_attention",  # used in minimax
     "conv",  # used in LFMv2
+    "mamba",
+    "attention",
 )
 
 
