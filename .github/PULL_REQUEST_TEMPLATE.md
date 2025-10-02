@@ -64,6 +64,7 @@ Integrations:
 - Big Model Inference: @SunMarc
 - quantization (bitsandbytes, autogpt): @SunMarc @MekkCyber
 - kernels: @MekkCyber @drbh
+- peft: @BenjaminBossan @githubnemo
 
 Devices/Backends:
 
