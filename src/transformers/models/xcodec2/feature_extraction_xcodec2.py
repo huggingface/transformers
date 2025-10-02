@@ -18,9 +18,10 @@ import copy
 from typing import Any, Optional, Union
 
 import numpy as np
+import torch
 import torch.nn.functional as F
 
-from ...audio_utils import mel_filter_bank, spectrogram, window_function, make_list_of_audio, AudioInput
+from ...audio_utils import mel_filter_bank, spectrogram_batch, window_function, make_list_of_audio, AudioInput
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import PaddingStrategy, TensorType, logging
@@ -65,7 +66,7 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
         feature_size=80,
         sampling_rate=16000,
         n_fft=512,
-        window_len=400,
+        window_length=400,
         num_mel_bins=80,
         padding_value=1.0,
         stride=2,
@@ -99,47 +100,110 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
         self.n_fft = n_fft
         self.num_mel_bins = num_mel_bins
         self.stride = stride 
-        self.win_length = window_len
+        self.window_length = window_length
+        self.mel_floor = 1.192092955078125e-07
+        self.preemphasis = 0.97
+        self.spec_hop_length = 160
+        self.spec_power = 2.0
+        self.spec_center = False
+        self.spec_remove_dc_offset = True
         self.mel_filters = mel_filter_bank(
             num_frequency_bins=self.n_fft // 2 + 1,
             num_mel_filters=self.num_mel_bins,
             min_frequency=20,
-            max_frequency=sampling_rate // 2,
-            sampling_rate=sampling_rate,
+            max_frequency=self.sampling_rate // 2,
+            sampling_rate=self.sampling_rate,
             norm=None,
             mel_scale="kaldi",
             triangularize_in_mel_space=True,
         )
-        self.window = window_function(self.win_length, "povey", periodic=False)
-
-    def _extract_fbank_features(
+        self.window = window_function(self.window_length, "povey", periodic=False)
+    
+    def _extract_fbank_features_numpy(
         self,
-        waveform: np.ndarray,
-    ) -> np.ndarray:
+        waveform_list: list[np.ndarray],
+    ) -> list[np.ndarray]:
         """
-        Get mel-filter bank features using TorchAudio. Note that TorchAudio requires 16-bit signed integers as inputs
-        and hence the waveform should not be normalized before feature extraction.
+        Batch version of mel-filter bank feature extraction for improved efficiency for a batch.
         """
-        # by default, it extracts the left channel if stereo
-        if len(waveform.shape) == 2:
-            waveform = waveform[0]
+        # Process waveforms: extract left channel if stereo and apply Kaldi scaling
+        processed_waveforms = []
+        for waveform in waveform_list:
+            waveform = np.squeeze(waveform) * (2**15)  # Kaldi compliance: 16-bit signed integers
+            processed_waveforms.append(waveform)
 
-        waveform = np.squeeze(waveform) * (2**15)  # Kaldi compliance: 16-bit signed integers
-        features = spectrogram(
-            waveform,
+        # Use batch spectrogram processing
+        features_list = spectrogram_batch(
+            processed_waveforms,
             self.window,
-            frame_length=self.win_length,
-            hop_length=160,
+            frame_length=self.window_length,
+            hop_length=self.spec_hop_length,
             fft_length=self.n_fft,
-            power=2.0,
-            center=False,
-            preemphasis=0.97,
+            power=self.spec_power,
+            center=self.spec_center,
+            preemphasis=self.preemphasis,
             mel_filters=self.mel_filters,
             log_mel="log",
-            mel_floor=1.192092955078125e-07,
-            remove_dc_offset=True,
-        ).T
-        return features
+            mel_floor=self.mel_floor,
+            remove_dc_offset=self.spec_remove_dc_offset,
+        )
+        
+        # Transpose each feature matrix to match expected format
+        return [features.T for features in features_list]
+
+    def _extract_fbank_features_torch(
+        self,
+        audio: torch.Tensor,
+        dtype: torch.dtype = torch.float32,
+        device: str = "cpu",
+    ) -> list[np.ndarray]:
+        """
+        torchaudio-based mel-filter bank feature extraction.
+        """
+
+        # Ensure each audio is 1D and apply Kaldi scaling (16-bit signed integers)
+        audio = audio.to(device, dtype).to(dtype) * (2**15)
+        if audio.dim() == 3:
+            # (batch, channel, time) -> (batch, time)
+            audio = audio.squeeze(1)
+
+        # Arrays to torch
+        window = torch.from_numpy(self.window).to(device, dtype)
+        mel_filters = torch.from_numpy(self.mel_filters).to(device, dtype)
+
+        # Compute mel spectrograms
+        with torch.no_grad():
+
+            # NOTE: Numpy version removes offset and applies preemphasis on each frame, which can cause difference
+            if self.spec_remove_dc_offset:
+                audio = audio - audio.mean(dim=-1, keepdim=True)
+            if self.preemphasis is not None:
+                # first sample scaling matches Kaldi
+                audio[..., 0] *= (1 - self.preemphasis)
+                audio[..., 1:] = audio[..., 1:] - self.preemphasis * audio[..., :-1]
+
+            # Compute mel spectrograms for the batch
+            stft = torch.stft(
+                audio, 
+                self.n_fft, 
+                self.spec_hop_length, 
+                win_length=self.window_length,
+                window=window, 
+                center=self.spec_center,
+                return_complex=True
+            )
+            if self.spec_power is not None:
+                stft = stft.abs() ** self.spec_power
+            audio_spectrogram = mel_filters.T @ stft
+
+            # Apply log mel with floor
+            audio_spectrogram = torch.maximum(torch.tensor(self.mel_floor, device=device), audio_spectrogram)
+            audio_spectrogram = torch.log(audio_spectrogram)
+
+            # Transpose each feature matrix to match expected format
+            audio_spectrogram = [spec.T.cpu().numpy().astype(np.float32) for spec in audio_spectrogram]
+
+        return audio_spectrogram
 
     def __call__(
         self,
@@ -151,6 +215,8 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         sampling_rate: Optional[int] = None,
         do_normalize_per_mel_bins: Optional[bool] = True,
+        use_torch: bool = False,
+        device: str = "cpu",
         **kwargs,
     ) -> BatchFeature:
         """
@@ -203,6 +269,10 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
                 `sampling_rate` at the forward call to prevent silent errors.
             do_normalize_per_mel_bins (`bool`, *optional*, defaults to `True`):
                 Whether or not to zero-mean unit-variance normalize the input per mel-channel.
+            use_torch (`bool`, *optional*, defaults to `True`):
+                Whether or not to use torch for mel-filter bank feature extraction. If `False`, a numpy
+            device (`str`, *optional*, defaults to `"cpu"`):
+                Device for PyTorch tensors when using torch.
             kwargs (*optional*):
                 Remaining dictionary of keyword arguments that will be passed to the tokenizer or the feature
                 extractor.
@@ -263,17 +333,19 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
 
         # 2) padding before semantic model feature extractor (i.e. that of SeamlessM4TFeatureExtractor)
         semantic_padding = self.hop_length // 2
-        semantic_input = F.pad(padded_inputs["audio"], (semantic_padding, semantic_padding)).cpu().tolist()
-        semantic_input = [np.asarray(speech, dtype=np.float32) for speech in semantic_input]
+        semantic_input = F.pad(padded_inputs["audio"], (semantic_padding, semantic_padding))
 
-        # SeamlessM4TFeatureExtractor logic (except that we use attention/padding mask from above)
-        # extract fbank features
-        mel_features = [self._extract_fbank_features(waveform) for waveform in semantic_input]
+        # Compute Mel Spectrogram like in SeamlessM4TFeatureExtractor
+        if use_torch:
+            mel_features = self._extract_fbank_features_torch(semantic_input, device=device)
+        else:
+            semantic_input = [np.asarray(speech, dtype=np.float32) for speech in semantic_input]
+            mel_features = self._extract_fbank_features_numpy(semantic_input)
 
         if do_normalize_per_mel_bins:
             # torch defaults to ddof=1, and numpy defaults to ddof=0
             mel_features = [
-                (x - np.expand_dims(x.mean(0), 0)) / np.sqrt(np.expand_dims(x.var(0, ddof=1), 0) + 1e-7)
+                (x - x.mean(0)) / np.sqrt(x.var(0, ddof=1) + 1e-7)
                 for x in mel_features
             ]
         encoded_inputs = BatchFeature({"audio_spectrogram": mel_features})
@@ -287,18 +359,13 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
             return_tensors="np",
         )
         # Process mel features with stride reshaping
-        audio_spectrogram = padded_mel.get("audio_spectrogram")
+        audio_spectrogram = padded_mel["audio_spectrogram"]
         batch_size, num_frames, num_mel_channels = audio_spectrogram.shape
         
-        # Ensure frames are divisible by stride
-        frame_remainder = num_frames % self.stride
-        if frame_remainder != 0:
-            audio_spectrogram = audio_spectrogram[:, : num_frames - frame_remainder, :]
-            num_frames = num_frames - frame_remainder
-            
-        # Reshape to combine stride frames: (batch, frames//stride, channels*stride)
-        audio_spectrogram = np.reshape(
-            audio_spectrogram, (batch_size, num_frames // self.stride, num_mel_channels * self.stride)
+        # Trim frames to be divisible by stride and reshape
+        trimmed_frames = num_frames - (num_frames % self.stride)
+        audio_spectrogram = audio_spectrogram[:, :trimmed_frames, :].reshape(
+            batch_size, trimmed_frames // self.stride, num_mel_channels * self.stride
         )
 
         # Combine output from DAC-like padding and SeamlessM4T feature extractor
