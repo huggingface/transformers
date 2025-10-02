@@ -797,7 +797,7 @@ class ResNetBlock(nn.Module):
     def forward(self, x):
         h = x
         h = self.norm1(h)
-        h = h * torch.sigmoid(h)  # TODO replace with SiLU?
+        h = h * torch.sigmoid(h)
         h = self.conv1(h)
         h = self.norm2(h)
         h = h * torch.sigmoid(h)
@@ -1724,10 +1724,6 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
             codes_padding_mask = torch.zeros(audio_codes.shape, dtype=padding_mask.dtype)
             idx = torch.arange(audio_codes.shape[-1]).view(1, -1)
             codes_padding_mask = (idx < token_length).to(padding_mask.dtype).to(padding_mask.device)
-
-            # # TODO (ebezzam) maybe below is enough
-            # new_len = int(padding_mask.shape[-1] / self.hop_length)
-            # codes_padding_mask = padding_mask[:, :new_len * self.hop_length:self.hop_length]
 
         if not return_dict:
             return audio_codes, quantized_representation, codes_padding_mask
