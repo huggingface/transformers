@@ -1364,6 +1364,8 @@ class DummyMeta(type):
     isinstance(LlamaConfig, PretrainedConfig)
     >>> True
     ```
+
+    This is because `isinstance(x, C)` actually maps to `C.__instancecheck__(x)`.
     """
 
     def __instancecheck__(cls, inst):
