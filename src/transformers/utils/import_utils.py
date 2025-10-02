@@ -816,7 +816,7 @@ def is_ipex_available(min_version: str = "") -> bool:
 @lru_cache
 def is_bitsandbytes_available(check_library_only: bool = False) -> bool:
     is_available, bitsandbytes_version = _is_package_available("bitsandbytes", return_version=True)
-    if check_library_only:
+    if check_library_only or not is_available:
         return is_available
 
     # `bitsandbytes` versions older than 0.43.1 eagerly require CUDA at import time,
