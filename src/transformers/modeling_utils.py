@@ -4001,7 +4001,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 if _is_dtensor_available and isinstance(state_dict[tensor], DTensor):
                     full_tensor = state_dict[tensor].full_tensor()
                     # to get the correctly ordered tensor we need to repack if packed
-                    if _get_parameter_tp_plan(tensor, self._tp_plan) in ("local_packed_rowwise",):
+                    if _get_parameter_tp_plan(tensor, self._tp_plan) == "local_packed_rowwise":
                         full_tensor = repack_weights(full_tensor, -1, self._tp_size, 2)
                     shard[tensor] = full_tensor.contiguous()  # only do contiguous after it's permuted correctly
                 else:
