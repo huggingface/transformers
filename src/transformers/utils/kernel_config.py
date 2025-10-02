@@ -15,7 +15,7 @@ from ..utils import is_kernels_available, is_torch_available
 
 
 if is_kernels_available():
-    from kernels import Device, LayerRepository, Mode
+    from kernels import LayerRepository, Mode
 
 if is_torch_available():
     import torch
@@ -117,7 +117,7 @@ class KernelConfig:
                 )
 
             if isinstance(kernel, str):
-                if ("/" not in kernel or ":" not in kernel):
+                if "/" not in kernel or ":" not in kernel:
                     raise ValueError(
                         f"Kernel mapping for '{layer_name}' must be a valid repo name with a layer name (e.g., 'org/repo:layer_name'), got: {kernel}"
                     )
