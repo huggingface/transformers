@@ -2005,6 +2005,10 @@ class MMGroundingDinoModel(MMGroundingDinoPreTrainedModel):
             token_type_ids = token_type_ids[:, :max_text_len]
             text_token_mask = text_token_mask[:, :max_text_len]
 
+        # 3D -> 4D correction (add head dim)
+        if text_self_attention_masks.ndim == 3:
+            text_self_attention_masks = text_self_attention_masks[:, None, :, :]
+
         # Extract text features from text backbone
         text_outputs = self.text_backbone(
             input_ids, text_self_attention_masks, token_type_ids, position_ids, return_dict=return_dict
