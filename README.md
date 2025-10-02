@@ -110,10 +110,10 @@ git clone https://github.com/huggingface/transformers.git
 cd transformers
 
 # pip
-pip install .[torch]
+pip install '.[torch]'
 
 # uv
-uv pip install .[torch]
+uv pip install '.[torch]'
 ```
 
 ## Quickstart
