@@ -194,7 +194,7 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
         if return_labels:
-            if model_class.__name__ in ["DabDetrForObjectDetection"]:
+            if model_class.__name__ == "DabDetrForObjectDetection":
                 labels = []
                 for i in range(self.model_tester.batch_size):
                     target = {}

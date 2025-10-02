@@ -323,7 +323,7 @@ class BrosModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     dtype=torch.bool,
                     device=torch_device,
                 )
-            elif model_class.__name__ in ["BrosSpadeEEForTokenClassification"]:
+            elif model_class.__name__ == "BrosSpadeEEForTokenClassification":
                 inputs_dict["initial_token_labels"] = torch.zeros(
                     (self.model_tester.batch_size, self.model_tester.seq_length),
                     dtype=torch.long,

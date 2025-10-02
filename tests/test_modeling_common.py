@@ -2974,7 +2974,7 @@ class ModelTesterMixin:
             param_device = device_map[param_name]
             if param_device in ["cpu", "disk"]:
                 self.assertEqual(param.device, torch.device("meta"))
-            elif param_device in ["mps"]:
+            elif param_device == "mps":
                 self.assertEqual(param.device, torch.device("mps"))
             else:
                 # when loaded with device_map, `param_device` are integer values for cuda/xpu/hpu/npu/mlu
@@ -3701,7 +3701,7 @@ class ModelTesterMixin:
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            if config.model_type in ["paligemma"]:
+            if config.model_type == "paligemma":
                 self.skipTest(
                     "PaliGemma-like models currently (transformers==4.41.0) requires an attention_mask input"
                 )
@@ -3729,7 +3729,7 @@ class ModelTesterMixin:
                 )
             if config.model_type in ["idefics", "idefics2", "idefics3"]:
                 self.skipTest(reason="Idefics currently (transformers==4.39.1) requires an image_attention_mask input")
-            if config.model_type in ["sam"]:
+            if config.model_type == "sam":
                 self.skipTest(reason="SAM requires an attention_mask input for relative positional embeddings")
 
             model = model_class(config)
@@ -3783,7 +3783,7 @@ class ModelTesterMixin:
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            if config.model_type in ["dbrx"]:
+            if config.model_type == "dbrx":
                 self.skipTest(
                     "DBRX (transformers==4.40) requires a modification to support dynamic shapes with compile."
                 )

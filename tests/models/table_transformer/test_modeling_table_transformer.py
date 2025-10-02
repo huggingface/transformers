@@ -214,7 +214,7 @@ class TableTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
         if return_labels:
-            if model_class.__name__ in ["TableTransformerForObjectDetection"]:
+            if model_class.__name__ == "TableTransformerForObjectDetection":
                 labels = []
                 for i in range(self.model_tester.batch_size):
                     target = {}
