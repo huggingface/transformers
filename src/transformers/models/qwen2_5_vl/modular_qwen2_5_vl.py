@@ -44,7 +44,7 @@ from transformers.models.qwen2_vl.processing_qwen2_vl import Qwen2VLImagesKwargs
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...modeling_flash_attention_utils import is_flash_attn_available
@@ -62,7 +62,7 @@ if is_flash_attn_available():
 logger = logging.get_logger(__name__)
 
 
-class Qwen2_5_VLVisionConfig(PretrainedConfig):
+class Qwen2_5_VLVisionConfig(PreTrainedConfig):
     model_type = "qwen2_5_vl"
     base_config_key = "vision_config"
 

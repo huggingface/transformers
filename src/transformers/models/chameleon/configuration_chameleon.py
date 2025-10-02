@@ -16,19 +16,19 @@
 
 from typing import Optional
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class ChameleonVQVAEConfig(PretrainedConfig):
+class ChameleonVQVAEConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ChameleonVQModel`]. It is used to instantiate a
     `ChameleonVQModel` according to the specified arguments, defining the model architecture.
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information. Instantiating a
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information. Instantiating a
     configuration with the defaults will yield a similar configuration to the VQModel of the
     [meta/chameleon-7B](https://huggingface.co/meta/chameleon-7B).
 
@@ -97,15 +97,15 @@ class ChameleonVQVAEConfig(PretrainedConfig):
         self.initializer_range = initializer_range
 
 
-class ChameleonConfig(PretrainedConfig):
+class ChameleonConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ChameleonModel`]. It is used to instantiate a
     chameleon model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the
     [meta/chameleon-7B](https://huggingface.co/meta/chameleon-7B).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:

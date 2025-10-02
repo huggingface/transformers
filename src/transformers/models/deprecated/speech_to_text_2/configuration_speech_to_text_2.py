@@ -14,22 +14,22 @@
 # limitations under the License.
 """Speech2Text model configuration"""
 
-from ....configuration_utils import PretrainedConfig
+from ....configuration_utils import PreTrainedConfig
 from ....utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class Speech2Text2Config(PretrainedConfig):
+class Speech2Text2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Speech2Text2ForCausalLM`]. It is used to
     instantiate an Speech2Text2 model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the Speech2Text2
     [facebook/s2t-wav2vec2-large-en-de](https://huggingface.co/facebook/s2t-wav2vec2-large-en-de) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
