@@ -344,6 +344,10 @@ class AlbertModelIntegrationTest(unittest.TestCase):
         if version.parse(torch.__version__) < version.parse("2.4.0"):
             self.skipTest(reason="This test requires torch >= 2.4 to run.")
 
+        from transformers.integrations.executorch import sdpa_bidirectional_mask_without_vmap
+        from transformers.masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
+        from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
+
         distilbert_model = "albert/albert-base-v2"
         device = "cpu"
         attn_implementation = "sdpa"
@@ -369,6 +373,13 @@ class AlbertModelIntegrationTest(unittest.TestCase):
             eg_predicted_mask.split(),
             ["capital", "capitol", "comune", "arrondissement", "bastille"],
         )
+
+        # Reset attention implementation to executorch friendly one
+        ALL_MASK_ATTENTION_FUNCTIONS.register(
+            "sdpa_bidirectional_mask_without_vmap", sdpa_bidirectional_mask_without_vmap
+        )
+        ALL_ATTENTION_FUNCTIONS.register("sdpa_bidirectional_mask_without_vmap", ALL_ATTENTION_FUNCTIONS["sdpa"])
+        model.config._attn_implementation = "sdpa_bidirectional_mask_without_vmap"
 
         exported_program = torch.export.export(
             model,
