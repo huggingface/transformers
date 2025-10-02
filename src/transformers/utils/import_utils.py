@@ -98,15 +98,6 @@ def get_torch_version() -> str:
 
 
 @lru_cache
-def get_torch_major_and_minor_version() -> str:
-    torch_version = get_torch_version()
-    if torch_version == "N/A":
-        return "N/A"
-    parsed_version = version.parse(torch_version)
-    return str(parsed_version.major) + "." + str(parsed_version.minor)
-
-
-@lru_cache
 def is_torch_greater_or_equal(library_version: str, accept_dev: bool = False) -> bool:
     """
     Accepts a library version and returns True if the current version of the library is greater than or equal to the
@@ -149,18 +140,41 @@ def is_torch_accelerator_available() -> bool:
 
 
 @lru_cache
-def is_torch_flex_attn_available() -> bool:
-    return is_torch_available() and version.parse(get_torch_version()) >= version.parse("2.5.0")
-
-
-@lru_cache
 def is_torch_cuda_available() -> bool:
     if is_torch_available():
         import torch
 
         return torch.cuda.is_available()
-    else:
+    return False
+
+
+@lru_cache
+def is_cuda_platform() -> bool:
+    if is_torch_available():
+        import torch
+
+        return torch.version.cuda is not None
+    return False
+
+
+@lru_cache
+def is_rocm_platform() -> bool:
+    if is_torch_available():
+        import torch
+
+        return torch.version.hip is not None
+    return False
+
+
+@lru_cache
+def is_habana_gaudi1() -> bool:
+    if not is_torch_hpu_available():
         return False
+
+    import habana_frameworks.torch.utils.experimental as htexp
+
+    # Check if the device is Gaudi1 (vs Gaudi2, Gaudi3)
+    return htexp._get_device_type() == htexp.synDeviceType.synDeviceGaudi
 
 
 @lru_cache
@@ -282,8 +296,8 @@ def is_torch_xla_available(check_is_tpu=False, check_is_gpu=False) -> bool:
     """
     assert not (check_is_tpu and check_is_gpu), "The check_is_tpu and check_is_gpu cannot both be true."
 
-    _torch_xla_available = USE_TORCH_XLA in ENV_VARS_TRUE_VALUES and _is_package_available("torch_xla")
-    if not _torch_xla_available:
+    torch_xla_available = USE_TORCH_XLA in ENV_VARS_TRUE_VALUES and _is_package_available("torch_xla")
+    if not torch_xla_available:
         return False
 
     import torch_xla
@@ -433,20 +447,15 @@ def is_torch_fp16_available_on_device(device: str) -> bool:
     try:
         x = torch.zeros(2, 2, dtype=torch.float16, device=device)
         _ = x @ x
-
         # At this moment, let's be strict of the check: check if `LayerNorm` is also supported on device, because many
         # models use this layer.
         batch, sentence_length, embedding_dim = 3, 4, 5
         embedding = torch.randn(batch, sentence_length, embedding_dim, dtype=torch.float16, device=device)
         layer_norm = torch.nn.LayerNorm(embedding_dim, dtype=torch.float16, device=device)
         _ = layer_norm(embedding)
-
-    except:  # noqa: E722
-        # TODO: more precise exception matching, if possible.
-        # most backends should return `RuntimeError` however this is not guaranteed.
+        return True
+    except Exception:
         return False
-
-    return True
 
 
 @lru_cache
@@ -465,12 +474,9 @@ def is_torch_bf16_available_on_device(device: str) -> bool:
     try:
         x = torch.zeros(2, 2, dtype=torch.bfloat16, device=device)
         _ = x @ x
-    except:  # noqa: E722
-        # TODO: more precise exception matching, if possible.
-        # most backends should return `RuntimeError` however this is not guaranteed.
+        return True
+    except Exception:
         return False
-
-    return True
 
 
 @lru_cache
@@ -490,6 +496,11 @@ def is_torch_tf32_available() -> bool:
     if torch.cuda.get_device_properties(torch.cuda.current_device()).major < 8:
         return False
     return True
+
+
+@lru_cache
+def is_torch_flex_attn_available() -> bool:
+    return is_torch_available() and version.parse(get_torch_version()) >= version.parse("2.5.0")
 
 
 @lru_cache
@@ -792,7 +803,7 @@ def is_ipex_available(min_version: str = "") -> bool:
     torch_major_and_minor = get_major_and_minor_from_version(get_torch_version())
     ipex_major_and_minor = get_major_and_minor_from_version(ipex_version)
     if torch_major_and_minor != ipex_major_and_minor:
-        logger.warning(
+        logger.warning_once(
             f"Intel Extension for PyTorch {ipex_major_and_minor} needs to work with PyTorch {ipex_major_and_minor}.*,"
             f" but PyTorch {get_torch_version()} is found. Please switch to the matching version and run again."
         )
@@ -804,25 +815,16 @@ def is_ipex_available(min_version: str = "") -> bool:
 
 @lru_cache
 def is_bitsandbytes_available(check_library_only: bool = False) -> bool:
-    bitsandbytes_available, bitsandbytes_version = _is_package_available("bitsandbytes", return_version=True)
-    if not bitsandbytes_available:
-        return False
-
+    is_available, bitsandbytes_version = _is_package_available("bitsandbytes", return_version=True)
     if check_library_only:
-        return True
-
-    if not is_torch_available():
-        return False
-
-    import torch
+        return is_available
 
     # `bitsandbytes` versions older than 0.43.1 eagerly require CUDA at import time,
     # so those versions of the library are practically only available when CUDA is too.
     if version.parse(bitsandbytes_version) < version.parse("0.43.1"):
-        return torch.cuda.is_available()
-
+        return is_torch_cuda_available() and is_available
     # Newer versions of `bitsandbytes` can be imported on systems without CUDA.
-    return True
+    return is_torch_available() and is_available
 
 
 @lru_cache
@@ -838,15 +840,10 @@ def is_bitsandbytes_multi_backend_available() -> bool:
 @lru_cache
 def is_flash_attn_2_available() -> bool:
     is_available, flash_attn_version = _is_package_available("flash_attn", return_version=True)
-
-    if not (is_available and is_torch_available()):
+    if not is_available or not (is_torch_cuda_available() or is_torch_mlu_available()):
         return False
 
-    # Let's add an extra check to see if cuda is available
     import torch
-
-    if not (torch.cuda.is_available() or is_torch_mlu_available()):
-        return False
 
     if torch.version.cuda:
         return version.parse(flash_attn_version) >= version.parse("2.1.0")
@@ -861,21 +858,7 @@ def is_flash_attn_2_available() -> bool:
 
 @lru_cache
 def is_flash_attn_3_available() -> bool:
-    if not is_torch_available():
-        return False
-
-    if not _is_package_available("flash_attn_3"):
-        return False
-
-    import torch
-
-    if not torch.cuda.is_available():
-        return False
-
-    # TODO: Check for a minimum version when FA3 is stable
-    # return version.parse(importlib.metadata.version("flash_attn_3")) >= version.parse("3.0.0")
-
-    return True
+    return is_torch_cuda_available() and _is_package_available("flash_attn_3")
 
 
 @lru_cache
@@ -1137,14 +1120,8 @@ def is_sudachi_available() -> bool:
 
 @lru_cache
 def is_sudachi_projection_available() -> bool:
-    if not is_sudachi_available():
-        return False
-
-    _, sudachipy_version = _is_package_available("sudachipy", return_version=True)
-
-    # NOTE: We require sudachipy>=0.6.8 to use projection option in sudachi_kwargs for the constructor of BertJapaneseTokenizer.
-    # - `projection` option is not supported in sudachipy<0.6.8, see https://github.com/WorksApplications/sudachi.rs/issues/230
-    return version.parse(sudachipy_version) >= version.parse("0.6.8")
+    is_available, sudachipy_version = _is_package_available("sudachipy", return_version=True)
+    return is_available and version.parse(sudachipy_version) >= version.parse("0.6.8")
 
 
 @lru_cache
@@ -1234,32 +1211,12 @@ def is_torch_deterministic() -> bool:
 
 
 @lru_cache
-def is_cuda_platform() -> bool:
-    if is_torch_available():
-        import torch
-
-        return torch.version.cuda is not None
-    return False
-
-
-@lru_cache
-def is_rocm_platform() -> bool:
-    if is_torch_available():
-        import torch
-
-        return torch.version.hip is not None
-    return False
-
-
-@lru_cache
-def is_habana_gaudi1() -> bool:
-    if not is_torch_hpu_available():
-        return False
-
-    import habana_frameworks.torch.utils.experimental as htexp
-
-    # Check if the device is Gaudi1 (vs Gaudi2, Gaudi3)
-    return htexp._get_device_type() == htexp.synDeviceType.synDeviceGaudi
+def get_torch_major_and_minor_version() -> str:
+    torch_version = get_torch_version()
+    if torch_version == "N/A":
+        return "N/A"
+    parsed_version = version.parse(torch_version)
+    return str(parsed_version.major) + "." + str(parsed_version.minor)
 
 
 def is_torchdynamo_compiling() -> bool:
