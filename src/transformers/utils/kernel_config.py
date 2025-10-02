@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+# from ..configuration_utils import ConfigMixin
 from ..utils import is_kernels_available, is_torch_available
 
 
@@ -51,6 +52,7 @@ def infer_device(model):
 class KernelConfig:
     def __init__(self, kernel_mapping={}):
         self.kernel_mapping = kernel_mapping
+        self.registered_layer_names = {}
 
     def update_kernel(self, repo_id, registered_name, layer_name, device, mode, revision=None):
         self.kernel_mapping[registered_name] = {
@@ -63,11 +65,10 @@ class KernelConfig:
             }
         }
 
-    def check_if_layer_name_registered(self, layer_name, model):
-        for _, module in model.named_modules():
-            if hasattr(module, "kernel_layer_name") and module.kernel_layer_name == layer_name:
-                return True
-        return False
+    def store_registered_layer_names(self, model):
+        for name, module in model.named_modules():
+            if hasattr(module, "kernel_layer_name"):
+                self.registered_layer_names[name] = module.kernel_layer_name
 
     def sanitize_kernel_mapping(self, model):
         """
@@ -104,6 +105,7 @@ class KernelConfig:
             ...
         }
         """
+        self.store_registered_layer_names(model)
         # Validate that the kernel mapping is a dict
         if not isinstance(self.kernel_mapping, dict):
             raise ValueError(
@@ -111,7 +113,7 @@ class KernelConfig:
             )
 
         for layer_name, kernel in self.kernel_mapping.items():
-            if not self.check_if_layer_name_registered(layer_name, model):
+            if layer_name not in self.registered_layer_names.values():
                 raise ValueError(
                     f"Layer {layer_name} is not registered in the model, please register it first using register_kernel_forward_from_hub"
                 )
