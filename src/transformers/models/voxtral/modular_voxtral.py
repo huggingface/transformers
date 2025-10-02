@@ -65,7 +65,7 @@ class VoxtralEncoder(Qwen2AudioEncoder):
         "hidden_states": VoxtralEncoderLayer,
     }
 
-    @check_model_inputs
+    @check_model_inputs()
     def forward(
         self,
         input_features,
