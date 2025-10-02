@@ -691,7 +691,9 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         encoder_decoder_position_bias=None,
-        past_key_values=None,
+        layer_head_mask=None,
+        cross_attn_layer_head_mask=None,
+        past_key_value=None,
         use_cache=False,
         output_attentions=False,
         output_router_logits=True,
@@ -702,13 +704,14 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
             hidden_states,
             attention_mask=attention_mask,
             position_bias=position_bias,
-            past_key_values=past_key_values,
+            layer_head_mask=layer_head_mask,
+            past_key_value=past_key_value,
             use_cache=use_cache,
             output_attentions=output_attentions,
             cache_position=cache_position,
         )
-        hidden_states = self_attention_outputs[0]
-        attention_outputs = self_attention_outputs[1:]  # Keep self-attention outputs and relative position weights
+        hidden_states, past_key_value = self_attention_outputs[:2]
+        attention_outputs = self_attention_outputs[2:]  # Keep self-attention outputs and relative position weights
 
         # clamp inf values to enable fp16 training
         if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
@@ -722,13 +725,14 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
                 position_bias=encoder_decoder_position_bias,
-                past_key_values=past_key_values,
+                layer_head_mask=cross_attn_layer_head_mask,
+                past_key_value=past_key_value,
                 query_length=cache_position[-1] + 1,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
                 cache_position=cache_position,
             )
-            hidden_states = cross_attention_outputs[0]
+            hidden_states, past_key_value = cross_attention_outputs[:2]
 
             # clamp inf values to enable fp16 training
             if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
@@ -736,7 +740,7 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
                 hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
             # Keep cross-attention outputs and relative position weights
-            attention_outputs = attention_outputs + cross_attention_outputs[1:]
+            attention_outputs = attention_outputs + cross_attention_outputs[2:]
 
         # Apply Feed Forward layer
         hidden_states = self.layer[-1](hidden_states, output_router_logits)
@@ -753,9 +757,12 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
 
         outputs = (hidden_states,)
 
-        return (
-            outputs + attention_outputs + (router_tuple,)
-        )  # hidden-states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights), (router_tuple)
+        if use_cache:
+            outputs = outputs + (past_key_value,) + attention_outputs + (router_tuple,)
+        else:
+            outputs = outputs + attention_outputs + (router_tuple,)
+
+        return outputs  # hidden-states, past_key_value, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights), (router_tuple)
 
 
 @auto_docstring
@@ -1000,50 +1007,24 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         hidden_states = self.dropout(inputs_embeds)
 
         for i, layer_module in enumerate(self.block):
+            layer_head_mask = head_mask[i]
+            cross_attn_layer_head_mask = cross_attn_head_mask[i]
+
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-                def create_custom_forward(module):
-                    def custom_forward(
-                        hidden_states,
-                        attention_mask,
-                        position_bias,
-                        encoder_hidden_states,
-                        encoder_attention_mask,
-                        encoder_decoder_position_bias,
-                        past_key_values,
-                        use_cache,
-                        output_attentions,
-                        output_router_logits,
-                        return_dict,
-                        cache_position,
-                    ):
-                        return module(
-                            hidden_states,
-                            attention_mask=attention_mask,
-                            position_bias=position_bias,
-                            encoder_hidden_states=encoder_hidden_states,
-                            encoder_attention_mask=encoder_attention_mask,
-                            encoder_decoder_position_bias=encoder_decoder_position_bias,
-                            past_key_values=past_key_values,
-                            use_cache=use_cache,
-                            output_attentions=output_attentions,
-                            output_router_logits=output_router_logits,
-                            return_dict=return_dict,
-                            cache_position=cache_position,
-                        )
-                    return custom_forward
-
                 layer_outputs = self._gradient_checkpointing_func(
-                    create_custom_forward(layer_module),
+                    layer_module.forward,
                     hidden_states,
                     causal_mask,
                     position_bias,
                     encoder_hidden_states,
                     encoder_extended_attention_mask,
                     encoder_decoder_position_bias,
-                    None,  # past_key_values is always None with gradient checkpointing
+                    layer_head_mask,
+                    cross_attn_layer_head_mask,
+                    None,  # past_key_value is always None with gradient checkpointing
                     use_cache,
                     output_attentions,
                     output_router_logits,
@@ -1058,7 +1039,9 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
                     encoder_hidden_states=encoder_hidden_states,
                     encoder_attention_mask=encoder_extended_attention_mask,
                     encoder_decoder_position_bias=encoder_decoder_position_bias,
-                    past_key_values=past_key_values,
+                    layer_head_mask=layer_head_mask,
+                    cross_attn_layer_head_mask=cross_attn_layer_head_mask,
+                    past_key_value=past_key_values,
                     use_cache=use_cache,
                     output_attentions=output_attentions,
                     output_router_logits=output_router_logits,
