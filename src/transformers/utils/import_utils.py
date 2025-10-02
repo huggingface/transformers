@@ -25,7 +25,6 @@ import re
 import shutil
 import subprocess
 import sys
-import warnings
 from collections import OrderedDict
 from enum import Enum
 from functools import lru_cache
@@ -72,10 +71,6 @@ ENV_VARS_TRUE_AND_AUTO_VALUES = ENV_VARS_TRUE_VALUES.union({"AUTO"})
 # Try to run a native pytorch job in an environment with TorchXLA installed by setting this value to 0.
 USE_TORCH_XLA = os.environ.get("USE_TORCH_XLA", "1").upper()
 
-# `transformers` requires `torch>=1.11` but this variable is exposed publicly, and we can't simply remove it.
-# This is the version of torch required to run torch.fx features and torch.onnx with dictionary inputs.
-TORCH_FX_REQUIRED_VERSION = version.parse("1.10")
-
 ACCELERATE_MIN_VERSION = "0.26.0"
 SCHEDULEFREE_MIN_VERSION = "1.2.6"
 FSDP_MIN_VERSION = "1.12.0"
@@ -103,34 +98,44 @@ def get_torch_version() -> str:
 
 
 @lru_cache
-def is_kenlm_available() -> bool:
-    return _is_package_available("kenlm")
+def get_torch_major_and_minor_version() -> str:
+    torch_version = get_torch_version()
+    if torch_version == "N/A":
+        return "N/A"
+    parsed_version = version.parse(torch_version)
+    return str(parsed_version.major) + "." + str(parsed_version.minor)
 
 
 @lru_cache
-def is_kernels_available() -> bool:
-    return _is_package_available("kernels")
+def is_torch_greater_or_equal(library_version: str, accept_dev: bool = False) -> bool:
+    """
+    Accepts a library version and returns True if the current version of the library is greater than or equal to the
+    given version. If `accept_dev` is True, it will also accept development versions (e.g. 2.7.0.dev20250320 matches
+    2.7.0).
+    """
+    if not is_torch_available():
+        return False
+
+    if accept_dev:
+        return version.parse(version.parse(get_torch_version()).base_version) >= version.parse(library_version)
+    else:
+        return version.parse(get_torch_version()) >= version.parse(library_version)
 
 
 @lru_cache
-def is_cv2_available() -> bool:
-    return _is_package_available("cv2")
+def is_torch_less_or_equal(library_version: str, accept_dev: bool = False) -> bool:
+    """
+    Accepts a library version and returns True if the current version of the library is less than or equal to the
+    given version. If `accept_dev` is True, it will also accept development versions (e.g. 2.7.0.dev20250320 matches
+    2.7.0).
+    """
+    if not is_torch_available():
+        return False
 
-
-@lru_cache
-def is_yt_dlp_available() -> bool:
-    return _is_package_available("yt_dlp")
-
-
-@lru_cache
-def is_libcst_available() -> bool:
-    return _is_package_available("libcst")
-
-
-@lru_cache
-def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION) -> bool:
-    is_available, accelerate_version = _is_package_available("accelerate", return_version=True)
-    return is_available and version.parse(accelerate_version) >= version.parse(min_version)
+    if accept_dev:
+        return version.parse(version.parse(get_torch_version()).base_version) <= version.parse(library_version)
+    else:
+        return version.parse(get_torch_version()) <= version.parse(library_version)
 
 
 @lru_cache
@@ -143,142 +148,9 @@ def is_torch_accelerator_available() -> bool:
     return False
 
 
-def is_torch_deterministic() -> bool:
-    """
-    Check whether pytorch uses deterministic algorithms by looking if torch.set_deterministic_debug_mode() is set to 1 or 2"
-    """
-    if is_torch_available():
-        import torch
-
-        if torch.get_deterministic_debug_mode() == 0:
-            return False
-        else:
-            return True
-
-    return False
-
-
-@lru_cache
-def is_triton_available(min_version: str = TRITON_MIN_VERSION) -> bool:
-    is_available, triton_version = _is_package_available("triton", return_version=True)
-    return is_available and version.parse(triton_version) >= version.parse(min_version)
-
-
-@lru_cache
-def is_hadamard_available() -> bool:
-    return _is_package_available("fast_hadamard_transform")
-
-
-@lru_cache
-def is_hqq_available(min_version: str = HQQ_MIN_VERSION) -> bool:
-    is_available, hqq_version = _is_package_available("hqq", return_version=True)
-    return is_available and version.parse(hqq_version) >= version.parse(min_version)
-
-
-@lru_cache
-def is_pygments_available() -> bool:
-    return _is_package_available("pygments")
-
-
-@lru_cache
-def get_torch_major_and_minor_version() -> str:
-    torch_version = get_torch_version()
-    if torch_version == "N/A":
-        return "N/A"
-    parsed_version = version.parse(torch_version)
-    return str(parsed_version.major) + "." + str(parsed_version.minor)
-
-
-@lru_cache
-def is_torch_sdpa_available():
-    # Mostly retained for backward compatibility in remote code, since sdpa works correctly on all torch versions >= 2.2
-    return is_torch_available()
-
-
 @lru_cache
 def is_torch_flex_attn_available() -> bool:
     return is_torch_available() and version.parse(get_torch_version()) >= version.parse("2.5.0")
-
-
-@lru_cache
-def is_torchvision_available() -> bool:
-    return _is_package_available("torchvision")
-
-
-@lru_cache
-def is_torchvision_v2_available() -> bool:
-    return is_torchvision_available()
-
-
-@lru_cache
-def is_galore_torch_available() -> bool:
-    return _is_package_available("galore_torch")
-
-
-@lru_cache
-def is_apollo_torch_available() -> bool:
-    return _is_package_available("apollo_torch")
-
-
-@lru_cache
-def is_torch_optimi_available() -> bool:
-    return _is_package_available("optimi")
-
-
-@lru_cache
-def is_lomo_available() -> bool:
-    return _is_package_available("lomo_optim")
-
-
-@lru_cache
-def is_grokadamw_available() -> bool:
-    return _is_package_available("grokadamw")
-
-
-@lru_cache
-def is_schedulefree_available(min_version: str = SCHEDULEFREE_MIN_VERSION) -> bool:
-    is_available, schedulefree_version = _is_package_available("schedulefree", return_version=True)
-    return is_available and version.parse(schedulefree_version) >= version.parse(min_version)
-
-
-@lru_cache
-def is_pyctcdecode_available() -> bool:
-    return _is_package_available("pyctcdecode")
-
-
-@lru_cache
-def is_librosa_available() -> bool:
-    return _is_package_available("librosa")
-
-
-@lru_cache
-def is_essentia_available() -> bool:
-    return _is_package_available("essentia")
-
-
-@lru_cache
-def is_pydantic_available() -> bool:
-    return _is_package_available("pydantic")
-
-
-@lru_cache
-def is_fastapi_available() -> bool:
-    return _is_package_available("fastapi")
-
-
-@lru_cache
-def is_uvicorn_available() -> bool:
-    return _is_package_available("uvicorn")
-
-
-@lru_cache
-def is_openai_available() -> bool:
-    return _is_package_available("openai")
-
-
-@lru_cache
-def is_pretty_midi_available() -> bool:
-    return _is_package_available("pretty_midi")
 
 
 @lru_cache
@@ -289,97 +161,6 @@ def is_torch_cuda_available() -> bool:
         return torch.cuda.is_available()
     else:
         return False
-
-
-@lru_cache
-def is_cuda_platform() -> bool:
-    if is_torch_available():
-        import torch
-
-        return torch.version.cuda is not None
-    else:
-        return False
-
-
-@lru_cache
-def is_rocm_platform() -> bool:
-    if is_torch_available():
-        import torch
-
-        return torch.version.hip is not None
-    else:
-        return False
-
-
-@lru_cache
-def is_mamba_ssm_available() -> bool:
-    if is_torch_available():
-        import torch
-
-        if not torch.cuda.is_available():
-            return False
-        else:
-            return _is_package_available("mamba_ssm")
-    return False
-
-
-@lru_cache
-def is_mamba_2_ssm_available() -> bool:
-    if is_torch_available():
-        import torch
-
-        if not torch.cuda.is_available():
-            return False
-        else:
-            if _is_package_available("mamba_ssm"):
-                import mamba_ssm
-
-                if version.parse(mamba_ssm.__version__) >= version.parse("2.0.4"):
-                    return True
-    return False
-
-
-@lru_cache
-def is_flash_linear_attention_available():
-    if is_torch_available():
-        import torch
-
-        if not torch.cuda.is_available():
-            return False
-
-        try:
-            import fla
-
-            if version.parse(fla.__version__) >= version.parse("0.2.2"):
-                return True
-        except Exception:
-            pass
-    return False
-
-
-@lru_cache
-def is_causal_conv1d_available() -> bool:
-    if is_torch_available():
-        import torch
-
-        if not torch.cuda.is_available():
-            return False
-        return _is_package_available("causal_conv1d")
-    return False
-
-
-@lru_cache
-def is_xlstm_available() -> bool:
-    if is_torch_available():
-        return _is_package_available("xlstm")
-    return False
-
-
-@lru_cache
-def is_mambapy_available() -> bool:
-    if is_torch_available():
-        return _is_package_available("mambapy")
-    return False
 
 
 @lru_cache
@@ -397,159 +178,100 @@ def is_torch_mps_available(min_version: Optional[str] = None) -> bool:
 
 
 @lru_cache
-def is_torch_bf16_gpu_available() -> bool:
-    if not is_torch_available():
+def is_torch_npu_available(check_device=False) -> bool:
+    "Checks if `torch_npu` is installed and potentially if a NPU is in the environment"
+    if not is_torch_available() or not _is_package_available("torch_npu"):
         return False
 
     import torch
+    import torch_npu  # noqa: F401
 
-    if torch.cuda.is_available():
-        return torch.cuda.is_bf16_supported()
-    if is_torch_xpu_available():
-        return torch.xpu.is_bf16_supported()
-    if is_torch_hpu_available():
-        return True
-    if is_torch_npu_available():
-        return torch.npu.is_bf16_supported()
-    if is_torch_mps_available():
-        # Note: Emulated in software by Metal using fp32 for hardware without native support (like M1/M2)
-        return torch.backends.mps.is_macos_or_newer(14, 0)
-    if is_torch_musa_available():
-        return torch.musa.is_bf16_supported()
-    return False
-
-
-@lru_cache
-def is_torch_bf16_cpu_available() -> bool:
-    return is_torch_available()
-
-
-@lru_cache
-def is_torch_bf16_available() -> bool:
-    # the original bf16 check was for gpu only, but later a cpu/bf16 combo has emerged so this util
-    # has become ambiguous and therefore deprecated
-    warnings.warn(
-        "The util is_torch_bf16_available is deprecated, please use is_torch_bf16_gpu_available "
-        "or is_torch_bf16_cpu_available instead according to whether it's used with cpu or gpu",
-        FutureWarning,
-    )
-    return is_torch_bf16_gpu_available()
-
-
-@lru_cache
-def is_torch_fp16_available_on_device(device: str) -> bool:
-    if not is_torch_available():
-        return False
-
-    if is_torch_hpu_available():
-        if is_habana_gaudi1():
+    if check_device:
+        try:
+            # Will raise a RuntimeError if no NPU is found
+            _ = torch.npu.device_count()
+            return torch.npu.is_available()
+        except RuntimeError:
             return False
+    return hasattr(torch, "npu") and torch.npu.is_available()
+
+
+@lru_cache
+def is_torch_xpu_available(check_device: bool = False) -> bool:
+    """
+    Checks if XPU acceleration is available either via native PyTorch (>=2.6),
+    `intel_extension_for_pytorch` or via stock PyTorch (>=2.4) and potentially
+    if a XPU is in the environment.
+    """
+    if not is_torch_available():
+        return False
+
+    torch_version = version.parse(get_torch_version())
+    if torch_version.major == 2 and torch_version.minor < 6:
+        if is_ipex_available():
+            import intel_extension_for_pytorch  # noqa: F401
+        elif torch_version.major == 2 and torch_version.minor < 4:
+            return False
+
+    import torch
+
+    if check_device:
+        try:
+            # Will raise a RuntimeError if no XPU  is found
+            _ = torch.xpu.device_count()
+            return torch.xpu.is_available()
+        except RuntimeError:
+            return False
+    return hasattr(torch, "xpu") and torch.xpu.is_available()
+
+
+@lru_cache
+def is_torch_mlu_available() -> bool:
+    """
+    Checks if `mlu` is available via an `cndev-based` check which won't trigger the drivers and leave mlu
+    uninitialized.
+    """
+    if not is_torch_available() or not _is_package_available("torch_mlu"):
+        return False
+
+    import torch
+    import torch_mlu  # noqa: F401
+
+    pytorch_cndev_based_mlu_check_previous_value = os.environ.get("PYTORCH_CNDEV_BASED_MLU_CHECK")
+    try:
+        os.environ["PYTORCH_CNDEV_BASED_MLU_CHECK"] = str(1)
+        available = torch.mlu.is_available()
+    finally:
+        if pytorch_cndev_based_mlu_check_previous_value:
+            os.environ["PYTORCH_CNDEV_BASED_MLU_CHECK"] = pytorch_cndev_based_mlu_check_previous_value
         else:
-            return True
+            os.environ.pop("PYTORCH_CNDEV_BASED_MLU_CHECK", None)
 
-    import torch
-
-    try:
-        x = torch.zeros(2, 2, dtype=torch.float16, device=device)
-        _ = x @ x
-
-        # At this moment, let's be strict of the check: check if `LayerNorm` is also supported on device, because many
-        # models use this layer.
-        batch, sentence_length, embedding_dim = 3, 4, 5
-        embedding = torch.randn(batch, sentence_length, embedding_dim, dtype=torch.float16, device=device)
-        layer_norm = torch.nn.LayerNorm(embedding_dim, dtype=torch.float16, device=device)
-        _ = layer_norm(embedding)
-
-    except:  # noqa: E722
-        # TODO: more precise exception matching, if possible.
-        # most backends should return `RuntimeError` however this is not guaranteed.
-        return False
-
-    return True
+    return available
 
 
 @lru_cache
-def is_torch_bf16_available_on_device(device: str) -> bool:
-    if not is_torch_available():
+def is_torch_musa_available(check_device=False) -> bool:
+    "Checks if `torch_musa` is installed and potentially if a MUSA is in the environment"
+    if not is_torch_available() or not _is_package_available("torch_musa"):
         return False
 
     import torch
+    import torch_musa  # noqa: F401
 
-    if device == "cuda":
-        return is_torch_bf16_gpu_available()
-
-    if device == "hpu":
-        return True
-
-    try:
-        x = torch.zeros(2, 2, dtype=torch.bfloat16, device=device)
-        _ = x @ x
-    except:  # noqa: E722
-        # TODO: more precise exception matching, if possible.
-        # most backends should return `RuntimeError` however this is not guaranteed.
+    torch_musa_min_version = "0.33.0"
+    accelerate_available, accelerate_version = _is_package_available("accelerate", return_version=True)
+    if accelerate_available and version.parse(accelerate_version) < version.parse(torch_musa_min_version):
         return False
 
-    return True
-
-
-@lru_cache
-def is_torch_tf32_available() -> bool:
-    if not is_torch_available():
-        return False
-
-    import torch
-
-    if is_torch_musa_available():
-        device_info = torch.musa.get_device_properties(torch.musa.current_device())
-        if f"{device_info.major}{device_info.minor}" >= "22":
-            return True
-        return False
-    if not torch.cuda.is_available() or torch.version.cuda is None:
-        return False
-    if torch.cuda.get_device_properties(torch.cuda.current_device()).major < 8:
-        return False
-    return True
-
-
-@lru_cache
-def is_torch_fx_available() -> bool:
-    return is_torch_available()
-
-
-@lru_cache
-def is_peft_available() -> bool:
-    return _is_package_available("peft")
-
-
-@lru_cache
-def is_bs4_available() -> bool:
-    return _is_package_available("bs4")
-
-
-@lru_cache
-def is_coloredlogs_available() -> bool:
-    return _is_package_available("coloredlogs")
-
-
-@lru_cache
-def is_onnx_available() -> bool:
-    return _is_package_available("onnx")
-
-
-@lru_cache
-def is_flute_available() -> bool:
-    is_available, flute_version = _is_package_available("flute", return_version=True)
-    return is_available and version.parse(flute_version) >= version.parse("0.4.1")
-
-
-@lru_cache
-def is_ftfy_available() -> bool:
-    return _is_package_available("ftfy")
-
-
-@lru_cache
-def is_g2p_en_available() -> bool:
-    return _is_package_available("g2p_en")
+    if check_device:
+        try:
+            # Will raise a RuntimeError if no MUSA is found
+            _ = torch.musa.device_count()
+            return torch.musa.is_available()
+        except RuntimeError:
+            return False
+    return hasattr(torch, "musa") and torch.musa.is_available()
 
 
 @lru_cache
@@ -575,87 +297,12 @@ def is_torch_xla_available(check_is_tpu=False, check_is_gpu=False) -> bool:
 
 
 @lru_cache
-def is_torch_neuroncore_available(check_device=True) -> bool:
-    if importlib.util.find_spec("torch_neuronx") is not None:
-        return is_torch_xla_available()
-    return False
-
-
-@lru_cache
-def is_torch_npu_available(check_device=False) -> bool:
-    "Checks if `torch_npu` is installed and potentially if a NPU is in the environment"
-    if not is_torch_available() or importlib.util.find_spec("torch_npu") is None:
-        return False
-
-    import torch
-    import torch_npu  # noqa: F401
-
-    if check_device:
-        try:
-            # Will raise a RuntimeError if no NPU is found
-            _ = torch.npu.device_count()
-            return torch.npu.is_available()
-        except RuntimeError:
-            return False
-    return hasattr(torch, "npu") and torch.npu.is_available()
-
-
-@lru_cache
-def is_torch_mlu_available() -> bool:
-    """
-    Checks if `mlu` is available via an `cndev-based` check which won't trigger the drivers and leave mlu
-    uninitialized.
-    """
-    if not is_torch_available() or importlib.util.find_spec("torch_mlu") is None:
-        return False
-
-    import torch
-    import torch_mlu  # noqa: F401
-
-    pytorch_cndev_based_mlu_check_previous_value = os.environ.get("PYTORCH_CNDEV_BASED_MLU_CHECK")
-    try:
-        os.environ["PYTORCH_CNDEV_BASED_MLU_CHECK"] = str(1)
-        available = torch.mlu.is_available()
-    finally:
-        if pytorch_cndev_based_mlu_check_previous_value:
-            os.environ["PYTORCH_CNDEV_BASED_MLU_CHECK"] = pytorch_cndev_based_mlu_check_previous_value
-        else:
-            os.environ.pop("PYTORCH_CNDEV_BASED_MLU_CHECK", None)
-
-    return available
-
-
-@lru_cache
-def is_torch_musa_available(check_device=False) -> bool:
-    "Checks if `torch_musa` is installed and potentially if a MUSA is in the environment"
-    if not is_torch_available() or importlib.util.find_spec("torch_musa") is None:
-        return False
-
-    import torch
-    import torch_musa  # noqa: F401
-
-    torch_musa_min_version = "0.33.0"
-    accelerate_available, accelerate_version = _is_package_available("accelerate", return_version=True)
-    if accelerate_available and version.parse(accelerate_version) < version.parse(torch_musa_min_version):
-        return False
-
-    if check_device:
-        try:
-            # Will raise a RuntimeError if no MUSA is found
-            _ = torch.musa.device_count()
-            return torch.musa.is_available()
-        except RuntimeError:
-            return False
-    return hasattr(torch, "musa") and torch.musa.is_available()
-
-
-@lru_cache
 def is_torch_hpu_available() -> bool:
     "Checks if `torch.hpu` is available and potentially if a HPU is in the environment"
     if (
         not is_torch_available()
-        or importlib.util.find_spec("habana_frameworks") is None
-        or importlib.util.find_spec("habana_frameworks.torch") is None
+        or not _is_package_available("habana_frameworks")
+        or not _is_package_available("habana_frameworks.torch")
     ):
         return False
 
@@ -748,44 +395,308 @@ def is_torch_hpu_available() -> bool:
 
 
 @lru_cache
-def is_habana_gaudi1() -> bool:
-    if not is_torch_hpu_available():
+def is_torch_bf16_gpu_available() -> bool:
+    if not is_torch_available():
         return False
 
-    import habana_frameworks.torch.utils.experimental as htexp
+    import torch
 
-    # Check if the device is Gaudi1 (vs Gaudi2, Gaudi3)
-    return htexp._get_device_type() == htexp.synDeviceType.synDeviceGaudi
+    if torch.cuda.is_available():
+        return torch.cuda.is_bf16_supported()
+    if is_torch_xpu_available():
+        return torch.xpu.is_bf16_supported()
+    if is_torch_hpu_available():
+        return True
+    if is_torch_npu_available():
+        return torch.npu.is_bf16_supported()
+    if is_torch_mps_available():
+        # Note: Emulated in software by Metal using fp32 for hardware without native support (like M1/M2)
+        return torch.backends.mps.is_macos_or_newer(14, 0)
+    if is_torch_musa_available():
+        return torch.musa.is_bf16_supported()
+    return False
 
 
-def is_torchdynamo_compiling() -> bool:
-    # Importing torch._dynamo causes issues with PyTorch profiler (https://github.com/pytorch/pytorch/issues/130622)
-    # hence rather relying on `torch.compiler.is_compiling()` when possible (torch>=2.3)
-    try:
-        import torch
+@lru_cache
+def is_torch_fp16_available_on_device(device: str) -> bool:
+    if not is_torch_available():
+        return False
 
-        return torch.compiler.is_compiling()
-    except Exception:
-        try:
-            import torch._dynamo as dynamo
-
-            return dynamo.is_compiling()
-        except Exception:
+    if is_torch_hpu_available():
+        if is_habana_gaudi1():
             return False
+        else:
+            return True
 
+    import torch
 
-def is_torchdynamo_exporting() -> bool:
     try:
-        import torch
+        x = torch.zeros(2, 2, dtype=torch.float16, device=device)
+        _ = x @ x
 
-        return torch.compiler.is_exporting()
-    except Exception:
-        try:
-            import torch._dynamo as dynamo
+        # At this moment, let's be strict of the check: check if `LayerNorm` is also supported on device, because many
+        # models use this layer.
+        batch, sentence_length, embedding_dim = 3, 4, 5
+        embedding = torch.randn(batch, sentence_length, embedding_dim, dtype=torch.float16, device=device)
+        layer_norm = torch.nn.LayerNorm(embedding_dim, dtype=torch.float16, device=device)
+        _ = layer_norm(embedding)
 
-            return dynamo.is_exporting()
-        except Exception:
-            return False
+    except:  # noqa: E722
+        # TODO: more precise exception matching, if possible.
+        # most backends should return `RuntimeError` however this is not guaranteed.
+        return False
+
+    return True
+
+
+@lru_cache
+def is_torch_bf16_available_on_device(device: str) -> bool:
+    if not is_torch_available():
+        return False
+
+    import torch
+
+    if device == "cuda":
+        return is_torch_bf16_gpu_available()
+
+    if device == "hpu":
+        return True
+
+    try:
+        x = torch.zeros(2, 2, dtype=torch.bfloat16, device=device)
+        _ = x @ x
+    except:  # noqa: E722
+        # TODO: more precise exception matching, if possible.
+        # most backends should return `RuntimeError` however this is not guaranteed.
+        return False
+
+    return True
+
+
+@lru_cache
+def is_torch_tf32_available() -> bool:
+    if not is_torch_available():
+        return False
+
+    import torch
+
+    if is_torch_musa_available():
+        device_info = torch.musa.get_device_properties(torch.musa.current_device())
+        if f"{device_info.major}{device_info.minor}" >= "22":
+            return True
+        return False
+    if not torch.cuda.is_available() or torch.version.cuda is None:
+        return False
+    if torch.cuda.get_device_properties(torch.cuda.current_device()).major < 8:
+        return False
+    return True
+
+
+@lru_cache
+def is_kenlm_available() -> bool:
+    return _is_package_available("kenlm")
+
+
+@lru_cache
+def is_kernels_available() -> bool:
+    return _is_package_available("kernels")
+
+
+@lru_cache
+def is_cv2_available() -> bool:
+    return _is_package_available("cv2")
+
+
+@lru_cache
+def is_yt_dlp_available() -> bool:
+    return _is_package_available("yt_dlp")
+
+
+@lru_cache
+def is_libcst_available() -> bool:
+    return _is_package_available("libcst")
+
+
+@lru_cache
+def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION) -> bool:
+    is_available, accelerate_version = _is_package_available("accelerate", return_version=True)
+    return is_available and version.parse(accelerate_version) >= version.parse(min_version)
+
+
+@lru_cache
+def is_triton_available(min_version: str = TRITON_MIN_VERSION) -> bool:
+    is_available, triton_version = _is_package_available("triton", return_version=True)
+    return is_available and version.parse(triton_version) >= version.parse(min_version)
+
+
+@lru_cache
+def is_hadamard_available() -> bool:
+    return _is_package_available("fast_hadamard_transform")
+
+
+@lru_cache
+def is_hqq_available(min_version: str = HQQ_MIN_VERSION) -> bool:
+    is_available, hqq_version = _is_package_available("hqq", return_version=True)
+    return is_available and version.parse(hqq_version) >= version.parse(min_version)
+
+
+@lru_cache
+def is_pygments_available() -> bool:
+    return _is_package_available("pygments")
+
+
+@lru_cache
+def is_torchvision_available() -> bool:
+    return _is_package_available("torchvision")
+
+
+@lru_cache
+def is_torchvision_v2_available() -> bool:
+    return is_torchvision_available()
+
+
+@lru_cache
+def is_galore_torch_available() -> bool:
+    return _is_package_available("galore_torch")
+
+
+@lru_cache
+def is_apollo_torch_available() -> bool:
+    return _is_package_available("apollo_torch")
+
+
+@lru_cache
+def is_torch_optimi_available() -> bool:
+    return _is_package_available("optimi")
+
+
+@lru_cache
+def is_lomo_available() -> bool:
+    return _is_package_available("lomo_optim")
+
+
+@lru_cache
+def is_grokadamw_available() -> bool:
+    return _is_package_available("grokadamw")
+
+
+@lru_cache
+def is_schedulefree_available(min_version: str = SCHEDULEFREE_MIN_VERSION) -> bool:
+    is_available, schedulefree_version = _is_package_available("schedulefree", return_version=True)
+    return is_available and version.parse(schedulefree_version) >= version.parse(min_version)
+
+
+@lru_cache
+def is_pyctcdecode_available() -> bool:
+    return _is_package_available("pyctcdecode")
+
+
+@lru_cache
+def is_librosa_available() -> bool:
+    return _is_package_available("librosa")
+
+
+@lru_cache
+def is_essentia_available() -> bool:
+    return _is_package_available("essentia")
+
+
+@lru_cache
+def is_pydantic_available() -> bool:
+    return _is_package_available("pydantic")
+
+
+@lru_cache
+def is_fastapi_available() -> bool:
+    return _is_package_available("fastapi")
+
+
+@lru_cache
+def is_uvicorn_available() -> bool:
+    return _is_package_available("uvicorn")
+
+
+@lru_cache
+def is_openai_available() -> bool:
+    return _is_package_available("openai")
+
+
+@lru_cache
+def is_pretty_midi_available() -> bool:
+    return _is_package_available("pretty_midi")
+
+
+@lru_cache
+def is_mamba_ssm_available() -> bool:
+    return is_torch_cuda_available() and _is_package_available("mamba_ssm")
+
+
+@lru_cache
+def is_mamba_2_ssm_available() -> bool:
+    is_available, mamba_ssm_version = _is_package_available("mamba_ssm", return_version=True)
+    return is_torch_cuda_available() and is_available and version.parse(mamba_ssm_version) >= version.parse("2.0.4")
+
+
+@lru_cache
+def is_flash_linear_attention_available():
+    is_available, fla_version = _is_package_available("fla", return_version=True)
+    return is_torch_cuda_available() and is_available and version.parse(fla_version) >= version.parse("0.2.2")
+
+
+@lru_cache
+def is_causal_conv1d_available() -> bool:
+    return is_torch_cuda_available() and _is_package_available("causal_conv1d")
+
+
+@lru_cache
+def is_xlstm_available() -> bool:
+    return is_torch_available() and _is_package_available("xlstm")
+
+
+@lru_cache
+def is_mambapy_available() -> bool:
+    return is_torch_available() and _is_package_available("mambapy")
+
+
+@lru_cache
+def is_peft_available() -> bool:
+    return _is_package_available("peft")
+
+
+@lru_cache
+def is_bs4_available() -> bool:
+    return _is_package_available("bs4")
+
+
+@lru_cache
+def is_coloredlogs_available() -> bool:
+    return _is_package_available("coloredlogs")
+
+
+@lru_cache
+def is_onnx_available() -> bool:
+    return _is_package_available("onnx")
+
+
+@lru_cache
+def is_flute_available() -> bool:
+    is_available, flute_version = _is_package_available("flute", return_version=True)
+    return is_available and version.parse(flute_version) >= version.parse("0.4.1")
+
+
+@lru_cache
+def is_ftfy_available() -> bool:
+    return _is_package_available("ftfy")
+
+
+@lru_cache
+def is_g2p_en_available() -> bool:
+    return _is_package_available("g2p_en")
+
+
+@lru_cache
+def is_torch_neuroncore_available(check_device=True) -> bool:
+    return is_torch_xla_available() and _is_package_available("torch_neuronx")
 
 
 @lru_cache
@@ -892,35 +803,6 @@ def is_ipex_available(min_version: str = "") -> bool:
 
 
 @lru_cache
-def is_torch_xpu_available(check_device: bool = False) -> bool:
-    """
-    Checks if XPU acceleration is available either via native PyTorch (>=2.6),
-    `intel_extension_for_pytorch` or via stock PyTorch (>=2.4) and potentially
-    if a XPU is in the environment.
-    """
-    if not is_torch_available():
-        return False
-
-    torch_version = version.parse(get_torch_version())
-    if torch_version.major == 2 and torch_version.minor < 6:
-        if is_ipex_available():
-            import intel_extension_for_pytorch  # noqa: F401
-        elif torch_version.major == 2 and torch_version.minor < 4:
-            return False
-
-    import torch
-
-    if check_device:
-        try:
-            # Will raise a RuntimeError if no XPU  is found
-            _ = torch.xpu.device_count()
-            return torch.xpu.is_available()
-        except RuntimeError:
-            return False
-    return hasattr(torch, "xpu") and torch.xpu.is_available()
-
-
-@lru_cache
 def is_bitsandbytes_available(check_library_only: bool = False) -> bool:
     bitsandbytes_available, bitsandbytes_version = _is_package_available("bitsandbytes", return_version=True)
     if not bitsandbytes_available:
@@ -1006,38 +888,6 @@ def is_flash_attn_greater_or_equal_2_10() -> bool:
 def is_flash_attn_greater_or_equal(library_version: str) -> bool:
     is_available, flash_attn_version = _is_package_available("flash_attn", return_version=True)
     return is_available and version.parse(flash_attn_version) >= version.parse(library_version)
-
-
-@lru_cache
-def is_torch_greater_or_equal(library_version: str, accept_dev: bool = False) -> bool:
-    """
-    Accepts a library version and returns True if the current version of the library is greater than or equal to the
-    given version. If `accept_dev` is True, it will also accept development versions (e.g. 2.7.0.dev20250320 matches
-    2.7.0).
-    """
-    if not is_torch_available():
-        return False
-
-    if accept_dev:
-        return version.parse(version.parse(get_torch_version()).base_version) >= version.parse(library_version)
-    else:
-        return version.parse(get_torch_version()) >= version.parse(library_version)
-
-
-@lru_cache
-def is_torch_less_or_equal(library_version: str, accept_dev: bool = False) -> bool:
-    """
-    Accepts a library version and returns True if the current version of the library is less than or equal to the
-    given version. If `accept_dev` is True, it will also accept development versions (e.g. 2.7.0.dev20250320 matches
-    2.7.0).
-    """
-    if not is_torch_available():
-        return False
-
-    if accept_dev:
-        return version.parse(version.parse(get_torch_version()).base_version) <= version.parse(library_version)
-    else:
-        return version.parse(get_torch_version()) <= version.parse(library_version)
 
 
 @lru_cache
@@ -1214,27 +1064,6 @@ def is_spacy_available() -> bool:
 
 
 @lru_cache
-def is_in_notebook() -> bool:
-    try:
-        # Check if we are running inside Marimo
-        if "marimo" in sys.modules:
-            return True
-        # Test adapted from tqdm.autonotebook: https://github.com/tqdm/tqdm/blob/master/tqdm/autonotebook.py
-        get_ipython = sys.modules["IPython"].get_ipython
-        if "IPKernelApp" not in get_ipython().config:
-            raise ImportError("console")
-        # Removed the lines to include VSCode
-        if "DATABRICKS_RUNTIME_VERSION" in os.environ and os.environ["DATABRICKS_RUNTIME_VERSION"] < "11.0":
-            # Databricks Runtime 11.0 and above uses IPython kernel by default so it should be compatible with Jupyter notebook
-            # https://docs.microsoft.com/en-us/azure/databricks/notebooks/ipython-kernel
-            raise ImportError("databricks")
-
-        return importlib.util.find_spec("IPython") is not None
-    except (AttributeError, ImportError, KeyError):
-        return False
-
-
-@lru_cache
 def is_pytorch_quantization_available() -> bool:
     return _is_package_available("pytorch_quantization")
 
@@ -1242,48 +1071,6 @@ def is_pytorch_quantization_available() -> bool:
 @lru_cache
 def is_pandas_available() -> bool:
     return _is_package_available("pandas")
-
-
-def is_sagemaker_dp_enabled() -> bool:
-    # Get the sagemaker specific env variable.
-    sagemaker_params = os.getenv("SM_FRAMEWORK_PARAMS", "{}")
-    try:
-        # Parse it and check the field "sagemaker_distributed_dataparallel_enabled".
-        sagemaker_params = json.loads(sagemaker_params)
-        if not sagemaker_params.get("sagemaker_distributed_dataparallel_enabled", False):
-            return False
-    except json.JSONDecodeError:
-        return False
-    # Lastly, check if the `smdistributed` module is present.
-    return _is_package_available("smdistributed")
-
-
-def is_sagemaker_mp_enabled() -> bool:
-    # Get the sagemaker specific mp parameters from smp_options variable.
-    smp_options = os.getenv("SM_HP_MP_PARAMETERS", "{}")
-    try:
-        # Parse it and check the field "partitions" is included, it is required for model parallel.
-        smp_options = json.loads(smp_options)
-        if "partitions" not in smp_options:
-            return False
-    except json.JSONDecodeError:
-        return False
-
-    # Get the sagemaker specific framework parameters from mpi_options variable.
-    mpi_options = os.getenv("SM_FRAMEWORK_PARAMS", "{}")
-    try:
-        # Parse it and check the field "sagemaker_distributed_dataparallel_enabled".
-        mpi_options = json.loads(mpi_options)
-        if not mpi_options.get("sagemaker_mpi_enabled", False):
-            return False
-    except json.JSONDecodeError:
-        return False
-    # Lastly, check if the `smdistributed` module is present.
-    return _is_package_available("smdistributed")
-
-
-def is_training_run_on_sagemaker() -> bool:
-    return "SAGEMAKER_JOB_NAME" in os.environ
 
 
 @lru_cache
@@ -1336,16 +1123,6 @@ def is_phonemizer_available() -> bool:
 @lru_cache
 def is_uroman_available() -> bool:
     return _is_package_available("uroman")
-
-
-def torch_only_method(fn: Callable) -> Callable:
-    def wrapper(*args, **kwargs):
-        if not is_torch_available():
-            raise ImportError("You need to install pytorch to use this method or class")
-        else:
-            return fn(*args, **kwargs)
-
-    return wrapper
 
 
 @lru_cache
@@ -1429,6 +1206,162 @@ def check_torch_load_is_safe() -> None:
             "when loading files with safetensors."
             "\nSee the vulnerability report here https://nvd.nist.gov/vuln/detail/CVE-2025-32434"
         )
+
+
+def torch_only_method(fn: Callable) -> Callable:
+    def wrapper(*args, **kwargs):
+        if not is_torch_available():
+            raise ImportError("You need to install pytorch to use this method or class")
+        else:
+            return fn(*args, **kwargs)
+
+    return wrapper
+
+
+def is_torch_deterministic() -> bool:
+    """
+    Check whether pytorch uses deterministic algorithms by looking if torch.set_deterministic_debug_mode() is set to 1 or 2"
+    """
+    if is_torch_available():
+        import torch
+
+        if torch.get_deterministic_debug_mode() == 0:
+            return False
+        else:
+            return True
+
+    return False
+
+
+@lru_cache
+def is_cuda_platform() -> bool:
+    if is_torch_available():
+        import torch
+
+        return torch.version.cuda is not None
+    return False
+
+
+@lru_cache
+def is_rocm_platform() -> bool:
+    if is_torch_available():
+        import torch
+
+        return torch.version.hip is not None
+    return False
+
+
+@lru_cache
+def is_habana_gaudi1() -> bool:
+    if not is_torch_hpu_available():
+        return False
+
+    import habana_frameworks.torch.utils.experimental as htexp
+
+    # Check if the device is Gaudi1 (vs Gaudi2, Gaudi3)
+    return htexp._get_device_type() == htexp.synDeviceType.synDeviceGaudi
+
+
+def is_torchdynamo_compiling() -> bool:
+    # Importing torch._dynamo causes issues with PyTorch profiler (https://github.com/pytorch/pytorch/issues/130622)
+    # hence rather relying on `torch.compiler.is_compiling()` when possible (torch>=2.3)
+    try:
+        import torch
+
+        return torch.compiler.is_compiling()
+    except Exception:
+        try:
+            import torch._dynamo as dynamo
+
+            return dynamo.is_compiling()
+        except Exception:
+            return False
+
+
+def is_torchdynamo_exporting() -> bool:
+    try:
+        import torch
+
+        return torch.compiler.is_exporting()
+    except Exception:
+        try:
+            import torch._dynamo as dynamo
+
+            return dynamo.is_exporting()
+        except Exception:
+            return False
+
+
+def is_torch_fx_proxy(x):
+    try:
+        import torch.fx
+
+        return isinstance(x, torch.fx.Proxy)
+    except Exception:
+        return False
+
+
+@lru_cache
+def is_in_notebook() -> bool:
+    try:
+        # Check if we are running inside Marimo
+        if "marimo" in sys.modules:
+            return True
+        # Test adapted from tqdm.autonotebook: https://github.com/tqdm/tqdm/blob/master/tqdm/autonotebook.py
+        get_ipython = sys.modules["IPython"].get_ipython
+        if "IPKernelApp" not in get_ipython().config:
+            raise ImportError("console")
+        # Removed the lines to include VSCode
+        if "DATABRICKS_RUNTIME_VERSION" in os.environ and os.environ["DATABRICKS_RUNTIME_VERSION"] < "11.0":
+            # Databricks Runtime 11.0 and above uses IPython kernel by default so it should be compatible with Jupyter notebook
+            # https://docs.microsoft.com/en-us/azure/databricks/notebooks/ipython-kernel
+            raise ImportError("databricks")
+
+        return importlib.util.find_spec("IPython") is not None
+    except (AttributeError, ImportError, KeyError):
+        return False
+
+
+def is_sagemaker_dp_enabled() -> bool:
+    # Get the sagemaker specific env variable.
+    sagemaker_params = os.getenv("SM_FRAMEWORK_PARAMS", "{}")
+    try:
+        # Parse it and check the field "sagemaker_distributed_dataparallel_enabled".
+        sagemaker_params = json.loads(sagemaker_params)
+        if not sagemaker_params.get("sagemaker_distributed_dataparallel_enabled", False):
+            return False
+    except json.JSONDecodeError:
+        return False
+    # Lastly, check if the `smdistributed` module is present.
+    return _is_package_available("smdistributed")
+
+
+def is_sagemaker_mp_enabled() -> bool:
+    # Get the sagemaker specific mp parameters from smp_options variable.
+    smp_options = os.getenv("SM_HP_MP_PARAMETERS", "{}")
+    try:
+        # Parse it and check the field "partitions" is included, it is required for model parallel.
+        smp_options = json.loads(smp_options)
+        if "partitions" not in smp_options:
+            return False
+    except json.JSONDecodeError:
+        return False
+
+    # Get the sagemaker specific framework parameters from mpi_options variable.
+    mpi_options = os.getenv("SM_FRAMEWORK_PARAMS", "{}")
+    try:
+        # Parse it and check the field "sagemaker_distributed_dataparallel_enabled".
+        mpi_options = json.loads(mpi_options)
+        if not mpi_options.get("sagemaker_mpi_enabled", False):
+            return False
+    except json.JSONDecodeError:
+        return False
+    # Lastly, check if the `smdistributed` module is present.
+    return _is_package_available("smdistributed")
+
+
+def is_training_run_on_sagemaker() -> bool:
+    return "SAGEMAKER_JOB_NAME" in os.environ
 
 
 # docstyle-ignore
@@ -1869,14 +1802,6 @@ class DummyObject(type):
         if (key.startswith("_") and key != "_from_config") or key == "is_dummy" or key == "mro" or key == "call":
             return super().__getattribute__(key)
         requires_backends(cls, cls._backends)
-
-
-def is_torch_fx_proxy(x):
-    if is_torch_fx_available():
-        import torch.fx
-
-        return isinstance(x, torch.fx.Proxy)
-    return False
 
 
 BACKENDS_T = frozenset[str]
