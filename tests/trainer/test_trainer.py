@@ -5990,7 +5990,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
                     mock.optim.AdamW,
                     default_adam_kwargs,
                 )
-                
+
     @require_bitsandbytes
     def test_bnb_paged_adam8bit_alias(self):
         mock = Mock()
@@ -6006,7 +6006,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
                     mock.optim.AdamW,
                     default_adam_kwargs,
                 )
-                
+
     @require_bitsandbytes
     def test_bnb_paged_adam(self):
         mock = Mock()
