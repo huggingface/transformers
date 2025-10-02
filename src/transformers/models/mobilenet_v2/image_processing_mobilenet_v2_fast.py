@@ -17,6 +17,7 @@
 from typing import Optional, Union
 
 import torch
+from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -38,14 +39,7 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_v2_available,
 )
-
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
 
 
 class MobileNetV2FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
@@ -134,9 +128,7 @@ class MobileNetV2ImageProcessorFast(BaseImageProcessorFast):
                     "do_normalize": False,
                     "do_rescale": False,
                     # Nearest interpolation is used for segmentation maps instead of BILINEAR.
-                    "interpolation": F.InterpolationMode.NEAREST_EXACT
-                    if is_torchvision_v2_available()
-                    else F.InterpolationMode.NEAREST,
+                    "interpolation": F.InterpolationMode.NEAREST_EXACT,
                 }
             )
 

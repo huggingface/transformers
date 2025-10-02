@@ -227,6 +227,28 @@ class VitPoseBackboneAttention(nn.Module):
         return output
 
 
+class VitPoseNaiveMoe(nn.ModuleList):
+    def __init__(self, config):
+        super().__init__()
+        self.num_experts = config.num_experts
+        self.part_features = config.part_features
+
+        hidden_features = int(config.hidden_size * config.mlp_ratio)
+        part_features = config.part_features
+
+        for _ in range(self.num_experts):
+            self.append(nn.Linear(hidden_features, part_features))
+
+    def forward(self, hidden_state, indices):
+        expert_hidden_state = torch.zeros_like(hidden_state[:, :, -self.part_features :])
+        for i in range(self.num_experts):
+            selected_index = indices == i
+            current_hidden_state = self[i](hidden_state) * selected_index
+            expert_hidden_state = expert_hidden_state + current_hidden_state
+
+        return expert_hidden_state
+
+
 class VitPoseBackboneMoeMLP(nn.Module):
     def __init__(self, config: VitPoseBackboneConfig):
         super().__init__()
@@ -241,26 +263,17 @@ class VitPoseBackboneMoeMLP(nn.Module):
         self.fc1 = nn.Linear(in_features, hidden_features)
         self.act = ACT2FN[config.hidden_act]
         self.fc2 = nn.Linear(hidden_features, out_features - part_features)
-        self.drop = nn.Dropout(config.hidden_dropout_prob)
 
         self.num_experts = num_experts
-        experts = [nn.Linear(hidden_features, part_features) for _ in range(num_experts)]
-        self.experts = nn.ModuleList(experts)
+        self.experts = VitPoseNaiveMoe(config)
 
     def forward(self, hidden_state: torch.Tensor, indices: torch.Tensor) -> torch.Tensor:
-        expert_hidden_state = torch.zeros_like(hidden_state[:, :, -self.part_features :])
-
         hidden_state = self.fc1(hidden_state)
         hidden_state = self.act(hidden_state)
         shared_hidden_state = self.fc2(hidden_state)
         indices = indices.view(-1, 1, 1)
 
-        # to support ddp training
-        for i in range(self.num_experts):
-            selected_index = indices == i
-            current_hidden_state = self.experts[i](hidden_state) * selected_index
-            expert_hidden_state = expert_hidden_state + current_hidden_state
-
+        expert_hidden_state = self.experts(hidden_state, indices)
         hidden_state = torch.cat([shared_hidden_state, expert_hidden_state], dim=-1)
 
         return hidden_state

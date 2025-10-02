@@ -147,7 +147,6 @@ class Gemma3nAudioModelTest(ModelTesterMixin, unittest.TestCase):
     is_generative = False
     _is_stateful = True
     main_input_name = "audio_mel"
-    test_initialization = False
 
     def setUp(self):
         self.model_tester = Gemma3nAudioModelTester(self)
@@ -448,7 +447,7 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
 
-            if config.get_text_config(decoder=True).is_encoder_decoder:
+            if config.is_encoder_decoder:
                 self.skipTest(reason="This model is encoder-decoder and has Encoder-Decoder Cache")
 
             model = model_class(config).to(torch_device).eval()
@@ -509,7 +508,7 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
             set_config_for_less_flaky_test(config)
             main_input = inputs_dict[model_class.main_input_name]
 
-            if config.get_text_config(decoder=True).is_encoder_decoder:
+            if config.is_encoder_decoder:
                 self.skipTest(reason="This model is encoder-decoder and has Encoder-Decoder Cache")
 
             config.is_decoder = True
@@ -698,10 +697,6 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
 
     @unittest.skip(reason="SiglipVisionModel (vision backbone) does not support standalone training")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="Siglip (vision backbone) uses a non-standard initialization scheme")
-    def test_initialization(self):
         pass
 
     @unittest.skip(

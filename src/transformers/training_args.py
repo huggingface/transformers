@@ -25,7 +25,6 @@ from typing import Any, Optional, Union
 
 from .debug_utils import DebugOption
 from .trainer_utils import (
-    EvaluationStrategy,
     FSDPOption,
     HubStrategy,
     IntervalStrategy,
@@ -37,7 +36,6 @@ from .utils import (
     ExplicitEnum,
     is_accelerate_available,
     is_ipex_available,
-    is_safetensors_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_torch_available,
@@ -391,12 +389,12 @@ class TrainingArguments:
             Whether or not to use PyTorch jit trace for inference.
         bf16 (`bool`, *optional*, defaults to `False`):
             Whether to use bf16 16-bit (mixed) precision training instead of 32-bit training. Requires Ampere or higher
-            NVIDIA architecture or Intel XPU or using CPU (use_cpu) or Ascend NPU. This is an experimental API and it may change.
+            NVIDIA architecture or Intel XPU or using CPU (use_cpu) or Ascend NPU.
         fp16 (`bool`, *optional*, defaults to `False`):
             Whether to use fp16 16-bit (mixed) precision training instead of 32-bit training.
         bf16_full_eval (`bool`, *optional*, defaults to `False`):
             Whether to use full bfloat16 evaluation instead of 32-bit. This will be faster and save memory but can harm
-            metric values. This is an experimental API and it may change.
+            metric values.
         fp16_full_eval (`bool`, *optional*, defaults to `False`):
             Whether to use full float16 evaluation instead of 32-bit. This will be faster and save memory but can harm
             metric values.
@@ -476,7 +474,7 @@ class TrainingArguments:
             When resuming training, whether or not to skip the epochs and batches to get the data loading at the same
             stage as in the previous training. If set to `True`, the training will begin faster (as that skipping step
             can take a long time) but will not yield the same results as the interrupted training would have.
-        fsdp (`bool`, `str` or list of [`~trainer_utils.FSDPOption`], *optional*, defaults to `''`):
+        fsdp (`bool`, `str` or list of [`~trainer_utils.FSDPOption`], *optional*, defaults to `[]`):
             Use PyTorch Distributed Parallel Training (in distributed training only).
 
             A list of options along the following:
@@ -618,6 +616,14 @@ class TrainingArguments:
             `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"dvclive"`, `"flyte"`, `"mlflow"`, `"neptune"`,
             `"swanlab"`, `"tensorboard"`, `"trackio"` and `"wandb"`. Use `"all"` to report to all integrations
             installed, `"none"` for no integrations.
+        project (`str`, *optional*, defaults to `"huggingface"`):
+            The name of the project to use for logging. Currently, only used by Trackio.
+        trackio_space_id (`str` or `None`, *optional*, defaults to `"trackio"`):
+            The Hugging Face Space ID to deploy to when using Trackio. Should be a complete Space name like
+            `'username/reponame'` or `'orgname/reponame' `, or just `'reponame'` in which case the Space will be
+            created in the currently-logged-in Hugging Face user's namespace. If `None`, will log to a local directory.
+            Note that this Space will be public unless you set `hub_private_repo=True` or your organization's default
+            is to create private Spaces."
         ddp_find_unused_parameters (`bool`, *optional*):
             When using distributed training, the value of the flag `find_unused_parameters` passed to
             `DistributedDataParallel`. Will default to `False` if gradient checkpointing is used, `True` otherwise.
@@ -682,7 +688,9 @@ class TrainingArguments:
             The token to use to push the model to the Hub. Will default to the token in the cache folder obtained with
             `hf auth login`.
         hub_private_repo (`bool`, *optional*):
-            Whether to make the repo private. If `None` (default), the repo will be public unless the organization's default is private. This value is ignored if the repo already exists.
+            Whether to make the repo private. If `None` (default), the repo will be public unless the organization's
+            default is private. This value is ignored if the repo already exists. If reporting to Trackio with
+            deployment to Hugging Face Spaces enabled, the same logic determines whether the Space is private.
         hub_always_push (`bool`, *optional*, defaults to `False`):
             Unless this is `True`, the `Trainer` will skip pushing a checkpoint when the previous push is not finished.
         hub_revision (`str`, *optional*):
@@ -738,16 +746,8 @@ class TrainingArguments:
             Refer to the PyTorch doc for possible values and note that they may change across PyTorch versions.
 
             This flag is experimental and subject to change in future releases.
-        include_tokens_per_second (`bool`, *optional*):
-            Whether or not to compute the number of tokens per second per device for training speed metrics.
-
-            This will iterate over the entire training dataloader once beforehand,
-
-            and will slow down the entire process.
-
-        include_num_input_tokens_seen (`bool`, *optional*):
-            Whether or not to track the number of input tokens seen throughout training.
-
+        include_num_input_tokens_seen (`Optional[Union[str, bool]]`, *optional*, defaults to "no"):
+            Whether to track the number of input tokens seen. Must be one of ["all", "non_padding", "no"] or a boolean value which map to "all" or "no".
             May be slower in distributed training as gather operations must be called.
 
         neftune_noise_alpha (`Optional[float]`):
@@ -761,7 +761,7 @@ class TrainingArguments:
             See GaLore implementation (https://github.com/jiaweizzhao/GaLore) and APOLLO implementation (https://github.com/zhuhanqing/APOLLO) for more details.
             You need to make sure to pass a valid GaLore or APOLLO optimizer, e.g., one of: "apollo_adamw", "galore_adamw", "galore_adamw_8bit", "galore_adafactor" and make sure that the target modules are `nn.Linear` modules only.
 
-        batch_eval_metrics (`Optional[bool]`, defaults to `False`):
+        batch_eval_metrics (`bool`, *optional*, defaults to `False`):
             If set to `True`, evaluation will call compute_metrics at the end of each batch to accumulate statistics
             rather than saving all eval logits in memory. When set to `True`, you must pass a compute_metrics function
             that takes a boolean argument `compute_result`, which when passed `True`, will trigger the final global
@@ -845,7 +845,7 @@ class TrainingArguments:
         metadata={"help": "Number of predictions steps to accumulate before moving the tensors to the CPU."},
     )
 
-    eval_delay: Optional[float] = field(
+    eval_delay: float = field(
         default=0,
         metadata={
             "help": (
@@ -880,7 +880,7 @@ class TrainingArguments:
         default="linear",
         metadata={"help": "The scheduler type to use."},
     )
-    lr_scheduler_kwargs: Optional[Union[dict[str, Any], str]] = field(
+    lr_scheduler_kwargs: Union[dict[str, Any], str] = field(
         default_factory=dict,
         metadata={
             "help": (
@@ -963,7 +963,7 @@ class TrainingArguments:
             )
         },
     )
-    save_safetensors: Optional[bool] = field(
+    save_safetensors: bool = field(
         default=True,
         metadata={
             "help": "Use safetensors saving and loading for state dicts instead of default torch.load and torch.save."
@@ -1117,13 +1117,13 @@ class TrainingArguments:
         default=None, metadata={"help": "Whether or not to disable the tqdm progress bars."}
     )
 
-    remove_unused_columns: Optional[bool] = field(
+    remove_unused_columns: bool = field(
         default=True, metadata={"help": "Remove columns not required by the model when using an nlp.Dataset."}
     )
     label_names: Optional[list[str]] = field(
         default=None, metadata={"help": "The list of keys in your dictionary of inputs that correspond to the labels."}
     )
-    load_best_model_at_end: Optional[bool] = field(
+    load_best_model_at_end: bool = field(
         default=False,
         metadata={
             "help": (
@@ -1147,8 +1147,8 @@ class TrainingArguments:
             )
         },
     )
-    fsdp: Optional[Union[list[FSDPOption], str]] = field(
-        default="",
+    fsdp: Union[list[FSDPOption], str, bool] = field(
+        default_factory=list,
         metadata={
             "help": (
                 "Whether or not to use PyTorch Fully Sharded Data Parallel (FSDP) training (in distributed training"
@@ -1209,12 +1209,26 @@ class TrainingArguments:
         default=False,
         metadata={"help": "Whether or not to group samples of roughly the same length together when batching."},
     )
-    length_column_name: Optional[str] = field(
+    length_column_name: str = field(
         default="length",
         metadata={"help": "Column name with precomputed lengths to use when grouping by length."},
     )
     report_to: Union[None, str, list[str]] = field(
         default=None, metadata={"help": "The list of integrations to report the results and logs to."}
+    )
+    project: str = field(
+        default="huggingface",
+        metadata={"help": "The name of the project to use for logging. Currenly, only used by Trackio."},
+    )
+    trackio_space_id: Optional[str] = field(
+        default="trackio",
+        metadata={
+            "help": "The Hugging Face Space ID to deploy to when using Trackio. Should be a complete Space name like "
+            "'username/reponame' or 'orgname/reponame', or just 'reponame' in which case the Space will be created in "
+            "the currently-logged-in Hugging Face user's namespace. If `None`, will log to a local directory. Note "
+            "that this Space will be public unless you set `hub_private_repo=True` or your organization's "
+            "default is to create private Spaces."
+        },
     )
     ddp_find_unused_parameters: Optional[bool] = field(
         default=None,
@@ -1255,9 +1269,6 @@ class TrainingArguments:
     skip_memory_metrics: bool = field(
         default=True, metadata={"help": "Whether or not to skip adding of memory profiler reports to metrics."}
     )
-    use_legacy_prediction_loop: bool = field(
-        default=False, metadata={"help": "Whether or not to use the legacy prediction_loop in the Trainer."}
-    )
     push_to_hub: bool = field(
         default=False, metadata={"help": "Whether or not to upload the trained model to the model hub after training."}
     )
@@ -1276,7 +1287,10 @@ class TrainingArguments:
     hub_private_repo: Optional[bool] = field(
         default=None,
         metadata={
-            "help": "Whether to make the repo private. If `None` (default), the repo will be public unless the organization's default is private. This value is ignored if the repo already exists."
+            "help": "Whether to make the repo private. If `None` (default), the repo will be public unless the "
+            "organization's default is private. This value is ignored if the repo already exists. If reporting to "
+            "Trackio with deployment to Hugging Face Spaces enabled, the same logic determines whether the Space is "
+            "private."
         },
     )
     hub_always_push: bool = field(
@@ -1338,7 +1352,7 @@ class TrainingArguments:
             )
         },
     )
-    ray_scope: Optional[str] = field(
+    ray_scope: str = field(
         default="last",
         metadata={
             "help": (
@@ -1374,17 +1388,18 @@ class TrainingArguments:
     )
 
     include_tokens_per_second: Optional[bool] = field(
-        default=False,
-        metadata={"help": "If set to `True`, the speed metrics will include `tgs` (tokens per second per device)."},
+        default=None,
+        metadata={
+            "help": "This arg is deprecated and will be removed in v5 , use `include_num_input_tokens_seen` instead."
+        },
     )
 
-    include_num_input_tokens_seen: Optional[Union[str, bool]] = field(
-        default=False,
+    include_num_input_tokens_seen: Union[str, bool] = field(
+        default="no",
         metadata={
             "help": (
                 "Whether to track the number of input tokens seen. "
-                "Can be `'all'` to count all tokens, `'non_padding'` to count only non-padding tokens, "
-                "or a boolean (`True` maps to `'all'`, `False` to `'no'`)."
+                "Must be one of [`all`, `non_padding`, `no`] or a boolean value which map to `all` or `no`"
             )
         },
     )
@@ -1415,7 +1430,7 @@ class TrainingArguments:
         },
     )
 
-    use_liger_kernel: Optional[bool] = field(
+    use_liger_kernel: bool = field(
         default=False,
         metadata={"help": "Whether or not to enable the Liger Kernel for model training."},
     )
@@ -1433,14 +1448,14 @@ class TrainingArguments:
         },
     )
 
-    eval_use_gather_object: Optional[bool] = field(
+    eval_use_gather_object: bool = field(
         default=False,
         metadata={
             "help": "Whether to run recursively gather object in a nested list/tuple/dictionary of objects from all devices."
         },
     )
 
-    average_tokens_across_devices: Optional[bool] = field(
+    average_tokens_across_devices: bool = field(
         default=True,
         metadata={
             "help": "Whether or not to average tokens across devices. If enabled, will use all_reduce to "
@@ -1481,15 +1496,6 @@ class TrainingArguments:
 
         if self.disable_tqdm is None:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
-
-        if isinstance(self.eval_strategy, EvaluationStrategy):
-            warnings.warn(
-                "using `EvaluationStrategy` for `eval_strategy` is deprecated and will be removed in version 5"
-                " of 🤗 Transformers. Use `IntervalStrategy` instead",
-                FutureWarning,
-            )
-            # Go back to the underlying string or we won't be able to instantiate `IntervalStrategy` on it.
-            self.eval_strategy = self.eval_strategy.value
 
         self.eval_strategy = IntervalStrategy(self.eval_strategy)
         self.logging_strategy = IntervalStrategy(self.logging_strategy)
@@ -1562,10 +1568,7 @@ class TrainingArguments:
                         f"steps, but found {self.save_steps}, which is not a round multiple of {self.eval_steps}."
                     )
 
-        safetensors_available = is_safetensors_available()
-        if self.save_safetensors and not safetensors_available:
-            raise ValueError(f"--save_safetensors={self.save_safetensors} requires safetensors to be installed!")
-        if not self.save_safetensors and safetensors_available:
+        if not self.save_safetensors:
             logger.info(
                 f"Found safetensors installation, but --save_safetensors={self.save_safetensors}. "
                 f"Safetensors should be a preferred weights saving format due to security and performance reasons. "
@@ -1689,8 +1692,13 @@ class TrainingArguments:
                         torch.backends.cudnn.allow_tf32 = False
                 # no need to assert on else
 
-        # NOTE: Mixed precision environment variable setting moved to after DeepSpeed processing
-        # to ensure DeepSpeed config can override TrainingArguments defaults
+        # if training args is specified, it will override the one specified in the accelerate config
+        mixed_precision_dtype = os.environ.get("ACCELERATE_MIXED_PRECISION", "no")
+        if self.fp16:
+            mixed_precision_dtype = "fp16"
+        elif self.bf16:
+            mixed_precision_dtype = "bf16"
+        os.environ["ACCELERATE_MIXED_PRECISION"] = mixed_precision_dtype
 
         if self.report_to is None:
             logger.info(
@@ -1877,15 +1885,6 @@ class TrainingArguments:
             self.deepspeed_plugin.set_mixed_precision(mixed_precision)
             self.deepspeed_plugin.set_deepspeed_weakref()
 
-        # Set mixed precision environment variable after DeepSpeed processing
-        # This ensures DeepSpeed config overrides have been applied to fp16/bf16 settings
-        mixed_precision_dtype = os.environ.get("ACCELERATE_MIXED_PRECISION", "no")
-        if self.fp16:
-            mixed_precision_dtype = "fp16"
-        elif self.bf16:
-            mixed_precision_dtype = "bf16"
-        os.environ["ACCELERATE_MIXED_PRECISION"] = mixed_precision_dtype
-
         if self.use_cpu:
             self.dataloader_pin_memory = False
 
@@ -1908,10 +1907,14 @@ class TrainingArguments:
                     "This is not supported and we recommend you to update your version."
                 )
 
-        if self.include_num_input_tokens_seen is True:
-            self.include_num_input_tokens_seen = "all"
-        elif self.include_num_input_tokens_seen is False:
-            self.include_num_input_tokens_seen = "no"
+        if self.include_tokens_per_second is not None:
+            logger.warning(
+                "include_tokens_per_second is deprecated and will be removed in v5. Use `include_num_input_tokens_seen` instead. "
+            )
+            self.include_num_input_tokens_seen = self.include_tokens_per_second
+
+        if isinstance(self.include_num_input_tokens_seen, bool):
+            self.include_num_input_tokens_seen = "all" if self.include_num_input_tokens_seen else "no"
 
     def __str__(self):
         self_as_dict = asdict(self)

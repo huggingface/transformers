@@ -75,6 +75,7 @@ from ..qwen3_moe.configuration_qwen3_moe import Qwen3MoeConfig
 from ..qwen3_moe.modeling_qwen3_moe import (
     Qwen3MoeAttention,
     Qwen3MoeDecoderLayer,
+    Qwen3MoeExperts,
     Qwen3MoeForCausalLM,
     Qwen3MoeMLP,
     Qwen3MoePreTrainedModel,
@@ -1196,8 +1197,18 @@ class Qwen3OmniMoeThinkerTextRotaryEmbedding(Qwen3VLMoeTextRotaryEmbedding):
     pass
 
 
+class Qwen3OmniMoeThinkerTextExperts(Qwen3MoeExperts):
+    """
+    ModuleList of experts.
+    """
+
+    def __init__(self, config: Qwen3OmniMoeThinkerConfig):
+        super().__init__(config)
+
+
 class Qwen3OmniMoeThinkerTextSparseMoeBlock(Qwen3MoeSparseMoeBlock):
-    pass
+    def __init__(self, config: Qwen3OmniMoeThinkerConfig):
+        super().__init__(config)
 
 
 class Qwen3OmniMoeThinkerTextAttention(Qwen3MoeAttention):
@@ -2414,7 +2425,7 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
                     self.config.talker_config.text_config.vocab_size - 1024,
                     self.config.talker_config.text_config.vocab_size,
                 )
-                if i not in (self.config.talker_config.codec_eos_token_id,)
+                if i != self.config.talker_config.codec_eos_token_id
             ]  # Suppress additional special tokens, should not be predicted
             talker_kwargs = {
                 "max_new_tokens": talker_max_new_tokens,

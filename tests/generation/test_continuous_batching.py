@@ -20,6 +20,7 @@ from parameterized import parameterized
 
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 from transformers.generation.continuous_batching.cache import group_layers_by_attn_type
+from transformers.generation.continuous_batching.continuous_api import build_attention_mask
 from transformers.testing_utils import Expectations, require_kernels, require_torch_gpu, slow
 
 
@@ -87,6 +88,48 @@ class ContinuousBatchingTest(unittest.TestCase):
                     expected_group_type,
                     f"Test failed for: {layer_types_str = }, {sliding_window = }, {group_types = }",
                 )
+
+    @parameterized.expand(
+        [
+            ([0, 4], [0, 4], 1, ["1000", "1100", "1110", "1111"]),
+            ([0, 4], [0, 4], 2, ["1000", "1100", "0110", "0011"]),
+            ([0, 3], [0, 5], 1, ["11100", "11110", "11111"]),
+            ([0, 3], [0, 5], 3, ["11100", "01110", "00111"]),
+            ([0, 3, 6], [0, 3, 6], 1, ["100000", "110000", "111000", "000100", "000110", "000111"]),
+            ([0, 3, 6], [0, 3, 6], 2, ["100000", "110000", "011000", "000100", "000110", "000011"]),
+        ]
+    )
+    def test_attention_mask(
+        self,
+        cumulative_seqlens_q: list[int],
+        cumulative_seqlens_k: list[int],
+        sliding_window: int,  # the sliding window size, 1 means no sliding window
+        str_expected_mask: list[str],  # the attention mask, broken down by line as a string of 0s and 1s
+    ) -> None:
+        # Build expected mask
+        minus_inf = torch.finfo(torch.float32).min
+        expected_mask = torch.empty((cumulative_seqlens_q[-1], cumulative_seqlens_k[-1]), dtype=torch.float32)
+        for i, line in enumerate(str_expected_mask):
+            expected_mask[i, :] = torch.tensor([minus_inf if c == "0" else 0 for c in line])
+        # Build actual mask
+        actual_mask = torch.full_like(expected_mask, minus_inf)  # function modifies in place
+        build_attention_mask(
+            actual_mask, torch.tensor(cumulative_seqlens_q), torch.tensor(cumulative_seqlens_k), sliding_window
+        )
+        # Check that the actual mask matches the expected mask
+        matches = (expected_mask == actual_mask).all()
+        # If it doesn't match, print the masks in a readable form and fail the test
+        if not matches:
+            str_mask = [
+                "".join("1" if x == 0 else "0" for x in token_attn_vector) for token_attn_vector in actual_mask
+            ]
+            str_mask = "\n".join(str_mask)
+            str_expected_mask = "\n".join(str_expected_mask)
+            self.fail(
+                f"Test failed for: {cumulative_seqlens_q = }, {cumulative_seqlens_k = }, {sliding_window = }\n"
+                f"Expected mask:\n{str_expected_mask}\n"
+                f"Actual mask:\n{str_mask}"
+            )
 
     def _continuous_batching_parity(
         self, model_id: str, attn_implementation: str, expected_outputs: dict[str, str]

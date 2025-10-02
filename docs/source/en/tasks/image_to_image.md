@@ -21,6 +21,7 @@ rendered properly in your Markdown viewer.
 Image-to-Image task is the task where an application receives an image and outputs another image. This has various subtasks, including image enhancement (super resolution, low light enhancement, deraining and so on), image inpainting, and more.
 
 This guide will show you how to:
+
 - Use an image-to-image pipeline for super resolution task,
 - Run image-to-image models for same task without a pipeline.
 
