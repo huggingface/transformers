@@ -74,9 +74,7 @@ def add_to_mapping(layer_name, device, repo_name, mode, compatible_mapping):
 
 class KernelConfig(PushToHubMixin):
     """
-    Kernel configuration class.
-    Args:
-        kernel_mapping: The kernel mapping to register.
+    Kernel configuration class. This class is used to configure the kernel mapping for a model.
     """
 
     def __init__(self, kernel_mapping={}):
