@@ -90,7 +90,9 @@ class DeepseekV3RotaryEmbedding(nn.Module):
 
 
 class DeepseekV3MLP(nn.Module):
-    def __init__(self, config, hidden_size=None, intermediate_size=None):
+    def __init__(
+        self, config: DeepseekV3Config, hidden_size: Optional[int] = None, intermediate_size: Optional[int] = None
+    ):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size if hidden_size is None else hidden_size
@@ -107,7 +109,7 @@ class DeepseekV3MLP(nn.Module):
 
 
 class DeepseekV3TopkRouter(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: DeepseekV3Config):
         super().__init__()
         self.config = config
         self.top_k = config.num_experts_per_tok
@@ -121,7 +123,7 @@ class DeepseekV3TopkRouter(nn.Module):
         self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts))
 
     @torch.no_grad()
-    def get_topk_indices(self, scores):
+    def get_topk_indices(self, scores: torch.Tensor):
         scores_for_choice = scores.view(-1, self.n_routed_experts) + self.e_score_correction_bias.unsqueeze(0)
         group_scores = (
             scores_for_choice.view(-1, self.n_group, self.n_routed_experts // self.n_group)
@@ -140,7 +142,7 @@ class DeepseekV3TopkRouter(nn.Module):
         topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
         return topk_indices
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor):
         hidden_states = hidden_states.view(-1, self.config.hidden_size)
         router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
         scores = router_logits.sigmoid()
@@ -158,7 +160,7 @@ class DeepseekV3MoE(nn.Module):
     A mixed expert module containing shared experts.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: DeepseekV3Config):
         super().__init__()
         self.config = config
         self.experts = nn.ModuleList(
@@ -171,34 +173,57 @@ class DeepseekV3MoE(nn.Module):
         self.shared_experts = DeepseekV3MLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def get_experts_weights(self, subname: str) -> torch.Tensor:
+        """
+        Arguments:
+        - subname: projection name (gate_proj, up_proj, down_proj)
+        Returns:
+        - Stack all expert projection weights once (no bias since bias=False).
+          Shapes: Wg, Wu -> (E, I, H) ;    Wd -> (E, H, I)
+        """
+        has_hooks = hasattr(self.experts, "_hf_hook")
+        W_l = []
+        for e in self.experts:
+            submodule = getattr(e, subname)
+            if has_hooks:
+                submodule._hf_hook.pre_forward(submodule)
+            W_l.append(submodule.weight)
+            if has_hooks:
+                submodule._hf_hook.post_forward(submodule, None)
+
+        return torch.stack(W_l, dim=0)
 
     def moe(self, hidden_states: torch.Tensor, topk_indices: torch.Tensor, topk_weights: torch.Tensor):
-        r"""
-        CALL FOR CONTRIBUTION! I don't have time to optimise this right now, but expert weights need to be fused
-        to not have to do a loop here (deepseek has 256 experts soooo yeah).
         """
-        final_hidden_states = torch.zeros_like(hidden_states, dtype=topk_weights.dtype)
-        expert_mask = torch.nn.functional.one_hot(topk_indices, num_classes=len(self.experts))
-        expert_mask = expert_mask.permute(2, 0, 1)
+        Vectorized MoE: no Python loop, no change to __init__.
+        Arguments:
+        - hidden_states: (N, H)
+        - topk_indices:  (N, K)  indices of the K selected experts per token
+        - topk_weights:  (N, K)  gating weights for those experts
+        Returns:
+        - final_hidden_states: (N, H)
+        """
+        # Shapes: Wg, Wu -> (E, I, H) ;    Wd -> (E, H, I)
+        Wg = self.get_experts_weights("gate_proj")
+        Wu = self.get_experts_weights("up_proj")
+        Wd = self.get_experts_weights("down_proj")
 
-        for expert_idx in range(len(self.experts)):
-            expert = self.experts[expert_idx]
-            mask = expert_mask[expert_idx]
-            token_indices, weight_indices = torch.where(mask)
+        # Shape (E, N, I)
+        gate_raw = torch.matmul(hidden_states, Wg.transpose(-2, -1))
+        up_raw = torch.matmul(hidden_states, Wu.transpose(-2, -1))
+        # Shape (E, N, I)
+        fused = self.act_fn(gate_raw) * up_raw
+        # Shape (E, N, H)
+        expert_out = torch.matmul(fused, Wd.transpose(-2, -1))
+        # Shape (K, N, H)
+        new_indices = topk_indices.unsqueeze(-1).expand((-1, -1, hidden_states.size(1))).transpose(0, 1)
+        # Shape (N, H)
+        final = (expert_out.gather(0, new_indices) * topk_weights.transpose(0, 1).unsqueeze(-1)).sum(dim=0)
+        return final.type(hidden_states.dtype)
 
-            if token_indices.numel() > 0:
-                expert_weights = topk_weights[token_indices, weight_indices]
-                expert_input = hidden_states[token_indices]
-                expert_output = expert(expert_input)
-                weighted_output = expert_output * expert_weights.unsqueeze(-1)
-                final_hidden_states.index_add_(0, token_indices, weighted_output)
-
-        # in original deepseek, the output of the experts are gathered once we leave this module
-        # thus the moe module is itelsf an IsolatedParallel module
-        # and all expert are "local" meaning we shard but we don't gather
-        return final_hidden_states.type(hidden_states.dtype)
-
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor):
         residuals = hidden_states
         orig_shape = hidden_states.shape
         topk_indices, topk_weights = self.gate(hidden_states)
@@ -280,7 +305,14 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+def apply_rotary_pos_emb_interleave(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    cos: torch.Tensor,
+    sin: torch.Tensor,
+    position_ids: Optional[torch.Tensor] = None,
+    unsqueeze_dim: Optional[int] = 1,
+) -> tuple[torch.Tensor, torch.Tensor]:
     r"""
     TODO let's just use the original freqcis computation to not have the view
     transpose + reshape! This is not optimized!
