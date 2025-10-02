@@ -298,25 +298,6 @@ class Qwen3VLMoeTextRMSNorm(Qwen3MoeRMSNorm):
     pass
 
 
-class Qwen3VLMoeTextRouter(nn.Linear):
-    def __init__(self, config):
-        super().__init__(config.hidden_size, config.num_experts, bias=False)
-        self.hidden_size = config.hidden_size
-        self.top_k = config.num_experts_per_tok
-        # since all the models use norm_topk_prob, we don't need to have a extra check for it
-        # self.norm_topk_prob = config.norm_topk_prob
-
-    def forward(self, hidden_states):
-        hidden_states = hidden_states.reshape(-1, self.hidden_size)
-        router_logits = super().forward(hidden_states)
-        routing_weights = torch.nn.functional.softmax(router_logits, dim=-1, dtype=torch.float)
-        routing_weights, router_indices = torch.topk(routing_weights, self.top_k, dim=-1)
-        routing_weights = routing_weights / routing_weights.sum(dim=-1, keepdim=True)
-        routing_weights = routing_weights.to(hidden_states.dtype)
-        router_weights = torch.zeros_like(router_logits).scatter_(1, router_indices, routing_weights)
-        return router_weights, router_logits, router_indices
-
-
 class Qwen3VLMoeTextExperts(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -384,11 +365,20 @@ class Qwen3VLMoeTextSparseMoeBlock(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.num_experts = config.num_experts
-        self.gate = Qwen3VLMoeTextRouter(config)
+        self.top_k = config.num_experts_per_tok
+        self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
         self.experts = Qwen3VLMoeTextExperts(config)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        router_weights, router_logits, router_indices = self.gate(hidden_states)
+        batch_size = hidden_states.shape[0]
+        hidden_states = hidden_states.reshape(-1, self.hidden_size)
+        router_logits = self.gate(hidden_states)
+        routing_weights = torch.nn.functional.softmax(router_logits, dim=-1, dtype=torch.float)
+        routing_weights, router_indices = torch.topk(routing_weights, self.top_k, dim=-1)
+        routing_weights = routing_weights / routing_weights.sum(dim=-1, keepdim=True)
+        routing_weights = routing_weights.to(hidden_states.dtype)
+        router_weights = torch.zeros_like(router_logits).scatter_(1, router_indices, routing_weights)
+        hidden_states = hidden_states.reshape(batch_size, -1, self.hidden_size)
         routed_out = self.experts(hidden_states, router_weights, router_indices)
         return routed_out
 
