@@ -4503,7 +4503,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             tp_plan = "auto"
 
         # Not used anymore -- remove them from the kwargs
-        _ = kwargs.pop("resume_download", None)
         _ = kwargs.pop("mirror", None)
         _ = kwargs.pop("_fast_init", None)
         _ = kwargs.pop("low_cpu_mem_usage", None)
