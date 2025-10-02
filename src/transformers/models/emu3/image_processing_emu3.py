@@ -266,8 +266,8 @@ class Emu3ImageProcessor(BaseImageProcessor):
         """
 
         max_shape = (
-            max([size[0] for size in image_sizes]),
-            max([size[1] for size in image_sizes]),
+            max(size[0] for size in image_sizes),
+            max(size[1] for size in image_sizes),
         )
         pixel_values = [
             pad(

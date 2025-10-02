@@ -126,7 +126,7 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
             list[`torch.Tensor`]: The padded images.
         """
 
-        max_shape = (max([size[0] for size in image_sizes]), max([size[1] for size in image_sizes]))
+        max_shape = (max(size[0] for size in image_sizes), max(size[1] for size in image_sizes))
         pixel_values = [
             torch.nn.functional.pad(image, pad=(0, max_shape[1] - size[1], 0, max_shape[0] - size[0]))
             for image, size in zip(pixel_values, image_sizes)
