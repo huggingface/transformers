@@ -80,7 +80,7 @@ class PhimoeAttention(LlamaAttention):
     pass
 
 
-class PhieMoeMLP(MixtralMLP):
+class PhimoeMLP(MixtralMLP):
     pass
 
 
@@ -269,8 +269,13 @@ def sparsemixer(scores, jitter_eps, training, top_k=2):
     )
 
 
-class PhimoeExperts(MixtralExperts):
-    pass
+class PhimoeExperts(MixtralExperts, nn.ModuleList):
+    def __init__(self, config: PhimoeConfig):
+        nn.ModuleList.__init__(self)
+        self.top_k = config.num_experts_per_tok
+        self.num_experts = config.num_local_experts
+        for _ in range(self.num_experts):
+            self.append(PhimoeMLP(config))
 
 
 class PhimoeRouter(nn.Linear):
