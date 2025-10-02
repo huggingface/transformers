@@ -2804,7 +2804,7 @@ class PerceiverAudioPostprocessor(nn.Module):
     def __init__(self, config: PerceiverConfig, in_channels: int, postproc_type: str = "patches") -> None:
         super().__init__()
 
-        if postproc_type not in ("patches",):  # to be supported: 'conv', 'patches', 'pixels'
+        if postproc_type != "patches":  # to be supported: 'conv', 'patches', 'pixels'
             raise ValueError("Invalid postproc_type!")
 
         # Architecture parameters:
@@ -3137,7 +3137,7 @@ class PerceiverAudioPreprocessor(AbstractPreprocessor):
         super().__init__()
         self.config = config
 
-        if prep_type not in ("patches",):
+        if prep_type != "patches":
             raise ValueError(f"Prep_type {prep_type} is invalid, can only be 'patches'.")
 
         if concat_or_add_pos not in ["concat", "add"]:

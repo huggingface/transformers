@@ -937,10 +937,9 @@ class AutoformerEncoder(AutoformerPreTrainedModel):
         hidden_states = self.layernorm_embedding(hidden_states + embed_pos)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
-        attention_mask = create_bidirectional_mask(
-            config=self.config,
-            input_embeds=inputs_embeds,
-            attention_mask=attention_mask,
+        attention_mask = self._update_full_mask(
+            attention_mask,
+            inputs_embeds,
         )
 
         encoder_states = () if output_hidden_states else None

@@ -17,6 +17,7 @@
 from typing import Optional, Union
 
 import torch
+from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
@@ -30,16 +31,10 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_v2_available,
     logging,
 )
 from .image_processing_pixtral import get_resize_output_image_size
 
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
 
 logger = logging.get_logger(__name__)
 
@@ -131,7 +126,7 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
             list[`torch.Tensor`]: The padded images.
         """
 
-        max_shape = (max([size[0] for size in image_sizes]), max([size[1] for size in image_sizes]))
+        max_shape = (max(size[0] for size in image_sizes), max(size[1] for size in image_sizes))
         pixel_values = [
             torch.nn.functional.pad(image, pad=(0, max_shape[1] - size[1], 0, max_shape[0] - size[0]))
             for image, size in zip(pixel_values, image_sizes)

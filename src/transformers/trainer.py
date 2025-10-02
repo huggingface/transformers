@@ -5233,7 +5233,7 @@ class Trainer:
         if count_num_items_in_batch:
             # For now we don't support object detection
             try:
-                num_items_in_batch = sum([(batch["labels"].ne(-100)).sum() for batch in batch_samples])
+                num_items_in_batch = sum((batch["labels"].ne(-100)).sum() for batch in batch_samples)
             except (TypeError, AttributeError):
                 pass
 

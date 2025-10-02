@@ -1021,7 +1021,12 @@ def _get_resolved_checkpoint_files(
                         is_sharded = True
                 if not local_files_only and not is_offline_mode():
                     if resolved_archive_file is not None:
-                        if filename in [WEIGHTS_NAME, WEIGHTS_INDEX_NAME]:
+                        # In a CI environment (CircleCI / Github Actions workflow runs) or in a pytest run,
+                        # we set `DISABLE_SAFETENSORS_CONVERSION=true` to prevent the conversion.
+                        if (
+                            filename in [WEIGHTS_NAME, WEIGHTS_INDEX_NAME]
+                            and os.getenv("DISABLE_SAFETENSORS_CONVERSION", None) != "true"
+                        ):
                             # If the PyTorch file was found, check if there is a safetensors file on the repository
                             # If there is no safetensors file on the repositories, start an auto conversion
                             safe_weights_name = SAFE_WEIGHTS_INDEX_NAME if is_sharded else SAFE_WEIGHTS_NAME
@@ -3996,7 +4001,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 if _is_dtensor_available and isinstance(state_dict[tensor], DTensor):
                     full_tensor = state_dict[tensor].full_tensor()
                     # to get the correctly ordered tensor we need to repack if packed
-                    if _get_parameter_tp_plan(tensor, self._tp_plan) in ("local_packed_rowwise",):
+                    if _get_parameter_tp_plan(tensor, self._tp_plan) == "local_packed_rowwise":
                         full_tensor = repack_weights(full_tensor, -1, self._tp_size, 2)
                     shard[tensor] = full_tensor.contiguous()  # only do contiguous after it's permuted correctly
                 else:
@@ -4098,9 +4103,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 are tensors that do not require gradients and not registered as parameters. E.g. mean and std in batch
                 norm layers. Please see: https://discuss.pytorch.org/t/what-pytorch-means-by-buffers/120266/2
         """
-        mem = sum([param.nelement() * param.element_size() for param in self.parameters()])
+        mem = sum(param.nelement() * param.element_size() for param in self.parameters())
         if return_buffers:
-            mem_bufs = sum([buf.nelement() * buf.element_size() for buf in self.buffers()])
+            mem_bufs = sum(buf.nelement() * buf.element_size() for buf in self.buffers())
             mem = mem + mem_bufs
         return mem
 

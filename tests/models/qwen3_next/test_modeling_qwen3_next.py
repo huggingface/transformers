@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import tempfile
 import unittest
 
@@ -40,7 +39,6 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...generation.test_utils import has_similar_generate_outputs
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
-    _config_zero_init,
     _test_eager_matches_sdpa_inference,
 )
 
@@ -278,24 +276,6 @@ class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertEqual(out_len + 1, len(outputs))
             self.assertEqual(len(self_attentions), sum(layer == "full_attention" for layer in config.layer_types))
             self.assertListEqual(list(self_attentions[0].shape[-3:]), [config.num_attention_heads, seq_len, seq_len])
-
-    def test_initialization(self):
-        "Some parameters need to be skipped."
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=copy.deepcopy(configs_no_init))
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    # this one need to be skipped, it's initialized as log(uniform(0, 16))
-                    if "A_log" in name:
-                        continue
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     def test_eager_matches_sdpa_inference(

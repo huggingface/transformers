@@ -65,6 +65,7 @@ class DbrxModelTester(CausalLMModelTester):
         # DBRX takes sub-configurations for the FFN and attention layers, so we need to set that correctly here
         self.ffn_config = {
             "ffn_hidden_size": self.hidden_size,
+            "hidden_size": 2 * self.hidden_size,
             "moe_jitter_eps": moe_jitter_eps,
             "moe_loss_weight": moe_loss_weight,
             "moe_num_experts": moe_num_experts,
@@ -130,6 +131,12 @@ class DbrxModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip("Dbrx doesn't have RoPE scaling implemented")
     def test_model_rope_scaling_from_config(self, scaling_type):
         pass
+
+    #
+    # @unittest.skip(reason="Not that big not that slow offload")
+    # def test_model_is_small(self):
+    #     pass
+    #
 
 
 @require_torch
