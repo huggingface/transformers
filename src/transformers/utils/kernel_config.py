@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # from ..configuration_utils import ConfigMixin
-from ..utils import is_kernels_available, is_torch_available
+from ..utils import is_kernels_available, is_torch_available, PushToHubMixin
 
 
 if is_kernels_available():
@@ -62,7 +62,7 @@ def add_to_mapping(layer_name, device, repo_name, mode, compatible_mapping):
         }
     }
 
-class KernelConfig:
+class KernelConfig(PushToHubMixin):
     def __init__(self, kernel_mapping={}):
         self.kernel_mapping = kernel_mapping
         self.registered_layer_names = {}
