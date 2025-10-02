@@ -349,7 +349,7 @@ class Qwen3VLMoeIntegrationTest(unittest.TestCase):
             self.message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
         )
         expected_input_ids = [151644, 872, 198, 151652, 151655, 151655, 151655, 151655, 151655, 151655, 151655, 151655, 151655, 151655, 151655, 151655, 151655]  # fmt: skip
-        assert expected_input_ids == inputs.input_ids[0].tolist()[:17]
+        self.assertListEqual(expected_input_ids, inputs.input_ids[0].tolist()[:17])
 
         expected_pixel_slice = torch.tensor(
             [
@@ -363,7 +363,7 @@ class Qwen3VLMoeIntegrationTest(unittest.TestCase):
             dtype=torch.float32,
             device="cpu",
         )
-        assert torch.allclose(expected_pixel_slice, inputs.pixel_values[:6, :3], atol=3e-3)
+        self.assertTrue(torch.allclose(expected_pixel_slice, inputs.pixel_values[:6, :3], atol=3e-3))
 
         # verify generation
         inputs = inputs.to(torch_device)
