@@ -2111,6 +2111,7 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
             text_token_mask = text_token_mask[:, :max_text_len]
 
         # 3D -> 4D correction (add head dim)
+        # NOTE: we squeeze this later again as there is custom 3D logic in this model
         if text_self_attention_masks.ndim == 3:
             text_self_attention_masks = text_self_attention_masks[:, None, :, :]
 
@@ -2196,7 +2197,7 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
                 text_features=text_features,
                 text_attention_mask=~text_token_mask,
                 text_position_embedding=None,
-                text_self_attention_masks=~text_self_attention_masks,
+                text_self_attention_masks=~text_self_attention_masks.squeeze(1),
                 text_position_ids=position_ids,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
