@@ -39,7 +39,6 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import OutputRecorder, check_model_inputs
 from .configuration_phimoe import PhimoeConfig
-from .processing_phimoe import MultiplierProcessor
 
 
 class PhimoeRotaryEmbedding(nn.Module):
@@ -242,6 +241,68 @@ class PhimoeMLP(nn.Module):
         return current_hidden_states
 
 
+class PhimoeMultiplier(torch.autograd.Function):
+    @staticmethod
+    def forward(
+        ctx,
+        scores: torch.Tensor,
+        multiplier: torch.Tensor,
+        selected_experts: torch.Tensor,
+        masked_gates: torch.Tensor,
+        mask_for_one: torch.Tensor,
+    ):
+        """
+        Forward pass for the custom autograd function.
+
+        Args:
+            ctx: Context object to save information for backward computation.
+            scores (torch.Tensor): Input scores tensor.
+            multiplier (torch.Tensor): Multiplier tensor.
+            selected_experts (torch.Tensor): Tensor of selected experts.
+            masked_gates (torch.Tensor): Masked gates tensor.
+            mask_for_one (torch.Tensor): Mask for one tensor.
+
+        Returns:
+            torch.Tensor: Result of the forward pass.
+        """
+        ctx.save_for_backward(multiplier, selected_experts, masked_gates)
+        return multiplier * mask_for_one
+
+    @staticmethod
+    def backward(
+        ctx,
+        grad_at_output: torch.Tensor,
+    ):
+        """
+        Backward pass for the custom autograd function.
+
+        Args:
+            ctx: Context object with saved tensors from the forward pass.
+            grad_at_output (torch.Tensor): Gradient at the output.
+
+        Returns:
+            tuple[torch.Tensor, None, None, None, None]: Gradients for the inputs.
+        """
+        multiplier, selected_experts, masked_gates = ctx.saved_tensors
+
+        grad_at_output = grad_at_output * multiplier
+
+        grad_at_scores_expanded = masked_gates * grad_at_output.mul(-1)
+        grad_at_scores_expanded.scatter_add_(
+            dim=-1,
+            index=selected_experts,
+            src=grad_at_output,
+        )
+
+        return (
+            grad_at_scores_expanded,
+            None,
+            None,
+            None,
+            None,
+        )
+
+
 class PhimoeExperts(nn.ModuleList):
     """
     ModuleList of experts.
@@ -346,7 +407,7 @@ def sparsemixer(scores, jitter_eps, training, top_k=2):
         # 1 -> 1.0 & 0 -> 1./3: lambda x: (x + 0.5) / 1.5
         mask_for_one = torch.add(0.3333, mask_for_one, alpha=0.6667).type_as(masked_gates)
 
-        multiplier = MultiplierProcessor.apply(
+        multiplier = PhimoeMultiplier.apply(
             scores,
             multiplier_o,
             selected_experts,
@@ -398,7 +459,7 @@ def sparsemixer(scores, jitter_eps, training, top_k=2):
         # 1 -> 1.0 & 0 -> 1./3: lambda x: (x + 0.5) / 1.5
         mask_for_one_top2 = torch.add(0.3333, mask_for_one_top2, alpha=0.6667).type_as(masked_gates_top2)
 
-        multiplier_top2 = MultiplierProcessor.apply(
+        multiplier_top2 = PhimoeMultiplier.apply(
             scores,
             multiplier_top2_o,
             selected_experts_top2,

@@ -84,7 +84,7 @@ class PhimoeMLP(MixtralMLP):
     pass
 
 
-class MultiplierProcessor(torch.autograd.Function):
+class PhimoeMultiplier(torch.autograd.Function):
     @staticmethod
     def forward(
         ctx,
@@ -198,7 +198,7 @@ def sparsemixer(scores, jitter_eps, training, top_k=2):
         # 1 -> 1.0 & 0 -> 1./3: lambda x: (x + 0.5) / 1.5
         mask_for_one = torch.add(0.3333, mask_for_one, alpha=0.6667).type_as(masked_gates)
 
-        multiplier = MultiplierProcessor.apply(
+        multiplier = PhimoeMultiplier.apply(
             scores,
             multiplier_o,
             selected_experts,
@@ -250,7 +250,7 @@ def sparsemixer(scores, jitter_eps, training, top_k=2):
         # 1 -> 1.0 & 0 -> 1./3: lambda x: (x + 0.5) / 1.5
         mask_for_one_top2 = torch.add(0.3333, mask_for_one_top2, alpha=0.6667).type_as(masked_gates_top2)
 
-        multiplier_top2 = MultiplierProcessor.apply(
+        multiplier_top2 = PhimoeMultiplier.apply(
             scores,
             multiplier_top2_o,
             selected_experts_top2,
