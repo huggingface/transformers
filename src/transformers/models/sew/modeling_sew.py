@@ -36,11 +36,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    TransformersKwargs,
-    auto_docstring,
-    logging,
-)
+from ...utils import TransformersKwargs, auto_docstring, logging
 from .configuration_sew import SEWConfig
 
 
