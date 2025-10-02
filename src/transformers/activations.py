@@ -50,7 +50,7 @@ class GELUTanh(nn.Module):
     def forward(self, input: Tensor) -> Tensor:
         return self.act(input)
 
-
+# Added for compatibility with autoawq which is archived now and imports PytorchGELUTanh from activations.py
 PytorchGELUTanh = GELUTanh
 
 
