@@ -13,27 +13,22 @@
 # limitations under the License.
 
 # Run the test: CUDA_VISIBLE_DEVICES=0,1 RUN_SLOW=1 pytest -sv tests/kernels/test_kernels.py
-import gc
 import copy
+import gc
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available
+from transformers import AutoModelForCausalLM, AutoTokenizer, KernelConfig
 from transformers.testing_utils import (
     TestCasePlus,
     backend_empty_cache,
     require_kernels,
     require_torch_accelerator,
-    backend_device_count,
-    require_huggingface_hub_greater_or_equal,
-    require_torch_multi_accelerator,
     torch_device,
-    torchrun,
 )
-from kernels import kernelize, Mode, Device
+from transformers.utils import is_kernels_available
 
 
-if is_torch_available():
-    import torch
-
+if is_kernels_available():
+    from kernels import Device, Mode, kernelize
 
 @require_kernels
 class TestHubKernels(TestCasePlus):
@@ -47,8 +42,7 @@ class TestHubKernels(TestCasePlus):
             self.model_id, use_kernels=False, device_map=torch_device
         )
         self.input = "Hello"
-        self.EXPECTED_OUTPUT = set()
-        self.EXPECTED_OUTPUT.add("Hello, I'm looking for a reliable and trustworthy online")
+
 
     def tearDown(self):
         gc.collect()
@@ -60,6 +54,10 @@ class TestHubKernels(TestCasePlus):
         tokenized_input = self.tokenizer(self.input, return_tensors="pt").input_ids.to(self.model_kernelized.device)
         output_ = self.model_kernelized.generate(tokenized_input, max_new_tokens=10, do_sample=False)
         output = self.tokenizer.decode(output_[0], skip_special_tokens=True)
+
+        self.EXPECTED_OUTPUT = set()
+        self.EXPECTED_OUTPUT.add("Hello, I'm looking for a reliable and trustworthy online")
+
         self.assertTrue(output in self.EXPECTED_OUTPUT)
 
     def test_getter_use_kernels(self):
@@ -149,9 +147,32 @@ class TestHubKernels(TestCasePlus):
 
         self.assertFalse(model.use_kernels)
 
-    def test_rekernelize(self):
-        model = copy.deepcopy(self.model_kernelized)
-        model.train()
+    def test_kernels_mapping(self):
+        kernel_config = KernelConfig(kernel_mapping={"RMSNorm": "kernels-community/layer_norm:LlamaRMSNorm"})
+        model = AutoModelForCausalLM.from_pretrained(
+            "unsloth/Llama-3.2-1B-Instruct", use_kernels=True, device_map=torch_device, kernel_config=kernel_config
+        )
 
-        
+        EXPECTED_OUTPUT = set()
+        EXPECTED_OUTPUT.add("Hello, I'm looking for a reliable and trustworthy online")
 
+        tokenized_input = self.tokenizer(self.input, return_tensors="pt").input_ids.to(model.device)
+        output = model.generate(tokenized_input, max_new_tokens=10, do_sample=False)
+        output = self.tokenizer.decode(output[0], skip_special_tokens=True)
+        self.assertTrue(output in EXPECTED_OUTPUT)
+
+        del model
+
+    def test_faulty_kernel_mapping_layer_name(self):
+        kernel_config = KernelConfig(kernel_mapping={"RMSNorm1": "kernels-community/layer_norm:LlamaRMSNorm"})
+        with self.assertRaises(ValueError):
+            _ = AutoModelForCausalLM.from_pretrained(
+                "unsloth/Llama-3.2-1B-Instruct", use_kernels=True, device_map=torch_device, kernel_config=kernel_config
+            )
+
+    def test_faulty_kernel_mapping_type(self):
+        kernel_config = KernelConfig(kernel_mapping={"RMSNorm": 1})
+        with self.assertRaises(ValueError):
+            _ = AutoModelForCausalLM.from_pretrained(
+                "unsloth/Llama-3.2-1B-Instruct", use_kernels=True, device_map=torch_device, kernel_config=kernel_config
+            )
