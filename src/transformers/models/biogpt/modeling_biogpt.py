@@ -871,6 +871,7 @@ class BioGptForSequenceClassification(BioGptPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
     ) -> Union[tuple, SequenceClassifierOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -894,7 +895,8 @@ class BioGptForSequenceClassification(BioGptPreTrainedModel):
             cache_position=cache_position,
         )
         hidden_states = transformer_outputs[0]
-        logits = self.score(hidden_states)
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.score(hidden_states[:, slice_indices, :])
 
         if input_ids is not None:
             batch_size, sequence_length = input_ids.shape[:2]
