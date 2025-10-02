@@ -27,11 +27,8 @@ rendered properly in your Markdown viewer.
 1. [SceneParse150](https://huggingface.co/datasets/scene_parse_150) データセットの [SegFormer](https://huggingface.co/docs/transformers/main/en/model_doc/segformer#segformer) を微調整します。
 2. 微調整したモデルを推論に使用します。
 
-<Tip>
-
-このタスクと互換性のあるすべてのアーキテクチャとチェックポイントを確認するには、[タスクページ](https://huggingface.co/tasks/image-segmentation) を確認することをお勧めします。
-
-</Tip>
+> [!TIP]
+> このタスクと互換性のあるすべてのアーキテクチャとチェックポイントを確認するには、[タスクページ](https://huggingface.co/tasks/image-segmentation) を確認することをお勧めします。
 
 始める前に、必要なライブラリがすべてインストールされていることを確認してください。
 
@@ -188,11 +185,8 @@ pip install -q datasets transformers evaluate
 これで`compute_metrics`関数の準備が整いました。トレーニングをセットアップするときにこの関数に戻ります。
 
 ## Train
-<Tip>
-
-[`Trainer`] を使用したモデルの微調整に慣れていない場合は、[ここ](../training#finetune-with-trainer) の基本的なチュートリアルをご覧ください。
-
-</Tip>
+> [!TIP]
+> [`Trainer`] を使用したモデルの微調整に慣れていない場合は、[ここ](../training#finetune-with-trainer) の基本的なチュートリアルをご覧ください。
 
 これでモデルのトレーニングを開始する準備が整いました。 [`AutoModelForSemanticSegmentation`] を使用して SegFormer をロードし、ラベル ID とラベル クラス間のマッピングをモデルに渡します。
 

@@ -30,11 +30,8 @@ rendered properly in your Markdown viewer.
 1. 抽象的な要約のために、[BillSum](https://huggingface.co/datasets/billsum) データセットのカリフォルニア州請求書サブセットで [T5](https://huggingface.co/google-t5/t5-small) を微調整します。
 2. 微調整したモデルを推論に使用します。
 
-<Tip>
-
-このタスクと互換性のあるすべてのアーキテクチャとチェックポイントを確認するには、[タスクページ](https://huggingface.co/tasks/summarization) を確認することをお勧めします。
-
-</Tip>
+> [!TIP]
+> このタスクと互換性のあるすべてのアーキテクチャとチェックポイントを確認するには、[タスクページ](https://huggingface.co/tasks/summarization) を確認することをお勧めします。
 
 始める前に、必要なライブラリがすべてインストールされていることを確認してください。
 
@@ -160,12 +157,8 @@ pip install transformers datasets evaluate rouge_score
 
 ## Train
 
-<Tip>
-
-
-[`Trainer`] を使用したモデルの微調整に慣れていない場合は、[こちら](../training#train-with-pytorch-trainer) の基本的なチュートリアルをご覧ください。
-
-</Tip>
+> [!TIP]
+> [`Trainer`] を使用したモデルの微調整に慣れていない場合は、[こちら](../training#train-with-pytorch-trainer) の基本的なチュートリアルをご覧ください。
 
 これでモデルのトレーニングを開始する準備が整いました。 [`AutoModelForSeq2SeqLM`] を使用して T5 をロードします。
 
@@ -216,13 +209,10 @@ pip install transformers datasets evaluate rouge_score
 >>> trainer.push_to_hub()
 ```
 
-<Tip>
-
-要約用にモデルを微調整する方法のより詳細な例については、対応するセクションを参照してください。
-[PyTorch ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization.ipynb)
-または [TensorFlow ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization-tf.ipynb)。
-
-</Tip>
+> [!TIP]
+> 要約用にモデルを微調整する方法のより詳細な例については、対応するセクションを参照してください。
+> [PyTorch ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization.ipynb)
+> または [TensorFlow ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization-tf.ipynb)。
 
 ## Inference
 

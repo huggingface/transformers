@@ -28,11 +28,8 @@ El modelado de lenguaje por enmascaramiento predice un token enmascarado en una 
 
 Esta guía te mostrará cómo realizar fine-tuning [DistilGPT2](https://huggingface.co/distilbert/distilgpt2) para modelos de lenguaje causales y [DistilRoBERTa](https://huggingface.co/distilbert/distilroberta-base) para modelos de lenguaje por enmascaramiento en el [r/askscience](https://www.reddit.com/r/askscience/) subdataset [ELI5](https://huggingface.co/datasets/eli5). 
 
-<Tip>
-
-Mira la [página de tarea](https://huggingface.co/tasks/text-generation) para generación de texto y la [página de tarea](https://huggingface.co/tasks/fill-mask) para modelos de lenguajes por enmascaramiento para obtener más información sobre los modelos, datasets, y métricas asociadas.
-
-</Tip>
+> [!TIP]
+> Mira la [página de tarea](https://huggingface.co/tasks/text-generation) para generación de texto y la [página de tarea](https://huggingface.co/tasks/fill-mask) para modelos de lenguajes por enmascaramiento para obtener más información sobre los modelos, datasets, y métricas asociadas.
 
 ## Carga el dataset ELI5
 
@@ -192,11 +189,8 @@ Carga DistilGPT2 con [`AutoModelForCausalLM`]:
 >>> model = AutoModelForCausalLM.from_pretrained("distilbert/distilgpt2")
 ```
 
-<Tip>
-
-Si no estás familiarizado con el proceso de realizar fine-tuning sobre un modelo con [`Trainer`], considera el tutorial básico [aquí](../training#finetune-with-trainer)!
-
-</Tip>
+> [!TIP]
+> Si no estás familiarizado con el proceso de realizar fine-tuning sobre un modelo con [`Trainer`], considera el tutorial básico [aquí](../training#finetune-with-trainer)!
 
 A este punto, solo faltan tres pasos:
 
@@ -237,11 +231,8 @@ Carga DistilRoBERTa con [`AutoModelForMaskedlM`]:
 >>> model = AutoModelForMaskedLM.from_pretrained("distilbert/distilroberta-base")
 ```
 
-<Tip>
-
-Si no estás familiarizado con el proceso de realizar fine-tuning sobre un modelo con [`Trainer`], considera el tutorial básico [aquí](../training#finetune-with-trainer)!
-
-</Tip>
+> [!TIP]
+> Si no estás familiarizado con el proceso de realizar fine-tuning sobre un modelo con [`Trainer`], considera el tutorial básico [aquí](../training#finetune-with-trainer)!
 
 A este punto, solo faltan tres pasos:
 
@@ -269,10 +260,7 @@ A este punto, solo faltan tres pasos:
 >>> trainer.train()
 ```
 
-<Tip>
-
-Para un ejemplo más profundo sobre cómo realizar el fine-tuning sobre un modelo de lenguaje causal, considera
-[PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb)
-o [TensorFlow notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb).
-
-</Tip>
+> [!TIP]
+> Para un ejemplo más profundo sobre cómo realizar el fine-tuning sobre un modelo de lenguaje causal, considera
+> [PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb)
+> o [TensorFlow notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb).

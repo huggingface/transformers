@@ -942,12 +942,9 @@ class SwinModel(SwinPreTrainedModel):
     custom_intro="""
     Swin Model with a decoder on top for masked image modeling, as proposed in [SimMIM](https://huggingface.co/papers/2111.09886).
 
-    <Tip>
-
-    Note that we provide a script to pre-train this model on custom data in our [examples
-    directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
-
-    </Tip>
+    > [!TIP]
+    > Note that we provide a script to pre-train this model on custom data in our [examples
+    > directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
     """
 )
 class SwinForMaskedImageModeling(SwinPreTrainedModel):
@@ -1056,13 +1053,10 @@ class SwinForMaskedImageModeling(SwinPreTrainedModel):
     Swin Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
     the [CLS] token) e.g. for ImageNet.
 
-    <Tip>
-
-        Note that it's possible to fine-tune Swin on higher resolution images than the ones it has been trained on, by
-        setting `interpolate_pos_encoding` to `True` in the forward of the model. This will interpolate the pre-trained
-        position embeddings to the higher resolution.
-
-    </Tip>
+    > [!TIP]
+    > Note that it's possible to fine-tune Swin on higher resolution images than the ones it has been trained on, by
+    >     setting `interpolate_pos_encoding` to `True` in the forward of the model. This will interpolate the pre-trained
+    >     position embeddings to the higher resolution.
     """
 )
 class SwinForImageClassification(SwinPreTrainedModel):

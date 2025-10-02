@@ -34,13 +34,10 @@ The abstract from the paper is the following:
 
 This model was contributed by [HuggingFaceM4](https://huggingface.co/HuggingFaceM4). The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>). (TODO: don't have a public link yet).
 
-<Tip warning={true}>
-
-IDEFICS modeling code in Transformers is for finetuning and inferencing the pre-trained IDEFICS models.
-
-To train a new IDEFICS model from scratch use the m4 codebase (a link will be provided once it's made public)
-
-</Tip>
+> [!WARNING]
+> IDEFICS modeling code in Transformers is for finetuning and inferencing the pre-trained IDEFICS models.
+>
+> To train a new IDEFICS model from scratch use the m4 codebase (a link will be provided once it's made public)
 
 ## IdeficsConfig
 

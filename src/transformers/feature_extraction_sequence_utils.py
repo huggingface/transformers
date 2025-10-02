@@ -72,13 +72,10 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         Padding side (left/right) padding values are defined at the feature extractor level (with `self.padding_side`,
         `self.padding_value`)
 
-        <Tip>
-
-        If the `processed_features` passed are dictionary of numpy arrays or PyTorch tensors  the
-        result will use the same type unless you provide a different tensor type with `return_tensors`. In the case of
-        PyTorch tensors, you will lose the specific device of your tensors however.
-
-        </Tip>
+        > [!TIP]
+        > If the `processed_features` passed are dictionary of numpy arrays or PyTorch tensors  the
+        > result will use the same type unless you provide a different tensor type with `return_tensors`. In the case of
+        > PyTorch tensors, you will lose the specific device of your tensors however.
 
         Args:
             processed_features ([`BatchFeature`], list of [`BatchFeature`], `dict[str, list[float]]`, `dict[str, list[list[float]]` or `list[dict[str, list[float]]]`):

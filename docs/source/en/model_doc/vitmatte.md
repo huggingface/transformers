@@ -40,10 +40,8 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 - A demo notebook regarding inference with [`VitMatteForImageMatting`], including background replacement, can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/ViTMatte).
 
-<Tip>
-
-The model expects both the image and trimap (concatenated) as input. Use [`ViTMatteImageProcessor`] for this purpose.
-</Tip>
+> [!TIP]
+> The model expects both the image and trimap (concatenated) as input. Use [`ViTMatteImageProcessor`] for this purpose.
 
 ## VitMatteConfig
 

@@ -102,11 +102,8 @@ DistilBertConfig {
 >>> my_config = DistilBertConfig.from_pretrained("./your_model_save_path/config.json")
 ```
 
-<Tip>
-
-你还可以将配置文件保存为字典，甚至只保存自定义配置属性与默认配置属性之间的差异！有关更多详细信息，请参阅 [配置](main_classes/configuration) 文档。
-
-</Tip>
+> [!TIP]
+> 你还可以将配置文件保存为字典，甚至只保存自定义配置属性与默认配置属性之间的差异！有关更多详细信息，请参阅 [配置](main_classes/configuration) 文档。
 
 ## 模型
 
@@ -164,11 +161,8 @@ DistilBertConfig {
 
 这两种分词器都支持常用的方法，如编码和解码、添加新标记以及管理特殊标记。
 
-<Tip warning={true}>
-
-并非每个模型都支持快速分词器。参照这张 [表格](index#supported-frameworks) 查看模型是否支持快速分词器。
-
-</Tip>
+> [!WARNING]
+> 并非每个模型都支持快速分词器。参照这张 [表格](index#supported-frameworks) 查看模型是否支持快速分词器。
 
 如果您训练了自己的分词器，则可以从*词表*文件创建一个分词器：
 
@@ -194,11 +188,8 @@ DistilBertConfig {
 >>> fast_tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
-<Tip>
-
-默认情况下，[`AutoTokenizer`] 将尝试加载快速标记生成器。你可以通过在 `from_pretrained` 中设置 `use_fast=False` 以禁用此行为。
-
-</Tip>
+> [!TIP]
+> 默认情况下，[`AutoTokenizer`] 将尝试加载快速标记生成器。你可以通过在 `from_pretrained` 中设置 `use_fast=False` 以禁用此行为。
 
 ## 图像处理器
 
@@ -230,11 +221,8 @@ ViTImageProcessor {
 }
 ```
 
-<Tip>
-
-如果您不需要进行任何自定义，只需使用 `from_pretrained` 方法加载模型的默认图像处理器参数。
-
-</Tip>
+> [!TIP]
+> 如果您不需要进行任何自定义，只需使用 `from_pretrained` 方法加载模型的默认图像处理器参数。
 
 修改任何 [`ViTImageProcessor`] 参数以创建自定义图像处理器：
 
@@ -284,11 +272,8 @@ Wav2Vec2FeatureExtractor {
 }
 ```
 
-<Tip>
-
-如果您不需要进行任何自定义，只需使用 `from_pretrained` 方法加载模型的默认特征提取器参数。
-
-</Tip>
+> [!TIP]
+> 如果您不需要进行任何自定义，只需使用 `from_pretrained` 方法加载模型的默认特征提取器参数。
 
 修改任何 [`Wav2Vec2FeatureExtractor`] 参数以创建自定义特征提取器：
 

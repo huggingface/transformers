@@ -144,11 +144,8 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 
 ## 훈련 하기[[train]]
 
-<Tip>
-
-[`Trainer`]로 모델을 미세 조정하는 데 익숙하지 않다면 기본 튜토리얼 [여기](../training#train-with-pytorch-trainer)를 살펴보세요!
-
-</Tip>
+> [!TIP]
+> [`Trainer`]로 모델을 미세 조정하는 데 익숙하지 않다면 기본 튜토리얼 [여기](../training#train-with-pytorch-trainer)를 살펴보세요!
 
 이제 모델 훈련을 시작할 준비가 되었습니다! [`AutoModelForMultipleChoice`]로 BERT를 로드합니다:
 
@@ -198,13 +195,10 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 ```
 
 
-<Tip>
-
-객관식 모델을 미세 조정하는 방법에 대한 보다 심층적인 예는 아래 문서를 참조하세요.
-[PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice.ipynb)
-또는 [TensorFlow notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice-tf.ipynb).
-
-</Tip>
+> [!TIP]
+> 객관식 모델을 미세 조정하는 방법에 대한 보다 심층적인 예는 아래 문서를 참조하세요.
+> [PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice.ipynb)
+> 또는 [TensorFlow notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice-tf.ipynb).
 
 ## 추론 하기[[inference]]
 

@@ -17,11 +17,8 @@ rendered properly in your Markdown viewer.
 
 Questo documento contiene informazioni su come fare inferenza in maniera efficiente su GPU multiple.
 
-<Tip>
-
-Nota: Un setup con GPU multiple può utilizzare la maggior parte delle strategie descritte nella [sezione con GPU singola](./perf_infer_gpu_one). Tuttavia, è necessario conoscere delle tecniche semplici che possono essere utilizzate per un risultato migliore.
-
-</Tip>
+> [!TIP]
+> Nota: Un setup con GPU multiple può utilizzare la maggior parte delle strategie descritte nella [sezione con GPU singola](./perf_infer_gpu_one). Tuttavia, è necessario conoscere delle tecniche semplici che possono essere utilizzate per un risultato migliore.
 
 ## `BetterTransformer` per inferenza più rapida
 

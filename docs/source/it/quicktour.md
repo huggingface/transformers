@@ -20,12 +20,9 @@ rendered properly in your Markdown viewer.
 
 Entra in azione con 🤗 Transformers! Inizia utilizzando [`pipeline`] per un'inferenza veloce, carica un modello pre-allenato e un tokenizer con una [AutoClass](./model_doc/auto) per risolvere i tuoi compiti legati a testo, immagini o audio.
 
-<Tip>
-
-Tutti gli esempi di codice presenti in questa documentazione hanno un pulsante in alto a sinistra che permette di selezionare tra PyTorch e TensorFlow. Se
-questo non è presente, ci si aspetta che il codice funzioni per entrambi i backend senza alcun cambiamento.
-
-</Tip>
+> [!TIP]
+> Tutti gli esempi di codice presenti in questa documentazione hanno un pulsante in alto a sinistra che permette di selezionare tra PyTorch e TensorFlow. Se
+> questo non è presente, ci si aspetta che il codice funzioni per entrambi i backend senza alcun cambiamento.
 
 ## Pipeline
 
@@ -54,11 +51,8 @@ La [`pipeline`] supporta molti compiti comuni:
 * Classificazione di Audio (Audio Classification, in inglese): assegna un'etichetta ad un segmento di audio dato.
 * Riconoscimento Vocale Automatico (Automatic Speech Recognition o ASR, in inglese): trascrive il contenuto di un audio dato in un testo.
 
-<Tip>
-
-Per maggiori dettagli legati alla [`pipeline`] e ai compiti ad essa associati, fai riferimento alla documentazione [qui](./main_classes/pipelines).
-
-</Tip>
+> [!TIP]
+> Per maggiori dettagli legati alla [`pipeline`] e ai compiti ad essa associati, fai riferimento alla documentazione [qui](./main_classes/pipelines).
 
 ### Utilizzo della Pipeline
 
@@ -230,11 +224,8 @@ Leggi il tutorial sul [preprocessing](./preprocessing) per maggiori dettagli sul
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained(model_name)
 ```
 
-<Tip>
-
-Guarda il [task summary](./task_summary) per sapere quale classe di [`AutoModel`] utilizzare per quale compito.
-
-</Tip>
+> [!TIP]
+> Guarda il [task summary](./task_summary) per sapere quale classe di [`AutoModel`] utilizzare per quale compito.
 
 Ora puoi passare il tuo lotto di input pre-processati direttamente al modello. Devi solo spacchettare il dizionario aggiungendo `**`:
 
@@ -253,21 +244,15 @@ tensor([[0.0041, 0.0037, 0.0203, 0.2005, 0.7713],
         [0.3766, 0.3292, 0.1832, 0.0558, 0.0552]], grad_fn=<SoftmaxBackward0>)
 ```
 
-<Tip>
-
-Tutti i modelli di 🤗 Transformers (PyTorch e TensorFlow) restituiscono i tensori *prima* della funzione finale
-di attivazione (come la softmax) perché la funzione di attivazione finale viene spesso unita a quella di perdita.
-
-</Tip>
+> [!TIP]
+> Tutti i modelli di 🤗 Transformers (PyTorch e TensorFlow) restituiscono i tensori *prima* della funzione finale
+> di attivazione (come la softmax) perché la funzione di attivazione finale viene spesso unita a quella di perdita.
 
 I modelli sono [`torch.nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) o [`tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model) standard così puoi utilizzarli all'interno del tuo training loop usuale. Tuttavia, per rendere le cose più semplici, 🤗 Transformers fornisce una classe [`Trainer`] per PyTorch che aggiunge delle funzionalità per l'allenamento distribuito, precisione mista, e altro ancora. Per TensorFlow, puoi utilizzare il metodo `fit` di [Keras](https://keras.io/). Fai riferimento al [tutorial per il training](./training) per maggiori dettagli.
 
-<Tip>
-
-Gli output del modello di 🤗 Transformers sono delle dataclasses speciali in modo che i loro attributi vengano auto-completati all'interno di un IDE.
-Gli output del modello si comportano anche come una tupla o un dizionario (ad esempio, puoi indicizzare con un intero, una slice o una stringa) nel qual caso gli attributi che sono `None` vengono ignorati.
-
-</Tip>
+> [!TIP]
+> Gli output del modello di 🤗 Transformers sono delle dataclasses speciali in modo che i loro attributi vengano auto-completati all'interno di un IDE.
+> Gli output del modello si comportano anche come una tupla o un dizionario (ad esempio, puoi indicizzare con un intero, una slice o una stringa) nel qual caso gli attributi che sono `None` vengono ignorati.
 
 ### Salva un modello
 

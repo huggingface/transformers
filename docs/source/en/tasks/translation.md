@@ -27,11 +27,8 @@ This guide will show you how to:
 1. Finetune [T5](https://huggingface.co/google-t5/t5-small) on the English-French subset of the [OPUS Books](https://huggingface.co/datasets/opus_books) dataset to translate English text to French.
 2. Use your finetuned model for inference.
 
-<Tip>
-
-To see all architectures and checkpoints compatible with this task, we recommend checking the [task-page](https://huggingface.co/tasks/translation).
-
-</Tip>
+> [!TIP]
+> To see all architectures and checkpoints compatible with this task, we recommend checking the [task-page](https://huggingface.co/tasks/translation).
 
 Before you begin, make sure you have all the necessary libraries installed:
 
@@ -167,11 +164,8 @@ Your `compute_metrics` function is ready to go now, and you'll return to it when
 
 ## Train
 
-<Tip>
-
-If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
-
-</Tip>
+> [!TIP]
+> If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
 
 You're ready to start training your model now! Load T5 with [`AutoModelForSeq2SeqLM`]:
 
@@ -221,12 +215,9 @@ Once training is completed, share your model to the Hub with the [`~transformers
 >>> trainer.push_to_hub()
 ```
 
-<Tip>
-
-For a more in-depth example of how to finetune a model for translation, take a look at the corresponding
-[PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/translation.ipynb).
-
-</Tip>
+> [!TIP]
+> For a more in-depth example of how to finetune a model for translation, take a look at the corresponding
+> [PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/translation.ipynb).
 
 ## Inference
 

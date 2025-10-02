@@ -27,11 +27,8 @@ In diesem Tutorial lernen Sie zwei Methoden kennen, wie Sie ein trainiertes oder
 frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope;
 picture-in-picture" allowfullscreen></iframe>
 
-<Tip>
-
-Um ein Modell mit der Öffentlichkeit zu teilen, benötigen Sie ein Konto auf [huggingface.co](https://huggingface.co/join). Sie können auch einer bestehenden Organisation beitreten oder eine neue Organisation gründen.
-
-</Tip>
+> [!TIP]
+> Um ein Modell mit der Öffentlichkeit zu teilen, benötigen Sie ein Konto auf [huggingface.co](https://huggingface.co/join). Sie können auch einer bestehenden Organisation beitreten oder eine neue Organisation gründen.
 
 ## Repository-Funktionen
 

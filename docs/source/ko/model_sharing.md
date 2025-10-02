@@ -27,11 +27,8 @@ rendered properly in your Markdown viewer.
 frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope;
 picture-in-picture" allowfullscreen></iframe>
 
-<Tip>
-
-커뮤니티에 모델을 공유하려면, [huggingface.co](https://huggingface.co/join)에 계정이 필요합니다. 기존 조직에 가입하거나 새로 만들 수도 있습니다.
-
-</Tip>
+> [!TIP]
+> 커뮤니티에 모델을 공유하려면, [huggingface.co](https://huggingface.co/join)에 계정이 필요합니다. 기존 조직에 가입하거나 새로 만들 수도 있습니다.
 
 ## 저장소 특징[[repository-features]]
 

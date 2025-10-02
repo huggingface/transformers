@@ -145,11 +145,8 @@ Your `compute_metrics` function is ready to go now, and you'll return to it when
 
 ## Train
 
-<Tip>
-
-If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
-
-</Tip>
+> [!TIP]
+> If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
 
 You're ready to start training your model now! Load BERT with [`AutoModelForMultipleChoice`]:
 
@@ -198,12 +195,9 @@ Once training is completed, share your model to the Hub with the [`~transformers
 >>> trainer.push_to_hub()
 ```
 
-<Tip>
-
-For a more in-depth example of how to finetune a model for multiple choice, take a look at the corresponding
-[PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice.ipynb).
-
-</Tip>
+> [!TIP]
+> For a more in-depth example of how to finetune a model for multiple choice, take a look at the corresponding
+> [PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice.ipynb).
 
 ## Inference
 

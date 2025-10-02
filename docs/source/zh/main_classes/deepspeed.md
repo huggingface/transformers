@@ -570,11 +570,8 @@ TrainingArguments(..., deepspeed=ds_config_dict)
 ### 共享配置
 
 
-<Tip warning={true}>
-
-这一部分是必读的。
-
-</Tip>
+> [!WARNING]
+> 这一部分是必读的。
 
 一些配置值对于 [`Trainer`] 和 DeepSpeed 正常运行都是必需的，因此，为了防止定义冲突及导致的难以检测的错误，我们选择通过 [`Trainer`] 命令行参数配置这些值。
 
@@ -1360,15 +1357,12 @@ bf16具有与fp32相同的动态范围，因此不需要损失缩放。
 }
 ```
 
-<Tip>
-
-在`deepspeed==0.6.0`版本中，bf16支持是新的实验性功能。
-
-如果您启用了bf16来进行[梯度累积](#gradient-accumulation)，您需要意识到它会以bf16累积梯度，这可能不是您想要的，因为这种格式的低精度可能会导致lossy accumulation。
-
-修复这个问题的工作正在努力进行，同时提供了使用更高精度的`dtype`（fp16或fp32）的选项。
-
-</Tip>
+> [!TIP]
+> 在`deepspeed==0.6.0`版本中，bf16支持是新的实验性功能。
+>
+> 如果您启用了bf16来进行[梯度累积](#gradient-accumulation)，您需要意识到它会以bf16累积梯度，这可能不是您想要的，因为这种格式的低精度可能会导致lossy accumulation。
+>
+> 修复这个问题的工作正在努力进行，同时提供了使用更高精度的`dtype`（fp16或fp32）的选项。
 
 
 ### NCCL集合
@@ -1519,11 +1513,8 @@ trainer.deepspeed.save_checkpoint(checkpoint_dir)
 fp32_model = load_state_dict_from_zero_checkpoint(trainer.model, checkpoint_dir)
 ```
 
-<Tip>
-
-注意，一旦运行了`load_state_dict_from_zero_checkpoint`，该模型将不再可以在相同的应用程序的DeepSpeed上下文中使用。也就是说，您需要重新初始化deepspeed引擎，因为`model.load_state_dict(state_dict)`会从其中移除所有的DeepSpeed相关点。所以您只能训练结束时这样做。
-
-</Tip>
+> [!TIP]
+> 注意，一旦运行了`load_state_dict_from_zero_checkpoint`，该模型将不再可以在相同的应用程序的DeepSpeed上下文中使用。也就是说，您需要重新初始化deepspeed引擎，因为`model.load_state_dict(state_dict)`会从其中移除所有的DeepSpeed相关点。所以您只能训练结束时这样做。
 
 当然，您不必使用类：*~transformers.Trainer*，您可以根据你的需求调整上面的示例。
 

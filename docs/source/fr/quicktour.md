@@ -190,11 +190,8 @@ Un tokenizer peut également accepter une liste de textes, et remplir et tronque
 ... )
 ```
 
-<Tip>
-
-Consultez le tutoriel [prétraitement](./preprocessing) pour plus de détails sur la tokenisation, et sur la manière d'utiliser un [`AutoImageProcessor`], un [`AutoFeatureExtractor`] et un [`AutoProcessor`] pour prétraiter les images, l'audio et les contenus multimodaux.
-
-</Tip>
+> [!TIP]
+> Consultez le tutoriel [prétraitement](./preprocessing) pour plus de détails sur la tokenisation, et sur la manière d'utiliser un [`AutoImageProcessor`], un [`AutoFeatureExtractor`] et un [`AutoProcessor`] pour prétraiter les images, l'audio et les contenus multimodaux.
 
 ### AutoModel
 
@@ -207,11 +204,8 @@ Consultez le tutoriel [prétraitement](./preprocessing) pour plus de détails su
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained(model_name)
 ```
 
-<Tip>
-
-Voir le [résumé de la tâche](./task_summary) pour vérifier si elle est prise en charge par une classe [`AutoModel`].
-
-</Tip>
+> [!TIP]
+> Voir le [résumé de la tâche](./task_summary) pour vérifier si elle est prise en charge par une classe [`AutoModel`].
 
 Maintenant, passez votre échantillon d'entrées prétraitées directement au modèle. Il vous suffit de décompresser le dictionnaire en ajoutant `**` :
 
@@ -230,11 +224,8 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
         [0.2084, 0.1826, 0.1969, 0.1755, 0.2365]], grad_fn=<SoftmaxBackward0>)
 ```
 
-<Tip>
-
-Tous les modèles 🤗 Transformers (PyTorch ou TensorFlow) produisent les tensors *avant* la fonction d'activation finale (comme softmax) car la fonction d'activation finale est souvent fusionnée avec le calcul de la perte. Les structures produites par le modèle sont des classes de données spéciales, de sorte que leurs attributs sont autocomplétés dans un environnement de développement. Les structures produites par le modèle se comportent comme un tuple ou un dictionnaire (vous pouvez les indexer avec un entier, une tranche ou une chaîne), auquel cas les attributs qui sont None sont ignorés.
-
-</Tip>
+> [!TIP]
+> Tous les modèles 🤗 Transformers (PyTorch ou TensorFlow) produisent les tensors *avant* la fonction d'activation finale (comme softmax) car la fonction d'activation finale est souvent fusionnée avec le calcul de la perte. Les structures produites par le modèle sont des classes de données spéciales, de sorte que leurs attributs sont autocomplétés dans un environnement de développement. Les structures produites par le modèle se comportent comme un tuple ou un dictionnaire (vous pouvez les indexer avec un entier, une tranche ou une chaîne), auquel cas les attributs qui sont None sont ignorés.
 
 ### Sauvegarder un modèle
 
@@ -370,11 +361,8 @@ Une fois que vous êtes prêt, appelez la fonction [`~Trainer.train`] pour comme
 >>> trainer.train()  # doctest: +SKIP
 ```
 
-<Tip>
-
-Pour les tâches - comme la traduction ou la génération de résumé - qui utilisent un modèle séquence à séquence, utilisez plutôt les classes [`Seq2SeqTrainer`] et [`Seq2SeqTrainingArguments`].
-
-</Tip>
+> [!TIP]
+> Pour les tâches - comme la traduction ou la génération de résumé - qui utilisent un modèle séquence à séquence, utilisez plutôt les classes [`Seq2SeqTrainer`] et [`Seq2SeqTrainingArguments`].
 
 Vous pouvez personnaliser le comportement de la boucle d'apprentissage en redéfinissant les méthodes à l'intérieur de [`Trainer`]. Cela vous permet de personnaliser des caractéristiques telles que la fonction de perte, l'optimiseur et le planificateur. Consultez la documentation de [`Trainer`] pour savoir quelles méthodes peuvent être redéfinies.
 

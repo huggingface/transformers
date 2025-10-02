@@ -30,11 +30,8 @@ rendered properly in your Markdown viewer.
 1. [Food-101](https://huggingface.co/datasets/food101) データセットの [ViT](model_doc/vit) を微調整して、画像内の食品を分類します。
 2. 微調整したモデルを推論に使用します。
 
-<Tip>
-
-このタスクと互換性のあるすべてのアーキテクチャとチェックポイントを確認するには、[タスクページ](https://huggingface.co/tasks/image-classification) を確認することをお勧めします。
-
-</Tip>
+> [!TIP]
+> このタスクと互換性のあるすべてのアーキテクチャとチェックポイントを確認するには、[タスクページ](https://huggingface.co/tasks/image-classification) を確認することをお勧めします。
 
 始める前に、必要なライブラリがすべてインストールされていることを確認してください。
 
@@ -180,11 +177,8 @@ Datasets、🤗 データセット ライブラリから Food-101 データセ�
 
 ## Train
 
-<Tip>
-
-[`Trainer`] を使用したモデルの微調整に慣れていない場合は、[こちら](../training#train-with-pytorch-trainer) の基本的なチュートリアルをご覧ください。
-
-</Tip>
+> [!TIP]
+> [`Trainer`] を使用したモデルの微調整に慣れていない場合は、[こちら](../training#train-with-pytorch-trainer) の基本的なチュートリアルをご覧ください。
 
 これでモデルのトレーニングを開始する準備が整いました。 [`AutoModelForImageClassification`] を使用して ViT をロードします。ラベルの数と予想されるラベルの数、およびラベル マッピングを指定します。
 
@@ -242,11 +236,8 @@ Datasets、🤗 データセット ライブラリから Food-101 データセ�
 >>> trainer.push_to_hub()
 ```
 
-<Tip>
-
-画像分類用のモデルを微調整する方法の詳細な例については、対応する [PyTorch ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb)
-
-</Tip>
+> [!TIP]
+> 画像分類用のモデルを微調整する方法の詳細な例については、対応する [PyTorch ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb)
 
 ## Inference
 

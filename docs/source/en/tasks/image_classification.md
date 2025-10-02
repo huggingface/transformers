@@ -29,11 +29,8 @@ This guide illustrates how to:
 1. Fine-tune [ViT](../model_doc/vit) on the [Food-101](https://huggingface.co/datasets/food101) dataset to classify a food item in an image.
 2. Use your fine-tuned model for inference.
 
-<Tip>
-
-To see all architectures and checkpoints compatible with this task, we recommend checking the [task-page](https://huggingface.co/tasks/image-classification)
-
-</Tip>
+> [!TIP]
+> To see all architectures and checkpoints compatible with this task, we recommend checking the [task-page](https://huggingface.co/tasks/image-classification)
 
 Before you begin, make sure you have all the necessary libraries installed:
 
@@ -175,11 +172,8 @@ Your `compute_metrics` function is ready to go now, and you'll return to it when
 
 ## Train
 
-<Tip>
-
-If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
-
-</Tip>
+> [!TIP]
+> If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
 
 You're ready to start training your model now! Load ViT with [`AutoModelForImageClassification`]. Specify the number of labels along with the number of expected labels, and the label mappings:
 
@@ -237,11 +231,8 @@ Once training is completed, share your model to the Hub with the [`~transformers
 >>> trainer.push_to_hub()
 ```
 
-<Tip>
-
-For a more in-depth example of how to finetune a model for image classification, take a look at the corresponding [PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
-
-</Tip>
+> [!TIP]
+> For a more in-depth example of how to finetune a model for image classification, take a look at the corresponding [PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
 
 ## Inference
 

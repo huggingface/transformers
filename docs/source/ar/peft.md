@@ -51,11 +51,8 @@ peft_model_id = "ybelkada/opt-350m-lora"
 model = AutoModelForCausalLM.from_pretrained(peft_model_id)
 ```
 
-<Tip>
-
-يمكنك تحميل محول PEFT باستخدام فئة `AutoModelFor` أو فئة النموذج الأساسي مثل `OPTForCausalLM` أو `LlamaForCausalLM`.
-
-</Tip>
+> [!TIP]
+> يمكنك تحميل محول PEFT باستخدام فئة `AutoModelFor` أو فئة النموذج الأساسي مثل `OPTForCausalLM` أو `LlamaForCausalLM`.
 
 يمكنك أيضًا تحميل محول PEFT عن طريق استدعاء طريقة `load_adapter`:
 
@@ -162,11 +159,8 @@ output = model.generate(**inputs)
 
 يدعم محول PEFT فئة [`Trainer`] بحيث يمكنك تدريب محول لحالتك الاستخدام المحددة. فهو يتطلب فقط إضافة بضع سطور أخرى من التعليمات البرمجية. على سبيل المثال، لتدريب محول LoRA:
 
-<Tip>
-
-إذا لم تكن معتادًا على ضبط نموذج دقيق باستخدام [`Trainer`، فراجع البرنامج التعليمي](training) لضبط نموذج مُدرب مسبقًا.
-
-</Tip>
+> [!TIP]
+> إذا لم تكن معتادًا على ضبط نموذج دقيق باستخدام [`Trainer`، فراجع البرنامج التعليمي](training) لضبط نموذج مُدرب مسبقًا.
 
 1. حدد تكوين المحول باستخدام نوع المهمة والمعاملات الزائدة (راجع [`~peft.LoraConfig`] لمزيد من التفاصيل حول وظيفة هذه  المعلمات).
 

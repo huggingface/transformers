@@ -18,12 +18,8 @@ rendered properly in your Markdown viewer.
 
 由于存在许多不同的Transformer架构，因此为您的checkpoint创建一个可用架构可能会具有挑战性。通过`AutoClass`可以自动推断并从给定的checkpoint加载正确的架构, 这也是🤗 Transformers易于使用、简单且灵活核心规则的重要一部分。`from_pretrained()`方法允许您快速加载任何架构的预训练模型，因此您不必花费时间和精力从头开始训练模型。生成这种与checkpoint无关的代码意味着，如果您的代码适用于一个checkpoint，它将适用于另一个checkpoint - 只要它们是为了类似的任务进行训练的 - 即使架构不同。
 
-<Tip>
-
-请记住，架构指的是模型的结构，而checkpoints是给定架构的权重。例如，[BERT](https://huggingface.co/google-bert/bert-base-uncased)是一种架构，而`google-bert/bert-base-uncased`是一个checkpoint。模型是一个通用术语，可以指代架构或checkpoint。
-
-
-</Tip>
+> [!TIP]
+> 请记住，架构指的是模型的结构，而checkpoints是给定架构的权重。例如，[BERT](https://huggingface.co/google-bert/bert-base-uncased)是一种架构，而`google-bert/bert-base-uncased`是一个checkpoint。模型是一个通用术语，可以指代架构或checkpoint。
 
 在这个教程中，学习如何：
 
@@ -114,11 +110,8 @@ rendered properly in your Markdown viewer.
 >>> model = AutoModelForTokenClassification.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
-<Tip warning={true}>
-
-对于PyTorch模型，`from_pretrained()`方法使用`torch.load()`，它内部使用已知是不安全的`pickle`。一般来说，永远不要加载来自不可信来源或可能被篡改的模型。对于托管在Hugging Face Hub上的公共模型，这种安全风险在一定程度上得到了缓解，因为每次提交都会进行[恶意软件扫描](https://huggingface.co/docs/hub/security-malware)。请参阅[Hub文档](https://huggingface.co/docs/hub/security)以了解最佳实践，例如使用GPG进行[签名提交验证](https://huggingface.co/docs/hub/security-gpg#signing-commits-with-gpg)。
-
-</Tip>
+> [!WARNING]
+> 对于PyTorch模型，`from_pretrained()`方法使用`torch.load()`，它内部使用已知是不安全的`pickle`。一般来说，永远不要加载来自不可信来源或可能被篡改的模型。对于托管在Hugging Face Hub上的公共模型，这种安全风险在一定程度上得到了缓解，因为每次提交都会进行[恶意软件扫描](https://huggingface.co/docs/hub/security-malware)。请参阅[Hub文档](https://huggingface.co/docs/hub/security)以了解最佳实践，例如使用GPG进行[签名提交验证](https://huggingface.co/docs/hub/security-gpg#signing-commits-with-gpg)。
 
 一般来说，我们建议使用`AutoTokenizer`类和`AutoModelFor`类来加载预训练的模型实例。这样可以确保每次加载正确的架构。在下一个[教程](preprocessing)中，学习如何使用新加载的`tokenizer`, `image processor`, `feature extractor`和`processor`对数据集进行预处理以进行微调。
 

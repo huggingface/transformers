@@ -261,11 +261,8 @@ Estas etiquetas son diferentes según la cabecera del modelo, por ejemplo:
 - Para modelos de detección de objetos ([`DetrForObjectDetection`]), el modelo espera una lista de diccionarios con claves `class_labels` y `boxes` donde cada valor del lote corresponde a la etiqueta esperada y el número de cajas delimitadoras de cada imagen individual.
 - Para modelos de reconocimiento automático de voz ([`Wav2Vec2ForCTC`]), el modelo espera un tensor de dimensión `(batch_size, target_length)` con cada valor correspondiente a la etiqueta esperada de cada token individual.
   
-<Tip>
-
-Las etiquetas de cada modelo pueden ser diferentes, así que asegúrate siempre de revisar la documentación de cada modelo para obtener más información sobre sus etiquetas específicas.
-
-</Tip>
+> [!TIP]
+> Las etiquetas de cada modelo pueden ser diferentes, así que asegúrate siempre de revisar la documentación de cada modelo para obtener más información sobre sus etiquetas específicas.
 
 Los modelos base ([`BertModel`]) no aceptan etiquetas, ya que estos son los modelos base de transformadores, que simplemente generan características.
 

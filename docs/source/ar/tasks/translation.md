@@ -27,11 +27,8 @@ rendered properly in your Markdown viewer.
 1. ضبط دقيق لنموذج [T5](https://huggingface.co/google-t5/t5-small) على المجموعة الفرعية الإنجليزية-الفرنسية من مجموعة بيانات [OPUS Books](https://huggingface.co/datasets/opus_books) لترجمة النص الإنجليزي إلى الفرنسية.
 2. استخدام النموذج المضبوط بدقة للاستدلال.
 
-<Tip>
-
-لمشاهدة جميع البنى والنسخ المتوافقة مع هذه المهمة، نوصي بالتحقق من [صفحة المهمة](https://huggingface.co/tasks/translation).
-
-</Tip>
+> [!TIP]
+> لمشاهدة جميع البنى والنسخ المتوافقة مع هذه المهمة، نوصي بالتحقق من [صفحة المهمة](https://huggingface.co/tasks/translation).
 
 قبل البدء، تأكد من تثبيت جميع المكتبات الضرورية:
 
@@ -166,11 +163,8 @@ pip install transformers datasets evaluate sacrebleu
 ## التدريب (Train)
 
 
-<Tip>
-
-إذا لم تكن معتادًا على ضبط دقيق نموذج باستخدام [`Trainer`], فألقِ نظرة على البرنامج التعليمي الأساسي [هنا](../training#train-with-pytorch-trainer)!
-
-</Tip>
+> [!TIP]
+> إذا لم تكن معتادًا على ضبط دقيق نموذج باستخدام [`Trainer`], فألقِ نظرة على البرنامج التعليمي الأساسي [هنا](../training#train-with-pytorch-trainer)!
 
 أنت جاهز لبدء تدريب نموذجك الآن! حمّل T5 باستخدام [`AutoModelForSeq2SeqLM`]:
 
@@ -220,12 +214,9 @@ pip install transformers datasets evaluate sacrebleu
 >>> trainer.push_to_hub()
 ```
 
-<Tip>
-
-للحصول على مثال أكثر تعمقًا لكيفية ضبط نموذج للترجمة، ألق نظرة على [دفتر ملاحظات PyTorch](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/translation.ipynb) المقابل
-أو [دفتر ملاحظات TensorFlow](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/translation-tf.ipynb).
-
-</Tip>
+> [!TIP]
+> للحصول على مثال أكثر تعمقًا لكيفية ضبط نموذج للترجمة، ألق نظرة على [دفتر ملاحظات PyTorch](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/translation.ipynb) المقابل
+> أو [دفتر ملاحظات TensorFlow](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/translation-tf.ipynb).
 
 ## الاستدلال (Inference)
 

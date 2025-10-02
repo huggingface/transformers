@@ -54,31 +54,24 @@ class FillMaskPipeline(Pipeline):
     which includes the bi-directional models in the library. See the up-to-date list of available models on
     [huggingface.co/models](https://huggingface.co/models?filter=fill-mask).
 
-    <Tip>
+    > [!TIP]
+    > This pipeline only works for inputs with exactly one token masked. Experimental: We added support for multiple
+    > masks. The returned values are raw model output, and correspond to disjoint probabilities where one might expect
+    > joint probabilities (See [discussion](https://github.com/huggingface/transformers/pull/10222)).
 
-    This pipeline only works for inputs with exactly one token masked. Experimental: We added support for multiple
-    masks. The returned values are raw model output, and correspond to disjoint probabilities where one might expect
-    joint probabilities (See [discussion](https://github.com/huggingface/transformers/pull/10222)).
-
-    </Tip>
-
-    <Tip>
-
-    This pipeline now supports tokenizer_kwargs. For example try:
-
-    ```python
-    >>> from transformers import pipeline
-
-    >>> fill_masker = pipeline(model="google-bert/bert-base-uncased")
-    >>> tokenizer_kwargs = {"truncation": True}
-    >>> fill_masker(
-    ...     "This is a simple [MASK]. " + "...with a large amount of repeated text appended. " * 100,
-    ...     tokenizer_kwargs=tokenizer_kwargs,
-    ... )
-    ```
-
-
-    </Tip>
+    > [!TIP]
+    > This pipeline now supports tokenizer_kwargs. For example try:
+    >
+    > ```python
+    > >>> from transformers import pipeline
+    >
+    > >>> fill_masker = pipeline(model="google-bert/bert-base-uncased")
+    > >>> tokenizer_kwargs = {"truncation": True}
+    > >>> fill_masker(
+    > ...     "This is a simple [MASK]. " + "...with a large amount of repeated text appended. " * 100,
+    > ...     tokenizer_kwargs=tokenizer_kwargs,
+    > ... )
+    > ```
 
 
     """

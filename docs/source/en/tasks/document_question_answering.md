@@ -28,11 +28,8 @@ This guide illustrates how to:
 - Fine-tune [LayoutLMv2](../model_doc/layoutlmv2) on the [DocVQA dataset](https://huggingface.co/datasets/nielsr/docvqa_1200_examples_donut).
 - Use your fine-tuned model for inference.
 
-<Tip>
-
-To see all architectures and checkpoints compatible with this task, we recommend checking the [task-page](https://huggingface.co/tasks/image-to-text)
-
-</Tip>
+> [!TIP]
+> To see all architectures and checkpoints compatible with this task, we recommend checking the [task-page](https://huggingface.co/tasks/image-to-text)
 
 LayoutLMv2 solves the document question-answering task by adding a question-answering head on top of the final hidden
 states of the tokens, to predict the positions of the start and end tokens of the

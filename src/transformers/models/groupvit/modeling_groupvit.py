@@ -272,13 +272,10 @@ class GroupViTModelOutput(ModelOutput):
     segmentation_logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels, logits_height, logits_width)`):
         Classification scores for each pixel.
 
-        <Tip warning={true}>
-
-        The logits returned do not necessarily have the same size as the `pixel_values` passed as inputs. This is
-        to avoid doing two interpolations and lose some quality when a user needs to resize the logits to the
-        original image size as post-processing. You should always check your logits shape and resize as needed.
-
-        </Tip>
+        > [!WARNING]
+        > The logits returned do not necessarily have the same size as the `pixel_values` passed as inputs. This is
+        > to avoid doing two interpolations and lose some quality when a user needs to resize the logits to the
+        > original image size as post-processing. You should always check your logits shape and resize as needed.
     text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
         The text embeddings obtained by applying the projection layer to the pooled output of
         [`GroupViTTextModel`].

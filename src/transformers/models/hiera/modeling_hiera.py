@@ -1080,12 +1080,9 @@ class HieraMultiScaleHead(nn.Module):
     custom_intro="""
     The Hiera Model transformer with the decoder on top for self-supervised pre-training.
 
-    <Tip>
-
-    Note that we provide a script to pre-train this model on custom data in our [examples
-    directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
-
-    </Tip>
+    > [!TIP]
+    > Note that we provide a script to pre-train this model on custom data in our [examples
+    > directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
     """
 )
 class HieraForPreTraining(HieraPreTrainedModel):
@@ -1222,13 +1219,10 @@ class HieraForPreTraining(HieraPreTrainedModel):
     Hiera Model transformer with an image classification head on top (a linear layer on top of the final hidden state with
     average pooling) e.g. for ImageNet.
 
-    <Tip>
-
-        Note that it's possible to fine-tune Hiera on higher resolution images than the ones it has been trained on, by
-        setting `interpolate_pos_encoding` to `True` in the forward of the model. This will interpolate the pre-trained
-        position embeddings to the higher resolution.
-
-    </Tip>
+    > [!TIP]
+    > Note that it's possible to fine-tune Hiera on higher resolution images than the ones it has been trained on, by
+    >     setting `interpolate_pos_encoding` to `True` in the forward of the model. This will interpolate the pre-trained
+    >     position embeddings to the higher resolution.
     """
 )
 class HieraForImageClassification(HieraPreTrainedModel):

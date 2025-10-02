@@ -30,11 +30,8 @@ rendered properly in your Markdown viewer.
 1. ضبط دقيق [T5](https://huggingface.co/google-t5/t5-small) على مجموعة فرعية من مشاريع قوانين ولاية كاليفورنيا من مجموعة بيانات [BillSum](https://huggingface.co/datasets/billsum) للتلخيص التجريدي.
 2. استخدام النموذج المضبوط بدقة للتنبؤ.
 
-<Tip>
-
-لمشاهدة جميع البنى ونقاط التفتيش المتوافقة مع هذه المهمة، نوصي بالتحقق من [صفحة المهمة](https://huggingface.co/tasks/summarization)
-
-</Tip>
+> [!TIP]
+> لمشاهدة جميع البنى ونقاط التفتيش المتوافقة مع هذه المهمة، نوصي بالتحقق من [صفحة المهمة](https://huggingface.co/tasks/summarization)
 
 قبل البدء، تأكد من تثبيت جميع المكتبات الضرورية:
 
@@ -159,11 +156,8 @@ pip install transformers datasets evaluate rouge_score
 ## التدريب (Train)
 
 
-<Tip>
-
-إذا لم تكن معتادًا على ضبط نموذج باستخدام [`Trainer`]، فألق نظرة على البرنامج التعليمي الأساسي [هنا](../training#train-with-pytorch-trainer)!
-
-</Tip>
+> [!TIP]
+> إذا لم تكن معتادًا على ضبط نموذج باستخدام [`Trainer`]، فألق نظرة على البرنامج التعليمي الأساسي [هنا](../training#train-with-pytorch-trainer)!
 
 أنت جاهز لبدء تدريب نموذجك الآن! قم بتحميل T5 باستخدام [`AutoModelForSeq2SeqLM`]:
 
@@ -213,12 +207,9 @@ pip install transformers datasets evaluate rouge_score
 >>> trainer.push_to_hub()
 ```
 
-<Tip>
-
-للحصول على مثال أكثر تعمقًا حول كيفية ضبط نموذج للتجميع، ألقِ نظرة على [دفتر ملاحظات PyTorch](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization.ipynb)
-أو [دفتر ملاحظات TensorFlow](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization-tf.ipynb) المقابل.
-
-</Tip>
+> [!TIP]
+> للحصول على مثال أكثر تعمقًا حول كيفية ضبط نموذج للتجميع، ألقِ نظرة على [دفتر ملاحظات PyTorch](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization.ipynb)
+> أو [دفتر ملاحظات TensorFlow](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization-tf.ipynb) المقابل.
 
 ## الاستدلال (Inference)
 

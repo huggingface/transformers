@@ -104,11 +104,8 @@ Once you are satisfied with your model configuration, you can save it with [`Pre
 >>> my_config = DistilBertConfig.from_pretrained("./your_model_save_path/config.json")
 ```
 
-<Tip>
-
-カスタム構成ファイルを辞書として保存することも、カスタム構成属性とデフォルトの構成属性の違いだけを保存することもできます！詳細については[configuration](main_classes/configuration)のドキュメンテーションをご覧ください。
-
-</Tip>
+> [!TIP]
+> カスタム構成ファイルを辞書として保存することも、カスタム構成属性とデフォルトの構成属性の違いだけを保存することもできます！詳細については[configuration](main_classes/configuration)のドキュメンテーションをご覧ください。
 
 ## Model
 
@@ -179,12 +176,9 @@ Once you are satisfied with your model configuration, you can save it with [`Pre
 
 両方のトークナイザは、エンコードとデコード、新しいトークンの追加、特別なトークンの管理など、共通のメソッドをサポートしています。
 
-<Tip warning={true}>
-
-すべてのモデルが高速なトークナイザをサポートしているわけではありません。
-モデルが高速なトークナイザをサポートしているかどうかを確認するには、この[表](index#supported-frameworks)をご覧ください。
-
-</Tip>
+> [!WARNING]
+> すべてのモデルが高速なトークナイザをサポートしているわけではありません。
+> モデルが高速なトークナイザをサポートしているかどうかを確認するには、この[表](index#supported-frameworks)をご覧ください。
 
 独自のトークナイザをトレーニングした場合、*ボキャブラリー*ファイルからトークナイザを作成できます。
 
@@ -213,11 +207,8 @@ Once you are satisfied with your model configuration, you can save it with [`Pre
 >>> fast_tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
-<Tip>
-
-デフォルトでは、[`AutoTokenizer`]は高速なトークナイザを読み込もうとします。`from_pretrained`内で`use_fast=False`を設定することで、この動作を無効にすることができます。
-
-</Tip>
+> [!TIP]
+> デフォルトでは、[`AutoTokenizer`]は高速なトークナイザを読み込もうとします。`from_pretrained`内で`use_fast=False`を設定することで、この動作を無効にすることができます。
 
 ## Image Processor
 
@@ -250,11 +241,8 @@ ViTImageProcessor {
 }
 ```
 
-<Tip>
-
-カスタマイズを必要としない場合、モデルのデフォルトの画像プロセッサパラメータをロードするには、単純に`from_pretrained`メソッドを使用してください。
-
-</Tip>
+> [!TIP]
+> カスタマイズを必要としない場合、モデルのデフォルトの画像プロセッサパラメータをロードするには、単純に`from_pretrained`メソッドを使用してください。
 
 [`ViTImageProcessor`]のパラメータを変更して、カスタムの画像プロセッサを作成できます：
 
@@ -306,11 +294,8 @@ Wav2Vec2FeatureExtractor {
 }
 ```
 
-<Tip>
-
-カスタマイズを行わない場合、モデルのデフォルトの特徴抽出器パラメーターをロードするには、単に `from_pretrained` メソッドを使用してください。
-
-</Tip>
+> [!TIP]
+> カスタマイズを行わない場合、モデルのデフォルトの特徴抽出器パラメーターをロードするには、単に `from_pretrained` メソッドを使用してください。
 
 [`Wav2Vec2FeatureExtractor`] のパラメーターを変更して、カスタム特徴抽出器を作成できます:
 

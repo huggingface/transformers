@@ -30,11 +30,8 @@ This guide will show you how to:
 1. Finetune [DistilBERT](https://huggingface.co/distilbert/distilbert-base-uncased) on the [SQuAD](https://huggingface.co/datasets/squad) dataset for extractive question answering.
 2. Use your finetuned model for inference.
 
-<Tip>
-
-To see all architectures and checkpoints compatible with this task, we recommend checking the [task-page](https://huggingface.co/tasks/question-answering)
-
-</Tip>
+> [!TIP]
+> To see all architectures and checkpoints compatible with this task, we recommend checking the [task-page](https://huggingface.co/tasks/question-answering)
 
 Before you begin, make sure you have all the necessary libraries installed:
 
@@ -175,11 +172,8 @@ Now create a batch of examples using [`DefaultDataCollator`]. Unlike other data 
 
 ## Train
 
-<Tip>
-
-If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
-
-</Tip>
+> [!TIP]
+> If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
 
 You're ready to start training your model now! Load DistilBERT with [`AutoModelForQuestionAnswering`]:
 
@@ -225,12 +219,9 @@ Once training is completed, share your model to the Hub with the [`~transformers
 >>> trainer.push_to_hub()
 ```
 
-<Tip>
-
-For a more in-depth example of how to finetune a model for question answering, take a look at the corresponding
-[PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb).
-
-</Tip>
+> [!TIP]
+> For a more in-depth example of how to finetune a model for question answering, take a look at the corresponding
+> [PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb).
 
 ## Evaluate
 

@@ -74,9 +74,6 @@ The following command allows you to do the conversion. We assume that the folder
 python3 $PATH_TO_TRANSFORMERS/models/megatron_gpt2/convert_megatron_gpt2_checkpoint.py megatron_gpt2_345m_v0_0.zip
 ```
 
-<Tip>
-
- MegatronGPT2 architecture is the same as OpenAI GPT-2 . Refer to [GPT-2 documentation](gpt2) for information on
- configuration classes and their parameters.
-
- </Tip>
+> [!TIP]
+> MegatronGPT2 architecture is the same as OpenAI GPT-2 . Refer to [GPT-2 documentation](gpt2) for information on
+>  configuration classes and their parameters.

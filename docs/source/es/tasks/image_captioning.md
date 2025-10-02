@@ -64,11 +64,8 @@ DatasetDict({
 
 El conjunto de datos tiene dos características, `image` y `text`.
 
-<Tip>
-
-Muchos conjuntos de datos de subtítulos de imágenes contienen múltiples subtítulos por imagen. En esos casos, una estrategia común es muestrear aleatoriamente un subtítulo entre los disponibles durante el entrenamiento.
-
-</Tip>
+> [!TIP]
+> Muchos conjuntos de datos de subtítulos de imágenes contienen múltiples subtítulos por imagen. En esos casos, una estrategia común es muestrear aleatoriamente un subtítulo entre los disponibles durante el entrenamiento.
 
 Divide el conjunto de entrenamiento del conjunto de datos en un conjunto de entrenamiento y de prueba con el método [`~datasets.Dataset.train_test_split`]:
 

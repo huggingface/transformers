@@ -285,11 +285,8 @@ def get_image_processor_config(
         local_files_only (`bool`, *optional*, defaults to `False`):
             If `True`, will only try to load the image processor configuration from local files.
 
-    <Tip>
-
-    Passing `token=True` is required when you want to use a private model.
-
-    </Tip>
+    > [!TIP]
+    > Passing `token=True` is required when you want to use a private model.
 
     Returns:
         `Dict`: The configuration of the image processor.
@@ -427,11 +424,8 @@ class AutoImageProcessor:
                 loaded values. Behavior concerning key/value pairs whose keys are *not* image processor attributes is
                 controlled by the `return_unused_kwargs` keyword parameter.
 
-        <Tip>
-
-        Passing `token=True` is required when you want to use a private model.
-
-        </Tip>
+        > [!TIP]
+        > Passing `token=True` is required when you want to use a private model.
 
         Examples:
 

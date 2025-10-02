@@ -589,11 +589,8 @@ TrainingArguments(..., deepspeed=ds_config_dict)
 
 ### Shared Configuration
 
-<Tip warning={true}>
-
-このセクションは必読です
-
-</Tip>
+> [!WARNING]
+> このセクションは必読です
 
 [`Trainer`] と DeepSpeed の両方が正しく機能するには、いくつかの設定値が必要です。
 したがって、検出が困難なエラーにつながる可能性のある定義の競合を防ぐために、それらを構成することにしました。
@@ -1458,15 +1455,12 @@ bf16 は fp32 と同じダイナミック レンジを備えているため、�
 }
 ```
 
-<Tip>
-
-`deepspeed==0.6.0`の時点では、bf16 サポートは新しく実験的なものです。
-
-bf16 が有効な状態で [勾配累積](#gradient-accumulation) を使用する場合は、bf16 で勾配が累積されることに注意する必要があります。この形式の精度が低いため、これは希望どおりではない可能性があります。損失のある蓄積につながります。
-
-この問題を修正し、より高精度の `dtype` (fp16 または fp32) を使用するオプションを提供するための作業が行われています。
-
-</Tip>
+> [!TIP]
+> `deepspeed==0.6.0`の時点では、bf16 サポートは新しく実験的なものです。
+>
+> bf16 が有効な状態で [勾配累積](#gradient-accumulation) を使用する場合は、bf16 で勾配が累積されることに注意する必要があります。この形式の精度が低いため、これは希望どおりではない可能性があります。損失のある蓄積につながります。
+>
+> この問題を修正し、より高精度の `dtype` (fp16 または fp32) を使用するオプションを提供するための作業が行われています。
 
 
 ### NCCL Collectives
@@ -1625,15 +1619,11 @@ trainer.deepspeed.save_checkpoint(checkpoint_dir)
 fp32_model = load_state_dict_from_zero_checkpoint(trainer.model, checkpoint_dir)
 ```
 
-<Tip>
-
-`load_state_dict_from_zero_checkpoint` が実行されると、`model` はもはや使用できなくなることに注意してください。
-同じアプリケーションの DeepSpeed コンテキスト。つまり、deepspeed エンジンを再初期化する必要があります。
-`model.load_state_dict(state_dict)` はそこからすべての DeepSpeed マジックを削除します。したがって、これは最後にのみ実行してください
-トレーニングの様子。
-
-
-</Tip>
+> [!TIP]
+> `load_state_dict_from_zero_checkpoint` が実行されると、`model` はもはや使用できなくなることに注意してください。
+> 同じアプリケーションの DeepSpeed コンテキスト。つまり、deepspeed エンジンを再初期化する必要があります。
+> `model.load_state_dict(state_dict)` はそこからすべての DeepSpeed マジックを削除します。したがって、これは最後にのみ実行してください
+> トレーニングの様子。
 
 もちろん、class:*~transformers.Trainer* を使用する必要はなく、上記の例を独自のものに調整することができます。
 トレーナー。

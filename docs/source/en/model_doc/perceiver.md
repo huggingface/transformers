@@ -86,11 +86,8 @@ alt="drawing" width="600"/>
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found
 [here](https://github.com/deepmind/deepmind-research/tree/master/perceiver).
 
-<Tip warning={true}>
-
-Perceiver does **not** work with `torch.nn.DataParallel` due to a bug in PyTorch, see [issue #36035](https://github.com/pytorch/pytorch/issues/36035)
-
-</Tip>
+> [!WARNING]
+> Perceiver does **not** work with `torch.nn.DataParallel` due to a bug in PyTorch, see [issue #36035](https://github.com/pytorch/pytorch/issues/36035)
 
 ## Resources
 

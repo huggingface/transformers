@@ -1741,47 +1741,44 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
         >>> mean_prediction = outputs.sequences.mean(dim=1)
         ```
 
-        <Tip>
-
-        The AutoformerForPrediction can also use static_real_features. To do so, set num_static_real_features in
-        AutoformerConfig based on number of such features in the dataset (in case of tourism_monthly dataset it
-        is equal to 1), initialize the model and call as shown below:
-
-        ```
-        >>> from huggingface_hub import hf_hub_download
-        >>> import torch
-        >>> from transformers import AutoformerConfig, AutoformerForPrediction
-
-        >>> file = hf_hub_download(
-        ...     repo_id="hf-internal-testing/tourism-monthly-batch", filename="train-batch.pt", repo_type="dataset"
-        ... )
-        >>> batch = torch.load(file)
-
-        >>> # check number of static real features
-        >>> num_static_real_features = batch["static_real_features"].shape[-1]
-
-        >>> # load configuration of pretrained model and override num_static_real_features
-        >>> configuration = AutoformerConfig.from_pretrained(
-        ...     "huggingface/autoformer-tourism-monthly",
-        ...     num_static_real_features=num_static_real_features,
-        ... )
-        >>> # we also need to update feature_size as it is not recalculated
-        >>> configuration.feature_size += num_static_real_features
-
-        >>> model = AutoformerForPrediction(configuration)
-
-        >>> outputs = model(
-        ...     past_values=batch["past_values"],
-        ...     past_time_features=batch["past_time_features"],
-        ...     past_observed_mask=batch["past_observed_mask"],
-        ...     static_categorical_features=batch["static_categorical_features"],
-        ...     static_real_features=batch["static_real_features"],
-        ...     future_values=batch["future_values"],
-        ...     future_time_features=batch["future_time_features"],
-        ... )
-        ```
-
-        </Tip>
+        > [!TIP]
+        > The AutoformerForPrediction can also use static_real_features. To do so, set num_static_real_features in
+        > AutoformerConfig based on number of such features in the dataset (in case of tourism_monthly dataset it
+        > is equal to 1), initialize the model and call as shown below:
+        >
+        > ```
+        > >>> from huggingface_hub import hf_hub_download
+        > >>> import torch
+        > >>> from transformers import AutoformerConfig, AutoformerForPrediction
+        >
+        > >>> file = hf_hub_download(
+        > ...     repo_id="hf-internal-testing/tourism-monthly-batch", filename="train-batch.pt", repo_type="dataset"
+        > ... )
+        > >>> batch = torch.load(file)
+        >
+        > >>> # check number of static real features
+        > >>> num_static_real_features = batch["static_real_features"].shape[-1]
+        >
+        > >>> # load configuration of pretrained model and override num_static_real_features
+        > >>> configuration = AutoformerConfig.from_pretrained(
+        > ...     "huggingface/autoformer-tourism-monthly",
+        > ...     num_static_real_features=num_static_real_features,
+        > ... )
+        > >>> # we also need to update feature_size as it is not recalculated
+        > >>> configuration.feature_size += num_static_real_features
+        >
+        > >>> model = AutoformerForPrediction(configuration)
+        >
+        > >>> outputs = model(
+        > ...     past_values=batch["past_values"],
+        > ...     past_time_features=batch["past_time_features"],
+        > ...     past_observed_mask=batch["past_observed_mask"],
+        > ...     static_categorical_features=batch["static_categorical_features"],
+        > ...     static_real_features=batch["static_real_features"],
+        > ...     future_values=batch["future_values"],
+        > ...     future_time_features=batch["future_time_features"],
+        > ... )
+        > ```
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

@@ -16,11 +16,8 @@ rendered properly in your Markdown viewer.
 # Efficient Inference on a Multiple GPUs
 
 この文書には、複数のGPUで効率的に推論を行う方法に関する情報が含まれています。
-<Tip>
-
-注意: 複数のGPUセットアップは、[単一のGPUセクション](./perf_infer_gpu_one)で説明されているほとんどの戦略を使用できます。ただし、より良い使用法のために使用できる簡単なテクニックについても認識しておく必要があります。
-
-</Tip>
+> [!TIP]
+> 注意: 複数のGPUセットアップは、[単一のGPUセクション](./perf_infer_gpu_one)で説明されているほとんどの戦略を使用できます。ただし、より良い使用法のために使用できる簡単なテクニックについても認識しておく必要があります。
 
 ## Flash Attention 2
 
@@ -31,11 +28,8 @@ Flash Attention 2の統合は、複数のGPUセットアップでも機能しま
 [BetterTransformer](https://huggingface.co/docs/optimum/bettertransformer/overview)は、🤗 TransformersモデルをPyTorchネイティブの高速実行パスを使用するように変換し、その下でFlash Attentionなどの最適化されたカーネルを呼び出します。
 
 BetterTransformerは、テキスト、画像、音声モデルの単一GPUおよび複数GPUでの高速推論もサポートしています。
-<Tip>
-
-Flash Attentionは、fp16またはbf16 dtypeを使用しているモデルにのみ使用できます。BetterTransformerを使用する前に、モデルを適切なdtypeにキャストしてください。
-
-</Tip>
+> [!TIP]
+> Flash Attentionは、fp16またはbf16 dtypeを使用しているモデルにのみ使用できます。BetterTransformerを使用する前に、モデルを適切なdtypeにキャストしてください。
 
 ### Decoder models
 

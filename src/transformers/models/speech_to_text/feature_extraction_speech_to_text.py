@@ -219,12 +219,9 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
 
                 [What are attention masks?](../glossary#attention-mask)
 
-                <Tip>
-
-                For Speech2TextTransformer models, `attention_mask` should always be passed for batched inference, to
-                avoid subtle bugs.
-
-                </Tip>
+                > [!TIP]
+                > For Speech2TextTransformer models, `attention_mask` should always be passed for batched inference, to
+                > avoid subtle bugs.
 
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:

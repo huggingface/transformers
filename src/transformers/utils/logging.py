@@ -165,17 +165,14 @@ def get_verbosity() -> int:
     Returns:
         `int`: The logging level.
 
-    <Tip>
-
-    🤗 Transformers has following logging levels:
-
-    - 50: `transformers.logging.CRITICAL` or `transformers.logging.FATAL`
-    - 40: `transformers.logging.ERROR`
-    - 30: `transformers.logging.WARNING` or `transformers.logging.WARN`
-    - 20: `transformers.logging.INFO`
-    - 10: `transformers.logging.DEBUG`
-
-    </Tip>"""
+    > [!TIP]
+    > 🤗 Transformers has following logging levels:
+    >
+    > - 50: `transformers.logging.CRITICAL` or `transformers.logging.FATAL`
+    > - 40: `transformers.logging.ERROR`
+    > - 30: `transformers.logging.WARNING` or `transformers.logging.WARN`
+    > - 20: `transformers.logging.INFO`
+    > - 10: `transformers.logging.DEBUG`"""
 
     _configure_library_root_logger()
     return _get_library_root_logger().getEffectiveLevel()

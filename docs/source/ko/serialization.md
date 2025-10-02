@@ -126,11 +126,8 @@ CLI 대신에 `optimum.onnxruntime`을 사용하여 프로그래밍 방식으로
 
 ### `transformers.onnx`를 사용하여 모델 내보내기 [[exporting-a-model-with-transformersonnx]]
 
-<Tip warning={true}>
-
-`tranformers.onnx`는 더 이상 유지되지 않습니다. 위에서 설명한 대로 🤗 Optimum을 사용하여 모델을 내보내세요. 이 섹션은 향후 버전에서 제거될 예정입니다.
-
-</Tip>
+> [!WARNING]
+> `tranformers.onnx`는 더 이상 유지되지 않습니다. 위에서 설명한 대로 🤗 Optimum을 사용하여 모델을 내보내세요. 이 섹션은 향후 버전에서 제거될 예정입니다.
 
 🤗 Transformers 모델을 ONNX로 내보내려면 추가 종속성을 설치하세요:
 

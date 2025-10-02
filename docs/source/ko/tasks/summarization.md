@@ -32,11 +32,8 @@ rendered properly in your Markdown viewer.
 1. 생성 요약을 위한 [BillSum](https://huggingface.co/datasets/billsum) 데이터셋 중 캘리포니아 주 법안 하위 집합으로 [T5](https://huggingface.co/google-t5/t5-small)를 파인튜닝합니다.
 2. 파인튜닝된 모델을 사용하여 추론합니다.
 
-<Tip>
-
-이 작업과 호환되는 모든 아키텍처와 체크포인트를 보려면 [작업 페이지](https://huggingface.co/tasks/summarization)를 확인하는 것이 좋습니다.
-
-</Tip>
+> [!TIP]
+> 이 작업과 호환되는 모든 아키텍처와 체크포인트를 보려면 [작업 페이지](https://huggingface.co/tasks/summarization)를 확인하는 것이 좋습니다.
 
 시작하기 전에 필요한 라이브러리가 모두 설치되어 있는지 확인하세요:
 
@@ -167,11 +164,8 @@ Hugging Face 계정에 로그인하면 모델을 업로드하고 커뮤니티에
 
 ## 학습[[train]]
 
-<Tip>
-
-모델을 [`Trainer`]로 파인튜닝 하는 것이 익숙하지 않다면, [여기](../training#train-with-pytorch-trainer)에서 기본 튜토리얼을 확인해보세요!
-
-</Tip>
+> [!TIP]
+> 모델을 [`Trainer`]로 파인튜닝 하는 것이 익숙하지 않다면, [여기](../training#train-with-pytorch-trainer)에서 기본 튜토리얼을 확인해보세요!
 
 이제 모델 학습을 시작할 준비가 되었습니다! [`AutoModelForSeq2SeqLM`]로 T5를 가져오세요:
 
@@ -224,12 +218,9 @@ Hugging Face 계정에 로그인하면 모델을 업로드하고 커뮤니티에
 >>> trainer.push_to_hub()
 ```
 
-<Tip>
-
-요약을 위해 모델을 파인튜닝하는 방법에 대한 더 자세한 예제를 보려면 [PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization.ipynb)
-또는 [TensorFlow notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization-tf.ipynb)을 참고하세요.
-
-</Tip>
+> [!TIP]
+> 요약을 위해 모델을 파인튜닝하는 방법에 대한 더 자세한 예제를 보려면 [PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization.ipynb)
+> 또는 [TensorFlow notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization-tf.ipynb)을 참고하세요.
 
 ## 추론[[inference]]
 

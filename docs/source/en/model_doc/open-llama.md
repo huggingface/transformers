@@ -21,20 +21,14 @@ rendered properly in your Markdown viewer.
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
-<Tip warning={true}>
+> [!WARNING]
+> This model is in maintenance mode only, we don't accept any new PRs changing its code.
+>
+> If you run into any issues running this model, please reinstall the last version that supported this model: v4.31.0.
+> You can do so by running the following command: `pip install -U transformers==4.31.0`.
 
-This model is in maintenance mode only, we don't accept any new PRs changing its code.
-
-If you run into any issues running this model, please reinstall the last version that supported this model: v4.31.0.
-You can do so by running the following command: `pip install -U transformers==4.31.0`.
-
-</Tip>
-
-<Tip warning={true}>
-
-This model differs from the [OpenLLaMA models](https://huggingface.co/models?search=openllama) on the Hugging Face Hub, which primarily use the [LLaMA](llama) architecture.
-
-</Tip>
+> [!WARNING]
+> This model differs from the [OpenLLaMA models](https://huggingface.co/models?search=openllama) on the Hugging Face Hub, which primarily use the [LLaMA](llama) architecture.
 
 ## Overview
 

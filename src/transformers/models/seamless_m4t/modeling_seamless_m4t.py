@@ -2611,16 +2611,13 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel, GenerationMixin):
         """
         Generates sequences of token ids.
 
-        <Tip warning={true}>
-
-        Most generation-controlling parameters are set in `generation_config` which, if not passed, will be set to the
-        model's default generation configuration. You can override any `generation_config` by passing the corresponding
-        parameters to generate(), e.g. `.generate(inputs, num_beams=4, do_sample=True)`.
-
-        For an overview of generation strategies and code examples, check out the [following
-        guide](./generation_strategies).
-
-        </Tip>
+        > [!WARNING]
+        > Most generation-controlling parameters are set in `generation_config` which, if not passed, will be set to the
+        > model's default generation configuration. You can override any `generation_config` by passing the corresponding
+        > parameters to generate(), e.g. `.generate(inputs, num_beams=4, do_sample=True)`.
+        >
+        > For an overview of generation strategies and code examples, check out the [following
+        > guide](./generation_strategies).
 
         Parameters:
             input_ids (`torch.Tensor` of varying shape depending on the modality, *optional*):
@@ -2870,16 +2867,13 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel, GenerationMixin):
         """
         Generates sequences of token ids.
 
-        <Tip warning={true}>
-
-        Most generation-controlling parameters are set in `generation_config` which, if not passed, will be set to the
-        model's default generation configuration. You can override any `generation_config` by passing the corresponding
-        parameters to generate(), e.g. `.generate(inputs, num_beams=4, do_sample=True)`.
-
-        For an overview of generation strategies and code examples, check out the [following
-        guide](./generation_strategies).
-
-        </Tip>
+        > [!WARNING]
+        > Most generation-controlling parameters are set in `generation_config` which, if not passed, will be set to the
+        > model's default generation configuration. You can override any `generation_config` by passing the corresponding
+        > parameters to generate(), e.g. `.generate(inputs, num_beams=4, do_sample=True)`.
+        >
+        > For an overview of generation strategies and code examples, check out the [following
+        > guide](./generation_strategies).
 
         Parameters:
             input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_banks)`):
@@ -3137,19 +3131,16 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
         """
         Generates translated audio waveforms.
 
-        <Tip>
-
-        This method successively calls the `.generate` function of two different sub-models. You can specify keyword
-        arguments at two different levels: general arguments that will be passed to both models, or prefixed arguments
-        that will be passed to one of them.
-
-        For example, calling `.generate(input_ids, num_beams=4, speech_do_sample=True)` will successively perform
-        beam-search decoding on the text model, and multinomial beam-search sampling on the speech model.
-
-        For an overview of generation strategies and code examples, check out the [following
-        guide](./generation_strategies).
-
-        </Tip>
+        > [!TIP]
+        > This method successively calls the `.generate` function of two different sub-models. You can specify keyword
+        > arguments at two different levels: general arguments that will be passed to both models, or prefixed arguments
+        > that will be passed to one of them.
+        >
+        > For example, calling `.generate(input_ids, num_beams=4, speech_do_sample=True)` will successively perform
+        > beam-search decoding on the text model, and multinomial beam-search sampling on the speech model.
+        >
+        > For an overview of generation strategies and code examples, check out the [following
+        > guide](./generation_strategies).
 
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -3461,19 +3452,16 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
         """
         Generates translated audio waveforms.
 
-        <Tip>
-
-        This method successively calls the `.generate` function of two different sub-models. You can specify keyword
-        arguments at two different levels: general arguments that will be passed to both models, or prefixed arguments
-        that will be passed to one of them.
-
-        For example, calling `.generate(input_features, num_beams=4, speech_do_sample=True)` will successively perform
-        beam-search decoding on the text model, and multinomial beam-search sampling on the speech model.
-
-        For an overview of generation strategies and code examples, check out the [following
-        guide](./generation_strategies).
-
-        </Tip>
+        > [!TIP]
+        > This method successively calls the `.generate` function of two different sub-models. You can specify keyword
+        > arguments at two different levels: general arguments that will be passed to both models, or prefixed arguments
+        > that will be passed to one of them.
+        >
+        > For example, calling `.generate(input_features, num_beams=4, speech_do_sample=True)` will successively perform
+        > beam-search decoding on the text model, and multinomial beam-search sampling on the speech model.
+        >
+        > For an overview of generation strategies and code examples, check out the [following
+        > guide](./generation_strategies).
 
         Args:
             input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_banks)`):
@@ -3853,19 +3841,16 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel, GenerationMixin):
         """
         Generates translated token ids and/or translated audio waveforms.
 
-        <Tip>
-
-        This method successively calls the `.generate` function of two different sub-models. You can specify keyword
-        arguments at two different levels: general arguments that will be passed to both models, or prefixed arguments
-        that will be passed to one of them.
-
-        For example, calling `.generate(input_ids=input_ids, num_beams=4, speech_do_sample=True)` will successively
-        perform beam-search decoding on the text model, and multinomial beam-search sampling on the speech model.
-
-        For an overview of generation strategies and code examples, check out the [following
-        guide](./generation_strategies).
-
-        </Tip>
+        > [!TIP]
+        > This method successively calls the `.generate` function of two different sub-models. You can specify keyword
+        > arguments at two different levels: general arguments that will be passed to both models, or prefixed arguments
+        > that will be passed to one of them.
+        >
+        > For example, calling `.generate(input_ids=input_ids, num_beams=4, speech_do_sample=True)` will successively
+        > perform beam-search decoding on the text model, and multinomial beam-search sampling on the speech model.
+        >
+        > For an overview of generation strategies and code examples, check out the [following
+        > guide](./generation_strategies).
 
 
         Args:

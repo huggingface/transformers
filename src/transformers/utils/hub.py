@@ -298,11 +298,8 @@ def cached_file(
         repo_type (`str`, *optional*):
             Specify the repo type (useful when downloading from a space for instance).
 
-    <Tip>
-
-    Passing `token=True` is required when you want to use a private model.
-
-    </Tip>
+    > [!TIP]
+    > Passing `token=True` is required when you want to use a private model.
 
     Returns:
         `Optional[str]`: Returns the resolved file (to the cache folder if downloaded from a repo).
@@ -386,11 +383,8 @@ def cached_files(
             passed when we are chaining several calls to various files (e.g. when loading a tokenizer or
             a pipeline). If files are cached for this commit hash, avoid calls to head and get from the cache.
 
-    <Tip>
-
-    Passing `token=True` is required when you want to use a private model.
-
-    </Tip>
+    > [!TIP]
+    > Passing `token=True` is required when you want to use a private model.
 
     Returns:
         `Optional[str]`: Returns the resolved file (to the cache folder if downloaded from a repo).

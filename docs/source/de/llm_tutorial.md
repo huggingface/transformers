@@ -68,11 +68,8 @@ Damit sich Ihr Modell so verhält, wie Sie es für Ihre Aufgabe erwarten, müsse
 
 Lassen Sie uns über Code sprechen!
 
-<Tip>
-
-Wenn Sie an der grundlegenden Verwendung von LLMs interessiert sind, ist unsere High-Level-Schnittstelle [`Pipeline`](pipeline_tutorial) ein guter Ausgangspunkt. LLMs erfordern jedoch oft fortgeschrittene Funktionen wie Quantisierung und Feinsteuerung des Token-Auswahlschritts, was am besten über [`~generation.GenerationMixin.generate`] erfolgt. Die autoregressive Generierung mit LLMs ist ebenfalls ressourcenintensiv und sollte für einen angemessenen Durchsatz auf einer GPU ausgeführt werden.
-
-</Tip>
+> [!TIP]
+> Wenn Sie an der grundlegenden Verwendung von LLMs interessiert sind, ist unsere High-Level-Schnittstelle [`Pipeline`](pipeline_tutorial) ein guter Ausgangspunkt. LLMs erfordern jedoch oft fortgeschrittene Funktionen wie Quantisierung und Feinsteuerung des Token-Auswahlschritts, was am besten über [`~generation.GenerationMixin.generate`] erfolgt. Die autoregressive Generierung mit LLMs ist ebenfalls ressourcenintensiv und sollte für einen angemessenen Durchsatz auf einer GPU ausgeführt werden.
 
 <!-- TODO: update example to llama 2 (or a newer popular baseline) when it becomes ungated -->
 Zunächst müssen Sie das Modell laden.

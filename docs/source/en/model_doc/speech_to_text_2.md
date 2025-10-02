@@ -17,13 +17,10 @@ rendered properly in your Markdown viewer.
 
 # Speech2Text2
 
-  <Tip warning={true}>
-
-  This model is in maintenance mode only, we don't accept any new PRs changing its code.
-  If you run into any issues running this model, please reinstall the last version that supported this model: v4.40.2.
-  You can do so by running the following command: `pip install -U transformers==4.40.2`.
-
-  </Tip>
+  > [!WARNING]
+  > This model is in maintenance mode only, we don't accept any new PRs changing its code.
+  > If you run into any issues running this model, please reinstall the last version that supported this model: v4.40.2.
+  > You can do so by running the following command: `pip install -U transformers==4.40.2`.
 
 ## Overview
 

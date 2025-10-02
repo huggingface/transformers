@@ -65,11 +65,8 @@ def find_adapter_config_file(
             git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
             identifier allowed by git.
 
-            <Tip>
-
-            To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>".
-
-            </Tip>
+            > [!TIP]
+            > To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>".
 
         local_files_only (`bool`, *optional*, defaults to `False`):
             If `True`, will only try to load the tokenizer configuration from local files.

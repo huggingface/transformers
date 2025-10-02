@@ -98,11 +98,8 @@ class BlenderbotTokenizer(PreTrainedTokenizer):
     You can get around that behavior by passing `add_prefix_space=True` when instantiating this tokenizer or when you
     call it on some text, but since the model was not pretrained this way, it might yield a decrease in performance.
 
-    <Tip>
-
-    When used with `is_split_into_words=True`, this tokenizer will add a space before each word (even the first one).
-
-    </Tip>
+    > [!TIP]
+    > When used with `is_split_into_words=True`, this tokenizer will add a space before each word (even the first one).
 
     This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
     this superclass for more information regarding those methods.
@@ -118,22 +115,16 @@ class BlenderbotTokenizer(PreTrainedTokenizer):
         bos_token (`str`, *optional*, defaults to `"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
 
-            <Tip>
-
-            When building a sequence using special tokens, this is not the token that is used for the beginning of
-            sequence. The token used is the `cls_token`.
-
-            </Tip>
+            > [!TIP]
+            > When building a sequence using special tokens, this is not the token that is used for the beginning of
+            > sequence. The token used is the `cls_token`.
 
         eos_token (`str`, *optional*, defaults to `"</s>"`):
             The end of sequence token.
 
-            <Tip>
-
-            When building a sequence using special tokens, this is not the token that is used for the end of sequence.
-            The token used is the `sep_token`.
-
-            </Tip>
+            > [!TIP]
+            > When building a sequence using special tokens, this is not the token that is used for the end of sequence.
+            > The token used is the `sep_token`.
 
         sep_token (`str`, *optional*, defaults to `"</s>"`):
             The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for

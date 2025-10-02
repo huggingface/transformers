@@ -867,11 +867,8 @@ def get_tokenizer_config(
             In case the tokenizer config is located inside a subfolder of the model repo on huggingface.co, you can
             specify the folder name here.
 
-    <Tip>
-
-    Passing `token=True` is required when you want to use a private model.
-
-    </Tip>
+    > [!TIP]
+    > Passing `token=True` is required when you want to use a private model.
 
     Returns:
         `dict`: The configuration of the tokenizer.

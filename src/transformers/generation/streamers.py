@@ -42,11 +42,8 @@ class TextStreamer(BaseStreamer):
     """
     Simple text streamer that prints the token(s) to stdout as soon as entire words are formed.
 
-    <Tip warning={true}>
-
-    The API for the streamer classes is still under development and may change in the future.
-
-    </Tip>
+    > [!WARNING]
+    > The API for the streamer classes is still under development and may change in the future.
 
     Parameters:
         tokenizer (`AutoTokenizer`):
@@ -165,11 +162,8 @@ class TextIteratorStreamer(TextStreamer):
     useful for applications that benefit from accessing the generated text in a non-blocking way (e.g. in an interactive
     Gradio demo).
 
-    <Tip warning={true}>
-
-    The API for the streamer classes is still under development and may change in the future.
-
-    </Tip>
+    > [!WARNING]
+    > The API for the streamer classes is still under development and may change in the future.
 
     Parameters:
         tokenizer (`AutoTokenizer`):
@@ -236,11 +230,8 @@ class AsyncTextIteratorStreamer(TextStreamer):
     This is useful for applications that benefit from accessing the generated text asynchronously (e.g. in an
     interactive Gradio demo).
 
-    <Tip warning={true}>
-
-    The API for the streamer classes is still under development and may change in the future.
-
-    </Tip>
+    > [!WARNING]
+    > The API for the streamer classes is still under development and may change in the future.
 
     Parameters:
         tokenizer (`AutoTokenizer`):

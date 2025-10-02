@@ -39,9 +39,8 @@ CUDA out of memory. Tried to allocate 256.00 MiB (GPU 0; 11.17 GiB total capacit
 
 - حاول استخدام [`gradient_accumulation_steps`](main_classes/trainer#transformers.TrainingArguments.gradient_accumulation_steps) في [`TrainingArguments`] لزيادة حجم الدُفعة بشكل فعال.
 
-<Tip>
-راجع دليل [الأداء](performance) لمزيد من التفاصيل حول تقنيات توفير الذاكرة.
-</Tip>
+> [!TIP]
+> راجع دليل [الأداء](performance) لمزيد من التفاصيل حول تقنيات توفير الذاكرة.
 
 ## عدم القدرة على تحميل نموذج TensorFlow محفوظ
 
@@ -138,9 +137,8 @@ tensor([[-0.1008, -0.4061]], grad_fn=<AddmmBackward0>)
 
 يجب عليك في معظم الوقت توفير `attention_mask` للنموذج لتجاهل رموز الحشو لتجنب هذا الخطأ الصامت. الآن يتطابق مُخرجات التسلسل الثاني مع مُخرجاته الفعلية:
 
-<Tip>
-بشكل افتراضي، ينشئ مجزىء النصوص `attention_mask` لك استنادًا إلى إعدادات المجزىء المحدد.
-</Tip>
+> [!TIP]
+> بشكل افتراضي، ينشئ مجزىء النصوص `attention_mask` لك استنادًا إلى إعدادات المجزىء المحدد.
 
 ```python
 >>> attention_mask = torch.tensor([[1, 1, 1, 1, 1, 1], [1, 0, 0, 0, 0, 0]])

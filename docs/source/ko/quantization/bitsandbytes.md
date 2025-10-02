@@ -125,11 +125,8 @@ model_4bit.model.decoder.layers[-1].final_layer_norm.weight.dtype
 </hfoption>
 </hfoptions>
 
-<Tip warning={true}>
-
-8비트 및 4비트 가중치로 훈련하는 것은 *추가* 매개변수에 대해서만 지원됩니다.
-
-</Tip>
+> [!WARNING]
+> 8비트 및 4비트 가중치로 훈련하는 것은 *추가* 매개변수에 대해서만 지원됩니다.
 
 메모리 사용량을 확인하려면 `get_memory_footprint`를 사용하세요:
 
@@ -147,11 +144,8 @@ model = AutoModelForCausalLM.from_pretrained("{your_username}/bloom-560m-8bit", 
 
 ## 8비트 (LLM.int8() 알고리즘)[[8-bit-(llm.int8()-algorithm)]]
 
-<Tip>
-
-8비트 양자화에 대한 자세한 내용을 알고 싶다면 이 [블로그 포스트](https://huggingface.co/blog/hf-bitsandbytes-integration)를 참조하세요!
-
-</Tip>
+> [!TIP]
+> 8비트 양자화에 대한 자세한 내용을 알고 싶다면 이 [블로그 포스트](https://huggingface.co/blog/hf-bitsandbytes-integration)를 참조하세요!
 
 이 섹션에서는 오프로딩, 이상치 임곗값, 모듈 변환 건너뛰기 및 미세 조정과 같은 8비트 모델의 특정 기능을 살펴봅니다.
 
@@ -235,11 +229,8 @@ model_8bit = AutoModelForCausalLM.from_pretrained(
 
 ## 4비트 (QLoRA 알고리즘)[[4-bit-(qlora-algorithm)]]
 
-<Tip>
-
-이 [노트북](https://colab.research.google.com/drive/1ge2F1QSK8Q7h0hn3YKuBCOAS0bK8E0wf)에서 4비트 양자화를 시도해보고 자세한 내용은 이 [블로그 게시물](https://huggingface.co/blog/4bit-transformers-bitsandbytes)에서 확인하세요.
-
-</Tip>
+> [!TIP]
+> 이 [노트북](https://colab.research.google.com/drive/1ge2F1QSK8Q7h0hn3YKuBCOAS0bK8E0wf)에서 4비트 양자화를 시도해보고 자세한 내용은 이 [블로그 게시물](https://huggingface.co/blog/4bit-transformers-bitsandbytes)에서 확인하세요.
 
 이 섹션에서는 계산 데이터 유형 변경, Normal Float 4 (NF4) 데이터 유형 사용, 중첩 양자화 사용과 같은 4비트 모델의 특정 기능 일부를 탐구합니다.
 

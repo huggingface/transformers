@@ -177,11 +177,8 @@ class ResnetModelForImageClassification(PreTrainedModel):
 두 경우 모두 `PreTrainedModel`를 상속받고, `config`를 통해 상위 클래스 초기화를 호출하다는 점을 기억하세요 (일반적인 `torch.nn.Module`을 작성할 때와 비슷함).
 모델을 auto 클래스에 등록하고 싶은 경우에는 `config_class`를 설정하는 부분이 필수입니다 (마지막 섹션 참조).
 
-<Tip>
-
-라이브러리에 존재하는 모델과 굉장히 유사하다면, 모델을 생성할 때 구성을 참조해 재사용할 수 있습니다.
-
-</Tip>
+> [!TIP]
+> 라이브러리에 존재하는 모델과 굉장히 유사하다면, 모델을 생성할 때 구성을 참조해 재사용할 수 있습니다.
 
 원하는 것을 모델이 반환하도록 할 수 있지만, `ResnetModelForImageClassification`에서 했던 것 처럼
 레이블을 통과시켰을 때 손실과 함께 사전 형태로 반환하는 것이 [`Trainer`] 클래스 내에서 직접 모델을 사용하기에 유용합니다.
@@ -213,11 +210,8 @@ resnet50d.model.load_state_dict(pretrained_model.state_dict())
 
 ## Hub로 코드 업로드하기[[sending-the-code-to-the-hub]]
 
-<Tip warning={true}>
-
-이 API는 실험적이며 다음 릴리스에서 약간의 변경 사항이 있을 수 있습니다.
-
-</Tip>
+> [!WARNING]
+> 이 API는 실험적이며 다음 릴리스에서 약간의 변경 사항이 있을 수 있습니다.
 
 먼저 모델이 `.py` 파일에 완전히 정의되어 있는지 확인하세요.
 모든 파일이 동일한 작업 경로에 있기 때문에 상대경로 임포트(relative import)에 의존할 수 있습니다 (transformers에서는 이 기능에 대한 하위 모듈을 지원하지 않습니다).
@@ -234,12 +228,9 @@ resnet50d.model.load_state_dict(pretrained_model.state_dict())
 
 Python이 `resnet_model`을 모듈로 사용할 수 있도록 감지하는 목적이기 때문에 `__init__.py`는 비어 있을 수 있습니다.
 
-<Tip warning={true}>
-
-라이브러리에서 모델링 파일을 복사하는 경우,
-모든 파일 상단에 있는 상대 경로 임포트(relative import) 부분을 `transformers` 패키지에서 임포트 하도록 변경해야 합니다.
-
-</Tip>
+> [!WARNING]
+> 라이브러리에서 모델링 파일을 복사하는 경우,
+> 모든 파일 상단에 있는 상대 경로 임포트(relative import) 부분을 `transformers` 패키지에서 임포트 하도록 변경해야 합니다.
 
 기존 구성이나 모델을 재사용(또는 서브 클래스화)할 수 있습니다.
 

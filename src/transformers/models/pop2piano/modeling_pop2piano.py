@@ -1193,14 +1193,11 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel, GenerationMixi
         """
         Generates token ids for midi outputs.
 
-        <Tip warning={true}>
-
-        Most generation-controlling parameters are set in `generation_config` which, if not passed, will be set to the
-        model's default generation configuration. You can override any `generation_config` by passing the corresponding
-        parameters to generate(), e.g. `.generate(inputs, num_beams=4, do_sample=True)`. For an overview of generation
-        strategies and code examples, check out the [following guide](./generation_strategies).
-
-        </Tip>
+        > [!WARNING]
+        > Most generation-controlling parameters are set in `generation_config` which, if not passed, will be set to the
+        > model's default generation configuration. You can override any `generation_config` by passing the corresponding
+        > parameters to generate(), e.g. `.generate(inputs, num_beams=4, do_sample=True)`. For an overview of generation
+        > strategies and code examples, check out the [following guide](./generation_strategies).
 
         Parameters:
             input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):

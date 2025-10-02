@@ -38,12 +38,9 @@ BARTHez のコーパス上で多言語 BART を事前訓練し、結果として
 
 このモデルは [moussakam](https://huggingface.co/moussakam) によって寄稿されました。著者のコードは[ここ](https://github.com/moussaKam/BARThez)にあります。
 
-<Tip>
-
-BARThez の実装は、トークン化を除いて BART と同じです。詳細については、[BART ドキュメント](bart) を参照してください。
-構成クラスとそのパラメータ。 BARThez 固有のトークナイザーについては以下に記載されています。
-
-</Tip>
+> [!TIP]
+> BARThez の実装は、トークン化を除いて BART と同じです。詳細については、[BART ドキュメント](bart) を参照してください。
+> 構成クラスとそのパラメータ。 BARThez 固有のトークナイザーについては以下に記載されています。
 
 ### Resources
 

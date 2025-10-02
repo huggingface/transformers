@@ -149,24 +149,18 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         chunk_length_s (`float`, *optional*, defaults to 0):
             The input length for in each chunk. If `chunk_length_s = 0` then chunking is disabled (default).
 
-            <Tip>
-
-            For more information on how to effectively use `chunk_length_s`, please have a look at the [ASR chunking
-            blog post](https://huggingface.co/blog/asr-chunking).
-
-            </Tip>
+            > [!TIP]
+            > For more information on how to effectively use `chunk_length_s`, please have a look at the [ASR chunking
+            > blog post](https://huggingface.co/blog/asr-chunking).
 
         stride_length_s (`float`, *optional*, defaults to `chunk_length_s / 6`):
             The length of stride on the left and right of each chunk. Used only with `chunk_length_s > 0`. This enables
             the model to *see* more context and infer letters better than without this context but the pipeline
             discards the stride bits at the end to make the final reconstitution as perfect as possible.
 
-            <Tip>
-
-            For more information on how to effectively use `stride_length_s`, please have a look at the [ASR chunking
-            blog post](https://huggingface.co/blog/asr-chunking).
-
-            </Tip>
+            > [!TIP]
+            > For more information on how to effectively use `stride_length_s`, please have a look at the [ASR chunking
+            > blog post](https://huggingface.co/blog/asr-chunking).
 
         device (Union[`int`, `torch.device`], *optional*):
             Device ordinal for CPU/GPU supports. Setting this to `None` will leverage CPU, a positive will run the

@@ -156,11 +156,8 @@ make fix-copies
 
 Transformersライブラリは、モデルコードに関して非常に意見があるため、各モデルは他のモデルに依存せずに完全に1つのファイルに実装する必要があります。したがって、特定のモデルのコードのコピーが元のコードと一貫しているかどうかを確認する仕組みを追加しました。これにより、バグ修正がある場合、他の影響を受けるモデルをすべて確認し、変更を伝達するかコピーを破棄するかを選択できます。
 
-<Tip>
-
-ファイルが別のファイルの完全なコピーである場合、それを`utils/check_copies.py`の`FULL_COPIES`定数に登録する必要があります。
-
-</Tip>
+> [!TIP]
+> ファイルが別のファイルの完全なコピーである場合、それを`utils/check_copies.py`の`FULL_COPIES`定数に登録する必要があります。
 
 この仕組みは、`# Copied from xxx`という形式のコメントに依存しています。`xxx`は、コピーされているクラスまたは関数の完全なパスを含む必要があります。例えば、`RobertaSelfOutput`は`BertSelfOutput`クラスの直接のコピーですので、[こちら](https://github.com/huggingface/transformers/blob/2bd7a27a671fd1d98059124024f580f8f5c0f3b5/src/transformers/models/roberta/modeling_roberta.py#L289)にコメントがあります。
 
@@ -188,11 +185,8 @@ Transformersライブラリは、モデルコードに関して非常に意見�
 
 もし順序が重要な場合（以前の置換と競合する可能性があるため）、置換は左から右に実行されます。
 
-<Tip>
-
-もし置換がフォーマットを変更する場合（たとえば、短い名前を非常に長い名前に置き換える場合など）、自動フォーマッタを適用した後にコピーが確認されます。
-
-</Tip>
+> [!TIP]
+> もし置換がフォーマットを変更する場合（たとえば、短い名前を非常に長い名前に置き換える場合など）、自動フォーマッタを適用した後にコピーが確認されます。
 
 パターンが同じ置換の異なるケース（大文字と小文字のバリアントがある）の場合、オプションとして `all-casing` を追加するだけの別の方法もあります。[こちら](https://github.com/huggingface/transformers/blob/15082a9dc6950ecae63a0d3e5060b2fc7f15050a/src/transformers/models/mobilebert/modeling_mobilebert.py#L1237)は、`MobileBertForSequenceClassification` 内の例で、コメントがついています。
 

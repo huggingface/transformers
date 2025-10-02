@@ -23,13 +23,10 @@ http://www.apache.org/licenses/LICENSE-2.0
 この種のチェックポイントに依存しないコードを生成することは、
 コードが1つのチェックポイントで動作すれば、アーキテクチャが異なっていても、同じタスクに向けてトレーニングされた場合は別のチェックポイントでも動作することを意味します。
 
-<Tip>
-
-アーキテクチャはモデルの骨格を指し、チェックポイントは特定のアーキテクチャの重みです。
-たとえば、[BERT](https://huggingface.co/google-bert/bert-base-uncased)はアーキテクチャであり、`google-bert/bert-base-uncased`はチェックポイントです。
-モデルはアーキテクチャまたはチェックポイントのどちらを指す一般的な用語です。
-
-</Tip>
+> [!TIP]
+> アーキテクチャはモデルの骨格を指し、チェックポイントは特定のアーキテクチャの重みです。
+> たとえば、[BERT](https://huggingface.co/google-bert/bert-base-uncased)はアーキテクチャであり、`google-bert/bert-base-uncased`はチェックポイントです。
+> モデルはアーキテクチャまたはチェックポイントのどちらを指す一般的な用語です。
 
 このチュートリアルでは、以下を学習します：
 
@@ -119,16 +116,13 @@ http://www.apache.org/licenses/LICENSE-2.0
 >>> model = AutoModelForTokenClassification.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
-<Tip warning={true}>
-
-PyTorchモデルの場合、  `from_pretrained()`メソッドは内部で`torch.load()`を使用し、内部的には`pickle`を使用しており、セキュリティの問題が知られています。
-一般的には、信頼性のないソースから取得した可能性があるモデルや改ざんされた可能性のあるモデルをロードしないでください。
-このセキュリティリスクは、`Hugging Face Hub`でホストされている公開モデルに対して部分的に緩和されており、各コミットでマルウェアのスキャンが行われています。
-GPGを使用した署名済みコミットの検証などのベストプラクティスについては、Hubのドキュメンテーションを参照してください。
-
-TensorFlowおよびFlaxのチェックポイントには影響がなく、`from_pretrained`メソッドの`from_tf`および`from_flax`引数を使用してPyTorchアーキテクチャ内でロードできます。
-
-</Tip>
+> [!WARNING]
+> PyTorchモデルの場合、  `from_pretrained()`メソッドは内部で`torch.load()`を使用し、内部的には`pickle`を使用しており、セキュリティの問題が知られています。
+> 一般的には、信頼性のないソースから取得した可能性があるモデルや改ざんされた可能性のあるモデルをロードしないでください。
+> このセキュリティリスクは、`Hugging Face Hub`でホストされている公開モデルに対して部分的に緩和されており、各コミットでマルウェアのスキャンが行われています。
+> GPGを使用した署名済みコミットの検証などのベストプラクティスについては、Hubのドキュメンテーションを参照してください。
+>
+> TensorFlowおよびFlaxのチェックポイントには影響がなく、`from_pretrained`メソッドの`from_tf`および`from_flax`引数を使用してPyTorchアーキテクチャ内でロードできます。
 
 一般的に、事前学習済みモデルのインスタンスをロードするために`AutoTokenizer`クラスと`AutoModelFor`クラスの使用をお勧めします。
 これにより、常に正しいアーキテクチャをロードできます。

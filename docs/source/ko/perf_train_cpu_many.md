@@ -44,12 +44,9 @@ pip install oneccl_bind_pt=={pytorch_version} -f https://developer.intel.com/ipe
 [oneccl_bind_pt 설치](https://github.com/intel/torch-ccl)에 대한 더 많은 접근 방법을 확인해 보세요.
 oneCCL과 PyTorch의 버전은 일치해야 합니다.
 
-<Tip warning={true}>
-
-oneccl_bindings_for_pytorch 1.12.0 버전의 미리 빌드된 Wheel 파일은 PyTorch 1.12.1과 호환되지 않습니다(PyTorch 1.12.0용입니다).
-PyTorch 1.12.1은 oneccl_bindings_for_pytorch 1.12.10 버전과 함께 사용해야 합니다.
-
-</Tip>
+> [!WARNING]
+> oneccl_bindings_for_pytorch 1.12.0 버전의 미리 빌드된 Wheel 파일은 PyTorch 1.12.1과 호환되지 않습니다(PyTorch 1.12.0용입니다).
+> PyTorch 1.12.1은 oneccl_bindings_for_pytorch 1.12.10 버전과 함께 사용해야 합니다.
 
 ## Intel® MPI 라이브러리 [[intel-mpi-library]]
 이 표준 기반 MPI 구현을 사용하여 Intel® 아키텍처에서 유연하고 효율적이며 확장 가능한 클러스터 메시징을 제공하세요. 이 구성 요소는 Intel® oneAPI HPC Toolkit의 일부입니다.

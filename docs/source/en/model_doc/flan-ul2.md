@@ -51,8 +51,5 @@ The model is pretty heavy (~40GB in half precision) so if you just want to run t
 ['In a large skillet, brown the ground beef and onion over medium heat. Add the garlic']
 ```
 
-<Tip>
-
-Refer to [T5's documentation page](t5) for API reference, tips, code examples and notebooks.
-
-</Tip>
+> [!TIP]
+> Refer to [T5's documentation page](t5) for API reference, tips, code examples and notebooks.

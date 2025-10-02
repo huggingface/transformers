@@ -269,11 +269,8 @@ python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/text-classific
 
 기본적으로 느린 테스트는 건너뛰지만 `RUN_SLOW` 환경 변수를 `yes`로 설정하여 실행할 수 있습니다. 이렇게 하면 많은 기가바이트 단위의 모델이 다운로드되므로 충분한 디스크 공간, 좋은 인터넷 연결과 많은 인내가 필요합니다!
 
-<Tip warning={true}>
-
-테스트를 실행하려면 *하위 폴더 경로 또는 테스트 파일 경로*를 지정하세요. 그렇지 않으면 `tests` 또는 `examples` 폴더의 모든 테스트를 실행하게 되어 매우 긴 시간이 걸립니다!
-
-</Tip>
+> [!WARNING]
+> 테스트를 실행하려면 *하위 폴더 경로 또는 테스트 파일 경로*를 지정하세요. 그렇지 않으면 `tests` 또는 `examples` 폴더의 모든 테스트를 실행하게 되어 매우 긴 시간이 걸립니다!
 
 ```bash
 RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./tests/models/my_new_model

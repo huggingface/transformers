@@ -27,11 +27,8 @@ rendered properly in your Markdown viewer.
 1. [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) 데이터 세트를 [Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base)로 미세 조정하여 화자의 의도를 분류합니다.
 2. 추론에 미세 조정된 모델을 사용하세요.
 
-<Tip>
-
-이 작업과 호환되는 모든 아키텍처와 체크포인트를 보려면 [작업 페이지](https://huggingface.co/tasks/audio-classification)를 확인하는 것이 좋습니다.
-
-</Tip>
+> [!TIP]
+> 이 작업과 호환되는 모든 아키텍처와 체크포인트를 보려면 [작업 페이지](https://huggingface.co/tasks/audio-classification)를 확인하는 것이 좋습니다.
 
 시작하기 전에 필요한 라이브러리가 모두 설치되어 있는지 확인하세요:
 
@@ -187,11 +184,8 @@ MinDS-14 데이터 세트의 샘플링 속도는 8khz이므로(이 정보는 [�
 
 ## 훈련[[train]]
 
-<Tip>
-
-[`Trainer`]로 모델을 미세 조정하는 데 익숙하지 않다면 기본 튜토리얼 [여기](../training#train-with-pytorch-trainer)을 살펴보세요!
-
-</Tip>
+> [!TIP]
+> [`Trainer`]로 모델을 미세 조정하는 데 익숙하지 않다면 기본 튜토리얼 [여기](../training#train-with-pytorch-trainer)을 살펴보세요!
 
 이제 모델 훈련을 시작할 준비가 되었습니다! [`AutoModelForAudioClassification`]을 이용해서 Wav2Vec2를 불러옵니다. 예상되는 레이블 수와 레이블 매핑을 지정합니다:
 
@@ -246,11 +240,8 @@ MinDS-14 데이터 세트의 샘플링 속도는 8khz이므로(이 정보는 [�
 >>> trainer.push_to_hub()
 ```
 
-<Tip>
-
-For a more in-depth example of how to finetune a model for audio classification, take a look at the corresponding [PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/audio_classification.ipynb).
-
-</Tip>
+> [!TIP]
+> For a more in-depth example of how to finetune a model for audio classification, take a look at the corresponding [PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/audio_classification.ipynb).
 
 ## 추론[[inference]]
 

@@ -47,13 +47,10 @@ def add_start_docstrings_to_model_forward(*docstr):
         class_name = f"[`{fn.__qualname__.split('.')[0]}`]"
         intro = rf"""    The {class_name} forward method, overrides the `__call__` special method.
 
-    <Tip>
-
-    Although the recipe for forward pass needs to be defined within this function, one should call the [`Module`]
-    instance afterwards instead of this since the former takes care of running the pre and post processing steps while
-    the latter silently ignores them.
-
-    </Tip>
+    > [!TIP]
+    > Although the recipe for forward pass needs to be defined within this function, one should call the [`Module`]
+    > instance afterwards instead of this since the former takes care of running the pre and post processing steps while
+    > the latter silently ignores them.
 """
 
         correct_indentation = get_docstring_indentation_level(fn)
@@ -180,13 +177,10 @@ def _prepare_output_docstrings(output_type, config_class, min_indent=None, add_i
 
 
 FAKE_MODEL_DISCLAIMER = """
-    <Tip warning={true}>
-
-    This example uses a random model as the real ones are all very big. To get proper results, you should use
-    {real_checkpoint} instead of {fake_checkpoint}. If you get out-of-memory when loading that checkpoint, you can try
-    adding `device_map="auto"` in the `from_pretrained` call.
-
-    </Tip>
+    > [!WARNING]
+    > This example uses a random model as the real ones are all very big. To get proper results, you should use
+    > {real_checkpoint} instead of {fake_checkpoint}. If you get out-of-memory when loading that checkpoint, you can try
+    > adding `device_map="auto"` in the `from_pretrained` call.
 """
 
 

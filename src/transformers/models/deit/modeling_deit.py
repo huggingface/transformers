@@ -495,12 +495,9 @@ class DeiTPooler(nn.Module):
     custom_intro="""
     DeiT Model with a decoder on top for masked image modeling, as proposed in [SimMIM](https://huggingface.co/papers/2111.09886).
 
-    <Tip>
-
-    Note that we provide a script to pre-train this model on custom data in our [examples
-    directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
-
-    </Tip>
+    > [!TIP]
+    > Note that we provide a script to pre-train this model on custom data in our [examples
+    > directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
     """
 )
 class DeiTForMaskedImageModeling(DeiTPreTrainedModel):

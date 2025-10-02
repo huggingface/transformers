@@ -540,12 +540,11 @@ def pipeline(
         - A [model](model) that generates predictions from the inputs.
         - Optional post-processing steps to refine the model's output, which can also be handled by processors.
 
-    <Tip>
-    While there are such optional arguments as `tokenizer`, `feature_extractor`, `image_processor`, and `processor`,
-    they shouldn't be specified all at once. If these components are not provided, `pipeline` will try to load
-    required ones automatically. In case you want to provide these components explicitly, please refer to a
-    specific pipeline in order to get more details regarding what components are required.
-    </Tip>
+    > [!TIP]
+    > While there are such optional arguments as `tokenizer`, `feature_extractor`, `image_processor`, and `processor`,
+    > they shouldn't be specified all at once. If these components are not provided, `pipeline` will try to load
+    > required ones automatically. In case you want to provide these components explicitly, please refer to a
+    > specific pipeline in order to get more details regarding what components are required.
 
     Args:
         task (`str`):
@@ -652,11 +651,8 @@ def pipeline(
             [here](https://huggingface.co/docs/accelerate/main/en/package_reference/big_modeling#accelerate.cpu_offload)
             for more information).
 
-            <Tip warning={true}>
-
-            Do not use `device_map` AND `device` at the same time as they will conflict
-
-            </Tip>
+            > [!WARNING]
+            > Do not use `device_map` AND `device` at the same time as they will conflict
 
         dtype (`str` or `torch.dtype`, *optional*):
             Sent directly as `model_kwargs` (just a simpler shortcut) to use the available precision for this model

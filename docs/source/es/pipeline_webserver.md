@@ -4,9 +4,8 @@ rendered properly in your Markdown viewer.
 
 # Uso de un flujo de trabajo para un servidor web
 
-<Tip>
-Crear un motor de inferencia es un tema complejo, y la "mejor" solución probablemente dependerá de tu caso de uso. ¿Estás en CPU o en GPU? ¿Quieres la latencia más baja, el rendimiento más alto, soporte para muchos modelos o simplemente optimizar altamente un modelo específico? Hay muchas formas de abordar este tema, así que lo que vamos a presentar es un buen valor predeterminado para comenzar, que no necesariamente será la solución más óptima para ti.
-</Tip>
+> [!TIP]
+> Crear un motor de inferencia es un tema complejo, y la "mejor" solución probablemente dependerá de tu caso de uso. ¿Estás en CPU o en GPU? ¿Quieres la latencia más baja, el rendimiento más alto, soporte para muchos modelos o simplemente optimizar altamente un modelo específico? Hay muchas formas de abordar este tema, así que lo que vamos a presentar es un buen valor predeterminado para comenzar, que no necesariamente será la solución más óptima para ti.
 
 
 Lo fundamental para entender es que podemos usar un iterador, tal como [en un conjunto de datos](pipeline_tutorial#uso-de-pipelines-en-un-conjunto-de-datos), ya que un servidor web es básicamente un sistema que espera solicitudes y las trata a medida que llegan.
@@ -71,12 +70,9 @@ curl -X POST -d "test [MASK]" http://localhost:8000/
 
 Lo realmente importante es cargar el modelo solo **una vez**, de modo que no haya copias del modelo en el servidor web. De esta manera, no se utiliza RAM innecesariamente. Luego, el mecanismo de queuing (colas) te permite hacer cosas sofisticadas como acumular algunos elementos antes de inferir para usar el agrupamiento dinámico:
 
-<Tip warning={true}>
-
-El ejemplo de código a continuación está escrito intencionalmente como pseudocódigo para facilitar la lectura.
-¡No lo ejecutes sin verificar si tiene sentido para los recursos de tu sistema!
-
-</Tip>
+> [!WARNING]
+> El ejemplo de código a continuación está escrito intencionalmente como pseudocódigo para facilitar la lectura.
+> ¡No lo ejecutes sin verificar si tiene sentido para los recursos de tu sistema!
 
 ```py
 (string, rq) = await q.get()

@@ -22,11 +22,8 @@ Die [`pipeline`] macht es einfach, jedes beliebige Modell aus dem [Hub](https://
 * Einen bestimmten Tokenizer oder ein bestimmtes Modell zu verwenden.
 * Eine [`pipeline`] für Audio-, Vision- und multimodale Aufgaben zu verwenden.
 
-<Tip>
-
-Eine vollständige Liste der unterstützten Aufgaben und verfügbaren Parameter finden Sie in der [`pipeline`]-Dokumentation.
-
-</Tip>
+> [!TIP]
+> Eine vollständige Liste der unterstützten Aufgaben und verfügbaren Parameter finden Sie in der [`pipeline`]-Dokumentation.
 
 ## Verwendung von Pipelines
 

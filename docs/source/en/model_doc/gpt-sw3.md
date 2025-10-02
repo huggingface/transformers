@@ -59,14 +59,11 @@ Träd är fina för att de är färgstarka. Men ibland är det fint
 - [Token classification task guide](../tasks/token_classification)
 - [Causal language modeling task guide](../tasks/language_modeling)
 
-<Tip>
-
-The implementation uses the `GPT2Model` coupled with our `GPTSw3Tokenizer`. Refer to [GPT2Model documentation](gpt2)
-for API reference and examples.
-
-Note that sentencepiece is required to use our tokenizer and can be installed with `pip install transformers[sentencepiece]` or `pip install sentencepiece`
-
-</Tip>
+> [!TIP]
+> The implementation uses the `GPT2Model` coupled with our `GPTSw3Tokenizer`. Refer to [GPT2Model documentation](gpt2)
+> for API reference and examples.
+>
+> Note that sentencepiece is required to use our tokenizer and can be installed with `pip install transformers[sentencepiece]` or `pip install sentencepiece`
 
 ## GPTSw3Tokenizer
 

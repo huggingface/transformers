@@ -29,11 +29,8 @@ Siri 和 Alexa 这类虚拟助手使用 ASR 模型来帮助用户日常生活，
    [Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base) 进行微调，以将音频转录为文本。
 2. 使用微调后的模型进行推断。
 
-<Tip>
-
-如果您想查看所有与本任务兼容的架构和检查点，最好查看[任务页](https://huggingface.co/tasks/automatic-speech-recognition)。
-
-</Tip>
+> [!TIP]
+> 如果您想查看所有与本任务兼容的架构和检查点，最好查看[任务页](https://huggingface.co/tasks/automatic-speech-recognition)。
 
 在开始之前，请确保您已安装所有必要的库：
 
@@ -242,11 +239,8 @@ Wav2Vec2 分词器仅训练了大写字符，因此您需要确保文本与分�
 
 ## 训练
 
-<Tip>
-
-如果您不熟悉使用[`Trainer`]微调模型，请查看这里的基本教程[here](../training#train-with-pytorch-trainer)！
-
-</Tip>
+> [!TIP]
+> 如果您不熟悉使用[`Trainer`]微调模型，请查看这里的基本教程[here](../training#train-with-pytorch-trainer)！
 
 现在您已经准备好开始训练您的模型了！使用 [`AutoModelForCTC`] 加载 Wav2Vec2。
 使用 `ctc_loss_reduction` 参数指定要应用的减少方式。通常最好使用平均值而不是默认的求和：
@@ -310,13 +304,10 @@ Wav2Vec2 分词器仅训练了大写字符，因此您需要确保文本与分�
 >>> trainer.push_to_hub()
 ```
 
-<Tip>
-
-要深入了解如何微调模型进行自动语音识别，
-请查看这篇博客[文章](https://huggingface.co/blog/fine-tune-wav2vec2-english)以了解英语 ASR，
-还可以参阅[这篇文章](https://huggingface.co/blog/fine-tune-xlsr-wav2vec2)以了解多语言 ASR。
-
-</Tip>
+> [!TIP]
+> 要深入了解如何微调模型进行自动语音识别，
+> 请查看这篇博客[文章](https://huggingface.co/blog/fine-tune-wav2vec2-english)以了解英语 ASR，
+> 还可以参阅[这篇文章](https://huggingface.co/blog/fine-tune-xlsr-wav2vec2)以了解多语言 ASR。
 
 ## 推断
 
@@ -344,11 +335,8 @@ Wav2Vec2 分词器仅训练了大写字符，因此您需要确保文本与分�
 {'text': 'I WOUD LIKE O SET UP JOINT ACOUNT WTH Y PARTNER'}
 ```
 
-<Tip>
-
-转录结果还不错，但可以更好！尝试用更多示例微调您的模型，以获得更好的结果！
-
-</Tip>
+> [!TIP]
+> 转录结果还不错，但可以更好！尝试用更多示例微调您的模型，以获得更好的结果！
 
 如果您愿意，您也可以手动复制 `pipeline` 的结果：
 

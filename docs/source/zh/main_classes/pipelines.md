@@ -119,13 +119,10 @@ for out in pipe(KeyDataset(dataset, "text"), batch_size=8, truncation="only_firs
     # as batches to the model
 ```
 
-<Tip warning={true}>
-
-然而，这并不自动意味着性能提升。它可能是一个10倍的加速或5倍的减速，具体取决于硬件、数据和实际使用的模型。
-
-主要是加速的示例：
-
-</Tip>
+> [!WARNING]
+> 然而，这并不自动意味着性能提升。它可能是一个10倍的加速或5倍的减速，具体取决于硬件、数据和实际使用的模型。
+>
+> 主要是加速的示例：
 
 ```python
 from transformers import pipeline

@@ -46,23 +46,14 @@ Esto mostrará mucha información de debug relacionada con NCCL, que luego puede
 
 ## Detección de Underflow y Overflow
 
-<Tip>
+> [!TIP]
+> Esta función está disponible actualmente sólo para PyTorch.
 
-Esta función está disponible actualmente sólo para PyTorch.
+> [!TIP]
+> Para el entrenamiento multi-GPU, requiere DDP (`torch.distributed.launch`).
 
-</Tip>
-
-<Tip>
-
-Para el entrenamiento multi-GPU, requiere DDP (`torch.distributed.launch`).
-
-</Tip>
-
-<Tip>
-
-Esta función puede utilizarse con cualquier modelo basado en `nn.Module`.
-
-</Tip>
+> [!TIP]
+> Esta función puede utilizarse con cualquier modelo basado en `nn.Module`.
 
 Si empiezas a obtener `loss=NaN` o el modelo muestra algún otro comportamiento anormal debido a `inf` o `nan` en
 activations o weights hay que descubrir dónde se produce el primer underflow o overflow y qué lo ha provocado. Por suerte

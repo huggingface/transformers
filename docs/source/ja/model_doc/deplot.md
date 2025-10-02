@@ -58,8 +58,5 @@ optimizer = Adafactor(self.parameters(), scale_parameter=False, relative_step=Fa
 scheduler = get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=1000, num_training_steps=40000)
 ```
 
-<Tip>
-
-DePlot は、`Pix2Struct`アーキテクチャを使用してトレーニングされたモデルです。 API リファレンスについては、[`Pix2Struct` ドキュメント](pix2struct) を参照してください。
-
-</Tip>
+> [!TIP]
+> DePlot は、`Pix2Struct`アーキテクチャを使用してトレーニングされたモデルです。 API リファレンスについては、[`Pix2Struct` ドキュメント](pix2struct) を参照してください。

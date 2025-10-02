@@ -96,15 +96,12 @@ sabemos ter 5 labels usamos o seguinte código:
 >>> model = AutoModelForSequenceClassification.from_pretrained("google-bert/bert-base-cased", num_labels=5)
 ```
 
-<Tip>
-
-    Você verá um alerta sobre alguns pesos pré-treinados que não estão sendo utilizados e que alguns pesos estão
-    sendo inicializados aleatoriamente. Não se preocupe, essa mensagem é completamente normal.
-    O header/cabeçário pré-treinado do modelo BERT é descartado e substitui-se por um header de classificação
-    inicializado aleatoriamente. Assim, pode aplicar o fine-tuning a este novo header do modelo em sua tarefa
-    de classificação de sequências fazendo um transfer learning do modelo pré-treinado.
-
-</Tip>
+> [!TIP]
+> Você verá um alerta sobre alguns pesos pré-treinados que não estão sendo utilizados e que alguns pesos estão
+>     sendo inicializados aleatoriamente. Não se preocupe, essa mensagem é completamente normal.
+>     O header/cabeçário pré-treinado do modelo BERT é descartado e substitui-se por um header de classificação
+>     inicializado aleatoriamente. Assim, pode aplicar o fine-tuning a este novo header do modelo em sua tarefa
+>     de classificação de sequências fazendo um transfer learning do modelo pré-treinado.
 
 ### Hiperparâmetros de treinamento
 
@@ -195,12 +192,9 @@ Assegure-se de especificar os `return_tensors` para retornar os tensores do Tens
 >>> data_collator = DefaultDataCollator(return_tensors="tf")
 ```
 
-<Tip>
-
-    O [`Trainer`] utiliza [`DataCollatorWithPadding`] por padrão, então você não precisa especificar explicitamente um
-    colador de dados (data collator).
-
-</Tip>
+> [!TIP]
+> O [`Trainer`] utiliza [`DataCollatorWithPadding`] por padrão, então você não precisa especificar explicitamente um
+>     colador de dados (data collator).
 
 Em seguida, converta os datasets tokenizados em datasets do TensorFlow com o método
 [`to_tf_dataset`](https://huggingface.co/docs/datasets/package_reference/main_classes#datasets.Dataset.to_tf_dataset).
@@ -347,13 +341,10 @@ em uma CPU pode acabar levando várias horas em vez de minutos.
 >>> model.to(device)
 ```
 
-<Tip>
-
-    Se necessário, você pode obter o acesso gratuito a uma GPU na núvem por meio de um notebook no
-    [Colaboratory](https://colab.research.google.com/) ou [SageMaker StudioLab](https://studiolab.sagemaker.aws/)
-    se não tiver esse recurso de forma local.
-
-</Tip>
+> [!TIP]
+> Se necessário, você pode obter o acesso gratuito a uma GPU na núvem por meio de um notebook no
+>     [Colaboratory](https://colab.research.google.com/) ou [SageMaker StudioLab](https://studiolab.sagemaker.aws/)
+>     se não tiver esse recurso de forma local.
 
 Perfeito, agora estamos prontos para começar o treinamento! 🥳
 

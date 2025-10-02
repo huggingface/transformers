@@ -21,14 +21,11 @@ rendered properly in your Markdown viewer.
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
-<Tip warning={true}>
-
-This model is in maintenance mode only, we don't accept any new PRs changing its code.
-
-If you run into any issues running this model, please reinstall the last version that supported this model: v4.30.0.
-You can do so by running the following command: `pip install -U transformers==4.30.0`.
-
-</Tip>
+> [!WARNING]
+> This model is in maintenance mode only, we don't accept any new PRs changing its code.
+>
+> If you run into any issues running this model, please reinstall the last version that supported this model: v4.30.0.
+> You can do so by running the following command: `pip install -U transformers==4.30.0`.
 
 ## Overview
 
@@ -141,12 +138,9 @@ benchmark for table fact checking (it achieves 84% accuracy). The code example b
 Refused
 ```
 
-<Tip>
-
-TAPEX architecture is the same as BART, except for tokenization. Refer to [BART documentation](bart) for information on
-configuration classes and their parameters. TAPEX-specific tokenizer is documented below.
-
-</Tip>
+> [!TIP]
+> TAPEX architecture is the same as BART, except for tokenization. Refer to [BART documentation](bart) for information on
+> configuration classes and their parameters. TAPEX-specific tokenizer is documented below.
 
 ## TapexTokenizer
 

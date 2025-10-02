@@ -128,16 +128,11 @@ for out in pipe(KeyDataset(dataset, "text"), batch_size=8, truncation="only_firs
     # as batches to the model
 ```
 
-<Tip warning={true}>
-
-
-ただし、これによってパフォーマンスが自動的に向上するわけではありません。状況に応じて、10 倍の高速化または 5 倍の低速化のいずれかになります。
-ハードウェア、データ、使用されている実際のモデルについて。
-
-主に高速化である例:
-
-
-</Tip>
+> [!WARNING]
+> ただし、これによってパフォーマンスが自動的に向上するわけではありません。状況に応じて、10 倍の高速化または 5 倍の低速化のいずれかになります。
+> ハードウェア、データ、使用されている実際のモデルについて。
+>
+> 主に高速化である例:
 
 ```python
 from transformers import pipeline

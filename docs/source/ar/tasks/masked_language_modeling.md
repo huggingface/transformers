@@ -24,11 +24,8 @@ rendered properly in your Markdown viewer.
 1. تكييف [DistilRoBERTa](https://huggingface.co/distilbert/distilroberta-base) على مجموعة فرعية [r/askscience](https://www.reddit.com/r/askscience/) من مجموعة بيانات [ELI5](https://huggingface.co/datasets/eli5).
 2. استخدام نموذج المدرب الخاص بك للاستدلال.
 
-<Tip>
-
-لمعرفة جميع البنى والنسخ المتوافقة مع هذه المهمة، نوصي بالتحقق من [صفحة المهمة](https://huggingface.co/tasks/fill-mask)
-
-</Tip>
+> [!TIP]
+> لمعرفة جميع البنى والنسخ المتوافقة مع هذه المهمة، نوصي بالتحقق من [صفحة المهمة](https://huggingface.co/tasks/fill-mask)
 
 قبل أن تبدأ، تأكد من تثبيت جميع المكتبات الضرورية:
 
@@ -189,11 +186,8 @@ pip install transformers datasets evaluate
 ## التدريب (Train)
 
 
-<Tip>
-
-إذا لم تكن على دراية بتعديل نموذج باستخدام [`Trainer`], ألق نظرة على الدليل الأساسي [هنا](../training#train-with-pytorch-trainer)!
-
-</Tip>
+> [!TIP]
+> إذا لم تكن على دراية بتعديل نموذج باستخدام [`Trainer`], ألق نظرة على الدليل الأساسي [هنا](../training#train-with-pytorch-trainer)!
 
 أنت مستعد الآن لبدء تدريب نموذجك! قم بتحميل DistilRoBERTa باستخدام [`AutoModelForMaskedLM`]:
 
@@ -248,13 +242,10 @@ Perplexity: 8.76
 >>> trainer.push_to_hub()
 ```
 
-<Tip>
-
-لمثال أكثر تفصيلاً حول كيفية تعديل نموذج للنمذجة اللغوية المقنعة، ألق نظرة على الدفتر المقابل
-[دفتر PyTorch](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb)
-أو [دفتر TensorFlow](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb).
-
-</Tip>
+> [!TIP]
+> لمثال أكثر تفصيلاً حول كيفية تعديل نموذج للنمذجة اللغوية المقنعة، ألق نظرة على الدفتر المقابل
+> [دفتر PyTorch](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb)
+> أو [دفتر TensorFlow](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb).
 
 ## الاستدلال
 

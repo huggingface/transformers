@@ -68,18 +68,15 @@ pip install 'transformers[torch]'
 pip install 'transformers[tf-cpu]'
 ```
 
-<Tip warning={true}>
-
-Pour les architectures mac M1 / ARM
-
-Vous devez installer les outils suivants avant d'installer TensorFLow 2.0
-
-```bash
-brew install cmake
-brew install pkg-config
-```
-
-</Tip>
+> [!WARNING]
+> Pour les architectures mac M1 / ARM
+>
+> Vous devez installer les outils suivants avant d'installer TensorFLow 2.0
+>
+> ```bash
+> brew install cmake
+> brew install pkg-config
+> ```
 
 🤗 Transformers et Flax :
 
@@ -132,11 +129,8 @@ pip install -e .
 
 Ces commandes créent des liens entre le dossier où le projet a été cloné et les chemins de vos librairies Python. Python regardera maintenant dans le dossier que vous avez cloné en plus des dossiers où sont installées vos autres librairies. Par exemple, si vos librairies Python sont installées dans `~/anaconda3/envs/main/lib/python3.7/site-packages/`, Python cherchera aussi dans le dossier où vous avez cloné : `~/transformers/`.
 
-<Tip warning={true}>
-
-Vous devez garder le dossier `transformers` si vous voulez continuer d'utiliser la librairie.
-
-</Tip>
+> [!WARNING]
+> Vous devez garder le dossier `transformers` si vous voulez continuer d'utiliser la librairie.
 
 Maintenant, vous pouvez facilement mettre à jour votre clone avec la dernière version de 🤗 Transformers en utilisant la commande suivante :
 
@@ -163,21 +157,15 @@ Les modèles pré-entraînés sont téléchargés et mis en cache localement dan
 2. Variable d'environnement : `HF_HOME`.
 3. Variable d'environnement : `XDG_CACHE_HOME` + `/huggingface`.
 
-<Tip>
-
-🤗 Transformers utilisera les variables d'environnement `PYTORCH_TRANSFORMERS_CACHE` ou `PYTORCH_PRETRAINED_BERT_CACHE` si vous utilisez une version précédente de cette librairie et avez défini ces variables d'environnement, sauf si vous spécifiez la variable d'environnement `TRANSFORMERS_CACHE`.
-
-</Tip>
+> [!TIP]
+> 🤗 Transformers utilisera les variables d'environnement `PYTORCH_TRANSFORMERS_CACHE` ou `PYTORCH_PRETRAINED_BERT_CACHE` si vous utilisez une version précédente de cette librairie et avez défini ces variables d'environnement, sauf si vous spécifiez la variable d'environnement `TRANSFORMERS_CACHE`.
 
 ## Mode hors ligne
 
 🤗 Transformers peut fonctionner dans un environnement cloisonné ou hors ligne en n'utilisant que des fichiers locaux. Définissez la variable d'environnement `HF_HUB_OFFLINE=1` pour activer ce mode.
 
-<Tip>
-
-Ajoutez [🤗 Datasets](https://huggingface.co/docs/datasets/) à votre processus d'entraînement hors ligne en définissant la variable d'environnement `HF_DATASETS_OFFLINE=1`.
-
-</Tip>
+> [!TIP]
+> Ajoutez [🤗 Datasets](https://huggingface.co/docs/datasets/) à votre processus d'entraînement hors ligne en définissant la variable d'environnement `HF_DATASETS_OFFLINE=1`.
 
 ```bash
 HF_DATASETS_OFFLINE=1 HF_HUB_OFFLINE=1 \
@@ -251,8 +239,5 @@ Une fois que votre fichier est téléchargé et caché localement, spécifiez so
 >>> config = AutoConfig.from_pretrained("./your/path/bigscience_t0/config.json")
 ```
 
-<Tip>
-
-Consultez la section [How to download files from the Hub (Comment télécharger des fichiers depuis le Hub)](https://huggingface.co/docs/hub/how-to-downstream) pour plus de détails sur le téléchargement de fichiers stockés sur le Hub.
-
-</Tip>
+> [!TIP]
+> Consultez la section [How to download files from the Hub (Comment télécharger des fichiers depuis le Hub)](https://huggingface.co/docs/hub/how-to-downstream) pour plus de détails sur le téléchargement de fichiers stockés sur le Hub.

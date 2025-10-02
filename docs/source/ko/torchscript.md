@@ -16,13 +16,10 @@ rendered properly in your Markdown viewer.
 
 # TorchScript로 내보내기[[export-to-torchscript]]
 
-<Tip>
-
-TorchScript를 활용한 실험은 아직 초기 단계로, 가변적인 입력 크기 모델들을 통해 그 기능성을 계속 탐구하고 있습니다. 
-이 기능은 저희가 관심을 두고 있는 분야 중 하나이며, 
-앞으로 출시될 버전에서 더 많은 코드 예제, 더 유연한 구현, 그리고 Python 기반 코드와 컴파일된 TorchScript를 비교하는 벤치마크를 등을 통해 분석을 심화할 예정입니다.
-
-</Tip>
+> [!TIP]
+> TorchScript를 활용한 실험은 아직 초기 단계로, 가변적인 입력 크기 모델들을 통해 그 기능성을 계속 탐구하고 있습니다. 
+> 이 기능은 저희가 관심을 두고 있는 분야 중 하나이며, 
+> 앞으로 출시될 버전에서 더 많은 코드 예제, 더 유연한 구현, 그리고 Python 기반 코드와 컴파일된 TorchScript를 비교하는 벤치마크를 등을 통해 분석을 심화할 예정입니다.
 
 [TorchScript 문서](https://pytorch.org/docs/stable/jit.html)에서는 이렇게 말합니다.
 

@@ -49,12 +49,9 @@ class BigBirdTokenizerFast(PreTrainedTokenizerFast):
         bos_token (`str`, *optional*, defaults to `"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
 
-            <Tip>
-
-            When building a sequence using special tokens, this is not the token that is used for the beginning of
-            sequence. The token used is the `cls_token`.
-
-            </Tip>
+            > [!TIP]
+            > When building a sequence using special tokens, this is not the token that is used for the beginning of
+            > sequence. The token used is the `cls_token`.
 
         eos_token (`str`, *optional*, defaults to `"</s>"`):
             The end of sequence token. .. note:: When building a sequence using special tokens, this is not the token

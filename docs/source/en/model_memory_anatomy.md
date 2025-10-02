@@ -149,12 +149,9 @@ default_args = {
 }
 ```
 
-<Tip>
-
- If you plan to run multiple experiments, in order to properly clear the memory between experiments, restart the Python
- kernel between experiments.
-
-</Tip>
+> [!TIP]
+> If you plan to run multiple experiments, in order to properly clear the memory between experiments, restart the Python
+>  kernel between experiments.
 
 ## Memory utilization at vanilla training
 

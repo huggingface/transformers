@@ -27,11 +27,8 @@ In questo tutorial, imparerai due metodi per la condivisione di un modello train
 frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope;
 picture-in-picture" allowfullscreen></iframe>
 
-<Tip>
-
-Per condividere un modello con la community, hai bisogno di un account su [huggingface.co](https://huggingface.co/join). Puoi anche unirti ad un'organizzazione esistente o crearne una nuova.
-
-</Tip>
+> [!TIP]
+> Per condividere un modello con la community, hai bisogno di un account su [huggingface.co](https://huggingface.co/join). Puoi anche unirti ad un'organizzazione esistente o crearne una nuova.
 
 ## Caratteristiche dei repository
 

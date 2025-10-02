@@ -28,11 +28,8 @@ rendered properly in your Markdown viewer.
 1. [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) データセットで [Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base) を微調整して話者の意図を分類します。
 2. 微調整したモデルを推論に使用します。
 
-<Tip>
-
-このタスクと互換性のあるすべてのアーキテクチャとチェックポイントを確認するには、[タスクページ](https://huggingface.co/tasks/audio-classification) を確認することをお勧めします。
-
-</Tip>
+> [!TIP]
+> このタスクと互換性のあるすべてのアーキテクチャとチェックポイントを確認するには、[タスクページ](https://huggingface.co/tasks/audio-classification) を確認することをお勧めします。
 
 ```bash
 pip install transformers datasets evaluate
@@ -186,11 +183,8 @@ MInDS-14 データセットのサンプリング レートは 8khz です (こ�
 
 ## Train
 
-<Tip>
-
-[`Trainer`] を使用したモデルの微調整に慣れていない場合は、[こちら](../training#train-with-pytorch-trainer) の基本的なチュートリアルをご覧ください。
-
-</Tip>
+> [!TIP]
+> [`Trainer`] を使用したモデルの微調整に慣れていない場合は、[こちら](../training#train-with-pytorch-trainer) の基本的なチュートリアルをご覧ください。
 
 これでモデルのトレーニングを開始する準備が整いました。 [`AutoModelForAudioClassification`] を使用して、予期されるラベルの数とラベル マッピングを使用して Wav2Vec2 を読み込みます。
 
@@ -244,11 +238,8 @@ MInDS-14 データセットのサンプリング レートは 8khz です (こ�
 >>> trainer.push_to_hub()
 ```
 
-<Tip>
-
-音声分類用のモデルを微調整する方法の詳細な例については、対応する [PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/audio_classification.ipynb).
-
-</Tip>
+> [!TIP]
+> 音声分類用のモデルを微調整する方法の詳細な例については、対応する [PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/audio_classification.ipynb).
 
 ## Inference
 

@@ -636,16 +636,13 @@ class IterableDatasetShard(IterableDataset):
     - the shard on process 0 will yield `[0, 1, 4, 5, 8, 9]` so will see batches `[0, 1]`, `[4, 5]`, `[8, 9]`
     - the shard on process 1 will yield `[2, 3, 6, 7, 10, 11]` so will see batches `[2, 3]`, `[6, 7]`, `[10, 11]`
 
-    <Tip warning={true}>
-
-        If your IterableDataset implements some randomization that needs to be applied the same way on all processes
-        (for instance, a shuffling), you should use a `torch.Generator` in a `generator` attribute of the `dataset` to
-        generate your random numbers and call the [`~trainer_pt_utils.IterableDatasetShard.set_epoch`] method of this
-        object. It will set the seed of this `generator` to `seed + epoch` on all processes before starting the
-        iteration. Alternatively, you can also implement a `set_epoch()` method in your iterable dataset to deal with
-        this.
-
-    </Tip>
+    > [!WARNING]
+    > If your IterableDataset implements some randomization that needs to be applied the same way on all processes
+    >     (for instance, a shuffling), you should use a `torch.Generator` in a `generator` attribute of the `dataset` to
+    >     generate your random numbers and call the [`~trainer_pt_utils.IterableDatasetShard.set_epoch`] method of this
+    >     object. It will set the seed of this `generator` to `seed + epoch` on all processes before starting the
+    >     iteration. Alternatively, you can also implement a `set_epoch()` method in your iterable dataset to deal with
+    >     this.
 
     Args:
         dataset (`torch.utils.data.IterableDataset`):

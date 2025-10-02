@@ -45,14 +45,11 @@ def get_last_stable_minor_release():
 def build_tip_message(last_stable_release):
     return (
         """
-<Tip warning={true}>
-
-This model is in maintenance mode only, we don't accept any new PRs changing its code.
-"""
-        + f"""If you run into any issues running this model, please reinstall the last version that supported this model: v{last_stable_release}.
-You can do so by running the following command: `pip install -U transformers=={last_stable_release}`.
-
-</Tip>"""
+> [!WARNING]
+> This model is in maintenance mode only, we don't accept any new PRs changing its code.
+> """
+>         + f"""If you run into any issues running this model, please reinstall the last version that supported this model: v{last_stable_release}.
+> You can do so by running the following command: `pip install -U transformers=={last_stable_release}`."""
     )
 
 

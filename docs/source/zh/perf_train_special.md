@@ -12,15 +12,12 @@ rendered properly in your Markdown viewer.
 
 之前，在 Mac 上训练模型仅限于使用 CPU 训练。不过随着PyTorch v1.12的发布，您可以通过在 Apple Silicon 芯片的 GPU 上训练模型来显著提高性能和训练速度。这是通过将 Apple 的 Metal 性能着色器 (Metal Performance Shaders, MPS) 作为后端集成到PyTorch中实现的。[MPS后端](https://pytorch.org/docs/stable/notes/mps.html) 将 PyTorch 操作视为自定义的 Metal 着色器来实现，并将对应模块部署到`mps`设备上。
 
-<Tip warning={true}>
-
-某些 PyTorch 操作目前还未在 MPS 上实现，可能会抛出错误提示。可以通过设置环境变量`PYTORCH_ENABLE_MPS_FALLBACK=1`来使用CPU内核以避免这种情况发生（您仍然会看到一个`UserWarning`）。
-
-<br>
-
-如果您遇到任何其他错误，请在[PyTorch库](https://github.com/pytorch/pytorch/issues)中创建一个 issue，因为[`Trainer`]类中只集成了 MPS 后端.
-
-</Tip>
+> [!WARNING]
+> 某些 PyTorch 操作目前还未在 MPS 上实现，可能会抛出错误提示。可以通过设置环境变量`PYTORCH_ENABLE_MPS_FALLBACK=1`来使用CPU内核以避免这种情况发生（您仍然会看到一个`UserWarning`）。
+>
+> <br>
+>
+> 如果您遇到任何其他错误，请在[PyTorch库](https://github.com/pytorch/pytorch/issues)中创建一个 issue，因为[`Trainer`]类中只集成了 MPS 后端.
 
 配置好`mps`设备后，您可以：
 

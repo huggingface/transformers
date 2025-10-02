@@ -681,12 +681,9 @@ class FocalNetModel(FocalNetPreTrainedModel):
 
     This follows the same implementation as in [SimMIM](https://huggingface.co/papers/2111.09886).
 
-    <Tip>
-
-    Note that we provide a script to pre-train this model on custom data in our [examples
-    directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
-
-    </Tip>
+    > [!TIP]
+    > Note that we provide a script to pre-train this model on custom data in our [examples
+    > directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
     """
 )
 class FocalNetForMaskedImageModeling(FocalNetPreTrainedModel):

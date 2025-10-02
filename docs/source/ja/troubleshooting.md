@@ -55,11 +55,8 @@ Please try again or make sure your Internet connection is on.
 - [`TrainingArguments`]の中で [`per_device_train_batch_size`](main_classes/trainer#transformers.TrainingArguments.per_device_train_batch_size) の値を減らす。
 - [`TrainingArguments`]の中で [`gradient_accumulation_steps`](main_classes/trainer#transformers.TrainingArguments.gradient_accumulation_steps) を使用して、全体的なバッチサイズを効果的に増やすことを試す。
 
-<Tip>
-
-メモリ節約のテクニックについての詳細は、[ガイド](performance)を参照してください。
-
-</Tip>
+> [!TIP]
+> メモリ節約のテクニックについての詳細は、[ガイド](performance)を参照してください。
 
 ## Unable to load a saved TensorFlow model
 
@@ -158,11 +155,8 @@ tensor([[-0.1008, -0.4061]], grad_fn=<AddmmBackward0>)
 
 大抵の場合、モデルには `attention_mask` を提供して、パディングトークンを無視し、このような無音のエラーを回避する必要があります。これにより、2番目のシーケンスの出力が実際の出力と一致するようになります。
 
-<Tip>
-
-デフォルトでは、トークナイザは、トークナイザのデフォルトに基づいて `attention_mask` を自動で作成します。
-
-</Tip>
+> [!TIP]
+> デフォルトでは、トークナイザは、トークナイザのデフォルトに基づいて `attention_mask` を自動で作成します。
 
 ```py
 >>> attention_mask = torch.tensor([[1, 1, 1, 1, 1, 1], [1, 0, 0, 0, 0, 0]])

@@ -27,11 +27,8 @@ This guide will show you how to:
 1. Fine-tune [Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base) on the [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) dataset to transcribe audio to text.
 2. Use your fine-tuned model for inference.
 
-<Tip>
-
-To see all architectures and checkpoints compatible with this task, we recommend checking the [task-page](https://huggingface.co/tasks/automatic-speech-recognition)
-
-</Tip>
+> [!TIP]
+> To see all architectures and checkpoints compatible with this task, we recommend checking the [task-page](https://huggingface.co/tasks/automatic-speech-recognition)
 
 Before you begin, make sure you have all the necessary libraries installed:
 
@@ -228,11 +225,8 @@ Your `compute_metrics` function is ready to go now, and you'll return to it when
 
 ## Train
 
-<Tip>
-
-If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
-
-</Tip>
+> [!TIP]
+> If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
 
 You are now ready to start training your model! Load Wav2Vec2 with [`AutoModelForCTC`]. Specify the reduction to apply with the `ctc_loss_reduction` parameter. It is often better to use the average instead of the default summation:
 
@@ -293,11 +287,8 @@ Once training is completed, share your model to the Hub with the [`~transformers
 >>> trainer.push_to_hub()
 ```
 
-<Tip>
-
-For a more in-depth example of how to fine-tune a model for automatic speech recognition, take a look at this blog [post](https://huggingface.co/blog/fine-tune-wav2vec2-english) for English ASR and this [post](https://huggingface.co/blog/fine-tune-xlsr-wav2vec2) for multilingual ASR.
-
-</Tip>
+> [!TIP]
+> For a more in-depth example of how to fine-tune a model for automatic speech recognition, take a look at this blog [post](https://huggingface.co/blog/fine-tune-wav2vec2-english) for English ASR and this [post](https://huggingface.co/blog/fine-tune-xlsr-wav2vec2) for multilingual ASR.
 
 ## Inference
 
@@ -324,11 +315,8 @@ The simplest way to try out your fine-tuned model for inference is to use it in 
 {'text': 'I WOUD LIKE O SET UP JOINT ACOUNT WTH Y PARTNER'}
 ```
 
-<Tip>
-
-The transcription is decent, but it could be better! Try finetuning your model on more examples to get even better results!
-
-</Tip>
+> [!TIP]
+> The transcription is decent, but it could be better! Try finetuning your model on more examples to get even better results!
 
 You can also manually replicate the results of the `pipeline` if you'd like:
 

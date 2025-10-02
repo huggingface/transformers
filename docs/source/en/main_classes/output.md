@@ -40,12 +40,9 @@ an optional `attentions` attribute. Here we have the `loss` since we passed alon
 `hidden_states` and `attentions` because we didn't pass `output_hidden_states=True` or
 `output_attentions=True`.
 
-<Tip>
-
-When passing `output_hidden_states=True` you may expect the `outputs.hidden_states[-1]` to match `outputs.last_hidden_state` exactly.
-However, this is not always the case. Some models apply normalization or subsequent process to the last hidden state when it's returned.
-
-</Tip>
+> [!TIP]
+> When passing `output_hidden_states=True` you may expect the `outputs.hidden_states[-1]` to match `outputs.last_hidden_state` exactly.
+> However, this is not always the case. Some models apply normalization or subsequent process to the last hidden state when it's returned.
 
 You can access each attribute as you would usually do, and if that attribute has not been returned by the model, you
 will get `None`. Here for instance `outputs.loss` is the loss computed by the model, and `outputs.attentions` is

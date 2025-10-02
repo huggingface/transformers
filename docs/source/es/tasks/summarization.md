@@ -25,11 +25,8 @@ La generación de resúmenes (summarization, en inglés) crea una versión más 
 
 Esta guía te mostrará cómo puedes hacer fine-tuning del modelo [T5](https://huggingface.co/google-t5/t5-small) sobre el subset de proyectos de ley del estado de California, dentro del dataset [BillSum](https://huggingface.co/datasets/billsum) para hacer generación de resúmenes abstractiva.
 
-<Tip>
-
-Consulta la [página de la tarea](https://huggingface.co/tasks/summarization) de generación de resúmenes para obtener más información sobre sus modelos, datasets y métricas asociadas.
-
-</Tip>
+> [!TIP]
+> Consulta la [página de la tarea](https://huggingface.co/tasks/summarization) de generación de resúmenes para obtener más información sobre sus modelos, datasets y métricas asociadas.
 
 ## Carga el dataset BillSum
 
@@ -112,11 +109,8 @@ Carga T5 con [`AutoModelForSeq2SeqLM`]:
 >>> model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-small")
 ```
 
-<Tip>
-
-Para familiarizarte con el proceso para realizar fine-tuning sobre un modelo con [`Trainer`], ¡mira el tutorial básico [aquí](../training#finetune-with-trainer)!
-
-</Tip>
+> [!TIP]
+> Para familiarizarte con el proceso para realizar fine-tuning sobre un modelo con [`Trainer`], ¡mira el tutorial básico [aquí](../training#finetune-with-trainer)!
 
 En este punto, solo faltan tres pasos:
 
@@ -149,10 +143,7 @@ En este punto, solo faltan tres pasos:
 >>> trainer.train()
 ```
 
-<Tip>
-
-Para un ejemplo con mayor profundidad de cómo hacer fine-tuning a un modelo para generación de resúmenes, revisa la
-[notebook en PyTorch](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization.ipynb)
-o a la [notebook en TensorFlow](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization-tf.ipynb).
-
-</Tip>
+> [!TIP]
+> Para un ejemplo con mayor profundidad de cómo hacer fine-tuning a un modelo para generación de resúmenes, revisa la
+> [notebook en PyTorch](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization.ipynb)
+> o a la [notebook en TensorFlow](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization-tf.ipynb).

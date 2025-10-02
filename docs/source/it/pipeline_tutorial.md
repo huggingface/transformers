@@ -22,11 +22,8 @@ La [`pipeline`] rende semplice usare qualsiasi modello dal [Model Hub](https://h
 * Usare uno specifico tokenizer o modello.
 * Usare una [`pipeline`] per compiti che riguardano audio e video.
 
-<Tip>
-
-Dai un'occhiata alla documentazione di [`pipeline`] per una lista completa dei compiti supportati.
-
-</Tip>
+> [!TIP]
+> Dai un'occhiata alla documentazione di [`pipeline`] per una lista completa dei compiti supportati.
 
 ## Utilizzo della Pipeline
 

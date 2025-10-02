@@ -2,15 +2,12 @@
 
 تُتيح وحدة [`Trainer`] حلقة تدريب وتقييم متكاملة لنماذج PyTorch المطبقة في مكتبة Transformers. تحتاج فقط إلى تمرير المكونات الضرورية للتدريب (النموذج، والمجزىء النصى، ومجموعة البيانات، دالة التقييم، معلمات التدريب الفائقة، إلخ)، وستتولى فئة [`Trainer`] الباقي. هذا يُسهّل بدء التدريب بشكل أسرع دون كتابة حلقة التدريب الخاصة بك يدويًا. ولكن في الوقت نفسه، فإن [`Trainer`] قابل للتخصيص بدرجة كبيرة ويوفر العديد من خيارات التدريب حتى تتمكن من تخصيصه وفقًا لاحتياجات التدريب الخاصة بك بدقة.
 
-<Tip>
-
-بالإضافة إلى فئة [`Trainer`], توفر مكتبة Transformers أيضًا فئة [`Seq2SeqTrainer`] للمهام التسلسلية مثل الترجمة أو التلخيص. هناك أيضًا فئة [`~trl.SFTTrainer`] من مكتبة [TRL](https://hf.co/docs/trl) التي تغلّف فئة [`Trainer`] وهي مُحُسَّنة لتدريب نماذج اللغة مثل Llama-2 وMistral باستخدام تقنيات التوليد اللغوي. كما يدعم [`~trl.SFTTrainer`] ميزات مثل حزم التسلسلات، وLoRA، والقياس الكمي، وDeepSpeed مما يُمكّن من التدريب بكفاءة على نماذج ضخمة الحجم.
-
-<br>
-
-لا تتردد في الاطلاع على [مرجع API](./main_classes/trainer) لهذه الفئات الأخرى من النوع [`Trainer`] لمعرفة المزيد حول متى يتم استخدام كل منها. بشكل عام، [`Trainer`] هو الخيار الأكثر تنوعًا ومناسبًا لمجموعة واسعة من المهام. تم تصميم [`Seq2SeqTrainer`] للمهام التسلسلية ، و [`~trl.SFTTrainer`] مُصمم لتدريب نماذج اللغة الكبيرة.
-
-</Tip>
+> [!TIP]
+> بالإضافة إلى فئة [`Trainer`], توفر مكتبة Transformers أيضًا فئة [`Seq2SeqTrainer`] للمهام التسلسلية مثل الترجمة أو التلخيص. هناك أيضًا فئة [`~trl.SFTTrainer`] من مكتبة [TRL](https://hf.co/docs/trl) التي تغلّف فئة [`Trainer`] وهي مُحُسَّنة لتدريب نماذج اللغة مثل Llama-2 وMistral باستخدام تقنيات التوليد اللغوي. كما يدعم [`~trl.SFTTrainer`] ميزات مثل حزم التسلسلات، وLoRA، والقياس الكمي، وDeepSpeed مما يُمكّن من التدريب بكفاءة على نماذج ضخمة الحجم.
+>
+> <br>
+>
+> لا تتردد في الاطلاع على [مرجع API](./main_classes/trainer) لهذه الفئات الأخرى من النوع [`Trainer`] لمعرفة المزيد حول متى يتم استخدام كل منها. بشكل عام، [`Trainer`] هو الخيار الأكثر تنوعًا ومناسبًا لمجموعة واسعة من المهام. تم تصميم [`Seq2SeqTrainer`] للمهام التسلسلية ، و [`~trl.SFTTrainer`] مُصمم لتدريب نماذج اللغة الكبيرة.
 
 قبل البدء، تأكد من تثبيت مكتبة [Accelerate](https://hf.co/docs/accelerate) - وهي مكتبة تُمكّن تشغيل تدريب PyTorch في بيئات مُوزعة.
 
@@ -164,21 +161,15 @@ trainer = Trainer(
 
 ## تسجيل الأحداث (Logging)
 
-<Tip>
-
-راجع مرجع [API](./main_classes/logging) للتسجيل للحصول على مزيد من المعلومات حول مستويات التسجيل المختلفة للأحداث.
-
-</Tip>
+> [!TIP]
+> راجع مرجع [API](./main_classes/logging) للتسجيل للحصول على مزيد من المعلومات حول مستويات التسجيل المختلفة للأحداث.
 
 يتم تعيين [`Trainer`] إلى `logging.INFO` افتراضيًا والذي يُبلغ عن الأخطاء والتحذيرات ومعلومات أساسية أخرى. يتم تعيين نسخة [`Trainer`] - في البيئات الموزعة - إلى `logging.WARNING` والتي يُبلغ فقط عن الأخطاء والتحذيرات. يمكنك تغيير مستوى تسجيل الأحداث باستخدام معاملي [`log_level`](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.log_level) و [`log_level_replica`](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.log_level_replica) في [`TrainingArguments`].
 
 لتهيئة إعداد مُستوى تسجيل  اﻷحداث لكل عقدة، استخدم معامل [`log_on_each_node`](https://huggingface.co/docs/transformers/main/en/main_classes/trainer#transformers.TrainingArguments.log_on_each_node) لتحديد ما إذا كان سيتم استخدام مُستوى السجل على كل عقدة أو فقط على العقدة الرئيسية.
 
-<Tip>
-
-يحدد [`Trainer`] مُستوى التسجيل بشكل مُنفصل لكل عقدة في طريقة [`Trainer.__init__`]، لذا فقد ترغب في التفكير في تعيين هذا الإعداد في وقت سابق إذا كنت تستخدم وظائف Transformers الأخرى قبل إنشاء كائن [`Trainer`].
-
-</Tip>
+> [!TIP]
+> يحدد [`Trainer`] مُستوى التسجيل بشكل مُنفصل لكل عقدة في طريقة [`Trainer.__init__`]، لذا فقد ترغب في التفكير في تعيين هذا الإعداد في وقت سابق إذا كنت تستخدم وظائف Transformers الأخرى قبل إنشاء كائن [`Trainer`].
 
 على سبيل المثال، لتعيين التعليمات البرمجية والوحدات النمطية الرئيسية الخاصة بك لاستخدام نفس مُستوى التسجيل وفقًا لكل عقدة:
 
@@ -382,11 +373,8 @@ trainer.train()
 تم تقديم مُحسِّنات LOMO في [التدريب على المعلمات الكاملة لنماذج اللغة الكبيرة باستخدام موارد محدودة](https://hf.co/papers/2306.09782) و [AdaLomo: تحسين ذاكرة منخفضة بمعدل تعلم متكيف](https://hf.co/papers/2310.10195).
 يتكون كلاهما من طريقة فعالة لضبط المعلمات الكاملة. تدمج محسنات LOMO حساب الاشتقاق وتحديث المعلمات في خطوة واحدة لتقليل استخدام الذاكرة. محسنات LOMO المدعومة هي `"lomo"` و `"adalomo"`. أولاً قم بتثبيت LOMO من pypi `pip install lomo-optim` أو قم بتثبيته من المصدر باستخدام `pip install git+https://github.com/OpenLMLab/LOMO.git`.
 
-<Tip>
-
-وفقًا للمؤلفين، يوصى باستخدام `AdaLomo` بدون `grad_norm` للحصول على أداء أفضل وسرعة أعلى.
-
-</Tip>
+> [!TIP]
+> وفقًا للمؤلفين، يوصى باستخدام `AdaLomo` بدون `grad_norm` للحصول على أداء أفضل وسرعة أعلى.
 
 فيما يلي نص برمجي بسيط يوضح كيفية ضبط نموذج [google/gemma-2b](https://huggingface.co/google/gemma-2b) على مجموعة بيانات IMDB في الدقة الكاملة:
 
@@ -411,9 +399,8 @@ trainer.train()
 
 ### مُحسِّن GrokAdamW
 تم تصميم مُحسِّن GrokAdamW لتعزيز أداء التدريب واستقراره، خاصةً للنماذج التي تستفيد من دوال إشارة `grokking`. لاستخدام `GrokAdamW`، قم أولاً بتثبيت حزمة المُحسِّن باستخدام `pip install grokadamw`.
-<Tip>
-يُعد GrokAdamW مفيدًا بشكل خاص للنماذج التي تتطلب تقنيات تحسين مُتقدمة لتحقيق أداء واستقرار أفضل.
-</Tip>
+> [!TIP]
+> يُعد GrokAdamW مفيدًا بشكل خاص للنماذج التي تتطلب تقنيات تحسين مُتقدمة لتحقيق أداء واستقرار أفضل.
 
 فيما يلي نص برمجى بسيط لشرح كيفية ضبط [google/gemma-2b](https://huggingface.co/google/gemma-2b) بدقة على مجموعة بيانات IMDB باستخدام مُحسِّن GrokAdamW:
 ```python
@@ -482,11 +469,8 @@ trainer.train()
 
 يتم تشغيل فئة [`Trainer`] بواسطة [تسريع](https://hf.co/docs/accelerate)، وهي مكتبة لتدريب نماذج PyTorch بسهولة في بيئات موزعة مع دعم عمليات التكامل مثل [FullyShardedDataParallel (FSDP)](https://pytorch.org/blog/introducing-pytorch-fully-sharded-data-parallel-api/) و [DeepSpeed](https://www.deepspeed.ai/).
 
-<Tip>
-
-تعرف على المزيد حول استراتيجيات تجزئة FSDP، وتفريغ وحدة المعالجة المركزية (CPU)، والمزيد مع [`Trainer`] في [دليل Fully Sharded Data Parallel](fsdp).
-
-</Tip>
+> [!TIP]
+> تعرف على المزيد حول استراتيجيات تجزئة FSDP، وتفريغ وحدة المعالجة المركزية (CPU)، والمزيد مع [`Trainer`] في [دليل Fully Sharded Data Parallel](fsdp).
 
 لاستخدام Accelerate مع [`Trainer`]]، قم بتشغيل الأمر [`accelerate.config`](https://huggingface.co/docs/accelerate/package_reference/cli#accelerate-config) لإعداد التدريب لبيئة التدريب الخاصة بك. نشئ هذا الأمر ملف `config_file.yaml` الذي سيتم استخدامه عند تشغيل نص للتدريب البرمجى. على سبيل المثال، بعض تكوينات المثال التي يمكنك إعدادها هي:
 

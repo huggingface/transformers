@@ -323,17 +323,11 @@ Und führen Sie dann jeden Test mehrmals durch (standardmäßig 50):
 pytest --flake-finder --flake-runs=5 tests/test_failing_test.py
 ```
 
-<Tip>
+> [!TIP]
+> Dieses Plugin funktioniert nicht mit dem `-n` Flag von `pytest-xdist`.
 
-Dieses Plugin funktioniert nicht mit dem `-n` Flag von `pytest-xdist`.
-
-</Tip>
-
-<Tip>
-
-Es gibt noch ein anderes Plugin `pytest-repeat`, aber es funktioniert nicht mit `unittest`.
-
-</Tip>
+> [!TIP]
+> Es gibt noch ein anderes Plugin `pytest-repeat`, aber es funktioniert nicht mit `unittest`.
 
 #### Run tests in a random order
 
@@ -802,20 +796,14 @@ keine Daten dort hinterlassen haben.
   - `after=True`: das temporäre Verzeichnis wird immer am Ende des Tests gelöscht.
   - `after=False`: das temporäre Verzeichnis wird am Ende des Tests immer beibehalten.
 
-<Tip>
+> [!TIP]
+> Um das Äquivalent von `rm -r` sicher ausführen zu können, sind nur Unterverzeichnisse des Projektarchivs checkout erlaubt, wenn
+> ein explizites `tmp_dir` verwendet wird, so dass nicht versehentlich ein `/tmp` oder ein ähnlich wichtiger Teil des Dateisystems vernichtet wird.
+> d.h. geben Sie bitte immer Pfade an, die mit `./` beginnen.
 
-Um das Äquivalent von `rm -r` sicher ausführen zu können, sind nur Unterverzeichnisse des Projektarchivs checkout erlaubt, wenn
-ein explizites `tmp_dir` verwendet wird, so dass nicht versehentlich ein `/tmp` oder ein ähnlich wichtiger Teil des Dateisystems vernichtet wird.
-d.h. geben Sie bitte immer Pfade an, die mit `./` beginnen.
-
-</Tip>
-
-<Tip>
-
-Jeder Test kann mehrere temporäre Verzeichnisse registrieren, die alle automatisch entfernt werden, sofern nicht anders gewünscht.
-anders.
-
-</Tip>
+> [!TIP]
+> Jeder Test kann mehrere temporäre Verzeichnisse registrieren, die alle automatisch entfernt werden, sofern nicht anders gewünscht.
+> anders.
 
 ### Temporäre Überschreibung von sys.path
 

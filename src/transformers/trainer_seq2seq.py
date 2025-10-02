@@ -219,13 +219,10 @@ class Seq2SeqTrainer(Trainer):
             gen_kwargs:
                 Additional `generate` specific kwargs.
 
-        <Tip>
-
-        If your predictions or labels have different sequence lengths (for instance because you're doing dynamic
-        padding in a token classification task) the predictions will be padded (on the right) to allow for
-        concatenation into one array. The padding index is -100.
-
-        </Tip>
+        > [!TIP]
+        > If your predictions or labels have different sequence lengths (for instance because you're doing dynamic
+        > padding in a token classification task) the predictions will be padded (on the right) to allow for
+        > concatenation into one array. The padding index is -100.
 
         Returns: *NamedTuple* A namedtuple with the following keys:
 

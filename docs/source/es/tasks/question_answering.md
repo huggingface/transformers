@@ -25,11 +25,8 @@ La respuesta a preguntas devuelve una respuesta a partir de una pregunta dada. E
 
 Esta guía te mostrará como hacer fine-tuning de [DistilBERT](https://huggingface.co/distilbert/distilbert-base-uncased) en el dataset [SQuAD](https://huggingface.co/datasets/squad) para responder preguntas de forma extractiva.
 
-<Tip>
-
-Revisa la [página de la tarea](https://huggingface.co/tasks/question-answering) de responder preguntas para tener más información sobre otras formas de responder preguntas y los modelos, datasets y métricas asociadas.
-
-</Tip>
+> [!TIP]
+> Revisa la [página de la tarea](https://huggingface.co/tasks/question-answering) de responder preguntas para tener más información sobre otras formas de responder preguntas y los modelos, datasets y métricas asociadas.
 
 ## Carga el dataset SQuAD
 
@@ -154,11 +151,8 @@ Carga el modelo DistilBERT con [`AutoModelForQuestionAnswering`]:
 >>> model = AutoModelForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
-<Tip>
-
-Para familiarizarte con el fine-tuning con [`Trainer`], ¡mira el tutorial básico [aquí](../training#finetune-with-trainer)!
-
-</Tip>
+> [!TIP]
+> Para familiarizarte con el fine-tuning con [`Trainer`], ¡mira el tutorial básico [aquí](../training#finetune-with-trainer)!
 
 En este punto, solo quedan tres pasos:
 
@@ -189,10 +183,7 @@ En este punto, solo quedan tres pasos:
 >>> trainer.train()
 ```
 
-<Tip>
-
-Para un ejemplo con mayor profundidad de cómo hacer fine-tuning a un modelo para responder preguntas, échale un vistazo al
-[cuaderno de PyTorch](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb) o al
-[cuaderno de TensorFlow](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering-tf.ipynb) correspondiente.
-
-</Tip>
+> [!TIP]
+> Para un ejemplo con mayor profundidad de cómo hacer fine-tuning a un modelo para responder preguntas, échale un vistazo al
+> [cuaderno de PyTorch](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb) o al
+> [cuaderno de TensorFlow](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering-tf.ipynb) correspondiente.

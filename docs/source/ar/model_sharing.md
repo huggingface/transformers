@@ -12,11 +12,8 @@
 frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope;
 picture-in-picture" allowfullscreen></iframe>
 
-<Tip>
-
-لمشاركة نموذج مع المجتمع، تحتاج إلى حساب على [huggingface.co](https://huggingface.co/join). يمكنك أيضًا الانضمام إلى منظمة موجودة أو إنشاء منظمة جديدة.
-
-</Tip>
+> [!TIP]
+> لمشاركة نموذج مع المجتمع، تحتاج إلى حساب على [huggingface.co](https://huggingface.co/join). يمكنك أيضًا الانضمام إلى منظمة موجودة أو إنشاء منظمة جديدة.
 
 ## ميزات المستودع
 

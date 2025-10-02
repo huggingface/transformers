@@ -48,23 +48,14 @@ NCCL_DEBUG=INFO python -m torch.distributed.run --nproc_per_node 2 --nnodes 1 to
 
 ## 下溢和上溢检测
 
-<Tip>
+> [!TIP]
+> 目前，此功能仅适用于PyTorch。
 
-目前，此功能仅适用于PyTorch。
+> [!TIP]
+> 对于多GPU训练，它需要使用DDP（`torch.distributed.launch`）。
 
-</Tip>
-
-<Tip>
-
-对于多GPU训练，它需要使用DDP（`torch.distributed.launch`）。
-
-</Tip>
-
-<Tip>
-
-此功能可以与任何基于`nn.Module`的模型一起使用。
-
-</Tip>
+> [!TIP]
+> 此功能可以与任何基于`nn.Module`的模型一起使用。
 
 如果您开始发现`loss=NaN`或模型因激活值或权重中的`inf`或`nan`而出现一些异常行为，就需要发现第一个下溢或上溢发生的地方以及导致它的原因。幸运的是，您可以通过激活一个特殊模块来自动进行检测。
 

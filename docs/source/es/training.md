@@ -81,12 +81,9 @@ Comienza cargando tu modelo y especifica el número de labels previstas. A parti
 >>> model = AutoModelForSequenceClassification.from_pretrained("google-bert/bert-base-cased", num_labels=5)
 ```
 
-<Tip>
-
-Verás una advertencia acerca de que algunos de los pesos pre-entrenados no están siendo utilizados y que algunos pesos están siendo inicializados al azar. No te preocupes, esto es completamente normal.
-El head/cabezal pre-entrenado del modelo BERT se descarta y se sustituye por un head de clasificación inicializado aleatoriamente. Puedes aplicar fine-tuning a este nuevo head del modelo en tu tarea de clasificación de secuencias haciendo transfer learning del modelo pre-entrenado.
-
-</Tip>
+> [!TIP]
+> Verás una advertencia acerca de que algunos de los pesos pre-entrenados no están siendo utilizados y que algunos pesos están siendo inicializados al azar. No te preocupes, esto es completamente normal.
+> El head/cabezal pre-entrenado del modelo BERT se descarta y se sustituye por un head de clasificación inicializado aleatoriamente. Puedes aplicar fine-tuning a este nuevo head del modelo en tu tarea de clasificación de secuencias haciendo transfer learning del modelo pre-entrenado.
 
 ### Hiperparámetros de entrenamiento
 
@@ -166,11 +163,8 @@ El [`DefaultDataCollator`] junta los tensores en un batch para que el modelo se 
 >>> data_collator = DefaultDataCollator(return_tensors="tf")
 ```
 
-<Tip>
-
-[`Trainer`] utiliza [`DataCollatorWithPadding`] por defecto por lo que no es necesario especificar explícitamente un intercalador de datos (data collator, en inglés).
-
-</Tip>
+> [!TIP]
+> [`Trainer`] utiliza [`DataCollatorWithPadding`] por defecto por lo que no es necesario especificar explícitamente un intercalador de datos (data collator, en inglés).
 
 A continuación, convierte los datasets tokenizados en datasets de TensorFlow con el método [`to_tf_dataset`](https://huggingface.co/docs/datasets/package_reference/main_classes#datasets.Dataset.to_tf_dataset). Especifica tus entradas en `columns` y tu etiqueta en `label_cols`:
 
@@ -309,11 +303,8 @@ Por último, especifica el `device` o entorno de ejecución para utilizar una GP
 >>> model.to(device)
 ```
 
-<Tip>
-
-Consigue acceso gratuito a una GPU en la nube si es que no tienes este recurso de forma local con un notebook alojado en [Colaboratory](https://colab.research.google.com/) o [SageMaker StudioLab](https://studiolab.sagemaker.aws/).
-
-</Tip>
+> [!TIP]
+> Consigue acceso gratuito a una GPU en la nube si es que no tienes este recurso de forma local con un notebook alojado en [Colaboratory](https://colab.research.google.com/) o [SageMaker StudioLab](https://studiolab.sagemaker.aws/).
 
 Genial, ¡ahora podemos entrenar! 🥳
 

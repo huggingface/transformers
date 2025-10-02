@@ -27,11 +27,8 @@ rendered properly in your Markdown viewer.
 1. [WNUT 17](https://huggingface.co/datasets/wnut_17) データセットで [DistilBERT](https://huggingface.co/distilbert/distilbert-base-uncased) を微調整して、新しいエンティティを検出します。
 2. 微調整されたモデルを推論に使用します。
 
-<Tip>
-
-このタスクと互換性のあるすべてのアーキテクチャとチェックポイントを確認するには、[タスクページ](https://huggingface.co/tasks/token-classification) を確認することをお勧めします。
-
-</Tip>
+> [!TIP]
+> このタスクと互換性のあるすべてのアーキテクチャとチェックポイントを確認するには、[タスクページ](https://huggingface.co/tasks/token-classification) を確認することをお勧めします。
 
 始める前に、必要なライブラリがすべてインストールされていることを確認してください。
 
@@ -240,11 +237,8 @@ pip install transformers datasets evaluate seqeval
 ... }
 ```
 
-<Tip>
-
-[`Trainer`] を使用したモデルの微調整に慣れていない場合は、[ここ](../training#train-with-pytorch-trainer) の基本的なチュートリアルをご覧ください。
-
-</Tip>
+> [!TIP]
+> [`Trainer`] を使用したモデルの微調整に慣れていない場合は、[ここ](../training#train-with-pytorch-trainer) の基本的なチュートリアルをご覧ください。
 
 これでモデルのトレーニングを開始する準備が整いました。 [`AutoModelForTokenClassification`] を使用して、予期されるラベルの数とラベル マッピングを指定して DistilBERT を読み込みます。
 
@@ -295,14 +289,10 @@ pip install transformers datasets evaluate seqeval
 >>> trainer.push_to_hub()
 ```
 
-<Tip>
-
-トークン分類のモデルを微調整する方法のより詳細な例については、対応するセクションを参照してください。
-[PyTorch ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification.ipynb)
-または [TensorFlow ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb)。
-
-
-</Tip>
+> [!TIP]
+> トークン分類のモデルを微調整する方法のより詳細な例については、対応するセクションを参照してください。
+> [PyTorch ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification.ipynb)
+> または [TensorFlow ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb)。
 
 ## Inference
 
