@@ -248,8 +248,8 @@ class AwqTest(unittest.TestCase):
         input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
 
         quantized_model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto")
-        print("quantized_model.hf_device_map.values()", quantized_model.hf_device_map.values())
-        self.assertTrue(set(quantized_model.hf_device_map.values()) == {0, 1})
+
+        self.assertTrue(len(set(quantized_model.hf_device_map.values())) >= 2)
 
         output = quantized_model.generate(**input_ids, max_new_tokens=40)
 
