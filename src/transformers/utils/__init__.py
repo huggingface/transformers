@@ -105,6 +105,7 @@ from .hub import (
 )
 from .import_utils import (
     ACCELERATE_MIN_VERSION,
+    BITSANDBYTES_MIN_VERSION,
     ENV_VARS_TRUE_AND_AUTO_VALUES,
     ENV_VARS_TRUE_VALUES,
     GGUF_MIN_VERSION,

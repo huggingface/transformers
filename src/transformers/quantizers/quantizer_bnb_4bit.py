@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 
 from ..utils import (
     ACCELERATE_MIN_VERSION,
+    BITSANDBYTES_MIN_VERSION,
     is_accelerate_available,
     is_bitsandbytes_available,
     is_torch_available,
@@ -39,11 +40,9 @@ from ..utils import (
 
 if is_torch_available():
     import torch
-
     from ..pytorch_utils import Conv1D
 
 logger = logging.get_logger(__name__)
-
 
 class Bnb4BitHfQuantizer(HfQuantizer):
     """
@@ -80,30 +79,14 @@ class Bnb4BitHfQuantizer(HfQuantizer):
     def validate_environment(self, *args, **kwargs):
         if not is_accelerate_available():
             raise ImportError(
-                f"Using `bitsandbytes` 4-bit quantization requires Accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
+                f"Using `bitsandbytes` 4-bit quantization requires accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
             )
-        if not is_bitsandbytes_available(check_library_only=True):
+        if not is_bitsandbytes_available():
             raise ImportError(
-                "Using `bitsandbytes` 4-bit quantization requires the latest version of bitsandbytes: `pip install -U bitsandbytes`"
+                f"Using `bitsandbytes` 4-bit quantization requires bitsandbytes: `pip install -U bitsandbytes>={BITSANDBYTES_MIN_VERSION}`"
             )
-        if not is_torch_available():
-            raise ImportError(
-                "The bitsandbytes library requires PyTorch but it was not found in your environment. "
-                "You can install it with `pip install torch`."
-            )
-        # `bitsandbytes` versions older than 0.43.1 eagerly require CUDA at import time,
-        # so those versions of the library are practically only available when CUDA is too.
-        if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.43.1"):
-            if not torch.cuda.is_available():
-                raise ImportError(
-                    "The installed version of bitsandbytes (<0.43.1) requires CUDA, but CUDA is not available. "
-                    "You may need to install PyTorch with CUDA support or upgrade bitsandbytes to >=0.43.1."
-                )
 
         from ..integrations import validate_bnb_backend_availability
-        from ..utils import is_bitsandbytes_multi_backend_available
-
-        bnb_multibackend_is_enabled = is_bitsandbytes_multi_backend_available()
         validate_bnb_backend_availability(raise_exception=True)
 
         device_map = kwargs.get("device_map")
@@ -115,7 +98,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             device_map_without_lm_head = {
                 key: device_map[key] for key in device_map if key not in self.modules_to_not_convert
             }
-            if set(device_map.values()) == {"cpu"} and bnb_multibackend_is_enabled:
+            if set(device_map.values()) == {"cpu"}:
                 pass
             elif "cpu" in device_map_without_lm_head.values() or "disk" in device_map_without_lm_head.values():
                 raise ValueError(
@@ -297,15 +280,6 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         return model
 
     def is_serializable(self, safe_serialization=None):
-        _is_4bit_serializable = version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.41.3")
-
-        if not _is_4bit_serializable:
-            logger.warning(
-                "You are calling `save_pretrained` to a 4-bit converted model, but your `bitsandbytes` version doesn't support it. "
-                "If you want to save 4-bit models, make sure to have `bitsandbytes>=0.41.3` installed."
-            )
-            return False
-
         return True
 
     @cached_property
@@ -315,7 +289,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         the `module` parameter in `Params4bit.from_prequantized`
         :return:
         """
-        return version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.43.3")
+        return True
 
     @property
     def is_trainable(self) -> bool:
