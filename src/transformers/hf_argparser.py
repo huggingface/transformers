@@ -176,9 +176,19 @@ class HfArgumentParser(ArgumentParser):
                     f" Problem encountered in field '{field.name}'."
                 )
             if type(None) not in field.type.__args__:
-                # filter `str` in Union
-                field.type = field.type.__args__[0] if field.type.__args__[1] is str else field.type.__args__[1]
-                origin_type = getattr(field.type, "__origin__", field.type)
+                # For Union[dict, str] or Union[str, dict], keep str type for argparse
+                # The conversion from JSON string to dict happens in the dataclass __post_init__
+                non_str_type = (field.type.__args__[0] if field.type.__args__[1] is str else field.type.__args__[1])
+                non_str_origin = getattr(non_str_type, "__origin__", type(non_str_type))
+
+                if non_str_origin is dict:
+                    # Keep the type as str for argparse to handle
+                    field.type = str
+                    origin_type = str
+                else:
+                    # filter 'str' in Union for other cases
+                    field.type = non_str_type
+                    origin_type = getattr(field.type, "__origin__", field.type)
             elif bool not in field.type.__args__:
                 # filter `NoneType` in Union (except for `Union[bool, NoneType]`)
                 field.type = (

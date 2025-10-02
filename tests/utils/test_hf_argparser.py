@@ -490,3 +490,54 @@ class HfArgumentParserTest(unittest.TestCase):
         parser = HfArgumentParser(TrainingArguments)
         training_args = parser.parse_args_into_dataclasses()[0]
         self.assertEqual(training_args.accelerator_config.gradient_accumulation_kwargs["num_steps"], 2)
+
+    def test_17_union_dict_str_parsing(self):
+        """Test that Union[dict, str] fields can be parsed from command line as JSON strings"""
+
+        @dataclass
+        class ArgsWithUnionDictStr:
+            scheduler_kwargs: Union[dict[str, Any], str] = field(
+                default_factory=dict,
+                metadata={"help": "Test field with Union[dict, str] type"},
+            )
+
+        parser = HfArgumentParser(ArgsWithUnionDictStr)
+
+        # Test parsing JSON string from command line
+        args = parser.parse_args_into_dataclasses(
+            ["--scheduler_kwargs", '{"min_lr": 1e-06}'], look_for_args_file=False
+        )
+        self.assertEqual(args[0].scheduler_kwargs, {"min_lr": 1e-06})
+
+        # Test with default value
+        args = parser.parse_args_into_dataclasses([], look_for_args_file=False)
+        self.assertEqual(args[0].scheduler_kwargs, {})
+
+        # Test with complex JSON
+        args = parser.parse_args_into_dataclasses(
+            ["--scheduler_kwargs", '{"min_lr": 0.000001, "num_cycles": 3}'],
+            look_for_args_file=False,
+        )
+        self.assertEqual(args[0].scheduler_kwargs, {"min_lr": 0.000001, "num_cycles": 3})
+    
+    @require_torch
+    def test_18_lr_scheduler_kwargs_parsing(self):
+        """Test that lr_scheduler_kwargs in TrainingArguments can be parsed from CLI (regression test for #41252)"""
+
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            parser = HfArgumentParser(TrainingArguments)
+
+            # Test parsing lr_scheduler_kwargs as JSON string
+            args = parser.parse_args_into_dataclasses(
+                ["--output_dir", tmp_dir, "--lr_scheduler_kwargs", '{"min_lr": 1e-06}'],
+                look_for_args_file=False,
+            )
+            training_args = args[0]
+
+            # At this stage, it should be a string
+            self.assertIsInstance(training_args.lr_scheduler_kwargs, str)
+            self.assertEqual(training_args.lr_scheduler_kwargs, '{"min_lr": 1e-06}')
+
+
