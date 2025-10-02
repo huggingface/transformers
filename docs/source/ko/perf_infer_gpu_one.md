@@ -64,10 +64,10 @@ PyTorch 2.0부터는 어텐션 패스트패스가 인코더와 디코더 모두�
 다음 코드를 실행하여 단일 GPU에서 빠르게 FP4 모델을 실행할 수 있습니다.
 
 ```py
-from transformers import AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
 model_name = "bigscience/bloom-2b5"
-model_4bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", load_in_4bit=True)
+model_4bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", quantization_config=BitsAndBytesConfig(load_in_4bit=True))
 ```
 `device_map`은 선택 사항입니다. 그러나 `device_map = 'auto'`로 설정하는 것이 사용 가능한 리소스를 효율적으로 디스패치하기 때문에 추론에 있어 권장됩니다.
 
@@ -76,7 +76,7 @@ model_4bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto",
 다중 GPU에서 혼합 4비트 모델을 가져오는 방법은 단일 GPU 설정과 동일합니다(동일한 명령어 사용):
 ```py
 model_name = "bigscience/bloom-2b5"
-model_4bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", load_in_4bit=True)
+model_4bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", quantization_config=BitsAndBytesConfig(load_in_4bit=True))
 ```
 하지만 `accelerate`를 사용하여 각 GPU에 할당할 GPU RAM을 제어할 수 있습니다. 다음과 같이 `max_memory` 인수를 사용하세요:
 
@@ -84,7 +84,7 @@ model_4bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto",
 max_memory_mapping = {0: "600MB", 1: "1GB"}
 model_name = "bigscience/bloom-3b"
 model_4bit = AutoModelForCausalLM.from_pretrained(
-    model_name, device_map="auto", load_in_4bit=True, max_memory=max_memory_mapping
+    model_name, device_map="auto", quantization_config=BitsAndBytesConfig(load_in_4bit=True), max_memory=max_memory_mapping
 )
 ```
 이 예에서는 첫 번째 GPU가 600MB의 메모리를 사용하고 두 번째 GPU가 1GB를 사용합니다.
@@ -167,7 +167,7 @@ model_8bit = AutoModelForCausalLM.from_pretrained(model_name, quantization_confi
 max_memory_mapping = {0: "1GB", 1: "2GB"}
 model_name = "bigscience/bloom-3b"
 model_8bit = AutoModelForCausalLM.from_pretrained(
-    model_name, device_map="auto", load_in_8bit=True, max_memory=max_memory_mapping
+    model_name, device_map="auto", quantization_config=BitsAndBytesConfig(load_in_4bit=True), max_memory=max_memory_mapping
 )
 ```
 이 예시에서는 첫 번째 GPU가 1GB의 메모리를 사용하고 두 번째 GPU가 2GB를 사용합니다.

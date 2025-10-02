@@ -407,8 +407,6 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
     This is a wrapper class about all possible attributes and features that you can play with a model that has been
     loaded using `bitsandbytes`.
 
-    This replaces `load_in_8bit` or `load_in_4bit`therefore both options are mutually exclusive.
-
     Currently only supports `LLM.int8()`, `FP4`, and `NF4` quantization. If more methods are added to `bitsandbytes`,
     then more arguments will be added to this class.
 

@@ -231,7 +231,7 @@ flush()
 دعنا نرى ما هو استهلاك ذاكرة GPU الذروة الذي يوفره تكميم 4 بت. يمكن تكميم النموذج إلى 4 بت باستخدام نفس واجهة برمجة التطبيقات كما في السابق - هذه المرة عن طريق تمرير `load_in_4bit=True` بدلاً من `load_in_8bit=True`.
 
 ```python
-model = AutoModelForCausalLM.from_pretrained("bigcode/octocoder", load_in_4bit=True, pad_token_id=0)
+model = AutoModelForCausalLM.from_pretrained("bigcode/octocoder", quantization_config=BitsAndBytesConfig(load_in_4bit=True), pad_token_id=0)
 
 pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
 

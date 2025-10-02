@@ -19,7 +19,7 @@ import unittest
 
 import pytest
 
-from transformers import AutoTokenizer, ZambaConfig, is_torch_available
+from transformers import AutoTokenizer, BitsAndBytesConfig, ZambaConfig, is_torch_available
 from transformers.testing_utils import (
     is_flaky,
     require_bitsandbytes,
@@ -498,7 +498,7 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                     tmpdirname,
                     dtype=torch.float16,
                     attn_implementation="flash_attention_2",
-                    load_in_4bit=True,
+                    quantization_config=BitsAndBytesConfig(load_in_4bit=True),
                 )
 
                 for _, param in model.named_parameters():

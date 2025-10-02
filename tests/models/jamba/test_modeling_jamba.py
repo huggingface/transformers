@@ -19,7 +19,7 @@ import unittest
 
 import pytest
 
-from transformers import AutoTokenizer, JambaConfig, is_torch_available
+from transformers import AutoTokenizer, BitsAndBytesConfig, JambaConfig, is_torch_available
 from transformers.testing_utils import (
     DeviceProperties,
     Expectations,
@@ -545,7 +545,7 @@ class JambaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     tmpdirname,
                     dtype=torch.float16,
                     attn_implementation="flash_attention_2",
-                    load_in_4bit=True,
+                    quantization_config=BitsAndBytesConfig(load_in_4bit=True),
                 )
 
                 for _, param in model.named_parameters():
