@@ -606,12 +606,12 @@ class PEAudioVideoWithTextModel(PEAudioVideoPretrainedModel):
     def get_video_features(
         self, pixel_values_videos: torch.Tensor, padding_mask_videos: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
-        """
-        Args:
-            pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_frames, channels, height, width)`):
-                The input video frames tensor.
-            padding_mask_videos (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
-                Mask indicating non-padded frames in the video input.
+        r"""
+        pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_frames, channels, height, width)`):
+            The input video frames tensor.
+        padding_mask_videos (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
+            Mask indicating non-padded frames in the video input.
+
         Returns:
             video_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`): the video embedding
                 obtained by applying the projection layer to the pooled output of the video encoder.
@@ -642,11 +642,11 @@ class PEAudioVideoWithTextModel(PEAudioVideoPretrainedModel):
     def get_audio_features(
         self, input_values: torch.Tensor, padding_mask: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
-        """
-        Args:
-            input_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
-                The input audio waveform tensor.
-            padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        r"""
+        input_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
+            The input audio waveform tensor.
+        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+
 
         Returns:
             audio_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`): the audio embedding
@@ -680,16 +680,15 @@ class PEAudioVideoWithTextModel(PEAudioVideoPretrainedModel):
         padding_mask: Optional[torch.Tensor] = None,
         padding_mask_videos: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        """
-        Args:
-            input_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
-                The input audio waveform tensor.
-            pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_frames, channels, height, width)`):
-                The input video frames tensor.
-            padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask indicating non-padded elements in the audio input.
-            padding_mask_videos (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
-                Mask indicating non-padded frames in the video input.
+        r"""
+        input_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
+            The input audio waveform tensor.
+        pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_frames, channels, height, width)`):
+            The input video frames tensor.
+        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask indicating non-padded elements in the audio input.
+        padding_mask_videos (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
+            Mask indicating non-padded frames in the video input.
 
         Returns:
             audio_video_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`): the audio-video embedding
@@ -726,11 +725,10 @@ class PEAudioVideoWithTextModel(PEAudioVideoPretrainedModel):
     @auto_docstring
     def get_audio_text_features(self, input_ids: torch.Tensor, attention_mask: Optional[torch.Tensor] = None):
         r"""
-        Args:
-            input_ids (`torch.Tensor` of shape `(batch_size, sequence_length)`):
-                The input token ids for the text encoder.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask indicating non-padded elements in the input for the text encoder.
+        input_ids (`torch.Tensor` of shape `(batch_size, sequence_length)`):
+            The input token ids for the text encoder.
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask indicating non-padded elements in the input for the text encoder.
 
         Returns:
             audio_text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`): the audio-text embedding
@@ -756,11 +754,10 @@ class PEAudioVideoWithTextModel(PEAudioVideoPretrainedModel):
     @auto_docstring
     def get_video_text_features(self, input_ids: torch.Tensor, attention_mask: Optional[torch.Tensor] = None):
         r"""
-        Args:
-            input_ids (`torch.Tensor` of shape `(batch_size, sequence_length)`):
-                The input token ids for the text encoder.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask indicating non-padded elements in the input for the text encoder.
+        input_ids (`torch.Tensor` of shape `(batch_size, sequence_length)`):
+            The input token ids for the text encoder.
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask indicating non-padded elements in the input for the text encoder.
 
         Returns:
             video_text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`): the video-text embedding
@@ -786,11 +783,10 @@ class PEAudioVideoWithTextModel(PEAudioVideoPretrainedModel):
     @auto_docstring
     def get_audio_video_text_features(self, input_ids: torch.Tensor, attention_mask: Optional[torch.Tensor] = None):
         r"""
-        Args:
-            input_ids (`torch.Tensor` of shape `(batch_size, sequence_length)`):
-                The input token ids for the text encoder.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask indicating non-padded elements in the input for the text encoder.
+        input_ids (`torch.Tensor` of shape `(batch_size, sequence_length)`):
+            The input token ids for the text encoder.
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask indicating non-padded elements in the input for the text encoder.
 
         Returns:
             audio_video_text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`): the audio-video text
@@ -825,21 +821,21 @@ class PEAudioVideoWithTextModel(PEAudioVideoPretrainedModel):
         return_loss=False,
     ) -> PEAudioVideoTextOutput:
         r"""
-        Args:
-            input_ids (`torch.Tensor`, *optional*):
-                The input token ids for the text encoder, of shape `(batch_size, sequence_length)`.
-            pixel_values_videos (`torch.Tensor`, *optional*):
-                The input video frames tensor, of shape `(batch_size, num_frames, channels, height, width)`.
-            input_values (`torch.Tensor`, *optional*):
-                The input audio waveform tensor, of shape `(batch_size, sequence_length)`.
-            attention_mask (`torch.Tensor`, *optional*):
-                Mask indicating non-padded elements in the input for the text encoder, of shape `(batch_size, sequence_length)`.
-            padding_mask_videos (`torch.Tensor`, *optional*):
-                Mask indicating non-padded frames in the video input, of shape `(batch_size, num_frames)`.
-            padding_mask (`torch.Tensor`, *optional*):
-                Mask indicating non-padded elements in the audio input, of shape `(batch_size, sequence_length)`.
-            return_loss (`bool`, *optional*, defaults to `False`):
-                Whether to compute and return contrastive losses between modalities.
+        input_ids (`torch.Tensor`, *optional*):
+            The input token ids for the text encoder, of shape `(batch_size, sequence_length)`.
+        pixel_values_videos (`torch.Tensor`, *optional*):
+            The input video frames tensor, of shape `(batch_size, num_frames, channels, height, width)`.
+        input_values (`torch.Tensor`, *optional*):
+            The input audio waveform tensor, of shape `(batch_size, sequence_length)`.
+        attention_mask (`torch.Tensor`, *optional*):
+            Mask indicating non-padded elements in the input for the text encoder, of shape `(batch_size, sequence_length)`.
+        padding_mask_videos (`torch.Tensor`, *optional*):
+            Mask indicating non-padded frames in the video input, of shape `(batch_size, num_frames)`.
+        padding_mask (`torch.Tensor`, *optional*):
+            Mask indicating non-padded elements in the audio input, of shape `(batch_size, sequence_length)`.
+        return_loss (`bool`, *optional*, defaults to `False`):
+            Whether to compute and return contrastive losses between modalities.
+
         Returns:
             [`PEAudioVideoTextOutput`]
 
