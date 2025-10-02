@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# from ..configuration_utils import ConfigMixin
+
 from ..utils import is_kernels_available, is_torch_available, PushToHubMixin
 
 
@@ -23,6 +23,14 @@ if is_torch_available():
 
 
 def infer_device(model):
+    """
+    Infers the device type from the model parameters.
+    Args:
+        model: The model instance.
+
+    Returns:
+        The device type.
+    """
     EXAMPLE_MAPPING = """
     {
         "RMSNorm": {
@@ -48,6 +56,7 @@ def infer_device(model):
 
     return dev_type
 
+
 def add_to_mapping(layer_name, device, repo_name, mode, compatible_mapping):
     if device not in ["cuda", "rocm", "xpu"]:
         raise ValueError(f"Only cuda, rocm, and xpu devices supported, got: {device}")
@@ -62,7 +71,14 @@ def add_to_mapping(layer_name, device, repo_name, mode, compatible_mapping):
         }
     }
 
+
 class KernelConfig(PushToHubMixin):
+    """
+    Kernel configuration class.
+    Args:
+        kernel_mapping: The kernel mapping to register.
+    """
+
     def __init__(self, kernel_mapping={}):
         self.kernel_mapping = kernel_mapping
         self.registered_layer_names = {}
