@@ -33,7 +33,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update, rop
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ProcessingKwargs, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
+from ...utils import auto_docstring, is_torchdynamo_compiling, logging
 from ...utils.generic import check_model_inputs
 from ...video_utils import VideoInput
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
