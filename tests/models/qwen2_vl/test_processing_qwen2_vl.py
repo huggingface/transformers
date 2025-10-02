@@ -24,7 +24,7 @@ from transformers import AutoProcessor, Qwen2TokenizerFast
 from transformers.testing_utils import require_av, require_torch, require_torchvision, require_vision
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
-from ...test_processing_common import ProcessorTesterMixin
+from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 if is_vision_available():
@@ -274,7 +274,9 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Add video URL for return dict and load with `num_frames` arg
         messages[0][0]["content"][0] = {
             "type": "video",
-            "url": "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4",
+            "url": url_to_local_path(
+                "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4"
+            ),
         }
         num_frames = 3
         out_dict_with_video = processor.apply_chat_template(
@@ -297,7 +299,7 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             fps=fps,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 900)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 360)
 
         # Load with `fps` and `num_frames` args, should raise an error
         with self.assertRaises(ValueError):
@@ -318,15 +320,19 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 27000)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1080)
 
         # Load video as a list of frames (i.e. images). NOTE: each frame should have same size
         # because we assume they come from one video
         messages[0][0]["content"][0] = {
             "type": "video",
             "url": [
-                "https://www.ilankelman.org/stopsigns/australia.jpg",
-                "https://www.ilankelman.org/stopsigns/australia.jpg",
+                url_to_local_path(
+                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+                ),
+                url_to_local_path(
+                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+                ),
             ],
         }
         out_dict_with_video = processor.apply_chat_template(
@@ -337,6 +343,19 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 160)
+
+        # When the inputs are frame URLs/paths we expect that those are already
+        # sampled and will raise an error is asked to sample again.
+        with self.assertRaisesRegex(
+            ValueError, "Sampling frames from a list of images is not supported! Set `do_sample_frames=False`"
+        ):
+            out_dict_with_video = processor.apply_chat_template(
+                messages,
+                add_generation_prompt=True,
+                tokenize=True,
+                return_dict=True,
+                do_sample_frames=True,
+            )
 
     def test_kwargs_overrides_custom_image_processor_kwargs(self):
         processor = self.get_processor()
@@ -354,7 +373,7 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = self.get_processor()
 
-        input_str = self.prepare_text_inputs(batch_size=2, modality="image")
+        input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
         image_input = self.prepare_image_inputs(batch_size=2)
 
         _ = processor(

@@ -148,10 +148,6 @@ class Qwen2VLTextConfig(PretrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
                 `high_freq_factor` (`float`, *optional*):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
-        image_token_id (`int`, *optional*):
-            Token index used as placeholder for image embeddings.
-        video_token_id (`int`, *optional*):
-            Token index used as placeholder for video embeddings.
 
     ```python
     >>> from transformers import Qwen2VLTextModel, Qwen2VLConfig
@@ -206,8 +202,6 @@ class Qwen2VLTextConfig(PretrainedConfig):
         layer_types=None,
         attention_dropout=0.0,
         rope_scaling=None,
-        image_token_id=None,
-        video_token_id=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -241,7 +235,7 @@ class Qwen2VLTextConfig(PretrainedConfig):
                 else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types)
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         # Validate the correctness of rotary position embeddings parameters
         # BC: if there is a 'type' field, move it to 'rope_type'.
@@ -253,9 +247,6 @@ class Qwen2VLTextConfig(PretrainedConfig):
                 self.rope_scaling["type"] = "default"
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self, ignore_keys={"mrope_section"})
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
-
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 
@@ -271,23 +262,27 @@ class Qwen2VLConfig(PretrainedConfig):
 
 
     Args:
-        text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `Qwen2_5_VLTextConfig`):
+        text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `Qwen2VLTextConfig`):
             The config object or dictionary of the text backbone.
-        vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `Qwen2_5_VLVisionConfig`):
+        vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `Qwen2VLVisionConfig`):
             The config object or dictionary of the vision backbone.
         image_token_id (`int`, *optional*, defaults to 151655):
             The image token index to encode the image prompt.
         video_token_id (`int`, *optional*, defaults to 151656):
             The video token index to encode the image prompt.
+        vision_start_token_id (`int`, *optional*, defaults to 151652):
+            The token index to denote start of vision input.
+        vision_end_token_id (`int`, *optional*, defaults to 151653):
+            The token index to denote end of vision input.
 
     ```python
-    >>> from transformers import Qwen2_5_VLForConditionalGeneration, Qwen2_5_VLConfig
+    >>> from transformers import Qwen2VLForConditionalGeneration, Qwen2VLConfig
 
-    >>> # Initializing a Qwen2_5_VL style configuration
-    >>> configuration = Qwen2_5_VLConfig()
+    >>> # Initializing a Qwen2VL style configuration
+    >>> configuration = Qwen2VLConfig()
 
     >>> # Initializing a model from the Qwen2-VL-7B style configuration
-    >>> model = Qwen2_5_VLForConditionalGeneration(configuration)
+    >>> model = Qwen2VLForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -303,8 +298,15 @@ class Qwen2VLConfig(PretrainedConfig):
         vision_config=None,
         image_token_id=151655,
         video_token_id=151656,
+        vision_start_token_id=151652,
+        vision_end_token_id=151653,
         **kwargs,
     ):
+        # We need to init super() here so that it does not reset values
+        # that are in text config to the BaseClass defaults. The Base
+        # config has many text related defaults and not all defaults are same as for `Qwen2VLTextConfig`
+        super().__init__(**kwargs)
+
         if isinstance(vision_config, dict):
             self.vision_config = self.sub_configs["vision_config"](**vision_config)
         elif vision_config is None:
@@ -318,8 +320,32 @@ class Qwen2VLConfig(PretrainedConfig):
 
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id
+        self.vision_start_token_id = vision_start_token_id
+        self.vision_end_token_id = vision_end_token_id
 
-        super().__init__(**kwargs)
+        # Attention implementation to use. It sets it recursively on sub-configs so we call it again in the end
+        self._attn_implementation = kwargs.pop("attn_implementation", None)
+
+    def __setattr__(self, key, value):
+        if (
+            (text_config := super().__getattribute__("__dict__").get("text_config")) is not None
+            and key not in ["dtype", "_attn_implementation_internal"]
+            and key in text_config.__dict__
+        ):
+            setattr(text_config, key, value)
+        else:
+            super().__setattr__(key, value)
+
+    def __getattribute__(self, key):
+        if "text_config" in super().__getattribute__("__dict__") and key not in [
+            "dtype",
+            "_attn_implementation_internal",
+        ]:
+            text_config = super().__getattribute__("text_config")
+            if key in text_config.__dict__:
+                return getattr(text_config, key)
+
+        return super().__getattribute__(key)
 
 
 __all__ = ["Qwen2VLConfig", "Qwen2VLTextConfig"]

@@ -27,8 +27,6 @@ rendered properly in your Markdown viewer.
 GPT-NeoX-Japanese, a Japanese language model based on [GPT-NeoX](./gpt_neox).
 Japanese uses three types of characters (hiragana, katakana, kanji) and has a huge vocabulary. This model uses [BPEEncoder V2](https://github.com/tanreinama/Japanese-BPEEncoder_V2), a sub-word tokenizer to handle the different characters.
 
-
-
 The model also removes some bias parameters for better performance.
 
 You can find all the original GPT-NeoX-Japanese checkpoints under the [ABEJA](https://huggingface.co/abeja/models?search=gpt-neo-x) organization.

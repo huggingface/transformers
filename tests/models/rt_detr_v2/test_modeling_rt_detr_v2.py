@@ -18,6 +18,7 @@ import inspect
 import math
 import tempfile
 import unittest
+from functools import cached_property
 
 from parameterized import parameterized
 
@@ -35,7 +36,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
@@ -264,7 +264,6 @@ class RTDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     is_encoder_decoder = True
     test_torchscript = False
     test_pruning = False
-    test_head_masking = False
     test_missing_keys = False
     test_torch_exportable = True
 

@@ -222,7 +222,7 @@ class TvltImageProcessor(BaseImageProcessor):
         image: ImageInput,
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_center_crop: Optional[bool] = None,
         crop_size: Optional[dict[str, int]] = None,
         do_rescale: Optional[bool] = None,
@@ -281,7 +281,7 @@ class TvltImageProcessor(BaseImageProcessor):
         size: Optional[dict[str, int]] = None,
         patch_size: Optional[list[int]] = None,
         num_frames: Optional[int] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_center_crop: Optional[bool] = None,
         crop_size: Optional[dict[str, int]] = None,
         do_rescale: Optional[bool] = None,
@@ -332,10 +332,8 @@ class TvltImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                     - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -382,8 +380,7 @@ class TvltImageProcessor(BaseImageProcessor):
 
         if not valid_images(videos):
             raise ValueError(
-                "Invalid image or video type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
+                "Invalid image or video type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor"
             )
 
         videos = make_batched(videos)

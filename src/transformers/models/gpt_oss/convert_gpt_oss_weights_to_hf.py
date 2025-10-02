@@ -102,6 +102,9 @@ def convert_moe_packed_tensors(
     dtype: torch.dtype = torch.bfloat16,
     rows_per_chunk: int = 32768 * 1024,
 ) -> torch.Tensor:
+    """
+    TODO this needs to be documented
+    """
     import math
 
     scales = scales.to(torch.int32) - 127
@@ -136,8 +139,8 @@ def convert_moe_packed_tensors(
         del idx_lo, idx_hi, blk, exp
 
     out = out.reshape(*prefix_shape, G, B * 2).view(*prefix_shape, G * B * 2)
-    # to match for now existing implementation
-    return out.to(torch.float8_e5m2)
+    out = out.to(torch.float8_e5m2).permute(0, 2, 1).contiguous()
+    return out
 
 
 def write_model(
@@ -212,7 +215,6 @@ def write_model(
                     scales = final_[key.replace("blocks", "scales")]
                     new_key = new_key.replace(".blocks", "")
                     unpacked_tensors = convert_moe_packed_tensors(blocks, scales, dtype=torch.bfloat16)
-                    unpacked_tensors = unpacked_tensors.permute(0, 2, 1).contiguous()  # einsum in orignal, I use bmm
                     state_dict[new_key] = unpacked_tensors
                 else:
                     raise (f"Unidentified {key}, please double check the state dict")
@@ -381,7 +383,7 @@ class GptOssConverter(TikTokenConverter):
     ):
         super().__init__(vocab_file, pattern=None)
 
-        # TODO 1st donwload the vocabfile!!!
+        # TODO 1st download the vocabfile!!!
         tokenizer = tiktoken.get_encoding(vocab_file)
         self.additional_special_tokens = {}
         # Complete list of Harmony special tokens as per o200k_harmony spec

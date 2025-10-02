@@ -271,7 +271,6 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         else {}
     )
     fx_compatible = False
-    test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
@@ -464,6 +463,14 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         pass
 
     @unittest.skip("KOSMOS-2 doesn't support padding")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("KOSMOS-2 doesn't support padding")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
+        pass
+
+    @unittest.skip("KOSMOS-2 doesn't support padding")
     def test_eager_padding_matches_padding_free_with_position_ids(self):
         pass
 
@@ -473,57 +480,24 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     @pytest.mark.generate
     def test_left_padding_compatibility(self):
-        # Overwrite because Kosmos-2 need to padd pixel values and pad image-attn-mask
+        # Overwrite -- kosmos2 needs to prepare `image_embeds_position_mask`, and it must be padded accordingly
+        _, inputs_dict = self.prepare_config_and_inputs_for_generate()
+        input_ids = inputs_dict["input_ids"]
 
-        def _prepare_model_kwargs(input_ids, attention_mask, pad_size, signature):
-            model_kwargs = {"input_ids": input_ids, "attention_mask": attention_mask}
-            if "position_ids" in signature:
-                position_ids = torch.cumsum(attention_mask, dim=-1) - 1
-                position_ids.masked_fill_(attention_mask == 0, 1)
-                model_kwargs["position_ids"] = position_ids
-            if "cache_position" in signature:
-                cache_position = torch.arange(input_ids.shape[-1], device=torch_device)
-                model_kwargs["cache_position"] = cache_position
-            if "image_embeds_position_mask" in signature:
-                image_embeds_position_mask = torch.zeros_like(input_ids)
-                image_embeds_position_mask[:, (pad_size + 1) : pad_size + 1 + self.model_tester.latent_query_num] = 1
-                model_kwargs["image_embeds_position_mask"] = image_embeds_position_mask
-            return model_kwargs
-
-        for model_class in self.all_generative_model_classes:
-            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-            input_ids = inputs_dict["input_ids"]
-            pixel_values = inputs_dict["pixel_values"]
-            attention_mask = inputs_dict.get("attention_mask")
-            if attention_mask is None:
-                attention_mask = torch.ones_like(input_ids)
-
-            model = model_class(config).to(torch_device).eval()
-            signature = inspect.signature(model.forward).parameters.keys()
-
-            # no cache as some models require special cache classes to be init outside forward
-            model.generation_config.use_cache = False
-
-            # Without padding
-            model_kwargs = _prepare_model_kwargs(input_ids, attention_mask, pad_size=0, signature=signature)
-            next_logits_wo_padding = model(**model_kwargs, pixel_values=pixel_values).logits[:, -1, :]
-
-            # With left-padding (length 32)
-            # can hardcode pad_token to be 0 as we'll do attn masking anyway
-            pad_token_id = (
-                config.get_text_config().pad_token_id if config.get_text_config().pad_token_id is not None else 0
+        def _prepare_image_embeds_position_mask(input_ids, pad_size):
+            image_embeds_position_mask = torch.zeros(
+                input_ids.shape[0], input_ids.shape[1] + pad_size, device=torch_device, dtype=input_ids.dtype
             )
-            pad_size = (input_ids.shape[0], 32)
-            padding = torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device) * pad_token_id
-            padded_input_ids = torch.cat((padding, input_ids), dim=1)
-            padded_attention_mask = torch.cat((torch.zeros_like(padding), attention_mask), dim=1)
-            model_kwargs = _prepare_model_kwargs(
-                padded_input_ids, padded_attention_mask, pad_size=32, signature=signature
-            )
-            next_logits_with_padding = model(**model_kwargs, pixel_values=pixel_values).logits[:, -1, :]
+            image_embeds_position_mask[:, (pad_size + 1) : pad_size + 1 + self.model_tester.latent_query_num] = 1
+            return image_embeds_position_mask
 
-            # They should result in very similar logits
-            torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-3, atol=1e-3)
+        # `image_embeds_position_mask` is randomly generated in `prepare_config_and_inputs_for_generate`, and it must
+        # match its padded version for the test to be valid -- we need to pass both
+        unpadded_custom_inputs = {"image_embeds_position_mask": _prepare_image_embeds_position_mask(input_ids, 0)}
+        padded_custom_inputs = {"image_embeds_position_mask": _prepare_image_embeds_position_mask(input_ids, 32)}
+        super().test_left_padding_compatibility(
+            unpadded_custom_inputs=unpadded_custom_inputs, padded_custom_inputs=padded_custom_inputs
+        )
 
     @slow
     def test_model_from_pretrained(self):

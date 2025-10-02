@@ -18,6 +18,7 @@ import inspect
 import math
 import re
 import unittest
+from functools import cached_property
 
 from datasets import load_dataset
 
@@ -27,7 +28,6 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.file_utils import cached_property
 from transformers.testing_utils import (
     Expectations,
     is_flaky,
@@ -249,7 +249,6 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     is_encoder_decoder = True
     test_torchscript = False
     test_pruning = False
-    test_head_masking = False
     test_missing_keys = False
     pipeline_model_mapping = (
         {"image-feature-extraction": GroundingDinoModel, "zero-shot-object-detection": GroundingDinoForObjectDetection}
@@ -638,7 +637,7 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
             # GroundingDino when sharing weights also uses the shared ones in GroundingDinoDecoder
             # Therefore, differently from DeformableDetr, we expect the group lens to be 2
-            # one for self.bbox_embed in GroundingDinoForObejectDetection and another one
+            # one for self.bbox_embed in GroundingDinoForObjectDetection and another one
             # in the decoder
             tied_params = [group for group in tied_params if len(group) > 2]
             self.assertListEqual(

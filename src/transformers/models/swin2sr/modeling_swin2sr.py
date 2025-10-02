@@ -20,7 +20,6 @@ from dataclasses import dataclass
 from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
@@ -76,11 +75,6 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
-    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
-    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
-    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
-    argument.
     """
     if drop_prob == 0.0 or not training:
         return input
@@ -300,7 +294,6 @@ class Swin2SRSelfAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
         batch_size, dim, num_channels = hidden_states.shape
@@ -355,8 +348,6 @@ class Swin2SRSelfAttention(nn.Module):
         attention_probs = self.dropout(attention_probs)
 
         # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
 
         context_layer = torch.matmul(attention_probs, value_layer)
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
@@ -420,10 +411,9 @@ class Swin2SRAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
-        self_outputs = self.self(hidden_states, attention_mask, head_mask, output_attentions)
+        self_outputs = self.self(hidden_states, attention_mask, output_attentions)
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
@@ -529,7 +519,6 @@ class Swin2SRLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         input_dimensions: tuple[int, int],
-        head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         height, width = input_dimensions
@@ -553,9 +542,7 @@ class Swin2SRLayer(nn.Module):
         if attn_mask is not None:
             attn_mask = attn_mask.to(hidden_states_windows.device)
 
-        attention_outputs = self.attention(
-            hidden_states_windows, attn_mask, head_mask, output_attentions=output_attentions
-        )
+        attention_outputs = self.attention(hidden_states_windows, attn_mask, output_attentions=output_attentions)
 
         attention_output = attention_outputs[0]
 
@@ -627,16 +614,13 @@ class Swin2SRStage(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         input_dimensions: tuple[int, int],
-        head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
         residual = hidden_states
 
         height, width = input_dimensions
         for i, layer_module in enumerate(self.layers):
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-
-            layer_outputs = layer_module(hidden_states, input_dimensions, layer_head_mask, output_attentions)
+            layer_outputs = layer_module(hidden_states, input_dimensions, output_attentions)
 
             hidden_states = layer_outputs[0]
 
@@ -682,7 +666,6 @@ class Swin2SREncoder(nn.Module):
         self,
         hidden_states: torch.Tensor,
         input_dimensions: tuple[int, int],
-        head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
@@ -695,9 +678,7 @@ class Swin2SREncoder(nn.Module):
             all_hidden_states += (hidden_states,)
 
         for i, stage_module in enumerate(self.stages):
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-
-            layer_outputs = stage_module(hidden_states, input_dimensions, layer_head_mask, output_attentions)
+            layer_outputs = stage_module(hidden_states, input_dimensions, output_attentions)
 
             hidden_states = layer_outputs[0]
             output_dimensions = layer_outputs[1]
@@ -794,7 +775,6 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -804,13 +784,6 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, len(self.config.depths))
 
         _, _, height, width = pixel_values.shape
 
@@ -823,7 +796,6 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
         encoder_outputs = self.encoder(
             embedding_output,
             input_dimensions,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -863,7 +835,7 @@ class Upsample(nn.Module):
         self.scale = scale
         if (scale & (scale - 1)) == 0:
             # scale = 2^n
-            for i in range(int(math.log(scale, 2))):
+            for i in range(int(math.log2(scale))):
                 self.add_module(f"convolution_{i}", nn.Conv2d(num_features, 4 * num_features, 3, 1, 1))
                 self.add_module(f"pixelshuffle_{i}", nn.PixelShuffle(2))
         elif scale == 3:
@@ -874,7 +846,7 @@ class Upsample(nn.Module):
 
     def forward(self, hidden_state):
         if (self.scale & (self.scale - 1)) == 0:
-            for i in range(int(math.log(self.scale, 2))):
+            for i in range(int(math.log2(self.scale))):
                 hidden_state = self.__getattr__(f"convolution_{i}")(hidden_state)
                 hidden_state = self.__getattr__(f"pixelshuffle_{i}")(hidden_state)
 
@@ -1020,7 +992,6 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1071,7 +1042,6 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
 
         outputs = self.swin2sr(
             pixel_values,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,

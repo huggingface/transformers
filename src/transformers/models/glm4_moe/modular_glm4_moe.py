@@ -17,7 +17,6 @@
 from typing import Optional
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...configuration_utils import PretrainedConfig
@@ -255,7 +254,7 @@ class Glm4MoeConfig(PretrainedConfig):
         )
 
 
-class Glm4MoeAttention(CohereAttention, nn.Module):
+class Glm4MoeAttention(CohereAttention):
     def __init__(self, config: Glm4MoeConfig, layer_idx: Optional[int] = None):
         nn.Module.__init__(self)
         self.config = config
@@ -287,7 +286,7 @@ class Glm4MoeMLP(DeepseekV3MLP):
     pass
 
 
-class Glm4MoeTopkRouter(DeepseekV3TopkRouter, nn.Module):
+class Glm4MoeTopkRouter(DeepseekV3TopkRouter):
     def __init__(self, config: Glm4MoeConfig):
         nn.Module.__init__(self)
         self.config = config

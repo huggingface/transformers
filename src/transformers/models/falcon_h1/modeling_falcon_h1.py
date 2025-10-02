@@ -555,7 +555,6 @@ class FalconH1Mixer(nn.Module):
         # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
         A = torch.arange(1, self.num_heads + 1)
         self.A_log = nn.Parameter(torch.log(A))
-        self.A_log._no_weight_decay = True
         self.mamba_rms_norm = config.mamba_rms_norm
 
         if self.mamba_rms_norm:
@@ -566,13 +565,12 @@ class FalconH1Mixer(nn.Module):
                 norm_before_gate=config.mamba_norm_before_gate,
             )
         self.D = nn.Parameter(torch.ones(self.num_heads))
-        self.D._no_weight_decay = True
 
         self.out_proj = nn.Linear(self.intermediate_size, config.hidden_size, bias=config.projectors_bias)
 
         if not is_fast_path_available:
             logger.warning_once(
-                "The fast path is not available because on of `(selective_state_update, causal_conv1d_fn, causal_conv1d_update)`"
+                "The fast path is not available because one of `(selective_state_update, causal_conv1d_fn, causal_conv1d_update)`"
                 " is None. Falling back to the naive implementation. To install follow https://github.com/state-spaces/mamba/#installation and"
                 " https://github.com/Dao-AILab/causal-conv1d"
             )
@@ -1007,7 +1005,7 @@ class FalconH1Mixer(nn.Module):
 
 
 class FalconH1MLP(nn.Module):
-    def __init__(self, config: FalconH1Config = None):
+    def __init__(self, config: FalconH1Config):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -1242,7 +1240,7 @@ class FalconH1Model(FalconH1PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[FalconHybridMambaAttentionDynamicCache] = None,
@@ -1478,17 +1476,11 @@ class FalconH1ForCausalLM(FalconH1PreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def set_decoder(self, decoder):
-        self.model = decoder
-
-    def get_decoder(self):
-        return self.model
-
     @can_return_tuple
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[FalconHybridMambaAttentionDynamicCache] = None,
@@ -1565,7 +1557,7 @@ class FalconH1ForCausalLM(FalconH1PreTrainedModel, GenerationMixin):
         use_cache=True,
         **kwargs,
     ):
-        # Overwitten -- has a unique cache type, `FalconHybridMambaAttentionDynamicCache`
+        # Overwritten -- has a unique cache type, `FalconHybridMambaAttentionDynamicCache`
 
         empty_past_kv = past_key_values is None
 
@@ -1615,6 +1607,12 @@ class FalconH1ForCausalLM(FalconH1PreTrainedModel, GenerationMixin):
                 "cache_position": cache_position,
             }
         )
+
+        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
+        for key, value in kwargs.items():
+            if key not in model_inputs:
+                model_inputs[key] = value
+
         return model_inputs
 
 

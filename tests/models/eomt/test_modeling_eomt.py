@@ -47,7 +47,7 @@ class EomtForUniversalSegmentationTester:
         num_labels=4,
         hidden_size=8,
         num_attention_heads=2,
-        num_hidden_layers=4,
+        num_hidden_layers=2,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -106,7 +106,6 @@ class EomtForUniversalSegmentationTest(ModelTesterMixin, PipelineTesterMixin, un
     pipeline_model_mapping = {"image-segmentation": EomtForUniversalSegmentation} if is_torch_available() else {}
     is_encoder_decoder = False
     test_pruning = False
-    test_head_masking = False
     test_missing_keys = False
     test_torch_exportable = False
 

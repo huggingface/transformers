@@ -14,13 +14,13 @@
 """Testing suite for the PyTorch ViLT model."""
 
 import unittest
+from functools import cached_property
 
 from datasets import load_dataset
 from packaging import version
 
 from transformers import ViltConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -230,7 +230,6 @@ class ViltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
     test_pruning = False
-    test_headmasking = False
     test_torchscript = False
     model_split_percents = [0.5, 0.8, 0.9]
 

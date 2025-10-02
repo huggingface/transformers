@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.56.0.dev0"
+__version__ = "4.57.0.dev0"
 
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -32,6 +32,7 @@ from .utils import (
     is_g2p_en_available,
     is_librosa_available,
     is_mistral_common_available,
+    is_mlx_available,
     is_pretty_midi_available,
 )
 
@@ -39,13 +40,9 @@ from .utils import (
 # so that mypy, pylint or other static linters can recognize them,
 # given that they are not exported using `__all__` in this file.
 from .utils import is_bitsandbytes_available as is_bitsandbytes_available
-from .utils import is_flax_available as is_flax_available
-from .utils import is_keras_nlp_available as is_keras_nlp_available
 from .utils import is_scipy_available as is_scipy_available
 from .utils import is_sentencepiece_available as is_sentencepiece_available
 from .utils import is_speech_available as is_speech_available
-from .utils import is_tensorflow_text_available as is_tensorflow_text_available
-from .utils import is_tf_available as is_tf_available
 from .utils import is_timm_available as is_timm_available
 from .utils import is_tokenizers_available as is_tokenizers_available
 from .utils import is_torch_available as is_torch_available
@@ -63,9 +60,7 @@ _import_structure = {
     "audio_utils": [],
     "commands": [],
     "configuration_utils": ["PretrainedConfig"],
-    "convert_graph_to_onnx": [],
     "convert_slow_tokenizers_checkpoints_to_fast": [],
-    "convert_tf_hub_seq_to_seq_bert_to_pytorch": [],
     "data": [
         "DataProcessor",
         "InputExample",
@@ -136,16 +131,6 @@ _import_structure = {
     ],
     "loss": [],
     "modelcard": ["ModelCard"],
-    # Losses
-    "modeling_tf_pytorch_utils": [
-        "convert_tf_weight_name_to_pt_weight_name",
-        "load_pytorch_checkpoint_in_tf2_model",
-        "load_pytorch_model_in_tf2_model",
-        "load_pytorch_weights_in_tf2_model",
-        "load_tf2_checkpoint_in_pytorch_model",
-        "load_tf2_model_in_pytorch_model",
-        "load_tf2_weights_in_pytorch_model",
-    ],
     # Models
     "onnx": [],
     "pipelines": [
@@ -163,6 +148,7 @@ _import_structure = {
         "ImageToImagePipeline",
         "ImageToTextPipeline",
         "JsonPipelineDataFormat",
+        "KeypointMatchingPipeline",
         "MaskGenerationPipeline",
         "NerPipeline",
         "ObjectDetectionPipeline",
@@ -216,15 +202,12 @@ _import_structure = {
     ],
     "training_args": ["TrainingArguments"],
     "training_args_seq2seq": ["Seq2SeqTrainingArguments"],
-    "training_args_tf": ["TFTrainingArguments"],
     "utils": [
         "CONFIG_NAME",
         "MODEL_CARD_NAME",
         "PYTORCH_PRETRAINED_BERT_CACHE",
         "PYTORCH_TRANSFORMERS_CACHE",
         "SPIECE_UNDERLINE",
-        "TF2_WEIGHTS_NAME",
-        "TF_WEIGHTS_NAME",
         "TRANSFORMERS_CACHE",
         "WEIGHTS_NAME",
         "TensorType",
@@ -235,9 +218,8 @@ _import_structure = {
         "is_bitsandbytes_available",
         "is_datasets_available",
         "is_faiss_available",
-        "is_flax_available",
-        "is_keras_nlp_available",
         "is_matplotlib_available",
+        "is_mlx_available",
         "is_phonemizer_available",
         "is_psutil_available",
         "is_py3nvml_available",
@@ -248,8 +230,6 @@ _import_structure = {
         "is_sentencepiece_available",
         "is_sklearn_available",
         "is_speech_available",
-        "is_tensorflow_text_available",
-        "is_tf_available",
         "is_timm_available",
         "is_tokenizers_available",
         "is_torch_available",
@@ -375,6 +355,7 @@ else:
         "CacheLayerMixin",
         "DynamicLayer",
         "StaticLayer",
+        "StaticSlidingWindowLayer",
         "SlidingWindowLayer",
         "ChunkedSlidingLayer",
         "QuantoQuantizedLayer",
@@ -389,7 +370,6 @@ else:
         "OffloadedStaticCache",
         "QuantizedCache",
         "QuantoQuantizedCache",
-        "SinkCache",
         "SlidingWindowCache",
         "StaticCache",
     ]
@@ -410,7 +390,6 @@ else:
             "BayesianDetectorConfig",
             "BayesianDetectorModel",
             "BeamScorer",
-            "BeamSearchScorer",
             "ClassifierFreeGuidanceLogitsProcessor",
             "ConstrainedBeamSearchScorer",
             "Constraint",
@@ -425,7 +404,6 @@ else:
             "ForcedBOSTokenLogitsProcessor",
             "ForcedEOSTokenLogitsProcessor",
             "GenerationMixin",
-            "HammingDiversityLogitsProcessor",
             "InfNanRemoveLogitsProcessor",
             "LogitNormalization",
             "LogitsProcessor",
@@ -478,11 +456,14 @@ else:
         "get_constant_schedule_with_warmup",
         "get_cosine_schedule_with_warmup",
         "get_cosine_with_hard_restarts_schedule_with_warmup",
+        "get_cosine_with_min_lr_schedule_with_warmup",
+        "get_cosine_with_min_lr_schedule_with_warmup_lr_rate",
         "get_inverse_sqrt_schedule",
         "get_linear_schedule_with_warmup",
         "get_polynomial_decay_schedule_with_warmup",
         "get_scheduler",
         "get_wsd_schedule",
+        "get_reduce_on_plateau_schedule",
     ]
     _import_structure["pytorch_utils"] = [
         "Conv1D",
@@ -496,84 +477,6 @@ else:
     _import_structure["trainer_pt_utils"] = ["torch_distributed_zero_first"]
     _import_structure["trainer_seq2seq"] = ["Seq2SeqTrainer"]
 
-# TensorFlow-backed objects
-try:
-    if not is_tf_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    from .utils import dummy_tf_objects
-
-    _import_structure["utils.dummy_tf_objects"] = [name for name in dir(dummy_tf_objects) if not name.startswith("_")]
-else:
-    _import_structure["activations_tf"] = []
-    _import_structure["generation"].extend(
-        [
-            "TFForcedBOSTokenLogitsProcessor",
-            "TFForcedEOSTokenLogitsProcessor",
-            "TFForceTokensLogitsProcessor",
-            "TFGenerationMixin",
-            "TFLogitsProcessor",
-            "TFLogitsProcessorList",
-            "TFLogitsWarper",
-            "TFMinLengthLogitsProcessor",
-            "TFNoBadWordsLogitsProcessor",
-            "TFNoRepeatNGramLogitsProcessor",
-            "TFRepetitionPenaltyLogitsProcessor",
-            "TFSuppressTokensAtBeginLogitsProcessor",
-            "TFSuppressTokensLogitsProcessor",
-            "TFTemperatureLogitsWarper",
-            "TFTopKLogitsWarper",
-            "TFTopPLogitsWarper",
-        ]
-    )
-    _import_structure["keras_callbacks"] = ["KerasMetricCallback", "PushToHubCallback"]
-    _import_structure["modeling_tf_outputs"] = []
-    _import_structure["modeling_tf_utils"] = [
-        "TFPreTrainedModel",
-        "TFSequenceSummary",
-        "TFSharedEmbeddings",
-        "shape_list",
-    ]
-    _import_structure["optimization_tf"] = [
-        "AdamWeightDecay",
-        "GradientAccumulator",
-        "WarmUp",
-        "create_optimizer",
-    ]
-    _import_structure["tf_utils"] = []
-
-
-# FLAX-backed objects
-try:
-    if not is_flax_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    from .utils import dummy_flax_objects
-
-    _import_structure["utils.dummy_flax_objects"] = [
-        name for name in dir(dummy_flax_objects) if not name.startswith("_")
-    ]
-else:
-    _import_structure["generation"].extend(
-        [
-            "FlaxForcedBOSTokenLogitsProcessor",
-            "FlaxForcedEOSTokenLogitsProcessor",
-            "FlaxForceTokensLogitsProcessor",
-            "FlaxGenerationMixin",
-            "FlaxLogitsProcessor",
-            "FlaxLogitsProcessorList",
-            "FlaxLogitsWarper",
-            "FlaxMinLengthLogitsProcessor",
-            "FlaxTemperatureLogitsWarper",
-            "FlaxSuppressTokensAtBeginLogitsProcessor",
-            "FlaxSuppressTokensLogitsProcessor",
-            "FlaxTopKLogitsWarper",
-            "FlaxTopPLogitsWarper",
-            "FlaxWhisperTimeStampLogitsProcessor",
-        ]
-    )
-    _import_structure["modeling_flax_outputs"] = []
-    _import_structure["modeling_flax_utils"] = ["FlaxPreTrainedModel"]
 
 # Direct imports for type-checking
 if TYPE_CHECKING:
@@ -586,17 +489,16 @@ if TYPE_CHECKING:
     from .cache_utils import HQQQuantizedCache as HQQQuantizedCache
     from .cache_utils import HQQQuantizedLayer as HQQQuantizedLayer
     from .cache_utils import HybridCache as HybridCache
-    from .cache_utils import MambaCache as MambaCache
     from .cache_utils import OffloadedCache as OffloadedCache
     from .cache_utils import OffloadedStaticCache as OffloadedStaticCache
     from .cache_utils import QuantizedCache as QuantizedCache
     from .cache_utils import QuantoQuantizedCache as QuantoQuantizedCache
     from .cache_utils import QuantoQuantizedLayer as QuantoQuantizedLayer
-    from .cache_utils import SinkCache as SinkCache
     from .cache_utils import SlidingWindowCache as SlidingWindowCache
     from .cache_utils import SlidingWindowLayer as SlidingWindowLayer
     from .cache_utils import StaticCache as StaticCache
     from .cache_utils import StaticLayer as StaticLayer
+    from .cache_utils import StaticSlidingWindowLayer as StaticSlidingWindowLayer
     from .configuration_utils import PretrainedConfig as PretrainedConfig
     from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS as SLOW_TO_FAST_CONVERTERS
     from .convert_slow_tokenizer import convert_slow_tokenizer as convert_slow_tokenizer
@@ -655,7 +557,6 @@ if TYPE_CHECKING:
     from .generation import BayesianDetectorConfig as BayesianDetectorConfig
     from .generation import BayesianDetectorModel as BayesianDetectorModel
     from .generation import BeamScorer as BeamScorer
-    from .generation import BeamSearchScorer as BeamSearchScorer
     from .generation import ClassifierFreeGuidanceLogitsProcessor as ClassifierFreeGuidanceLogitsProcessor
     from .generation import CompileConfig as CompileConfig
     from .generation import ConstrainedBeamSearchScorer as ConstrainedBeamSearchScorer
@@ -668,25 +569,10 @@ if TYPE_CHECKING:
     from .generation import EpsilonLogitsWarper as EpsilonLogitsWarper
     from .generation import EtaLogitsWarper as EtaLogitsWarper
     from .generation import ExponentialDecayLengthPenalty as ExponentialDecayLengthPenalty
-    from .generation import FlaxForcedBOSTokenLogitsProcessor as FlaxForcedBOSTokenLogitsProcessor
-    from .generation import FlaxForcedEOSTokenLogitsProcessor as FlaxForcedEOSTokenLogitsProcessor
-    from .generation import FlaxForceTokensLogitsProcessor as FlaxForceTokensLogitsProcessor
-    from .generation import FlaxGenerationMixin as FlaxGenerationMixin
-    from .generation import FlaxLogitsProcessor as FlaxLogitsProcessor
-    from .generation import FlaxLogitsProcessorList as FlaxLogitsProcessorList
-    from .generation import FlaxLogitsWarper as FlaxLogitsWarper
-    from .generation import FlaxMinLengthLogitsProcessor as FlaxMinLengthLogitsProcessor
-    from .generation import FlaxSuppressTokensAtBeginLogitsProcessor as FlaxSuppressTokensAtBeginLogitsProcessor
-    from .generation import FlaxSuppressTokensLogitsProcessor as FlaxSuppressTokensLogitsProcessor
-    from .generation import FlaxTemperatureLogitsWarper as FlaxTemperatureLogitsWarper
-    from .generation import FlaxTopKLogitsWarper as FlaxTopKLogitsWarper
-    from .generation import FlaxTopPLogitsWarper as FlaxTopPLogitsWarper
-    from .generation import FlaxWhisperTimeStampLogitsProcessor as FlaxWhisperTimeStampLogitsProcessor
     from .generation import ForcedBOSTokenLogitsProcessor as ForcedBOSTokenLogitsProcessor
     from .generation import ForcedEOSTokenLogitsProcessor as ForcedEOSTokenLogitsProcessor
     from .generation import GenerationConfig as GenerationConfig
     from .generation import GenerationMixin as GenerationMixin
-    from .generation import HammingDiversityLogitsProcessor as HammingDiversityLogitsProcessor
     from .generation import InfNanRemoveLogitsProcessor as InfNanRemoveLogitsProcessor
     from .generation import LogitNormalization as LogitNormalization
     from .generation import LogitsProcessor as LogitsProcessor
@@ -713,22 +599,6 @@ if TYPE_CHECKING:
     from .generation import TemperatureLogitsWarper as TemperatureLogitsWarper
     from .generation import TextIteratorStreamer as TextIteratorStreamer
     from .generation import TextStreamer as TextStreamer
-    from .generation import TFForcedBOSTokenLogitsProcessor as TFForcedBOSTokenLogitsProcessor
-    from .generation import TFForcedEOSTokenLogitsProcessor as TFForcedEOSTokenLogitsProcessor
-    from .generation import TFForceTokensLogitsProcessor as TFForceTokensLogitsProcessor
-    from .generation import TFGenerationMixin as TFGenerationMixin
-    from .generation import TFLogitsProcessor as TFLogitsProcessor
-    from .generation import TFLogitsProcessorList as TFLogitsProcessorList
-    from .generation import TFLogitsWarper as TFLogitsWarper
-    from .generation import TFMinLengthLogitsProcessor as TFMinLengthLogitsProcessor
-    from .generation import TFNoBadWordsLogitsProcessor as TFNoBadWordsLogitsProcessor
-    from .generation import TFNoRepeatNGramLogitsProcessor as TFNoRepeatNGramLogitsProcessor
-    from .generation import TFRepetitionPenaltyLogitsProcessor as TFRepetitionPenaltyLogitsProcessor
-    from .generation import TFSuppressTokensAtBeginLogitsProcessor as TFSuppressTokensAtBeginLogitsProcessor
-    from .generation import TFSuppressTokensLogitsProcessor as TFSuppressTokensLogitsProcessor
-    from .generation import TFTemperatureLogitsWarper as TFTemperatureLogitsWarper
-    from .generation import TFTopKLogitsWarper as TFTopKLogitsWarper
-    from .generation import TFTopPLogitsWarper as TFTopPLogitsWarper
     from .generation import TopKLogitsWarper as TopKLogitsWarper
     from .generation import TopPLogitsWarper as TopPLogitsWarper
     from .generation import TypicalLogitsWarper as TypicalLogitsWarper
@@ -760,35 +630,18 @@ if TYPE_CHECKING:
     from .integrations import is_wandb_available as is_wandb_available
     from .integrations.executorch import TorchExportableModuleWithStaticCache as TorchExportableModuleWithStaticCache
     from .integrations.executorch import convert_and_export_with_cache as convert_and_export_with_cache
-    from .keras_callbacks import KerasMetricCallback as KerasMetricCallback
-    from .keras_callbacks import PushToHubCallback as PushToHubCallback
     from .masking_utils import AttentionMaskInterface as AttentionMaskInterface
     from .model_debugging_utils import model_addition_debugger_context as model_addition_debugger_context
 
     # Model Cards
     from .modelcard import ModelCard as ModelCard
-    from .modeling_flax_utils import FlaxPreTrainedModel as FlaxPreTrainedModel
     from .modeling_layers import GradientCheckpointingLayer as GradientCheckpointingLayer
     from .modeling_rope_utils import ROPE_INIT_FUNCTIONS as ROPE_INIT_FUNCTIONS
     from .modeling_rope_utils import dynamic_rope_update as dynamic_rope_update
-
-    # TF 2.0 <=> PyTorch conversion utilities
-    from .modeling_tf_pytorch_utils import (
-        convert_tf_weight_name_to_pt_weight_name as convert_tf_weight_name_to_pt_weight_name,
-    )
-    from .modeling_tf_pytorch_utils import load_pytorch_checkpoint_in_tf2_model as load_pytorch_checkpoint_in_tf2_model
-    from .modeling_tf_pytorch_utils import load_pytorch_model_in_tf2_model as load_pytorch_model_in_tf2_model
-    from .modeling_tf_pytorch_utils import load_pytorch_weights_in_tf2_model as load_pytorch_weights_in_tf2_model
-    from .modeling_tf_pytorch_utils import load_tf2_checkpoint_in_pytorch_model as load_tf2_checkpoint_in_pytorch_model
-    from .modeling_tf_pytorch_utils import load_tf2_model_in_pytorch_model as load_tf2_model_in_pytorch_model
-    from .modeling_tf_pytorch_utils import load_tf2_weights_in_pytorch_model as load_tf2_weights_in_pytorch_model
-    from .modeling_tf_utils import TFPreTrainedModel as TFPreTrainedModel
-    from .modeling_tf_utils import TFSequenceSummary as TFSequenceSummary
-    from .modeling_tf_utils import TFSharedEmbeddings as TFSharedEmbeddings
-    from .modeling_tf_utils import shape_list as shape_list
     from .modeling_utils import AttentionInterface as AttentionInterface
     from .modeling_utils import PreTrainedModel as PreTrainedModel
     from .models import *
+    from .models.mamba.modeling_mamba import MambaCache as MambaCache
     from .models.timm_wrapper import TimmWrapperImageProcessor as TimmWrapperImageProcessor
 
     # Optimization
@@ -799,17 +652,17 @@ if TYPE_CHECKING:
     from .optimization import (
         get_cosine_with_hard_restarts_schedule_with_warmup as get_cosine_with_hard_restarts_schedule_with_warmup,
     )
+    from .optimization import (
+        get_cosine_with_min_lr_schedule_with_warmup as get_cosine_with_min_lr_schedule_with_warmup,
+    )
+    from .optimization import (
+        get_cosine_with_min_lr_schedule_with_warmup_lr_rate as get_cosine_with_min_lr_schedule_with_warmup_lr_rate,
+    )
     from .optimization import get_inverse_sqrt_schedule as get_inverse_sqrt_schedule
     from .optimization import get_linear_schedule_with_warmup as get_linear_schedule_with_warmup
     from .optimization import get_polynomial_decay_schedule_with_warmup as get_polynomial_decay_schedule_with_warmup
     from .optimization import get_scheduler as get_scheduler
     from .optimization import get_wsd_schedule as get_wsd_schedule
-
-    # Optimization
-    from .optimization_tf import AdamWeightDecay as AdamWeightDecay
-    from .optimization_tf import GradientAccumulator as GradientAccumulator
-    from .optimization_tf import WarmUp as WarmUp
-    from .optimization_tf import create_optimizer as create_optimizer
 
     # Pipelines
     from .pipelines import AudioClassificationPipeline as AudioClassificationPipeline
@@ -826,6 +679,7 @@ if TYPE_CHECKING:
     from .pipelines import ImageToImagePipeline as ImageToImagePipeline
     from .pipelines import ImageToTextPipeline as ImageToTextPipeline
     from .pipelines import JsonPipelineDataFormat as JsonPipelineDataFormat
+    from .pipelines import KeypointMatchingPipeline as KeypointMatchingPipeline
     from .pipelines import MaskGenerationPipeline as MaskGenerationPipeline
     from .pipelines import NerPipeline as NerPipeline
     from .pipelines import ObjectDetectionPipeline as ObjectDetectionPipeline
@@ -883,7 +737,6 @@ if TYPE_CHECKING:
     from .trainer_utils import set_seed as set_seed
     from .training_args import TrainingArguments as TrainingArguments
     from .training_args_seq2seq import Seq2SeqTrainingArguments as Seq2SeqTrainingArguments
-    from .training_args_tf import TFTrainingArguments as TFTrainingArguments
 
     # Files and general utilities
     from .utils import CONFIG_NAME as CONFIG_NAME
@@ -891,8 +744,6 @@ if TYPE_CHECKING:
     from .utils import PYTORCH_PRETRAINED_BERT_CACHE as PYTORCH_PRETRAINED_BERT_CACHE
     from .utils import PYTORCH_TRANSFORMERS_CACHE as PYTORCH_TRANSFORMERS_CACHE
     from .utils import SPIECE_UNDERLINE as SPIECE_UNDERLINE
-    from .utils import TF2_WEIGHTS_NAME as TF2_WEIGHTS_NAME
-    from .utils import TF_WEIGHTS_NAME as TF_WEIGHTS_NAME
     from .utils import TRANSFORMERS_CACHE as TRANSFORMERS_CACHE
     from .utils import WEIGHTS_NAME as WEIGHTS_NAME
     from .utils import TensorType as TensorType
@@ -917,7 +768,6 @@ if TYPE_CHECKING:
     from .utils import is_torch_npu_available as is_torch_npu_available
     from .utils import is_torch_xla_available as is_torch_xla_available
     from .utils import is_torch_xpu_available as is_torch_xpu_available
-    from .utils import logging as logging
 
     # bitsandbytes config
     from .utils.quantization_config import AqlmConfig as AqlmConfig
@@ -957,9 +807,7 @@ else:
     )
 
 
-if not is_tf_available() and not is_torch_available() and not is_flax_available():
+if not is_torch_available():
     logger.warning_advice(
-        "None of PyTorch, TensorFlow >= 2.0, or Flax have been found. "
-        "Models won't be available and only tokenizers, configuration "
-        "and file/data utilities can be used."
+        "PyTorch was not found. Models won't be available and only tokenizers, configuration and file/data utilities can be used."
     )

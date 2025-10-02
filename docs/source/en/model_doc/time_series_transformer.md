@@ -35,16 +35,16 @@ point forecasting model. This means that the model learns a distribution, from w
 and a decoder, which predicts a `prediction_length` of time series values into the future (called `future_values`). During training, one needs to provide
 pairs of (`past_values` and `future_values`) to the model.
 - In addition to the raw (`past_values` and `future_values`), one typically provides additional features to the model. These can be the following:
-    - `past_time_features`: temporal features which the model will add to `past_values`. These serve as "positional encodings" for the Transformer encoder.
+  - `past_time_features`: temporal features which the model will add to `past_values`. These serve as "positional encodings" for the Transformer encoder.
     Examples are "day of the month", "month of the year", etc. as scalar values (and then stacked together as a vector).
     e.g. if a given time-series value was obtained on the 11th of August, then one could have [11, 8] as time feature vector (11 being "day of the month", 8 being "month of the year").
-    - `future_time_features`: temporal features which the model will add to `future_values`. These serve as "positional encodings" for the Transformer decoder.
+  - `future_time_features`: temporal features which the model will add to `future_values`. These serve as "positional encodings" for the Transformer decoder.
     Examples are "day of the month", "month of the year", etc. as scalar values (and then stacked together as a vector).
     e.g. if a given time-series value was obtained on the 11th of August, then one could have [11, 8] as time feature vector (11 being "day of the month", 8 being "month of the year").
-    - `static_categorical_features`: categorical features which are static over time (i.e., have the same value for all `past_values` and `future_values`).
+  - `static_categorical_features`: categorical features which are static over time (i.e., have the same value for all `past_values` and `future_values`).
     An example here is the store ID or region ID that identifies a given time-series.
     Note that these features need to be known for ALL data points (also those in the future).
-    - `static_real_features`: real-valued features which are static over time (i.e., have the same value for all `past_values` and `future_values`).
+  - `static_real_features`: real-valued features which are static over time (i.e., have the same value for all `past_values` and `future_values`).
     An example here is the image representation of the product for which you have the time-series values (like the [ResNet](resnet) embedding of a "shoe" picture,
     if your time-series is about the sales of shoes).
     Note that these features need to be known for ALL data points (also those in the future).
@@ -60,7 +60,6 @@ which is then fed to the decoder in order to make the next prediction (also call
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
 - Check out the Time Series Transformer blog-post in HuggingFace blog: [Probabilistic Time Series Forecasting with 🤗 Transformers](https://huggingface.co/blog/time-series-transformers)
-
 
 ## TimeSeriesTransformerConfig
 

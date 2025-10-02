@@ -16,27 +16,28 @@ rendered properly in your Markdown viewer.
 
 # Serving
 
-Transformer models can be efficiently deployed using libraries such as vLLM, Text Generation Inference (TGI), and others. These libraries are designed for production-grade user-facing services, and can scale to multiple servers and millions of concurrent users. Refer to [Transformers as Backend for Inference Servers](./transformers_as_backends) for usage examples.
+Transformer models can be efficiently deployed using libraries such as vLLM, Text Generation Inference (TGI), and others. These libraries are designed for production-grade user-facing services, and can scale to multiple servers and millions of concurrent users. Refer to [Transformers as Backend for Inference Servers](./transformers_as_backend) for usage examples.
 
 > [!TIP]
 > Responses API is now supported as an experimental API! Read more about it [here](#responses-api).
 
-Apart from that you can also serve transformer models easily using the `transformers serve` CLI. This is ideal for experimentation purposes, or to run models locally for personal and private use.
+You can also serve transformer models with the `transformers serve` CLI. With Continuous Batching, `serve` now delivers solid throughput and latency well suited for evaluation, experimentation, and moderate-load local or self-hosted deployments. While vLLM, SGLang, or other inference engines remain our recommendations for large-scale production, `serve` avoids the extra runtime and operational overhead, and is on track to gain more production-oriented features.
 
 In this document, we dive into the different supported endpoints and modalities; we also cover the setup of several user interfaces that can be used on top of `transformers serve` in the following guides:
-- [Jan (text and MCP user interface)](./jan.md)
-- [Cursor (IDE)](./cursor.md)
-- [Open WebUI (text, image, speech user interface)](./open_webui.md)
-- [Tiny-Agents (text and MCP CLI tool)](./tiny_agents.md)
+- [Jan (text and MCP user interface)](./jan)
+- [Cursor (IDE)](./cursor)
+- [Open WebUI (text, image, speech user interface)](./open_webui)
+- [Tiny-Agents (text and MCP CLI tool)](./tiny_agents)
 
 ## Serve CLI
 
 > [!WARNING]
 > This section is experimental and subject to change in future versions
 
-You can serve models of diverse modalities supported by `transformers` with the `transformers serve` CLI. It spawns a local server that offers compatibility with the OpenAI SDK, which is the _de facto_ standard for LLM conversations and other related tasks. This way, you can use the server from many third party applications, or test it using the `transformers chat` CLI ([docs](conversations.md#chat-cli)).
+You can serve models of diverse modalities supported by `transformers` with the `transformers serve` CLI. It spawns a local server that offers compatibility with the OpenAI SDK, which is the _de facto_ standard for LLM conversations and other related tasks. This way, you can use the server from many third party applications, or test it using the `transformers chat` CLI ([docs](conversations#chat-cli)).
 
 The server supports the following REST APIs:
+
 - `/v1/chat/completions`
 - `/v1/responses`
 - `/v1/audio/transcriptions`
@@ -58,7 +59,7 @@ or by sending an HTTP request, like we'll see below.
 
 ## Chat Completions - text-based
 
-See below for examples for text-based requests. Both LLMs and VLMs should handle 
+See below for examples for text-based requests. Both LLMs and VLMs should handle
 
 <hfoptions id="chat-completion-http">
 <hfoption id="curl">
@@ -356,7 +357,6 @@ ResponseCompletedEvent(response=Response(id='resp_req_0', created_at=1754060400.
 </hfoption>
 </hfoptions>
 
-
 ## MCP integration
 
 The `transformers serve` server is also an MCP client, so it can interact with MCP tools in agentic use cases. This, of course, requires the use of an LLM that is designed to use tools.
@@ -366,6 +366,37 @@ The `transformers serve` server is also an MCP client, so it can interact with M
 
 <!-- TODO: example with a minimal python example, and explain that it is possible to pass a full generation config in the request -->
 
+## Continuous Batching
 
+Continuous Batching (CB) lets the server dynamically group and interleave requests so they can share forward passes on the GPU. Instead of processing each request sequentially, `serve` adds new requests as others progress (prefill) and drops finished ones during decode. The result is significantly higher GPU utilization and better throughput without sacrificing latency for most workloads.
 
+Thanks to this, evaluation, experimentation, and moderate-load local/self-hosted use can now be handled comfortably by `transformers serve` without introducing an extra runtime to operate.
 
+### Enable CB in serve
+
+CB is opt-in and currently applies to chat completions.
+
+```sh
+transformers serve \
+  --continuous-batching
+  --attn_implementation sdpa_paged
+```
+
+### Performance tips
+
+- Use an efficient attention backend when available:
+
+```sh
+transformers serve \
+  --continuous_batching \
+  --attn_implementation paged_attention
+```
+
+> [!TIP]
+> If you choose `paged_attention`, you must install `flash-attn` separately: `pip install flash-attn --no-build-isolation`
+
+- `--dtype {bfloat16|float16}` typically improve throughput and memory use vs. `float32`
+
+- `--load_in_4bit`/`--load_in_8bit` can reduce memory footprint for LoRA setups
+
+- `--force-model <repo_id>` avoids per-request model hints and helps produce stable, repeatable runs

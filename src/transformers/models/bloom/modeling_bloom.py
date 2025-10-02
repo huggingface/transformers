@@ -19,7 +19,6 @@ import warnings
 from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 from torch.nn import functional as F
@@ -264,7 +263,6 @@ class BloomAttention(nn.Module):
         alibi: torch.Tensor,
         attention_mask: torch.Tensor,
         layer_past: Optional[Cache] = None,
-        head_mask: Optional[torch.Tensor] = None,
         use_cache: bool = False,
         output_attentions: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
@@ -302,9 +300,6 @@ class BloomAttention(nn.Module):
 
         # [batch_size, num_heads, q_length, kv_length]
         attention_probs = self.attention_dropout(attention_probs)
-
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
 
         # change view [batch_size x num_heads, q_length, kv_length]
         attention_probs_reshaped = attention_probs.view(batch_size * self.num_heads, q_length, -1)
@@ -383,7 +378,6 @@ class BloomBlock(GradientCheckpointingLayer):
         alibi: torch.Tensor,
         attention_mask: torch.Tensor,
         layer_past: Optional[Cache] = None,
-        head_mask: Optional[torch.Tensor] = None,
         use_cache: bool = False,
         output_attentions: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
@@ -406,7 +400,6 @@ class BloomBlock(GradientCheckpointingLayer):
             layer_past=layer_past,
             attention_mask=attention_mask,
             alibi=alibi,
-            head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
             cache_position=cache_position,
@@ -442,8 +435,6 @@ class BloomPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module: nn.Module):
         """Initialize the weights."""
         if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -494,7 +485,6 @@ class BloomModel(BloomPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[Cache, tuple[tuple[torch.Tensor, torch.Tensor], ...]]] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -545,12 +535,8 @@ class BloomModel(BloomPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
 
-        # TODO (joao): remove this exception in v4.56 -- it exists for users that try to pass a legacy cache
-        if not isinstance(past_key_values, (type(None), Cache)):
-            raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
-
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         batch_size, seq_length, _ = inputs_embeds.shape
         past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -558,11 +544,6 @@ class BloomModel(BloomPreTrainedModel):
         if cache_position is None:
             cache_position = torch.arange(past_length, past_length + seq_length, device=inputs_embeds.device)
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape batch_size x num_heads x N x N
-        # head_mask has shape n_layer x batch x num_heads x N x N
-        head_mask = self.get_head_mask(head_mask, self.config.n_layer)
         hidden_states = self.word_embeddings_layernorm(inputs_embeds)
 
         all_self_attentions = () if output_attentions else None
@@ -587,7 +568,6 @@ class BloomModel(BloomPreTrainedModel):
                 hidden_states,
                 layer_past=past_key_values,
                 attention_mask=causal_mask,
-                head_mask=head_mask[i],
                 use_cache=use_cache,
                 output_attentions=output_attentions,
                 alibi=alibi,
@@ -822,6 +802,12 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
                 "attention_mask": attention_mask,
             }
         )
+
+        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
+        for key, value in kwargs.items():
+            if key not in model_inputs:
+                model_inputs[key] = value
+
         return model_inputs
 
     @auto_docstring
@@ -830,7 +816,6 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
         input_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[Cache, tuple[tuple[torch.Tensor, torch.Tensor], ...]]] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
@@ -875,7 +860,6 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -889,7 +873,7 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            # move labels to correct device to enable model parallelism
+            # move labels to correct device
             labels = labels.to(lm_logits.device)
             # Flatten the tokens
             loss = self.loss_function(
@@ -942,7 +926,6 @@ class BloomForSequenceClassification(BloomPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[Cache, tuple[tuple[torch.Tensor, torch.Tensor], ...]]] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
@@ -984,7 +967,6 @@ class BloomForSequenceClassification(BloomPreTrainedModel):
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -1078,7 +1060,6 @@ class BloomForTokenClassification(BloomPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[Cache, tuple[tuple[torch.Tensor, torch.Tensor], ...]]] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
@@ -1120,7 +1101,6 @@ class BloomForTokenClassification(BloomPreTrainedModel):
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -1134,7 +1114,7 @@ class BloomForTokenClassification(BloomPreTrainedModel):
 
         loss = None
         if labels is not None:
-            # move labels to correct device to enable model parallelism
+            # move labels to correct device
             labels = labels.to(logits.device)
             batch_size, seq_length = labels.shape
             loss_fct = CrossEntropyLoss()
@@ -1170,7 +1150,6 @@ class BloomForQuestionAnswering(BloomPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         start_positions: Optional[torch.LongTensor] = None,
         end_positions: Optional[torch.LongTensor] = None,
@@ -1197,7 +1176,6 @@ class BloomForQuestionAnswering(BloomPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,

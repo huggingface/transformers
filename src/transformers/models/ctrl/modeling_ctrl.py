@@ -22,7 +22,7 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ...cache_utils import DynamicCache
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
@@ -57,7 +57,7 @@ def positional_encoding(position, d_model_size, dtype):
     return pos_encoding
 
 
-def scaled_dot_product_attention(q, k, v, mask, attention_mask=None, head_mask=None):
+def scaled_dot_product_attention(q, k, v, mask, attention_mask=None):
     # calculate attention
     matmul_qk = torch.matmul(q, k.permute(0, 1, 3, 2))
 
@@ -73,10 +73,6 @@ def scaled_dot_product_attention(q, k, v, mask, attention_mask=None, head_mask=N
         scaled_attention_logits = scaled_attention_logits + attention_mask
 
     attention_weights = torch.softmax(scaled_attention_logits, dim=-1)
-
-    # Mask heads if we want to
-    if head_mask is not None:
-        attention_weights = attention_weights * head_mask
 
     output = torch.matmul(attention_weights, v)
 
@@ -128,7 +124,6 @@ class MultiHeadAttention(nn.Module):
         mask,
         layer_past=None,
         attention_mask=None,
-        head_mask=None,
         use_cache=False,
         output_attentions=False,
         cache_position=None,
@@ -146,7 +141,7 @@ class MultiHeadAttention(nn.Module):
         if layer_past is not None:
             k, v = layer_past.update(k, v, self.layer_idx, {"cache_position": cache_position})
 
-        output = scaled_dot_product_attention(q, k, v, mask, attention_mask, head_mask)
+        output = scaled_dot_product_attention(q, k, v, mask, attention_mask)
         scaled_attention = output[0].permute([0, 2, 1, 3])
         attn = output[1]
         original_size_attention = scaled_attention.reshape(batch_size, -1, self.d_model_size)
@@ -177,7 +172,6 @@ class EncoderLayer(nn.Module):
         mask,
         layer_past=None,
         attention_mask=None,
-        head_mask=None,
         use_cache=False,
         output_attentions=False,
         cache_position=None,
@@ -190,7 +184,6 @@ class EncoderLayer(nn.Module):
             mask,
             layer_past=layer_past,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
             cache_position=cache_position,
@@ -216,8 +209,6 @@ class CTRLPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, (nn.Linear, Conv1D)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -271,11 +262,10 @@ class CTRLModel(CTRLPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -339,7 +329,7 @@ class CTRLModel(CTRLPreTrainedModel):
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
         if use_cache and isinstance(past_key_values, tuple):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
@@ -372,9 +362,6 @@ class CTRLModel(CTRLPreTrainedModel):
             # effectively the same as removing these entirely.
             attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
             attention_mask = (1.0 - attention_mask) * torch.finfo(self.dtype).min
-
-        # Prepare head mask if needed
-        head_mask = self.get_head_mask(head_mask, self.config.n_layer)
 
         if token_type_ids is not None:
             token_type_ids = token_type_ids.view(-1, input_shape[-1])
@@ -409,7 +396,6 @@ class CTRLModel(CTRLPreTrainedModel):
                 mask,
                 layer_past=past_key_values,
                 attention_mask=attention_mask,
-                head_mask=head_mask[i],
                 use_cache=use_cache,
                 output_attentions=output_attentions,
                 cache_position=cache_position,
@@ -456,11 +442,10 @@ class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -520,7 +505,6 @@ class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -570,7 +554,17 @@ class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
 
             input_ids = input_ids[:, remove_prefix_length:]
 
-        return {"input_ids": input_ids, "past_key_values": past_key_values, "use_cache": use_cache}
+        model_inputs = {"input_ids": input_ids, "past_key_values": past_key_values, "use_cache": use_cache}
+
+        # token_type_ids are computed on CTRLModel.forward()
+        kwargs.pop("token_type_ids", None)
+        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
+        for key, value in kwargs.items():
+            if key not in model_inputs:
+                print(f"Warning: {key} is not a recognized input.")
+                model_inputs[key] = value
+
+        return model_inputs
 
 
 @auto_docstring(
@@ -598,11 +592,10 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -706,7 +699,6 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,

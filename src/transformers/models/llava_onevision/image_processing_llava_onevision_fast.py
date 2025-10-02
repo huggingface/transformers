@@ -22,6 +22,7 @@
 from typing import Optional, Union
 
 import torch
+from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils import BatchFeature, get_patch_output_size, select_best_resolution
 from ...image_processing_utils_fast import (
@@ -41,13 +42,7 @@ from ...image_utils import (
     get_image_size,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_v2_available
-
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
+from ...utils import TensorType, auto_docstring
 
 
 class LlavaOnevisionFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
@@ -56,13 +51,9 @@ class LlavaOnevisionFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         A list of possible resolutions to use for processing high resolution images. The best resolution is selected
         based on the original size of the image. Can be overridden by `image_grid_pinpoints` in the `preprocess`
         method.
-    do_pad (`bool`, *optional*):
-        Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
-        number of patches in the batch. Padding will be applied to the bottom and right with zeros.
     """
 
     image_grid_pinpoints: Optional[list[list[int]]]
-    do_pad: Optional[bool]
 
 
 @auto_docstring
@@ -323,7 +314,7 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
             background_color (`int` or `tuple[int, int, int]`, *optional*, defaults to 0):
                 The color to use for the padding. Can be an integer for single channel or a
                 tuple of integers representing for multi-channel images. If passed as integer
-                in mutli-channel mode, it will default to `0` in subsequent channels.
+                in multi-channel mode, it will default to `0` in subsequent channels.
         Returns:
             `torch.Tensor`: The padded images.
         """

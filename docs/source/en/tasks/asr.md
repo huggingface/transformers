@@ -219,17 +219,15 @@ Then create a function that passes your predictions and labels to [`~evaluate.Ev
 ...     pred_str = processor.batch_decode(pred_ids)
 ...     label_str = processor.batch_decode(pred.label_ids, group_tokens=False)
 
-...     wer = wer.compute(predictions=pred_str, references=label_str)
+...     wer_score = wer.compute(predictions=pred_str, references=label_str)
 
-...     return {"wer": wer}
+...     return {"wer": wer_score}
 ```
 
 Your `compute_metrics` function is ready to go now, and you'll return to it when you setup your training.
 
 ## Train
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
@@ -294,8 +292,6 @@ Once training is completed, share your model to the Hub with the [`~transformers
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -336,8 +332,6 @@ The transcription is decent, but it could be better! Try finetuning your model o
 
 You can also manually replicate the results of the `pipeline` if you'd like:
 
-<frameworkcontent>
-<pt>
 Load a processor to preprocess the audio file and transcription and return the `input` as PyTorch tensors:
 
 ```py
@@ -367,5 +361,3 @@ Get the predicted `input_ids` with the highest probability, and use the processo
 >>> transcription
 ['I WOUL LIKE O SET UP JOINT ACOUNT WTH Y PARTNER']
 ```
-</pt>
-</frameworkcontent>

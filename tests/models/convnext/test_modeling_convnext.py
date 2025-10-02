@@ -14,10 +14,11 @@
 """Testing suite for the PyTorch ConvNext model."""
 
 import unittest
+from functools import cached_property
 
 from transformers import ConvNextConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -174,10 +175,9 @@ class ConvNextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         else {}
     )
 
-    fx_compatible = True
+    fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     has_attentions = False
     test_torch_exportable = True
 

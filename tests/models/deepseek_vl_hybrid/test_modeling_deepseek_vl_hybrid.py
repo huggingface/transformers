@@ -168,7 +168,6 @@ class DeepseekVLHybridModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
     )
     _is_composite = True
     test_pruning = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = DeepseekVLHybridModelTester(self)
@@ -218,7 +217,7 @@ class DeepseekVLHybridModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
             torch.testing.assert_close(out_embeds, out_ids)
 
-    @unittest.skip(reason="Siglip uses the same initialization scheme as the Flax original implementation")
+    @unittest.skip(reason="Siglip uses a non-standard initialization scheme")
     # Copied from tests.models.siglip.test_modeling_siglip.SiglipVisionModelTest.test_initialization
     def test_initialization(self):
         pass
@@ -382,7 +381,10 @@ class DeepseekVLHybridIntegrationTest(unittest.TestCase):
                     {"type": "text", "text": "What's the difference between"},
                     {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
                     {"type": "text", "text": " and "},
-                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                    {
+                        "type": "image",
+                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                    },
                 ],
             }
         ]

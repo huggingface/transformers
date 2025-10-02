@@ -16,7 +16,7 @@
 
 import unittest
 
-from transformers import PhiConfig, is_torch_available
+from transformers import is_torch_available
 from transformers.testing_utils import (
     require_torch,
     slow,
@@ -36,25 +36,15 @@ if is_torch_available():
         PhiForTokenClassification,
         PhiModel,
     )
-    from transformers.models.phi.modeling_phi import PhiRotaryEmbedding
 
 
 class PhiModelTester(CausalLMModelTester):
-    config_class = PhiConfig
     if is_torch_available():
         base_model_class = PhiModel
-        causal_lm_class = PhiForCausalLM
-        sequence_class = PhiForSequenceClassification
-        token_class = PhiForTokenClassification
 
 
 @require_torch
 class PhiModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (PhiModel, PhiForCausalLM, PhiForSequenceClassification, PhiForTokenClassification)
-        if is_torch_available()
-        else ()
-    )
     pipeline_model_mapping = (
         {
             "feature-extraction": PhiModel,
@@ -66,10 +56,7 @@ class PhiModelTest(CausalLMModelTest, unittest.TestCase):
         else {}
     )
 
-    test_headmasking = False
-    test_pruning = False
     model_tester_class = PhiModelTester
-    rotary_embedding_layer = PhiRotaryEmbedding
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79292/workflows/fa2ba644-8953-44a6-8f67-ccd69ca6a476/jobs/1012905
     def is_pipeline_test_to_skip(

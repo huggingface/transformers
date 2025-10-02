@@ -71,65 +71,6 @@ class Cohere2ModelTest(CohereModelTest, unittest.TestCase):
         self.model_tester = Cohere2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Cohere2Config, hidden_size=37)
 
-    @unittest.skip("Failing because of unique cache (HybridCache)")
-    def test_model_outputs_equivalence(self, **kwargs):
-        pass
-
-    @unittest.skip("Cohere2's forcefully disables sdpa due to softcapping")
-    def test_sdpa_can_dispatch_non_composite_models(self):
-        pass
-
-    @unittest.skip("Cohere2's eager attn/sdpa attn outputs are expected to be different")
-    def test_eager_matches_sdpa_generate(self):
-        pass
-
-    @parameterized.expand([("random",), ("same",)])
-    @pytest.mark.generate
-    @unittest.skip("Cohere2 has HybridCache which is not compatible with assisted decoding")
-    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
-        pass
-
-    @unittest.skip("Cohere2 has HybridCache which is not compatible with assisted decoding")
-    def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip("Cohere2 has HybridCache which is not compatible with assisted decoding")
-    def test_assisted_decoding_sample(self):
-        pass
-
-    @unittest.skip("Cohere2 has HybridCache which is not compatible with dola decoding")
-    def test_dola_decoding_sample(self):
-        pass
-
-    @unittest.skip("Cohere2 has HybridCache and doesn't support continue from past kv")
-    def test_generate_continue_from_past_key_values(self):
-        pass
-
-    @unittest.skip("Cohere2 has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate(self):
-        pass
-
-    @unittest.skip("Cohere2 has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip("Cohere2 has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
-    @unittest.skip("Cohere2 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
-    def test_generate_with_static_cache(self):
-        pass
-
-    @unittest.skip("Cohere2 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
-    def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @unittest.skip("Cohere2 has HybridCache and doesn't support progressive generation using input embeds.")
-    def test_generate_continue_from_inputs_embeds(self):
-        pass
-
 
 @slow
 @require_read_token
@@ -287,20 +228,20 @@ class Cohere2IntegrationTest(unittest.TestCase):
     @require_read_token
     def test_generation_beyond_sliding_window(self, attn_implementation: str):
         """Test that we can correctly generate beyond the sliding window. This is non trivial as
-        we need to correctly slice the attention mask in all cases (because we use a HybridCache).
+        we need to correctly slice the attention mask in all cases (because we use a hybrid cache).
         Outputs for every attention functions should be coherent and identical.
         """
+        # Impossible to test it with this model (even with < 100 tokens), probably due to the compilation of a large model.
+        if attn_implementation == "flex_attention":
+            self.skipTest(
+                reason="`flex_attention` gives `torch._inductor.exc.InductorError: RuntimeError: No valid triton configs. OutOfMemoryError: out of resource: triton_tem_fused_0 Required: 147456 Hardware limit:101376 Reducing block sizes or `num_stages` may help.`"
+            )
+
         if attn_implementation == "flash_attention_2" and not is_flash_attn_2_available():
             self.skipTest("FlashAttention2 is required for this test.")
 
-        # TODO: if we can specify not to compile when `flex` attention is used?
-        if attn_implementation == "flex_attention":
-            self.skipTest(
-                "Flex attention will compile (see `compile_friendly_flex_attention`) which causes triton issue."
-            )
-
         if torch_device == "xpu" and attn_implementation == "flash_attention_2":
-            self.skipTest(reason="Intel XPU doesn't support falsh_attention_2 as of now.")
+            self.skipTest(reason="Intel XPU doesn't support flash_attention_2 as of now.")
 
         model_id = "CohereForAI/c4ai-command-r7b-12-2024"
         EXPECTED_COMPLETIONS = [

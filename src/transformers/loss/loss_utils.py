@@ -62,7 +62,6 @@ def ForCausalLMLoss(
     # Flatten the tokens
     logits = logits.view(-1, vocab_size)
     shift_labels = shift_labels.view(-1)
-    # Enable model parallelism
     shift_labels = shift_labels.to(logits.device)
     loss = fixed_cross_entropy(logits, shift_labels, num_items_in_batch, ignore_index, **kwargs)
     return loss
@@ -82,7 +81,6 @@ def ForMaskedLMLoss(
     # Flatten the tokens
     logits = logits.view(-1, vocab_size)
     labels = labels.view(-1)
-    # Enable model parallelism
 
     labels = labels.to(logits.device)
     loss = fixed_cross_entropy(logits, labels, num_items_in_batch, ignore_index, **kwargs)
@@ -151,6 +149,7 @@ LOSS_MAPPING = {
     "ForSequenceClassification": ForSequenceClassificationLoss,
     "ForImageClassification": ForSequenceClassificationLoss,
     "ForVideoClassification": ForSequenceClassificationLoss,
+    "ForAudioClassification": ForSequenceClassificationLoss,
     "ForTokenClassification": ForTokenClassification,
     "ForSegmentation": ForSegmentationLoss,
     "ForObjectDetection": ForObjectDetectionLoss,

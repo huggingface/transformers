@@ -25,7 +25,6 @@ from transformers.testing_utils import (
     require_read_token,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     require_torch_large_accelerator,
     slow,
     torch_device,
@@ -43,6 +42,7 @@ if is_torch_available():
     from transformers import (
         DeepseekV3ForCausalLM,
         DeepseekV3ForSequenceClassification,
+        DeepseekV3ForTokenClassification,
         DeepseekV3Model,
     )
     from transformers.models.deepseek_v3.modeling_deepseek_v3 import (
@@ -64,7 +64,7 @@ class DeepseekV3ModelTester:
         hidden_size=32,
         intermediate_size=37,
         moe_intermediate_size=12,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         num_key_value_heads=4,
         n_shared_experts=1,
@@ -217,6 +217,7 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             DeepseekV3Model,
             DeepseekV3ForCausalLM,
             DeepseekV3ForSequenceClassification,
+            DeepseekV3ForTokenClassification,
         )
         if is_torch_available()
         else ()
@@ -226,13 +227,13 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         {
             "feature-extraction": DeepseekV3Model,
             "text-classification": DeepseekV3ForSequenceClassification,
+            "token-classification": DeepseekV3ForTokenClassification,
             "text-generation": DeepseekV3ForCausalLM,
             "zero-shot": DeepseekV3ForSequenceClassification,
         }
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
     test_pruning = False
     fx_compatible = False
 
@@ -247,51 +248,17 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         self.model_tester = DeepseekV3ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=DeepseekV3Config, hidden_size=37)
 
-    @unittest.skip("Failing because of unique cache (HybridCache)")
-    def test_model_outputs_equivalence(self, **kwargs):
-        pass
-
     @parameterized.expand([("random",), ("same",)])
-    @unittest.skip("DeepseekV3 has HybridCache which is not compatible with assisted decoding")
+    @unittest.skip("DeepseekV3 is not compatible with assisted decoding")
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass
 
-    @unittest.skip("DeepseekV3 has HybridCache which is not compatible with assisted decoding")
+    @unittest.skip("DeepseekV3 is not compatible with assisted decoding")
     def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type):
         pass
 
-    @unittest.skip("DeepseekV3 has HybridCache which is not compatible with assisted decoding")
+    @unittest.skip("DeepseekV3 is not compatible with assisted decoding")
     def test_assisted_decoding_sample(self):
-        pass
-
-    @unittest.skip("DeepseekV3 has HybridCache which is not compatible with dola decoding")
-    def test_dola_decoding_sample(self):
-        pass
-
-    @unittest.skip("DeepseekV3 has HybridCache and doesn't support continue from past kv")
-    def test_generate_continue_from_past_key_values(self):
-        pass
-
-    @unittest.skip("DeepseekV3 has HybridCache and doesn't support low_memory generation")
-    def test_beam_search_low_memory(self):
-        pass
-
-    @unittest.skip("DeepseekV3 has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate(self):
-        pass
-
-    @unittest.skip("DeepseekV3 has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip("DeepseekV3 has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
-    @unittest.skip(
-        "DeepseekV3 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support."
-    )
-    def test_generate_continue_from_inputs_embeds(self):
         pass
 
     @unittest.skip("Deepseek-V3 uses MLA so it is not compatible with the standard cache format")
@@ -357,7 +324,9 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         long_input_length = int(config.max_position_embeddings * 1.5)
 
         # Inputs
-        x = torch.randn(1, dtype=torch.float32, device=torch_device)  # used exlusively to get the dtype and the device
+        x = torch.randn(
+            1, dtype=torch.float32, device=torch_device
+        )  # used exclusively to get the dtype and the device
         position_ids_short = torch.arange(short_input_length, dtype=torch.long, device=torch_device)
         position_ids_short = position_ids_short.unsqueeze(0)
         position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)
@@ -478,7 +447,7 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                     msg=f"\n{tokenizer.batch_decode(res_eager)} \nvs\n{tokenizer.batch_decode(res_sdpa)}",
                 )
 
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_flex_attention_with_grads(self):
         """
         Overwriting as the namings/functionality on the attention part are different; for now it's more of a unique model.

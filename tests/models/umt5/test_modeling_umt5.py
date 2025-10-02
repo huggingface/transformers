@@ -109,30 +109,16 @@ class UMT5ModelTester:
         decoder_input_ids,
         attention_mask=None,
         decoder_attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
     ):
         if attention_mask is None:
             attention_mask = input_ids.ne(config.pad_token_id)
         if decoder_attention_mask is None:
             decoder_attention_mask = decoder_input_ids.ne(config.pad_token_id)
-        if head_mask is None:
-            head_mask = torch.ones(config.num_hidden_layers, config.num_attention_heads, device=torch_device)
-        if decoder_head_mask is None:
-            decoder_head_mask = torch.ones(config.num_decoder_layers, config.num_attention_heads, device=torch_device)
-        if cross_attn_head_mask is None:
-            cross_attn_head_mask = torch.ones(
-                config.num_decoder_layers, config.num_attention_heads, device=torch_device
-            )
         return {
             "input_ids": input_ids,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
             "decoder_attention_mask": decoder_attention_mask,
-            "head_mask": head_mask,
-            "decoder_head_mask": decoder_head_mask,
-            "cross_attn_head_mask": cross_attn_head_mask,
         }
 
     def prepare_config_and_inputs(self):
@@ -144,7 +130,7 @@ class UMT5ModelTester:
         # all pad tokens have pos id = 2 and rest are between 2..seq_length
         # and the seq_length here is seq_length - num_pad_tokens
         # but when using past, there is no way of knowing if the past input ids had
-        # pad tokens in them, which results in incorrect seq_lenth and which in turn results in
+        # pad tokens in them, which results in incorrect seq_length and which in turn results in
         # position_ids being off by num_pad_tokens in past input
         input_ids = input_ids.clamp(self.pad_token_id + 2)
         input_ids[:, -1] = self.eos_token_id  # Eos Token
@@ -647,7 +633,6 @@ class UMT5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
     all_model_classes = (UMT5EncoderModel, UMT5ForTokenClassification) if is_torch_available() else ()
     test_pruning = False
     test_resize_embeddings = False
-    test_model_parallel = True
     pipeline_model_mapping = (
         {
             "token-classification": UMT5ForTokenClassification,
@@ -655,7 +640,6 @@ class UMT5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         if is_torch_available()
         else {}
     )
-    all_parallelizable_model_classes = (UMT5EncoderModel,) if is_torch_available() else ()
 
     def setUp(self):
         self.model_tester = UMT5EncoderOnlyModelTester(self)

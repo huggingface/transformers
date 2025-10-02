@@ -126,7 +126,6 @@ class MllamaForCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
 
     all_model_classes = (MllamaForCausalLM,) if is_torch_available() else ()
     test_pruning = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = MllamaText2TextModelTester(self)
@@ -145,7 +144,7 @@ class MllamaVisionText2TextModelTester:
             "model_type": "mllama",
             "vocab_size": 99,
             "hidden_size": 32,
-            "num_hidden_layers": 4,
+            "num_hidden_layers": 2,
             "num_attention_heads": 4,
             "num_key_value_heads": 4,
             "intermediate_size": 37,
@@ -166,7 +165,7 @@ class MllamaVisionText2TextModelTester:
             "intermediate_layers_indices": [0],
             "vision_output_dim": 32,
             "projection_dim": 32,
-            "num_hidden_layers": 6,
+            "num_hidden_layers": 2,
             "num_global_layers": 2,
             "num_attention_heads": 4,
             "intermediate_size": 37,
@@ -281,7 +280,6 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     )
     pipeline_model_mapping = {"image-text-to-text": MllamaForConditionalGeneration} if is_torch_available() else ()
     test_pruning = False
-    test_head_masking = False
     test_torchscript = False
     _is_composite = True
 
@@ -368,16 +366,6 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     def test_model_parallelism(self):
         pass
 
-    @unittest.skip(
-        reason="Mllama cache type doesn't allow correct check on output `past_key_values` due to `Cache.crop()`"
-    )
-    def test_contrastive_generate_dict_outputs_use_cache(self, assistant_type):
-        pass
-
-    @unittest.skip(reason="Mllama can't do low memory due to `Cache.crop()`")
-    def test_contrastive_generate_low_memory(self, assistant_type):
-        pass
-
     @unittest.skip(reason="Mllama can't assisted decoding due to cache format and `Cache.crop()`")
     def test_assisted_decoding_with_num_logits_to_keep(self):
         pass
@@ -392,6 +380,14 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
 
     @unittest.skip(reason="Mllama uses self.weights directly causing device mismatch when offloading`")
     def test_disk_offload_safetensors(self):
+        pass
+
+    @unittest.skip("Mllama applies key/query norm which doesn't work with packing")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Mllama applies key/query norm which doesn't work with packing")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
         pass
 
     @unittest.skip("Mllama applies key/query norm which doesn't work with packing")
@@ -506,6 +502,25 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
             del inputs["pixel_values"]
 
             model.generate(input_ids, use_cache=True)
+
+    @pytest.mark.generate
+    def test_left_padding_compatibility(self):
+        # Overwrite -- mllama needs to prepare `cross_attention_mask`, and it must be padded accordingly
+        _, inputs_dict = self.prepare_config_and_inputs_for_generate()
+        input_ids = inputs_dict["input_ids"]
+        cross_attention_mask = inputs_dict["cross_attention_mask"]
+
+        pad_cross_attn_size = (input_ids.shape[0], 32, *cross_attention_mask.shape[2:])
+        extra_cross_attn_mask = torch.zeros(pad_cross_attn_size, dtype=cross_attention_mask.dtype, device=torch_device)
+        padded_cross_attention_mask = torch.cat([extra_cross_attn_mask, cross_attention_mask], dim=1)
+
+        # `cross_attention_mask` is randomly generated in `prepare_config_and_inputs_for_generate`, and it must match
+        # its padded version for the test to be valid -- we need to pass both
+        unpadded_custom_inputs = {"cross_attention_mask": cross_attention_mask}
+        padded_custom_inputs = {"cross_attention_mask": padded_cross_attention_mask}
+        super().test_left_padding_compatibility(
+            unpadded_custom_inputs=unpadded_custom_inputs, padded_custom_inputs=padded_custom_inputs
+        )
 
 
 @require_torch
@@ -669,7 +684,12 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "<|image|>This image shows",
         ]
         image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw)
+        image2 = Image.open(
+            requests.get(
+                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                stream=True,
+            ).raw
+        )
 
         inputs = processor(text=prompt, images=[[image1], [image2]], padding=True, return_tensors="pt").to(
             torch_device
@@ -726,7 +746,12 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # Prepare inputs
         image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw)
+        image2 = Image.open(
+            requests.get(
+                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                stream=True,
+            ).raw
+        )
 
         conversation = [
             {

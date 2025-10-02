@@ -18,6 +18,7 @@ import os
 import pickle
 import tempfile
 import unittest
+from functools import cached_property
 
 import pytest
 
@@ -35,7 +36,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
 from transformers.utils.fx import symbolic_trace
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -570,11 +570,9 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
         if is_torch_available()
         else {}
     )
-    all_parallelizable_model_classes = (T5Model, T5ForConditionalGeneration) if is_torch_available() else ()
     fx_compatible = True
     test_pruning = False
     test_resize_embeddings = True
-    test_model_parallel = True
     is_encoder_decoder = True
     # The small T5 model needs higher percentages for CPU/MP tests
     model_split_percents = [0.5, 0.8, 0.9]
@@ -1014,7 +1012,6 @@ class T5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     all_model_classes = (T5EncoderModel, T5ForTokenClassification) if is_torch_available() else ()
     test_pruning = False
     test_resize_embeddings = False
-    test_model_parallel = True
     pipeline_model_mapping = (
         {
             "token-classification": T5ForTokenClassification,
@@ -1022,7 +1019,6 @@ class T5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         if is_torch_available()
         else {}
     )
-    all_parallelizable_model_classes = (T5EncoderModel,) if is_torch_available() else ()
 
     def setUp(self):
         self.model_tester = T5EncoderOnlyModelTester(self)
@@ -1569,6 +1565,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
         translation = tok.decode(output[0])
         self.assertEqual(translation, expected_translation)
 
+    # TODO joao, manuel: remove this in v4.62.0
     @slow
     def test_contrastive_search_t5(self):
         article = (
@@ -1603,7 +1600,14 @@ class T5ModelIntegrationTests(unittest.TestCase):
             article, add_special_tokens=False, truncation=True, max_length=512, return_tensors="pt"
         ).input_ids.to(torch_device)
 
-        outputs = t5_model.generate(input_ids, penalty_alpha=0.5, top_k=5, max_length=64)
+        outputs = t5_model.generate(
+            input_ids,
+            penalty_alpha=0.5,
+            top_k=5,
+            max_length=64,
+            trust_remote_code=True,
+            custom_generate="transformers-community/contrastive-search",
+        )
         generated_text = t5_tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
         # TODO: @arthur?

@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch Data2VecVision model."""
 
 import unittest
+from functools import cached_property
 
 import pytest
 
@@ -26,7 +27,6 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import (
-    cached_property,
     is_torch_available,
     is_vision_available,
 )
@@ -202,7 +202,6 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
 
     test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = Data2VecVisionModelTester(self)

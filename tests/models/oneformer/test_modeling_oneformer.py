@@ -15,6 +15,7 @@
 
 import inspect
 import unittest
+from functools import cached_property
 
 import numpy as np
 
@@ -32,7 +33,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init
@@ -234,7 +234,6 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     is_encoder_decoder = False
     test_pruning = False
-    test_head_masking = False
     test_missing_keys = False
 
     # TODO: Fix the failed tests when this model gets more usage

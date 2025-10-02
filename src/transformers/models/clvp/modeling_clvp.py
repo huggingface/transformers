@@ -21,7 +21,6 @@ from dataclasses import dataclass
 from typing import Callable, Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
@@ -308,7 +307,6 @@ class ClvpSelfAttention(nn.Module):
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
-        head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.Tensor] = None,
     ) -> tuple[torch.FloatTensor, Optional[torch.FloatTensor], Optional[tuple[torch.FloatTensor]]]:
@@ -366,10 +364,6 @@ class ClvpSelfAttention(nn.Module):
             attn_weights = attn_weights + attention_mask
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attn_weights = attn_weights * head_mask
 
         attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
         attn_output = torch.matmul(attn_probs, value_states)
@@ -616,7 +610,6 @@ class ClvpDecoderLayer(nn.Module):
         past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.Tensor] = None,
@@ -628,7 +621,6 @@ class ClvpDecoderLayer(nn.Module):
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
             cache_position=cache_position,
@@ -1028,8 +1020,7 @@ class ClvpDecoder(ClvpPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1070,7 +1061,7 @@ class ClvpDecoder(ClvpPreTrainedModel):
                 use_cache = False
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
         if use_cache and isinstance(past_key_values, tuple):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
@@ -1094,12 +1085,6 @@ class ClvpDecoder(ClvpPreTrainedModel):
         attention_mask = _prepare_4d_causal_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
         )
-
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x num_attention_heads x N x N
-        # head_mask has shape num_hidden_layers x batch x num_attention_heads x N x N
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         hidden_states = inputs_embeds
 
@@ -1125,7 +1110,6 @@ class ClvpDecoder(ClvpPreTrainedModel):
                     None,
                     attention_mask,
                     position_ids,
-                    head_mask[i],
                     cache_position,
                 )
             else:
@@ -1134,7 +1118,6 @@ class ClvpDecoder(ClvpPreTrainedModel):
                     past_key_values=past_key_values,
                     attention_mask=attention_mask,
                     position_ids=position_ids,
-                    head_mask=head_mask[i],
                     use_cache=use_cache,
                     output_attentions=output_attentions,
                     cache_position=cache_position,
@@ -1187,9 +1170,6 @@ class ClvpModel(ClvpPreTrainedModel):
     def set_input_embeddings(self, value):
         self.decoder.input_embeds_layer = value
 
-    def get_decoder(self):
-        return self.decoder
-
     @auto_docstring
     def forward(
         self,
@@ -1197,8 +1177,7 @@ class ClvpModel(ClvpPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1219,7 +1198,6 @@ class ClvpModel(ClvpPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
@@ -1260,8 +1238,6 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
         self.post_init()
 
     def get_output_embeddings(self):
-        # NOTE: get_output_embeddings() must return None to prevent accidental weight tying.
-        # See e.g. https://github.com/huggingface/transformers/pull/39339#discussion_r2219126400
         return None
 
     def get_input_embeddings(self):
@@ -1366,11 +1342,10 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -1399,7 +1374,6 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,

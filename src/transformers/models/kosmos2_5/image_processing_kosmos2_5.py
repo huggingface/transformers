@@ -30,7 +30,7 @@ from ...image_utils import (
     ImageInput,
     get_image_size,
     infer_channel_dimension_format,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
 )
@@ -48,7 +48,7 @@ DEFAULT_FONT_PATH = "ybelkada/fonts"
 # Copied from transformers.models.pix2struct.image_processing_pix2struct.torch_extract_patches
 def torch_extract_patches(image_tensor, patch_height, patch_width):
     """
-    Utiliy function to extract patches from a given image tensor. Returns a tensor of shape
+    Utility function to extract patches from a given image tensor. Returns a tensor of shape
     (1, `rows`, `columns`, `num_channels`x `patch_height` x `patch_width`).
 
     Args:
@@ -72,7 +72,7 @@ def torch_extract_patches(image_tensor, patch_height, patch_width):
     return patches.unsqueeze(0)
 
 
-# similar to transformers.models.pix2struct.image_processing_pix2struct.Pix2StructImageProcessor, but delete is_vqa and additionaly return width and height after resizing
+# similar to transformers.models.pix2struct.image_processing_pix2struct.Pix2StructImageProcessor, but delete is_vqa and additionally return width and height after resizing
 class Kosmos2_5ImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Kosmos2_5 image processor.
@@ -209,9 +209,6 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
         """
         Normalize an image. image = (image - image_mean) / image_std.
 
-        The image std is to mimic the tensorflow implementation of the `per_image_standardization`:
-        https://www.tensorflow.org/api_docs/python/tf/image/per_image_standardization
-
         Args:
             image (`np.ndarray`):
                 Image to normalize.
@@ -253,9 +250,7 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
         """
         Preprocess an image or batch of images. The processor first computes the maximum possible number of
         aspect-ratio preserving patches of size `patch_size` that can be extracted from the image. It then pads the
-        image with zeros to make the image respect the constraint of `max_patches`. Before extracting the patches the
-        images are standardized following the tensorflow implementation of `per_image_standardization`
-        (https://www.tensorflow.org/api_docs/python/tf/image/per_image_standardization).
+        image with zeros to make the image respect the constraint of `max_patches`.
 
 
         Args:
@@ -272,10 +267,8 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -296,13 +289,10 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
         if kwargs.get("data_format") is not None:
             raise ValueError("data_format is not an accepted input as the outputs are ")
 
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         # PIL RGBA images are converted to RGB
         if do_convert_rgb:

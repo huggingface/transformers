@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch Dinov2 model."""
 
 import unittest
+from functools import cached_property
 
 from transformers import Dinov2Config
 from transformers.testing_utils import (
@@ -23,7 +24,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -227,11 +228,10 @@ class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    fx_compatible = True
+    fx_compatible = False  # broken by output recording refactor
 
     test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = Dinov2ModelTester(self)

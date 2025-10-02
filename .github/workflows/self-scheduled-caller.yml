@@ -52,6 +52,7 @@ jobs:
       slack_report_channel: "#transformers-ci-daily-models"
       docker: huggingface/transformers-all-latest-gpu
       ci_event: Daily CI
+      runner_type: "a10"
       report_repo_id: hf-internal-testing/transformers_daily_ci
       commit_sha: ${{ github.sha }}
     secrets: inherit
@@ -87,6 +88,7 @@ jobs:
       job: run_trainer_and_fsdp_gpu
       slack_report_channel: "#transformers-ci-daily-training"
       docker: huggingface/transformers-all-latest-gpu
+      runner_type: "a10"
       ci_event: Daily CI
       report_repo_id: hf-internal-testing/transformers_daily_ci
       commit_sha: ${{ github.sha }}

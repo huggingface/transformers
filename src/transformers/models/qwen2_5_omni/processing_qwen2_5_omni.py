@@ -27,14 +27,14 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
-from ...video_utils import VideoInput, make_batched_videos
+from ...video_utils import VideoInput
 
 
 class Qwen2_5_OmniVideosKwargs(VideosKwargs):
-    fps: Optional[list[Union[int, float]]] = None
-    use_audio_in_video: Optional[bool] = None
-    seconds_per_chunk: Optional[float] = None
-    position_id_per_seconds: Optional[int] = None
+    fps: Optional[list[Union[int, float]]]
+    use_audio_in_video: Optional[bool]
+    seconds_per_chunk: Optional[float]
+    position_id_per_seconds: Optional[int]
     min_pixels: Optional[int]
     max_pixels: Optional[int]
     patch_size: Optional[int]
@@ -62,8 +62,10 @@ class Qwen2_5OmniProcessorKwargs(ProcessingKwargs, total=False):
             "seconds_per_chunk": 2.0,
             "position_id_per_seconds": 25,
             "use_audio_in_video": False,
-            "min_pixels": 128 * 28 * 28,
-            "max_pixels": 768 * 28 * 28,
+            "size": {
+                "shortest_edge": 128 * 28 * 28,
+                "longest_edge": 768 * 28 * 28,
+            },
         },
         "audio_kwargs": {
             "sampling_rate": 16000,
@@ -113,9 +115,9 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        images: ImageInput = None,
-        videos: VideoInput = None,
-        audio: AudioInput = None,
+        images: Optional[ImageInput] = None,
+        videos: Optional[VideoInput] = None,
+        audio: Optional[AudioInput] = None,
         **kwargs: Unpack[Qwen2_5OmniProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -154,7 +156,6 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         seconds_per_chunk = output_kwargs["videos_kwargs"].pop("seconds_per_chunk")
         position_id_per_seconds = output_kwargs["videos_kwargs"].pop("position_id_per_seconds")
         use_audio_in_video = output_kwargs["videos_kwargs"].pop("use_audio_in_video")
-        fps = output_kwargs["videos_kwargs"].get("fps", 2.0)
 
         if audio is not None:
             output_kwargs["audio_kwargs"]["padding"] = "max_length"  # Support "max_length" padding only here
@@ -179,14 +180,15 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
             image_grid_thw = iter([])
 
         if videos is not None:
-            videos = make_batched_videos(videos)
             videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
-            fps = [fps] * len(videos)
-            videos_inputs["video_second_per_grid"] = [
-                self.video_processor.temporal_patch_size / fps[i] for i in range(len(fps))
-            ]
-            video_grid_thw = iter(videos_inputs["video_grid_thw"])
-            video_second_per_grid = iter(videos_inputs["video_second_per_grid"])
+
+            fps = output_kwargs["videos_kwargs"].get("fps", 2.0)
+            video_grid_thw = videos_inputs["video_grid_thw"]
+            second_per_grid_ts = [self.video_processor.temporal_patch_size / fps] * len(video_grid_thw)
+            videos_inputs["video_second_per_grid"] = second_per_grid_ts
+
+            video_grid_thw = iter(video_grid_thw)
+            video_second_per_grid = iter(second_per_grid_ts)
         else:
             videos_inputs = {}
             video_grid_thw = iter([])

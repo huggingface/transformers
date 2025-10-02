@@ -108,9 +108,6 @@ class Idefics3ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-Idefics3ProcessorKwargs.__annotations__["images_kwargs"] = Idefics3ImagesKwargs  # python 3.8 compatibility
-
-
 class Idefics3Processor(ProcessorMixin):
     r"""
     Constructs a Idefics3 processor which wraps a LLama tokenizer and Idefics3 image processor into a single processor.
@@ -138,11 +135,6 @@ class Idefics3Processor(ProcessorMixin):
     def __init__(
         self, image_processor, tokenizer=None, image_seq_len: int = 169, chat_template: Optional[str] = None, **kwargs
     ):
-        if image_processor is None:
-            raise ValueError("You need to specify an `image_processor`.")
-        if tokenizer is None:
-            raise ValueError("You need to specify a `tokenizer`.")
-
         self.fake_image_token = AddedToken("<fake_token_around_image>", normalized=False, special=True).content
         self.image_token = AddedToken("<image>", normalized=False, special=True).content
         self.end_of_utterance_token = AddedToken("<end_of_utterance>", normalized=False, special=True).content

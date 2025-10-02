@@ -33,7 +33,6 @@ The instruction-tuned variant was fine-tuned with supervised learning on instruc
 
 You can find all the original Gemma checkpoints under the [Gemma](https://huggingface.co/collections/google/gemma-release-65d5efbccdbb8c4202ec078b) release.
 
-
 > [!TIP]
 > Click on the Gemma models in the right sidebar for more examples of how to apply Gemma to different language tasks.
 
@@ -150,7 +149,7 @@ visualizer("LLMs generate text through a process known as")
    )
    input_text = "LLMs generate text through a process known as"
    input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
-   past_key_values = DynamicCache()
+   past_key_values = DynamicCache(config=model.config)
    outputs = model.generate(**input_ids, max_new_tokens=50, past_key_values=past_key_values)
    print(tokenizer.decode(outputs[0], skip_special_tokens=True))
    ```
@@ -162,7 +161,6 @@ visualizer("LLMs generate text through a process known as")
 ## GemmaTokenizer
 
 [[autodoc]] GemmaTokenizer
-
 
 ## GemmaTokenizerFast
 

@@ -15,10 +15,11 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2025-06-17 and added to Hugging Face Transformers on 2025-06-25.*
 
-# Kyutai Speech-To-Text 
+# Kyutai Speech-To-Text
 ## Overview
 
-[Kyutai STT](https://kyutai.org/next/stt) is a speech-to-text model architecture based on the [Mimi codec](https://huggingface.co/docs/transformers/en/model_doc/mimi), which encodes audio into discrete tokens in a streaming fashion, and a [Moshi-like](https://huggingface.co/docs/transformers/en/model_doc/moshi) autoregressive decoder. Kyutai’s lab has released two model checkpoints:
+[Kyutai STT](https://kyutai.org/next/stt) is a speech-to-text model architecture based on the [Mimi codec](https://huggingface.co/docs/transformers/en/model_doc/mimi), which encodes audio into discrete tokens in a streaming fashion, and a [Moshi-like](https://huggingface.co/docs/transformers/en/model_doc/moshi) autoregressive decoder. Kyutai's lab has released two model checkpoints:
+
 - [kyutai/stt-1b-en_fr](https://huggingface.co/kyutai/stt-1b-en_fr): a 1B-parameter model capable of transcribing both English and French
 - [kyutai/stt-2.6b-en](https://huggingface.co/kyutai/stt-2.6b-en): a 2.6B-parameter model focused solely on English, optimized for maximum transcription accuracy
 
@@ -97,7 +98,6 @@ for output in decoded_outputs:
 
 This model was contributed by [Eustache Le Bihan](https://huggingface.co/eustlb).
 The original code can be found [here](https://github.com/kyutai-labs/moshi).
-
 
 ## KyutaiSpeechToTextConfig
 

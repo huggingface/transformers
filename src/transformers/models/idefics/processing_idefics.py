@@ -29,15 +29,13 @@ from ...processing_utils import (
     Unpack,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import is_tf_available, is_torch_available
+from ...utils import is_torch_available
 from ...utils.deprecation import deprecate_kwarg
 
 
 if is_torch_available():
     import torch
 
-if is_tf_available():
-    import tensorflow as tf
 
 IMAGE_TOKEN = "<image>"
 
@@ -74,8 +72,6 @@ def incremental_to_binary_attention_mask(incremental_mask, return_tensors, num_c
     if num_classes != -1:
         if return_tensors == "pt":
             incremental_mask[incremental_mask >= num_classes] = -1
-        elif return_tensors == "tf":
-            incremental_mask = tf.where(incremental_mask >= num_classes, -1, incremental_mask)
 
     # Create mask for negative values
     if return_tensors == "pt":
@@ -83,13 +79,6 @@ def incremental_to_binary_attention_mask(incremental_mask, return_tensors, num_c
         incremental_mask[negatives] = 0
         attn_mask = torch.nn.functional.one_hot(incremental_mask, num_classes=num_classes)
         attn_mask[negatives, :] = 0
-    elif return_tensors == "tf":
-        negatives = tf.equal(incremental_mask, -1)
-        incremental_mask = tf.where(negatives, 0, incremental_mask)
-        attn_mask = tf.one_hot(incremental_mask, depth=num_classes)
-        # Reshape 'negatives' to add an extra dimension, making it [batch_size, seq_length, 1]
-        negatives_expanded = tf.expand_dims(negatives, -1)
-        attn_mask = tf.where(negatives_expanded, tf.zeros_like(attn_mask), attn_mask)
 
     return attn_mask
 
@@ -98,8 +87,6 @@ def incremental_to_binary_attention_mask(incremental_mask, return_tensors, num_c
 def image_attention_mask_for_packed_input_ids(input_ids, tokenizer, return_tensors):
     if return_tensors == "pt":
         return image_attention_mask_for_packed_input_ids_pt(input_ids, tokenizer)
-    elif return_tensors == "tf":
-        return image_attention_mask_for_packed_input_ids_tf(input_ids, tokenizer)
 
 
 def image_attention_mask_for_packed_input_ids_pt(input_ids, tokenizer):
@@ -149,39 +136,6 @@ def image_attention_mask_for_packed_input_ids_pt(input_ids, tokenizer):
     return image_attention_mask, next_image_attention_mask
 
 
-def image_attention_mask_for_packed_input_ids_tf(input_ids, tokenizer):
-    image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_TOKEN)
-    eod_token_id = tokenizer.eos_token_id
-    batch_size = tf.shape(input_ids)[0]
-    image_attention_mask = tf.fill(tf.shape(input_ids), -1)
-    next_image_attention_mask = tf.fill(tf.shape(input_ids), -1)
-
-    for batch_idx in range(batch_size):
-        count = -1
-        seen_eod = False
-        seq_length = tf.shape(input_ids)[1]
-
-        for idx in range(seq_length - 1, -1, -1):
-            token_id = input_ids[batch_idx, idx].numpy()
-            if token_id == image_token_id:
-                count += 1
-                indices = [[batch_idx, idx]]
-                updates = [count]
-                image_attention_mask = tf.tensor_scatter_nd_update(image_attention_mask, indices, updates)
-                next_image_attention_mask = tf.tensor_scatter_nd_update(next_image_attention_mask, indices, updates)
-            elif token_id == eod_token_id and not seen_eod:
-                seen_eod = True
-                count = 0
-                indices = [[batch_idx, idx]]
-                updates = [count]
-                next_image_attention_mask = tf.tensor_scatter_nd_update(next_image_attention_mask, indices, updates)
-            if seen_eod and token_id != eod_token_id:
-                indices = [[batch_idx, idx]]
-                updates = [-1]
-                next_image_attention_mask = tf.tensor_scatter_nd_update(next_image_attention_mask, indices, updates)
-    return image_attention_mask, next_image_attention_mask
-
-
 def is_url(string):
     """Checks if the passed string contains a valid url and nothing else. e.g. if space is included it's immediately
     invalidated the url"""
@@ -214,11 +168,6 @@ class IdeficsProcessor(ProcessorMixin):
     tokenizer_class = "LlamaTokenizerFast"
 
     def __init__(self, image_processor, tokenizer=None, image_size=224, add_end_of_utterance_token=None, **kwargs):
-        if image_processor is None:
-            raise ValueError("You need to specify an `image_processor`.")
-        if tokenizer is None:
-            raise ValueError("You need to specify a `tokenizer`.")
-
         super().__init__(image_processor, tokenizer)
         self.current_processor = self.image_processor
         self.image_token_id = (
@@ -358,9 +307,10 @@ class IdeficsProcessor(ProcessorMixin):
             if not all(isinstance(i, str) for i in text):
                 raise ValueError("When using the image-text-to-text behavior, the prompts should only contain text.")
             if isinstance(images[0], (list, tuple)):
-                # if nested images, nest text as well
-                text = [[i] for i in text]
-            prompts = list(zip(images, text))
+                # if nested images, un-nest each sublist and create `prompts`
+                prompts = [[sample, *image_list] for image_list, sample in zip(images, text)]
+            else:
+                prompts = list(zip(images, text))
 
         output_kwargs = self._merge_kwargs(
             IdeficsProcessorKwargs,
@@ -455,42 +405,19 @@ class IdeficsProcessor(ProcessorMixin):
                 if return_tensors == "pt":
                     padded_image_tensor = torch.zeros(max_num_images, *current_images.size()[1:])
                     padded_image_tensor[: current_images.size(0)] = current_images
-                elif return_tensors == "tf":
-                    # Assuming current_images is a TensorFlow tensor
-                    # Get the shape of current_images, excluding the first dimension
-                    image_shape = tf.shape(current_images)[1:]
-                    # Create a shape for the padded_image_tensor
-                    padded_shape = tf.concat([[max_num_images], image_shape], axis=0)
-                    # Create the padded_image_tensor of zeros
-                    padded_image_tensor = tf.zeros(padded_shape, dtype=current_images.dtype)
-                    # Get the number of images (assuming current_images has shape [num_images, height, width, channels])
-                    num_images = tf.shape(current_images)[0]
-                    # Update the padded_image_tensor with the values from current_images
-                    indices = tf.reshape(tf.range(num_images), (-1, 1))
-                    updates = current_images
-                    padded_image_tensor = tf.tensor_scatter_nd_update(padded_image_tensor, indices, updates)
             else:
                 if return_tensors == "pt":
                     padded_image_tensor = torch.zeros(max_num_images, *self.default_image_dims)
-                elif return_tensors == "tf":
-                    padded_image_tensor = tf.zeros((max_num_images, *self.default_image_dims))
 
             output_images.append(padded_image_tensor)
             if return_tensors == "pt":
                 output_input_ids.append(torch.tensor(padded_input_ids))
                 output_attention_masks.append(torch.tensor(attention_mask))
-            elif return_tensors == "tf":
-                output_input_ids.append(tf.convert_to_tensor(padded_input_ids, dtype=tf.int32))
-                output_attention_masks.append(attention_mask)
 
         if return_tensors == "pt":
             output_input_ids = torch.stack(output_input_ids)
             output_images = torch.stack(output_images)
             output_attention_masks = torch.stack(output_attention_masks)
-        elif return_tensors == "tf":
-            output_input_ids = tf.stack(output_input_ids)
-            output_images = tf.stack(output_images)
-            output_attention_masks = tf.stack(output_attention_masks)
 
         if at_least_one_image:
             image_attention_mask, _ = image_attention_mask_for_packed_input_ids(
@@ -504,10 +431,6 @@ class IdeficsProcessor(ProcessorMixin):
             if return_tensors == "pt":
                 image_attention_mask = torch.zeros(
                     output_input_ids.shape[0], output_input_ids.shape[1], 1, dtype=torch.bool
-                )
-            elif return_tensors == "tf":
-                image_attention_mask = tf.zeros(
-                    (output_input_ids.shape[0], output_input_ids.shape[1], 1), dtype=tf.bool
                 )
         return BatchFeature(
             data={

@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch BEiT model."""
 
 import unittest
+from functools import cached_property
 
 import pytest
 from datasets import load_dataset
@@ -27,7 +28,6 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import (
-    cached_property,
     is_torch_available,
     is_vision_available,
 )
@@ -262,7 +262,6 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     test_torch_exportable = True
 
     def setUp(self):

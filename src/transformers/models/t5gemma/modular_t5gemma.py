@@ -18,8 +18,6 @@ from typing import Any, Callable, Optional, Union
 import torch
 import torch.nn as nn
 
-from transformers.utils.generic import OutputRecorder, check_model_inputs
-
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
@@ -33,17 +31,16 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_torch_flex_attn_available,
-    is_torchdynamo_compiling,
     logging,
 )
 from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import OutputRecorder, check_model_inputs
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
     Gemma2Attention,
@@ -60,15 +57,144 @@ from ..gemma2.modeling_gemma2 import (
 _CHECKPOINT_FOR_DOC = "google/t5gemma-2b-2b-prefixlm-it"
 
 
-if is_torch_flex_attn_available():
-    pass
-
-
 logger = logging.get_logger(__name__)
 
 
 class T5GemmaModuleConfig(Gemma2Config):
-    pass
+    r"""
+    This is the configuration class to store the configuration of a [`T5GemmaModuleModel`]. It is used to instantiate an T5GemmaModule
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the T5GemmaModule-7B.
+    e.g. [google/t5_gemma_module-7b](https://huggingface.co/google/t5_gemma_module-7b)
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        vocab_size (`int`, *optional*, defaults to 256000):
+            Vocabulary size of the T5GemmaModule model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`T5GemmaModuleModel`]
+        hidden_size (`int`, *optional*, defaults to 2304):
+            Dimension of the hidden representations.
+        intermediate_size (`int`, *optional*, defaults to 9216):
+            Dimension of the MLP representations.
+        num_hidden_layers (`int`, *optional*, defaults to 26):
+            Number of hidden layers in the Transformer decoder.
+        num_attention_heads (`int`, *optional*, defaults to 8):
+            Number of attention heads for each attention layer in the Transformer decoder.
+        num_key_value_heads (`int`, *optional*, defaults to 4):
+            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
+            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
+            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
+            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
+            by meanpooling all the original heads within that group. For more details, check out [this
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
+            `num_attention_heads`.
+        head_dim (`int`, *optional*, defaults to 256):
+            The attention head dimension.
+        hidden_activation (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
+            The non-linear activation function (function or string) in the decoder. Will default to `"gelu_pytorch_tanh"`
+            if not specified. `"gelu_pytorch_tanh"` uses an approximation of the `"gelu"` activation function.
+        max_position_embeddings (`int`, *optional*, defaults to 8192):
+            The maximum sequence length that this model might ever be used with.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon used by the rms normalization layers.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return the last key/values attentions (not used by all models). Only
+            relevant if `config.is_decoder=True`.
+        pad_token_id (`int`, *optional*, defaults to 0):
+            Padding token id.
+        eos_token_id (`int`, *optional*, defaults to 1):
+            End of stream token id.
+        bos_token_id (`int`, *optional*, defaults to 2):
+            Beginning of stream token id.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
+        rope_theta (`float`, *optional*, defaults to 10000.0):
+            The base period of the RoPE embeddings.
+        attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
+            Whether to use a bias in the query, key, value and output projection layers during self-attention.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        query_pre_attn_scalar (`float`, *optional*, defaults to 256):
+            scaling factor used on the attention scores
+        sliding_window (`int`, *optional*, defaults to 4096):
+            in T5GemmaModule, every other layer uses sliding window attention. This is the size of the sliding window.
+        layer_types (`list`, *optional*):
+            Attention pattern for each layer.
+        final_logit_softcapping (`float`, *optional*, defaults to 30.0):
+            scaling factor when applying tanh softcapping on the logits.
+        attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
+            scaling factor when applying tanh softcapping on the attention scores.
+
+    ```python
+    >>> from transformers import T5GemmaModuleModel, T5GemmaModuleConfig
+    >>> # Initializing a T5GemmaModule t5_gemma_module-7b style configuration
+    >>> configuration = T5GemmaModuleConfig()
+    >>> # Initializing a model from the t5_gemma_module-7b style configuration
+    >>> model = T5GemmaModuleModel(configuration)
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    def __init__(
+        self,
+        vocab_size=256000,
+        hidden_size=2304,
+        intermediate_size=9216,
+        num_hidden_layers=26,
+        num_attention_heads=8,
+        num_key_value_heads=4,
+        head_dim=256,
+        hidden_activation="gelu_pytorch_tanh",
+        max_position_embeddings=8192,
+        initializer_range=0.02,
+        rms_norm_eps=1e-6,
+        use_cache=True,
+        pad_token_id=0,
+        eos_token_id=1,
+        bos_token_id=2,
+        tie_word_embeddings=True,
+        rope_theta=10000.0,
+        attention_bias=False,
+        attention_dropout=0.0,
+        query_pre_attn_scalar=256,
+        sliding_window=4096,
+        layer_types=None,
+        final_logit_softcapping=30.0,
+        attn_logit_softcapping=50.0,
+        **kwargs,
+    ):
+        super().__init__(
+            vocab_size=vocab_size,
+            hidden_size=hidden_size,
+            intermediate_size=intermediate_size,
+            num_hidden_layers=num_hidden_layers,
+            num_attention_heads=num_attention_heads,
+            num_key_value_heads=num_key_value_heads,
+            head_dim=head_dim,
+            hidden_activation=hidden_activation,
+            max_position_embeddings=max_position_embeddings,
+            initializer_range=initializer_range,
+            rms_norm_eps=rms_norm_eps,
+            use_cache=use_cache,
+            pad_token_id=pad_token_id,
+            eos_token_id=eos_token_id,
+            bos_token_id=bos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            rope_theta=rope_theta,
+            attention_bias=attention_bias,
+            attention_dropout=attention_dropout,
+            query_pre_attn_scalar=query_pre_attn_scalar,
+            sliding_window=sliding_window,
+            layer_types=layer_types,
+            final_logit_softcapping=final_logit_softcapping,
+            attn_logit_softcapping=attn_logit_softcapping,
+            **kwargs,
+        )
+
+        del self.use_bidirectional_attention
 
 
 class T5GemmaConfig(PretrainedConfig):
@@ -213,10 +339,6 @@ class T5GemmaConfig(PretrainedConfig):
             setattr(self.decoder, key, value)
         super().__setattr__(key, value)
 
-    def get_text_config(self, *args, **kwargs):
-        # Always return self, regardless of the decoder option.
-        return self
-
 
 class T5GemmaRMSNorm(Gemma2RMSNorm):
     pass
@@ -242,7 +364,7 @@ class T5GemmaRotaryEmbedding(Gemma2RotaryEmbedding):
 class T5GemmaSelfAttention(Gemma2Attention):
     def __init__(self, config: T5GemmaModuleConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        # Requied by flash attention: encoder selfattention is non-causal
+        # Required by flash attention: encoder selfattention is non-causal
         self.is_causal = config.is_decoder
 
 
@@ -483,11 +605,19 @@ class T5GemmaPreTrainedModel(Gemma2PreTrainedModel):
     config: T5GemmaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["T5GemmaBlock"]
+    _no_split_modules = ["T5GemmaEncoderLayer", "T5GemmaDecoderLayer"]
+    _can_record_outputs = {
+        "hidden_states": T5GemmaDecoderLayer,
+        "attentions": [
+            OutputRecorder(T5GemmaSelfAttention, index=1, layer_name="self_attn"),
+            OutputRecorder(T5GemmaSelfAttention, index=1, layer_name="cross_attn"),
+            OutputRecorder(T5GemmaCrossAttention, index=1, layer_name="cross_attn"),
+        ],
+    }
 
     def _init_weights(self, module):
-        # TODO: support intialization for encoders and decoders separately(?)
-        Gemma2PreTrainedModel._init_weights(self, module)
+        # TODO: support initialization for encoders and decoders separately(?)
+        PreTrainedModel._init_weights(self, module)
         std = self.config.initializer_range
         if isinstance(module, T5GemmaClassificationHead):
             scale = module.out_proj.weight.shape[0] ** -0.5
@@ -498,6 +628,9 @@ class T5GemmaPreTrainedModel(Gemma2PreTrainedModel):
             if not self.config.tie_word_embeddings:
                 scale = module.out_proj.weight.shape[0] ** -0.5
                 module.out_proj.weight.data.normal_(mean=0.0, std=std * scale)
+        # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
+        elif "RMSNorm" in module.__class__.__name__:
+            module.weight.data.zero_()
 
     def _shift_right(self, input_ids):
         """
@@ -579,7 +712,7 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        # As we want to pass `past_key_values=None` explicitly everwhere, we need to pop them from kwargs if present
+        # As we want to pass `past_key_values=None` explicitly everywhere, we need to pop them from kwargs if present
         kwargs.pop("past_key_values", None)
 
         if inputs_embeds is None:
@@ -761,9 +894,6 @@ class T5GemmaModel(T5GemmaPreTrainedModel):
     def get_encoder(self):
         return self.encoder
 
-    def get_decoder(self):
-        return self.decoder
-
     def get_input_embeddings(self):
         return self.encoder.get_input_embeddings()
 
@@ -930,15 +1060,6 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         """
-        if self.training and self.config._attn_implementation != "eager":
-            msg = (
-                "It is strongly recommended to train T5Gemma models with the `eager` attention implementation "
-                f"instead of `{self.config._attn_implementation}`. Use `eager` with `AutoModelForCausalLM.from_pretrained('<path-to-checkpoint>', attn_implementation='eager')`."
-            )
-            if is_torchdynamo_compiling():
-                raise ValueError(msg)
-            else:
-                logger.warning_once(msg)
 
         if labels is not None and decoder_input_ids is None and decoder_inputs_embeds is None:
             # get decoder inputs from shifting lm labels to the right
@@ -1253,7 +1374,7 @@ __all__ = [
     "T5GemmaForConditionalGeneration",
     "T5GemmaModel",
     "T5GemmaEncoderModel",
-    "T5GemmaPreTrainedModel",  # noqa: F822
+    "T5GemmaPreTrainedModel",
     "T5GemmaForSequenceClassification",
     "T5GemmaForTokenClassification",
 ]

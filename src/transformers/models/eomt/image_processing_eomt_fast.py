@@ -18,6 +18,7 @@ import math
 from typing import Optional, Union
 
 import numpy as np
+import torch
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -39,8 +40,6 @@ from ...utils import (
     TensorType,
     auto_docstring,
     filter_out_non_signature_kwargs,
-    is_torch_available,
-    is_torchvision_available,
     is_torchvision_v2_available,
 )
 from .image_processing_eomt import (
@@ -51,14 +50,10 @@ from .image_processing_eomt import (
 )
 
 
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
+if is_torchvision_v2_available():
+    from torchvision.transforms.v2 import functional as F
+else:
+    from torchvision.transforms import functional as F
 
 
 class EomtImageProcessorFastKwargs(DefaultFastImageProcessorKwargs):

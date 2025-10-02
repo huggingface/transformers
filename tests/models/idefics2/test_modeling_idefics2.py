@@ -86,7 +86,7 @@ class Idefics2VisionText2TextModelTester:
             "vocab_size": 100,
             "hidden_size": 64,
             "intermediate_size": 56,
-            "num_hidden_layers": 3,
+            "num_hidden_layers": 2,
             "num_attention_heads": 2,
             "num_key_value_heads": 2,
             "hidden_act": "silu",
@@ -180,7 +180,6 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
     test_torchscript = False
     test_pruning = False
     test_resize_embeddings = True
-    test_head_masking = False
     _is_composite = True
 
     def setUp(self):
@@ -297,6 +296,7 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
             model = model_class(config).to(torch_device)
+            model.eval()
 
             # if no output embeddings -> leave test
             if model.get_output_embeddings() is None:
@@ -371,7 +371,6 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True
-    test_head_masking = False
     test_torchscript = False
 
     def setUp(self):
@@ -388,24 +387,6 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
 
     @unittest.skip(reason="Model does not support padding right")
     def test_flash_attn_2_inference_padding_right(self):
-        pass
-
-    @unittest.skip(reason="Contrastive search is not implemented for VLMs that do cross-attn")
-    def test_contrastive_generate(self):
-        pass
-
-    @unittest.skip(reason="Contrastive search is not implemented for VLMs that do cross-attn")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip(reason="Contrastive search is not implemented for VLMs that do cross-attn")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
-    @unittest.skip(
-        reason="Prompt lookup decoding needs a way to indicate `bad_word_ids` that should not be suggested as candidates"
-    )
-    def test_prompt_lookup_decoding_matches_greedy_search(self):
         pass
 
     @pytest.mark.generate
@@ -498,6 +479,7 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
             model = model_class(config).to(torch_device)
+            model.eval()
 
             # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
             model_vocab_size = config.text_config.vocab_size

@@ -197,7 +197,6 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
         {"image-text-to-text": LlavaOnevisionForConditionalGeneration} if is_torch_available() else {}
     )
     test_pruning = False
-    test_head_masking = False
     # MP works but offload doesn't work when the MultiheadAttention is offloaded
     # TODO: One potential solution would be to add to set preload_module_classes = ["Siglip2MultiheadAttentionPoolingHead"]
     # in the dispatch_model function
@@ -416,7 +415,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
             device_map=torch_device,
         )
 
-        url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
         image = Image.open(requests.get(url, stream=True).raw)
         prompt = (
             "user\n<image><image>\nWhat is the difference between these images?<|im_end|>\n<|im_start|>assistant\n"
@@ -444,7 +443,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
             device_map=torch_device,
         )
 
-        url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
         image = Image.open(requests.get(url, stream=True).raw)
         prompts = [
             "user\nTell me about the french revolution.<|im_end|>\n<|im_start|>assistant\n",  # text-only case

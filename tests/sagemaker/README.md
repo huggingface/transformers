@@ -12,7 +12,7 @@ This document explains the testing strategy for releasing the new Hugging Face D
 Before we can run the tests we need to adjust the `requirements.txt` for PyTorch under `/tests/sagemaker/scripts/pytorch` and for TensorFlow under `/tests/sagemaker/scripts/pytorch`. We adjust the branch to the new RC-tag.
 
 ```
-git+https://github.com/huggingface/transformers.git@v4.5.0.rc0 # install main or adjust ist with vX.X.X for installing version specific-transforms
+git+https://github.com/huggingface/transformers.git@v4.5.0.rc0 # install main or adjust it with vX.X.X for installing version specific-transforms
 ```
 
 After we adjusted the `requirements.txt` we can run Amazon SageMaker tests with:  
@@ -79,7 +79,7 @@ AWS is going to release new DLCs for PyTorch and/or TensorFlow. The Tests should
 
 Before we can run the tests we need to adjust the `requirements.txt` for Pytorch under `/tests/sagemaker/scripts/pytorch` and for Tensorflow under `/tests/sagemaker/scripts/pytorch`. We add the new framework version to it.
 
-```
+```bash
 torch==1.8.1 # for pytorch
 tensorflow-gpu==2.5.0 # for tensorflow
 ```
@@ -140,9 +140,9 @@ images:
 
 | ID                                  | Description                                                       | Platform                   | #GPUs | Collected & evaluated metrics            |
 |-------------------------------------|-------------------------------------------------------------------|-----------------------------|-------|------------------------------------------|
-| pytorch-transfromers-test-single    | test bert finetuning using BERT fromtransformerlib+PT             | SageMaker createTrainingJob | 1     | train_runtime, eval_accuracy & eval_loss |
-| pytorch-transfromers-test-2-ddp     | test bert finetuning using BERT from transformer lib+ PT DPP      | SageMaker createTrainingJob | 16    | train_runtime, eval_accuracy & eval_loss |
-| pytorch-transfromers-test-2-smd     | test bert finetuning using BERT from transformer lib+ PT SM DDP   | SageMaker createTrainingJob | 16    | train_runtime, eval_accuracy & eval_loss |
-| pytorch-transfromers-test-1-smp     | test roberta finetuning using BERT from transformer lib+ PT SM MP | SageMaker createTrainingJob | 8     | train_runtime, eval_accuracy & eval_loss |
-| tensorflow-transfromers-test-single | Test bert finetuning using BERT from transformer lib+TF           | SageMaker createTrainingJob | 1     | train_runtime, eval_accuracy & eval_loss |
-| tensorflow-transfromers-test-2-smd  | test bert finetuning using BERT from transformer lib+ TF SM DDP   | SageMaker createTrainingJob | 16    | train_runtime, eval_accuracy & eval_loss |
+| pytorch-transformers-test-single    | test bert finetuning using BERT fromtransformerlib+PT             | SageMaker createTrainingJob | 1     | train_runtime, eval_accuracy & eval_loss |
+| pytorch-transformers-test-2-ddp     | test bert finetuning using BERT from transformer lib+ PT DPP      | SageMaker createTrainingJob | 16    | train_runtime, eval_accuracy & eval_loss |
+| pytorch-transformers-test-2-smd     | test bert finetuning using BERT from transformer lib+ PT SM DDP   | SageMaker createTrainingJob | 16    | train_runtime, eval_accuracy & eval_loss |
+| pytorch-transformers-test-1-smp     | test roberta finetuning using BERT from transformer lib+ PT SM MP | SageMaker createTrainingJob | 8     | train_runtime, eval_accuracy & eval_loss |
+| tensorflow-transformers-test-single | Test bert finetuning using BERT from transformer lib+TF           | SageMaker createTrainingJob | 1     | train_runtime, eval_accuracy & eval_loss |
+| tensorflow-transformers-test-2-smd  | test bert finetuning using BERT from transformer lib+ TF SM DDP   | SageMaker createTrainingJob | 16    | train_runtime, eval_accuracy & eval_loss |

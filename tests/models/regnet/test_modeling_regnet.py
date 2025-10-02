@@ -14,9 +14,10 @@
 """Testing suite for the PyTorch RegNet model."""
 
 import unittest
+from functools import cached_property
 
 from transformers import RegNetConfig
-from transformers.file_utils import cached_property, is_torch_available, is_vision_available
+from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import Expectations, is_flaky, require_torch, require_vision, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -130,7 +131,6 @@ class RegNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     has_attentions = False
     test_torch_exportable = True
 

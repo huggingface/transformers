@@ -1,6 +1,9 @@
 import pathlib
 from typing import Optional, Union
 
+import torch
+from torchvision.transforms.v2 import functional as F
+
 from transformers.models.detr.image_processing_detr_fast import DetrFastImageProcessorKwargs, DetrImageProcessorFast
 
 from ...image_processing_utils import BatchFeature
@@ -20,22 +23,9 @@ from ...image_utils import (
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
     logging,
     requires_backends,
 )
-
-
-if is_torch_available():
-    import torch
-
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-elif is_torchvision_available():
-    from torchvision.transforms import functional as F
 
 
 logger = logging.get_logger(__name__)
@@ -106,7 +96,7 @@ class RTDetrFastImageProcessorKwargs(DetrFastImageProcessorKwargs):
     pass
 
 
-class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
+class RTDetrImageProcessorFast(DetrImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
     image_std = IMAGENET_DEFAULT_STD
@@ -128,7 +118,7 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
         if do_convert_annotations is None and getattr(self, "do_convert_annotations", None) is None:
             self.do_convert_annotations = do_normalize if do_normalize is not None else self.do_normalize
 
-        BaseImageProcessorFast.__init__(**kwargs)
+        BaseImageProcessorFast.__init__(self, **kwargs)
 
     def preprocess(
         self,
@@ -137,7 +127,7 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         **kwargs: Unpack[RTDetrFastImageProcessorKwargs],
     ) -> BatchFeature:
-        return BaseImageProcessorFast().preprocess(images, annotations, masks_path, **kwargs)
+        return BaseImageProcessorFast.preprocess(self, images, annotations, masks_path, **kwargs)
 
     def prepare_annotation(
         self,
@@ -175,7 +165,7 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
         do_pad: bool,
-        pad_size: Optional[dict[str, int]],
+        pad_size: Optional[SizeDict],
         format: Optional[Union[str, AnnotationFormat]],
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
@@ -234,7 +224,7 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
         if do_pad:
             # depends on all resized image shapes so we need another loop
             if pad_size is not None:
-                padded_size = (pad_size["height"], pad_size["width"])
+                padded_size = (pad_size.height, pad_size.width)
             else:
                 padded_size = get_max_height_width(images)
 
@@ -337,28 +327,28 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
 
         return results
 
-    def from_dict():
+    def from_dict(self):
         raise NotImplementedError("No need to override this method for RT-DETR yet.")
 
-    def post_process():
+    def post_process(self):
         raise NotImplementedError("Post-processing is not implemented for RT-DETR yet.")
 
-    def post_process_segmentation():
+    def post_process_segmentation(self):
         raise NotImplementedError("Segmentation post-processing is not implemented for RT-DETR yet.")
 
-    def post_process_instance():
+    def post_process_instance(self):
         raise NotImplementedError("Instance post-processing is not implemented for RT-DETR yet.")
 
-    def post_process_panoptic():
+    def post_process_panoptic(self):
         raise NotImplementedError("Panoptic post-processing is not implemented for RT-DETR yet.")
 
-    def post_process_instance_segmentation():
+    def post_process_instance_segmentation(self):
         raise NotImplementedError("Segmentation post-processing is not implemented for RT-DETR yet.")
 
-    def post_process_semantic_segmentation():
+    def post_process_semantic_segmentation(self):
         raise NotImplementedError("Semantic segmentation post-processing is not implemented for RT-DETR yet.")
 
-    def post_process_panoptic_segmentation():
+    def post_process_panoptic_segmentation(self):
         raise NotImplementedError("Panoptic segmentation post-processing is not implemented for RT-DETR yet.")
 
 

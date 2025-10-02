@@ -15,6 +15,7 @@
 
 import copy
 import unittest
+from functools import cached_property
 
 import numpy as np
 
@@ -31,7 +32,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin
@@ -206,7 +206,6 @@ class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     is_encoder_decoder = False
     test_pruning = False
-    test_head_masking = False
     test_missing_keys = False
     zero_init_hidden_state = True
     test_torch_exportable = True

@@ -27,11 +27,7 @@ from ...modeling_outputs import (
     XVectorOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    is_peft_available,
-)
+from ...utils import ModelOutput, auto_docstring, is_peft_available
 from .configuration_wav2vec2_conformer import Wav2Vec2ConformerConfig
 
 
@@ -602,8 +598,6 @@ class Wav2Vec2ConformerEncoderLayer(GradientCheckpointingLayer):
         relative_position_embeddings: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ):
-        hidden_states = hidden_states
-
         # 1. Feed-Forward 1 layer
         residual = hidden_states
         hidden_states = self.ffn1_layer_norm(hidden_states)

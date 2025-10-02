@@ -145,7 +145,6 @@ Arguments can also be passed directly to `@auto_docstring` for more control. Use
 
 The `Returns` and `Examples` parts of the docstring can also be manually specified.
 
-
 ```python
 MODEL_COMMON_CUSTOM_ARGS = r"""
     common_arg_1 (`torch.Tensor`, *optional*, defaults to `default_value`):
@@ -202,7 +201,6 @@ There are some rules for documenting different types of arguments and they're li
 
     If a standard argument behaves differently in your model, then you can override it locally in a `r""" """` block. This local definition has a higher priority. For example, the `labels` argument is often customized per model and typically requires overriding.
 
-
 - New or custom arguments should be documented within an `r""" """` block after the signature if it is a function or in the `__init__` method's docstring if it is a class.
 
     ```py
@@ -212,9 +210,9 @@ There are some rules for documenting different types of arguments and they're li
         This can span multiple lines.
     ```
 
-    * Include `type` in backticks.
-    * Add *optional* if the argument is not required or has a default value.
-    * Add "defaults to X" if it has a default value. You don't need to add "defaults to `None`" if the default value is `None`.
+  * Include `type` in backticks.
+  * Add *optional* if the argument is not required or has a default value.
+  * Add "defaults to X" if it has a default value. You don't need to add "defaults to `None`" if the default value is `None`.
 
     These arguments can also be passed to `@auto_docstring` as a `custom_args` argument. It is used to define the docstring block for new arguments once if they are repeated in multiple places in the modeling file.
 

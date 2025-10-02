@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch Mask2Former model."""
 
 import unittest
+from functools import cached_property
 
 import numpy as np
 import pytest
@@ -32,7 +33,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init
@@ -204,7 +204,6 @@ class Mask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     is_encoder_decoder = False
     test_pruning = False
-    test_head_masking = False
     test_missing_keys = False
     test_torch_exportable = True
 

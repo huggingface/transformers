@@ -75,11 +75,12 @@ checkpoint: 检查点
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_vi.md">Tiếng Việt</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ar.md">العربية</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ur.md">اردو</a> |
+        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_bn.md">বাংলা</a> |
     </p>
 </h4>
 
 <h3 align="center">
-    <p>为 Jax、PyTorch 和 TensorFlow 打造的先进的自然语言处理</p>
+    <p>为 Jax、PyTorch 和 TensorFlow 打造的先进的自然语言处理函数库</p>
 </h3>
 
 <h3 align="center">

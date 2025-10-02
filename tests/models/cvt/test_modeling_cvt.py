@@ -14,10 +14,11 @@
 """Testing suite for the PyTorch CvT model."""
 
 import unittest
+from functools import cached_property
 from math import floor
 
 from transformers import CvtConfig
-from transformers.file_utils import cached_property, is_torch_available, is_vision_available
+from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -156,7 +157,6 @@ class CvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_torchscript = False
     test_resize_embeddings = False
-    test_head_masking = False
     has_attentions = False
     test_torch_exportable = True
 

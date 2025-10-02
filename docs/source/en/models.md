@@ -45,44 +45,6 @@ There are two general types of models you can load:
 1. A barebones model, like [`AutoModel`] or [`LlamaModel`], that outputs hidden states.
 2. A model with a specific *head* attached, like [`AutoModelForCausalLM`] or [`LlamaForCausalLM`], for performing specific tasks.
 
-For each model type, there is a separate class for each machine learning framework (PyTorch, TensorFlow, Flax). Pick the corresponding prefix for the framework you're using.
-
-<hfoptions id="backend">
-<hfoption id="PyTorch">
-
-```py
-from transformers import AutoModelForCausalLM, MistralForCausalLM
-
-# load with AutoClass or model-specific class
-model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", dtype="auto", device_map="auto")
-model = MistralForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", dtype="auto", device_map="auto")
-```
-
-</hfoption>
-<hfoption id="TensorFlow">
-
-```py
-from transformers import TFAutoModelForCausalLM, TFMistralForCausalLM
-
-# load with AutoClass or model-specific class
-model = TFAutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1")
-model = TFMistralForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1")
-```
-
-</hfoption>
-<hfoption id="Flax">
-
-```py
-from transformers import FlaxAutoModelForCausalLM, FlaxMistralForCausalLM
-
-# load with AutoClass or model-specific class
-model = FlaxAutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1")
-model = FlaxMistralForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1")
-```
-
-</hfoption>
-</hfoptions>
-
 ## Model classes
 
 To get a pretrained model, you need to load the weights into the model. This is done by calling [`~PreTrainedModel.from_pretrained`] which accepts weights from the Hugging Face Hub or a local directory.
@@ -147,7 +109,6 @@ Large pretrained models require a lot of memory to load. The loading process inv
 You need enough memory to hold two copies of the model weights (random and pretrained) which may not be possible depending on your hardware. In distributed training environments, this is even more challenging because each process loads a pretrained model.
 
 Transformers reduces some of these memory-related challenges with fast initialization, sharded checkpoints, Accelerate's [Big Model Inference](https://hf.co/docs/accelerate/usage_guides/big_modeling) feature, and supporting lower bit data types.
-
 
 ### Sharded checkpoints
 
