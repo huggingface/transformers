@@ -226,6 +226,7 @@ class HrmModelTest(CausalLMModelTest, unittest.TestCase):
         model = HrmForCausalLM(config).to(torch_device)
 
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmp_dir:
             model.save_pretrained(tmp_dir)
             loaded_model = HrmForCausalLM.from_pretrained(tmp_dir).to(torch_device)
@@ -238,12 +239,7 @@ class HrmModelTest(CausalLMModelTest, unittest.TestCase):
                 outputs2 = loaded_model(input_ids=input_ids)
 
             # Check that outputs are similar (within tolerance for floating point)
-            torch.testing.assert_close(
-                outputs1.logits,
-                outputs2.logits,
-                rtol=1e-4,
-                atol=1e-4
-            )
+            torch.testing.assert_close(outputs1.logits, outputs2.logits, rtol=1e-4, atol=1e-4)
 
     def is_pipeline_test_to_skip(
         self,
