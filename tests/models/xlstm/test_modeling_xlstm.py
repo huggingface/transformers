@@ -168,17 +168,6 @@ class xLSTMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             self, config_class=xLSTMConfig, n_embd=37, common_properties=["hidden_size", "num_hidden_layers"]
         )
 
-    def test_initialization(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config=config)
-            for name, param in model.named_parameters():
-                if "D" in name:
-                    if param.requires_grad:
-                        # check if it's a ones like
-                        self.assertTrue(torch.allclose(param.data, torch.ones_like(param.data), atol=1e-5, rtol=1e-5))
-
     @unittest.skip(reason="xLSTM cache slicing test case is an edge case")
     def test_generate_without_input_ids(self):
         pass

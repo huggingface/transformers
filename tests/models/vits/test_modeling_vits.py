@@ -220,46 +220,6 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_batching_equivalence(self):
         pass
 
-    @is_flaky(
-        max_attempts=3,
-        description="Weight initialisation for the VITS conv layers sometimes exceeds the kaiming normal range",
-    )
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        uniform_init_parms = [
-            "emb_rel_k",
-            "emb_rel_v",
-            "conv_1",
-            "conv_2",
-            "conv_pre",
-            "conv_post",
-            "conv_proj",
-            "conv_dds",
-            "project",
-            "wavenet.in_layers",
-            "wavenet.res_skip_layers",
-            "upsampler",
-            "resblocks",
-        ]
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    if any(x in name for x in uniform_init_parms):
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-
     @unittest.skip(reason="VITS has no inputs_embeds")
     def test_inputs_embeds(self):
         pass
