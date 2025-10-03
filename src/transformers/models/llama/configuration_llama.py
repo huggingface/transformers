@@ -180,7 +180,7 @@ class LlamaConfig(PretrainedConfig):
     eos_token_id: Optional[int] = 2
     pretraining_tp: Optional[int] = 1
     tie_word_embeddings: Optional[bool] = False
-    rope_theta: Optional[float] = 10000.0
+    rope_theta: Optional[Union[int, float]] = 10000.0
     rope_scaling: Optional[dict[str, Any]] = None
     attention_bias: Optional[bool] = False
     attention_dropout: Optional[Union[int, float]] = 0.0

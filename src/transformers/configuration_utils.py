@@ -15,11 +15,12 @@
 """Configuration base class and utilities."""
 
 import copy
+import inspect
 import json
 import os
 import warnings
 from collections.abc import Sequence
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field, fields, is_dataclass
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, Optional, TypeVar, Union
 
 from huggingface_hub.dataclasses import strict
@@ -378,8 +379,18 @@ class PretrainedConfig(PushToHubMixin):
             key = super().__getattribute__("attribute_map")[key]
         return super().__getattribute__(key)
 
+    # tests/models/reformer/test_modeling_reformer.py::ReformerLocalAttnModelTest::test_can_load_with_global_device_set
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        # if (
+        #     hasattr(self, "hidden_size")
+        #     and hasattr(self, "num_attention_heads")
+        #     and self.hidden_size % self.num_attention_heads != 0
+        # ):
+        #     raise ValueError(
+        #         f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
+        #         f"heads ({self.num_attention_heads})."
+        #     )
 
         if (
             hasattr(self, "head_dim")
@@ -786,7 +797,15 @@ class PretrainedConfig(PushToHubMixin):
         # Update config with kwargs if needed
         # To remove arg here are those passed along for our internal telemetry but we still need to remove them
         to_remove = ["_from_auto", "_from_pipeline"]
-        valid_fields = [field.name for field in fields(cls)]
+
+        # Case 1: dataclass → get dataclass fields
+        if is_dataclass(cls):
+            valid_fields = [field.name for field in fields(cls)]
+        # Case 2: for BC with remote code configs → inspect __init__ params
+        else:
+            sig = inspect.signature(cls.__init__)
+            valid_fields = [name for name, param in sig.parameters.items() if name != "self"]
+
         valid_fields.extend(["num_labels", "attn_implementation", "output_attentions", "torch_dtype", "name_or_path"])
         for key, value in kwargs.items():
             if key in valid_fields:
@@ -795,10 +814,11 @@ class PretrainedConfig(PushToHubMixin):
 
                 # To authorize passing a custom subconfig as kwarg in models that have nested configs.
                 # We need to update only custom kwarg values instead and keep other attributes in subconfig.
-                if key in cls.sub_configs and isinstance(value, dict) and isinstance(config_dict.get(key), dict):
-                    config_dict[key].update(value)
-                else:
-                    config_dict[key] = value
+                if not isinstance(cls.sub_configs, property): # TODO: remove after merging another PR 
+                    if key in cls.sub_configs and isinstance(value, dict) and isinstance(config_dict.get(key), dict):
+                        config_dict[key].update(value)
+                    else:
+                        config_dict[key] = value
 
         config = cls(**config_dict)
 
@@ -806,6 +826,18 @@ class PretrainedConfig(PushToHubMixin):
         if "_commit_hash" in kwargs and "_commit_hash" in config_dict:
             kwargs.setdefault("_commit_hash", config_dict["_commit_hash"])
 
+        for key, value in kwargs.items():
+            if hasattr(config, key):
+                current_attr = getattr(config, key)
+                # To authorize passing a custom subconfig as kwarg in models that have nested configs.
+                # We need to update only custom kwarg values instead and keep other attributes in subconfig.
+                if isinstance(current_attr, PretrainedConfig) and isinstance(value, dict):
+                    current_attr_updated = current_attr.to_dict()
+                    current_attr_updated.update(value)
+                    value = current_attr.__class__(**current_attr_updated)
+                setattr(config, key, value)
+                if key != "dtype":
+                    to_remove.append(key)
         for key in to_remove:
             kwargs.pop(key, None)
 
