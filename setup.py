@@ -185,6 +185,7 @@ _deps = [
     "rich",
     "opentelemetry-api",
     "mistral-common[opencv]>=1.6.3",
+    "optax>=0.1.7",
 ]
 
 
@@ -300,6 +301,7 @@ extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")
 extras["mistral-common"] = deps_list("mistral-common[opencv]")
 extras["chat_template"] = deps_list("jinja2")
+extras["optax"] = deps_list("optax")
 extras["testing"] = (
     deps_list(
         "pytest",

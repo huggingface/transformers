@@ -1,3 +1,11 @@
+[project]
+name = "transformers"
+version = "4.57.0.dev0"
+description = "Transformers: state-of-the-art Machine Learning models in text, vision, audio, and multimodal tasks"
+authors = [{ name = "The HuggingFace Team", email = "transformers@huggingface.co" }]
+readme = "README.md"
+requires-python = ">=3.9"
+
 [tool.coverage.run]
 source = ["transformers"]
 omit = [
@@ -72,3 +80,6 @@ markers = [
 log_cli = 1
 log_cli_level = "WARNING"
 asyncio_default_fixture_loop_scope = "function"
+# --- Added to fix Poetry parsing for extras ---
+[project.optional-dependencies]
+optax = ["optax>=0.1.7"]
