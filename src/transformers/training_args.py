@@ -881,7 +881,7 @@ class TrainingArguments:
         metadata={"help": "The scheduler type to use."},
     )
     lr_scheduler_kwargs: Optional[Union[dict, str]] = field(
-        default_factory=None,
+        default=None,
         metadata={
             "help": (
                 "Extra parameters for the lr_scheduler such as {'num_cycles': 1} for the cosine with hard restarts."
