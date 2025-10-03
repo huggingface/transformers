@@ -710,28 +710,6 @@ class HrmModel(HrmPreTrainedModel):
 
 
 class HrmForCausalLM(HrmPreTrainedModel, GenerationMixin):
-    """
-    HRM Model with a language modeling head for causal language modeling with hierarchical reasoning.
-
-    This model supports:
-    - Hierarchical reasoning with H-level (high-level) and L-level (low-level) processing
-    - Adaptive Computation Time (ACT) with Q-learning based halting
-    - Puzzle-specific embeddings for task identification
-    - Recurrent carry state for iterative refinement
-
-    Args:
-        puzzle_identifiers (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Puzzle identifiers for puzzle-specific embeddings. Each puzzle can have a unique embedding
-            to help the model adapt to different task instances. Only used when `config.puzzle_emb_ndim > 0`.
-        carry (`HrmCarry`, *optional*):
-            Recurrent carry state from previous computation step. Contains:
-            - `inner_carry`: H-level and L-level hidden states
-            - `steps`: Number of ACT steps taken
-            - `halted`: Boolean flags indicating if computation has halted
-            - `current_data`: Current input data being processed
-            If not provided, will be initialized automatically.
-    """
-
     def __init__(self, config: HrmConfig):
         super().__init__(config)
         self.model = HrmModel(config)
