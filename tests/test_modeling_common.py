@@ -1262,7 +1262,8 @@ class ModelTesterMixin:
             del inputs_dict["output_attentions"]
             config.output_attentions = True
             for k in config.sub_configs:
-                getattr(config, k).output_attentions = True
+                if getattr(config, k) is not None:
+                    getattr(config, k).output_attentions = True
 
             model = model_class(config)
             model.to(torch_device)
