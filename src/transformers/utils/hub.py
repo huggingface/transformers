@@ -277,9 +277,6 @@ def cached_file(
         force_download (`bool`, *optional*, defaults to `False`):
             Whether or not to force to (re-)download the configuration files and override the cached versions if they
             exist.
-        resume_download:
-            Deprecated and ignored. All downloads are now resumed by default when possible.
-            Will be removed in v5 of Transformers.
         proxies (`dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -324,7 +321,6 @@ def cached_files(
     filenames: list[str],
     cache_dir: Optional[Union[str, os.PathLike]] = None,
     force_download: bool = False,
-    resume_download: Optional[bool] = None,
     proxies: Optional[dict[str, str]] = None,
     token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
@@ -354,9 +350,6 @@ def cached_files(
         force_download (`bool`, *optional*, defaults to `False`):
             Whether or not to force to (re-)download the configuration files and override the cached versions if they
             exist.
-        resume_download:
-            Deprecated and ignored. All downloads are now resumed by default when possible.
-            Will be removed in v5 of Transformers.
         proxies (`dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -481,7 +474,6 @@ def cached_files(
                 user_agent=user_agent,
                 force_download=force_download,
                 proxies=proxies,
-                resume_download=resume_download,
                 token=token,
                 local_files_only=local_files_only,
             )
@@ -495,7 +487,6 @@ def cached_files(
                 user_agent=user_agent,
                 force_download=force_download,
                 proxies=proxies,
-                resume_download=resume_download,
                 token=token,
                 local_files_only=local_files_only,
             )
@@ -1023,7 +1014,6 @@ def get_checkpoint_shard_files(
     cache_dir=None,
     force_download=False,
     proxies=None,
-    resume_download=None,
     local_files_only=False,
     token=None,
     user_agent=None,
@@ -1077,7 +1067,6 @@ def get_checkpoint_shard_files(
         cache_dir=cache_dir,
         force_download=force_download,
         proxies=proxies,
-        resume_download=resume_download,
         local_files_only=local_files_only,
         token=token,
         user_agent=user_agent,
