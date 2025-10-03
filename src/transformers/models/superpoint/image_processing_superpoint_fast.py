@@ -32,7 +32,6 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_v2_available,
 )
 from .image_processing_superpoint import SuperPointImageProcessorKwargs
 
@@ -40,10 +39,7 @@ from .image_processing_superpoint import SuperPointImageProcessorKwargs
 if TYPE_CHECKING:
     from .modeling_superpoint import SuperPointKeypointDescriptionOutput
 
-if is_torchvision_v2_available():
-    import torchvision.transforms.v2.functional as F
-else:
-    import torchvision.transforms.functional as F
+import torchvision.transforms.v2.functional as F
 
 
 def is_grayscale(

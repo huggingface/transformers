@@ -20,6 +20,7 @@ from functools import lru_cache
 from typing import Any, Optional, Union
 
 import torch
+from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
@@ -32,7 +33,6 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_v2_available,
 )
 from .image_processing_flava import (
     FLAVA_CODEBOOK_MEAN,
@@ -42,12 +42,6 @@ from .image_processing_flava import (
     LOGIT_LAPLACE_EPS,
     FlavaImageProcessorKwargs,
 )
-
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
 
 
 class FlavaMaskingGenerator:

@@ -495,7 +495,7 @@ class SubWordJapaneseTokenizer:
                         candidates.append((self.vocab[wd], wd, e))
             if len(candidates) > 0:
                 # the smallest token_id is adopted
-                _, wd, e = sorted(candidates, key=lambda x: x[0])[0]
+                _, wd, e = min(candidates, key=lambda x: x[0])
                 result.append(wd)
                 pos = e
             else:

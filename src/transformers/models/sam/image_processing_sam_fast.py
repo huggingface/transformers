@@ -23,6 +23,7 @@ import numpy as np
 import torch
 from torch.nn import functional as F
 from torchvision.ops.boxes import batched_nms
+from torchvision.transforms.v2 import functional as F_t
 
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import BaseImageProcessorFast
@@ -36,14 +37,8 @@ from ...image_utils import (
     pil_torch_interpolation_mapping,
 )
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, is_torchvision_v2_available
+from ...utils import auto_docstring
 from .image_processing_sam import SamImageProcessorKwargs
-
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F_t
-else:
-    from torchvision.transforms import functional as F_t
 
 
 @auto_docstring
@@ -208,9 +203,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
                 {
                     "do_normalize": False,
                     "do_rescale": False,
-                    "interpolation": F_t.InterpolationMode.NEAREST_EXACT
-                    if is_torchvision_v2_available()
-                    else F_t.InterpolationMode.NEAREST,
+                    "interpolation": F_t.InterpolationMode.NEAREST_EXACT,
                     "size": segmentation_maps_kwargs.pop("mask_size"),
                     "pad_size": segmentation_maps_kwargs.pop("mask_pad_size"),
                 }

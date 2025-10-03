@@ -918,7 +918,6 @@ class ProcessorMixin(PushToHubMixin):
 
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
-        resume_download = kwargs.pop("resume_download", None)
         proxies = kwargs.pop("proxies", None)
         token = kwargs.pop("token", None)
         local_files_only = kwargs.pop("local_files_only", False)
@@ -986,7 +985,6 @@ class ProcessorMixin(PushToHubMixin):
                     cache_dir=cache_dir,
                     force_download=force_download,
                     proxies=proxies,
-                    resume_download=resume_download,
                     local_files_only=local_files_only,
                     token=token,
                     user_agent=user_agent,
@@ -1003,7 +1001,6 @@ class ProcessorMixin(PushToHubMixin):
                     cache_dir=cache_dir,
                     force_download=force_download,
                     proxies=proxies,
-                    resume_download=resume_download,
                     local_files_only=local_files_only,
                     token=token,
                     user_agent=user_agent,
@@ -1018,7 +1015,6 @@ class ProcessorMixin(PushToHubMixin):
                     cache_dir=cache_dir,
                     force_download=force_download,
                     proxies=proxies,
-                    resume_download=resume_download,
                     local_files_only=local_files_only,
                     token=token,
                     user_agent=user_agent,
@@ -1034,7 +1030,6 @@ class ProcessorMixin(PushToHubMixin):
                         cache_dir=cache_dir,
                         force_download=force_download,
                         proxies=proxies,
-                        resume_download=resume_download,
                         local_files_only=local_files_only,
                         token=token,
                         user_agent=user_agent,
@@ -1051,7 +1046,6 @@ class ProcessorMixin(PushToHubMixin):
                     cache_dir=cache_dir,
                     force_download=force_download,
                     proxies=proxies,
-                    resume_download=resume_download,
                     local_files_only=local_files_only,
                     token=token,
                     user_agent=user_agent,

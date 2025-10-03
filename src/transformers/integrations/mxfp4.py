@@ -343,7 +343,6 @@ def dequantize(module, param_name, param_value, target_device, dq_param_name, **
                     to_contiguous,
                     rank,
                     device_mesh,
-                    set_param=False,
                 )
             blocks_attr = f"{proj}_blocks"
             scales_attr = f"{proj}_scales"

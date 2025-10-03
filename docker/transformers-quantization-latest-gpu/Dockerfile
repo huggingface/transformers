@@ -82,6 +82,9 @@ RUN python3 -m pip uninstall -y flash-attn
 # this line must be added in order for python to be aware of transformers.
 RUN cd transformers && python3 setup.py develop
 
+# Add fp-quant for quantization testing
+RUN python3 -m pip install --no-cache-dir "fp-quant>=0.2.0"
+
 # Low usage or incompatible lib, will enable later on
 
 # # Add aqlm for quantization testing
@@ -102,7 +105,3 @@ RUN cd transformers && python3 setup.py develop
 # # TODO: create a new workflow to test them
 # RUN python3 -m pip install --no-cache-dir flute-kernel==0.4.1
 # RUN python3 -m pip install --no-cache-dir git+https://github.com/Dao-AILab/fast-hadamard-transform.git
-
-# Add fp-quant for quantization testing
-# Requires py3.11 but our CI runs on 3.9
-# RUN python3 -m pip install --no-cache-dir "fp-quant>=0.1.6"

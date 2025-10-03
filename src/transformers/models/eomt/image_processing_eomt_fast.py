@@ -19,6 +19,7 @@ from typing import Optional, Union
 
 import numpy as np
 import torch
+from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -39,7 +40,6 @@ from ...utils import (
     TensorType,
     auto_docstring,
     filter_out_non_signature_kwargs,
-    is_torchvision_v2_available,
 )
 from .image_processing_eomt import (
     EomtImageProcessorKwargs,
@@ -48,15 +48,6 @@ from .image_processing_eomt import (
     get_size_with_aspect_ratio,
     remove_low_and_no_objects,
 )
-
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
-
-
-EomtImageProcessorFastKwargs = EomtImageProcessorKwargs
 
 
 def get_target_size(size_dict: dict[str, int]) -> tuple[int, int]:
@@ -92,9 +83,9 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
     do_split_image = False
     do_pad = False
     ignore_index = None
-    valid_kwargs = EomtImageProcessorFastKwargs
+    valid_kwargs = EomtImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[EomtImageProcessorFastKwargs]):
+    def __init__(self, **kwargs: Unpack[EomtImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     def _split_image(self, images: torch.Tensor, size: dict, image_indices: int) -> tuple[list, list]:
@@ -143,7 +134,7 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
         images: ImageInput,
         segmentation_maps: Optional[list[torch.Tensor]] = None,
         instance_id_to_semantic_id: Optional[dict[int, int]] = None,
-        **kwargs: Unpack[EomtImageProcessorFastKwargs],
+        **kwargs: Unpack[EomtImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
         segmentation_maps (`ImageInput`, *optional*):
@@ -161,7 +152,7 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         device: Optional[Union[str, "torch.device"]] = None,
-        **kwargs: Unpack[EomtImageProcessorFastKwargs],
+        **kwargs: Unpack[EomtImageProcessorKwargs],
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.
@@ -188,9 +179,7 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
                     "do_normalize": False,
                     "do_rescale": False,
                     # Nearest interpolation is used for segmentation maps instead of BILINEAR.
-                    "interpolation": F.InterpolationMode.NEAREST_EXACT
-                    if is_torchvision_v2_available()
-                    else F.InterpolationMode.NEAREST,
+                    "interpolation": F.InterpolationMode.NEAREST_EXACT,
                 }
             )
 

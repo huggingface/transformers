@@ -287,7 +287,7 @@ class AutoformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                 "future_time_features",
             ]
 
-            if model.__class__.__name__ in ["AutoformerForPrediction"]:
+            if model.__class__.__name__ == "AutoformerForPrediction":
                 expected_arg_names.append("future_observed_mask")
 
             expected_arg_names.extend(

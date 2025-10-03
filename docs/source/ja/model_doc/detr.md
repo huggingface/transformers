@@ -193,15 +193,6 @@ DETR の使用を開始するのに役立つ公式 Hugging Face およびコミ�
     - post_process_instance_segmentation
     - post_process_panoptic_segmentation
 
-## DetrFeatureExtractor
-
-[[autodoc]] DetrFeatureExtractor
-    - __call__
-    - post_process_object_detection
-    - post_process_semantic_segmentation
-    - post_process_instance_segmentation
-    - post_process_panoptic_segmentation
-
 ## DETR specific outputs
 
 [[autodoc]] models.detr.modeling_detr.DetrModelOutput

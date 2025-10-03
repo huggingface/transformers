@@ -244,10 +244,6 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     def test_model_parallelism(self):
         pass
 
-    @unittest.skip(reason="PaliGemma's SigLip encoder uses a non-standard initialization scheme")
-    def test_initialization(self):
-        pass
-
     # TODO extend valid outputs to include this test @Molbap
     @unittest.skip(reason="PaliGemma has currently one output format.")
     def test_model_outputs_equivalence(self):

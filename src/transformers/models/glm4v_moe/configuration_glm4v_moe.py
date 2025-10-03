@@ -236,6 +236,9 @@ class Glm4vMoeTextConfig(PretrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    attribute_map = {
+        "num_local_experts": "n_routed_experts",
+    }
     base_config_key = "text_config"
 
     def __init__(

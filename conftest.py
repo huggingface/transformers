@@ -54,7 +54,6 @@ NOT_DEVICE_TESTS = {
     "test_gradient_checkpointing_backward_compatibility",
     "test_gradient_checkpointing_enable_disable",
     "test_torch_save_load",
-    "test_initialization",
     "test_forward_signature",
     "test_model_get_set_embeddings",
     "test_model_main_input_name",
@@ -89,6 +88,8 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "not_device_test: mark the tests always running on cpu")
     config.addinivalue_line("markers", "torch_compile_test: mark test which tests torch compile functionality")
     config.addinivalue_line("markers", "torch_export_test: mark test which tests torch export functionality")
+
+    os.environ['DISABLE_SAFETENSORS_CONVERSION'] = 'true'
 
 
 def pytest_collection_modifyitems(items):

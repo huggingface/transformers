@@ -392,7 +392,7 @@ class TvltImageProcessor(BaseImageProcessor):
                     f"number of frames must not be greater than the maximum frames of the model {self.num_frames}."
                 )
 
-        max_num_frames = max([len(video) for video in videos])
+        max_num_frames = max(len(video) for video in videos)
         num_patches_per_image = (size["shortest_edge"] // patch_size[0]) ** 2
         video_masks = np.array(
             [

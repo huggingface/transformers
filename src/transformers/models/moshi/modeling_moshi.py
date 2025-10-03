@@ -1038,7 +1038,6 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
             attentions=all_self_attns,
         )
 
-    # Copied from transformers.models.phimoe.modeling_phimoe.PhimoeModel._update_causal_mask with Phimoe->Moshi
     def _update_causal_mask(
         self,
         attention_mask: Union[torch.Tensor, "BlockMask"],
@@ -1121,7 +1120,6 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
         return causal_mask
 
     @staticmethod
-    # Copied from transformers.models.phimoe.modeling_phimoe.PhimoeModel._prepare_4d_causal_attention_mask_with_cache_position with Phimoe->MoshiDepth
     def _prepare_4d_causal_attention_mask_with_cache_position(
         attention_mask: torch.Tensor,
         sequence_length: int,
@@ -1303,7 +1301,6 @@ class MoshiModel(MoshiPreTrainedModel):
             attentions=all_self_attns,
         )
 
-    # Copied from transformers.models.phimoe.modeling_phimoe.PhimoeModel._update_causal_mask with Phimoe->Moshi
     def _update_causal_mask(
         self,
         attention_mask: Union[torch.Tensor, "BlockMask"],
@@ -1386,7 +1383,6 @@ class MoshiModel(MoshiPreTrainedModel):
         return causal_mask
 
     @staticmethod
-    # Copied from transformers.models.phimoe.modeling_phimoe.PhimoeModel._prepare_4d_causal_attention_mask_with_cache_position with Phimoe->Moshi
     def _prepare_4d_causal_attention_mask_with_cache_position(
         attention_mask: torch.Tensor,
         sequence_length: int,
@@ -1706,7 +1702,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
 
             if audio_codes is not None:
                 audio_inputs_embeds = sum(
-                    [self.embed_tokens[codebook](audio_codes[:, codebook]) for codebook in range(audio_codes.shape[1])]
+                    self.embed_tokens[codebook](audio_codes[:, codebook]) for codebook in range(audio_codes.shape[1])
                 )
                 inputs_embeds = (
                     audio_inputs_embeds
@@ -1876,20 +1872,18 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
             if user_audio_codes is not None and moshi_audio_codes is not None:
                 audio_codes = torch.cat([moshi_audio_codes, user_audio_codes], dim=1)
                 audio_inputs_embeds = sum(
-                    [self.embed_tokens[codebook](audio_codes[:, codebook]) for codebook in range(audio_codes.shape[1])]
+                    self.embed_tokens[codebook](audio_codes[:, codebook]) for codebook in range(audio_codes.shape[1])
                 )
             elif moshi_audio_codes is not None:
                 audio_codes = moshi_audio_codes
                 audio_inputs_embeds = sum(
-                    [self.embed_tokens[codebook](audio_codes[:, codebook]) for codebook in range(audio_codes.shape[1])]
+                    self.embed_tokens[codebook](audio_codes[:, codebook]) for codebook in range(audio_codes.shape[1])
                 )
             elif user_audio_codes is not None:
                 audio_codes = user_audio_codes
                 audio_inputs_embeds = sum(
-                    [
-                        self.embed_tokens[codebook](audio_codes[:, codebook + self.num_codebooks])
-                        for codebook in range(audio_codes.shape[1])
-                    ]
+                    self.embed_tokens[codebook](audio_codes[:, codebook + self.num_codebooks])
+                    for codebook in range(audio_codes.shape[1])
                 )
 
             if input_ids is not None:

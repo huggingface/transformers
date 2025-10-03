@@ -797,8 +797,7 @@ def is_copy_consistent(
         orig_idx = -1
         observed_code = ""
         for name, code in observed_code_blocks.items():
-            if code.endswith("\n"):
-                code = code[:-1]
+            code = code.removesuffix("\n")
             for code_line in code.split("\n"):
                 orig_idx += 1
                 if code_line.strip() and not name.startswith(("_ignored_existing_block_", "_ignored_new_block_")):

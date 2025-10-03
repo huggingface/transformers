@@ -21,6 +21,7 @@ from typing import Callable, Optional, Union
 
 import numpy as np
 import torch
+from safetensors.torch import load_file as safe_load_file
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
@@ -50,7 +51,6 @@ from ...utils import (
     cached_file,
     check_torch_load_is_safe,
     is_peft_available,
-    is_safetensors_available,
     is_torch_flex_attn_available,
     logging,
 )
@@ -59,10 +59,6 @@ from .configuration_wav2vec2 import Wav2Vec2Config
 
 WAV2VEC2_ADAPTER_PT_FILE = "adapter.{}.bin"
 WAV2VEC2_ADAPTER_SAFE_FILE = "adapter.{}.safetensors"
-
-if is_safetensors_available():
-    from safetensors.torch import load_file as safe_load_file
-
 
 if is_torch_flex_attn_available():
     from ...integrations.flex_attention import make_flex_block_causal_mask
@@ -1152,9 +1148,6 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force the (re-)download of the model weights and configuration files, overriding the
                 cached versions if they exist.
-            resume_download:
-                Deprecated and ignored. All downloads are now resumed by default when possible.
-                Will be removed in v5 of Transformers.
             proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
@@ -1208,13 +1201,12 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
 
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
-        resume_download = kwargs.pop("resume_download", None)
         proxies = kwargs.pop("proxies", None)
         local_files_only = kwargs.pop("local_files_only", False)
         token = kwargs.pop("token", None)
         use_auth_token = kwargs.pop("use_auth_token", None)
         revision = kwargs.pop("revision", None)
-        use_safetensors = kwargs.pop("use_safetensors", None if is_safetensors_available() else False)
+        use_safetensors = kwargs.pop("use_safetensors", None)
 
         if use_auth_token is not None:
             warnings.warn(
@@ -1239,7 +1231,6 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
                     model_path_or_id,
                     filename=filepath,
                     force_download=force_download,
-                    resume_download=resume_download,
                     proxies=proxies,
                     local_files_only=local_files_only,
                     token=token,
@@ -1274,7 +1265,6 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
                     model_path_or_id,
                     filename=filepath,
                     force_download=force_download,
-                    resume_download=resume_download,
                     proxies=proxies,
                     local_files_only=local_files_only,
                     token=token,
