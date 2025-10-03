@@ -64,7 +64,6 @@ class VocosProcessor(ProcessorMixin):
 
     def __init__(self, feature_extractor, audio_tokenizer):
         super().__init__(feature_extractor=feature_extractor, audio_tokenizer=audio_tokenizer)
-        self.audio_tokenizer.eval()
 
     def __call__(
         self,
@@ -98,9 +97,7 @@ class VocosProcessor(ProcessorMixin):
 
         output_kwargs = self._merge_kwargs(VocosProcessorKwargs, **kwargs)
         audio_kwargs = output_kwargs["audio_kwargs"]
-        common_kwargs = output_kwargs["common_kwargs"]
-
-        return_tensors = common_kwargs.pop("return_tensors", None)
+        return_tensors = audio_kwargs.get("return_tensors", None)
         if return_tensors != "pt":
             raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
 
@@ -124,7 +121,7 @@ class VocosProcessor(ProcessorMixin):
                 elif audio.dim() == 2:
                     audio = audio.unsqueeze(1)
                 with torch.no_grad():
-                    encoded_frames = self.audio_tokenizer.encoder(audio)
+                    encoded_frames = self.audio_tokenizer.encoder(audio.to(self.audio_tokenizer.device))
                     codes = self.audio_tokenizer.quantizer.encode(encoded_frames, bandwidth=bandwidth)
             else:
                 features = self.feature_extractor(audio, **audio_kwargs).input_features
@@ -142,7 +139,7 @@ class VocosProcessor(ProcessorMixin):
             num_quantizers = self.audio_tokenizer.quantizer.get_num_quantizers_for_bandwidth(max(self.bandwidths))
             codebook_weights = torch.cat(
                 [layer.codebook.embed for layer in self.audio_tokenizer.quantizer.layers[:num_quantizers]], dim=0
-            )
+            ).to(codes.device)
             num_bins = self.audio_tokenizer.quantizer.codebook_size
             # Embed with position https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/pretrained.py#L117
             offsets = torch.arange(0, num_bins * len(codes), num_bins, device=codes.device).reshape(-1, 1, 1)

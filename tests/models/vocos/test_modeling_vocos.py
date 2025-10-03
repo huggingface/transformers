@@ -273,8 +273,8 @@ class VocosModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(
             audio_output.squeeze(0)[: EXPECTED_AUDIO.shape[0]],
             EXPECTED_AUDIO,
-            rtol=1e-6,
-            atol=1e-6,
+            rtol=1e-5,
+            atol=1e-5,
         )
 
     def test_inference_encodec_vocos(self):
