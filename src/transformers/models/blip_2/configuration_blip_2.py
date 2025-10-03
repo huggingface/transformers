@@ -316,7 +316,9 @@ class Blip2Config(PretrainedConfig):
         self.use_decoder_only_language_model = self.text_config.model_type in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
         self.initializer_factor = 1.0
         self.initializer_range = 0.02
-        super().__init__(**kwargs, is_encoder_decoder=self.text_config.is_encoder_decoder)
+
+        kwargs["is_encoder_decoder"] = self.text_config.is_encoder_decoder
+        super().__init__(**kwargs)
 
 
 __all__ = ["Blip2Config", "Blip2QFormerConfig", "Blip2VisionConfig"]

@@ -211,9 +211,9 @@ class MusicgenConfig(PretrainedConfig):
         self.text_encoder = text_encoder
         self.audio_encoder = audio_encoder
         self.decoder = decoder
-        self.is_encoder_decoder = True
         self.initializer_factor = self.decoder.initializer_factor
 
+        kwargs["is_encoder_decoder"] = True
         super().__init__(**kwargs)
 
     @property

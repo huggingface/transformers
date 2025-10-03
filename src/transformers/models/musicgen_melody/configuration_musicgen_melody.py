@@ -224,9 +224,9 @@ class MusicgenMelodyConfig(PretrainedConfig):
         self.text_encoder = text_encoder
         self.audio_encoder = audio_encoder
         self.decoder = decoder
-        self.is_encoder_decoder = False
         self.num_chroma = num_chroma
         self.chroma_length = chroma_length
+        kwargs["is_encoder_decoder"] = False
         super().__init__(**kwargs)
 
     @property
