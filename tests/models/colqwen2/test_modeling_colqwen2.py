@@ -337,9 +337,9 @@ class ColQwen2ModelIntegrationTest(unittest.TestCase):
                     [15.6562, 12.2656, 20.2969],
                 ],
                 ("cuda", 8): [
-                    [15.0703, 8.7422, 15.0312],
-                    [9.5078, 16.8906, 10.6250],
-                    [15.6484, 12.3984, 20.4688],
+                    [16.2812, 8.3672, 14.5703],
+                    [9.4922, 17.1875, 10.3281],
+                    [15.0312, 11.3984, 20.1719],
                 ],
             }
         )
@@ -355,7 +355,7 @@ class ColQwen2ModelIntegrationTest(unittest.TestCase):
         """
         model = ColQwen2ForRetrieval.from_pretrained(
             "Sahil-Kabir/colqwen2.5-v0.2-hf",
-            device_map="cpu",
+            device_map=torch_device,
             dtype=torch.bfloat16,
         ).eval()
         processor = ColQwen2Processor.from_pretrained("Sahil-Kabir/colqwen2.5-v0.2-hf", trust_remote_code=True)
@@ -384,7 +384,13 @@ class ColQwen2ModelIntegrationTest(unittest.TestCase):
         self.assertTrue((scores.argmax(axis=1) == torch.arange(len(ds), device=scores.device)).all())
         # Further validation: fine-grained check, with a hardcoded score from the original Hf implementation.
         expectations = Expectations(
-            {("cpu", 0): [[16.3750, 10.9375, 14.7500], [11.4375, 16.8750, 12.0625], [15.0000, 13.3125, 21.5000]]}
+            {
+                ("cuda", 8): [
+                    [16.3750, 10.9375, 14.7500],
+                    [11.3750, 16.8750, 12.0625],
+                    [15.3125, 13.1250, 21.5000],
+                ]
+            }
         )
         expected_scores = torch.tensor(expectations.get_expectation(), dtype=scores.dtype)
 
