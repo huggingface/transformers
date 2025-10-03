@@ -13,13 +13,12 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2019-09-26 and added to Hugging Face Transformers on 2020-11-16.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white" >
-        <img alt= "TensorFlow" src= "https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white" >
-        <img alt= "Flax" src="https://img.shields.io/badge/Flax-29a79b.svg?style…Nu+W0m6K/I9gGPd/dfx/EN/wN62AhsBWuAAAAAElFTkSuQmCC">
-        <img alt="SDPA" src= "https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white" > 
+        <img alt="SDPA" src= "https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white" >
     </div>
 </div>
 
@@ -51,7 +50,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="fill-mask",
     model="albert-base-v2",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 pipeline("Plants create [MASK] through a process known as photosynthesis.", top_k=5)
@@ -67,7 +66,7 @@ from transformers import AutoModelForMaskedLM, AutoTokenizer
 tokenizer = AutoTokenizer.from_pretrained("albert/albert-base-v2")
 model = AutoModelForMaskedLM.from_pretrained(
     "albert/albert-base-v2",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     attn_implementation="sdpa",
     device_map="auto"
 )
@@ -109,42 +108,30 @@ The resources provided in the following sections consist of a list of official H
 
 - [`AlbertForSequenceClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification).
 
-- [`TFAlbertForSequenceClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/text-classification).
-
-- [`FlaxAlbertForSequenceClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/text-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification_flax.ipynb).
 - Check the [Text classification task guide](../tasks/sequence_classification) on how to use the model.
 
 <PipelineTag pipeline="token-classification"/>
 
 - [`AlbertForTokenClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/token-classification).
 
-- [`TFAlbertForTokenClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/token-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb).
-
-- [`FlaxAlbertForTokenClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/token-classification).
 - [Token classification](https://huggingface.co/course/chapter7/2?fw=pt) chapter of the 🤗 Hugging Face Course.
 - Check the [Token classification task guide](../tasks/token_classification) on how to use the model.
 
 <PipelineTag pipeline="fill-mask"/>
 
 - [`AlbertForMaskedLM`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling#robertabertdistilbert-and-masked-language-modeling) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb).
-- [`TFAlbertForMaskedLM`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/language-modeling#run_mlmpy) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb).
-- [`FlaxAlbertForMaskedLM`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/language-modeling#masked-language-modeling) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/masked_language_modeling_flax.ipynb).
 - [Masked language modeling](https://huggingface.co/course/chapter7/3?fw=pt) chapter of the 🤗 Hugging Face Course.
 - Check the [Masked language modeling task guide](../tasks/masked_language_modeling) on how to use the model.
 
 <PipelineTag pipeline="question-answering"/>
 
 - [`AlbertForQuestionAnswering`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb).
-- [`TFAlbertForQuestionAnswering`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/question-answering) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering-tf.ipynb).
-- [`FlaxAlbertForQuestionAnswering`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/question-answering).
 - [Question answering](https://huggingface.co/course/chapter7/7?fw=pt) chapter of the 🤗 Hugging Face Course.
 - Check the [Question answering task guide](../tasks/question_answering) on how to use the model.
 
 **Multiple choice**
 
 - [`AlbertForMultipleChoice`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/multiple-choice) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice.ipynb).
-- [`TFAlbertForMultipleChoice`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/multiple-choice) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice-tf.ipynb).
-
 - Check the [Multiple choice task guide](../tasks/multiple_choice) on how to use the model.
 
 ## AlbertConfig
@@ -162,11 +149,6 @@ The resources provided in the following sections consist of a list of official H
 ## Albert specific outputs
 
 [[autodoc]] models.albert.modeling_albert.AlbertForPreTrainingOutput
-
-[[autodoc]] models.albert.modeling_tf_albert.TFAlbertForPreTrainingOutput
-
-<frameworkcontent>
-<pt>
 
 ## AlbertModel
 
@@ -195,69 +177,3 @@ The resources provided in the following sections consist of a list of official H
 ## AlbertForQuestionAnswering
 
 [[autodoc]] AlbertForQuestionAnswering - forward
-
-</pt>
-
-<tf>
-
-## TFAlbertModel
-
-[[autodoc]] TFAlbertModel - call
-
-## TFAlbertForPreTraining
-
-[[autodoc]] TFAlbertForPreTraining - call
-
-## TFAlbertForMaskedLM
-
-[[autodoc]] TFAlbertForMaskedLM - call
-
-## TFAlbertForSequenceClassification
-
-[[autodoc]] TFAlbertForSequenceClassification - call
-
-## TFAlbertForMultipleChoice
-
-[[autodoc]] TFAlbertForMultipleChoice - call
-
-## TFAlbertForTokenClassification
-
-[[autodoc]] TFAlbertForTokenClassification - call
-
-## TFAlbertForQuestionAnswering
-
-[[autodoc]] TFAlbertForQuestionAnswering - call
-
-</tf>
-<jax>
-
-## FlaxAlbertModel
-
-[[autodoc]] FlaxAlbertModel - **call**
-
-## FlaxAlbertForPreTraining
-
-[[autodoc]] FlaxAlbertForPreTraining - **call**
-
-## FlaxAlbertForMaskedLM
-
-[[autodoc]] FlaxAlbertForMaskedLM - **call**
-
-## FlaxAlbertForSequenceClassification
-
-[[autodoc]] FlaxAlbertForSequenceClassification - **call**
-
-## FlaxAlbertForMultipleChoice
-
-[[autodoc]] FlaxAlbertForMultipleChoice - **call**
-
-## FlaxAlbertForTokenClassification
-
-[[autodoc]] FlaxAlbertForTokenClassification - **call**
-
-## FlaxAlbertForQuestionAnswering
-
-[[autodoc]] FlaxAlbertForQuestionAnswering - **call**
-
-</jax>
-</frameworkcontent>

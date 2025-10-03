@@ -19,7 +19,6 @@ from typing import Callable, Optional, Union
 
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
@@ -351,13 +350,15 @@ class MllamaVisionEncoder(nn.Module):
                 [What are attention masks?](../glossary#attention-mask)
 
         """
+        encoder_states = ()
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
                 hidden_state=hidden_states,
                 attention_mask=attention_mask,
             )
+            encoder_states = encoder_states + (hidden_states,)
 
-        return BaseModelOutput(last_hidden_state=hidden_states)
+        return BaseModelOutput(last_hidden_state=hidden_states, hidden_states=encoder_states)
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->MllamaText
@@ -633,7 +634,7 @@ class MllamaSelfAttentionDecoderLayer(GradientCheckpointingLayer):
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
-            past_key_values (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+            past_key_values (`Cache`, *optional*): cached past key and value projection states
             cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
                 Indices depicting the position of the input sequence tokens in the sequence
             position_embeddings (`tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
@@ -1113,7 +1114,7 @@ class MllamaVisionModel(MllamaPreTrainedModel):
         hidden_state = hidden_state.reshape(batch_size, num_concurrent_media, num_tiles, num_patches, dim)
 
         # Collect intermediate layer outputs from encoder output
-        all_intermediate_hidden_states = [output.last_hidden_state for _ in self.intermediate_layers_indices]
+        all_intermediate_hidden_states = [output.hidden_states[i] for i in self.intermediate_layers_indices]
         intermediate_hidden_states = torch.stack(all_intermediate_hidden_states, dim=-1)
 
         # Remove padding from intermediate hidden states
@@ -1227,7 +1228,7 @@ class MllamaTextModel(MllamaPreTrainedModel):
         hidden_states = inputs_embeds
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -1296,12 +1297,6 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
         self.lm_head = nn.Linear(self.text_config.hidden_size, self.vocab_size, bias=False)
 
         self.post_init()
-
-    def set_decoder(self, decoder):
-        self.model = decoder
-
-    def get_decoder(self):
-        return self.model
 
     @can_return_tuple
     @auto_docstring
@@ -1569,7 +1564,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model.get_decoder()
 
-    # Make modules available throught conditional class for BC
+    # Make modules available through conditional class for BC
     @property
     def language_model(self):
         return self.model.language_model

@@ -48,7 +48,7 @@ tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B")
 model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.1-8B", device_map="auto", quantization_config=quantization_config)
 
 prompt = "Hello, my llama is cute"
-inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
+inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 generated_ids = model.generate(**inputs)
 outputs = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
 ```
@@ -69,7 +69,7 @@ Learn in more detail the concepts underlying 8-bit quantization in the [Gentle I
 
 Set up a [`BitsAndBytesConfig`] and set `load_in_4bit=True` to load a model in 4-bit precision. The [`BitsAndBytesConfig`] is passed to the `quantization_config` parameter in [`~PreTrainedModel.from_pretrained`].
 
-Allow Accelerate to automatically distribute the model across your available hardware by setting `device_map=“auto”`.
+Allow Accelerate to automatically distribute the model across your available hardware by setting `device_map="auto"`.
 
 Place all inputs on the same device as the model.
 
@@ -175,7 +175,7 @@ There are three supported implementations available.
 - [xFormers](https://github.com/facebookresearch/xformers) or Memory-Efficient Attention is able to support models with the fp32 torch type.
 - C++ implementation of scaled dot product attention
 
-SDPA is used by default for PyTorch v2.1.1. and greater when an implementation is available. You could explicitly enable SDPA by setting `attn_implementation="sdpa"` in [`~PreTrainedModel.from_pretrained`] though. Certain attention parameters, such as `head_mask` and `output_attentions=True`, are unsupported and returns a warning that Transformers will fall back to the (slower) eager implementation.
+SDPA is used by default for PyTorch v2.1.1. and greater when an implementation is available. You could explicitly enable SDPA by setting `attn_implementation="sdpa"` in [`~PreTrainedModel.from_pretrained`] though. Certain attention parameters, such as `output_attentions=True`, are unsupported and returns a warning that Transformers will fall back to the (slower) eager implementation.
 
 Refer to the [AttentionInterface](./attention_interface) guide to learn how to change the attention implementation after loading a model.
 
@@ -197,10 +197,10 @@ from torch.nn.attention import SDPBackend, sdpa_kernel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B")
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.1-8B", device_map="auto").to("cuda")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.1-8B", device_map="auto")
 
 input_text = "Hello, my llama is cute"
-inputs = tokenizer(input_text, return_tensors="pt").to("cuda")
+inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
 
 with sdpa_kernel(SDPBackend.FLASH_ATTENTION):
     outputs = model.generate(**inputs)
@@ -245,7 +245,7 @@ Enable FlashAttention2 by setting `attn_implementation="flash_attention_2"` in [
 ```py
 from transformers import AutoModelForCausalLM
 
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.1-8B", device_map="auto", torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.1-8B", device_map="auto", dtype=torch.bfloat16, attn_implementation="flash_attention_2")
 ```
 
 ### Benchmarks

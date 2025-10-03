@@ -15,6 +15,8 @@
 
 import unittest
 
+import pytest
+
 from transformers import is_torch_available
 from transformers.testing_utils import (
     require_read_token,
@@ -27,14 +29,12 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 if is_torch_available():
-    from transformers import Lfm2Config, Lfm2ForCausalLM, Lfm2Model
+    from transformers import Lfm2ForCausalLM, Lfm2Model
 
 
 class Lfm2ModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = Lfm2Config
         base_model_class = Lfm2Model
-        causal_lm_class = Lfm2ForCausalLM
 
     def __init__(
         self,
@@ -47,7 +47,6 @@ class Lfm2ModelTester(CausalLMModelTester):
 
 @require_torch
 class Lfm2ModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (Lfm2Model, Lfm2ForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": Lfm2Model,
@@ -56,8 +55,6 @@ class Lfm2ModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
-    test_pruning = False
     fx_compatible = False
     model_tester_class = Lfm2ModelTester
     # used in `test_torch_compile_for_training`
@@ -73,21 +70,10 @@ class Lfm2ModelTest(CausalLMModelTest, unittest.TestCase):
     def test_past_key_values_format(self):
         pass
 
-    @unittest.skip("Lfm2 has a special cache format which is not compatible with contrastive search")
-    def test_contrastive_generate(self):
-        pass
-
-    @unittest.skip("Lfm2 has a special cache format which is not compatible with contrastive search")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip("Lfm2 has a special cache format which is not compatible with contrastive search")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
     @unittest.skip(
         "Lfm2 has a special cache format which is not compatible with compile as it has static address for conv cache"
     )
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
 

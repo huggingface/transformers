@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Optional
 
 from .base import HfQuantizer
 
@@ -89,49 +89,36 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
                     "Please use a quantized checkpoint or remove the CPU or disk device from the device_map."
                 )
 
-    def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
-        if torch_dtype is None:
-            torch_dtype = torch.bfloat16
+    def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
+        if dtype is None:
+            dtype = torch.bfloat16
             logger.info(
-                "Overriding torch_dtype=%s with `torch_dtype=torch.bloat16` due to "
+                "Overriding dtype=%s with `dtype=torch.bloat16` due to "
                 "requirements of `fbgemm-gpu` to enable model loading in fp8. "
-                "Pass your own torch_dtype to specify the dtype of the remaining non-linear layers or pass"
-                " torch_dtype=torch.bfloat16 to remove this warning.",
-                torch_dtype,
+                "Pass your own dtype to specify the dtype of the remaining non-linear layers or pass"
+                " dtype=torch.bfloat16 to remove this warning.",
+                dtype,
             )
-        elif torch_dtype == torch.float16:
+        elif dtype == torch.float16:
             raise ValueError(
-                "You cannot use FP8 with torch_dtype=torch.float16.We recommend you passing torch_dtype=torch.bfloat16"
+                "You cannot use FP8 with dtype=torch.float16.We recommend you passing dtype=torch.bfloat16"
             )
-        return torch_dtype
+        return dtype
 
-    def check_quantized_param(
-        self,
-        model: "PreTrainedModel",
-        param_value: "torch.Tensor",
-        param_name: str,
-        state_dict: dict[str, Any],
-        **kwargs,
-    ):
+    def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         from ..integrations import FbgemmFp8Linear, FbgemmFp8Llama4TextExperts
 
         module, tensor_name = get_module_from_name(model, param_name)
 
         if isinstance(module, FbgemmFp8Linear):
             if self.pre_quantized or tensor_name == "bias":
-                if tensor_name == "weight" and param_value.dtype != torch.float8_e4m3fn:
-                    raise ValueError("Expect quantized weights but got an unquantized weight")
                 return False
             else:
-                if tensor_name == "weight_scale":
-                    raise ValueError("Expect unquantized weights but got a quantized weight_scale")
                 return True
         if isinstance(module, FbgemmFp8Llama4TextExperts):
             if self.pre_quantized or tensor_name == "bias":
                 return False
             else:
-                if tensor_name == "gate_up_proj_scale" or tensor_name == "down_proj_scale":
-                    raise ValueError("Expect unquantized weights but got a quantized weight_scale")
                 return True
         return False
 
@@ -141,16 +128,25 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
         param_value: "torch.Tensor",
         param_name: str,
         target_device: "torch.device",
-        state_dict: dict[str, Any],
-        unexpected_keys: Optional[list[str]] = None,
+        **kwargs,
     ):
-        """
-        Quantizes weights into weight and weight_scale
-        """
-
-        from ..integrations import FbgemmFp8Llama4TextExperts
+        from ..integrations import FbgemmFp8Linear, FbgemmFp8Llama4TextExperts
 
         module, tensor_name = get_module_from_name(model, param_name)
+
+        # Sanity checks
+        if isinstance(module, FbgemmFp8Linear):
+            if self.pre_quantized or tensor_name == "bias":
+                if tensor_name == "weight" and param_value.dtype != torch.float8_e4m3fn:
+                    raise ValueError("Expect quantized weights but got an unquantized weight")
+            else:
+                if tensor_name == "weight_scale":
+                    raise ValueError("Expect unquantized weights but got a quantized weight_scale")
+        if isinstance(module, FbgemmFp8Llama4TextExperts):
+            if not (self.pre_quantized or tensor_name == "bias"):
+                if tensor_name == "gate_up_proj_scale" or tensor_name == "down_proj_scale":
+                    raise ValueError("Expect unquantized weights but got a quantized weight_scale")
+
         if isinstance(module, FbgemmFp8Llama4TextExperts):
             if tensor_name == "gate_up_proj":
                 # Process each expert separately
@@ -194,8 +190,6 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
 
         module._parameters[tensor_name] = torch.nn.Parameter(new_value.to(target_device))
 
-        if unexpected_keys is not None and param_name in unexpected_keys:
-            unexpected_keys.remove(param_name)
         del param_name
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):

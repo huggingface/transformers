@@ -181,7 +181,6 @@ class GraniteMoeSharedModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
     test_pruning = False
     fx_compatible = False
 
@@ -352,7 +351,6 @@ class GraniteMoeSharedIntegrationTest(unittest.TestCase):
 
     @slow
     def test_model_3b_generation(self):
-        # ground truth text generated with dola_layers="low", repetition_penalty=1.2
         # fmt: off
         EXPECTED_TEXT_COMPLETIONS = Expectations(
             {

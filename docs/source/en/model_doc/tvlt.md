@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2022-09-28 and added to Hugging Face Transformers on 2023-06-20.*
 
 # TVLT
 
@@ -63,15 +64,15 @@ The original code can be found [here](https://github.com/zinengtang/TVLT). This 
 [[autodoc]] TvltProcessor
     - __call__
 
-## TvltImageProcessor
-
-[[autodoc]] TvltImageProcessor
-    - preprocess
-
 ## TvltFeatureExtractor
 
 [[autodoc]] TvltFeatureExtractor
     - __call__
+
+## TvltImageProcessor
+
+[[autodoc]] TvltImageProcessor
+    - preprocess
 
 ## TvltModel
 

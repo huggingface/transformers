@@ -51,16 +51,16 @@ class SpQRHfQuantizer(HfQuantizer):
         if not is_spqr_available():
             raise ImportError("Using `spqr` quantization requires SpQR: `pip install spqr_quant[gpu]`")
 
-    def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
-        if torch_dtype is None:
-            torch_dtype = torch.float16
+    def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
+        if dtype is None:
+            dtype = torch.float16
             logger.info("Assuming SpQR inference on GPU and loading the model in `torch.float16`.")
-        elif torch_dtype != torch.float16:
+        elif dtype != torch.float16:
             raise ValueError(
                 "You cannot use any type other than torch.float16 for SpQR. Please either leave it None or set it to"
                 "torch.float16 explicitly."
             )
-        return torch_dtype
+        return dtype
 
     def _process_model_before_weight_loading(
         self,

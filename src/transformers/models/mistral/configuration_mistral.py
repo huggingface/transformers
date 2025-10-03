@@ -157,6 +157,11 @@ class MistralConfig(PretrainedConfig):
         self.rope_theta = rope_theta
         self.attention_dropout = attention_dropout
 
+        if "layer_types" in kwargs:
+            logger.warning_once(
+                "Detected Mistral model with layer_types. Consider using AutoModel or Ministral classes instead to enable alternating attention compatibility."
+            )
+
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,

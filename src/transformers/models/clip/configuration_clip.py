@@ -16,12 +16,11 @@
 
 from collections import OrderedDict
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 
 if TYPE_CHECKING:
     from ...processing_utils import ProcessorMixin
-    from ...utils import TensorType
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
@@ -296,7 +295,7 @@ class CLIPConfig(PretrainedConfig):
 
             # Give a warning if the values exist in both `_text_config_dict` and `text_config` but being different.
             for key, value in _text_config_dict.items():
-                if key in text_config and value != text_config[key] and key not in ["transformers_version"]:
+                if key in text_config and value != text_config[key] and key != "transformers_version":
                     # If specified in `text_config_dict`
                     if key in text_config_dict:
                         message = (
@@ -328,7 +327,7 @@ class CLIPConfig(PretrainedConfig):
 
             # Give a warning if the values exist in both `_vision_config_dict` and `vision_config` but being different.
             for key, value in _vision_config_dict.items():
-                if key in vision_config and value != vision_config[key] and key not in ["transformers_version"]:
+                if key in vision_config and value != vision_config[key] and key != "transformers_version":
                     # If specified in `vision_config_dict`
                     if key in vision_config_dict:
                         message = (
@@ -393,13 +392,15 @@ class CLIPOnnxConfig(OnnxConfig):
         processor: "ProcessorMixin",
         batch_size: int = -1,
         seq_length: int = -1,
-        framework: Optional["TensorType"] = None,
     ) -> Mapping[str, Any]:
         text_input_dict = super().generate_dummy_inputs(
-            processor.tokenizer, batch_size=batch_size, seq_length=seq_length, framework=framework
+            processor.tokenizer,
+            batch_size=batch_size,
+            seq_length=seq_length,
         )
         image_input_dict = super().generate_dummy_inputs(
-            processor.image_processor, batch_size=batch_size, framework=framework
+            processor.image_processor,
+            batch_size=batch_size,
         )
         return {**text_input_dict, **image_input_dict}
 

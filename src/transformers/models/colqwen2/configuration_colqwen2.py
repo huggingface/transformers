@@ -75,9 +75,7 @@ class ColQwen2Config(PretrainedConfig):
                     "The `model_type` key is missing in the `vlm_config` dictionary. Please provide the model type."
                 )
             vlm_config = CONFIG_MAPPING[vlm_config["model_type"]](**vlm_config)
-        elif isinstance(vlm_config, PretrainedConfig):
-            vlm_config = vlm_config
-        else:
+        elif not isinstance(vlm_config, PretrainedConfig):
             raise TypeError(
                 f"Invalid type for `vlm_config`. Expected `PretrainedConfig`, `dict`, or `None`, but got {type(vlm_config)}."
             )
@@ -87,8 +85,8 @@ class ColQwen2Config(PretrainedConfig):
         self.initializer_range = initializer_range
         super().__init__(**kwargs)
 
-    def get_text_config(self, decoder=False) -> PretrainedConfig:
-        return self.vlm_config.get_text_config(decoder=decoder)
+    def get_text_config(self, *args, **kwargs) -> PretrainedConfig:
+        return self.vlm_config.get_text_config(*args, **kwargs)
 
 
 __all__ = ["ColQwen2Config"]

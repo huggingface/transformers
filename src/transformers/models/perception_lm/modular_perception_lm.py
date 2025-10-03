@@ -18,9 +18,9 @@ from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from torch import nn
 
+from ...cache_utils import Cache
 from ...utils import (
     auto_docstring,
     can_return_tuple,
@@ -98,8 +98,7 @@ class PerceptionLMPreTrainedModel(LlavaPreTrainedModel):
 class PerceptionLMModelOutputWithPast(LlavaModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
@@ -121,8 +120,7 @@ class PerceptionLMCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
@@ -172,11 +170,11 @@ class PerceptionLMModel(LlavaModel):
         self,
         input_ids: torch.LongTensor,
         inputs_embeds: torch.FloatTensor,
-        image_features: torch.FloatTensor = None,
-        video_features: torch.FloatTensor = None,
+        image_features: Optional[torch.FloatTensor] = None,
+        video_features: Optional[torch.FloatTensor] = None,
     ):
         """
-        Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
         equal to the length of multimodal features. If the lengths are different, an error is raised.
         """
         if input_ids is None:
@@ -217,7 +215,7 @@ class PerceptionLMModel(LlavaModel):
         pixel_values_videos: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -325,7 +323,7 @@ class PerceptionLMForConditionalGeneration(LlavaForConditionalGeneration):
         pixel_values_videos: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -335,6 +333,54 @@ class PerceptionLMForConditionalGeneration(LlavaForConditionalGeneration):
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **lm_kwargs,
     ) -> Union[tuple, PerceptionLMCausalLMOutputWithPast]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+        Example:
+
+        ```python
+        from transformers import AutoProcessor, AutoModelForImageTextToText
+        from huggingface_hub import hf_hub_download
+
+        MODEL_PATH = "facebook/Perception-LM-1B"
+        processor = AutoProcessor.from_pretrained(MODEL_PATH, use_fast=True)
+        model = AutoModelForImageTextToText.from_pretrained(MODEL_PATH).to("cuda")
+        test_image_file = hf_hub_download(
+                    repo_id="shumingh/perception_lm_test_images",
+                    filename="14496_0.PNG",
+                    repo_type="dataset",
+        )
+        conversation = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "url": test_image_file,
+                    },
+                    {"type": "text", "text": "Describe the bar plot in the image."},
+                ],
+            }
+        ]
+
+        inputs = processor.apply_chat_template(
+            [conversation],
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+        )
+        inputs = inputs.to(model.device)
+        generate_ids = model.generate(**inputs, max_new_tokens=256)
+        input_length = inputs["input_ids"].shape[1]
+        generate_ids_without_inputs = generate_ids[:, input_length:]
+
+        for output in processor.batch_decode(generate_ids_without_inputs, skip_special_tokens=True):
+            print(output)
+        ```"""
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,

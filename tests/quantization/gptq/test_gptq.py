@@ -117,7 +117,7 @@ class GPTQTest(unittest.TestCase):
         Setup quantized model
         """
         cls.model_fp16 = AutoModelForCausalLM.from_pretrained(
-            cls.model_name, torch_dtype=torch.float16, device_map=cls.device_map
+            cls.model_name, dtype=torch.float16, device_map=cls.device_map
         )
         cls.mem_fp16 = cls.model_fp16.get_memory_footprint()
 
@@ -136,7 +136,7 @@ class GPTQTest(unittest.TestCase):
 
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.model_name,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
             device_map=cls.device_map,
             quantization_config=cls.quantization_config,
         )
@@ -343,7 +343,7 @@ class GPTQTestActOrderExllama(unittest.TestCase):
         cls.quantization_config = GPTQConfig(bits=4, max_input_length=4028)
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.model_name,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
             device_map={"": 0},
             quantization_config=cls.quantization_config,
         )
@@ -419,7 +419,7 @@ class GPTQTestExllamaV2(unittest.TestCase):
         cls.quantization_config = GPTQConfig(bits=4, exllama_config={"version": 2})
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.model_name,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
             device_map={"": 0},
             quantization_config=cls.quantization_config,
         )

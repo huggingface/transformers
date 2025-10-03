@@ -24,7 +24,7 @@ import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image
-from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, BatchEncoding, TextInput
 from ...utils import logging
 
@@ -87,14 +87,7 @@ def get_image_prompt_string(
     )
 
 
-class Idefics3ImagesKwargs(ImagesKwargs, total=False):
-    return_row_col_info: Optional[bool]
-    max_image_size: Optional[dict[str, int]]
-
-
 class Idefics3ProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: Idefics3ImagesKwargs
-
     _defaults = {
         "text_kwargs": {
             "add_special_tokens": True,
@@ -106,9 +99,6 @@ class Idefics3ProcessorKwargs(ProcessingKwargs, total=False):
             "return_row_col_info": True,
         },
     }
-
-
-Idefics3ProcessorKwargs.__annotations__["images_kwargs"] = Idefics3ImagesKwargs  # python 3.8 compatibility
 
 
 class Idefics3Processor(ProcessorMixin):
@@ -138,11 +128,6 @@ class Idefics3Processor(ProcessorMixin):
     def __init__(
         self, image_processor, tokenizer=None, image_seq_len: int = 169, chat_template: Optional[str] = None, **kwargs
     ):
-        if image_processor is None:
-            raise ValueError("You need to specify an `image_processor`.")
-        if tokenizer is None:
-            raise ValueError("You need to specify a `tokenizer`.")
-
         self.fake_image_token = AddedToken("<fake_token_around_image>", normalized=False, special=True).content
         self.image_token = AddedToken("<image>", normalized=False, special=True).content
         self.end_of_utterance_token = AddedToken("<end_of_utterance>", normalized=False, special=True).content
@@ -187,8 +172,6 @@ class Idefics3Processor(ProcessorMixin):
         self,
         images: Union[ImageInput, list[ImageInput], list[list[ImageInput]]] = None,
         text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
-        audio=None,
-        videos=None,
         image_seq_len: Optional[int] = None,
         **kwargs: Unpack[Idefics3ProcessorKwargs],
     ) -> BatchEncoding:
@@ -407,28 +390,6 @@ class Idefics3Processor(ProcessorMixin):
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         return MultiModalData(**vision_data)
-
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to Idefics3TokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        batched_decode_output = self.tokenizer.batch_decode(*args, **kwargs)
-        return [self._regex_to_remove_extra_special_tokens.sub("<image>", s) for s in batched_decode_output]
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to Idefics3TokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        decode_output = self.tokenizer.decode(*args, **kwargs)
-        return self._regex_to_remove_extra_special_tokens.sub("<image>", decode_output)
-
-    @property
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(image_processor_input_names + tokenizer_input_names))
 
 
 __all__ = ["Idefics3Processor"]

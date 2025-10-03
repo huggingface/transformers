@@ -76,7 +76,7 @@ def verify_out_features_out_indices(
 
 def _align_output_features_output_indices(
     out_features: Optional[list[str]],
-    out_indices: Optional[Union[list[int], tuple[int]]],
+    out_indices: Optional[Union[list[int], tuple[int, ...]]],
     stage_names: list[str],
 ):
     """
@@ -139,6 +139,10 @@ def get_aligned_output_features_output_indices(
 
 class BackboneMixin:
     backbone_type: Optional[BackboneType] = None
+
+    # Attribute to indicate if the backbone has attention and can return attention outputs.
+    # Should be set to `False` for conv-based models to be able to run `forward_with_filtered_kwargs`
+    has_attentions: bool = True
 
     def _init_timm_backbone(self, config) -> None:
         """
@@ -230,9 +234,12 @@ class BackboneMixin:
         return [self.out_feature_channels[name] for name in self.out_features]
 
     def forward_with_filtered_kwargs(self, *args, **kwargs):
-        signature = dict(inspect.signature(self.forward).parameters)
-        filtered_kwargs = {k: v for k, v in kwargs.items() if k in signature}
-        return self(*args, **filtered_kwargs)
+        if not self.has_attentions:
+            kwargs.pop("output_attentions", None)
+        if self.backbone_type == BackboneType.TIMM:
+            signature = dict(inspect.signature(self.forward).parameters)
+            kwargs = {k: v for k, v in kwargs.items() if k in signature}
+        return self(*args, **kwargs)
 
     def forward(
         self,
@@ -277,7 +284,7 @@ class BackboneConfigMixin:
         return self._out_indices
 
     @out_indices.setter
-    def out_indices(self, out_indices: Union[tuple[int], list[int]]):
+    def out_indices(self, out_indices: Union[tuple[int, ...], list[int]]):
         """
         Set the out_indices attribute. This will also update the out_features attribute to match the new out_indices.
         """
@@ -323,7 +330,7 @@ def load_backbone(config):
     if backbone_config is not None and backbone_checkpoint is not None and use_pretrained_backbone is not None:
         raise ValueError("Cannot specify both config.backbone_config and config.backbone")
 
-    # If any of thhe following are set, then the config passed in is from a model which contains a backbone.
+    # If any of the following are set, then the config passed in is from a model which contains a backbone.
     if backbone_config is None and use_timm_backbone is None and backbone_checkpoint is None:
         return AutoBackbone.from_config(config=config, **backbone_kwargs)
 

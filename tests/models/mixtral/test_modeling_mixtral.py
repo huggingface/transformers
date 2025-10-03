@@ -17,7 +17,7 @@ import unittest
 
 import pytest
 
-from transformers import MixtralConfig, is_torch_available
+from transformers import is_torch_available
 from transformers.testing_utils import (
     Expectations,
     require_flash_attn,
@@ -44,28 +44,12 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 class MixtralModelTester(CausalLMModelTester):
-    config_class = MixtralConfig
     if is_torch_available():
         base_model_class = MixtralModel
-        causal_lm_class = MixtralForCausalLM
-        sequence_class = MixtralForSequenceClassification
-        token_class = MixtralForTokenClassification
-        question_answering_class = MixtralForQuestionAnswering
 
 
 @require_torch
-class MistralModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            MixtralModel,
-            MixtralForCausalLM,
-            MixtralForSequenceClassification,
-            MixtralForTokenClassification,
-            MixtralForQuestionAnswering,
-        )
-        if is_torch_available()
-        else ()
-    )
+class MixtralModelTest(CausalLMModelTest, unittest.TestCase):
     pipeline_model_mapping = (
         {
             "feature-extraction": MixtralModel,
@@ -78,8 +62,6 @@ class MistralModelTest(CausalLMModelTest, unittest.TestCase):
         else {}
     )
 
-    test_headmasking = False
-    test_pruning = False
     model_tester_class = MixtralModelTester
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
@@ -149,7 +131,7 @@ class MixtralIntegrationTest(unittest.TestCase):
 
         model = MixtralForCausalLM.from_pretrained(
             model_id,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
         ).to(torch_device)
         # TODO: might need to tweak it in case the logits do not match on our daily runners
         # these logits have been obtained with the original megablocks implementation.
@@ -183,7 +165,7 @@ class MixtralIntegrationTest(unittest.TestCase):
 
         model = MixtralForCausalLM.from_pretrained(
             model_id,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
         ).to(torch_device)
 
         # TODO: might need to tweak it in case the logits do not match on our daily runners

@@ -58,10 +58,6 @@ class LayoutXLMProcessor(ProcessorMixin):
             feature_extractor = kwargs.pop("feature_extractor")
 
         image_processor = image_processor if image_processor is not None else feature_extractor
-        if image_processor is None:
-            raise ValueError("You need to specify an `image_processor`.")
-        if tokenizer is None:
-            raise ValueError("You need to specify a `tokenizer`.")
 
         super().__init__(image_processor, tokenizer)
 
@@ -164,20 +160,6 @@ class LayoutXLMProcessor(ProcessorMixin):
             )
 
         return images_with_overflow
-
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer
-        to the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
 
     @property
     def model_input_names(self):

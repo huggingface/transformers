@@ -312,7 +312,7 @@ class MoshiTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertEqual(expected_result, decoded_input)
 
-    def test_alignement_methods(self):
+    def test_alignment_methods(self):
         # TODO: @ArthurZucker - alignment is broken
         pass
 

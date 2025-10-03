@@ -13,12 +13,12 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2022-02-22 and added to Hugging Face Transformers on 2022-06-28.*
 
 # GroupViT
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
 </div>
 
 ## Overview
@@ -30,19 +30,18 @@ The abstract from the paper is the following:
 
 *Grouping and recognition are important components of visual scene understanding, e.g., for object detection and semantic segmentation. With end-to-end deep learning systems, grouping of image regions usually happens implicitly via top-down supervision from pixel-level recognition labels. Instead, in this paper, we propose to bring back the grouping mechanism into deep networks, which allows semantic segments to emerge automatically with only text supervision. We propose a hierarchical Grouping Vision Transformer (GroupViT), which goes beyond the regular grid structure representation and learns to group image regions into progressively larger arbitrary-shaped segments. We train GroupViT jointly with a text encoder on a large-scale image-text dataset via contrastive losses. With only text supervision and without any pixel-level annotations, GroupViT learns to group together semantic regions and successfully transfers to the task of semantic segmentation in a zero-shot manner, i.e., without any further fine-tuning. It achieves a zero-shot accuracy of 52.3% mIoU on the PASCAL VOC 2012 and 22.4% mIoU on PASCAL Context datasets, and performs competitively to state-of-the-art transfer-learning methods requiring greater levels of supervision.*
 
-This model was contributed by [xvjiarui](https://huggingface.co/xvjiarui). The TensorFlow version was contributed by [ariG23498](https://huggingface.co/ariG23498) with the help of [Yih-Dar SHIEH](https://huggingface.co/ydshieh), [Amy Roberts](https://huggingface.co/amyeroberts), and [Joao Gante](https://huggingface.co/joaogante).
-The original code can be found [here](https://github.com/NVlabs/GroupViT).
+This model was contributed by [xvjiarui](https://huggingface.co/xvjiarui). The original code can be found [here](https://github.com/NVlabs/GroupViT).
 
 ## Usage tips
- 
-- You may specify `output_segmentation=True` in the forward of `GroupViTModel` to get the segmentation logits of input texts. 
+
+- You may specify `output_segmentation=True` in the forward of `GroupViTModel` to get the segmentation logits of input texts.
 
 ## Resources
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with GroupViT.
 
 - The quickest way to get started with GroupViT is by checking the [example notebooks](https://github.com/xvjiarui/GroupViT/blob/main/demo/GroupViT_hf_inference_notebook.ipynb) (which showcase zero-shot segmentation inference).
-- One can also check out the [HuggingFace Spaces demo](https://huggingface.co/spaces/xvjiarui/GroupViT) to play with GroupViT. 
+- One can also check out the [HuggingFace Spaces demo](https://huggingface.co/spaces/xvjiarui/GroupViT) to play with GroupViT.
 
 ## GroupViTConfig
 
@@ -56,9 +55,6 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 ## GroupViTVisionConfig
 
 [[autodoc]] GroupViTVisionConfig
-
-<frameworkcontent>
-<pt>
 
 ## GroupViTModel
 
@@ -76,26 +72,3 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] GroupViTVisionModel
     - forward
-
-</pt>
-<tf>
-
-## TFGroupViTModel
-
-[[autodoc]] TFGroupViTModel
-    - call
-    - get_text_features
-    - get_image_features
-
-## TFGroupViTTextModel
-
-[[autodoc]] TFGroupViTTextModel
-    - call
-
-## TFGroupViTVisionModel
-
-[[autodoc]] TFGroupViTVisionModel
-    - call
-
-</tf>
-</frameworkcontent>

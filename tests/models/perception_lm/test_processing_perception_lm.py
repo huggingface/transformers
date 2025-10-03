@@ -115,6 +115,36 @@ class PerceptionLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         image_tokens = (inputs["input_ids"] == image_token_index).sum().item()
         self.assertEqual(expected_image_tokens, image_tokens)
+        self.assertEqual(inputs["pixel_values"].ndim, 5)
+
+    def test_vanilla_image_with_no_tiles_token_filling(self):
+        processor = self.processor_class.from_pretrained(self.tmpdirname)
+        processor.image_processor.vision_input_type = "vanilla"
+        # Important to check with non square image
+        image = torch.randn((1, 3, 450, 500))
+        #  1 tile
+        #  448/patch_size/pooling_ratio = 16 => 16*16 tokens per tile
+        expected_image_tokens = 16 * 16 * 1
+        image_token_index = processor.image_token_id
+
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image"},
+                    {"type": "text", "text": "What is shown in this image?"},
+                ],
+            },
+        ]
+        inputs = processor(
+            text=[processor.apply_chat_template(messages)],
+            images=[image],
+            return_tensors="pt",
+        )
+        image_tokens = (inputs["input_ids"] == image_token_index).sum().item()
+        self.assertEqual(expected_image_tokens, image_tokens)
+        self.assertEqual(inputs["pixel_values"].ndim, 5)
+        self.assertEqual(inputs["pixel_values"].shape[1], 1)  # 1 tile
 
 
 CHAT_TEMPLATE = (

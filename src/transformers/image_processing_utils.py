@@ -20,7 +20,8 @@ import numpy as np
 
 from .image_processing_base import BatchFeature, ImageProcessingMixin
 from .image_transforms import center_crop, normalize, rescale
-from .image_utils import ChannelDimension, get_image_size
+from .image_utils import ChannelDimension, ImageInput, get_image_size
+from .processing_utils import ImagesKwargs, Unpack
 from .utils import logging
 from .utils.import_utils import requires
 
@@ -36,12 +37,21 @@ INIT_SERVICE_KWARGS = [
 
 @requires(backends=("vision",))
 class BaseImageProcessor(ImageProcessingMixin):
+    valid_kwargs = ImagesKwargs
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-    def __call__(self, images, **kwargs) -> BatchFeature:
+    @property
+    def is_fast(self) -> bool:
+        """
+        `bool`: Whether or not this image processor is a fast processor (backed by PyTorch and TorchVision).
+        """
+        return False
+
+    def __call__(self, images: ImageInput, *args, **kwargs: Unpack[ImagesKwargs]) -> BatchFeature:
         """Preprocess an image or a batch of images."""
-        return self.preprocess(images, **kwargs)
+        return self.preprocess(images, *args, **kwargs)
 
     def preprocess(self, images, **kwargs) -> BatchFeature:
         raise NotImplementedError("Each image processor must implement its own preprocess method")

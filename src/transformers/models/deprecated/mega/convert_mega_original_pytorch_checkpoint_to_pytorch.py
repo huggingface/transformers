@@ -179,7 +179,7 @@ def convert_checkpoint_to_huggingface(pretrained_checkpoint_path, output_path, i
 
     hf_mlm = MegaForMaskedLM(hf_config).eval()
 
-    # the originl checkpoint just uses nn.Embedding for the word embeddings
+    # the original checkpoint just uses nn.Embedding for the word embeddings
     # we use a wrapper module for embeddings to add support for positional embeddings
     hf_mlm.mega.embedding_layer.word_embeddings.weight = original_mlm.mega.embedding_layer.weight
 

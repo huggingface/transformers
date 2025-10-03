@@ -102,7 +102,6 @@ def eager_attention_forward(
     attention_mask: torch.Tensor,
     scaling: float,
     dropout: float = 0.0,
-    head_mask: Optional[torch.Tensor] = None,
     **kwargs,
 ):
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
@@ -112,10 +111,6 @@ def eager_attention_forward(
         attn_weights = attn_weights + causal_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-
-    # Mask heads if we want to
-    if head_mask is not None:
-        attn_weights = attn_weights * head_mask
 
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value)
@@ -144,7 +139,6 @@ class GPTNeoXAttention(nn.Module):
         self,
         hidden_states: torch.FloatTensor,
         attention_mask: torch.FloatTensor,
-        head_mask: Optional[torch.FloatTensor] = None,
         layer_past: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
@@ -183,7 +177,6 @@ class GPTNeoXAttention(nn.Module):
             attention_mask,
             scaling=self.scaling,
             dropout=0.0 if not self.training else self.attention_dropout,
-            head_mask=head_mask,
             **kwargs,
         )
 
@@ -210,7 +203,6 @@ class GPTNeoXLayer(GradientCheckpointingLayer):
         hidden_states: Optional[torch.FloatTensor],
         attention_mask: Optional[torch.FloatTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
         layer_past: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
@@ -223,7 +215,6 @@ class GPTNeoXLayer(GradientCheckpointingLayer):
             attention_mask=attention_mask,
             position_ids=position_ids,
             layer_past=layer_past,
-            head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
             cache_position=cache_position,
@@ -400,7 +391,6 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
@@ -428,12 +418,8 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_in(input_ids)
 
-        # TODO (joao): remove this exception in v4.56 -- it exists for users that try to pass a legacy cache
-        if not isinstance(past_key_values, (type(None), Cache)):
-            raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
-
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -453,18 +439,6 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
             position_ids=position_ids,
         )
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        converted_head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-        # Flex Attention converts it to a separate mask
-        if head_mask is not None:
-            converted_head_mask = ~converted_head_mask.bool() * torch.finfo(inputs_embeds.dtype).min
-            converted_head_mask = converted_head_mask.to(dtype=self.dtype, device=self.device)
-        head_mask = converted_head_mask
-
         hidden_states = self.emb_dropout(inputs_embeds)
 
         # create position embeddings to be shared across the decoder layers
@@ -480,7 +454,6 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
                 hidden_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
-                head_mask=head_mask[i],
                 layer_past=past_key_values,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
@@ -545,7 +518,6 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
         attention_mask: Optional[torch.FloatTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         past_key_values: Optional[Union[Cache, tuple[tuple[torch.FloatTensor]]]] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -582,7 +554,6 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             past_key_values=past_key_values,
             use_cache=use_cache,
@@ -642,7 +613,6 @@ class GPTNeoXForSequenceClassification(GPTNeoXPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         past_key_values: Optional[Union[Cache, tuple[tuple[torch.FloatTensor]]]] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -660,7 +630,6 @@ class GPTNeoXForSequenceClassification(GPTNeoXPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             past_key_values=past_key_values,
             use_cache=use_cache,
@@ -723,7 +692,6 @@ class GPTNeoXForTokenClassification(GPTNeoXPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -742,7 +710,6 @@ class GPTNeoXForTokenClassification(GPTNeoXPreTrainedModel):
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -784,7 +751,6 @@ class GPTNeoXForQuestionAnswering(GPTNeoXPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         start_positions: Optional[torch.LongTensor] = None,
         end_positions: Optional[torch.LongTensor] = None,
@@ -795,7 +761,6 @@ class GPTNeoXForQuestionAnswering(GPTNeoXPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,

@@ -14,14 +14,12 @@
 # limitations under the License.
 """Classes to support Vision-Encoder-Text-Decoder architectures"""
 
-import gc
-import os
-import tempfile
 from typing import Optional, Union
 
 import torch
 from torch import nn
 
+from ...cache_utils import Cache
 from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput, Seq2SeqLMOutput
@@ -148,9 +146,6 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
     def get_encoder(self):
         return self.encoder
 
-    def get_decoder(self):
-        return self.decoder
-
     def get_input_embeddings(self):
         return self.decoder.get_input_embeddings()
 
@@ -159,130 +154,6 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
 
     def set_output_embeddings(self, new_embeddings):
         return self.decoder.set_output_embeddings(new_embeddings)
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r"""
-        Example:
-
-        ```python
-        >>> from transformers import VisionEncoderDecoderModel, AutoImageProcessor, AutoTokenizer
-        >>> from PIL import Image
-        >>> import requests
-
-        >>> image_processor = AutoImageProcessor.from_pretrained("ydshieh/vit-gpt2-coco-en")
-        >>> decoder_tokenizer = AutoTokenizer.from_pretrained("ydshieh/vit-gpt2-coco-en")
-        >>> model = VisionEncoderDecoderModel.from_pretrained("ydshieh/vit-gpt2-coco-en")
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> img = Image.open(requests.get(url, stream=True).raw)
-        >>> pixel_values = image_processor(images=img, return_tensors="pt").pixel_values  # Batch size 1
-
-        >>> output_ids = model.generate(
-        ...     pixel_values, max_length=16, num_beams=4, return_dict_in_generate=True
-        ... ).sequences
-
-        >>> preds = decoder_tokenizer.batch_decode(output_ids, skip_special_tokens=True)
-        >>> preds = [pred.strip() for pred in preds]
-
-        >>> assert preds == ["a cat laying on top of a couch next to another cat"]
-        ```"""
-
-        from_tf = kwargs.pop("from_tf", False)
-        if from_tf:
-            from transformers import TFVisionEncoderDecoderModel
-
-            # a workaround to load from tensorflow checkpoint
-            # Using `_tf_model` won't work, because the weight names in the encoder/decoder of `_tf_model` get
-            # extended before saving those components. For example, The name of `_tf_model.encoder.vit` is
-            # `[top model name]/encoder/vit`, but the name of `tf_model.encoder.vit` is `[top model name]/vit`. The
-            # [top model name] is handled (stripped) by the conversion method, and the former case gets extra `encoder`,
-            # which should not occur when we want to save the components alone.
-            # There was a (very) ugly potential fix, which wasn't integrated to `transformers`: see
-            #   https://github.com/huggingface/transformers/pull/13222/commits/dbb3c9de76eee235791d2064094654637c99f36d#r697304245
-            #   (the change in `src/transformers/modeling_tf_utils.py`)
-            _tf_model = TFVisionEncoderDecoderModel.from_pretrained(
-                pretrained_model_name_or_path, *model_args, **kwargs
-            )
-            config = _tf_model.config
-
-            # Using `tf_model` instead
-            encoder = _tf_model.encoder.__class__(_tf_model.config.encoder)
-            decoder = _tf_model.decoder.__class__(_tf_model.config.decoder)
-            # Make sure models are built
-            encoder(encoder.dummy_inputs)
-            decoder(decoder.dummy_inputs)
-
-            # Get the variable correspondence between `_tf_model` and `encoder` and `decoder`
-            encoder_variables = {}
-            for v in encoder.trainable_variables + encoder.non_trainable_variables:
-                encoder_variables["/".join(v.name.split("/")[1:])] = v
-            decoder_variables = {}
-            for v in decoder.trainable_variables + decoder.non_trainable_variables:
-                decoder_variables["/".join(v.name.split("/")[1:])] = v
-
-            _encoder_variables = {}
-            for v in _tf_model.encoder.trainable_variables + _tf_model.encoder.non_trainable_variables:
-                _encoder_variables["/".join(v.name.split("/")[2:])] = v
-            _decoder_variables = {}
-            for v in _tf_model.decoder.trainable_variables + _tf_model.decoder.non_trainable_variables:
-                _decoder_variables["/".join(v.name.split("/")[2:])] = v
-
-            # assign weight values to `encoder` and `decoder` from `_tf_model`
-            for name, v in encoder_variables.items():
-                v.assign(_encoder_variables[name])
-            for name, v in decoder_variables.items():
-                v.assign(_decoder_variables[name])
-
-            tf_model = TFVisionEncoderDecoderModel(encoder=encoder, decoder=decoder)
-
-            # Deal with `enc_to_dec_proj`
-            if hasattr(_tf_model, "enc_to_dec_proj"):
-                tf_model(tf_model.dummy_inputs)
-                tf_model.enc_to_dec_proj.kernel.assign(_tf_model.enc_to_dec_proj.kernel)
-                tf_model.enc_to_dec_proj.bias.assign(_tf_model.enc_to_dec_proj.bias)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                encoder_dir = os.path.join(tmpdirname, "encoder")
-                decoder_dir = os.path.join(tmpdirname, "decoder")
-                tf_model.encoder.save_pretrained(encoder_dir)
-                tf_model.decoder.save_pretrained(decoder_dir)
-
-                if hasattr(tf_model, "enc_to_dec_proj"):
-                    enc_to_dec_proj_weight = torch.transpose(
-                        torch.from_numpy(tf_model.enc_to_dec_proj.kernel.numpy()), 1, 0
-                    )
-                    enc_to_dec_proj_bias = torch.from_numpy(tf_model.enc_to_dec_proj.bias.numpy())
-
-                del _tf_model
-                del tf_model
-                gc.collect()
-
-                attn_implementation = kwargs.get("attn_implementation")
-                kwargs_encoder_decoder = {}
-                if attn_implementation:
-                    kwargs_encoder_decoder = {
-                        "encoder_attn_implementation": attn_implementation,
-                        "decoder_attn_implementation": attn_implementation,
-                    }
-
-                model = VisionEncoderDecoderModel.from_encoder_decoder_pretrained(
-                    encoder_dir,
-                    decoder_dir,
-                    encoder_from_tf=True,
-                    decoder_from_tf=True,
-                    **kwargs_encoder_decoder,
-                )
-                # This is only for copying some specific attributes of this particular model.
-                model.config = config
-
-                if hasattr(model, "enc_to_dec_proj"):
-                    model.enc_to_dec_proj.weight.data = enc_to_dec_proj_weight.contiguous()
-                    model.enc_to_dec_proj.bias.data = enc_to_dec_proj_bias.contiguous()
-
-                return model
-
-        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
     @classmethod
     def from_encoder_decoder_pretrained(
@@ -308,10 +179,6 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
                       example is `google/vit-base-patch16-224-in21k`.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
-                    - A path or url to a *tensorflow index checkpoint file* (e.g, `./tf_model/model.ckpt.index`). In
-                      this case, `from_tf` should be set to `True` and a configuration object should be provided as
-                      `config` argument. This loading path is slower than converting the TensorFlow checkpoint in a
-                      PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
 
             decoder_pretrained_model_name_or_path (`str`, *optional*, defaults to `None`):
                 Information necessary to initiate the text decoder. Can be either:
@@ -319,10 +186,6 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
-                    - A path or url to a *tensorflow index checkpoint file* (e.g, `./tf_model/model.ckpt.index`). In
-                      this case, `from_tf` should be set to `True` and a configuration object should be provided as
-                      `config` argument. This loading path is slower than converting the TensorFlow checkpoint in a
-                      PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
 
             model_args (remaining positional arguments, *optional*):
                 All remaining positional arguments will be passed to the underlying model's `__init__` method.
@@ -385,7 +248,7 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
                 if encoder_config.is_decoder is True or encoder_config.add_cross_attention is True:
                     logger.info(
                         f"Initializing {encoder_pretrained_model_name_or_path} as a encoder model "
-                        "from a decoder model. Cross-attention and casual mask are disabled."
+                        "from a decoder model. Cross-attention and causal mask are disabled."
                     )
                     encoder_config.is_decoder = False
                     encoder_config.add_cross_attention = False
@@ -443,7 +306,7 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.BoolTensor] = None,
         encoder_outputs: Optional[tuple[torch.FloatTensor]] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,

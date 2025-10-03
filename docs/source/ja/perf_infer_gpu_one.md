@@ -56,7 +56,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     attn_implementation="flash_attention_2",
 )
 ```
@@ -223,7 +223,7 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m")
-model = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", torch_dtype=torch.float16).to("cuda")
+model = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", dtype=torch.float16).to("cuda")
 # convert the model to BetterTransformer
 model.to_bettertransformer()
 

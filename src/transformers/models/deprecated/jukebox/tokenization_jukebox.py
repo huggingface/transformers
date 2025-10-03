@@ -26,8 +26,8 @@ import regex
 
 from ....tokenization_utils import AddedToken, PreTrainedTokenizer
 from ....tokenization_utils_base import BatchEncoding
-from ....utils import TensorType, is_flax_available, is_tf_available, is_torch_available, logging
-from ....utils.generic import _is_jax, _is_numpy
+from ....utils import TensorType, is_torch_available, logging
+from ....utils.generic import _is_numpy
 
 
 logger = logging.get_logger(__name__)
@@ -279,30 +279,13 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         if not isinstance(tensor_type, TensorType):
             tensor_type = TensorType(tensor_type)
 
-        # Get a function reference for the correct framework
-        if tensor_type == TensorType.TENSORFLOW:
-            if not is_tf_available():
-                raise ImportError(
-                    "Unable to convert output to TensorFlow tensors format, TensorFlow is not installed."
-                )
-            import tensorflow as tf
-
-            as_tensor = tf.constant
-            is_tensor = tf.is_tensor
-        elif tensor_type == TensorType.PYTORCH:
+        if tensor_type == TensorType.PYTORCH:
             if not is_torch_available():
                 raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
             import torch
 
             as_tensor = torch.tensor
             is_tensor = torch.is_tensor
-        elif tensor_type == TensorType.JAX:
-            if not is_flax_available():
-                raise ImportError("Unable to convert output to JAX tensors format, JAX is not installed.")
-            import jax.numpy as jnp  # noqa: F811
-
-            as_tensor = jnp.array
-            is_tensor = _is_jax
         else:
             as_tensor = np.asarray
             is_tensor = _is_numpy

@@ -224,7 +224,7 @@ def write_model(
         params = json.load(f)
 
     params = params.get("model", params)
-    torch_dtype = "bfloat16"
+    dtype = "bfloat16"
 
     # ------------------------------------------------------------
     # Text model params and config
@@ -303,7 +303,7 @@ def write_model(
         eos_token_id=eos_token_id,
         pad_token_id=pad_token_id,
         tie_word_embeddings=False,  # Constant set to False
-        torch_dtype=torch_dtype,
+        dtype=dtype,
         for_llm_compressor=_OFFLINE_QUANT_COMPATIBLE,
         **config_kwargs,
     )
@@ -527,7 +527,7 @@ def write_model(
     with torch.no_grad():
         # TODO test if we can do `tp_plan="auto"``
         model = Llama4ForConditionalGeneration.from_pretrained(
-            model_path, torch_dtype=torch.bfloat16, device_map="auto", attn_implementation="eager"
+            model_path, dtype=torch.bfloat16, device_map="auto", attn_implementation="eager"
         )
 
         model.generation_config.top_p = 0.9
@@ -662,7 +662,7 @@ class Llama4Converter(TikTokenConverter):
         )
 
 
-O200K_PATTERN = r"""[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{Lm}\p{Lo}\p{M}]+(?i:'s|'t|'re|'ve|'m|'ll|'d)?|[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+[\p{Ll}\p{Lm}\p{Lo}\p{M}]*(?i:'s|'t|'re|'ve|'m|'ll|'d)?|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n/]*|\s*[\r\n]+|\s+(?!\S)|\s+"""  # noqa: E501
+O200K_PATTERN = r"""[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{Lm}\p{Lo}\p{M}]+(?i:'s|'t|'re|'ve|'m|'ll|'d)?|[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+[\p{Ll}\p{Lm}\p{Lo}\p{M}]*(?i:'s|'t|'re|'ve|'m|'ll|'d)?|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n/]*|\s*[\r\n]+|\s+(?!\S)|\s+"""
 
 
 def write_tokenizer(args):

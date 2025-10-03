@@ -268,7 +268,7 @@ class MMGroundingDinoConfig(GroundingDinoConfig, PretrainedConfig):
         self.disable_custom_kernels = disable_custom_kernels
         # Text backbone
         if isinstance(text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "bert"
+            text_config["model_type"] = text_config.get("model_type", "bert")
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             text_config = CONFIG_MAPPING["bert"]()
@@ -337,7 +337,7 @@ class MMGroundingDinoDecoder(GroundingDinoDecoder):
 
 class MMGroundingDinoModel(GroundingDinoModel, MMGroundingDinoPreTrainedModel):
     def __init__(self, config: MMGroundingDinoConfig):
-        MMGroundingDinoPreTrainedModel.__init__(config)
+        MMGroundingDinoPreTrainedModel.__init__(self, config)
 
         # Create backbone + positional encoding
         backbone = MMGroundingDinoConvEncoder(config)
@@ -400,7 +400,7 @@ class MMGroundingDinoForObjectDetection(GroundingDinoForObjectDetection, MMGroun
     ]
 
     def __init__(self, config: MMGroundingDinoConfig):
-        MMGroundingDinoPreTrainedModel.__init__(config)
+        MMGroundingDinoPreTrainedModel.__init__(self, config)
 
         self.model = MMGroundingDinoModel(config)
 

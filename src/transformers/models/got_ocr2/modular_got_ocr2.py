@@ -19,7 +19,13 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 
-from transformers.models.llava.modeling_llava import (
+from ...cache_utils import Cache
+from ...configuration_utils import PretrainedConfig
+from ...modeling_utils import PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import auto_docstring, can_return_tuple, logging
+from ..auto import CONFIG_MAPPING, AutoConfig
+from ..llava.modeling_llava import (
     LlavaCausalLMOutputWithPast,
     LlavaForConditionalGeneration,
     LlavaModel,
@@ -27,20 +33,13 @@ from transformers.models.llava.modeling_llava import (
     LlavaPreTrainedModel,
     TransformersKwargs,
 )
-from transformers.models.sam.modeling_sam import (
+from ..sam.modeling_sam import (
     SamMLPBlock,
     SamPreTrainedModel,
     SamVisionAttention,
     SamVisionEncoder,
     SamVisionLayer,
 )
-
-from ...cache_utils import Cache
-from ...configuration_utils import PretrainedConfig
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, logging
-from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -240,7 +239,7 @@ class GotOcr2VisionAttention(SamVisionAttention):
 
 class GotOcr2VisionLayer(SamVisionLayer):
     def __init__(self, config, window_size):
-        super().__init__()
+        super().__init__(config, window_size)
         self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attn = GotOcr2VisionAttention(config, window_size)
         self.layer_norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -291,7 +290,7 @@ class GotOcr2PreTrainedModel(LlavaPreTrainedModel):
     _supports_flex_attn = False
 
     def _init_weights(self, module):
-        LlavaPreTrainedModel._init_weights(module)
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, GotOcr2VisionAttention):
             if module.use_rel_pos:
                 module.rel_pos_h.data.zero_()
@@ -323,8 +322,8 @@ class GotOcr2Model(LlavaModel):
 
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -334,7 +333,7 @@ class GotOcr2Model(LlavaModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, GotOcr2ModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -383,8 +382,8 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,

@@ -87,7 +87,7 @@ class Qwen2AudioProcessor(ProcessorMixin):
         """
         Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `text`
         and `kwargs` arguments to Qwen2TokenizerFast's [`~Qwen2TokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the audio(s), this method forwards the `audios` and `kwrags` arguments to
+        the text. To prepare the audio(s), this method forwards the `audios` and `kwargs` arguments to
         WhisperFeatureExtractor's [`~WhisperFeatureExtractor.__call__`] if `audios` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
@@ -173,20 +173,6 @@ class Qwen2AudioProcessor(ProcessorMixin):
             inputs.update(audio_inputs)
 
         return BatchFeature(data={**inputs}, tensor_type=return_tensors)
-
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to Qwen2TokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to Qwen2TokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
 
     @property
     def model_input_names(self):

@@ -18,7 +18,7 @@ import unittest
 
 import pytest
 
-from transformers import Ernie4_5_MoeConfig, is_torch_available
+from transformers import is_torch_available
 from transformers.testing_utils import (
     cleanup,
     is_flaky,
@@ -41,26 +41,17 @@ if is_torch_available():
         Ernie4_5_MoeForCausalLM,
         Ernie4_5_MoeModel,
     )
+
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 class Ernie4_5_MoeModelTester(CausalLMModelTester):
-    config_class = Ernie4_5_MoeConfig
     if is_torch_available():
         base_model_class = Ernie4_5_MoeModel
-        causal_lm_class = Ernie4_5_MoeForCausalLM
 
 
 @require_torch
 class Ernie4_5_MoeModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            Ernie4_5_MoeModel,
-            Ernie4_5_MoeForCausalLM,
-        )
-        if is_torch_available()
-        else ()
-    )
     pipeline_model_mapping = (
         {
             "feature-extraction": Ernie4_5_MoeModel,
@@ -70,8 +61,6 @@ class Ernie4_5_MoeModelTest(CausalLMModelTest, unittest.TestCase):
         else {}
     )
 
-    test_headmasking = False
-    test_pruning = False
     test_all_params_have_gradient = False
     model_tester_class = Ernie4_5_MoeModelTester
 
@@ -91,13 +80,11 @@ class Ernie4_5_MoeModelTest(CausalLMModelTest, unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+                    tmpdirname, dtype=torch.bfloat16, attn_implementation="flash_attention_2"
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="eager"
-                )
+                model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16, attn_implementation="eager")
                 model.to(torch_device)
 
                 dummy_input = inputs_dict[model_class.main_input_name]

@@ -24,26 +24,16 @@ from typing import Optional, Union
 
 import numpy as np
 import torch
+from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
-    group_images_by_shape,
-    reorder_images,
-)
+from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
-from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_v2_available
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import TensorType, auto_docstring
 
 
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
-
-
-class Cohere2VisionFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+class Cohere2VisionFastImageProcessorKwargs(ImagesKwargs):
     """
     crop_to_patches (`bool`, *optional*, defaults to `False`):
         Whether to crop the image to patches. Can be overridden by the `crop_to_patches` parameter in the
@@ -227,6 +217,7 @@ class Cohere2VisionImageProcessorFast(BaseImageProcessorFast):
         image_std: Optional[Union[float, list[float]]],
         disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
+        **kwargs,
     ) -> BatchFeature:
         if crop_to_patches:
             grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
@@ -301,7 +292,8 @@ class Cohere2VisionImageProcessorFast(BaseImageProcessorFast):
             num_columns, num_rows = get_optimal_tiled_canvas(
                 (height, width), (patch_size["height"], patch_size["width"]), min_patches, max_patches
             )
-            num_patches += num_columns * num_rows
+            if num_columns * num_rows > 1:
+                num_patches += num_columns * num_rows
 
         return num_patches
 

@@ -17,9 +17,6 @@ File utilities: utilities related to download and cache models
 This module should not be update anymore and is only left for backward compatibility.
 """
 
-from huggingface_hub import get_full_repo_name  # for backward compatibility
-from huggingface_hub.constants import HF_HUB_DISABLE_TELEMETRY as DISABLE_TELEMETRY  # for backward compatibility
-
 from . import __version__
 
 # Backward compatibility imports, to make sure all those objects can be found in file_utils
@@ -31,7 +28,6 @@ from .utils import (
     ENV_VARS_TRUE_AND_AUTO_VALUES,
     ENV_VARS_TRUE_VALUES,
     FEATURE_EXTRACTOR_NAME,
-    FLAX_WEIGHTS_NAME,
     HF_MODULES_CACHE,
     HUGGINGFACE_CO_PREFIX,
     HUGGINGFACE_CO_RESOLVE_ENDPOINT,
@@ -42,14 +38,9 @@ from .utils import (
     S3_BUCKET_PREFIX,
     SENTENCEPIECE_UNDERLINE,
     SPIECE_UNDERLINE,
-    TF2_WEIGHTS_NAME,
-    TF_WEIGHTS_NAME,
     TORCH_FX_REQUIRED_VERSION,
     TRANSFORMERS_CACHE,
     TRANSFORMERS_DYNAMIC_MODULE_NAME,
-    USE_JAX,
-    USE_TF,
-    USE_TORCH,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     ContextManagers,
@@ -67,7 +58,6 @@ from .utils import (
     add_end_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    cached_property,
     copy_func,
     default_cache_path,
     define_sagemaker_information,
@@ -80,7 +70,6 @@ from .utils import (
     is_datasets_available,
     is_detectron2_available,
     is_faiss_available,
-    is_flax_available,
     is_ftfy_available,
     is_g2p_en_available,
     is_in_notebook,
@@ -107,9 +96,6 @@ from .utils import (
     is_spacy_available,
     is_speech_available,
     is_tensor,
-    is_tensorflow_probability_available,
-    is_tf2onnx_available,
-    is_tf_available,
     is_timm_available,
     is_tokenizers_available,
     is_torch_available,

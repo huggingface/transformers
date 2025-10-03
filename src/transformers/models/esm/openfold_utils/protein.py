@@ -159,7 +159,7 @@ def add_pdb_headers(prot: Protein, pdb_str: str) -> str:
                 parent_dict.setdefault(str(i), [])
                 parent_dict[str(i)].append(p)
 
-            max_idx = max([int(chain_idx) for chain_idx in parent_dict])
+            max_idx = max(int(chain_idx) for chain_idx in parent_dict)
             for i in range(max_idx + 1):
                 chain_parents = parent_dict.get(str(i), ["N/A"])
                 parents_per_chain.append(chain_parents)

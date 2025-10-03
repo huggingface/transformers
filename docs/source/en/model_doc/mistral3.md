@@ -13,6 +13,8 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-01-30 and added to Hugging Face Transformers on 2025-03-18.*
+
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
            <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&amp;logo=pytorch&amp;logoColor=white">
@@ -24,7 +26,6 @@ rendered properly in your Markdown viewer.
 [Mistral 3](https://mistral.ai/news/mistral-small-3) is a latency optimized model with a lot fewer layers to reduce the time per forward pass. This model adds vision understanding and supports long context lengths of up to 128K tokens without compromising performance.
 
 You can find the original Mistral 3 checkpoints under the [Mistral AI](https://huggingface.co/mistralai/models?search=mistral-small-3) organization.
-
 
 > [!TIP]
 > This model was contributed by [cyrilvallez](https://huggingface.co/cyrilvallez) and [yonigozlan](https://huggingface.co/yonigozlan).
@@ -52,7 +53,7 @@ messages = [
 pipeline = pipeline(
     task="image-text-to-text", 
     model="mistralai/Mistral-Small-3.1-24B-Instruct-2503", 
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device=0
 )
 outputs = pipeline(text=messages, max_new_tokens=50, return_full_text=False)
@@ -60,20 +61,21 @@ outputs = pipeline(text=messages, max_new_tokens=50, return_full_text=False)
 outputs[0]["generated_text"]
 'The image depicts a vibrant and lush garden scene featuring a variety of wildflowers and plants. The central focus is on a large, pinkish-purple flower, likely a Greater Celandine (Chelidonium majus), with a'
 ```
+
 </hfoption>
 <hfoption id="AutoModel">
 
 ```py
 import torch
-from transformers import AutoProcessor, AutoModelForImageTextToText 
+from transformers import AutoProcessor, AutoModelForImageTextToText, infer_device 
 
-torch_device = "cuda"
+torch_device = infer_device()
 model_checkpoint = "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
 processor = AutoProcessor.from_pretrained(model_checkpoint)
 model = AutoModelForImageTextToText.from_pretrained(
     model_checkpoint, 
     device_map=torch_device, 
-    torch_dtype=torch.bfloat16
+    dtype=torch.bfloat16
 )
 
 messages = [
@@ -98,20 +100,22 @@ decoded_output = processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :
 decoded_output
 'The image depicts a vibrant and lush garden scene featuring a variety of wildflowers and plants. The central focus is on a large, pinkish-purple flower, likely a Greater Celandine (Chelidonium majus), with a'
 ```
+
 </hfoption>
 </hfoptions>
 
-## Notes 
+## Notes
 
-- Mistral 3 supports text-only generation. 
-```py 
-from transformers import AutoProcessor, AutoModelForImageTextToText
+- Mistral 3 supports text-only generation.
+
+```py
 import torch
+from transformers import AutoProcessor, AutoModelForImageTextToText, infer_device
 
-torch_device = "cuda"
+torch_device = infer_device()
 model_checkpoint = ".mistralai/Mistral-Small-3.1-24B-Instruct-2503"
 processor = AutoProcessor.from_pretrained(model_checkpoint)
-model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16)
+model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, dtype=torch.bfloat16)
 
 SYSTEM_PROMPT = "You are a conversational agent that always answers straight to the point, always end your accurate response with an ASCII drawing of a cat."
 user_prompt = "Give me 5 non-formal ways to say 'See you later' in French."
@@ -134,21 +138,24 @@ print(decoded_output)
  5. Je me casse, à plus!
 
 ```
+
  /\_/\
 ( o.o )
  > ^ <
+
 ```"
 ````
 
-- Mistral 3 accepts batched image and text inputs. 
-```py
-from transformers import AutoProcessor, AutoModelForImageTextToText
-import torch
+- Mistral 3 accepts batched image and text inputs.
 
-torch_device = "cuda"
+```py
+import torch
+from transformers import AutoProcessor, AutoModelForImageTextToText, infer_device
+
+torch_device = infer_device()
 model_checkpoint = "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
 processor = AutoProcessor.from_pretrained(model_checkpoint)
-model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16)
+model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device, dtype=torch.bfloat16)
 
 messages = [
      [
@@ -182,13 +189,13 @@ messages = [
 , "Describe this imageThe image depicts a vibrant street scene in what appears to be a Chinatown district. The focal point is a traditional Chinese"]
 ```
 
-- Mistral 3 also supported batched image and text inputs with a different number of images for each text. The example below quantizes the model with bitsandbytes. 
+- Mistral 3 also supported batched image and text inputs with a different number of images for each text. The example below quantizes the model with bitsandbytes.
 
-```py 
-from transformers import AutoProcessor, AutoModelForImageTextToText, BitsAndBytesConfig
+```py
 import torch
+from transformers import AutoProcessor, AutoModelForImageTextToText, BitsAndBytesConfig, infer_device
 
-torch_device = "cuda"
+torch_device = infer_device()
 model_checkpoint = "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
 processor = AutoProcessor.from_pretrained(model_checkpoint)
 quantization_config = BitsAndBytesConfig(load_in_4bit=True)

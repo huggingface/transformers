@@ -129,6 +129,8 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "deberta",
     "deberta-v2",
     "dinov2",
+    "dinov3_convnext",
+    "dinov3_vit",
     "distilbert",
     "donut-swin",
     "electra",
@@ -146,6 +148,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "marian",
     "mbart",
     "megatron-bert",
+    "ministral",
     "mistral",
     "mixtral",
     "mobilebert",
@@ -157,6 +160,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "qwen2",
     "qwen2_moe",
     "qwen3",
+    "qwen3_next",
     "qwen3_moe",
     "resnet",
     "roberta",
@@ -749,9 +753,7 @@ def create_wrapper(
             tracer = found_proxies[0].tracer
             if op_type == "call_function":
                 target = function
-            elif op_type == "call_method":
-                target = function.__name__
-            elif op_type == "get_attr":
+            elif op_type == "call_method" or op_type == "get_attr":
                 target = function.__name__
             else:
                 raise ValueError(f"op_type {op_type} not supported.")
@@ -815,7 +817,6 @@ def _proxies_to_metas(v):
 
 def create_cache_proxy_factory_fn(orig_cache_cls: type[Cache]) -> Callable[[Node], HFCacheProxy]:
     def cache_proxy_factory_fn(n: Node) -> HFCacheProxy:
-        global _CURRENT_TRACER
         if not isinstance(_CURRENT_TRACER, HFTracer):
             raise RuntimeError("Cannot create HFCacheProxy because there is no HFTracer currently tracing.")
         cache_proxy = HFCacheProxy(n, _CURRENT_TRACER)
@@ -1345,7 +1346,7 @@ class HFTracer(Tracer):
 
         return self.graph
 
-    def _stateless_mod_instanciation_depends_on_proxies(self, mod: nn.Module) -> bool:
+    def _stateless_mod_instantiation_depends_on_proxies(self, mod: nn.Module) -> bool:
         """
         Whether the module was instantiated with Proxies. If that is the case, such module cannot be a leaf module
         because its attributes are input-dependent.
@@ -1358,7 +1359,7 @@ class HFTracer(Tracer):
         """
         # If one of the module attributes is a Proxy, it means that its instantiation is input-dependent.
         # It is not possible to insert such modules, those should be traced through.
-        if self._stateless_mod_instanciation_depends_on_proxies(mod):
+        if self._stateless_mod_instantiation_depends_on_proxies(mod):
             return ""
         idx = 0
         mod_name = mod.__class__.__name__.lower()
@@ -1394,7 +1395,7 @@ class HFTracer(Tracer):
             raise e
 
     def is_leaf_module(self, m: torch.nn.Module, module_qualified_name: str) -> bool:
-        return (not self._stateless_mod_instanciation_depends_on_proxies(m)) and super().is_leaf_module(
+        return (not self._stateless_mod_instantiation_depends_on_proxies(m)) and super().is_leaf_module(
             m, module_qualified_name
         )
 

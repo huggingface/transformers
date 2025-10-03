@@ -246,7 +246,6 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: Optional[float] = None,
     dropout: float = 0.0,
-    head_mask: Optional[torch.Tensor] = None,
     **kwargs,
 ):
     if scaling is None:
@@ -257,9 +256,6 @@ def eager_attention_forward(
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-    if head_mask is not None:
-        attn_weights = attn_weights * head_mask.view(1, -1, 1, 1)
 
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value)
@@ -308,7 +304,6 @@ class PatchTSMixerAttention(nn.Module):
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
@@ -347,7 +342,6 @@ class PatchTSMixerAttention(nn.Module):
             dropout=0.0 if not self.training else self.dropout,
             scaling=self.scaling,
             output_attentions=output_attentions,
-            head_mask=layer_head_mask,
             **kwargs,
         )
 
@@ -2044,7 +2038,7 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
                     raise Exception("target_values cannot be negative for negative_binomial distribution.")
                 distribution = self.distribution_output.distribution(y_hat)
                 # y_hat should be a 2-tuple, each with dimension [bs, num_targets]
-                y_hat = tuple([item.view(-1, self.config.num_targets) for item in y_hat])
+                y_hat = tuple(item.view(-1, self.config.num_targets) for item in y_hat)
                 loss_val = loss(distribution, target_values)
                 # take average of the loss
                 loss_val = weighted_average(loss_val)

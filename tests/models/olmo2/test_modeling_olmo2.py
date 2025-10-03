@@ -15,6 +15,7 @@
 
 import unittest
 
+import pytest
 from packaging import version
 from parameterized import parameterized
 
@@ -190,10 +191,6 @@ class Olmo2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="OLMo2 does not support head pruning.")
-    def test_headmasking(self):
-        pass
-
     def test_model_various_embeddings(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         for type in ["absolute", "relative_key", "relative_key_query"]:
@@ -327,6 +324,7 @@ class Olmo2IntegrationTest(unittest.TestCase):
 
         self.assertEqual(rust_tokenizer.encode(" Hello"), [22691])
 
+    @pytest.mark.torch_export_test
     @slow
     def test_export_static_cache(self):
         if version.parse(torch.__version__) < version.parse("2.4.0"):
@@ -365,7 +363,7 @@ class Olmo2IntegrationTest(unittest.TestCase):
         model = Olmo2ForCausalLM.from_pretrained(
             olmo2_model,
             device_map=device,
-            torch_dtype=dtype,
+            dtype=dtype,
             attn_implementation=attn_implementation,
             generation_config=generation_config,
         )

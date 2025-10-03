@@ -357,7 +357,6 @@ class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     test_missing_keys = False
     test_pruning = False
     test_torchscript = False
-    test_head_masking = False
     pipeline_model_mapping = (
         {
             "feature-extraction": MptModel,
@@ -440,9 +439,7 @@ class MptIntegrationTests(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(model_id)
 
         # Load in 4bit to fit the daily CI runner GPU RAM
-        model = MptForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, device_map={"": 0}, load_in_4bit=True
-        )
+        model = MptForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map={"": 0}, load_in_4bit=True)
 
         input_text = "Hello"
         expected_outputs = Expectations({
@@ -463,9 +460,7 @@ class MptIntegrationTests(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(model_id)
 
         # Load in 4bit to fit the daily CI runner GPU RAM
-        model = MptForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, device_map={"": 0}, load_in_4bit=True
-        )
+        model = MptForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map={"": 0}, load_in_4bit=True)
 
         input_text = "Hello"
         expected_outputs = Expectations({
@@ -488,9 +483,7 @@ class MptIntegrationTests(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(model_id)
 
         # Load in 4bit to fit the daily CI runner GPU RAM
-        model = MptForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, device_map={"": 0}, load_in_4bit=True
-        )
+        model = MptForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map={"": 0}, load_in_4bit=True)
 
         input_texts = ["Hello my name is", "Today I am going at the gym and"]
         tokenizer.pad_token_id = tokenizer.eos_token_id
@@ -529,9 +522,7 @@ class MptIntegrationTests(unittest.TestCase):
         model_id = "mosaicml/mpt-7b"
 
         # Load in 4bit to fit the daily CI runner GPU RAM
-        model = MptForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, device_map={"": 0}, load_in_4bit=True
-        )
+        model = MptForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map={"": 0}, load_in_4bit=True)
 
         dummy_input = torch.LongTensor([[1, 2, 3, 4, 5]]).to(torch_device)
 

@@ -21,7 +21,7 @@ import numpy as np
 
 from transformers import AutoProcessor, AutoTokenizer, JanusProcessor
 
-from ...test_processing_common import ProcessorTesterMixin
+from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
@@ -38,6 +38,7 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class.from_pretrained(
             "deepseek-community/Janus-Pro-1B",
             extra_special_tokens=special_image_tokens,
+            **self.prepare_processor_dict(),
         )
         # Set the processor to use the default system prompt to False as it's used based on input modality.
         # Hence set to False to avoid any issues in the test irrespective of inputs.
@@ -128,7 +129,12 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # Now test the ability to return dict
         messages[0][0]["content"][1].update(
-            {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"}
+            {
+                "type": "image",
+                "url": url_to_local_path(
+                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+                ),
+            }
         )
         out_dict = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True)
         self.assertTrue(self.images_input_name in out_dict)
@@ -269,10 +275,15 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # Verify image inputs are included in the output dict
         batched_messages[0][0]["content"][1].update(
-            {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"}
+            {
+                "type": "image",
+                "url": url_to_local_path(
+                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+                ),
+            }
         )
         batched_messages[1][0]["content"][1].update(
-            {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"}
+            {"type": "image", "url": url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg")}
         )
         out_dict = processor.apply_chat_template(
             batched_messages, add_generation_prompt=True, tokenize=True, return_dict=True, padding=True
@@ -419,7 +430,12 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Test 3: Image processing kwargs
         # Add an image and test image processing parameters
         messages[0][0]["content"].append(
-            {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"}
+            {
+                "type": "image",
+                "url": url_to_local_path(
+                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+                ),
+            }
         )
         # Process with image rescaling and verify the pixel values are negative
         out_dict = processor.apply_chat_template(
@@ -441,7 +457,7 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         orig_image_input = self.prepare_image_inputs()
         orig_image = np.array(orig_image_input).transpose(2, 0, 1)
 
-        inputs = processor(text=input_str, images=orig_image, do_resize=False, return_tensors="np")
+        inputs = processor(text=input_str, images=orig_image, do_resize=False, do_pad=False, return_tensors="np")
         normalized_image_input = inputs.pixel_values
         unnormalized_images = processor.postprocess(normalized_image_input, return_tensors="np")["pixel_values"]
 

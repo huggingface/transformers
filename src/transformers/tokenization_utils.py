@@ -104,7 +104,7 @@ class Trie:
 
     def split(self, text: str) -> list[str]:
         """
-        Will look for the words added to the trie within `text`. Output is the original string splitted along the
+        Will look for the words added to the trie within `text`. Output is the original string split along the
         boundaries of the words found.
 
         This trie will match the longest possible word first !
@@ -587,11 +587,11 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         self._update_total_vocab_size()
         return added_tokens
 
-    def _update_trie(self, unique_no_split_tokens: Optional[str] = []):
+    def _update_trie(self, unique_no_split_tokens: Optional[list[str]] = None):
         for token in self._added_tokens_decoder.values():
             if token.content not in self.tokens_trie._tokens:
                 self.tokens_trie.add(token.content)
-        for token in unique_no_split_tokens:
+        for token in unique_no_split_tokens or []:
             if token not in self.tokens_trie._tokens:
                 self.tokens_trie.add(token)
 
@@ -877,9 +877,11 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
         input_ids = []
         for ids_or_pair_ids in batch_text_or_text_pairs:
-            if not isinstance(ids_or_pair_ids, (list, tuple)):
-                ids, pair_ids = ids_or_pair_ids, None
-            elif is_split_into_words and not isinstance(ids_or_pair_ids[0], (list, tuple)):
+            if (
+                not isinstance(ids_or_pair_ids, (list, tuple))
+                or is_split_into_words
+                and not isinstance(ids_or_pair_ids[0], (list, tuple))
+            ):
                 ids, pair_ids = ids_or_pair_ids, None
             else:
                 ids, pair_ids = ids_or_pair_ids

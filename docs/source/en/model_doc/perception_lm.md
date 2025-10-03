@@ -13,12 +13,13 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-04-17 and added to Hugging Face Transformers on 2025-07-11.*
 
 # PerceptionLM
 
 ## Overview
 
-The PerceptionLM model was proposed in [PerceptionLM: Open-Access Data and Models for Detailed Visual Understanding](https://ai.meta.com/research/publications/perceptionlm-open-access-data-and-models-for-detailed-visual-understanding/) by Jang Hyun Cho et al. It's a fully open, reproducible model for transparent research in image and video understanding. PLM consists of
+The [PerceptionLM](https://huggingface.co/papers/2504.13180) model was proposed in [PerceptionLM: Open-Access Data and Models for Detailed Visual Understanding](https://ai.meta.com/research/publications/perceptionlm-open-access-data-and-models-for-detailed-visual-understanding/) by Jang Hyun Cho et al. It's a fully open, reproducible model for transparent research in image and video understanding. PLM consists of
 a vision encoder with a small scale (<8B parameters) LLM decoder.
 
 The abstract from the paper is the following:
@@ -37,10 +38,8 @@ video captions. Additionally, we introduce PLM–VideoBench, a suite for evaluat
 understanding tasks focusing on the ability to reason about “what”, “where”, “when”, and “how” of a
 video. We make our work fully reproducible by providing data, training recipes, code & models.*
 
-
 This model was contributed by [shumingh](https://huggingface.co/shumingh).
 The original code can be found [here](https://github.com/facebookresearch/perception_models).
-
 
 ## PerceptionLMConfig
 

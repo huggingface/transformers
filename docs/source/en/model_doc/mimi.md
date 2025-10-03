@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-09-17 and added to Hugging Face Transformers on 2024-09-18.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -38,7 +39,7 @@ The example below demonstrates how to encode and decode audio with the [`AutoMod
 <hfoptions id="usage">
 <hfoption id="AutoModel">
 
-```python 
+```python
 >>> from datasets import load_dataset, Audio
 >>> from transformers import MimiModel, AutoFeatureExtractor
 >>> librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
