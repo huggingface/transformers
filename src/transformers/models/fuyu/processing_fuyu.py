@@ -71,7 +71,6 @@ class FuyuProcessorKwargs(ProcessingKwargs, total=False):
             "verbose": True,
             "return_mm_token_type_ids": False,
         },
-        "images_kwargs": {},
     }
 
 
@@ -487,8 +486,6 @@ class FuyuProcessor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[FuyuProcessorKwargs],
     ) -> "FuyuBatchFeature":
         """

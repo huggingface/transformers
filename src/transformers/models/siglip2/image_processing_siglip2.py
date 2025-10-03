@@ -37,6 +37,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
 
 
@@ -45,6 +46,19 @@ logger = logging.get_logger(__name__)
 
 if is_vision_available():
     from PIL import Image
+
+
+class Siglip2ImageProcessorKwargs(ImagesKwargs):
+    """
+    patch_size (`int`, *optional*, defaults to 16):
+        The size (resolution) of each patch the image will be split to.
+    max_num_patches (`int`, *optional*, defaults to 256):
+        The image will be resized to have at most this number of patches,
+        and then padded in "patch" dimension to match this number exactly.
+    """
+
+    patch_size: Optional[int]
+    max_num_patches: Optional[int]
 
 
 @lru_cache(maxsize=256)
@@ -159,6 +173,7 @@ class Siglip2ImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values", "pixel_attention_mask", "spatial_shapes"]
+    valid_kwargs = Siglip2ImageProcessorKwargs
 
     def __init__(
         self,

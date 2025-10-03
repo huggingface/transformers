@@ -658,7 +658,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         words = []
         token_idx = char_start_idx = char_end_idx = chars_idx = 0
 
-        for i, word in enumerate(text.split(" ")):
+        for word in text.split(" "):
             token = self.tokenizer.tokenize(word)
 
             # Append words if they are in the span

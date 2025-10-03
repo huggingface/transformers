@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 [`Trainer`] をインスタンス化する前に、トレーニング中にカスタマイズのすべてのポイントにアクセスするために [`TrainingArguments`] を作成します。
 
-この API は、複数の GPU/TPU での分散トレーニング、[NVIDIA Apex](https://github.com/NVIDIA/apex) および PyTorch のネイティブ AMP による混合精度をサポートします。
+この API は、複数の GPU/TPU での分散トレーニング、PyTorch のネイティブ AMP による混合精度をサポートします。
 
 [`Trainer`] には、上記の機能をサポートする基本的なトレーニング ループが含まれています。カスタム動作を挿入するには、それらをサブクラス化し、次のメソッドをオーバーライドします。
 

@@ -111,6 +111,27 @@ try:
                 )
             }
         },
+        "SiLU": {
+            "cuda": {
+                Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                    repo_id="kernels-community/activation", layer_name="Silu", version=">=0.1.0"
+                )
+            }
+        },
+        "GeLU": {
+            "cuda": {
+                Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                    repo_id="kernels-community/activation", layer_name="Gelu", version=">=0.1.0"
+                )
+            }
+        },
+        "GeluTanh": {
+            "cuda": {
+                Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                    repo_id="kernels-community/activation", layer_name="GeluTanh", version=">=0.1.0"
+                )
+            }
+        },
     }
 
     register_kernel_mapping(_KERNEL_MAPPING)
@@ -152,7 +173,10 @@ def load_and_register_kernel(attn_implementation: str) -> None:
     if not is_kernel(attn_implementation):
         return
     if not _kernels_available:
-        raise ImportError("`kernels` is not installed. Please install it with `pip install kernels`.")
+        raise ImportError(
+            "`kernels` is either not installed or uses an incompatible version. "
+            "Please install the latest version with `pip install -U kernels`."
+        )
 
     # Need to be imported here as otherwise we have a circular import in `modeling_utils`
     from ..masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
@@ -188,7 +212,7 @@ def load_and_register_kernel(attn_implementation: str) -> None:
         if attention_wrapper is None:
             attention_wrapper = flash_attention_forward
         kernel_function = partial(attention_wrapper, implementation=kernel)
-        lazy_import_flash_attention(kernel)
+        lazy_import_flash_attention(kernel, force_import=True)
     elif kernel_name is not None:
         kernel_function = getattr(kernel, kernel_name)
     # Register the kernel as a valid attention

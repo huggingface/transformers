@@ -515,7 +515,6 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     test_pruning = False
     test_torchscript = True
     test_resize_embeddings = True
-    test_model_parallel = False
     is_encoder_decoder = True
 
     def setUp(self):
@@ -1012,7 +1011,6 @@ class LongT5EncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_torchscript = True
     test_resize_embeddings = False
-    test_model_parallel = False
 
     def setUp(self):
         self.model_tester = LongT5EncoderOnlyModelTester(self)

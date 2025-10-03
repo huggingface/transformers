@@ -23,6 +23,7 @@ rendered properly in your Markdown viewer.
 Image segmentation models separate areas corresponding to different areas of interest in an image. These models work by assigning a label to each pixel. There are several types of segmentation: semantic segmentation, instance segmentation, and panoptic segmentation.
 
 In this guide, we will:
+
 1. [Take a look at different types of segmentation](#types-of-segmentation).
 2. [Have an end-to-end fine-tuning example for semantic segmentation](#fine-tuning-a-model-for-segmentation).
 
