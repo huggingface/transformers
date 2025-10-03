@@ -898,7 +898,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         **kwargs,
     ):
         """
-        Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
+        Creates causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
         `(batch_size, key_value_length)`, or if the input `attention_mask` is already 4D, do nothing.
 
         Args:
