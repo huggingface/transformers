@@ -1366,7 +1366,7 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
         hidden_states = outputs[0]
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        logits = self.output(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
