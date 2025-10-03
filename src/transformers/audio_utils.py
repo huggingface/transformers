@@ -1038,8 +1038,8 @@ def spectrogram_batch(
 
 
 def spectrogram_torch(
-    waveform_list: list[torch.Tensor],
-    window: torch.Tensor,
+    waveform_list: list["torch.Tensor"],
+    window: "torch.Tensor",
     frame_length: int,
     hop_length: int,
     fft_length: Optional[int] = None,
@@ -1049,7 +1049,7 @@ def spectrogram_torch(
     onesided: bool = True,
     dither: float = 0.0,
     preemphasis: Optional[float] = None,
-    mel_filters: Optional[torch.Tensor] = None,
+    mel_filters: Optional["torch.Tensor"] = None,
     mel_floor: float = 1e-10,
     log_mel: Optional[str] = None,
     reference: float = 1.0,
@@ -1057,7 +1057,7 @@ def spectrogram_torch(
     db_range: Optional[float] = None,
     remove_dc_offset: Optional[bool] = False,
     device: str = "cpu",
-    dtype: torch.dtype = torch.float32,
+    dtype: str = "float32",
 ):
     """
     PyTorch version of spectrogram_batch().
@@ -1075,6 +1075,9 @@ def spectrogram_torch(
         raise ValueError(f"window_length ({window_length}) must equal frame_length ({frame_length})")
     if hop_length <= 0:
         raise ValueError("hop_length must be greater than zero")
+    if dtype not in ["float16", "float32", "float64"]:
+        raise ValueError(f"dtype must be one of 'float16', 'float32', 'float64', got {dtype}")
+    dtype = getattr(torch, dtype)
 
     # Convert list of waveforms → padded tensor [B, T]
     max_len = max(w.shape[-1] for w in waveform_list)
