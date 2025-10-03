@@ -12,17 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict
 
 from transformers import is_torch_available
 from transformers.testing_utils import (
     TestCasePlus,
+    backend_device_count,
     execute_subprocess_async,
     get_torch_dist_unique_port,
     require_accelerate,
     require_fp8,
-    require_fsdp,
-    require_torch_multi_gpu,
+    require_torch_multi_accelerator,
+    run_first,
+    torch_device,
 )
 
 
@@ -64,9 +65,9 @@ if is_torch_available():
 
 
 class TestFSDPTrainer(TestCasePlus):
+    @require_torch_multi_accelerator
     @require_accelerate
-    @require_torch_multi_gpu
-    @require_fsdp
+    @run_first
     def test_trainer(self):
         output_dir = self.get_auto_remove_tmp_dir()
         cmd = [
@@ -76,7 +77,7 @@ class TestFSDPTrainer(TestCasePlus):
             "--main_process_port",
             f"{get_torch_dist_unique_port()}",
             "--num_processes",
-            f"{torch.cuda.device_count()}",
+            f"{backend_device_count(torch_device)}",
             "--fsdp_transformer_layer_cls_to_wrap",
             "GPT2Block",
             f"{self.test_file_dir}/test_trainer_fsdp.py",
@@ -90,10 +91,10 @@ class TestFSDPTrainer(TestCasePlus):
 
 
 class TestFSDPTrainerFP8(TestCasePlus):
+    @require_torch_multi_accelerator
     @require_accelerate
-    @require_torch_multi_gpu
-    @require_fsdp
     @require_fp8
+    @run_first
     def test_trainer(self):
         output_dir = self.get_auto_remove_tmp_dir()
         cmd = [
@@ -103,7 +104,7 @@ class TestFSDPTrainerFP8(TestCasePlus):
             "--main_process_port",
             f"{get_torch_dist_unique_port()}",
             "--num_processes",
-            f"{torch.cuda.device_count()}",
+            f"{backend_device_count(torch_device)}",
             "--mixed_precision",
             "fp8",
             "--fsdp_transformer_layer_cls_to_wrap",
@@ -117,39 +118,67 @@ class TestFSDPTrainerFP8(TestCasePlus):
         execute_subprocess_async(cmd, env=self.get_env())
         # successful return here == success - any errors would have caused an error in the sub-call
 
-    class TestFSDPTrainerWrap(TestCasePlus):
-        @require_accelerate
-        @require_torch_multi_gpu
-        @require_fsdp
-        def test_trainer(self):
-            output_dir = self.get_auto_remove_tmp_dir()
-            cmd = [
-                "accelerate",
-                "launch",
-                "--use_fsdp",
-                "--main_process_port",
-                f"{get_torch_dist_unique_port()}",
-                "--num_processes",
-                f"{torch.cuda.device_count()}",
-                "--fsdp_transformer_layer_cls_to_wrap",
-                "GPT2Block",
-                f"{self.test_file_dir}/test_trainer_fsdp.py",
-                "--output_dir",
-                f"{output_dir}",
-                "--report_to",
-                "none",
-                "--auto_find_batch_size",
-                "True",
-            ]
-            execute_subprocess_async(cmd, env=self.get_env())
-            # successful return here == success - any errors would have caused an error in the sub-call
+
+class TestFSDPTrainerWrap(TestCasePlus):
+    @require_torch_multi_accelerator
+    @require_accelerate
+    @run_first
+    def test_trainer(self):
+        output_dir = self.get_auto_remove_tmp_dir()
+        cmd = [
+            "accelerate",
+            "launch",
+            "--use_fsdp",
+            "--main_process_port",
+            f"{get_torch_dist_unique_port()}",
+            "--num_processes",
+            f"{backend_device_count(torch_device)}",
+            "--fsdp_transformer_layer_cls_to_wrap",
+            "GPT2Block",
+            f"{self.test_file_dir}/test_trainer_fsdp.py",
+            "--output_dir",
+            f"{output_dir}",
+            "--report_to",
+            "none",
+            "--auto_find_batch_size",
+            "True",
+        ]
+        execute_subprocess_async(cmd, env=self.get_env())
+        # successful return here == success - any errors would have caused an error in the sub-call
+
+
+class TestFSDPTrainerTorchCompile(TestCasePlus):
+    @require_torch_multi_accelerator
+    @require_accelerate
+    @run_first
+    def test_trainer(self):
+        output_dir = self.get_auto_remove_tmp_dir()
+        cmd = [
+            "accelerate",
+            "launch",
+            "--use_fsdp",
+            "--main_process_port",
+            f"{get_torch_dist_unique_port()}",
+            "--num_processes",
+            f"{backend_device_count(torch_device)}",
+            "--fsdp_transformer_layer_cls_to_wrap",
+            "GPT2Block",
+            f"{self.test_file_dir}/test_trainer_fsdp.py",
+            "--torch_compile_mode",
+            "default",
+            "--output_dir",
+            f"{output_dir}",
+            "--report_to",
+            "none",
+        ]
+        execute_subprocess_async(cmd, env=self.get_env())
+        # successful return here == success - any errors would have caused an error in the sub-call
 
 
 if __name__ == "__main__":
     parser = HfArgumentParser((Seq2SeqTrainingArguments,))
     training_args = parser.parse_args_into_dataclasses()[0]
     training_args.per_device_eval_batch_size = 1
-    training_args.use_legacy_prediction_loop = False
     training_args.predict_with_generate = True
     training_args.generation_config = GenerationConfig(max_length=30)
 
@@ -159,7 +188,7 @@ if __name__ == "__main__":
     device = torch.device(torch.distributed.get_rank())
     model = AutoModelForCausalLM.from_pretrained(pretrained_model_name).to(device)
 
-    def compute_metrics(p: EvalPrediction) -> Dict[str, bool]:
+    def compute_metrics(p: EvalPrediction) -> dict[str, bool]:
         return {"accuracy": (p.predictions == p.label_ids).mean()}
 
     trainer = Seq2SeqTrainer(

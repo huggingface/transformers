@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,12 +15,12 @@
 
 import unittest
 
+import pytest
 from packaging import version
-from parameterized import parameterized
 
 from transformers import AlbertConfig, AutoTokenizer, is_torch_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_torch, require_torch_sdpa, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
@@ -53,19 +52,19 @@ class AlbertModelTester:
         use_input_mask=True,
         use_token_type_ids=True,
         use_labels=True,
-        vocab_size=99,
-        embedding_size=16,
-        hidden_size=36,
+        vocab_size=32,
+        embedding_size=8,
+        hidden_size=16,
         num_hidden_layers=2,
         # this needs to be the same as `num_hidden_layers`!
         num_hidden_groups=2,
-        num_attention_heads=6,
-        intermediate_size=37,
+        num_attention_heads=4,
+        intermediate_size=20,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=16,
+        max_position_embeddings=8,
+        type_vocab_size=2,
         type_sequence_label_size=2,
         initializer_range=0.02,
         num_labels=3,
@@ -123,6 +122,7 @@ class AlbertModelTester:
     def get_config(self):
         return AlbertConfig(
             vocab_size=self.vocab_size,
+            embedding_size=self.embedding_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
@@ -134,6 +134,7 @@ class AlbertModelTester:
             type_vocab_size=self.type_vocab_size,
             initializer_range=self.initializer_range,
             num_hidden_groups=self.num_hidden_groups,
+            inner_group_num=1,
         )
 
     def create_and_check_model(
@@ -199,16 +200,6 @@ class AlbertModelTester:
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
-    def create_and_check_for_token_classification(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        config.num_labels = self.num_labels
-        model = AlbertForTokenClassification(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
-
     def create_and_check_for_multiple_choice(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
@@ -269,7 +260,7 @@ class AlbertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    fx_compatible = True
+    fx_compatible = False  # will not be maintained
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -288,12 +279,6 @@ class AlbertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = AlbertModelTester(self)
         self.config_tester = ConfigTester(self, config_class=AlbertConfig, hidden_size=37)
-
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    @require_torch_sdpa
-    @unittest.skip("Albert requires `head_mask` which is currently not done in this test.")
-    def test_eager_matches_sdpa_inference(self):
-        pass
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -326,6 +311,7 @@ class AlbertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         for type in ["absolute", "relative_key", "relative_key_query"]:
             config_and_inputs[0].position_embedding_type = type
+            config_and_inputs[0]._attn_implementation = "eager"
             self.model_tester.create_and_check_model(*config_and_inputs)
 
     @slow
@@ -350,9 +336,10 @@ class AlbertModelIntegrationTest(unittest.TestCase):
             [[[-0.6513, 1.5035, -0.2766], [-0.6515, 1.5046, -0.2780], [-0.6512, 1.5049, -0.2784]]]
         )
 
-        self.assertTrue(torch.allclose(output[:, 1:4, 1:4], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
+    @pytest.mark.torch_export_test
     def test_export(self):
         if version.parse(torch.__version__) < version.parse("2.4.0"):
             self.skipTest(reason="This test requires torch >= 2.4 to run.")

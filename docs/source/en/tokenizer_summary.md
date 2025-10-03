@@ -42,7 +42,7 @@ For instance, let's look at the sentence `"Don't you love 🤗 Transformers? We 
 
 A simple way of tokenizing this text is to split it by spaces, which would give:
 
-```
+```text
 ["Don't", "you", "love", "🤗", "Transformers?", "We", "sure", "do."]
 ```
 
@@ -52,7 +52,7 @@ punctuation into account so that a model does not have to learn a different repr
 punctuation symbol that could follow it, which would explode the number of representations the model has to learn.
 Taking punctuation into account, tokenizing our exemplary text would give:
 
-```
+```text
 ["Don", "'", "t", "you", "love", "🤗", "Transformers", "?", "We", "sure", "do", "."]
 ```
 
@@ -65,7 +65,7 @@ input that was tokenized with the same rules that were used to tokenize its trai
 [spaCy](https://spacy.io/) and [Moses](http://www.statmt.org/moses/?n=Development.GetStarted) are two popular
 rule-based tokenizers. Applying them on our example, *spaCy* and *Moses* would output something like:
 
-```
+```text
 ["Do", "n't", "you", "love", "🤗", "Transformers", "?", "We", "sure", "do", "."]
 ```
 
@@ -140,7 +140,7 @@ on.
 ### Byte-Pair Encoding (BPE)
 
 Byte-Pair Encoding (BPE) was introduced in [Neural Machine Translation of Rare Words with Subword Units (Sennrich et
-al., 2015)](https://arxiv.org/abs/1508.07909). BPE relies on a pre-tokenizer that splits the training data into
+al., 2015)](https://huggingface.co/papers/1508.07909). BPE relies on a pre-tokenizer that splits the training data into
 words. Pretokenization can be as simple as space tokenization, e.g. [GPT-2](model_doc/gpt2), [RoBERTa](model_doc/roberta). More advanced pre-tokenization include rule-based tokenization, e.g. [XLM](model_doc/xlm),
 [FlauBERT](model_doc/flaubert) which uses Moses for most languages, or [GPT](model_doc/openai-gpt) which uses
 spaCy and ftfy, to count the frequency of each word in the training corpus.
@@ -154,14 +154,14 @@ define before training the tokenizer.
 As an example, let's assume that after pre-tokenization, the following set of words including their frequency has been
 determined:
 
-```
+```text
 ("hug", 10), ("pug", 5), ("pun", 12), ("bun", 4), ("hugs", 5)
 ```
 
 Consequently, the base vocabulary is `["b", "g", "h", "n", "p", "s", "u"]`. Splitting all words into symbols of the
 base vocabulary, we obtain:
 
-```
+```text
 ("h" "u" "g", 10), ("p" "u" "g", 5), ("p" "u" "n", 12), ("b" "u" "n", 4), ("h" "u" "g" "s", 5)
 ```
 
@@ -172,7 +172,7 @@ the example above `"h"` followed by `"u"` is present _10 + 5 = 15_ times (10 tim
 `"u"` symbols followed by a `"g"` symbol together. Next, `"ug"` is added to the vocabulary. The set of words then
 becomes
 
-```
+```text
 ("h" "ug", 10), ("p" "ug", 5), ("p" "u" "n", 12), ("b" "u" "n", 4), ("h" "ug" "s", 5)
 ```
 
@@ -183,7 +183,7 @@ BPE then identifies the next most common symbol pair. It's `"u"` followed by `"n
 At this stage, the vocabulary is `["b", "g", "h", "n", "p", "s", "u", "ug", "un", "hug"]` and our set of unique words
 is represented as
 
-```
+```text
 ("hug", 10), ("p" "ug", 5), ("p" "un", 12), ("b" "un", 4), ("hug" "s", 5)
 ```
 
@@ -230,7 +230,7 @@ to ensure it's _worth it_.
 ### Unigram
 
 Unigram is a subword tokenization algorithm introduced in [Subword Regularization: Improving Neural Network Translation
-Models with Multiple Subword Candidates (Kudo, 2018)](https://arxiv.org/pdf/1804.10959.pdf). In contrast to BPE or
+Models with Multiple Subword Candidates (Kudo, 2018)](https://huggingface.co/papers/1804.10959). In contrast to BPE or
 WordPiece, Unigram initializes its base vocabulary to a large number of symbols and progressively trims down each
 symbol to obtain a smaller vocabulary. The base vocabulary could for instance correspond to all pre-tokenized words and
 the most common substrings. Unigram is not used directly for any of the models in the transformers, but it's used in
@@ -246,7 +246,7 @@ reached the desired size. The Unigram algorithm always keeps the base characters
 Because Unigram is not based on merge rules (in contrast to BPE and WordPiece), the algorithm has several ways of
 tokenizing new text after training. As an example, if a trained Unigram tokenizer exhibits the vocabulary:
 
-```
+```text
 ["b", "g", "h", "n", "p", "s", "u", "ug", "un", "hug"],
 ```
 
@@ -270,7 +270,7 @@ All tokenization algorithms described so far have the same problem: It is assume
 separate words. However, not all languages use spaces to separate words. One possible solution is to use language
 specific pre-tokenizers, *e.g.* [XLM](model_doc/xlm) uses a specific Chinese, Japanese, and Thai pre-tokenizer.
 To solve this problem more generally, [SentencePiece: A simple and language independent subword tokenizer and
-detokenizer for Neural Text Processing (Kudo et al., 2018)](https://arxiv.org/pdf/1808.06226.pdf) treats the input
+detokenizer for Neural Text Processing (Kudo et al., 2018)](https://huggingface.co/papers/1808.06226) treats the input
 as a raw input stream, thus including the space in the set of characters to use. It then uses the BPE or unigram
 algorithm to construct the appropriate vocabulary.
 

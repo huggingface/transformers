@@ -15,7 +15,7 @@
 """RemBERT model configuration"""
 
 from collections import OrderedDict
-from typing import Mapping
+from collections.abc import Mapping
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
@@ -157,3 +157,6 @@ class RemBertOnnxConfig(OnnxConfig):
     @property
     def atol_for_validation(self) -> float:
         return 1e-4
+
+
+__all__ = ["RemBertConfig", "RemBertOnnxConfig"]

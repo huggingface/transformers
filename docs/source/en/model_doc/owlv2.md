@@ -13,12 +13,17 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-06-16 and added to Hugging Face Transformers on 2023-10-13.*
 
 # OWLv2
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
-OWLv2 was proposed in [Scaling Open-Vocabulary Object Detection](https://arxiv.org/abs/2306.09683) by Matthias Minderer, Alexey Gritsenko, Neil Houlsby. OWLv2 scales up [OWL-ViT](owlvit) using self-training, which uses an existing detector to generate pseudo-box annotations on image-text pairs. This results in large gains over the previous state-of-the-art for zero-shot object detection.
+OWLv2 was proposed in [Scaling Open-Vocabulary Object Detection](https://huggingface.co/papers/2306.09683) by Matthias Minderer, Alexey Gritsenko, Neil Houlsby. OWLv2 scales up [OWL-ViT](owlvit) using self-training, which uses an existing detector to generate pseudo-box annotations on image-text pairs. This results in large gains over the previous state-of-the-art for zero-shot object detection.
 
 The abstract from the paper is the following:
 
@@ -27,7 +32,7 @@ The abstract from the paper is the following:
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/owlv2_overview.png"
 alt="drawing" width="600"/>
 
-<small> OWLv2 high-level overview. Taken from the <a href="https://arxiv.org/abs/2306.09683">original paper</a>. </small>
+<small> OWLv2 high-level overview. Taken from the <a href="https://huggingface.co/papers/2306.09683">original paper</a>. </small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/google-research/scenic/tree/main/scenic/projects/owl_vit).
@@ -50,20 +55,22 @@ OWLv2 is, just like its predecessor [OWL-ViT](owlvit), a zero-shot text-conditio
 
 >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 >>> image = Image.open(requests.get(url, stream=True).raw)
->>> texts = [["a photo of a cat", "a photo of a dog"]]
->>> inputs = processor(text=texts, images=image, return_tensors="pt")
+>>> text_labels = [["a photo of a cat", "a photo of a dog"]]
+>>> inputs = processor(text=text_labels, images=image, return_tensors="pt")
 >>> outputs = model(**inputs)
 
 >>> # Target image sizes (height, width) to rescale box predictions [batch_size, 2]
->>> target_sizes = torch.Tensor([image.size[::-1]])
->>> # Convert outputs (bounding boxes and class logits) to Pascal VOC Format (xmin, ymin, xmax, ymax)
->>> results = processor.post_process_object_detection(outputs=outputs, target_sizes=target_sizes, threshold=0.1)
->>> i = 0  # Retrieve predictions for the first image for the corresponding text queries
->>> text = texts[i]
->>> boxes, scores, labels = results[i]["boxes"], results[i]["scores"], results[i]["labels"]
->>> for box, score, label in zip(boxes, scores, labels):
+>>> target_sizes = torch.tensor([(image.height, image.width)])
+>>> # Convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
+>>> results = processor.post_process_grounded_object_detection(
+...     outputs=outputs, target_sizes=target_sizes, threshold=0.1, text_labels=text_labels
+... )
+>>> # Retrieve predictions for the first image for the corresponding text queries
+>>> result = results[0]
+>>> boxes, scores, text_labels = result["boxes"], result["scores"], result["text_labels"]
+>>> for box, score, text_label in zip(boxes, scores, text_labels):
 ...     box = [round(i, 2) for i in box.tolist()]
-...     print(f"Detected {text[label]} with confidence {round(score.item(), 3)} at location {box}")
+...     print(f"Detected {text_label} with confidence {round(score.item(), 3)} at location {box}")
 Detected a photo of a cat with confidence 0.614 at location [341.67, 23.39, 642.32, 371.35]
 Detected a photo of a cat with confidence 0.665 at location [6.75, 51.96, 326.62, 473.13]
 ```
@@ -100,9 +107,19 @@ Usage of OWLv2 is identical to [OWL-ViT](owlvit) with a new, updated image proce
     - post_process_object_detection
     - post_process_image_guided_detection
 
+## Owlv2ImageProcessorFast
+
+[[autodoc]] Owlv2ImageProcessorFast
+    - preprocess
+    - post_process_object_detection
+    - post_process_image_guided_detection
+
 ## Owlv2Processor
 
 [[autodoc]] Owlv2Processor
+    - __call__
+    - post_process_grounded_object_detection
+    - post_process_image_guided_detection
 
 ## Owlv2Model
 

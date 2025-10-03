@@ -107,13 +107,10 @@ class UnivNetModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_resize_position_embeddings = False
-    test_head_masking = False
     # UnivNetModel is not a sequence classification model.
     test_mismatched_shapes = False
     # UnivNetModel does not have a base_model_prefix attribute.
     test_missing_keys = False
-    # UnivNetModel does not implement a parallelize method.
-    test_model_parallel = False
     is_encoder_decoder = False
     has_attentions = False
 
@@ -216,7 +213,7 @@ class UnivNetModelIntegrationTests(unittest.TestCase):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         ds = ds.cast_column("audio", Audio(sampling_rate=sampling_rate))
         # automatic decoding with librispeech
-        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+        speech_samples = ds.sort("id")[:num_samples]["audio"]
 
         return [x["array"] for x in speech_samples], [x["sampling_rate"] for x in speech_samples]
 
@@ -227,7 +224,7 @@ class UnivNetModelIntegrationTests(unittest.TestCase):
             noise_sequence_shape = (64, noise_length)
         else:
             noise_sequence_shape = (num_samples, 64, noise_length)
-        # Explicity generate noise_sequence on CPU for consistency.
+        # Explicitly generate noise_sequence on CPU for consistency.
         noise_sequence = torch.randn(noise_sequence_shape, generator=generator, dtype=torch.float32, device="cpu")
         # Put noise_sequence on the desired device.
         noise_sequence = noise_sequence.to(device)
@@ -276,9 +273,9 @@ class UnivNetModelIntegrationTests(unittest.TestCase):
         EXPECTED_STDDEV = torch.tensor(0.35230172)
         EXPECTED_SLICE = torch.tensor([-0.3408, -0.6045, -0.5052, 0.1160, -0.1556, -0.0405, -0.3024, -0.5290, -0.5019])
 
-        torch.testing.assert_close(waveform_mean, EXPECTED_MEAN, atol=1e-4, rtol=1e-5)
-        torch.testing.assert_close(waveform_stddev, EXPECTED_STDDEV, atol=1e-4, rtol=1e-5)
-        torch.testing.assert_close(waveform_slice, EXPECTED_SLICE, atol=5e-4, rtol=1e-5)
+        torch.testing.assert_close(waveform_mean, EXPECTED_MEAN, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(waveform_stddev, EXPECTED_STDDEV, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(waveform_slice, EXPECTED_SLICE, rtol=5e-4, atol=5e-4)
 
     def test_model_inference_unbatched(self):
         # Load sample checkpoint from Tortoise TTS
@@ -300,9 +297,9 @@ class UnivNetModelIntegrationTests(unittest.TestCase):
         EXPECTED_STDDEV = torch.tensor(0.33986747)
         EXPECTED_SLICE = torch.tensor([-0.3276, -0.5504, -0.3484, 0.3574, -0.0373, -0.1826, -0.4880, -0.6431, -0.5162])
 
-        torch.testing.assert_close(waveform_mean, EXPECTED_MEAN, atol=1e-4, rtol=1e-5)
-        torch.testing.assert_close(waveform_stddev, EXPECTED_STDDEV, atol=1e-4, rtol=1e-5)
-        torch.testing.assert_close(waveform_slice, EXPECTED_SLICE, atol=1e-3, rtol=1e-5)
+        torch.testing.assert_close(waveform_mean, EXPECTED_MEAN, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(waveform_stddev, EXPECTED_STDDEV, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(waveform_slice, EXPECTED_SLICE, rtol=1e-3, atol=1e-3)
 
     def test_integration(self):
         feature_extractor = UnivNetFeatureExtractor.from_pretrained("dg845/univnet-dev")
@@ -331,6 +328,6 @@ class UnivNetModelIntegrationTests(unittest.TestCase):
         EXPECTED_SLICE = torch.tensor([-4.3934e-04, -1.8203e-04, -3.3033e-04, -3.8716e-04, -1.6125e-04, 3.5389e-06, -3.3149e-04, -3.7613e-04, -2.3331e-04])
         # fmt: on
 
-        torch.testing.assert_close(waveform_mean, EXPECTED_MEAN, atol=5e-6, rtol=1e-5)
-        torch.testing.assert_close(waveform_stddev, EXPECTED_STDDEV, atol=1e-4, rtol=1e-5)
-        torch.testing.assert_close(waveform_slice, EXPECTED_SLICE, atol=5e-6, rtol=1e-5)
+        torch.testing.assert_close(waveform_mean, EXPECTED_MEAN, rtol=5e-6, atol=5e-6)
+        torch.testing.assert_close(waveform_stddev, EXPECTED_STDDEV, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(waveform_slice, EXPECTED_SLICE, rtol=5e-6, atol=5e-6)

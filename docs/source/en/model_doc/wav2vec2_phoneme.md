@@ -13,13 +13,18 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-09-23 and added to Hugging Face Transformers on 2021-12-17.*
 
 # Wav2Vec2Phoneme
+
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
 
 ## Overview
 
 The Wav2Vec2Phoneme model was proposed in [Simple and Effective Zero-shot Cross-lingual Phoneme Recognition (Xu et al.,
-2021](https://arxiv.org/abs/2109.11680) by Qiantong Xu, Alexei Baevski, Michael Auli.
+2021)](https://huggingface.co/papers/2109.11680) by Qiantong Xu, Alexei Baevski, Michael Auli.
 
 The abstract from the paper is the following:
 
@@ -48,10 +53,9 @@ The original code can be found [here](https://github.com/pytorch/fairseq/tree/ma
 - By default, the model outputs a sequence of phonemes. In order to transform the phonemes to a sequence of words one
   should make use of a dictionary and language model.
 
-
 <Tip>
 
-Wav2Vec2Phoneme's architecture is based on the Wav2Vec2 model, for API reference, check out [`Wav2Vec2`](wav2vec2)'s documentation page 
+Wav2Vec2Phoneme's architecture is based on the Wav2Vec2 model, for API reference, check out [`Wav2Vec2`](wav2vec2)'s documentation page
 except for the tokenizer.
 
 </Tip>
@@ -59,7 +63,7 @@ except for the tokenizer.
 ## Wav2Vec2PhonemeCTCTokenizer
 
 [[autodoc]] Wav2Vec2PhonemeCTCTokenizer
-	- __call__
-	- batch_decode
-	- decode
-	- phonemize
+    - __call__
+    - batch_decode
+    - decode
+    - phonemize

@@ -15,7 +15,7 @@
 """BigBird model configuration"""
 
 from collections import OrderedDict
-from typing import Mapping
+from collections.abc import Mapping
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
@@ -171,3 +171,6 @@ class BigBirdOnnxConfig(OnnxConfig):
                 ("attention_mask", dynamic_axis),
             ]
         )
+
+
+__all__ = ["BigBirdConfig", "BigBirdOnnxConfig"]

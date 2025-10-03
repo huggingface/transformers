@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The Hugging Face Team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,10 +14,10 @@
 
 
 import unittest
+from functools import cached_property
 
 from transformers import MarkupLMConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
-from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
@@ -310,7 +309,7 @@ class MarkupLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         feature_extractor_name,
         processor_name,
     ):
-        # ValueError: Nodes must be of type `List[str]` (single pretokenized example), or `List[List[str]]`
+        # ValueError: Nodes must be of type `list[str]` (single pretokenized example), or `list[list[str]]`
         # (batch of pretokenized examples).
         return True
 
@@ -388,4 +387,4 @@ class MarkupLMModelIntegrationTest(unittest.TestCase):
             [[0.0675, -0.0052, 0.5001], [-0.2281, 0.0802, 0.2192], [-0.0583, -0.3311, 0.1185]]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

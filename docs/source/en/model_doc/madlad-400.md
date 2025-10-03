@@ -13,16 +13,21 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-09-09 and added to Hugging Face Transformers on 2023-11-28.*
 
 # MADLAD-400
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
-MADLAD-400 models were released in the paper [MADLAD-400: A Multilingual And Document-Level Large Audited Dataset](MADLAD-400: A Multilingual And Document-Level Large Audited Dataset). 
+MADLAD-400 models were released in the paper [MADLAD-400: A Multilingual And Document-Level Large Audited Dataset](https://huggingface.co/papers/2309.04662).
 
-The abstract from the paper is the following: 
+The abstract from the paper is the following:
 
-*We introduce MADLAD-400, a manually audited, general domain 3T token monolingual dataset based on CommonCrawl, spanning 419 languages. We discuss 
+*We introduce MADLAD-400, a manually audited, general domain 3T token monolingual dataset based on CommonCrawl, spanning 419 languages. We discuss
 the limitations revealed by self-auditing MADLAD-400, and the role data auditing
 had in the dataset creation process. We then train and release a 10.7B-parameter
 multilingual machine translation model on 250 billion tokens covering over 450
@@ -31,7 +36,7 @@ that are significantly larger, and report the results on different domains. In a
 translation. We make the baseline models 1
 available to the research community.*
 
-This model was added by [Juarez Bochi](https://huggingface.co/jbochi). The original checkpoints can be found [here](https://github.com/google-research/google-research/tree/master/madlad_400). 
+This model was added by [Juarez Bochi](https://huggingface.co/jbochi). The original checkpoints can be found [here](https://github.com/google-research/google-research/tree/master/madlad_400).
 
 This is a machine translation model that supports many low-resource languages, and that is competitive with models that are significantly larger.
 

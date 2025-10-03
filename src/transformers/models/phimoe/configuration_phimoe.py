@@ -48,8 +48,8 @@ class PhimoeConfig(PretrainedConfig):
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `8`.
+            by meanpooling all the original heads within that group. For more details, check out [this
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `8`.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to `4096*32`):
@@ -88,7 +88,7 @@ class PhimoeConfig(PretrainedConfig):
         num_local_experts (`int`, *optional*, defaults to 16):
             Number of experts per Sparse MLP layer.
         output_router_logits (`bool`, *optional*, defaults to `False`):
-            Whether or not the router logits should be returned by the model. Enabeling this will also
+            Whether or not the router logits should be returned by the model. Enabling this will also
             allow the model to output the auxiliary loss. See [here]() for more details
         router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
             The aux loss factor for the total loss.
@@ -181,13 +181,11 @@ class PhimoeConfig(PretrainedConfig):
             rope_scaling_short_mscale = self.rope_scaling.get("short_mscale", None)
             rope_scaling_long_mscale = self.rope_scaling.get("long_mscale", None)
             if not isinstance(rope_scaling_short_mscale, (int, float)):
-                raise ValueError(
+                raise TypeError(
                     f"`rope_scaling`'s short_mscale field must be a number, got {rope_scaling_short_mscale}"
                 )
             if not isinstance(rope_scaling_long_mscale, (int, float)):
-                raise ValueError(
-                    f"`rope_scaling`'s long_mscale field must be a number, got {rope_scaling_long_mscale}"
-                )
+                raise TypeError(f"`rope_scaling`'s long_mscale field must be a number, got {rope_scaling_long_mscale}")
 
         rope_config_validation(self)
 

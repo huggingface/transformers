@@ -22,7 +22,6 @@ from transformers.testing_utils import (
     compare_pipeline_output_to_hub_spec,
     is_pipeline_test,
     nested_simplify,
-    require_tf,
     require_torch,
     require_vision,
     slow,
@@ -74,9 +73,9 @@ class ZeroShotImageClassificationPipelineTests(unittest.TestCase):
     #     outputs = pipe([image] * 3, batch_size=2, candidate_labels=["A", "B"])
 
     @require_torch
-    def test_small_model_pt(self, torch_dtype="float32"):
+    def test_small_model_pt(self, dtype="float32"):
         image_classifier = pipeline(
-            model="hf-internal-testing/tiny-random-clip-zero-shot-image-classification", torch_dtype=torch_dtype
+            model="hf-internal-testing/tiny-random-clip-zero-shot-image-classification", dtype=dtype
         )
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         output = image_classifier(image, candidate_labels=["a", "b", "c"])
@@ -135,58 +134,7 @@ class ZeroShotImageClassificationPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_small_model_pt_fp16(self):
-        self.test_small_model_pt(torch_dtype="float16")
-
-    @require_tf
-    def test_small_model_tf(self):
-        image_classifier = pipeline(
-            model="hf-internal-testing/tiny-random-clip-zero-shot-image-classification", framework="tf"
-        )
-        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        output = image_classifier(image, candidate_labels=["a", "b", "c"])
-
-        self.assertEqual(
-            nested_simplify(output),
-            [{"score": 0.333, "label": "a"}, {"score": 0.333, "label": "b"}, {"score": 0.333, "label": "c"}],
-        )
-
-        output = image_classifier([image] * 5, candidate_labels=["A", "B", "C"], batch_size=2)
-        self.assertEqual(
-            nested_simplify(output),
-            # Pipeline outputs are supposed to be deterministic and
-            # So we could in theory have real values "A", "B", "C" instead
-            # of ANY(str).
-            # However it seems that in this particular case, the floating
-            # scores are so close, we enter floating error approximation
-            # and the order is not guaranteed anymore with batching.
-            [
-                [
-                    {"score": 0.333, "label": ANY(str)},
-                    {"score": 0.333, "label": ANY(str)},
-                    {"score": 0.333, "label": ANY(str)},
-                ],
-                [
-                    {"score": 0.333, "label": ANY(str)},
-                    {"score": 0.333, "label": ANY(str)},
-                    {"score": 0.333, "label": ANY(str)},
-                ],
-                [
-                    {"score": 0.333, "label": ANY(str)},
-                    {"score": 0.333, "label": ANY(str)},
-                    {"score": 0.333, "label": ANY(str)},
-                ],
-                [
-                    {"score": 0.333, "label": ANY(str)},
-                    {"score": 0.333, "label": ANY(str)},
-                    {"score": 0.333, "label": ANY(str)},
-                ],
-                [
-                    {"score": 0.333, "label": ANY(str)},
-                    {"score": 0.333, "label": ANY(str)},
-                    {"score": 0.333, "label": ANY(str)},
-                ],
-            ],
-        )
+        self.test_small_model_pt(dtype="float16")
 
     @slow
     @require_torch
@@ -199,37 +147,6 @@ class ZeroShotImageClassificationPipelineTests(unittest.TestCase):
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         output = image_classifier(image, candidate_labels=["cat", "plane", "remote"])
 
-        self.assertEqual(
-            nested_simplify(output),
-            [
-                {"score": 0.511, "label": "remote"},
-                {"score": 0.485, "label": "cat"},
-                {"score": 0.004, "label": "plane"},
-            ],
-        )
-
-        output = image_classifier([image] * 5, candidate_labels=["cat", "plane", "remote"], batch_size=2)
-        self.assertEqual(
-            nested_simplify(output),
-            [
-                [
-                    {"score": 0.511, "label": "remote"},
-                    {"score": 0.485, "label": "cat"},
-                    {"score": 0.004, "label": "plane"},
-                ],
-            ]
-            * 5,
-        )
-
-    @slow
-    @require_tf
-    def test_large_model_tf(self):
-        image_classifier = pipeline(
-            task="zero-shot-image-classification", model="openai/clip-vit-base-patch32", framework="tf"
-        )
-        # This is an image of 2 cats with remotes and no planes
-        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        output = image_classifier(image, candidate_labels=["cat", "plane", "remote"])
         self.assertEqual(
             nested_simplify(output),
             [

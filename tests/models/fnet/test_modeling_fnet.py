@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,14 +14,13 @@
 """Testing suite for the PyTorch FNet model."""
 
 import unittest
-from typing import Dict, List, Tuple
 
 from transformers import FNetConfig, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_tokenizers, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -40,10 +38,6 @@ if is_torch_available():
         FNetForTokenClassification,
         FNetModel,
         FNetTokenizerFast,
-    )
-    from transformers.models.fnet.modeling_fnet import (
-        FNetBasicFourierTransform,
-        is_scipy_available,
     )
 
 
@@ -133,26 +127,6 @@ class FNetModelTester:
             tpu_short_seq_length=self.seq_length,
         )
 
-    @require_torch
-    def create_and_check_fourier_transform(self, config):
-        hidden_states = floats_tensor([self.batch_size, self.seq_length, config.hidden_size])
-        transform = FNetBasicFourierTransform(config)
-        fftn_output = transform(hidden_states)
-
-        config.use_tpu_fourier_optimizations = True
-        if is_scipy_available():
-            transform = FNetBasicFourierTransform(config)
-            dft_output = transform(hidden_states)
-
-        config.max_position_embeddings = 4097
-        transform = FNetBasicFourierTransform(config)
-        fft_output = transform(hidden_states)
-
-        if is_scipy_available():
-            self.parent.assertTrue(torch.allclose(fftn_output[0][0], dft_output[0][0], atol=1e-4))
-            self.parent.assertTrue(torch.allclose(fft_output[0][0], dft_output[0][0], atol=1e-4))
-        self.parent.assertTrue(torch.allclose(fftn_output[0][0], fft_output[0][0], atol=1e-4))
-
     def create_and_check_model(self, config, input_ids, token_type_ids, sequence_labels, token_labels, choice_labels):
         model = FNetModel(config=config)
         model.to(torch_device)
@@ -184,19 +158,6 @@ class FNetModelTester:
         model.eval()
         result = model(input_ids, token_type_ids=token_type_ids, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-
-    def create_and_check_for_next_sentence_prediction(
-        self, config, input_ids, token_type_ids, sequence_labels, token_labels, choice_labels
-    ):
-        model = FNetForNextSentencePrediction(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(
-            input_ids,
-            token_type_ids=token_type_ids,
-            next_sentence_label=sequence_labels,
-        )
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, 2))
 
     def create_and_check_for_question_answering(
         self, config, input_ids, token_type_ids, sequence_labels, token_labels, choice_labels
@@ -294,7 +255,6 @@ class FNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     # Skip Tests
     test_pruning = False
-    test_head_masking = False
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
@@ -326,25 +286,25 @@ class FNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 )
         return inputs_dict
 
-    # Overriden Tests
+    # Overridden Tests
     @unittest.skip
     def test_attention_outputs(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -362,10 +322,10 @@ class FNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
-                    if isinstance(tuple_object, (List, Tuple)):
+                    if isinstance(tuple_object, (list, tuple)):
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
-                    elif isinstance(tuple_object, Dict):
+                    elif isinstance(tuple_object, dict):
                         for tuple_iterable_value, dict_iterable_value in zip(
                             tuple_object.values(), dict_object.values()
                         ):
@@ -478,61 +438,6 @@ class FNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 class FNetModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_for_masked_lm(self):
-        """
-        For comparison:
-        1. Modify the pre-training model `__call__` to skip computing metrics and return masked_lm_output like so:
-            ```
-            ...
-            sequence_output, pooled_output = EncoderModel(
-            self.config, random_seed=self.random_seed, name="encoder")(
-                input_ids, input_mask, type_ids, deterministic=deterministic)
-
-            masked_lm_output = nn.Dense(
-                self.config.d_emb,
-                kernel_init=default_kernel_init,
-                name="predictions_dense")(
-                    sequence_output)
-            masked_lm_output = nn.gelu(masked_lm_output)
-            masked_lm_output = nn.LayerNorm(
-                epsilon=LAYER_NORM_EPSILON, name="predictions_layer_norm")(
-                    masked_lm_output)
-            masked_lm_logits = layers.OutputProjection(
-                kernel=self._get_embedding_table(), name="predictions_output")(
-                    masked_lm_output)
-
-            next_sentence_logits = layers.OutputProjection(
-                n_out=2, kernel_init=default_kernel_init, name="classification")(
-                    pooled_output)
-
-            return masked_lm_logits
-            ...
-            ```
-        2. Run the following:
-            >>> import jax.numpy as jnp
-            >>> import sentencepiece as spm
-            >>> from flax.training import checkpoints
-            >>> from f_net.models import PreTrainingModel
-            >>> from f_net.configs.pretraining import get_config, ModelArchitecture
-
-            >>> pretrained_params = checkpoints.restore_checkpoint('./f_net/f_net_checkpoint', None) # Location of original checkpoint
-            >>> pretrained_config  = get_config()
-            >>> pretrained_config.model_arch = ModelArchitecture.F_NET
-
-            >>> vocab_filepath = "./f_net/c4_bpe_sentencepiece.model" # Location of the sentence piece model
-            >>> tokenizer = spm.SentencePieceProcessor()
-            >>> tokenizer.Load(vocab_filepath)
-            >>> with pretrained_config.unlocked():
-            >>>     pretrained_config.vocab_size = tokenizer.GetPieceSize()
-            >>> tokens = jnp.array([[0, 1, 2, 3, 4, 5]])
-            >>> type_ids = jnp.zeros_like(tokens, dtype="i4")
-            >>> attention_mask = jnp.ones_like(tokens) # Dummy. This gets deleted inside the model.
-
-            >>> flax_pretraining_model = PreTrainingModel(pretrained_config)
-            >>> pretrained_model_params = freeze(pretrained_params['target'])
-            >>> flax_model_outputs = flax_pretraining_model.apply({"params": pretrained_model_params}, tokens, attention_mask, type_ids, None, None, None, None, deterministic=True)
-            >>> masked_lm_logits[:, :3, :3]
-        """
-
         model = FNetForMaskedLM.from_pretrained("google/fnet-base")
         model.to(torch_device)
 
@@ -550,7 +455,7 @@ class FNetModelIntegrationTest(unittest.TestCase):
             device=torch_device,
         )
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     @require_tokenizers
@@ -592,7 +497,7 @@ class FNetModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([[-0.2234, -0.0226]], device=torch_device)
 
-        self.assertTrue(torch.allclose(output, expected_slice, atol=1e-4))
+        torch.testing.assert_close(output, expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_model(self):
@@ -610,4 +515,4 @@ class FNetModelIntegrationTest(unittest.TestCase):
             [[[4.1541, -0.1051, -0.1667], [-0.9144, 0.2939, -0.0086], [-0.8472, -0.7281, 0.0256]]], device=torch_device
         )
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

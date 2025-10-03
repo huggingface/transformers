@@ -87,7 +87,7 @@ class Pop2PianoConfig(PretrainedConfig):
         dropout_rate=0.1,
         layer_norm_epsilon=1e-6,
         initializer_factor=1.0,
-        feed_forward_proj="gated-gelu",  # noqa
+        feed_forward_proj="gated-gelu",
         is_encoder_decoder=True,
         use_cache=True,
         pad_token_id=0,
@@ -122,3 +122,6 @@ class Pop2PianoConfig(PretrainedConfig):
             is_encoder_decoder=is_encoder_decoder,
             **kwargs,
         )
+
+
+__all__ = ["Pop2PianoConfig"]

@@ -14,7 +14,7 @@
 # limitations under the License.
 
 from functools import partial
-from typing import Any, Callable, Dict, List, Type, TypeVar, Union, overload
+from typing import Any, Callable, TypeVar, Union, overload
 
 import torch
 import torch.nn as nn
@@ -32,7 +32,7 @@ def add(m1: torch.Tensor, m2: torch.Tensor, inplace: bool) -> torch.Tensor:
     return m1
 
 
-def permute_final_dims(tensor: torch.Tensor, inds: List[int]) -> torch.Tensor:
+def permute_final_dims(tensor: torch.Tensor, inds: list[int]) -> torch.Tensor:
     zero_index = -1 * len(inds)
     first_inds = list(range(len(tensor.shape[:zero_index])))
     return tensor.permute(first_inds + [zero_index + i for i in inds])
@@ -55,7 +55,7 @@ def pts_to_distogram(
     return torch.bucketize(dists, boundaries)
 
 
-def dict_multimap(fn: Callable[[list], Any], dicts: List[dict]) -> dict:
+def dict_multimap(fn: Callable[[list], Any], dicts: list[dict]) -> dict:
     first = dicts[0]
     new_dict = {}
     for k, v in first.items():
@@ -76,13 +76,13 @@ def one_hot(x: torch.Tensor, v_bins: torch.Tensor) -> torch.Tensor:
 
 
 def batched_gather(data: torch.Tensor, inds: torch.Tensor, dim: int = 0, no_batch_dims: int = 0) -> torch.Tensor:
-    ranges: List[Union[slice, torch.Tensor]] = []
+    ranges: list[Union[slice, torch.Tensor]] = []
     for i, s in enumerate(data.shape[:no_batch_dims]):
         r = torch.arange(s)
         r = r.view(*(*((1,) * i), -1, *((1,) * (len(inds.shape) - i - 1))))
         ranges.append(r)
 
-    remaining_dims: List[Union[slice, torch.Tensor]] = [slice(None) for _ in range(len(data.shape) - no_batch_dims)]
+    remaining_dims: list[Union[slice, torch.Tensor]] = [slice(None) for _ in range(len(data.shape) - no_batch_dims)]
     remaining_dims[dim - no_batch_dims if dim >= 0 else dim] = inds
     ranges.extend(remaining_dims)
     # Matt note: Editing this to get around the behaviour of using a list as an array index changing
@@ -93,11 +93,10 @@ def batched_gather(data: torch.Tensor, inds: torch.Tensor, dim: int = 0, no_batc
 T = TypeVar("T")
 
 
-# With tree_map, a poor man's JAX tree_map
 def dict_map(
-    fn: Callable[[T], Any], dic: Dict[Any, Union[dict, list, tuple, T]], leaf_type: Type[T]
-) -> Dict[Any, Union[dict, list, tuple, Any]]:
-    new_dict: Dict[Any, Union[dict, list, tuple, Any]] = {}
+    fn: Callable[[T], Any], dic: dict[Any, Union[dict, list, tuple, T]], leaf_type: type[T]
+) -> dict[Any, Union[dict, list, tuple, Any]]:
+    new_dict: dict[Any, Union[dict, list, tuple, Any]] = {}
     for k, v in dic.items():
         if isinstance(v, dict):
             new_dict[k] = dict_map(fn, v, leaf_type)
@@ -108,19 +107,19 @@ def dict_map(
 
 
 @overload
-def tree_map(fn: Callable[[T], Any], tree: T, leaf_type: Type[T]) -> Any: ...
+def tree_map(fn: Callable[[T], Any], tree: T, leaf_type: type[T]) -> Any: ...
 
 
 @overload
-def tree_map(fn: Callable[[T], Any], tree: dict, leaf_type: Type[T]) -> dict: ...
+def tree_map(fn: Callable[[T], Any], tree: dict, leaf_type: type[T]) -> dict: ...
 
 
 @overload
-def tree_map(fn: Callable[[T], Any], tree: list, leaf_type: Type[T]) -> list: ...
+def tree_map(fn: Callable[[T], Any], tree: list, leaf_type: type[T]) -> list: ...
 
 
 @overload
-def tree_map(fn: Callable[[T], Any], tree: tuple, leaf_type: Type[T]) -> tuple: ...
+def tree_map(fn: Callable[[T], Any], tree: tuple, leaf_type: type[T]) -> tuple: ...
 
 
 def tree_map(fn, tree, leaf_type):

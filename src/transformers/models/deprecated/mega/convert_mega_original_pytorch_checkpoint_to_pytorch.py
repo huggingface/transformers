@@ -132,13 +132,17 @@ def convert_checkpoint_to_huggingface(pretrained_checkpoint_path, output_path, i
     print(
         "Original Mega encoder:",
         original_mlm.mega.load_state_dict(
-            torch.load(os.path.join(pretrained_checkpoint_path, "encoder_weights.pt"), map_location="cpu")
+            torch.load(
+                os.path.join(pretrained_checkpoint_path, "encoder_weights.pt"), map_location="cpu", weights_only=True
+            )
         ),
     )
     print(
         "Original Mega MLM layer:",
         original_mlm.mlm_head.load_state_dict(
-            torch.load(os.path.join(pretrained_checkpoint_path, "mlm_head_weights.pt"), map_location="cpu")
+            torch.load(
+                os.path.join(pretrained_checkpoint_path, "mlm_head_weights.pt"), map_location="cpu", weights_only=True
+            )
         ),
     )
 
@@ -175,7 +179,7 @@ def convert_checkpoint_to_huggingface(pretrained_checkpoint_path, output_path, i
 
     hf_mlm = MegaForMaskedLM(hf_config).eval()
 
-    # the originl checkpoint just uses nn.Embedding for the word embeddings
+    # the original checkpoint just uses nn.Embedding for the word embeddings
     # we use a wrapper module for embeddings to add support for positional embeddings
     hf_mlm.mega.embedding_layer.word_embeddings.weight = original_mlm.mega.embedding_layer.weight
 
@@ -184,7 +188,7 @@ def convert_checkpoint_to_huggingface(pretrained_checkpoint_path, output_path, i
     # also renaming previously confusing parameter names
     original_state_dict = original_mlm.mega.encoders.state_dict()
     updated_keys = {}
-    for module_name in original_state_dict.keys():
+    for module_name in original_state_dict:
         new_module_name = None
         # have to handle gamma, beta, and alpha differently due to their use
         # in multiple modules within the original repository;
@@ -234,7 +238,9 @@ def convert_checkpoint_to_huggingface(pretrained_checkpoint_path, output_path, i
     print(
         "HF Mega MLM layer:",
         hf_mlm.mlm_head.load_state_dict(
-            torch.load(os.path.join(pretrained_checkpoint_path, "mlm_head_weights.pt"), map_location="cpu")
+            torch.load(
+                os.path.join(pretrained_checkpoint_path, "mlm_head_weights.pt"), map_location="cpu", weights_only=True
+            )
         ),
     )
 

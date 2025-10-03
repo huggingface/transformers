@@ -44,7 +44,7 @@ def download_wmt_dataset(src_lang="ro", tgt_lang="en", dataset="wmt16", save_dir
     save_dir = Path(save_dir)
     save_dir.mkdir(exist_ok=True)
 
-    for split in ds.keys():
+    for split in ds:
         print(f"Splitting {split} with {ds[split].num_rows} records")
 
         # to save to val.source, val.target like summary datasets

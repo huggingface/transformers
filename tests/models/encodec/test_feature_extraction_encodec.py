@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021-2023 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -50,7 +49,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 
 
 @require_torch
-class EnCodecFeatureExtractionTester(unittest.TestCase):
+class EnCodecFeatureExtractionTester:
     def __init__(
         self,
         parent,
@@ -140,7 +139,7 @@ class EnCodecFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
-        audio_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+        audio_samples = ds.sort("id")[:num_samples]["audio"]
 
         return [x["array"] for x in audio_samples]
 
@@ -159,7 +158,7 @@ class EnCodecFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         feature_extractor = EncodecFeatureExtractor()
         input_values = feature_extractor(input_audio, return_tensors="pt").input_values
         self.assertEqual(input_values.shape, (1, 1, 93680))
-        self.assertTrue(torch.allclose(input_values[0, 0, :30], EXPECTED_INPUT_VALUES, atol=1e-6))
+        torch.testing.assert_close(input_values[0, 0, :30], EXPECTED_INPUT_VALUES, rtol=1e-6, atol=1e-6)
 
     def test_integration_stereo(self):
         # fmt: off
@@ -178,8 +177,8 @@ class EnCodecFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         feature_extractor = EncodecFeatureExtractor(feature_size=2)
         input_values = feature_extractor(input_audio, return_tensors="pt").input_values
         self.assertEqual(input_values.shape, (1, 2, 93680))
-        self.assertTrue(torch.allclose(input_values[0, 0, :30], EXPECTED_INPUT_VALUES, atol=1e-6))
-        self.assertTrue(torch.allclose(input_values[0, 1, :30], EXPECTED_INPUT_VALUES * 0.5, atol=1e-6))
+        torch.testing.assert_close(input_values[0, 0, :30], EXPECTED_INPUT_VALUES, rtol=1e-6, atol=1e-6)
+        torch.testing.assert_close(input_values[0, 1, :30], EXPECTED_INPUT_VALUES * 0.5, rtol=1e-6, atol=1e-6)
 
     def test_truncation_and_padding(self):
         input_audio = self._load_datasamples(2)

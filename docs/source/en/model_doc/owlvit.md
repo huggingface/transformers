@@ -13,12 +13,17 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2022-05-12 and added to Hugging Face Transformers on 2022-07-22.*
 
 # OWL-ViT
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
-The OWL-ViT (short for Vision Transformer for Open-World Localization) was proposed in [Simple Open-Vocabulary Object Detection with Vision Transformers](https://arxiv.org/abs/2205.06230) by Matthias Minderer, Alexey Gritsenko, Austin Stone, Maxim Neumann, Dirk Weissenborn, Alexey Dosovitskiy, Aravindh Mahendran, Anurag Arnab, Mostafa Dehghani, Zhuoran Shen, Xiao Wang, Xiaohua Zhai, Thomas Kipf, and Neil Houlsby. OWL-ViT is an open-vocabulary object detection network trained on a variety of (image, text) pairs. It can be used to query an image with one or multiple text queries to search for and detect target objects described in text.
+The OWL-ViT (short for Vision Transformer for Open-World Localization) was proposed in [Simple Open-Vocabulary Object Detection with Vision Transformers](https://huggingface.co/papers/2205.06230) by Matthias Minderer, Alexey Gritsenko, Austin Stone, Maxim Neumann, Dirk Weissenborn, Alexey Dosovitskiy, Aravindh Mahendran, Anurag Arnab, Mostafa Dehghani, Zhuoran Shen, Xiao Wang, Xiaohua Zhai, Thomas Kipf, and Neil Houlsby. OWL-ViT is an open-vocabulary object detection network trained on a variety of (image, text) pairs. It can be used to query an image with one or multiple text queries to search for and detect target objects described in text.
 
 The abstract from the paper is the following:
 
@@ -27,7 +32,7 @@ The abstract from the paper is the following:
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/owlvit_architecture.jpg"
 alt="drawing" width="600"/>
 
-<small> OWL-ViT architecture. Taken from the <a href="https://arxiv.org/abs/2205.06230">original paper</a>. </small>
+<small> OWL-ViT architecture. Taken from the <a href="https://huggingface.co/papers/2205.06230">original paper</a>. </small>
 
 This model was contributed by [adirik](https://huggingface.co/adirik). The original code can be found [here](https://github.com/google-research/scenic/tree/main/scenic/projects/owl_vit).
 
@@ -49,20 +54,22 @@ OWL-ViT is a zero-shot text-conditioned object detection model. OWL-ViT uses [CL
 
 >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 >>> image = Image.open(requests.get(url, stream=True).raw)
->>> texts = [["a photo of a cat", "a photo of a dog"]]
->>> inputs = processor(text=texts, images=image, return_tensors="pt")
+>>> text_labels = [["a photo of a cat", "a photo of a dog"]]
+>>> inputs = processor(text=text_labels, images=image, return_tensors="pt")
 >>> outputs = model(**inputs)
 
 >>> # Target image sizes (height, width) to rescale box predictions [batch_size, 2]
->>> target_sizes = torch.Tensor([image.size[::-1]])
+>>> target_sizes = torch.tensor([(image.height, image.width)])
 >>> # Convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
->>> results = processor.post_process_object_detection(outputs=outputs, target_sizes=target_sizes, threshold=0.1)
->>> i = 0  # Retrieve predictions for the first image for the corresponding text queries
->>> text = texts[i]
->>> boxes, scores, labels = results[i]["boxes"], results[i]["scores"], results[i]["labels"]
->>> for box, score, label in zip(boxes, scores, labels):
+>>> results = processor.post_process_grounded_object_detection(
+...     outputs=outputs, target_sizes=target_sizes, threshold=0.1, text_labels=text_labels
+... )
+>>> # Retrieve predictions for the first image for the corresponding text queries
+>>> result = results[0]
+>>> boxes, scores, text_labels = result["boxes"], result["scores"], result["text_labels"]
+>>> for box, score, text_label in zip(boxes, scores, text_labels):
 ...     box = [round(i, 2) for i in box.tolist()]
-...     print(f"Detected {text[label]} with confidence {round(score.item(), 3)} at location {box}")
+...     print(f"Detected {text_label} with confidence {round(score.item(), 3)} at location {box}")
 Detected a photo of a cat with confidence 0.707 at location [324.97, 20.44, 640.58, 373.29]
 Detected a photo of a cat with confidence 0.717 at location [1.46, 55.26, 315.55, 472.17]
 ```
@@ -88,19 +95,20 @@ A demo notebook on using OWL-ViT for zero- and one-shot (image-guided) object de
 
 [[autodoc]] OwlViTImageProcessor
     - preprocess
+
+## OwlViTImageProcessorFast
+
+[[autodoc]] OwlViTImageProcessorFast
+    - preprocess
     - post_process_object_detection
-    - post_process_image_guided_detection
-
-## OwlViTFeatureExtractor
-
-[[autodoc]] OwlViTFeatureExtractor
-    - __call__
-    - post_process
     - post_process_image_guided_detection
 
 ## OwlViTProcessor
 
 [[autodoc]] OwlViTProcessor
+    - __call__
+    - post_process_grounded_object_detection
+    - post_process_image_guided_detection
 
 ## OwlViTModel
 

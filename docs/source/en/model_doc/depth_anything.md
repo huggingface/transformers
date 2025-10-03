@@ -13,98 +13,71 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-01-19 and added to Hugging Face Transformers on 2024-01-25.*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # Depth Anything
 
-## Overview
+[Depth Anything](https://huggingface.co/papers/2401.10891) is designed to be a foundation model for monocular depth estimation (MDE). It is jointly trained on labeled and ~62M unlabeled images to enhance the dataset. It uses a pretrained [DINOv2](./dinov2) model as an image encoder to inherit its existing rich semantic priors, and [DPT](./dpt) as the decoder. A teacher model is trained on unlabeled images to create pseudo-labels. The student model is trained on a combination of the pseudo-labels and labeled images. To improve the student model's performance, strong perturbations are added to the unlabeled images to challenge the student model to learn more visual knowledge from the image.
 
-The Depth Anything model was proposed in [Depth Anything: Unleashing the Power of Large-Scale Unlabeled Data](https://arxiv.org/abs/2401.10891) by Lihe Yang, Bingyi Kang, Zilong Huang, Xiaogang Xu, Jiashi Feng, Hengshuang Zhao. Depth Anything is based on the [DPT](dpt) architecture, trained on ~62 million images, obtaining state-of-the-art results for both relative and absolute depth estimation.
+You can find all the original Depth Anything checkpoints under the [Depth Anything](https://huggingface.co/collections/LiheYoung/depth-anything-release-65b317de04eec72abf6b55aa) collection.
 
-<Tip>
+> [!TIP]
+> Click on the Depth Anything models in the right sidebar for more examples of how to apply Depth Anything to different vision tasks.
 
-[Depth Anything V2](depth_anything_v2) was released in June 2024. It uses the same architecture as Depth Anything and therefore it is compatible with all code examples and existing workflows. However, it leverages synthetic data and a larger capacity teacher model to achieve much finer and robust depth predictions.
+The example below demonstrates how to obtain a depth map with [`Pipeline`] or the [`AutoModel`] class.
 
-</Tip>
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The abstract from the paper is the following:
+```py
+import torch
+from transformers import pipeline
 
-*This work presents Depth Anything, a highly practical solution for robust monocular depth estimation. Without pursuing novel technical modules, we aim to build a simple yet powerful foundation model dealing with any images under any circumstances. To this end, we scale up the dataset by designing a data engine to collect and automatically annotate large-scale unlabeled data (~62M), which significantly enlarges the data coverage and thus is able to reduce the generalization error. We investigate two simple yet effective strategies that make data scaling-up promising. First, a more challenging optimization target is created by leveraging data augmentation tools. It compels the model to actively seek extra visual knowledge and acquire robust representations. Second, an auxiliary supervision is developed to enforce the model to inherit rich semantic priors from pre-trained encoders. We evaluate its zero-shot capabilities extensively, including six public datasets and randomly captured photos. It demonstrates impressive generalization ability. Further, through fine-tuning it with metric depth information from NYUv2 and KITTI, new SOTAs are set. Our better depth model also results in a better depth-conditioned ControlNet.*
-
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/depth_anything_overview.jpg"
-alt="drawing" width="600"/>
-
-<small> Depth Anything overview. Taken from the <a href="https://arxiv.org/abs/2401.10891">original paper</a>.</small>
-
-This model was contributed by [nielsr](https://huggingface.co/nielsr).
-The original code can be found [here](https://github.com/LiheYoung/Depth-Anything).
-
-## Usage example
-
-There are 2 main ways to use Depth Anything: either using the pipeline API, which abstracts away all the complexity for you, or by using the `DepthAnythingForDepthEstimation` class yourself.
-
-### Pipeline API
-
-The pipeline allows to use the model in a few lines of code:
-
-```python
->>> from transformers import pipeline
->>> from PIL import Image
->>> import requests
-
->>> # load pipe
->>> pipe = pipeline(task="depth-estimation", model="LiheYoung/depth-anything-small-hf")
-
->>> # load image
->>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
->>> image = Image.open(requests.get(url, stream=True).raw)
-
->>> # inference
->>> depth = pipe(image)["depth"]
+pipe = pipeline(task="depth-estimation", model="LiheYoung/depth-anything-base-hf", dtype=torch.bfloat16, device=0)
+pipe("http://images.cocodataset.org/val2017/000000039769.jpg")["depth"]
 ```
 
-### Using the model yourself
+</hfoption>
+<hfoption id="AutoModel">
 
-If you want to do the pre- and postprocessing yourself, here's how to do that:
+```py
+import torch
+import requests
+import numpy as np
+from PIL import Image
+from transformers import AutoImageProcessor, AutoModelForDepthEstimation
 
-```python
->>> from transformers import AutoImageProcessor, AutoModelForDepthEstimation
->>> import torch
->>> import numpy as np
->>> from PIL import Image
->>> import requests
+image_processor = AutoImageProcessor.from_pretrained("LiheYoung/depth-anything-base-hf")
+model = AutoModelForDepthEstimation.from_pretrained("LiheYoung/depth-anything-base-hf", dtype=torch.bfloat16)
+url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
+inputs = image_processor(images=image, return_tensors="pt")
 
->>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
->>> image = Image.open(requests.get(url, stream=True).raw)
+with torch.no_grad():
+    outputs = model(**inputs)
 
->>> image_processor = AutoImageProcessor.from_pretrained("LiheYoung/depth-anything-small-hf")
->>> model = AutoModelForDepthEstimation.from_pretrained("LiheYoung/depth-anything-small-hf")
-
->>> # prepare image for the model
->>> inputs = image_processor(images=image, return_tensors="pt")
-
->>> with torch.no_grad():
-...     outputs = model(**inputs)
-
->>> # interpolate to original size and visualize the prediction
->>> post_processed_output = image_processor.post_process_depth_estimation(
-...     outputs,
-...     target_sizes=[(image.height, image.width)],
-... )
-
->>> predicted_depth = post_processed_output[0]["predicted_depth"]
->>> depth = (predicted_depth - predicted_depth.min()) / (predicted_depth.max() - predicted_depth.min())
->>> depth = depth.detach().cpu().numpy() * 255
->>> depth = Image.fromarray(depth.astype("uint8"))
+post_processed_output = image_processor.post_process_depth_estimation(
+    outputs,
+    target_sizes=[(image.height, image.width)],
+)
+predicted_depth = post_processed_output[0]["predicted_depth"]
+depth = (predicted_depth - predicted_depth.min()) / (predicted_depth.max() - predicted_depth.min())
+depth = depth.detach().cpu().numpy() * 255
+Image.fromarray(depth.astype("uint8"))
 ```
 
-## Resources
+</hfoption>
+</hfoptions>
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with Depth Anything.
+## Notes
 
-- [Monocular depth estimation task guide](../tasks/monocular_depth_estimation)
-- A notebook showcasing inference with [`DepthAnythingForDepthEstimation`] can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/Depth%20Anything/Predicting_depth_in_an_image_with_Depth_Anything.ipynb). 🌎
-
-If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+- [DepthAnythingV2](./depth_anything_v2), released in June 2024, uses the same architecture as Depth Anything and is compatible with all code examples and existing workflows. It uses synthetic data and a larger capacity teacher model to achieve much finer and robust depth predictions.
 
 ## DepthAnythingConfig
 

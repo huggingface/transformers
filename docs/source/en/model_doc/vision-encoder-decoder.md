@@ -13,8 +13,15 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-09-21 and added to Hugging Face Transformers on 2021-10-13.*
 
 # Vision Encoder Decoder Models
+
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
 
 ## Overview
 
@@ -23,7 +30,7 @@ pretrained Transformer-based vision model as the encoder (*e.g.* [ViT](vit), [BE
 and any pretrained language model as the decoder (*e.g.* [RoBERTa](roberta), [GPT2](gpt2), [BERT](bert), [DistilBERT](distilbert)).
 
 The effectiveness of initializing image-to-text-sequence models with pretrained checkpoints has been shown in (for
-example) [TrOCR: Transformer-based Optical Character Recognition with Pre-trained Models](https://arxiv.org/abs/2109.10282) by Minghao Li, Tengchao Lv, Lei Cui, Yijuan Lu, Dinei Florencio, Cha Zhang,
+example) [TrOCR: Transformer-based Optical Character Recognition with Pre-trained Models](https://huggingface.co/papers/2109.10282) by Minghao Li, Tengchao Lv, Lei Cui, Yijuan Lu, Dinei Florencio, Cha Zhang,
 Zhoujun Li, Furu Wei.
 
 After such a [`VisionEncoderDecoderModel`] has been trained/fine-tuned, it can be saved/loaded just like any other models (see the examples below
@@ -91,27 +98,6 @@ To perform inference, one uses the [`generate`] method, which allows to autoregr
 a cat laying on a blanket next to a cat laying on a bed
 ```
 
-## Loading a PyTorch checkpoint into `TFVisionEncoderDecoderModel`.
-
-[`TFVisionEncoderDecoderModel.from_pretrained`] currently doesn't support initializing the model from a
-PyTorch checkpoint. Passing `from_pt=True` to this method will throw an exception. If there are only PyTorch
-checkpoints for a particular vision encoder-decoder model, a workaround is:
-
-```python
->>> from transformers import VisionEncoderDecoderModel, TFVisionEncoderDecoderModel
-
->>> _model = VisionEncoderDecoderModel.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
-
->>> _model.encoder.save_pretrained("./encoder")
->>> _model.decoder.save_pretrained("./decoder")
-
->>> model = TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
-...     "./encoder", "./decoder", encoder_from_pt=True, decoder_from_pt=True
-... )
->>> # This is only for copying some specific attributes of this particular model.
->>> model.config = _model.config
-```
-
 ## Training
 
 Once the model is created, it can be fine-tuned similar to BART, T5 or any other encoder-decoder model on a dataset of (image, text) pairs.
@@ -144,39 +130,14 @@ images) and `labels` (which are the `input_ids` of the encoded target sequence).
 >>> loss = model(pixel_values=pixel_values, labels=labels).loss
 ```
 
-This model was contributed by [nielsr](https://github.com/nielsrogge). This model's TensorFlow and Flax versions
-were contributed by [ydshieh](https://github.com/ydshieh).
+This model was contributed by [nielsr](https://github.com/nielsrogge).
 
 ## VisionEncoderDecoderConfig
 
 [[autodoc]] VisionEncoderDecoderConfig
-
-<frameworkcontent>
-<pt>
 
 ## VisionEncoderDecoderModel
 
 [[autodoc]] VisionEncoderDecoderModel
     - forward
     - from_encoder_decoder_pretrained
-
-</pt>
-<tf>
-
-## TFVisionEncoderDecoderModel
-
-[[autodoc]] TFVisionEncoderDecoderModel
-    - call
-    - from_encoder_decoder_pretrained
-
-</tf>
-<jax>
-
-## FlaxVisionEncoderDecoderModel
-
-[[autodoc]] FlaxVisionEncoderDecoderModel
-    - __call__
-    - from_encoder_decoder_pretrained
-
-</jax>
-</frameworkcontent>

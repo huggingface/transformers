@@ -148,7 +148,7 @@ def rename_keys(state_dict, architecture):
         )
         name = name.replace("classification_decoder/~/basic_decoder/output/b", "decoder.decoder.final_layer.bias")
         name = name.replace("classification_decoder/~/basic_decoder/output/w", "decoder.decoder.final_layer.weight")
-        name = name = name.replace("classification_decoder/~/basic_decoder/~/", "decoder.decoder.")
+        name = name.replace("classification_decoder/~/basic_decoder/~/", "decoder.decoder.")
         name = name.replace("basic_decoder/cross_attention/", "decoder.decoding_cross_attention.")
         name = name.replace("basic_decoder/~/", "decoder.")
 
@@ -444,7 +444,8 @@ if __name__ == "__main__":
         type=str,
         default=None,
         required=True,
-        help="Path to local pickle file of a Perceiver checkpoint you'd like to convert.",
+        help="Path to local pickle file of a Perceiver checkpoint you'd like to convert.\n"
+        "Given the files are in the pickle format, please be wary of passing it files you trust.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",

@@ -13,12 +13,18 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-06-04 and added to Hugging Face Transformers on 2021-08-31.*
 
 # GPT-J
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+</div>
+
 ## Overview
 
-The GPT-J model was released in the [kingoflolz/mesh-transformer-jax](https://github.com/kingoflolz/mesh-transformer-jax) repository by Ben Wang and Aran Komatsuzaki. It is a GPT-2-like
+The [GPT-J](https://arankomatsuzaki.wordpress.com/2021/06/04/gpt-j/) model was released in the [kingoflolz/mesh-transformer-jax](https://github.com/kingoflolz/mesh-transformer-jax) repository by Ben Wang and Aran Komatsuzaki. It is a GPT-2-like
 causal language model trained on [the Pile](https://pile.eleuther.ai/) dataset.
 
 This model was contributed by [Stella Biderman](https://huggingface.co/stellaathena).
@@ -27,19 +33,19 @@ This model was contributed by [Stella Biderman](https://huggingface.co/stellaath
 
 - To load [GPT-J](https://huggingface.co/EleutherAI/gpt-j-6B) in float32 one would need at least 2x model size
   RAM: 1x for initial weights and another 1x to load the checkpoint. So for GPT-J it would take at least 48GB
-  RAM to just load the model. To reduce the RAM usage there are a few options. The `torch_dtype` argument can be
+  RAM to just load the model. To reduce the RAM usage there are a few options. The `dtype` argument can be
   used to initialize the model in half-precision on a CUDA device only. There is also a fp16 branch which stores the fp16 weights,
   which could be used to further minimize the RAM usage:
 
 ```python
->>> from transformers import GPTJForCausalLM
+>>> from transformers import GPTJForCausalLM, infer_device
 >>> import torch
 
->>> device = "cuda"
+>>> device = infer_device()
 >>> model = GPTJForCausalLM.from_pretrained(
 ...     "EleutherAI/gpt-j-6B",
 ...     revision="float16",
-...     torch_dtype=torch.float16,
+...     dtype=torch.float16,
 ... ).to(device)
 ```
 
@@ -87,11 +93,11 @@ model.
 ...or in float16 precision:
 
 ```python
->>> from transformers import GPTJForCausalLM, AutoTokenizer
+>>> from transformers import GPTJForCausalLM, AutoTokenizer, infer_device
 >>> import torch
 
->>> device = "cuda"
->>> model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", torch_dtype=torch.float16).to(device)
+>>> device = infer_device()
+>>> model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", dtype=torch.float16).to(device)
 >>> tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
 
 >>> prompt = (
@@ -100,7 +106,7 @@ model.
 ...     "researchers was the fact that the unicorns spoke perfect English."
 ... )
 
->>> input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(device)
+>>> input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(model.device)
 
 >>> gen_tokens = model.generate(
 ...     input_ids,
@@ -122,13 +128,12 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - A blog on how to [Accelerate GPT-J inference with DeepSpeed-Inference on GPUs](https://www.philschmid.de/gptj-deepspeed-inference).
 - A blog post introducing [GPT-J-6B: 6B JAX-Based Transformer](https://arankomatsuzaki.wordpress.com/2021/06/04/gpt-j/). 🌎
 - A notebook for [GPT-J-6B Inference Demo](https://colab.research.google.com/github/kingoflolz/mesh-transformer-jax/blob/master/colab_demo.ipynb). 🌎
-- Another notebook demonstrating [Inference with GPT-J-6B](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/GPT-J-6B/Inference_with_GPT_J_6B.ipynb).  
+- Another notebook demonstrating [Inference with GPT-J-6B](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/GPT-J-6B/Inference_with_GPT_J_6B.ipynb).
 - [Causal language modeling](https://huggingface.co/course/en/chapter7/6?fw=pt#training-a-causal-language-model-from-scratch) chapter of the 🤗 Hugging Face Course.
 - [`GPTJForCausalLM`] is supported by this [causal language modeling example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling#gpt-2gpt-and-causal-language-modeling), [text generation example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-generation), and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb).
-- [`TFGPTJForCausalLM`] is supported by this [causal language modeling example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/language-modeling#run_clmpy) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb).
-- [`FlaxGPTJForCausalLM`] is supported by this [causal language modeling example script](https://github.com/huggingface/transformers/tree/main/examples/flax/language-modeling#causal-language-modeling) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/causal_language_modeling_flax.ipynb).
 
 **Documentation resources**
+
 - [Text classification task guide](../tasks/sequence_classification)
 - [Question answering task guide](../tasks/question_answering)
 - [Causal language modeling task guide](../tasks/language_modeling)
@@ -137,9 +142,6 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] GPTJConfig
     - all
-
-<frameworkcontent>
-<pt>
 
 ## GPTJModel
 
@@ -160,41 +162,3 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] GPTJForQuestionAnswering
     - forward
-
-</pt>
-<tf>
-
-## TFGPTJModel
-
-[[autodoc]] TFGPTJModel
-    - call
-
-## TFGPTJForCausalLM
-
-[[autodoc]] TFGPTJForCausalLM
-    - call
-
-## TFGPTJForSequenceClassification
-
-[[autodoc]] TFGPTJForSequenceClassification
-    - call
-
-## TFGPTJForQuestionAnswering
-
-[[autodoc]] TFGPTJForQuestionAnswering
-    - call
-
-</tf>
-<jax>
-
-## FlaxGPTJModel
-
-[[autodoc]] FlaxGPTJModel
-    - __call__
-
-## FlaxGPTJForCausalLM
-
-[[autodoc]] FlaxGPTJForCausalLM
-    - __call__
-</jax>
-</frameworkcontent>

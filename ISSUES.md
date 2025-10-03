@@ -26,7 +26,7 @@ There are two main venues to receive support: [the forums](https://discuss.huggi
 
 [The user forums](https://discuss.huggingface.co/) are supported by the wide community of the library users and backed up by developers when needed.
 
-If you have a difficulty with deploying this library or some questions, or you'd like to discuss a new feature, please first consider discussing those things at the forums. Only when you feel your subject matter has been crystalized and you still need support from the library developers do proceed to file an [issue](https://github.com/huggingface/transformers/issues).
+If you have a difficulty with deploying this library or some questions, or you'd like to discuss a new feature, please first consider discussing those things at the forums. Only when you feel your subject matter has been crystallized and you still need support from the library developers do proceed to file an [issue](https://github.com/huggingface/transformers/issues).
 
 In particular all "Please explain" questions or objectively very user-specific feature requests belong to the forums. Here are some example of such questions:
 
@@ -37,7 +37,6 @@ In particular all "Please explain" questions or objectively very user-specific f
 * "How should I set my generation parameters for translation?"
 
 * "How to train T5 on De->En translation?"
-
 
 ## The GitHub Issues
 
@@ -247,7 +246,6 @@ You are not required to read the following guidelines before opening an issue. H
 
     Try not use italics and bold text too much as these often make the text more difficult to read.
 
-
 12. If you are cross-referencing a specific comment in a given thread or another issue, always link to that specific comment, rather than using the issue link. If you do the latter it could be quite impossible to find which specific comment you're referring to.
 
     To get the link to the specific comment do not copy the url from the location bar of your browser, but instead, click the `...` icon in the upper right corner of the comment and then select "Copy Link".
@@ -257,15 +255,14 @@ You are not required to read the following guidelines before opening an issue. H
     1. https://github.com/huggingface/transformers/issues/9257
     2. https://github.com/huggingface/transformers/issues/9257#issuecomment-749945162
 
-
 13. If you are replying to a last comment, it's totally fine to make your reply with just your comment in it. The readers can follow the information flow here.
 
     But if you're replying to a comment that happened some comments back it's always a good practice to quote just the relevant lines you're replying it. The `>` is used for quoting, or you can always use the menu to do so. For example your editor box will look like:
 
     ```
-    > How big is your gpu cluster?
+    > How big is your GPU cluster?
 
-    Our cluster is made of 256 gpus.
+    Our cluster is made of 256 GPUs.
     ```
 
     If you are addressing multiple comments, quote the relevant parts of each before your answer. Some people use the same comment to do multiple replies, others separate them into separate comments. Either way works. The latter approach helps for linking to a specific comment.

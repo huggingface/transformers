@@ -14,7 +14,7 @@
 # limitations under the License.
 """T5 model configuration"""
 
-from typing import Mapping
+from collections.abc import Mapping
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxSeq2SeqConfigWithPast
@@ -166,3 +166,6 @@ class T5OnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def default_onnx_opset(self) -> int:
         return 13
+
+
+__all__ = ["T5Config", "T5OnnxConfig"]

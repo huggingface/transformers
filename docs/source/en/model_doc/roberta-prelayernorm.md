@@ -13,12 +13,17 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2019-04-01 and added to Hugging Face Transformers on 2022-12-19.*
 
 # RoBERTa-PreLayerNorm
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
-The RoBERTa-PreLayerNorm model was proposed in [fairseq: A Fast, Extensible Toolkit for Sequence Modeling](https://arxiv.org/abs/1904.01038) by Myle Ott, Sergey Edunov, Alexei Baevski, Angela Fan, Sam Gross, Nathan Ng, David Grangier, Michael Auli.
+The RoBERTa-PreLayerNorm model was proposed in [fairseq: A Fast, Extensible Toolkit for Sequence Modeling](https://huggingface.co/papers/1904.01038) by Myle Ott, Sergey Edunov, Alexei Baevski, Angela Fan, Sam Gross, Nathan Ng, David Grangier, Michael Auli.
 It is identical to using the `--encoder-normalize-before` flag in [fairseq](https://fairseq.readthedocs.io/).
 
 The abstract from the paper is the following:
@@ -30,7 +35,7 @@ The original code can be found [here](https://github.com/princeton-nlp/DinkyTrai
 
 ## Usage tips
 
-- The implementation is the same as [Roberta](roberta) except instead of using _Add and Norm_ it does _Norm and Add_. _Add_ and _Norm_ refers to the Addition and LayerNormalization as described in [Attention Is All You Need](https://arxiv.org/abs/1706.03762).
+- The implementation is the same as [Roberta](roberta) except instead of using _Add and Norm_ it does _Norm and Add_. _Add_ and _Norm_ refers to the Addition and LayerNormalization as described in [Attention Is All You Need](https://huggingface.co/papers/1706.03762).
 - This is identical to using the `--encoder-normalize-before` flag in [fairseq](https://fairseq.readthedocs.io/).
 
 ## Resources
@@ -45,9 +50,6 @@ The original code can be found [here](https://github.com/princeton-nlp/DinkyTrai
 ## RobertaPreLayerNormConfig
 
 [[autodoc]] RobertaPreLayerNormConfig
-
-<frameworkcontent>
-<pt>
 
 ## RobertaPreLayerNormModel
 
@@ -83,82 +85,3 @@ The original code can be found [here](https://github.com/princeton-nlp/DinkyTrai
 
 [[autodoc]] RobertaPreLayerNormForQuestionAnswering
     - forward
-
-</pt>
-<tf>
-
-## TFRobertaPreLayerNormModel
-
-[[autodoc]] TFRobertaPreLayerNormModel
-    - call
-
-## TFRobertaPreLayerNormForCausalLM
-
-[[autodoc]] TFRobertaPreLayerNormForCausalLM
-    - call
-
-## TFRobertaPreLayerNormForMaskedLM
-
-[[autodoc]] TFRobertaPreLayerNormForMaskedLM
-    - call
-
-## TFRobertaPreLayerNormForSequenceClassification
-
-[[autodoc]] TFRobertaPreLayerNormForSequenceClassification
-    - call
-
-## TFRobertaPreLayerNormForMultipleChoice
-
-[[autodoc]] TFRobertaPreLayerNormForMultipleChoice
-    - call
-
-## TFRobertaPreLayerNormForTokenClassification
-
-[[autodoc]] TFRobertaPreLayerNormForTokenClassification
-    - call
-
-## TFRobertaPreLayerNormForQuestionAnswering
-
-[[autodoc]] TFRobertaPreLayerNormForQuestionAnswering
-    - call
-
-</tf>
-<jax>
-
-## FlaxRobertaPreLayerNormModel
-
-[[autodoc]] FlaxRobertaPreLayerNormModel
-    - __call__
-
-## FlaxRobertaPreLayerNormForCausalLM
-
-[[autodoc]] FlaxRobertaPreLayerNormForCausalLM
-    - __call__
-
-## FlaxRobertaPreLayerNormForMaskedLM
-
-[[autodoc]] FlaxRobertaPreLayerNormForMaskedLM
-    - __call__
-
-## FlaxRobertaPreLayerNormForSequenceClassification
-
-[[autodoc]] FlaxRobertaPreLayerNormForSequenceClassification
-    - __call__
-
-## FlaxRobertaPreLayerNormForMultipleChoice
-
-[[autodoc]] FlaxRobertaPreLayerNormForMultipleChoice
-    - __call__
-
-## FlaxRobertaPreLayerNormForTokenClassification
-
-[[autodoc]] FlaxRobertaPreLayerNormForTokenClassification
-    - __call__
-
-## FlaxRobertaPreLayerNormForQuestionAnswering
-
-[[autodoc]] FlaxRobertaPreLayerNormForQuestionAnswering
-    - __call__
-
-</jax>
-</frameworkcontent>

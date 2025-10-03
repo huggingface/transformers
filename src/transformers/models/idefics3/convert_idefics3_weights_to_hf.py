@@ -156,7 +156,7 @@ def get_config(checkpoint):
 def convert_idefics3_hub_to_hf(original_model_id, output_hub_path, push_to_hub):
     # The original model maps to AutoModelForCausalLM, converted we map to Idefics3ForConditionalGeneration
     original_model = AutoModelForCausalLM.from_pretrained(
-        original_model_id, trust_remote_code=True, torch_dtype=torch.bfloat16
+        original_model_id, trust_remote_code=True, dtype=torch.bfloat16
     )
     # The original model doesn't use the Idefics3 processing objects
     image_processor = Idefics3ImageProcessor()
