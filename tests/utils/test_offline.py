@@ -14,7 +14,6 @@
 
 import subprocess
 import sys
-import unittest
 
 from transformers import BertConfig, BertModel, BertTokenizer, pipeline
 from transformers.testing_utils import TestCasePlus, require_torch
