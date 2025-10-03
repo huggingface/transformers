@@ -512,7 +512,7 @@ class JambaSparseMoeBlock(nn.Module):
         top_k_index, top_k_weights = self.route_tokens_to_experts(hidden_states, router_logits)
         hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
         hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
-        return hidden_states, router_logits
+        return hidden_states
 
 
 class JambaAttentionDecoderLayer(GradientCheckpointingLayer):
@@ -551,8 +551,6 @@ class JambaAttentionDecoderLayer(GradientCheckpointingLayer):
         residual = hidden_states
         hidden_states = self.pre_ff_layernorm(hidden_states)
         hidden_states = self.feed_forward(hidden_states)
-        if isinstance(hidden_states, tuple):
-            hidden_states, _ = hidden_states
         hidden_states = residual + hidden_states
         return hidden_states
 
@@ -586,8 +584,6 @@ class JambaMambaDecoderLayer(GradientCheckpointingLayer):
         residual = hidden_states
         hidden_states = self.pre_ff_layernorm(hidden_states)
         hidden_states = self.feed_forward(hidden_states)
-        if isinstance(hidden_states, tuple):
-            hidden_states, _ = hidden_states
         hidden_states = residual + hidden_states
         return hidden_states
 
@@ -607,7 +603,7 @@ class JambaPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": [JambaAttentionDecoderLayer, JambaMambaDecoderLayer],
         "attentions": JambaAttention,
-        "router_logits": OutputRecorder(JambaSparseMoeBlock, index=1),
+        "router_logits": OutputRecorder(nn.Linear, layer_name="router"),
     }
 
     def _init_weights(self, module):
