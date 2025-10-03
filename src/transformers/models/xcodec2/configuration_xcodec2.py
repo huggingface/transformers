@@ -76,6 +76,8 @@ class Xcodec2Config(PretrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the rotary position embeddings.
+        istft_padding (`str`, *optional*, defaults to `"same"`):
+            Padding type for the iSTFT in the decoder. Should be one of `"center"` or `"same"`.
     """
 
     model_type = "xcodec2"
@@ -105,6 +107,7 @@ class Xcodec2Config(PretrainedConfig):
         vq_levels=[4, 4, 4, 4, 4, 4, 4, 4],
         max_position_embeddings=4096,
         rope_theta=10000.0,
+        istft_padding="same",
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -148,6 +151,8 @@ class Xcodec2Config(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.max_position_embeddings = max_position_embeddings
         self.rope_theta = rope_theta
+        # -- Vocos vocoder parameters
+        self.istft_padding = istft_padding
 
         # single codebook VQ is main feature of Xcodec2
         self.num_quantizers = 1
@@ -171,6 +176,11 @@ class Xcodec2Config(PretrainedConfig):
     @property
     def hop_length(self) -> int:
         return int(np.prod(self.downsampling_ratios))
+
+    @property
+    def n_fft(self) -> int:
+        # For ISTFT in Vocos decoder
+        return self.hop_length * 4
 
     @property
     def hidden_size(self) -> int:
