@@ -18,8 +18,8 @@ import copy
 from typing import Any, Optional, Union
 
 import numpy as np
-import torch
 
+from ... import is_torch_available
 from ...audio_utils import (
     AudioInput,
     make_list_of_audio,
@@ -31,6 +31,10 @@ from ...audio_utils import (
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import PaddingStrategy, TensorType, logging
+
+
+if is_torch_available():
+    import torch
 
 
 logger = logging.get_logger(__name__)
