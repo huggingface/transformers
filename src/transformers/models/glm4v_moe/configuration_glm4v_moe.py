@@ -381,6 +381,7 @@ class Glm4vMoeConfig(PretrainedConfig):
         self.video_end_token_id = video_end_token_id
         self.image_start_token_id = image_start_token_id
         self.image_end_token_id = image_end_token_id
+
         super().__init__(**kwargs)
 
 

@@ -142,15 +142,12 @@ class MusicgenConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        kwargs (*optional*):
-            Dictionary of keyword arguments. Notably:
-
-                - **text_encoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
-                  defines the text encoder config.
-                - **audio_encoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
-                  defines the audio encoder config.
-                - **decoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that defines
-                  the decoder config.
+        text_encoder (`Union[dict, `PretrainedConfig`]`):
+            An instance of a configuration object that defines the text encoder config.
+        audio_encoder (`Union[dict, `PretrainedConfig`]`):
+            An instance of a configuration object that defines the audio encoder config.
+        decoder (`Union[dict, `PretrainedConfig`]`):
+            An instance of a configuration object that defines the decoder config.
 
     Example:
 

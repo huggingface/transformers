@@ -145,18 +145,16 @@ class MusicgenMelodyConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        num_chroma (`int`, *optional*, defaults to 12): Number of chroma bins to use.
+        text_encoder (`Union[dict, `PretrainedConfig`]`):
+            An instance of a configuration object that defines the text encoder config.
+        audio_encoder (`Union[dict, `PretrainedConfig`]`):
+            An instance of a configuration object that defines the audio encoder config.
+        decoder (`Union[dict, `PretrainedConfig`]`):
+            An instance of a configuration object that defines the decoder config.
+        num_chroma (`int`, *optional*, defaults to 12):
+            Number of chroma bins to use.
         chroma_length (`int`, *optional*, defaults to 235):
             Maximum chroma duration if audio is used to condition the model. Corresponds to the maximum duration used during training.
-        kwargs (*optional*):
-            Dictionary of keyword arguments. Notably:
-
-                - **text_encoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
-                  defines the text encoder config.
-                - **audio_encoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
-                  defines the audio encoder config.
-                - **decoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that defines
-                  the decoder config.
 
     Example:
 

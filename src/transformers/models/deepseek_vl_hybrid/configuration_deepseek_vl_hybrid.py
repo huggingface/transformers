@@ -74,6 +74,15 @@ class DeepseekVLHybridConfig(PretrainedConfig):
         image_token_id: int = 100015,
         **kwargs,
     ):
+        if high_res_vision_config is None:
+            high_res_vision_config = {}
+            logger.info("`high_res_vision_config` is `None`. Initializing the `SamVisionConfig` with default values.")
+
+        if isinstance(high_res_vision_config, dict):
+            high_res_vision_config["model_type"] = high_res_vision_config.get("model_type", "sam_vision_model")
+            high_res_vision_config = CONFIG_MAPPING[high_res_vision_config["model_type"]](**high_res_vision_config)
+
+        self.high_res_vision_config = high_res_vision_config
         if text_config is None:
             text_config = {}
             logger.info("`text_config` is `None`. Initializing the `LlamaConfig` with default values.")
@@ -93,16 +102,6 @@ class DeepseekVLHybridConfig(PretrainedConfig):
         self.text_config = text_config
         self.vision_config = vision_config
         self.image_token_id = image_token_id
-
-        if high_res_vision_config is None:
-            high_res_vision_config = {}
-            logger.info("`high_res_vision_config` is `None`. Initializing the `SamVisionConfig` with default values.")
-
-        if isinstance(high_res_vision_config, dict):
-            high_res_vision_config["model_type"] = high_res_vision_config.get("model_type", "sam_vision_model")
-            high_res_vision_config = CONFIG_MAPPING[high_res_vision_config["model_type"]](**high_res_vision_config)
-
-        self.high_res_vision_config = high_res_vision_config
         super().__init__(**kwargs)
 
 

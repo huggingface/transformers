@@ -152,6 +152,7 @@ class PromptDepthAnythingConfig(PretrainedConfig):
             raise ValueError("depth_estimation_type must be one of ['relative', 'metric']")
         self.depth_estimation_type = depth_estimation_type
         self.max_depth = max_depth if max_depth else 1
+
         super().__init__(**kwargs)
 
     @property

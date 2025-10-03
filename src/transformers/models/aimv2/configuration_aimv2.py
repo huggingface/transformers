@@ -264,11 +264,13 @@ class Aimv2Config(PretrainedConfig):
     def __init__(
         self, text_config=None, vision_config=None, projection_dim=512, logit_scale_init_value=2.6592, **kwargs
     ):
+        self.projection_dim = projection_dim
+        self.logit_scale_init_value = logit_scale_init_value
+        self.max_logit_scale = 100.0
         if text_config is None:
             text_config = Aimv2TextConfig()
             logger.info("`text_config` is `None`. Initializing the `Aimv2TextConfig` with default values.")
         elif isinstance(text_config, dict):
-            print("vision_config" in text_config)
             text_config = Aimv2TextConfig(**text_config)
 
         if vision_config is None:
@@ -279,9 +281,7 @@ class Aimv2Config(PretrainedConfig):
 
         self.text_config = text_config
         self.vision_config = vision_config
-        self.projection_dim = projection_dim
-        self.logit_scale_init_value = logit_scale_init_value
-        self.max_logit_scale = 100.0
+
         super().__init__(**kwargs)
 
 

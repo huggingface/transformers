@@ -268,7 +268,6 @@ class RTDetrV2Config(PretrainedConfig):
         decoder_method="default",
         **kwargs,
     ):
-        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
         self.initializer_range = initializer_range
         self.initializer_bias_prior_prob = initializer_bias_prior_prob
         self.layer_norm_eps = layer_norm_eps
@@ -368,6 +367,7 @@ class RTDetrV2Config(PretrainedConfig):
         self.decoder_n_levels = decoder_n_levels
         self.decoder_offset_scale = decoder_offset_scale
         self.decoder_method = decoder_method
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     @property
     def sub_configs(self):

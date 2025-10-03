@@ -379,6 +379,17 @@ class Phi4MultimodalConfig(PretrainedConfig):
         audio_config=None,
         **kwargs,
     ):
+        if isinstance(vision_config, dict):
+            vision_config = Phi4MultimodalVisionConfig(**vision_config)
+        elif vision_config is None:
+            Phi4MultimodalVisionConfig()
+        self.vision_config = vision_config
+
+        if isinstance(audio_config, dict):
+            audio_config = Phi4MultimodalAudioConfig(**audio_config)
+        elif vision_config is None:
+            audio_config = Phi4MultimodalAudioConfig()
+        self.audio_config = audio_config
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
@@ -404,18 +415,6 @@ class Phi4MultimodalConfig(PretrainedConfig):
         self._rope_scaling_adjustment()
         self._rope_scaling_validation()
         self.sliding_window = sliding_window
-
-        if isinstance(vision_config, dict):
-            vision_config = Phi4MultimodalVisionConfig(**vision_config)
-        elif vision_config is None:
-            Phi4MultimodalVisionConfig()
-        self.vision_config = vision_config
-
-        if isinstance(audio_config, dict):
-            audio_config = Phi4MultimodalAudioConfig(**audio_config)
-        elif vision_config is None:
-            audio_config = Phi4MultimodalAudioConfig()
-        self.audio_config = audio_config
 
         super().__init__(
             bos_token_id=bos_token_id,
