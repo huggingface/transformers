@@ -38,7 +38,6 @@ logger = logging.get_logger(__name__)
 class LlavaProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {"padding": False, "return_mm_token_type_ids": False},
-        "images_kwargs": {},
     }
 
 
@@ -94,8 +93,6 @@ class LlavaProcessor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[LlavaProcessorKwargs],
     ) -> BatchFeature:
         """

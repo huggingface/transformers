@@ -37,6 +37,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, is_vision_available, logging
 
 
@@ -44,6 +45,11 @@ if is_vision_available():
     from PIL import Image
 
 logger = logging.get_logger(__name__)
+
+
+class Emu3ImageProcessorKwargs(ImagesKwargs):
+    ratio: Optional[str]
+    image_area: Optional[int]
 
 
 def smart_resize(
@@ -108,6 +114,7 @@ class Emu3ImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values", "image_sizes"]
+    valid_kwargs = Emu3ImageProcessorKwargs
 
     def __init__(
         self,
