@@ -87,10 +87,10 @@ class DINOv3ViTConfig(BackboneConfigMixin, PretrainedConfig):
         pos_embed_rescale (`float`, *optional*, defaults to 2.0):
             Amount to randomly rescale position embedding coordinates in log-uniform value in [1/rescale, rescale],
             applied only in training mode if not `None`.
-             out_features (`List[str]`, *optional*):
+        out_features (`list[str]`, *optional*):
             If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
             (depending on how many stages the model has). Will default to the last stage if unset.
-        out_indices (`List[int]`, *optional*):
+        out_indices (`list[int]`, *optional*):
             If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc.
             (depending on how many stages the model has). Will default to the last stage if unset.
         apply_layernorm (`bool`, *optional*, defaults to `True`):

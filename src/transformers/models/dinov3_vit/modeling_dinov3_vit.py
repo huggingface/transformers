@@ -564,6 +564,7 @@ class DINOv3ViTBackbone(DINOv3ViTPreTrainedModel, BackboneMixin):
         B, N, C = tokens.shape
         return tokens.reshape(B, H, W, C).permute(0, 3, 1, 2).contiguous()
 
+    @check_model_inputs
     def forward(
         self, pixel_values: torch.Tensor, output_hidden_states: Optional[bool] = None, **kwargs
     ) -> BackboneOutput:
@@ -597,7 +598,10 @@ class DINOv3ViTBackbone(DINOv3ViTPreTrainedModel, BackboneMixin):
                 feature_maps.append(fmap)
 
         if not return_dict:
-            return (tuple(feature_maps),)
+            output = (tuple(feature_maps),)
+            if output_hidden_states:
+                output = output + (hidden_states,)
+            return output
 
         return BackboneOutput(
             feature_maps=tuple(feature_maps),
