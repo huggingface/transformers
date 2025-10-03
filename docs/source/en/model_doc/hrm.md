@@ -241,9 +241,8 @@ With only 27M parameters and 1000 training examples:
 
 Available checkpoints on the Hugging Face Hub:
 
-- [sapientinc/HRM-checkpoint-sudoku-extreme](https://huggingface.co/sapientinc/HRM-checkpoint-sudoku-extreme)
-- [sapientinc/HRM-checkpoint-maze-30x30-hard](https://huggingface.co/sapientinc/HRM-checkpoint-maze-30x30-hard)
-- [sapientinc/HRM-checkpoint-ARC-2](https://huggingface.co/sapientinc/HRM-checkpoint-ARC-2)
+- [zbloss/HRM-sudoku-extreme](https://huggingface.co/zbloss/HRM-sudoku-extreme)
+- [zbloss/HRM-maze-30x30-hard](https://huggingface.co/zbloss/HRM-maze-30x30-hard)
 
 ## Tips and Best Practices
 

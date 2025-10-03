@@ -5,7 +5,7 @@
 #                          modular_hrm.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 # coding=utf-8
-# Copyright 2025 The HRM Team and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 Sapient Inc. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -39,9 +39,9 @@ class HrmConfig(PretrainedConfig):
     Xing Chen, Changling Liu, Yue Wu, Meng Lu, Sen Song, and Yasin Abbasi Yadkori.
     For more details, see: https://arxiv.org/abs/2506.21734
 
-    This model was contributed by [sapientinc](https://huggingface.co/sapientinc). The original code can be found
-    [sapientinc/HRM-checkpoint-ARC-2](https://huggingface.co/sapientinc/HRM-checkpoint-ARC-2). Checkpoints for this model can be found
-    on the Hugging Face Hub at [sapientinc/HRM-checkpoint-ARC-2](https://huggingface.co/sapientinc/HRM-checkpoint-ARC-2).
+    This model was contributed by [zbloss](https://huggingface.co/zbloss). The original code can be found
+    [zbloss/HRM-sudoku-extreme](https://huggingface.co/zbloss/HRM-sudoku-extreme). Checkpoints for this model can be found
+    on the Hugging Face Hub at [zbloss/HRM-sudoku-extreme](https://huggingface.co/zbloss/HRM-sudoku-extreme).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

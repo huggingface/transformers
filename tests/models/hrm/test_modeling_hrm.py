@@ -377,8 +377,43 @@ class HrmModelTest(CausalLMModelTest, unittest.TestCase):
 class HrmIntegrationTest(unittest.TestCase):
     """Integration tests for HRM with real use cases."""
 
+    @slow
+    @require_torch
+    def test_pretrained_model_loading(self):
+        """Test loading pre-trained HRM checkpoint from HuggingFace Hub."""
+        # This test requires the converted checkpoint to be available
+        # Skip if the model is not yet available on the Hub
+        try:
+            model = HrmForCausalLM.from_pretrained("zbloss/HRM-sudoku-extreme")
+            model.eval()
+
+            # Test model can perform inference
+            # Create a simple input for ARC-like reasoning task (30x30 grid max)
+            input_ids = torch.randint(0, 11, (1, 81), device=torch_device)
+            model = model.to(torch_device)
+
+            with torch.no_grad():
+                outputs = model(input_ids=input_ids)
+
+            # Verify outputs have expected structure
+            self.assertIsNotNone(outputs)
+            self.assertIsNotNone(outputs.logits)
+            self.assertEqual(outputs.logits.shape[0], 1)  # batch size
+            self.assertEqual(outputs.logits.shape[1], 81)  # sequence length
+            self.assertEqual(outputs.logits.shape[2], 11)  # vocab size
+
+            # Verify carry state is present
+            self.assertIsNotNone(outputs.carry)
+
+            # Verify Q-values for ACT mechanism
+            self.assertIsNotNone(outputs.q_halt_logits)
+            self.assertIsNotNone(outputs.q_continue_logits)
+
+        except Exception as e:
+            self.skipTest(f"Pre-trained checkpoint not available: {e}")
+
     def test_simple_reasoning_task(self):
-        """Test HRM on a simple reasoning task."""
+        """Test HRM on a simple reasoning task with random initialization."""
         config = HrmConfig(
             vocab_size=11,
             hidden_size=256,

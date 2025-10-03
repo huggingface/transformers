@@ -5,7 +5,7 @@
 #                          modular_hrm.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 # coding=utf-8
-# Copyright 2025 The HRM Team and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 Sapient Inc. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -31,6 +31,7 @@ from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import _flash_attention_forward
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
+from ...utils import auto_docstring
 from .configuration_hrm import HrmConfig
 
 
@@ -256,6 +257,9 @@ class HrmAttention(nn.Module):
 
         if cos_sin is not None:
             cos, sin = cos_sin
+            # Slice RoPE embeddings to match actual sequence length
+            cos = cos[:seq_len, :]
+            sin = sin[:seq_len, :]
             query, key = apply_rotary_pos_emb(query, key, cos, sin)
 
         # Try FlashAttention first, fall back to eager if not available
@@ -451,19 +455,28 @@ class HrmInner(nn.Module):
 
         return self.embed_scale * embedding
 
-    def empty_carry(self, batch_size: int, device: torch.device) -> HrmInnerCarry:
-        """Create uninitialized carry state tensors."""
+    def empty_carry(self, batch_size: int, sequence_length: int, device: torch.device) -> HrmInnerCarry:
+        """Create uninitialized carry state tensors.
+
+        Args:
+            batch_size (int): Batch size
+            sequence_length (int): Sequence length (without puzzle embedding positions)
+            device (torch.device): Device to create tensors on
+
+        Returns:
+            HrmInnerCarry: Uninitialized carry state
+        """
         return HrmInnerCarry(
             z_H=torch.empty(
                 batch_size,
-                self.config.max_position_embeddings + self.puzzle_emb_len,
+                sequence_length + self.puzzle_emb_len,
                 self.config.hidden_size,
                 dtype=self.forward_dtype,
                 device=device,
             ),
             z_L=torch.empty(
                 batch_size,
-                self.config.max_position_embeddings + self.puzzle_emb_len,
+                sequence_length + self.puzzle_emb_len,
                 self.config.hidden_size,
                 dtype=self.forward_dtype,
                 device=device,
@@ -562,9 +575,10 @@ class HrmModel(HrmPreTrainedModel):
     def initial_carry(self, batch: dict) -> HrmCarry:
         """Initialize carry state for a new batch."""
         batch_size = batch["input_ids"].shape[0]
+        sequence_length = batch["input_ids"].shape[1]
         device = batch["input_ids"].device
         return HrmCarry(
-            inner_carry=self.inner.empty_carry(batch_size, device),
+            inner_carry=self.inner.empty_carry(batch_size, sequence_length, device),
             steps=torch.zeros((batch_size,), dtype=torch.int32, device=device),
             halted=torch.ones((batch_size,), dtype=torch.bool, device=device),
             current_data={k: torch.empty_like(v) for k, v in batch.items()},
@@ -696,7 +710,27 @@ class HrmModel(HrmPreTrainedModel):
 
 
 class HrmForCausalLM(HrmPreTrainedModel, GenerationMixin):
-    """HRM Model with a language modeling head."""
+    """
+    HRM Model with a language modeling head for causal language modeling with hierarchical reasoning.
+
+    This model supports:
+    - Hierarchical reasoning with H-level (high-level) and L-level (low-level) processing
+    - Adaptive Computation Time (ACT) with Q-learning based halting
+    - Puzzle-specific embeddings for task identification
+    - Recurrent carry state for iterative refinement
+
+    Args:
+        puzzle_identifiers (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Puzzle identifiers for puzzle-specific embeddings. Each puzzle can have a unique embedding
+            to help the model adapt to different task instances. Only used when `config.puzzle_emb_ndim > 0`.
+        carry (`HrmCarry`, *optional*):
+            Recurrent carry state from previous computation step. Contains:
+            - `inner_carry`: H-level and L-level hidden states
+            - `steps`: Number of ACT steps taken
+            - `halted`: Boolean flags indicating if computation has halted
+            - `current_data`: Current input data being processed
+            If not provided, will be initialized automatically.
+    """
 
     def __init__(self, config: HrmConfig):
         super().__init__(config)
@@ -738,6 +772,7 @@ class HrmForCausalLM(HrmPreTrainedModel, GenerationMixin):
         model_kwargs.pop("attention_mask", None)
         return model_kwargs
 
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
