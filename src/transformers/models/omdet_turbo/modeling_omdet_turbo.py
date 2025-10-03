@@ -59,7 +59,7 @@ class OmDetTurboEncoderOutput(ModelOutput):
     last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
-    extracted_states: tuple[torch.FloatTensor] = None
+    extracted_states: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -92,7 +92,7 @@ class OmDetTurboDecoderOutput(ModelOutput):
     decoder_coords: Optional[torch.FloatTensor] = None
     decoder_classes: Optional[torch.FloatTensor] = None
     encoder_coord_logits: Optional[torch.FloatTensor] = None
-    encoder_class_logits: tuple[torch.FloatTensor] = None
+    encoder_class_logits: Optional[tuple[torch.FloatTensor]] = None
     init_reference_points: Optional[torch.FloatTensor] = None
     intermediate_reference_points: tuple[tuple[torch.FloatTensor]] = None
 
@@ -147,7 +147,7 @@ class OmDetTurboObjectDetectionOutput(ModelOutput):
     init_reference_points: Optional[torch.FloatTensor] = None
     intermediate_reference_points: Optional[tuple[tuple[torch.FloatTensor]]] = None
     encoder_coord_logits: Optional[torch.FloatTensor] = None
-    encoder_class_logits: tuple[torch.FloatTensor] = None
+    encoder_class_logits: Optional[tuple[torch.FloatTensor]] = None
     encoder_extracted_states: Optional[torch.FloatTensor] = None
     decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[tuple[tuple[torch.FloatTensor]]] = None
@@ -352,7 +352,7 @@ class OmDetTurboMultiscaleDeformableAttention(nn.Module):
         batch_size, num_queries, _ = hidden_states.shape
         batch_size, sequence_length, _ = encoder_hidden_states.shape
         # Ignore copy
-        total_elements = sum([shape[0] * shape[1] for shape in spatial_shapes_list])
+        total_elements = sum(shape[0] * shape[1] for shape in spatial_shapes_list)
         if total_elements != sequence_length:
             raise ValueError(
                 "Make sure to align the spatial shapes with the sequence length of the encoder hidden states"
@@ -1086,7 +1086,7 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
                 self.language_cache_prompt.put(not_cached_tasks[idx], (emb, cur_mask))
 
         # pad before concat if needed
-        max_len = max([task.shape[0] for task in total_task_features])
+        max_len = max(task.shape[0] for task in total_task_features)
         for idx, task in enumerate(total_task_features):
             if task.shape[0] < max_len:
                 pad_size = max_len - task.shape[0]

@@ -39,7 +39,6 @@ pair of BERT encoders with lower-dimension projection for dense semantic indexin
 This model was contributed by [yjernite](https://huggingface.co/yjernite). Code to train and use the model can be
 found [here](https://github.com/huggingface/transformers/tree/main/examples/research-projects/distillation).
 
-
 ## RetriBertConfig
 
 [[autodoc]] RetriBertConfig

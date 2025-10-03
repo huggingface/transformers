@@ -14,12 +14,11 @@
 
 import tempfile
 import unittest
-from functools import lru_cache
 
 from transformers import RoFormerTokenizer, RoFormerTokenizerFast
 from transformers.testing_utils import require_rjieba, require_tokenizers
 
-from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 @require_rjieba
@@ -38,15 +37,11 @@ class RoFormerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer.save_pretrained(cls.tmpdirname)
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_tokenizer(cls, pretrained_name=None, **kwargs):
         pretrained_name = pretrained_name or cls.tmpdirname
         return cls.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_rust_tokenizer(cls, pretrained_name=None, **kwargs):
         pretrained_name = pretrained_name or cls.tmpdirname
         return cls.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)

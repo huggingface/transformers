@@ -74,10 +74,8 @@ class Wav2Vec2Processor(ProcessorMixin):
 
     def __call__(
         self,
-        audio: AudioInput = None,
+        audio: Optional[AudioInput] = None,
         text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
-        images=None,
-        videos=None,
         **kwargs: Unpack[Wav2Vec2ProcessorKwargs],
     ):
         """
@@ -112,7 +110,6 @@ class Wav2Vec2Processor(ProcessorMixin):
                 audio,
                 **output_kwargs["audio_kwargs"],
                 **output_kwargs["text_kwargs"],
-                **output_kwargs["common_kwargs"],
             )
 
         if audio is not None:

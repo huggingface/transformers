@@ -20,6 +20,7 @@
 # limitations under the License.
 
 import math
+import warnings
 from typing import Callable, Optional, Union
 
 import torch
@@ -49,7 +50,6 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: Optional[float] = None,
     dropout: float = 0.0,
-    head_mask: Optional[torch.Tensor] = None,
     **kwargs,
 ):
     if scaling is None:
@@ -60,9 +60,6 @@ def eager_attention_forward(
         attn_weights = attn_weights + attention_mask[:, :, :, : key.shape[-2]]
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-    if head_mask is not None:
-        attn_weights = attn_weights * head_mask.view(1, -1, 1, 1)
 
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value)
@@ -121,7 +118,6 @@ class VoxtralAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
@@ -151,7 +147,6 @@ class VoxtralAttention(nn.Module):
             dropout=0.0 if not self.training else self.dropout,
             scaling=1.0,
             output_attentions=output_attentions,
-            head_mask=layer_head_mask,
             **kwargs,
         )
 
@@ -184,7 +179,6 @@ class VoxtralEncoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        layer_head_mask: torch.Tensor,
         output_attentions: bool = False,
     ) -> torch.Tensor:
         """
@@ -192,8 +186,6 @@ class VoxtralEncoderLayer(GradientCheckpointingLayer):
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
-                `(encoder_attention_heads,)`.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -203,7 +195,6 @@ class VoxtralEncoderLayer(GradientCheckpointingLayer):
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -358,7 +349,6 @@ class VoxtralEncoder(VoxtralPreTrainedModel):
             layer_outputs = encoder_layer(
                 hidden_states,
                 attention_mask=attention_mask,
-                layer_head_mask=None,
             )
             hidden_states = layer_outputs[0]
 
@@ -431,7 +421,7 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.language_model.get_decoder()
 
-    def get_audio_embeds(self, input_features: torch.FloatTensor):
+    def get_audio_features(self, input_features: torch.FloatTensor):
         """
         This method is used to get the audio embeddings from input features (a log mel spectrogram), meaning inferring the audio encoder and the multi-modal projector.
         Args:
@@ -451,6 +441,12 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
         audio_hidden_states = audio_hidden_states.reshape(-1, self.config.audio_config.intermediate_size)
         audio_embeds = self.multi_modal_projector(audio_hidden_states)
         return audio_embeds
+
+    def get_audio_embeds(self, input_features: torch.FloatTensor):
+        warnings.warn(
+            "The method `get_audio_embeds` is deprecated. Please use `get_audio_features` instead.", FutureWarning
+        )
+        return self.get_audio_features(input_features)
 
     @can_return_tuple
     @auto_docstring
@@ -504,12 +500,14 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if input_features is not None:
-            audio_embeds = self.get_audio_embeds(input_features)
+        if input_features is not None and input_ids is not None:
+            audio_embeds = self.get_audio_features(input_features)
 
             # replace text-audio token placeholders with audio embeddings
-            audio_token_mask = input_ids == self.config.audio_token_id
-            inputs_embeds[audio_token_mask] = audio_embeds
+            audio_token_mask = (input_ids == self.config.audio_token_id).unsqueeze(-1)
+            inputs_embeds = inputs_embeds.masked_scatter(
+                audio_token_mask.to(inputs_embeds.device), audio_embeds.to(inputs_embeds.device)
+            )
 
         outputs: BaseModelOutputWithPast = self.language_model(
             attention_mask=attention_mask,

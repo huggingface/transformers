@@ -138,7 +138,7 @@ class MaskTest(unittest.TestCase):
         self.assertTrue((find_packed_sequence_indices(position_ids) == EXPECTED_SEQUENCE_INDICES).all())
 
     def test_chunked_mask_with_left_padding_and_large_prefill(self):
-        # Make sur we have an attention_chunk_size in the config
+        # Make sure we have an attention_chunk_size in the config
         config = LlamaConfig(attention_chunk_size=3, attn_implementation="sdpa")
 
         batch_size = 2
@@ -193,7 +193,7 @@ class MaskTest(unittest.TestCase):
         self.assertTrue((chunked_attention_mask == EXPECTED_CHUNKED_MASK).all())
 
     def test_chunked_mask_with_left_padding_decoding(self):
-        # Make sur we have an attention_chunk_size in the config
+        # Make sure we have an attention_chunk_size in the config
         config = LlamaConfig(attention_chunk_size=4, attn_implementation="sdpa", num_hidden_layers=1)
 
         cache = DynamicCache(config=config)

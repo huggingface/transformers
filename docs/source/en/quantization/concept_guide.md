@@ -18,12 +18,11 @@ rendered properly in your Markdown viewer.
 
 Quantization reduces the memory footprint and computational cost of large machine learning models like those found in the Transformers library. It achieves this by representing the model's weights and or activations with lower-precision data types (like 8-bit integers or int8) instead of the standard 32-bit floating-point (float32).
 
-
 Reducing a model's precision offers several significant benefits:
 
--  Smaller model size: Lower-precision data types require less storage space. An int8 model, for example, is roughly 4 times smaller than its float32 counterpart.
--  Faster inference: Operations on lower-precision data types, especially integers, can be significantly faster on compatible hardware (CPUs and GPUs often have specialized instructions for int8 operations). This leads to lower latency.
--  Reduced energy consumption: Faster computations and smaller memory transfers often translate to lower power usage.
+- Smaller model size: Lower-precision data types require less storage space. An int8 model, for example, is roughly 4 times smaller than its float32 counterpart.
+- Faster inference: Operations on lower-precision data types, especially integers, can be significantly faster on compatible hardware (CPUs and GPUs often have specialized instructions for int8 operations). This leads to lower latency.
+- Reduced energy consumption: Faster computations and smaller memory transfers often translate to lower power usage.
 
 The primary trade-off in quantization is *efficiency* vs. *accuracy*. Reducing precision saves resources but inevitably introduces small errors (quantization noise). The goal is to minimize this error using appropriate schemes (affine/symmetric), granularity (per-tensor/channel), and techniques (PTQ/QAT) so that the model's performance on its target task degrades as little as possible.
 
@@ -46,8 +45,7 @@ The most common method is *affine quantization*. For a given float32 tensor (lik
 There are two main ways to perform this mapping, *symmetric* and *asymmetric*. The choice between symmetric and asymmetric quantization determines how the float32 range is mapped to the int8 range.
 
 - Symmetric: This method assumes the original float32 range is symmetric around zero ( \\([ -a, a ]\\) ). This range is mapped symmetrically to the int8 range, for example, \\([-127, 127]\\). A key characteristic is that the float32 value \\(0.0\\) maps directly to the int8 value \\(0\\). This only requires one parameter, the **scale ( \\(S\\) )**, to define the mapping. It can simplify computations, but it might be less accurate if the original data distribution isn't naturally centered around zero.
-- Asymmetric (Affine): This method does not assume the data is centered around zero. It maps the exact range \\([val_{min}, val_{max}]\\) from float32 to the full int8 range, like \\([-128, 127]\\). This requires two parameters, a **scale ( \\(S\\) )** and a **zero-point ( \\(Z\\) )**. 
-
+- Asymmetric (Affine): This method does not assume the data is centered around zero. It maps the exact range \\([val_{min}, val_{max}]\\) from float32 to the full int8 range, like \\([-128, 127]\\). This requires two parameters, a **scale ( \\(S\\) )** and a **zero-point ( \\(Z\\) )**.
 
     scale ( \\(S\\) ): A positive float32 number representing the ratio between the float32 and the int8 range.
 
@@ -134,8 +132,7 @@ There are two main types of quantization techniques.
 
 ## Quantization in Transformers
 
-Transformers integrates several quantization backends such as bitsandbytes, torchao, compressed-tensors, and more (refer to the quantization [overview](./overview) for more backends). 
-
+Transformers integrates several quantization backends such as bitsandbytes, torchao, compressed-tensors, and more (refer to the quantization [overview](./overview) for more backends).
 
 All backends are unified under the [`HfQuantizer`] API and associated [`QuantizationConfig`] classes. You can integrate your own custom quantization backends by implementing a custom [`HfQuantizer`] and [`QuantizationConfig`], as shown in the [Contribution](./contribute) guide.
 
@@ -164,7 +161,6 @@ model = AutoModelForCausalLM.from_pretrained(
     device_map="auto"
 )
 ```
-
 
 ## Resources
 

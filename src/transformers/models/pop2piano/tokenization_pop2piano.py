@@ -542,7 +542,6 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
             return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
             verbose (`bool`, *optional*, defaults to `True`):
@@ -555,7 +554,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
         # check if it is batched or not
         # it is batched if its a list containing a list of `pretty_midi.Notes` where the outer list contains all the
         # batches and the inner list contains all Notes for a single batch. Otherwise if np.ndarray is passed it will be
-        # considered batched if it has shape of `[batch_size, seqence_length, 4]` or ndim=3.
+        # considered batched if it has shape of `[batch_size, sequence_length, 4]` or ndim=3.
         is_batched = notes.ndim == 3 if isinstance(notes, np.ndarray) else isinstance(notes[0], list)
 
         # get the truncation and padding strategy
@@ -609,7 +608,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
         transformer to midi_notes and returns them.
 
         Args:
-            token_ids (`Union[np.ndarray, torch.Tensor, tf.Tensor]`):
+            token_ids (`Union[np.ndarray, torch.Tensor]`):
                 Output token_ids of `Pop2PianoConditionalGeneration` model.
             feature_extractor_output (`BatchFeature`):
                 Denotes the output of `Pop2PianoFeatureExtractor.__call__`. It must contain `"beatstep"` and

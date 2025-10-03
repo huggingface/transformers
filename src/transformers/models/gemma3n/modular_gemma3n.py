@@ -84,7 +84,7 @@ class Gemma3nTextConfig(Gemma2Config, PretrainedConfig):
             Dimension of the hidden representations for per-layer emebeddings.
         intermediate_size (`int` or `Sequence[int]`, *optional*, defaults to 16384):
             Dimension of the MLP representations. MatFormer configurations may wish to provide a sequence of integers
-            to account for vairable intermediate_size values across layers. In such cases,
+            to account for variable intermediate_size values across layers. In such cases,
             `len(intermediate_size) == num_hidden_layers`.
         num_hidden_layers (`int`, *optional*, defaults to 35):
             Number of hidden layers in the Transformer decoder.
@@ -121,7 +121,7 @@ class Gemma3nTextConfig(Gemma2Config, PretrainedConfig):
         rope_theta (`float`, *optional*, defaults to 1000000.0):
             The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings used in gloabl attention.
+            Dictionary containing the scaling configuration for the RoPE embeddings used in global attention.
             NOTE: if you apply new rope type and you expect the model to work on longer `max_position_embeddings`, we
             recommend you to update this value accordingly.
             Expected contents:
@@ -175,7 +175,7 @@ class Gemma3nTextConfig(Gemma2Config, PretrainedConfig):
         altup_active_idx (`int`, *optional*, defaults to 0):
             The index of the prediction from which AltUp will compute additional predictions or correct
         altup_coef_clip (`float`, *optional*, defaults to 120.0):
-            The maximum amplitude of an AltUp prediction or correction coeficient weight.
+            The maximum amplitude of an AltUp prediction or correction coefficient weight.
         altup_correct_scale (`bool`, *optional*, defaults to `True`):
             If True, apply the `AltUp.correct_output_scale` to the corrected prediction at `altup_active_idx`.
         altup_num_inputs (`int`, *optional*, defaults to 4):
@@ -290,7 +290,7 @@ class Gemma3nTextConfig(Gemma2Config, PretrainedConfig):
         else:
             self.layer_types = layer_types
 
-        layer_type_validation(self.layer_types)
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         self.hidden_size_per_layer_input = hidden_size_per_layer_input
         self.num_kv_shared_layers = num_kv_shared_layers
@@ -304,9 +304,7 @@ class Gemma3nTextConfig(Gemma2Config, PretrainedConfig):
 
         if activation_sparsity_pattern is None:
             num_sparse_layers = 10 if num_hidden_layers > 10 else 0
-            activation_sparsity_pattern = (0.95,) * num_sparse_layers + (0.0,) * (
-                num_hidden_layers - num_sparse_layers
-            )
+            activation_sparsity_pattern = [0.95] * num_sparse_layers + [0.0] * (num_hidden_layers - num_sparse_layers)
 
         if (len_asp := len(activation_sparsity_pattern)) != num_hidden_layers:
             raise ValueError(
@@ -341,7 +339,7 @@ class Gemma3nAudioConfig(PretrainedConfig):
         rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the rms normalization layers.
         gradient_clipping (`float`, *optional*, defaults to 10000000000.0):
-            Clipping value used to stablize extremely large gradient values.
+            Clipping value used to stabilize extremely large gradient values.
         conf_attention_chunk_size (`int`, *optional*, defaults to 12):
             The sub-sequence size for local attention processing inside the Conformer ("conf") section of the
             Universal Speech Model.
@@ -647,9 +645,8 @@ class Gemma3nConfig(PretrainedConfig):
 
 class Gemma3nModelOutputWithPast(PaligemmaModelOutputWithPast):
     r"""
-    past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
@@ -670,9 +667,8 @@ class Gemma3nCausalLMOutputWithPast(PaliGemmaCausalLMOutputWithPast):
         Language modeling loss (for next-token prediction).
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.text_config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
@@ -1744,6 +1740,7 @@ def apply_rotary_pos_emb(
 class Gemma3nTextAttention(Gemma3Attention):
     def __init__(self, config: Gemma3nTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
+        self.is_causal = True
         del self.attn_logit_softcapping
         del self.scaling
         self.v_norm = Gemma3nRMSNorm(dim=config.head_dim, eps=config.rms_norm_eps, with_scale=False)
@@ -2242,6 +2239,7 @@ class Gemma3nModel(PaliGemmaModel):
     def __init__(self, config: Gemma3nConfig):
         super().__init__(config)
         del self.multi_modal_projector  # Replaced by Gemma3nVisionEmbedder
+        del self.text_config_dtype
         self.vocab_size_per_layer_input = config.text_config.vocab_size_per_layer_input
         self.audio_tower = AutoModel.from_config(config.audio_config)
         self.embed_vision = Gemma3nMultimodalEmbedder(config.vision_config, config.text_config)
@@ -2323,7 +2321,7 @@ class Gemma3nModel(PaliGemmaModel):
         attention_mask: Optional[torch.Tensor] = None,
         input_features_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None,
+        past_key_values: Optional[Cache] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -2472,9 +2470,6 @@ class Gemma3nModel(PaliGemmaModel):
         audio_outputs, audio_mask = self.audio_tower(input_features, input_features_mask)
         return self.embed_audio(inputs_embeds=audio_outputs), audio_mask
 
-    def _update_causal_mask(self, **super_kwargs):
-        raise AttributeError("We don't want to inherit it")
-
 
 @auto_docstring(
     custom_intro="""
@@ -2504,7 +2499,7 @@ class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
         attention_mask: Optional[torch.Tensor] = None,
         input_features_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None,
+        past_key_values: Optional[Cache] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -2668,8 +2663,8 @@ class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
 
         return model_inputs
 
-    def _prepare_4d_causal_attention_mask_with_cache_position(self, **super_kwargs):
-        raise AttributeError("Do not inherit _prepare_4d_causal_attention_mask_with_cache_position from PaliGemma")
+    def create_masks_for_generate(self, **super_kwargs):
+        raise AttributeError("Do not inherit create_masks_for_generate from PaliGemma")
 
 
 __all__ = [
@@ -2679,7 +2674,7 @@ __all__ = [
     "Gemma3nForCausalLM",
     "Gemma3nForConditionalGeneration",
     "Gemma3nModel",
-    "Gemma3nPreTrainedModel",  # noqa: F822
+    "Gemma3nPreTrainedModel",
     "Gemma3nTextConfig",
     "Gemma3nTextModel",
     "Gemma3nVisionConfig",

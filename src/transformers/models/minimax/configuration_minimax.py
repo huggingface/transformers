@@ -87,7 +87,7 @@ class MiniMaxConfig(PretrainedConfig):
         num_local_experts (`int`, *optional*, defaults to 8):
             Number of experts per Sparse MLP layer.
         output_router_logits (`bool`, *optional*, defaults to `False`):
-            Whether or not the router logits should be returned by the model. Enabeling this will also
+            Whether or not the router logits should be returned by the model. Enabling this will also
             allow the model to output the auxiliary loss. See [here]() for more details
         router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
             The aux loss factor for the total loss.
@@ -140,6 +140,9 @@ class MiniMaxConfig(PretrainedConfig):
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
+    }
+    attribute_map = {
+        "num_experts": "num_local_experts",
     }
 
     def __init__(
@@ -224,7 +227,7 @@ class MiniMaxConfig(PretrainedConfig):
             self.layer_types = [
                 "full_attention" if bool((i + 1) % 2) else "linear_attention" for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types)
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
 
 __all__ = ["MiniMaxConfig"]

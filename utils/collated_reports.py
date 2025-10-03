@@ -197,8 +197,9 @@ if __name__ == "__main__":
 
         collated_report_buffer.append(report)
 
+    filename = f"collated_reports_{machine_type}_{commit_hash}.json"
     # Write collated report
-    with open(f"collated_reports_{machine_type}_{commit_hash}.json", "w") as f:
+    with open(filename, "w") as f:
         json.dump(
             {
                 "gpu_name": gpu_name,
@@ -211,5 +212,6 @@ if __name__ == "__main__":
             indent=2,
         )
 
+    # Upload collated report
     if job and report_repo_id:
-        upload_collated_report(job, report_repo_id, f"collated_reports_{commit_hash}.json")
+        upload_collated_report(job, report_repo_id, filename)

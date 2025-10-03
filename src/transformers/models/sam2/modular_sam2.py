@@ -21,11 +21,10 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.utils.checkpoint
 
 from ...activations import ACT2FN
 from ...image_processing_utils import BatchFeature, get_size_dict
-from ...image_processing_utils_fast import BaseImageProcessorFast, DefaultFastImageProcessorKwargs
+from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -37,12 +36,11 @@ from ...image_utils import (
 )
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     ModelOutput,
     TensorType,
     auto_docstring,
-    is_torch_available,
     logging,
 )
 from ...utils.generic import TransformersKwargs, check_model_inputs
@@ -69,15 +67,10 @@ from .configuration_sam2 import (
 )
 
 
-if is_torch_available():
-    import torch
-    from torch.nn import functional as F
-
-
 logger = logging.get_logger(__name__)
 
 
-class Sam2FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+class Sam2FastImageProcessorKwargs(ImagesKwargs):
     r"""
     mask_size (`dict[str, int]`, *optional*):
         The size `{"height": int, "width": int}` to resize the segmentation maps to.
@@ -108,13 +101,13 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
     def __init__(self, **kwargs: Unpack[Sam2FastImageProcessorKwargs]):
         BaseImageProcessorFast.__init__(self, **kwargs)
 
-    def pad_image():
+    def pad_image(self):
         raise NotImplementedError("No pad_image for SAM 2.")
 
-    def _get_preprocess_shape():
+    def _get_preprocess_shape(self):
         raise NotImplementedError("No _get_preprocess_shape for SAM 2.")
 
-    def resize():
+    def resize(self):
         raise NotImplementedError("No need to override resize for SAM 2.")
 
     def _preprocess(
@@ -124,6 +117,19 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
         **kwargs,
     ) -> "torch.Tensor":
         return BaseImageProcessorFast._preprocess(self, images, return_tensors=return_tensors, **kwargs).pixel_values
+
+    @auto_docstring
+    def preprocess(
+        self,
+        images: ImageInput,
+        segmentation_maps: Optional[ImageInput] = None,
+        **kwargs: Unpack[Sam2FastImageProcessorKwargs],
+    ) -> BatchFeature:
+        r"""
+        segmentation_maps (`ImageInput`, *optional*):
+            The segmentation maps to preprocess.
+        """
+        return super().preprocess(images, segmentation_maps, **kwargs)
 
     def _preprocess_image_like_inputs(
         self,
@@ -314,7 +320,7 @@ class Sam2VisionEncoderOutput(ModelOutput):
         the self-attention heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     fpn_hidden_states: Optional[torch.FloatTensor] = None
     fpn_position_encoding: Optional[torch.FloatTensor] = None
     hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
@@ -346,9 +352,9 @@ class Sam2ImageSegmentationOutput(ModelOutput):
         Attentions weights of the mask decoder.
     """
 
-    iou_scores: torch.FloatTensor = None
-    pred_masks: torch.FloatTensor = None
-    object_score_logits: torch.FloatTensor = None
+    iou_scores: Optional[torch.FloatTensor] = None
+    pred_masks: Optional[torch.FloatTensor] = None
+    object_score_logits: Optional[torch.FloatTensor] = None
     image_embeddings: tuple[torch.FloatTensor, ...] = None
     vision_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
     vision_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
@@ -882,13 +888,14 @@ class Sam2PromptEncoder(SamPromptEncoder):
 
     def _embed_boxes(self, boxes: torch.Tensor) -> torch.Tensor:
         """Embeds box prompts."""
-        boxes = boxes + 0.5  # Shift to center of pixel
-        batch_size, nb_boxes = boxes.shape[:2]
-        coords = boxes.reshape(batch_size, nb_boxes, 2, 2)
-        input_shape = (self.input_image_size, self.input_image_size)
-        corner_embedding = self.shared_embedding(coords, input_shape)
+        boxes += 0.5  # Shift to center of pixel
+        coords = boxes.view(*boxes.shape[:2], 2, 2)
+        # add padding point for consistency with the original implementation
+        coords = torch.nn.functional.pad(coords, (0, 0, 0, 1), mode="constant", value=0)
+        corner_embedding = self.shared_embedding(coords, (self.input_image_size, self.input_image_size))
         corner_embedding[:, :, 0, :] += self.point_embed.weight[2]
         corner_embedding[:, :, 1, :] += self.point_embed.weight[3]
+        corner_embedding[:, :, 2, :] = self.not_a_point_embed.weight.expand_as(corner_embedding[:, :, 2, :])
         return corner_embedding
 
 
@@ -940,7 +947,7 @@ class Sam2Attention(nn.Module):
             key,
             value,
             attention_mask=attention_similarity,
-            dropout=0.0 if not self.training else self.dropout_p,
+            dropout=0.0,
             scaling=self.scaling,
             is_causal=self.is_causal,
             **kwargs,
@@ -1384,9 +1391,7 @@ class Sam2Model(SamModel):
         if input_points is not None and input_boxes is not None:
             if input_points.shape[1] != input_boxes.shape[1]:
                 raise ValueError(
-                    "You should provide as many bounding boxes as input points per box. Got {} and {}.".format(
-                        input_points.shape[1], input_boxes.shape[1]
-                    )
+                    f"You should provide as many bounding boxes as input points per box. Got {input_points.shape[1]} and {input_boxes.shape[1]}."
                 )
 
         image_positional_embeddings = self.get_image_wide_positional_embeddings()

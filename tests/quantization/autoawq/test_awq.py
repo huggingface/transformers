@@ -336,7 +336,7 @@ class AwqFusedTest(unittest.TestCase):
 
     def test_fused_modules_to_not_convert(self):
         """
-        Test if fused + modules to_not_covnert work as expected
+        Test if fused + modules to_not_convert work as expected
         """
         model_id = "hf-internal-testing/Mixtral-tiny-AWQ"
 

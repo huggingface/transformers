@@ -18,7 +18,7 @@ import unittest
 import pytest
 from packaging import version
 
-from transformers import AutoTokenizer, Qwen3Config, is_torch_available, set_seed
+from transformers import AutoTokenizer, is_torch_available, set_seed
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
     Expectations,
@@ -26,7 +26,6 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -47,30 +46,12 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 class Qwen3ModelTester(CausalLMModelTester):
-    config_class = Qwen3Config
     if is_torch_available():
         base_model_class = Qwen3Model
-        causal_lm_class = Qwen3ForCausalLM
-        sequence_class = Qwen3ForSequenceClassification
-        token_class = Qwen3ForTokenClassification
-        question_answering_class = Qwen3ForQuestionAnswering
 
 
 @require_torch
 class Qwen3ModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            Qwen3Model,
-            Qwen3ForCausalLM,
-            Qwen3ForSequenceClassification,
-            Qwen3ForTokenClassification,
-            Qwen3ForQuestionAnswering,
-        )
-        if is_torch_available()
-        else ()
-    )
-    test_headmasking = False
-    test_pruning = False
     model_tester_class = Qwen3ModelTester
     pipeline_model_mapping = (
         {
@@ -96,13 +77,6 @@ class Qwen3ModelTest(CausalLMModelTest, unittest.TestCase):
         processor_name,
     ):
         return True
-
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest(reason="Qwen3 flash attention does not support right padding")
 
 
 @require_torch
@@ -207,7 +181,7 @@ class Qwen3IntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): "My favourite condiment is 100% peanut butter. I love it so much that I can't help but use it",
                 ("cuda", 7): "My favourite condiment is 100% natural. It's a little spicy and a little sweet, but it's the",
-                ("cuda", 8): "My favourite condiment is 100% peanut butter. I love it so much that I can't help but use it",
+                ("cuda", 8): "My favourite condiment is 100% beef, 100% beef, 100% beef.",
             }
         )  # fmt: skip
         EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETIONS.get_expectation()

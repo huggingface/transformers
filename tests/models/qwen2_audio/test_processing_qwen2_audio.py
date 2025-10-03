@@ -18,7 +18,7 @@ import unittest
 from transformers import AutoProcessor, AutoTokenizer, Qwen2AudioProcessor, WhisperFeatureExtractor
 from transformers.testing_utils import require_torch, require_torchaudio
 
-from ...test_processing_common import ProcessorTesterMixin
+from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 @require_torch
@@ -116,7 +116,9 @@ class Qwen2AudioProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3",
+                        "audio_url": url_to_local_path(
+                            "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/glass-breaking-151256.mp3"
+                        ),
                     },
                     {"type": "text", "text": "What's that sound?"},
                 ],
@@ -127,7 +129,9 @@ class Qwen2AudioProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav",
+                        "audio_url": url_to_local_path(
+                            "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav"
+                        ),
                     },
                     {"type": "text", "text": "How about this one?"},
                 ],
