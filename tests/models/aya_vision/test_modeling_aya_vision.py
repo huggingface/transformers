@@ -172,7 +172,6 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     fx_compatible = False
     test_pruning = False
     test_torchscript = False
-    test_head_masking = False
     _is_composite = True
 
     def setUp(self):
@@ -196,10 +195,6 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     @unittest.skip(reason="SiglipVisionModel does not support standalone training")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="Siglip uses a non-standard initialization scheme")
-    def test_initialization(self):
         pass
 
     @unittest.skip(reason="Compile not yet supported because in LLava models")

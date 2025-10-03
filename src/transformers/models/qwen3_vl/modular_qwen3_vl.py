@@ -33,7 +33,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update, rop
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ProcessingKwargs, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
+from ...utils import auto_docstring, is_torchdynamo_compiling, logging
 from ...utils.generic import check_model_inputs
 from ...video_utils import VideoInput
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
@@ -1006,7 +1006,7 @@ class Qwen3VLModel(Qwen2_5_VLModel):
         return self.get_image_features(pixel_values_videos, video_grid_thw)
 
     @auto_docstring
-    @can_return_tuple
+    @check_model_inputs
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1137,8 +1137,6 @@ class Qwen3VLModel(Qwen2_5_VLModel):
         return Qwen3VLModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
             rope_deltas=self.rope_deltas,
         )
 
@@ -1151,6 +1149,7 @@ class Qwen3VLForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
     config: Qwen3VLConfig
     _checkpoint_conversion_mapping = {}
 
+    @check_model_inputs
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1208,8 +1207,6 @@ class Qwen3VLForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
             rope_deltas=outputs.rope_deltas,
         )
 
@@ -1396,7 +1393,7 @@ class Qwen3VLProcessor(Qwen2VLProcessor):
             index = 0
             for i in range(len(text)):
                 while self.video_token in text[i]:
-                    metadata = video_metadata[i]
+                    metadata = video_metadata[index]
                     if metadata.fps is None:
                         logger.warning_once(
                             "Qwen3VL requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "

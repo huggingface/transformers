@@ -409,7 +409,7 @@ def get_diff_for_doctesting(repo: Repo, base_commit: str, commits: list[str]) ->
             if not diff_obj.b_path.endswith(".py") and not diff_obj.b_path.endswith(".md"):
                 continue
             # We always add new python/md files
-            if diff_obj.change_type in ["A"]:
+            if diff_obj.change_type == "A":
                 code_diff.append(diff_obj.b_path)
             # Now for modified files
             elif diff_obj.change_type in ["M", "R"]:

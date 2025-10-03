@@ -38,12 +38,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...utils import (
-    TensorType,
-    filter_out_non_signature_kwargs,
-    is_vision_available,
-    logging,
-)
+from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
 
 
 if is_vision_available():

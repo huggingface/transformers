@@ -500,7 +500,6 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
         self,
         pixel_values: torch.Tensor,
         bool_masked_pos: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
@@ -514,10 +513,8 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
         position_embeddings = self.rope_embeddings(pixel_values)
 
         for i, layer_module in enumerate(self.layer):
-            layer_head_mask = head_mask[i] if head_mask is not None else None
             hidden_states = layer_module(
                 hidden_states,
-                attention_mask=layer_head_mask,
                 position_embeddings=position_embeddings,
             )
 

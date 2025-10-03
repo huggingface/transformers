@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Optional
 
 from ..utils import is_accelerate_available, is_torch_available, is_torch_xpu_available, logging
 from .base import HfQuantizer
@@ -81,12 +81,20 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         param_value: "torch.Tensor",
         param_name: str,
         target_device: "torch.device",
-        state_dict: dict[str, Any],
+        **kwargs,
     ):
-        """
-        Quantizes weights to FP8 format using Block-wise quantization
-        """
+        from ..integrations.finegrained_fp8 import FP8Linear
         from ..modeling_utils import _load_parameter_into_model
+
+        # Sanity checks
+        module, tensor_name = get_module_from_name(model, param_name)
+        if isinstance(module, FP8Linear):
+            if self.pre_quantized or tensor_name == "bias":
+                if tensor_name == "weight" and param_value.dtype != torch.float8_e4m3fn:
+                    raise ValueError("Expect quantized weights but got an unquantized weight")
+            else:
+                if tensor_name == "weight_scale_inv":
+                    raise ValueError("Expect unquantized weights but got a quantized weight_scale")
 
         param_value = param_value.to(target_device)
 
@@ -128,26 +136,14 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         _load_parameter_into_model(model, param_name, quantized_param)
         _load_parameter_into_model(model, param_name.rsplit(".", 1)[0] + ".weight_scale_inv", scale)
 
-    def param_needs_quantization(
-        self,
-        model: "PreTrainedModel",
-        param_value: "torch.Tensor",
-        param_name: str,
-        state_dict: dict[str, Any],
-        **kwargs,
-    ):
+    def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         from ..integrations.finegrained_fp8 import FP8Linear
 
         module, tensor_name = get_module_from_name(model, param_name)
-
         if isinstance(module, FP8Linear):
             if self.pre_quantized or tensor_name == "bias":
-                if tensor_name == "weight" and param_value.dtype != torch.float8_e4m3fn:
-                    raise ValueError("Expect quantized weights but got an unquantized weight")
                 return False
             else:
-                if tensor_name == "weight_scale_inv":
-                    raise ValueError("Expect unquantized weights but got a quantized weight_scale")
                 return True
         return False
 

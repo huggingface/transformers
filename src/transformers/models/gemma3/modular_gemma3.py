@@ -1162,7 +1162,7 @@ class Gemma3TextForSequenceClassification(GenericForSequenceClassification, Gemm
 __all__ = [
     "Gemma3Config",
     "Gemma3TextConfig",
-    "Gemma3PreTrainedModel",  # noqa: F822
+    "Gemma3PreTrainedModel",
     "Gemma3TextModel",
     "Gemma3ForCausalLM",
     "Gemma3ForConditionalGeneration",

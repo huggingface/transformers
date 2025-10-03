@@ -59,6 +59,7 @@ pip install pretty-midi==0.2.9 essentia==2.1b6.dev1034 librosa scipy
 ```
 
 Please note that you may need to restart your runtime after installation.
+
 * Pop2Piano is an Encoder-Decoder based model like T5.
 * Pop2Piano can be used to generate midi-audio files for a given audio sequence.
 * Choosing different composers in `Pop2PianoForConditionalGeneration.generate()` can lead to variety of different results.

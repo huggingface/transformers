@@ -46,6 +46,7 @@ from transformers.models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_M
 from transformers.models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING_NAMES
 from transformers.models.auto.processing_auto import PROCESSOR_MAPPING_NAMES
 from transformers.models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES
+from transformers.testing_utils import _COMMON_MODEL_NAMES_MAP
 from transformers.utils import ENV_VARS_TRUE_VALUES, direct_transformers_import
 
 
@@ -139,7 +140,9 @@ IGNORE_NON_TESTED = (
         "BarkCausalModel",  # Building part of bigger (tested) model.
         "BarkModel",  # Does not have a forward signature - generation tested with integration tests.
         "Sam2HieraDetModel",  # Building part of bigger (tested) model.
-        "Sam2VideoModel",  # inherit from Sam2Model (tested).
+        "Sam2VideoModel",  # Partly tested in Sam2Model, not regular model.
+        "EdgeTamVisionModel",  # Building part of bigger (tested) model.
+        "EdgeTamVideoModel",  # Partly tested in EdgeTamModel, not regular model.
         "SeamlessM4TTextToUnitModel",  # Building part of bigger (tested) model.
         "SeamlessM4TCodeHifiGan",  # Building part of bigger (tested) model.
         "SeamlessM4TTextToUnitForConditionalGeneration",  # Building part of bigger (tested) model.
@@ -207,6 +210,7 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "models/shieldgemma2/test_modeling_shieldgemma2.py",
     "models/llama4/test_modeling_llama4.py",
     "models/sam2_video/test_modeling_sam2_video.py",
+    "models/edgetam_video/test_modeling_edgetam_video.py",
 ]
 
 # Update this list for models that are not in any of the auto MODEL_XXX_MAPPING. Being in this list is an exception and
@@ -255,6 +259,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SamModel",
     "Sam2Model",
     "Sam2VideoModel",
+    "EdgeTamModel",
+    "EdgeTamVideoModel",
     "SamHQModel",
     "DPTForDepthEstimation",
     "DecisionTransformerGPT2Model",
@@ -593,7 +599,7 @@ def get_model_test_files() -> list[str]:
 
 # This is a bit hacky but I didn't find a way to import the test_file as a module and read inside the tester class
 # for the all_model_classes variable.
-def find_tested_models(test_file: str) -> list[str]:
+def find_tested_models(test_file: str) -> set[str]:
     """
     Parse the content of test_file to detect what's in `all_model_classes`. This detects the models that inherit from
     the common test class.
@@ -602,21 +608,46 @@ def find_tested_models(test_file: str) -> list[str]:
         test_file (`str`): The path to the test file to check
 
     Returns:
-        `List[str]`: The list of models tested in that file.
+        `Set[str]`: The set of models tested in that file.
     """
     with open(os.path.join(PATH_TO_TESTS, test_file), "r", encoding="utf-8", newline="\n") as f:
         content = f.read()
+
+    model_tested = set()
+
     all_models = re.findall(r"all_model_classes\s+=\s+\(\s*\(([^\)]*)\)", content)
     # Check with one less parenthesis as well
     all_models += re.findall(r"all_model_classes\s+=\s+\(([^\)]*)\)", content)
     if len(all_models) > 0:
-        model_tested = []
         for entry in all_models:
             for line in entry.split(","):
                 name = line.strip()
                 if len(name) > 0:
-                    model_tested.append(name)
-        return model_tested
+                    model_tested.add(name)
+
+    # Models that inherit from `CausalLMModelTester` don't need to set `all_model_classes` -- it is built from other
+    # attributes by default.
+    if "CausalLMModelTester" in content:
+        base_model_class = re.findall(r"base_model_class\s+=.*", content)  # Required attribute
+        base_class = base_model_class[0].split("=")[1].strip()
+        model_tested.add(base_class)
+
+        model_name = base_class.replace("Model", "")
+        # Optional attributes: if not set explicitly, the tester will attempt to infer and use the corresponding class
+        for test_class_type in [
+            "causal_lm_class",
+            "sequence_classification_class",
+            "question_answering_class",
+            "token_classification_class",
+        ]:
+            tested_class = re.findall(rf"{test_class_type}\s+=.*", content)
+            if tested_class:
+                tested_class = tested_class[0].split("=")[1].strip()
+            else:
+                tested_class = model_name + _COMMON_MODEL_NAMES_MAP[test_class_type]
+            model_tested.add(tested_class)
+
+    return model_tested
 
 
 def should_be_tested(model_name: str) -> bool:
@@ -641,22 +672,24 @@ def check_models_are_tested(module: types.ModuleType, test_file: str) -> list[st
     # XxxPreTrainedModel are not tested
     defined_models = get_models(module)
     tested_models = find_tested_models(test_file)
-    if tested_models is None:
+    if len(tested_models) == 0:
         if test_file.replace(os.path.sep, "/") in TEST_FILES_WITH_NO_COMMON_TESTS:
             return
         return [
-            f"{test_file} should define `all_model_classes` to apply common tests to the models it tests. "
-            + "If this intentional, add the test filename to `TEST_FILES_WITH_NO_COMMON_TESTS` in the file "
-            + "`utils/check_repo.py`."
+            f"{test_file} should define `all_model_classes` or inherit from `CausalLMModelTester` (and fill in the "
+            "model class attributes) to apply common tests to the models it tests. "
+            "If this intentional, add the test filename to `TEST_FILES_WITH_NO_COMMON_TESTS` in the file "
+            "`utils/check_repo.py`."
         ]
     failures = []
     for model_name, _ in defined_models:
         if model_name not in tested_models and should_be_tested(model_name):
             failures.append(
                 f"{model_name} is defined in {module.__name__} but is not tested in "
-                + f"{os.path.join(PATH_TO_TESTS, test_file)}. Add it to the all_model_classes in that file."
-                + "If common tests should not applied to that model, add its name to `IGNORE_NON_TESTED`"
-                + "in the file `utils/check_repo.py`."
+                f"{os.path.join(PATH_TO_TESTS, test_file)}. Add it to the `all_model_classes` in that file or, if "
+                "it inherits from `CausalLMModelTester`, fill in the model class attributes. "
+                "If common tests should not applied to that model, add its name to `IGNORE_NON_TESTED`"
+                "in the file `utils/check_repo.py`."
             )
     return failures
 
@@ -968,7 +1001,6 @@ UNDOCUMENTED_OBJECTS = [
     "VitPoseBackbone",  # Internal module
     "VitPoseBackboneConfig",  # Internal module
     "get_values",  # Internal object
-    "SinkCache",  # Moved to a custom_generate repository, to be deleted from transformers in v4.59.0
 ]
 
 # This list should be empty. Objects in it should get their own doc page.

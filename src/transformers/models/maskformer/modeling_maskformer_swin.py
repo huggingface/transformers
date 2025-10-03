@@ -353,7 +353,6 @@ class MaskFormerSwinSelfAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
         batch_size, dim, num_channels = hidden_states.shape
@@ -391,10 +390,6 @@ class MaskFormerSwinSelfAttention(nn.Module):
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
 
         context_layer = torch.matmul(attention_probs, value_layer)
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
@@ -450,10 +445,9 @@ class MaskFormerSwinAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
-        self_outputs = self.self(hidden_states, attention_mask, head_mask, output_attentions)
+        self_outputs = self.self(hidden_states, attention_mask, output_attentions)
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
@@ -538,7 +532,7 @@ class MaskFormerSwinLayer(nn.Module):
         hidden_states = nn.functional.pad(hidden_states, pad_values)
         return hidden_states, pad_values
 
-    def forward(self, hidden_states, input_dimensions, head_mask=None, output_attentions=False):
+    def forward(self, hidden_states, input_dimensions, output_attentions=False):
         height, width = input_dimensions
         batch_size, dim, channels = hidden_states.size()
         shortcut = hidden_states
@@ -562,9 +556,7 @@ class MaskFormerSwinLayer(nn.Module):
         if attn_mask is not None:
             attn_mask = attn_mask.to(hidden_states_windows.device)
 
-        self_attention_outputs = self.attention(
-            hidden_states_windows, attn_mask, head_mask, output_attentions=output_attentions
-        )
+        self_attention_outputs = self.attention(hidden_states_windows, attn_mask, output_attentions=output_attentions)
 
         attention_output = self_attention_outputs[0]
 
@@ -626,9 +618,7 @@ class MaskFormerSwinStage(GradientCheckpointingLayer):
 
         self.pointing = False
 
-    def forward(
-        self, hidden_states, input_dimensions, head_mask=None, output_attentions=False, output_hidden_states=False
-    ):
+    def forward(self, hidden_states, input_dimensions, output_attentions=False, output_hidden_states=False):
         all_hidden_states = () if output_hidden_states else None
 
         height, width = input_dimensions
@@ -636,9 +626,7 @@ class MaskFormerSwinStage(GradientCheckpointingLayer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-
-            block_hidden_states = block_module(hidden_states, input_dimensions, layer_head_mask, output_attentions)
+            block_hidden_states = block_module(hidden_states, input_dimensions, output_attentions)
 
             hidden_states = block_hidden_states[0]
 
@@ -683,7 +671,6 @@ class MaskFormerSwinEncoder(nn.Module):
         self,
         hidden_states,
         input_dimensions,
-        head_mask=None,
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
@@ -696,12 +683,9 @@ class MaskFormerSwinEncoder(nn.Module):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         for i, layer_module in enumerate(self.layers):
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-
             layer_hidden_states, output_dimensions, layer_all_hidden_states = layer_module(
                 hidden_states,
                 input_dimensions,
-                layer_head_mask,
                 output_attentions,
                 output_hidden_states,
             )
@@ -778,7 +762,6 @@ class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):
     def forward(
         self,
         pixel_values=None,
-        head_mask=None,
         output_attentions=None,
         output_hidden_states=None,
         interpolate_pos_encoding=False,
@@ -793,13 +776,6 @@ class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, len(self.config.depths))
-
         embedding_output, input_dimensions = self.embeddings(
             pixel_values, interpolate_pos_encoding=interpolate_pos_encoding
         )
@@ -807,7 +783,6 @@ class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):
         encoder_outputs = self.encoder(
             embedding_output,
             input_dimensions,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
