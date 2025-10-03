@@ -22,7 +22,10 @@ from collections import OrderedDict
 from collections.abc import Callable, Iterator, KeysView, ValuesView
 from typing import Any, TypeVar, Union
 
-from ...configuration_utils import PretrainedConfig
+from packaging import version
+
+from ... import __version__ as transformers_version
+from ...configuration_utils import PREVIOUSLY_SUPPORTED_MODELS_TYPES, PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...utils import CONFIG_NAME, logging
 
@@ -923,34 +926,6 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
     ]
 )
 
-# This is tied to the processing `-` -> `_` in `model_type_to_module_name`. For example, instead of putting
-# `transfo-xl` (as in `CONFIG_MAPPING_NAMES`), we should use `transfo_xl`.
-DEPRECATED_MODELS = [
-    "bort",
-    "deta",
-    "efficientformer",
-    "ernie_m",
-    "gptsan_japanese",
-    "graphormer",
-    "jukebox",
-    "mctct",
-    "mega",
-    "mmbt",
-    "nat",
-    "nezha",
-    "open_llama",
-    "qdqbert",
-    "realm",
-    "retribert",
-    "speech_to_text_2",
-    "tapex",
-    "trajectory_transformer",
-    "transfo_xl",
-    "tvlt",
-    "van",
-    "vit_hybrid",
-    "xlm_prophetnet",
-]
 
 SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
     [
@@ -1001,6 +976,13 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
     ]
 )
 
+# List of modules containing deprecated models, built from `PREVIOUSLY_SUPPORTED_MODELS_TYPES` and applying the
+# mapping from model type on the hub to module name in `transformers`
+DEPRECATED_MODELS = [
+    getattr(SPECIAL_MODEL_TYPE_TO_MODULE_NAME, key, key).replace("-", "_")
+    for key in PREVIOUSLY_SUPPORTED_MODELS_TYPES.keys()
+]
+
 
 def model_type_to_module_name(key) -> str:
     """Converts a config key to the corresponding module."""
@@ -1012,7 +994,7 @@ def model_type_to_module_name(key) -> str:
             key = f"deprecated.{key}"
         return key
 
-    key = key.replace("-", "_")
+    key = key.replace("-", "_")  # folders in transformers always use `_` instead of `-`, regarless of the model type
     if key in DEPRECATED_MODELS:
         key = f"deprecated.{key}"
 
@@ -1349,10 +1331,22 @@ class AutoConfig:
             config_class.register_for_auto_class()
             return config_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif "model_type" in config_dict:
-            # Apply heuristic: if model_type is mistral but layer_types is present, treat as ministral
+            # Handle past deletions
+            if config_dict["model_type"] in PREVIOUSLY_SUPPORTED_MODELS_TYPES:
+                current_version = version.parse(transformers_version)
+                last_version = version.parse(PREVIOUSLY_SUPPORTED_MODELS_TYPES[config_dict["model_type"]])
+                if current_version >= last_version:
+                    raise ValueError(
+                        f"The model type `{config_dict['model_type']}` was removed from `transformers` in "
+                        f"v{last_version}. To use this model, make sure to install a corresponding version of "
+                        "`transformers`"
+                    )
+
+            # Mistral heuristic: if model_type is mistral but layer_types is present, treat as ministral
             if config_dict["model_type"] == "mistral" and "layer_types" in config_dict:
                 logger.info(
-                    "Detected mistral model with layer_types, treating as ministral for alternating attention compatibility. "
+                    "Detected mistral model with layer_types, treating as ministral for alternating attention "
+                    "compatibility. "
                 )
                 config_dict["model_type"] = "ministral"
 

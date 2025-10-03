@@ -50,6 +50,40 @@ logger = logging.get_logger(__name__)
 SpecificPretrainedConfigType = TypeVar("SpecificPretrainedConfigType", bound="PretrainedConfig")
 
 
+# Map containing deprecated/deleted model types, and the last version that supports them.
+# - set version > current version: the model type is deprecated, and users will see a warning;
+# - set version < current version: the model type is deleted, and users will see an exception pointing to the last
+#   version that supported it.
+# NOTE: this variable is set here (and not in `models.auto`) to avoid circular imports. We want to use it with
+# `PretrainedConfig` to make sure the deprecation warning is seen even if the user doesn't use auto classes.
+PREVIOUSLY_SUPPORTED_MODELS_TYPES = {
+    "bort": "5.0.0",
+    "deta": "5.0.0",
+    "efficientformer": "5.0.0",
+    "ernie_m": "5.0.0",
+    "gptsan-japanese": "5.0.0",
+    "graphormer": "5.0.0",
+    "jukebox": "5.0.0",
+    "mctct": "5.0.0",
+    "mega": "5.0.0",
+    "mmbt": "5.0.0",
+    "nat": "5.0.0",
+    "nezha": "5.0.0",
+    "open-llama": "5.0.0",
+    "qdqbert": "5.0.0",
+    "realm": "5.0.0",
+    "retribert": "5.0.0",
+    "speech_to_text_2": "5.0.0",
+    "tapex": "5.0.0",
+    "trajectory_transformer": "5.0.0",
+    "transfo-xl": "5.0.0",
+    "tvlt": "5.0.0",
+    "van": "5.0.0",
+    "vit_hybrid": "5.0.0",
+    "xlm-prophetnet": "5.0.0",
+}
+
+
 class PretrainedConfig(PushToHubMixin):
     # no-format
     r"""
@@ -343,6 +377,17 @@ class PretrainedConfig(PushToHubMixin):
             except AttributeError as err:
                 logger.error(f"Can't set {key} with value {value} for {self}")
                 raise err
+
+        # Handle deprecations: if the model type is deprecated, we raise a warning
+        # (if this line is reached and the model type is in PREVIOUSLY_SUPPORTED_MODELS_TYPES, it means the model
+        # config class is still operational -- it's deprecated, not deleted)
+        if self.model_type in PREVIOUSLY_SUPPORTED_MODELS_TYPES:
+            last_version = PREVIOUSLY_SUPPORTED_MODELS_TYPES[self.model_type]
+            warnings.warn(
+                f"\n🚨🚨 The model type `{self.model_type}` is deprecated and will be removed from `transformers` in "
+                f"v{last_version}. If you want to continue using this model, make sure to pin `transformers` to "
+                f"a version older than v{last_version}. 🚨🚨\n"
+            )
 
     def _create_id_label_maps(self, num_labels: int):
         self.id2label = {i: f"LABEL_{i}" for i in range(num_labels)}

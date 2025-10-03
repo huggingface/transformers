@@ -23,7 +23,7 @@ from pathlib import Path
 
 import httpx
 
-from transformers import AutoConfig, BertConfig, Florence2Config, GPT2Config
+from transformers import AutoConfig, BertConfig, Florence2Config, GPT2Config, GPTSanJapaneseConfig
 from transformers.configuration_utils import PretrainedConfig
 from transformers.testing_utils import TOKEN, TemporaryHubRepo, is_staging_test, require_torch
 
@@ -356,3 +356,33 @@ class ConfigTestUtils(unittest.TestCase):
 
             config = PretrainedConfig.from_pretrained(tmpdirname, torch_dtype="float32")
             self.assertEqual(config.dtype, "float32")
+
+    def test_deleted_model_type(self):
+        # TODO, when we have actually removed a model class:
+        # - let's use that model as a test case, instead of mocking fake versions.
+        # - let's also test trying to load the deleted class, without AutoConfig
+        with mock.patch(
+            "transformers.models.auto.configuration_auto.PREVIOUSLY_SUPPORTED_MODELS_TYPES",
+            {"gptsan-japanese": "4.0.0"},
+        ):
+            with self.assertRaises(ValueError):
+                AutoConfig.from_pretrained("hf-internal-testing/tiny-random-GPTSanJapaneseForConditionalGeneration")
+
+    def test_deprecated_model_type(self):
+        # This is intentionally a live test, testing against actually deprecated (but not yet deleted) model classes.
+        # We want to be highly confident that users are seeing the deprecation warnings.
+        with self.assertWarns(UserWarning) as cm:
+            AutoConfig.from_pretrained("hf-internal-testing/tiny-random-GPTSanJapaneseForConditionalGeneration")
+        self.assertIn("gptsan-japanese", str(cm.warning))
+        self.assertIn("v5.0.0", str(cm.warning))
+        self.assertIn("transformers", str(cm.warning))
+        self.assertIn("🚨", str(cm.warning))
+
+        with self.assertWarns(UserWarning) as cm:
+            GPTSanJapaneseConfig.from_pretrained(
+                "hf-internal-testing/tiny-random-GPTSanJapaneseForConditionalGeneration"
+            )
+        self.assertIn("gptsan-japanese", str(cm.warning))
+        self.assertIn("v5.0.0", str(cm.warning))
+        self.assertIn("transformers", str(cm.warning))
+        self.assertIn("🚨", str(cm.warning))
