@@ -466,7 +466,6 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
         EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
         # fmt: on
         DECODED_TEXT = self.processor.batch_decode(output, skip_special_tokens=True)
-        print(f"{DECODED_TEXT}")
 
         self.assertListEqual(DECODED_TEXT, EXPECTED_DECODED_TEXT)
 
