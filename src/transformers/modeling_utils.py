@@ -4924,12 +4924,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         is_quantized = hf_quantizer is not None
         is_from_file = pretrained_model_name_or_path is not None or gguf_file is not None
 
-        if (
-            is_safetensors_available()
-            and is_from_file
-            and not is_sharded
-            and checkpoint_files[0].endswith(".safetensors")
-        ):
+        if is_from_file and not is_sharded and checkpoint_files[0].endswith(".safetensors"):
             with safe_open(checkpoint_files[0], framework="pt") as f:
                 metadata = f.metadata()
 
@@ -5062,7 +5057,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 sharded_metadata=sharded_metadata,
                 device_map=device_map,
                 disk_offload_folder=offload_folder,
-                offload_state_dict=offload_state_dict,
                 dtype=dtype,
                 hf_quantizer=hf_quantizer,
                 keep_in_fp32_regex=keep_in_fp32_regex,

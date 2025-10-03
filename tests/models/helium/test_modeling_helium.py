@@ -24,8 +24,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...test_configuration_common import ConfigTester
-from ..gemma.test_modeling_gemma import GemmaModelTest, GemmaModelTester
+from ..gemma.test_modeling_gemma import GemmaModelTester
 
 
 if is_torch_available():

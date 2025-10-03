@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import multiprocessing as mp
+import random
 import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -1280,7 +1281,6 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
 
     - collates batches of tensors, honoring their tokenizer's pad_token
     - preprocesses batches for masked language modeling
-    """
 
     <Tip>
 
@@ -1419,6 +1419,8 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         """
         Get 0/1 labels for masked tokens with whole word mask proxy
         """
+        from transformers import BertTokenizer, BertTokenizerFast
+
         if not isinstance(self.tokenizer, (BertTokenizer, BertTokenizerFast)):
             warnings.warn(
                 "DataCollatorForWholeWordMask is only suitable for BertTokenizer-like tokenizers. "
@@ -1635,6 +1637,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
 
         # The rest of the time ((1-mask_replace_prob-random_replace_prob)% of the time) we keep the masked input tokens unchanged
         return inputs, labels
+
     def __init__(self, *args, **kwargs):
         warnings.warn(
             "DataCollatorForWholeWordMask is deprecated and will be removed in a future version, you can now use "

@@ -26,7 +26,6 @@ from ..integrations.deepspeed import is_deepspeed_available
 from ..utils import (
     is_accelerate_available,
     is_flax_available,
-    is_safetensors_available,
     is_tf_available,
     is_torch_available,
     is_torch_hpu_available,
