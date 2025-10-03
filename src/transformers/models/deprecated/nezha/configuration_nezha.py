@@ -100,3 +100,6 @@ class NezhaConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.classifier_dropout = classifier_dropout
         self.use_cache = use_cache
+
+
+__all__ = ["NezhaConfig"]

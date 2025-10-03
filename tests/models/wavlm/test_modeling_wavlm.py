@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,7 +25,6 @@ from transformers.testing_utils import require_torch, require_torchaudio, slow, 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
-    _config_zero_init,
     floats_tensor,
     ids_tensor,
     random_attention_mask,
@@ -156,32 +154,6 @@ class WavLMModelTester:
         self.parent.assertEqual(
             result.last_hidden_state.shape, (self.batch_size, self.output_seq_length, self.hidden_size)
         )
-
-    def create_and_check_batch_inference(self, config, input_values, *args):
-        # test does not pass for models making use of `group_norm`
-        # check: https://github.com/pytorch/fairseq/issues/3227
-        model = WavLMModel(config=config)
-        model.to(torch_device)
-        model.eval()
-
-        input_values = input_values[:3]
-        attention_mask = torch.ones(input_values.shape, device=torch_device, dtype=torch.bool)
-
-        input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
-
-        # pad input
-        for i in range(len(input_lengths)):
-            input_values[i, input_lengths[i] :] = 0.0
-            attention_mask[i, input_lengths[i] :] = 0.0
-
-        batch_outputs = model(input_values, attention_mask=attention_mask).last_hidden_state
-
-        for i in range(input_values.shape[0]):
-            input_slice = input_values[i : i + 1, : input_lengths[i]]
-            output = model(input_slice).last_hidden_state
-
-            batch_output = batch_outputs[i : i + 1, : output.shape[1]]
-            self.parent.assertTrue(torch.allclose(output, batch_output, atol=1e-3))
 
     def check_ctc_loss(self, config, input_values, *args):
         model = WavLMForCTC(config=config)
@@ -334,7 +306,6 @@ class WavLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
     test_pruning = False
-    test_headmasking = False
 
     def setUp(self):
         self.model_tester = WavLMModelTester(self)
@@ -425,42 +396,6 @@ class WavLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         self.assertIsNotNone(hidden_states.grad)
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                uniform_init_parms = [
-                    "conv.weight",
-                    "conv.parametrizations.weight",
-                    "masked_spec_embed",
-                    "codevectors",
-                    "quantizer.weight_proj.weight",
-                    "project_hid.weight",
-                    "project_hid.bias",
-                    "project_q.weight",
-                    "project_q.bias",
-                    "feature_projection.projection.weight",
-                    "feature_projection.projection.bias",
-                    "label_embeddings_concat",
-                    "rel_attn_embed",
-                    "objective.weight",
-                ]
-                if param.requires_grad:
-                    if any(x in name for x in uniform_init_parms):
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-
     # overwrite from test_modeling_common
     def _mock_init_weights(self, module):
         if hasattr(module, "weight") and module.weight is not None:
@@ -500,7 +435,7 @@ class WavLMModelIntegrationTest(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     def _load_superb(self, task, num_samples):
-        ds = load_dataset("anton-l/superb_dummy", task, split="test", trust_remote_code=True)
+        ds = load_dataset("anton-l/superb_dummy", task, split="test")
 
         return ds[:num_samples]
 

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +17,9 @@ import unittest
 
 from transformers import XGLMConfig, is_torch_available
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
+    is_torch_greater_or_equal,
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
@@ -94,13 +95,10 @@ class XGLMModelTester:
 
         config = self.get_config(gradient_checkpointing=gradient_checkpointing)
 
-        head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
-
         return (
             config,
             input_ids,
             input_mask,
-            head_mask,
         )
 
     def get_config(
@@ -124,18 +122,18 @@ class XGLMModelTester:
             gradient_checkpointing=gradient_checkpointing,
         )
 
-    def create_and_check_xglm_model(self, config, input_ids, input_mask, head_mask, *args):
+    def create_and_check_xglm_model(self, config, input_ids, input_mask, *args):
         model = XGLMModel(config=config)
         model.to(torch_device)
         model.eval()
 
-        result = model(input_ids, head_mask=head_mask)
+        result = model(input_ids)
         result = model(input_ids)
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(len(result.past_key_values), config.num_hidden_layers)
 
-    def create_and_check_xglm_model_past(self, config, input_ids, input_mask, head_mask, *args):
+    def create_and_check_xglm_model_past(self, config, input_ids, input_mask, *args):
         model = XGLMModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -165,7 +163,7 @@ class XGLMModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    def create_and_check_xglm_model_attention_mask_past(self, config, input_ids, input_mask, head_mask, *args):
+    def create_and_check_xglm_model_attention_mask_past(self, config, input_ids, input_mask, *args):
         model = XGLMModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -200,7 +198,7 @@ class XGLMModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    def create_and_check_xglm_model_past_large_inputs(self, config, input_ids, input_mask, head_mask, *args):
+    def create_and_check_xglm_model_past_large_inputs(self, config, input_ids, input_mask, *args):
         model = XGLMModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -232,7 +230,7 @@ class XGLMModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    def create_and_check_lm_head_model(self, config, input_ids, input_mask, head_mask, *args):
+    def create_and_check_lm_head_model(self, config, input_ids, input_mask, *args):
         model = XGLMForCausalLM(config)
         model.to(torch_device)
         model.eval()
@@ -242,7 +240,7 @@ class XGLMModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_forward_and_backwards(
-        self, config, input_ids, input_mask, head_mask, *args, gradient_checkpointing=False
+        self, config, input_ids, input_mask, *args, gradient_checkpointing=False
     ):
         model = XGLMForCausalLM(config)
         model.to(torch_device)
@@ -257,7 +255,7 @@ class XGLMModelTester:
     def create_and_check_xglm_weight_initialization(self, config, *args):
         model = XGLMModel(config)
         model_std = model.config.initializer_range / math.sqrt(2 * model.config.num_hidden_layers)
-        for key in model.state_dict().keys():
+        for key in model.state_dict():
             if "c_proj" in key and "weight" in key:
                 self.parent.assertLessEqual(abs(torch.std(model.state_dict()[key]) - model_std), 0.001)
                 self.parent.assertLessEqual(abs(torch.mean(model.state_dict()[key]) - 0.0), 0.01)
@@ -269,12 +267,10 @@ class XGLMModelTester:
             config,
             input_ids,
             input_mask,
-            head_mask,
         ) = config_and_inputs
 
         inputs_dict = {
             "input_ids": input_ids,
-            "head_mask": head_mask,
         }
 
         return config, inputs_dict
@@ -423,10 +419,20 @@ class XGLMModelLanguageGenerationTest(unittest.TestCase):
         output_ids = model.generate(input_ids, do_sample=True, num_beams=1)
         output_str = tokenizer.decode(output_ids[0], skip_special_tokens=True)
 
-        EXPECTED_OUTPUT_STR = (
-            "Today is a nice day and the water is still cold. We just stopped off for some fresh coffee. This place"
-            " looks like a"
-        )
+        if is_torch_greater_or_equal("2.7.0"):
+            cuda_expectation = (
+                "Today is a nice day and the sun is shining. A nice day with warm rainy and windy weather today."
+            )
+        else:
+            cuda_expectation = "Today is a nice day and the water is still cold. We just stopped off for some fresh coffee. This place looks like a"
+
+        expected_output_strings = Expectations(
+            {
+                ("rocm", (9, 5)): "Today is a nice day and the sun is shining. A nice day with warm rainy and windy weather today.",
+                ("cuda", None): cuda_expectation,
+            }
+        )  # fmt: skip
+        EXPECTED_OUTPUT_STR = expected_output_strings.get_expectation()
         self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
 
     @require_torch_accelerator
@@ -435,7 +441,7 @@ class XGLMModelLanguageGenerationTest(unittest.TestCase):
         model_name = "facebook/xglm-564M"
         tokenizer = XGLMTokenizer.from_pretrained(model_name, use_fast=False, padding_side="left")
 
-        model = XGLMForCausalLM.from_pretrained(model_name, torch_dtype=torch.float16, use_cache=True).to(torch_device)
+        model = XGLMForCausalLM.from_pretrained(model_name, dtype=torch.float16, use_cache=True).to(torch_device)
         model = model.eval()
 
         batch = tokenizer(["Who are you?", "Joe Biden is the president of"], padding=True, return_tensors="pt")

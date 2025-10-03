@@ -23,6 +23,7 @@ Image-text-to-text models, also known as vision language models (VLMs), are lang
 In this guide, we provide a brief overview of VLMs and show how to use them with Transformers for inference.
 
 To begin with, there are multiple types of VLMs:
+
 - base models used for fine-tuning
 - chat fine-tuned models for conversation
 - instruction fine-tuned models
@@ -38,13 +39,13 @@ pip install -q transformers accelerate flash_attn
 Let's initialize the model and the processor.
 
 ```python
-from transformers import AutoProcessor, AutoModelForImageTextToText
+from transformers import AutoProcessor, AutoModelForImageTextToText, infer_device
 import torch
 
-device = torch.device("cuda")
+device = torch.device(infer_device())
 model = AutoModelForImageTextToText.from_pretrained(
     "HuggingFaceM4/idefics2-8b",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     attn_implementation="flash_attention_2",
 ).to(device)
 
@@ -63,7 +64,6 @@ The image inputs look like the following.
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg" alt="A bee on a pink flower"/>
 </div>
 
-
 ```python
 from PIL import Image
 import requests
@@ -75,7 +75,6 @@ images = [Image.open(requests.get(img_urls[0], stream=True).raw),
 ```
 
 Below is an example of the chat template. We can feed conversation turns and the last message as an input by appending it at the end of the template.
-
 
 ```python
 messages = [
@@ -160,12 +159,52 @@ outputs[0]["generated_text"]
 #  with a yellow center in the foreground. The flower is surrounded by red and white flowers with green stems
 ```
 
-## Streaming
+If you prefer, you can also load the images separately and pass them to the pipeline like so:
+
+```python
+pipe = pipeline("image-text-to-text", model="HuggingFaceTB/SmolVLM-256M-Instruct")
+
+img_urls = [
+    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/cats.png",
+    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg",
+]
+images = [
+    Image.open(requests.get(img_urls[0], stream=True).raw),
+    Image.open(requests.get(img_urls[1], stream=True).raw),
+]
+
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "image"},
+            {"type": "image"},
+            {"type": "text", "text": "What do you see in these images?"},
+        ],
+    }
+]
+outputs = pipe(text=messages, images=images, max_new_tokens=50, return_full_text=False)
+outputs[0]["generated_text"]
+" In the first image, there are two cats sitting on a plant. In the second image, there are flowers with a pinkish hue."
+```
+
+The images will still be included in the `"input_text"` field of the output:
+
+```python
+outputs[0]['input_text']
+"""
+[{'role': 'user',
+  'content': [{'type': 'image',
+    'image': <PIL.PngImagePlugin.PngImageFile image mode=RGBA size=622x412>},
+   {'type': 'image',
+    'image': <PIL.JpegImagePlugin.JpegImageFile image mode=RGB size=5184x3456>},
+   {'type': 'text', 'text': 'What do you see in these images?'}]}]## Streaming
+"""
+```
 
 We can use [text streaming](./generation_strategies#streaming) for a better generation experience. Transformers supports streaming with the [`TextStreamer`] or [`TextIteratorStreamer`] classes. We will use the [`TextIteratorStreamer`] with IDEFICS-8B.
 
 Assume we have an application that keeps chat history and takes in the new user input. We will preprocess the inputs as usual and initialize [`TextIteratorStreamer`] to handle the generation in a separate thread. This allows you to stream the generated text tokens in real-time. Any generation arguments can be passed to [`TextIteratorStreamer`].
-
 
 ```python
 import time
@@ -260,7 +299,7 @@ from transformers import AutoModelForImageTextToText, QuantoConfig
 model_id = "HuggingFaceM4/idefics2-8b"
 quantization_config = QuantoConfig(weights="int8")
 quantized_model = AutoModelForImageTextToText.from_pretrained(
-    model_id, device_map="cuda", quantization_config=quantization_config
+    model_id, device_map="auto", quantization_config=quantization_config
 )
 ```
 

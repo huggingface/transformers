@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -241,7 +240,6 @@ class NystromformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         else {}
     )
     test_pruning = False
-    test_headmasking = False
 
     def setUp(self):
         self.model_tester = NystromformerModelTester(self)

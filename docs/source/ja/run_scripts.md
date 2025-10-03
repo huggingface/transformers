@@ -90,8 +90,6 @@ pip install -r requirements.txt
 
 ## Run a script
 
-<frameworkcontent>
-<pt>
 この例のスクリプトは、🤗 [Datasets](https://huggingface.co/docs/datasets/) ライブラリからデータセットをダウンロードし、前処理を行います。次に、[Trainer](https://huggingface.co/docs/transformers/main_classes/trainer) を使用して要約をサポートするアーキテクチャ上でデータセットをファインチューニングします。以下の例では、[CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail) データセット上で [T5-small](https://huggingface.co/google-t5/t5-small) をファインチューニングする方法が示されています。T5 モデルは、そのトレーニング方法に起因して追加の `source_prefix` 引数が必要です。このプロンプトにより、T5 はこれが要約タスクであることを知ることができます。
 
 
@@ -110,25 +108,6 @@ python examples/pytorch/summarization/run_summarization.py \
     --predict_with_generate
 ```
 
-</pt>
-<tf>
-この例のスクリプトは、🤗 [Datasets](https://huggingface.co/docs/datasets/) ライブラリからデータセットをダウンロードして前処理します。その後、スクリプトは要約をサポートするアーキテクチャ上で Keras を使用してデータセットをファインチューニングします。以下の例では、[T5-small](https://huggingface.co/google-t5/t5-small) を [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail) データセットでファインチューニングする方法を示しています。T5 モデルは、そのトレーニング方法に起因して追加の `source_prefix` 引数が必要です。このプロンプトは、T5 にこれが要約タスクであることを知らせます。
-
-
-```bash
-python examples/tensorflow/summarization/run_summarization.py  \
-    --model_name_or_path google-t5/t5-small \
-    --dataset_name cnn_dailymail \
-    --dataset_config "3.0.0" \
-    --output_dir /tmp/tst-summarization  \
-    --per_device_train_batch_size 8 \
-    --per_device_eval_batch_size 16 \
-    --num_train_epochs 3 \
-    --do_train \
-    --do_eval
-```
-</tf>
-</frameworkcontent>
 
 ## Distributed training and mixed precision
 
@@ -161,8 +140,6 @@ TensorFlowスクリプトは、分散トレーニングに[`MirroredStrategy`](h
 
 ## Run a script on a TPU
 
-<frameworkcontent>
-<pt>
 Tensor Processing Units (TPUs)は、パフォーマンスを加速させるために特別に設計されています。PyTorchは、[XLA](https://www.tensorflow.org/xla)ディープラーニングコンパイラを使用してTPUsをサポートしており、詳細については[こちら](https://github.com/pytorch/xla/blob/master/README.md)をご覧ください。TPUを使用するには、`xla_spawn.py`スクリプトを起動し、`num_cores`引数を使用して使用するTPUコアの数を設定します。
 ```bash
 python xla_spawn.py --num_cores 8 \
@@ -179,25 +156,6 @@ python xla_spawn.py --num_cores 8 \
     --overwrite_output_dir \
     --predict_with_generate
 ```
-</pt>
-<tf>
-もちろん、Tensor Processing Units（TPUs）は性能を高速化するために特別に設計されています。TensorFlowスクリプトは、TPUsでトレーニングするために[`TPUStrategy`](https://www.tensorflow.org/guide/distributed_training#tpustrategy)を利用します。TPUを使用するには、TPUリソースの名前を`tpu`引数に渡します。
-
-```bash
-python run_summarization.py  \
-    --tpu name_of_tpu_resource \
-    --model_name_or_path google-t5/t5-small \
-    --dataset_name cnn_dailymail \
-    --dataset_config "3.0.0" \
-    --output_dir /tmp/tst-summarization  \
-    --per_device_train_batch_size 8 \
-    --per_device_eval_batch_size 16 \
-    --num_train_epochs 3 \
-    --do_train \
-    --do_eval
-```
-</tf>
-</frameworkcontent>
 
 ## Run a script with 🤗 Accelerate
 
@@ -337,7 +295,7 @@ python examples/pytorch/summarization/run_summarization.py
 すべてのスクリプトは、最終的なモデルを [Model Hub](https://huggingface.co/models) にアップロードできます。開始する前に Hugging Face にログインしていることを確認してください。
 
 ```bash
-huggingface-cli login
+hf auth login
 ```
 
 次に、スクリプトに `push_to_hub` 引数を追加します。この引数は、Hugging Face のユーザー名と `output_dir` で指定したフォルダ名でリポジトリを作成します。

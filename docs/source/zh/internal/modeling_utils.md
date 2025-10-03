@@ -25,23 +25,6 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] pytorch_utils.Conv1D
 
-[[autodoc]] modeling_utils.PoolerStartLogits
-    - forward
-
-[[autodoc]] modeling_utils.PoolerEndLogits
-    - forward
-
-[[autodoc]] modeling_utils.PoolerAnswerClass
-    - forward
-
-[[autodoc]] modeling_utils.SquadHeadOutput
-
-[[autodoc]] modeling_utils.SQuADHead
-    - forward
-
-[[autodoc]] modeling_utils.SequenceSummary
-    - forward
-
 ## PyTorch帮助函数
 
 [[autodoc]] pytorch_utils.apply_chunking_to_forward
@@ -54,30 +37,3 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] pytorch_utils.prune_linear_layer
 
-## TensorFlow自定义层
-
-[[autodoc]] modeling_tf_utils.TFConv1D
-
-[[autodoc]] modeling_tf_utils.TFSequenceSummary
-
-## TensorFlow loss 函数
-
-[[autodoc]] modeling_tf_utils.TFCausalLanguageModelingLoss
-
-[[autodoc]] modeling_tf_utils.TFMaskedLanguageModelingLoss
-
-[[autodoc]] modeling_tf_utils.TFMultipleChoiceLoss
-
-[[autodoc]] modeling_tf_utils.TFQuestionAnsweringLoss
-
-[[autodoc]] modeling_tf_utils.TFSequenceClassificationLoss
-
-[[autodoc]] modeling_tf_utils.TFTokenClassificationLoss
-
-## TensorFlow帮助函数
-
-[[autodoc]] modeling_tf_utils.get_initializer
-
-[[autodoc]] modeling_tf_utils.keras_serializable
-
-[[autodoc]] modeling_tf_utils.shape_list

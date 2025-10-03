@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -145,7 +144,6 @@ class OwlViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = OwlViTVisionModelTester(self)
@@ -203,14 +201,6 @@ class OwlViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
         reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="OwlViTVisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="OwlViTVisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
         pass
 
     @slow
@@ -314,7 +304,6 @@ class OwlViTTextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (OwlViTTextModel,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = OwlViTTextModelTester(self)
@@ -351,14 +340,6 @@ class OwlViTTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="OwlViTTextModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="OwlViTTextModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "google/owlvit-base-patch32"
@@ -388,7 +369,11 @@ class OwlViTModelTester:
         return config, input_ids, attention_mask, pixel_values
 
     def get_config(self):
-        return OwlViTConfig.from_text_vision_configs(self.text_config, self.vision_config, projection_dim=64)
+        return OwlViTConfig(
+            text_config=self.text_config,
+            vision_config=self.vision_config,
+            projection_dim=64,
+        )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
         model = OwlViTModel(config).to(torch_device).eval()
@@ -435,7 +420,6 @@ class OwlViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
     fx_compatible = False
-    test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
@@ -469,30 +453,6 @@ class OwlViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip(reason="OwlViTModel does not have input/output embeddings")
     def test_model_get_set_embeddings(self):
         pass
-
-    # override as the `logit_scale` parameter initialization is different for OWLVIT
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    # check if `logit_scale` is initialized as per the original implementation
-                    if name == "logit_scale":
-                        self.assertAlmostEqual(
-                            param.data.item(),
-                            np.log(1 / 0.07),
-                            delta=1e-3,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
@@ -532,8 +492,8 @@ class OwlViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             loaded_model_state_dict = loaded_model.state_dict()
 
             non_persistent_buffers = {}
-            for key in loaded_model_state_dict.keys():
-                if key not in model_state_dict.keys():
+            for key in loaded_model_state_dict:
+                if key not in model_state_dict:
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {
@@ -600,7 +560,11 @@ class OwlViTForObjectDetectionTester:
         return config, pixel_values, input_ids, attention_mask
 
     def get_config(self):
-        return OwlViTConfig.from_text_vision_configs(self.text_config, self.vision_config, projection_dim=64)
+        return OwlViTConfig(
+            text_config=self.text_config,
+            vision_config=self.vision_config,
+            projection_dim=64,
+        )
 
     def create_and_check_model(self, config, pixel_values, input_ids, attention_mask):
         model = OwlViTForObjectDetection(config).to(torch_device).eval()
@@ -646,7 +610,6 @@ class OwlViTForObjectDetectionTester:
 class OwlViTForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (OwlViTForObjectDetection,) if is_torch_available() else ()
     fx_compatible = False
-    test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
@@ -674,16 +637,8 @@ class OwlViTForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="Test_initialization is tested in individual model tests")
-    def test_initialization(self):
-        pass
-
     @unittest.skip(reason="Test_forward_signature is tested in individual model tests")
     def test_forward_signature(self):
-        pass
-
-    @unittest.skip(reason="Test_save_load_fast_init_from_base is tested in individual model tests")
-    def test_save_load_fast_init_from_base(self):
         pass
 
     @unittest.skip(reason="OWL-ViT does not support training yet")
@@ -744,8 +699,8 @@ class OwlViTForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
             loaded_model_state_dict = loaded_model.state_dict()
 
             non_persistent_buffers = {}
-            for key in loaded_model_state_dict.keys():
-                if key not in model_state_dict.keys():
+            for key in loaded_model_state_dict:
+                if key not in model_state_dict:
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {
@@ -995,7 +950,7 @@ class OwlViTModelIntegrationTest(unittest.TestCase):
             outputs, text_labels=text_labels
         )
 
-        objects_labels = post_processed_output_with_text_labels[0]["labels"].cpu().tolist()
+        objects_labels = post_processed_output_with_text_labels[0]["labels"].tolist()
         self.assertListEqual(objects_labels, [0, 0])
 
         objects_text_labels = post_processed_output_with_text_labels[0]["text_labels"]
@@ -1035,7 +990,7 @@ class OwlViTModelIntegrationTest(unittest.TestCase):
     @require_torch_fp16
     def test_inference_one_shot_object_detection_fp16(self):
         model_name = "google/owlvit-base-patch32"
-        model = OwlViTForObjectDetection.from_pretrained(model_name, torch_dtype=torch.float16).to(torch_device)
+        model = OwlViTForObjectDetection.from_pretrained(model_name, dtype=torch.float16).to(torch_device)
 
         processor = OwlViTProcessor.from_pretrained(model_name)
 

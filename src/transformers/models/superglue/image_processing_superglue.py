@@ -13,11 +13,10 @@
 # limitations under the License.
 """Image processor class for SuperPoint."""
 
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
 
-from ... import is_torch_available, is_vision_available
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import resize, to_channel_dimension_format
 from ...image_utils import (
@@ -29,12 +28,15 @@ from ...image_utils import (
     infer_channel_dimension_format,
     is_pil_image,
     is_scaled_image,
+    is_torch_available,
     is_valid_image,
+    is_vision_available,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, logging, requires_backends
+from ...utils.import_utils import requires
 
 
 if is_torch_available():
@@ -45,13 +47,14 @@ if TYPE_CHECKING:
 
 if is_vision_available():
     import PIL
+    from PIL import Image, ImageDraw
 
 logger = logging.get_logger(__name__)
 
 
 # Copied from transformers.models.superpoint.image_processing_superpoint.is_grayscale
 def is_grayscale(
-    image: ImageInput,
+    image: np.ndarray,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ):
     if input_data_format == ChannelDimension.FIRST:
@@ -70,8 +73,7 @@ def convert_to_grayscale(
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> ImageInput:
     """
-    Converts an image to grayscale format using the NTSC formula. Only support numpy and PIL Image. TODO support torch
-    and tensorflow grayscale conversion
+    Converts an image to grayscale format using the NTSC formula. Only support numpy and PIL Image.
 
     This function is supposed to return a 1-channel image, but it returns a 3-channel image with the same value in each
     channel, because of an issue that is discussed in :
@@ -131,27 +133,28 @@ def validate_and_format_image_pairs(images: ImageInput):
     raise ValueError(error_message)
 
 
+@requires(backends=("torch",))
 class SuperGlueImageProcessor(BaseImageProcessor):
     r"""
     Constructs a SuperGlue image processor.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
-            Controls whether to resize the image's (height, width) dimensions to the specified `size`. Can be overriden
+            Controls whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden
             by `do_resize` in the `preprocess` method.
-        size (`Dict[str, int]` *optional*, defaults to `{"height": 480, "width": 640}`):
+        size (`dict[str, int]` *optional*, defaults to `{"height": 480, "width": 640}`):
             Resolution of the output image after `resize` is applied. Only has an effect if `do_resize` is set to
-            `True`. Can be overriden by `size` in the `preprocess` method.
+            `True`. Can be overridden by `size` in the `preprocess` method.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
-            Resampling filter to use if resizing the image. Can be overriden by `resample` in the `preprocess` method.
+            Resampling filter to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`. Can be overriden by `do_rescale` in
+            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by `do_rescale` in
             the `preprocess` method.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image. Can be overriden by `rescale_factor` in the `preprocess`
+            Scale factor to use if rescaling the image. Can be overridden by `rescale_factor` in the `preprocess`
             method.
         do_grayscale (`bool`, *optional*, defaults to `True`):
-            Whether to convert the image to grayscale. Can be overriden by `do_grayscale` in the `preprocess` method.
+            Whether to convert the image to grayscale. Can be overridden by `do_grayscale` in the `preprocess` method.
     """
 
     model_input_names = ["pixel_values"]
@@ -159,7 +162,7 @@ class SuperGlueImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255,
@@ -181,7 +184,7 @@ class SuperGlueImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
+        size: dict[str, int],
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
@@ -192,7 +195,7 @@ class SuperGlueImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Dictionary of the form `{"height": int, "width": int}`, specifying the size of the output image.
             data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format of the output image. If not provided, it will be inferred from the input
@@ -220,12 +223,12 @@ class SuperGlueImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
-        resample: PILImageResampling = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_grayscale: bool = None,
+        do_resize: Optional[bool] = None,
+        size: Optional[dict[str, int]] = None,
+        resample: Optional[PILImageResampling] = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_grayscale: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -241,7 +244,7 @@ class SuperGlueImageProcessor(BaseImageProcessor):
                 `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`dict[str, int]`, *optional*, defaults to `self.size`):
                 Size of the output image after `resize` has been applied. If `size["shortest_edge"]` >= 384, the image
                 is resized to `(size["shortest_edge"], size["shortest_edge"])`. Otherwise, the smaller edge of the
                 image will be matched to `int(size["shortest_edge"]/ crop_pct)`, after which the image is cropped to
@@ -258,10 +261,8 @@ class SuperGlueImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -288,10 +289,7 @@ class SuperGlueImageProcessor(BaseImageProcessor):
         images = validate_and_format_image_pairs(images)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         validate_preprocess_arguments(
             do_resize=do_resize,
@@ -338,23 +336,23 @@ class SuperGlueImageProcessor(BaseImageProcessor):
     def post_process_keypoint_matching(
         self,
         outputs: "KeypointMatchingOutput",
-        target_sizes: Union[TensorType, List[Tuple]],
+        target_sizes: Union[TensorType, list[tuple]],
         threshold: float = 0.0,
-    ) -> List[Dict[str, torch.Tensor]]:
+    ) -> list[dict[str, torch.Tensor]]:
         """
         Converts the raw output of [`KeypointMatchingOutput`] into lists of keypoints, scores and descriptors
         with coordinates absolute to the original image sizes.
         Args:
             outputs ([`KeypointMatchingOutput`]):
                 Raw outputs of the model.
-            target_sizes (`torch.Tensor` or `List[Tuple[Tuple[int, int]]]`, *optional*):
-                Tensor of shape `(batch_size, 2, 2)` or list of tuples of tuples (`Tuple[int, int]`) containing the
+            target_sizes (`torch.Tensor` or `list[tuple[tuple[int, int]]]`, *optional*):
+                Tensor of shape `(batch_size, 2, 2)` or list of tuples of tuples (`tuple[int, int]`) containing the
                 target size `(height, width)` of each image in the batch. This must be the original image size (before
                 any processing).
             threshold (`float`, *optional*, defaults to 0.0):
                 Threshold to filter out the matches with low scores.
         Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the keypoints in the first and second image
+            `list[Dict]`: A list of dictionaries, each dictionary containing the keypoints in the first and second image
             of the pair, the matching scores and the matching indices.
         """
         if outputs.mask.shape[0] != len(target_sizes):
@@ -362,7 +360,7 @@ class SuperGlueImageProcessor(BaseImageProcessor):
         if not all(len(target_size) == 2 for target_size in target_sizes):
             raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
 
-        if isinstance(target_sizes, List):
+        if isinstance(target_sizes, list):
             image_pair_sizes = torch.tensor(target_sizes, device=outputs.mask.device)
         else:
             if target_sizes.shape[1] != 2 or target_sizes.shape[2] != 2:
@@ -402,6 +400,69 @@ class SuperGlueImageProcessor(BaseImageProcessor):
             )
 
         return results
+
+    # Copied from transformers.models.efficientloftr.image_processing_efficientloftr.EfficientLoFTRImageProcessor.visualize_keypoint_matching with EfficientLoFTR->SuperGlue
+    def visualize_keypoint_matching(
+        self,
+        images: ImageInput,
+        keypoint_matching_output: list[dict[str, torch.Tensor]],
+    ) -> list["Image.Image"]:
+        """
+        Plots the image pairs side by side with the detected keypoints as well as the matching between them.
+
+        Args:
+            images (`ImageInput`):
+                Image pairs to plot. Same as `SuperGlueImageProcessor.preprocess`. Expects either a list of 2
+                images or a list of list of 2 images list with pixel values ranging from 0 to 255.
+            keypoint_matching_output (List[Dict[str, torch.Tensor]]]):
+                A post processed keypoint matching output
+
+        Returns:
+            `List[PIL.Image.Image]`: A list of PIL images, each containing the image pairs side by side with the detected
+            keypoints as well as the matching between them.
+        """
+        images = validate_and_format_image_pairs(images)
+        images = [to_numpy_array(image) for image in images]
+        image_pairs = [images[i : i + 2] for i in range(0, len(images), 2)]
+
+        results = []
+        for image_pair, pair_output in zip(image_pairs, keypoint_matching_output):
+            height0, width0 = image_pair[0].shape[:2]
+            height1, width1 = image_pair[1].shape[:2]
+            plot_image = np.zeros((max(height0, height1), width0 + width1, 3), dtype=np.uint8)
+            plot_image[:height0, :width0] = image_pair[0]
+            plot_image[:height1, width0:] = image_pair[1]
+
+            plot_image_pil = Image.fromarray(plot_image)
+            draw = ImageDraw.Draw(plot_image_pil)
+
+            keypoints0_x, keypoints0_y = pair_output["keypoints0"].unbind(1)
+            keypoints1_x, keypoints1_y = pair_output["keypoints1"].unbind(1)
+            for keypoint0_x, keypoint0_y, keypoint1_x, keypoint1_y, matching_score in zip(
+                keypoints0_x, keypoints0_y, keypoints1_x, keypoints1_y, pair_output["matching_scores"]
+            ):
+                color = self._get_color(matching_score)
+                draw.line(
+                    (keypoint0_x, keypoint0_y, keypoint1_x + width0, keypoint1_y),
+                    fill=color,
+                    width=3,
+                )
+                draw.ellipse((keypoint0_x - 2, keypoint0_y - 2, keypoint0_x + 2, keypoint0_y + 2), fill="black")
+                draw.ellipse(
+                    (keypoint1_x + width0 - 2, keypoint1_y - 2, keypoint1_x + width0 + 2, keypoint1_y + 2),
+                    fill="black",
+                )
+
+            results.append(plot_image_pil)
+        return results
+
+    # Copied from transformers.models.efficientloftr.image_processing_efficientloftr.EfficientLoFTRImageProcessor._get_color
+    def _get_color(self, score):
+        """Maps a score to a color."""
+        r = int(255 * (1 - score))
+        g = int(255 * score)
+        b = 0
+        return (r, g, b)
 
 
 __all__ = ["SuperGlueImageProcessor"]

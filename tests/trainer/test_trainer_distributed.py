@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict
 
 import numpy as np
 
@@ -23,6 +22,7 @@ from transformers.testing_utils import (
     execute_subprocess_async,
     get_torch_dist_unique_port,
     require_torch_multi_accelerator,
+    run_first,
     torch_device,
 )
 from transformers.training_args import ParallelMode
@@ -117,6 +117,7 @@ if is_torch_available():
 
 
 class TestTrainerDistributed(TestCasePlus):
+    @run_first
     @require_torch_multi_accelerator
     def test_trainer(self):
         distributed_args = f"""--nproc_per_node={backend_device_count(torch_device)}
@@ -148,7 +149,7 @@ if __name__ == "__main__":
     for dataset_length in [101, 40, 7]:
         dataset = DummyDataset(dataset_length)
 
-        def compute_metrics(p: EvalPrediction) -> Dict:
+        def compute_metrics(p: EvalPrediction) -> dict:
             sequential = list(range(len(dataset)))
             success = p.predictions.tolist() == sequential and p.label_ids.tolist() == sequential
             if not success and training_args.local_rank == 0:
@@ -200,6 +201,7 @@ if __name__ == "__main__":
     model = RegressionModel()
     training_args.per_device_train_batch_size = 1
     training_args.max_steps = 1
-    training_args.dispatch_batches = False
+    training_args.accelerator_config.dispatch_batches = False
+
     trainer = Trainer(model, training_args, train_dataset=train_dataset)
     trainer.train()

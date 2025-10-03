@@ -15,7 +15,7 @@
 """Tokenization classes for DPR."""
 
 import collections
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import TensorType, add_end_docstrings, add_start_docstrings, logging
@@ -71,13 +71,13 @@ CUSTOM_DPR_READER_DOCSTRING = r"""
     ```
 
     Args:
-        questions (`str` or `List[str]`):
+        questions (`str` or `list[str]`):
             The questions to be encoded. You can specify one question for many passages. In this case, the question
             will be duplicated like `[questions] * n_passages`. Otherwise you have to specify as many questions as in
             `titles` or `texts`.
-        titles (`str` or `List[str]`):
+        titles (`str` or `list[str]`):
             The passages titles to be encoded. This can be a string or a list of strings if there are several passages.
-        texts (`str` or `List[str]`):
+        texts (`str` or `list[str]`):
             The passages texts to be encoded. This can be a string or a list of strings if there are several passages.
         padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
             Activates and controls padding. Accepts the following values:
@@ -112,7 +112,6 @@ CUSTOM_DPR_READER_DOCSTRING = r"""
         return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
         return_attention_mask (`bool`, *optional*):
@@ -122,7 +121,7 @@ CUSTOM_DPR_READER_DOCSTRING = r"""
             [What are attention masks?](../glossary#attention-mask)
 
     Returns:
-        `Dict[str, List[List[int]]]`: A dictionary with the following keys:
+        `dict[str, list[list[int]]]`: A dictionary with the following keys:
 
         - `input_ids`: List of token ids to be fed to a model.
         - `attention_mask`: List of indices specifying which tokens should be attended to by the model.
@@ -197,7 +196,7 @@ class CustomDPRReaderTokenizerMixin:
         num_spans: int = 16,
         max_answer_length: int = 64,
         num_spans_per_passage: int = 4,
-    ) -> List[DPRSpanPrediction]:
+    ) -> list[DPRSpanPrediction]:
         """
         Get the span predictions for the extractive Q&A model.
 
@@ -233,7 +232,7 @@ class CustomDPRReaderTokenizerMixin:
         start_logits, end_logits, relevance_logits = reader_output[:3]
         n_passages = len(relevance_logits)
         sorted_docs = sorted(range(n_passages), reverse=True, key=relevance_logits.__getitem__)
-        nbest_spans_predictions: List[DPRReaderOutput] = []
+        nbest_spans_predictions: list[DPRReaderOutput] = []
         for doc_id in sorted_docs:
             sequence_ids = list(input_ids[doc_id])
             # assuming question & title information is at the beginning of the sequence
@@ -268,11 +267,11 @@ class CustomDPRReaderTokenizerMixin:
 
     def _get_best_spans(
         self,
-        start_logits: List[int],
-        end_logits: List[int],
+        start_logits: list[int],
+        end_logits: list[int],
         max_answer_length: int,
         top_spans: int,
-    ) -> List[DPRSpanPrediction]:
+    ) -> list[DPRSpanPrediction]:
         """
         Finds the best answer span for the extractive Q&A model for one passage. It returns the best span by descending
         `span_score` order and keeping max `top_spans` spans. Spans longer that `max_answer_length` are ignored.

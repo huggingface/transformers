@@ -66,7 +66,7 @@ The following command shows how to fine-tune [XLSR-Wav2Vec2](https://huggingface
 
 ```bash
 python run_speech_recognition_ctc.py \
-	--dataset_name="common_voice" \
+	--dataset_name="mozilla-foundation/common_voice_17_0" \
 	--model_name_or_path="facebook/wav2vec2-large-xlsr-53" \
 	--dataset_config_name="tr" \
 	--output_dir="./wav2vec2-common_voice-tr-demo" \
@@ -102,7 +102,7 @@ The following command shows how to fine-tune [XLSR-Wav2Vec2](https://huggingface
 ```bash
 torchrun \
 	--nproc_per_node 8 run_speech_recognition_ctc.py \
-	--dataset_name="common_voice" \
+	--dataset_name="mozilla-foundation/common_voice_17_0" \
 	--model_name_or_path="facebook/wav2vec2-large-xlsr-53" \
 	--dataset_config_name="tr" \
 	--output_dir="./wav2vec2-common_voice-tr-demo-dist" \
@@ -149,7 +149,7 @@ However, the `--shuffle_buffer_size` argument controls how many examples we can 
 ```bash
 **torchrun \
 	--nproc_per_node 4 run_speech_recognition_ctc_streaming.py \
-	--dataset_name="common_voice" \
+	--dataset_name="mozilla-foundation/common_voice_17_0" \
 	--model_name_or_path="facebook/wav2vec2-xls-r-300m" \
 	--tokenizer_name_or_path="anton-l/wav2vec2-tokenizer-turkish" \
 	--dataset_config_name="tr" \
@@ -278,7 +278,7 @@ accordingly be called `adapter.{<target_language}.safetensors`.
 
 Let's run an example script. Make sure to be logged in so that your model can be directly uploaded to the Hub.
 ```bash
-huggingface-cli login
+hf auth login
 ```
 
 Now, let's run an example and upload it to the Hub under `wav2vec2-common_voice-tr-mms-demo`.
@@ -314,7 +314,7 @@ below 27%.
 For an example run, you can have a look at [`patrickvonplaten/wav2vec2-common_voice-tr-mms-demo`](https://huggingface.co/patrickvonplaten/wav2vec2-common_voice-tr-mms-demo).
 
 
-If you'd like to train another adapter model with the same base model, you can simply re-use the same `--output_dir`,
+If you'd like to train another adapter model with the same base model, you can simply reuse the same `--output_dir`,
 but make sure to pass the `--output_dir` folder also to `--tokenizer_name_or_path` so that the vocabulary is not 
 overwritten but **extended**. Assuming you would like to train adapter weights on Swedish in addition to Turkish and save 
 the adapter weights in the same model repo, you can run:
@@ -448,7 +448,7 @@ By pairing a pretrained speech model with a pretrained text model, the warm-star
 As an example, let's instantiate a *Wav2Vec2-2-Bart* model with the `SpeechEncoderDecoderModel` framework. First create an empty repo on `hf.co`:
 
 ```bash
-huggingface-cli repo create wav2vec2-2-bart-base
+hf repo create wav2vec2-2-bart-base
 git clone https://huggingface.co/<your-user-name>/wav2vec2-2-bart-base
 cd wav2vec2-2-bart-base
 ```
@@ -493,7 +493,7 @@ Note that we have added a randomly initialized _adapter layer_ to `wav2vec2-base
 `encoder_add_adapter=True`. This adapter sub-samples the output sequence of 
 `wav2vec2-base` along the time dimension. By default, a single
 output vector of `wav2vec2-base` has a receptive field of *ca.* 25ms (*cf.* 
-Section *4.2* of the [official Wav2Vec2 paper](https://arxiv.org/pdf/2006.11477.pdf)), which represents a little less a single character. On the other hand, BART
+Section *4.2* of the [official Wav2Vec2 paper](https://huggingface.co/papers/2006.11477)), which represents a little less a single character. On the other hand, BART
 makes use of a sentence-piece tokenizer as an input processor, so that a single 
 hidden vector of `bart-base` represents *ca.* 4 characters. To better align the 
 receptive field of the *Wav2Vec2* output vectors with *BART*'s hidden-states in the cross-attention 

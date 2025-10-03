@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,6 +16,7 @@
 import math
 import tempfile
 import unittest
+from functools import cached_property
 
 import numpy as np
 from pytest import mark
@@ -31,7 +31,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -182,7 +182,6 @@ class ViTMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_torchscript = False
     test_resize_embeddings = False
-    test_head_masking = False
     test_torch_exportable = True
 
     def setUp(self):
@@ -250,20 +249,6 @@ class ViTMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_determinism(self):
         pass
 
-    @unittest.skip(
-        reason="""ViTMAE returns a random mask + ids_restore in each forward pass. See test_save_load
-    to get deterministic results."""
-    )
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(
-        reason="""ViTMAE returns a random mask + ids_restore in each forward pass. See test_save_load
-    to get deterministic results."""
-    )
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @unittest.skip(reason="""ViTMAE returns a random mask + ids_restore in each forward pass. See test_save_load""")
     def test_model_outputs_equivalence(self):
         pass
@@ -288,7 +273,7 @@ class ViTMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self.skipTest(reason="Model architecture does not support attentions")
 
         for model_class in self.all_model_classes:
-            if not model_class._supports_flash_attn_2:
+            if not model_class._supports_flash_attn:
                 self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -300,11 +285,11 @@ class ViTMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+                    tmpdirname, dtype=torch.bfloat16, attn_implementation="flash_attention_2"
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
+                model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
                 model.to(torch_device)
 
                 # ForPretraining model has random `noise` -> need to set seed
@@ -355,7 +340,6 @@ class ViTMAEModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_for_pretraining(self):
-        # make random mask reproducible across the PT and TF model
         np.random.seed(2)
 
         model = self.default_model
@@ -364,8 +348,6 @@ class ViTMAEModelIntegrationTest(unittest.TestCase):
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
-        # prepare a noise vector that will be also used for testing the TF model
-        # (this way we can ensure that the PT and TF models operate on the same inputs)
         vit_mae_config = ViTMAEConfig()
         num_patches = int((vit_mae_config.image_size // vit_mae_config.patch_size) ** 2)
         noise = torch.from_numpy(np.random.uniform(size=(1, num_patches))).to(device=torch_device)
@@ -391,7 +373,6 @@ class ViTMAEModelIntegrationTest(unittest.TestCase):
         # the model on higher resolutions. The DINO model by Facebook AI leverages this
         # to visualize self-attention on higher resolution images.
 
-        # make random mask reproducible across the PT and TF model
         np.random.seed(2)
 
         model = self.default_model
@@ -400,8 +381,6 @@ class ViTMAEModelIntegrationTest(unittest.TestCase):
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt", do_resize=False).to(torch_device)
 
-        # prepare a noise vector that will be also used for testing the TF model
-        # (this way we can ensure that the PT and TF models operate on the same inputs)
         vit_mae_config = ViTMAEConfig()
         num_patches = (image.height // vit_mae_config.patch_size) * (image.width // vit_mae_config.patch_size)
         noise = torch.from_numpy(np.random.uniform(size=(1, num_patches))).to(device=torch_device)
@@ -418,7 +397,6 @@ class ViTMAEModelIntegrationTest(unittest.TestCase):
     def test_inference_interpolate_pos_encoding_custom_sizes(self):
         # Ensure custom sizes are correctly handled when interpolating the position embeddings
 
-        # make random mask reproducible across the PT and TF model
         np.random.seed(2)
 
         model = self.default_model

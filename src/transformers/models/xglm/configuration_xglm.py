@@ -35,7 +35,7 @@ class XGLMConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 256008):
             Vocabulary size of the XGLM model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`XGLMModel`] or [`FlaxXGLMModel`].
+            `inputs_ids` passed when calling [`XGLMModel`].
         max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
@@ -57,7 +57,7 @@ class XGLMConfig(PretrainedConfig):
         activation_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for activations inside the fully connected layer.
         layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
             for more details.
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.

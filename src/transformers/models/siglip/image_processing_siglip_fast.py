@@ -14,19 +14,16 @@
 # limitations under the License.
 """Fast Image processor class for SigLIP."""
 
-from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast
+from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
     PILImageResampling,
 )
-from ...utils import add_start_docstrings
+from ...utils import auto_docstring
 
 
-@add_start_docstrings(
-    "Constructs a fast SigLIP image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-)
+@auto_docstring
 class SiglipImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
     image_mean = IMAGENET_STANDARD_MEAN

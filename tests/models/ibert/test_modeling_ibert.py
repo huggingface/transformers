@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -227,7 +226,6 @@ class IBertModelTester:
 class IBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_torchscript = False
-    test_head_masking = False
     test_resize_embeddings = False
 
     all_model_classes = (

@@ -19,7 +19,7 @@ backend:
   model: meta-llama/Llama-2-7b-hf
   cache_implementation: static
   torch_compile: true
-  torch_dtype: float16
+  dtype: float16
   torch_compile_config:
     backend: inductor
     mode: reduce-overhead

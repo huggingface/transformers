@@ -15,7 +15,7 @@
 """MobileViTV2 model configuration"""
 
 from collections import OrderedDict
-from typing import Mapping
+from collections.abc import Mapping
 
 from packaging import version
 
@@ -60,15 +60,15 @@ class MobileViTV2Config(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         aspp_out_channels (`int`, *optional*, defaults to 512):
             Number of output channels used in the ASPP layer for semantic segmentation.
-        atrous_rates (`List[int]`, *optional*, defaults to `[6, 12, 18]`):
+        atrous_rates (`list[int]`, *optional*, defaults to `[6, 12, 18]`):
             Dilation (atrous) factors used in the ASPP layer for semantic segmentation.
         aspp_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the ASPP layer for semantic segmentation.
         semantic_loss_ignore_index (`int`, *optional*, defaults to 255):
             The index that is ignored by the loss function of the semantic segmentation model.
-        n_attn_blocks (`List[int]`, *optional*, defaults to `[2, 4, 3]`):
+        n_attn_blocks (`list[int]`, *optional*, defaults to `[2, 4, 3]`):
             The number of attention blocks in each MobileViTV2Layer
-        base_attn_unit_dims (`List[int]`, *optional*, defaults to `[128, 192, 256]`):
+        base_attn_unit_dims (`list[int]`, *optional*, defaults to `[128, 192, 256]`):
             The base multiplier for dimensions of attention blocks in each MobileViTV2Layer
         width_multiplier (`float`, *optional*, defaults to 1.0):
             The width multiplier for MobileViTV2.

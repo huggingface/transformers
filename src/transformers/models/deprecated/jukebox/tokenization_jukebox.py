@@ -19,15 +19,15 @@ import os
 import re
 import unicodedata
 from json.encoder import INFINITY
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 import regex
 
 from ....tokenization_utils import AddedToken, PreTrainedTokenizer
 from ....tokenization_utils_base import BatchEncoding
-from ....utils import TensorType, is_flax_available, is_tf_available, is_torch_available, logging
-from ....utils.generic import _is_jax, _is_numpy
+from ....utils import TensorType, is_torch_available, logging
+from ....utils.generic import _is_numpy
 
 
 logger = logging.get_logger(__name__)
@@ -82,7 +82,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
             Path to the vocabulary file which contain a mapping between genres and ids.
         lyrics_file (`str`):
             Path to the vocabulary file which contains the accepted characters for the lyrics tokenization.
-        version (`List[str]`, `optional`, default to `["v3", "v2", "v2"]`) :
+        version (`list[str]`, `optional`, default to `["v3", "v2", "v2"]`) :
             List of the tokenizer versions. The `5b-lyrics`'s top level prior model was trained using `v3` instead of
             `v2`.
         n_genres (`int`, `optional`, defaults to 1):
@@ -184,7 +184,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
 
     def prepare_for_tokenization(
         self, artists: str, genres: str, lyrics: str, is_split_into_words: bool = False
-    ) -> Tuple[str, str, str, Dict[str, Any]]:
+    ) -> tuple[str, str, str, dict[str, Any]]:
         """
         Performs any necessary transformations before tokenization.
 
@@ -259,7 +259,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         text = pattern.sub("_", text).strip("_")
         return text
 
-    def convert_lyric_tokens_to_string(self, lyrics: List[str]) -> str:
+    def convert_lyric_tokens_to_string(self, lyrics: list[str]) -> str:
         return " ".join(lyrics)
 
     def convert_to_tensors(
@@ -279,30 +279,13 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         if not isinstance(tensor_type, TensorType):
             tensor_type = TensorType(tensor_type)
 
-        # Get a function reference for the correct framework
-        if tensor_type == TensorType.TENSORFLOW:
-            if not is_tf_available():
-                raise ImportError(
-                    "Unable to convert output to TensorFlow tensors format, TensorFlow is not installed."
-                )
-            import tensorflow as tf
-
-            as_tensor = tf.constant
-            is_tensor = tf.is_tensor
-        elif tensor_type == TensorType.PYTORCH:
+        if tensor_type == TensorType.PYTORCH:
             if not is_torch_available():
                 raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
             import torch
 
             as_tensor = torch.tensor
             is_tensor = torch.is_tensor
-        elif tensor_type == TensorType.JAX:
-            if not is_flax_available():
-                raise ImportError("Unable to convert output to JAX tensors format, JAX is not installed.")
-            import jax.numpy as jnp  # noqa: F811
-
-            as_tensor = jnp.array
-            is_tensor = _is_jax
         else:
             as_tensor = np.asarray
             is_tensor = _is_numpy
@@ -350,7 +333,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         ]
         return BatchEncoding({"input_ids": input_ids, "attention_masks": attention_masks})
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         """
         Saves the tokenizer's vocabulary dictionary to the provided save_directory.
 
@@ -393,12 +376,15 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         Args:
             artists_index (`int`):
                 Index of the artist in its corresponding dictionary.
-            genres_index (`Union[List[int], int]`):
+            genres_index (`Union[list[int], int]`):
                Index of the genre in its corresponding dictionary.
-            lyric_index (`List[int]`):
+            lyric_index (`list[int]`):
                 List of character indices, which each correspond to a character.
         """
         artist = self.artists_decoder.get(artists_index)
         genres = [self.genres_decoder.get(genre) for genre in genres_index]
         lyrics = [self.lyrics_decoder.get(character) for character in lyric_index]
         return artist, genres, lyrics
+
+
+__all__ = ["JukeboxTokenizer"]

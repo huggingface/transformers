@@ -38,7 +38,7 @@ class DacConfig(PretrainedConfig):
     Args:
         encoder_hidden_size (`int`, *optional*, defaults to 64):
             Intermediate representation dimension for the encoder.
-        downsampling_ratios (`List[int]`, *optional*, defaults to `[2, 4, 8, 8]`):
+        downsampling_ratios (`list[int]`, *optional*, defaults to `[2, 4, 8, 8]`):
             Ratios for downsampling in the encoder. These are used in reverse order for upsampling in the decoder.
         decoder_hidden_size (`int`, *optional*, defaults to 1536):
             Intermediate representation dimension for the decoder.

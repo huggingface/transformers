@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-04-20 and added to Hugging Face Transformers on 2023-06-20.*
 
 # QDQBERT
 
@@ -31,7 +32,7 @@ You can do so by running the following command: `pip install -U transformers==4.
 ## Overview
 
 The QDQBERT model can be referenced in [Integer Quantization for Deep Learning Inference: Principles and Empirical
-Evaluation](https://arxiv.org/abs/2004.09602) by Hao Wu, Patrick Judd, Xiaojie Zhang, Mikhail Isaev and Paulius
+Evaluation](https://huggingface.co/papers/2004.09602) by Hao Wu, Patrick Judd, Xiaojie Zhang, Mikhail Isaev and Paulius
 Micikevicius.
 
 The abstract from the paper is the following:
@@ -101,8 +102,10 @@ tensors. After setting up the tensor quantizers, one can use the following examp
 ...         module.load_calib_amax()
 ...         module.enable_quant()
 
->>> # If running on GPU, it needs to call .cuda() again because new tensors will be created by calibration process
->>> model.cuda()
+>>> # If running on accelerator, it needs to call `.to(xx)` again because new tensors will be created by calibration process
+>>> from transformers import infer_device
+>>> device = infer_device()
+>>> model.to(device)
 
 >>> # Keep running the quantized model
 >>> # ...
@@ -112,7 +115,7 @@ tensors. After setting up the tensor quantizers, one can use the following examp
 
 The goal of exporting to ONNX is to deploy inference by [TensorRT](https://developer.nvidia.com/tensorrt). Fake
 quantization will be broken into a pair of QuantizeLinear/DequantizeLinear ONNX ops. After setting static member of
-TensorQuantizer to use Pytorch’s own fake quantization functions, fake quantized model can be exported to ONNX, follow
+TensorQuantizer to use Pytorch's own fake quantization functions, fake quantized model can be exported to ONNX, follow
 the instructions in [torch.onnx](https://pytorch.org/docs/stable/onnx.html). Example:
 
 ```python

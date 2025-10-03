@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,7 @@
 
 import math
 import unittest
-from typing import Dict, List, Tuple
+from functools import cached_property
 
 from transformers import HieraConfig
 from transformers.testing_utils import (
@@ -26,7 +25,6 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import (
-    cached_property,
     is_torch_available,
     is_vision_available,
 )
@@ -249,7 +247,6 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     test_torch_exportable = True
 
     def setUp(self):
@@ -263,6 +260,9 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.config_tester.create_and_test_config_with_num_labels()
         self.config_tester.check_config_can_be_init_without_params()
         self.config_tester.check_config_arguments_init()
+
+    def test_batching_equivalence(self, atol=3e-4, rtol=3e-4):
+        super().test_batching_equivalence(atol=atol, rtol=rtol)
 
     # Overriding as Hiera `get_input_embeddings` returns HieraPatchEmbeddings
     def test_model_get_set_embeddings(self):
@@ -283,7 +283,8 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -369,7 +370,7 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 [num_patches, self.model_tester.embed_dim],
             )
 
-            if not model_class.__name__ == "HieraBackbone":
+            if model_class.__name__ != "HieraBackbone":
                 reshaped_hidden_states = outputs.reshaped_hidden_states
                 self.assertEqual(len(reshaped_hidden_states), expected_num_layers)
 
@@ -410,10 +411,10 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
-                    if isinstance(tuple_object, (List, Tuple)):
+                    if isinstance(tuple_object, (list, tuple)):
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
-                    elif isinstance(tuple_object, Dict):
+                    elif isinstance(tuple_object, dict):
                         for tuple_iterable_value, dict_iterable_value in zip(
                             tuple_object.values(), dict_object.values()
                         ):

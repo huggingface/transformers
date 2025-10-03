@@ -78,14 +78,6 @@ AutoModel.register(NewModelConfig, NewModel)
 
 [[autodoc]] AutoModel
 
-### TFAutoModel[[transformers.TFAutoModel]]
-
-[[autodoc]] TFAutoModel
-
-### FlaxAutoModel[[transformers.FlaxAutoModel]]
-
-[[autodoc]] FlaxAutoModel
-
 ## 일반적인 사전 학습 클래스[[generic-pretraining-classes]]
 
 다음 자동 클래스들은 사전 훈련 헤드가 포함된 모델을 인스턴스화하는 데 사용할 수 있습니다.
@@ -93,14 +85,6 @@ AutoModel.register(NewModelConfig, NewModel)
 ### AutoModelForPreTraining[[transformers.AutoModelForPreTraining]]
 
 [[autodoc]] AutoModelForPreTraining
-
-### TFAutoModelForPreTraining[[transformers.TFAutoModelForPreTraining]]
-
-[[autodoc]] TFAutoModelForPreTraining
-
-### FlaxAutoModelForPreTraining[[transformers.FlaxAutoModelForPreTraining]]
-
-[[autodoc]] FlaxAutoModelForPreTraining
 
 ## 자연어 처리[[natural-language-processing]]
 
@@ -110,113 +94,41 @@ AutoModel.register(NewModelConfig, NewModel)
 
 [[autodoc]] AutoModelForCausalLM
 
-### TFAutoModelForCausalLM[[transformers.TFAutoModelForCausalLM]]
-
-[[autodoc]] TFAutoModelForCausalLM
-
-### FlaxAutoModelForCausalLM[[transformers.FlaxAutoModelForCausalLM]]
-
-[[autodoc]] FlaxAutoModelForCausalLM
-
 ### AutoModelForMaskedLM[[transformers.AutoModelForMaskedLM]]
 
 [[autodoc]] AutoModelForMaskedLM
-
-### TFAutoModelForMaskedLM[[transformers.TFAutoModelForMaskedLM]]
-
-[[autodoc]] TFAutoModelForMaskedLM
-
-### FlaxAutoModelForMaskedLM[[transformers.FlaxAutoModelForMaskedLM]]
-
-[[autodoc]] FlaxAutoModelForMaskedLM
 
 ### AutoModelForMaskGeneration[[transformers.AutoModelForMaskGeneration]]
 
 [[autodoc]] AutoModelForMaskGeneration
 
-### TFAutoModelForMaskGeneration[[transformers.TFAutoModelForMaskGeneration]]
-
-[[autodoc]] TFAutoModelForMaskGeneration
-
 ### AutoModelForSeq2SeqLM[[transformers.AutoModelForSeq2SeqLM]]
 
 [[autodoc]] AutoModelForSeq2SeqLM
-
-### TFAutoModelForSeq2SeqLM[[transformers.TFAutoModelForSeq2SeqLM]]
-
-[[autodoc]] TFAutoModelForSeq2SeqLM
-
-### FlaxAutoModelForSeq2SeqLM[[transformers.FlaxAutoModelForSeq2SeqLM]]
-
-[[autodoc]] FlaxAutoModelForSeq2SeqLM
 
 ### AutoModelForSequenceClassification[[transformers.AutoModelForSequenceClassification]]
 
 [[autodoc]] AutoModelForSequenceClassification
 
-### TFAutoModelForSequenceClassification[[transformers.TFAutoModelForSequenceClassification]]
-
-[[autodoc]] TFAutoModelForSequenceClassification
-
-### FlaxAutoModelForSequenceClassification[[transformers.FlaxAutoModelForSequenceClassification]]
-
-[[autodoc]] FlaxAutoModelForSequenceClassification
-
 ### AutoModelForMultipleChoice[[transformers.AutoModelForMultipleChoice]]
 
 [[autodoc]] AutoModelForMultipleChoice
-
-### TFAutoModelForMultipleChoice[[transformers.TFAutoModelForMultipleChoice]]
-
-[[autodoc]] TFAutoModelForMultipleChoice
-
-### FlaxAutoModelForMultipleChoice[[transformers.FlaxAutoModelForMultipleChoice]]
-
-[[autodoc]] FlaxAutoModelForMultipleChoice
 
 ### AutoModelForNextSentencePrediction[[transformers.AutoModelForNextSentencePrediction]]
 
 [[autodoc]] AutoModelForNextSentencePrediction
 
-### TFAutoModelForNextSentencePrediction[[transformers.TFAutoModelForNextSentencePrediction]]
-
-[[autodoc]] TFAutoModelForNextSentencePrediction
-
-### FlaxAutoModelForNextSentencePrediction[[transformers.FlaxAutoModelForNextSentencePrediction]]
-
-[[autodoc]] FlaxAutoModelForNextSentencePrediction
-
 ### AutoModelForTokenClassification[[transformers.AutoModelForTokenClassification]]
 
 [[autodoc]] AutoModelForTokenClassification
-
-### TFAutoModelForTokenClassification[[transformers.TFAutoModelForTokenClassification]]
-
-[[autodoc]] TFAutoModelForTokenClassification
-
-### FlaxAutoModelForTokenClassification[[transformers.FlaxAutoModelForTokenClassification]]
-
-[[autodoc]] FlaxAutoModelForTokenClassification
 
 ### AutoModelForQuestionAnswering[[transformers.AutoModelForQuestionAnswering]]
 
 [[autodoc]] AutoModelForQuestionAnswering
 
-### TFAutoModelForQuestionAnswering[[transformers.TFAutoModelForQuestionAnswering]]
-
-[[autodoc]] TFAutoModelForQuestionAnswering
-
-### FlaxAutoModelForQuestionAnswering[[transformers.FlaxAutoModelForQuestionAnswering]]
-
-[[autodoc]] FlaxAutoModelForQuestionAnswering
-
 ### AutoModelForTextEncoding[[transformers.AutoModelForTextEncoding]]
 
 [[autodoc]] AutoModelForTextEncoding
-
-### TFAutoModelForTextEncoding[[transformers.TFAutoModelForTextEncoding]]
-
-[[autodoc]] TFAutoModelForTextEncoding
 
 ## 컴퓨터 비전[[computer-vision]]
 
@@ -230,14 +142,6 @@ AutoModel.register(NewModelConfig, NewModel)
 
 [[autodoc]] AutoModelForImageClassification
 
-### TFAutoModelForImageClassification[[transformers.TFAutoModelForImageClassification]]
-
-[[autodoc]] TFAutoModelForImageClassification
-
-### FlaxAutoModelForImageClassification[[transformers.FlaxAutoModelForImageClassification]]
-
-[[autodoc]] FlaxAutoModelForImageClassification
-
 ### AutoModelForVideoClassification[[transformers.AutoModelForVideoClassification]]
 
 [[autodoc]] AutoModelForVideoClassification
@@ -249,10 +153,6 @@ AutoModel.register(NewModelConfig, NewModel)
 ### AutoModelForMaskedImageModeling[[transformers.AutoModelForMaskedImageModeling]]
 
 [[autodoc]] AutoModelForMaskedImageModeling
-
-### TFAutoModelForMaskedImageModeling[[transformers.TFAutoModelForMaskedImageModeling]]
-
-[[autodoc]] TFAutoModelForMaskedImageModeling
 
 ### AutoModelForObjectDetection[[transformers.AutoModelForObjectDetection]]
 
@@ -270,10 +170,6 @@ AutoModel.register(NewModelConfig, NewModel)
 
 [[autodoc]] AutoModelForSemanticSegmentation
 
-### TFAutoModelForSemanticSegmentation[[transformers.TFAutoModelForSemanticSegmentation]]
-
-[[autodoc]] TFAutoModelForSemanticSegmentation
-
 ### AutoModelForInstanceSegmentation[[transformers.AutoModelForInstanceSegmentation]]
 
 [[autodoc]] AutoModelForInstanceSegmentation
@@ -285,10 +181,6 @@ AutoModel.register(NewModelConfig, NewModel)
 ### AutoModelForZeroShotImageClassification[[transformers.AutoModelForZeroShotImageClassification]]
 
 [[autodoc]] AutoModelForZeroShotImageClassification
-
-### TFAutoModelForZeroShotImageClassification[[transformers.TFAutoModelForZeroShotImageClassification]]
-
-[[autodoc]] TFAutoModelForZeroShotImageClassification
 
 ### AutoModelForZeroShotObjectDetection[[transformers.AutoModelForZeroShotObjectDetection]]
 
@@ -302,10 +194,6 @@ AutoModel.register(NewModelConfig, NewModel)
 
 [[autodoc]] AutoModelForAudioClassification
 
-### TFAutoModelForAudioClassification[[transformers.TFAutoModelForAudioClassification]]
-
-[[autodoc]] TFAutoModelForAudioClassification
-
 ### AutoModelForAudioFrameClassification[[transformers.AutoModelForAudioFrameClassification]]
 
 [[autodoc]] AutoModelForAudioFrameClassification
@@ -317,14 +205,6 @@ AutoModel.register(NewModelConfig, NewModel)
 ### AutoModelForSpeechSeq2Seq[[transformers.AutoModelForSpeechSeq2Seq]]
 
 [[autodoc]] AutoModelForSpeechSeq2Seq
-
-### TFAutoModelForSpeechSeq2Seq[[transformers.TFAutoModelForSpeechSeq2Seq]]
-
-[[autodoc]] TFAutoModelForSpeechSeq2Seq
-
-### FlaxAutoModelForSpeechSeq2Seq[[transformers.FlaxAutoModelForSpeechSeq2Seq]]
-
-[[autodoc]] FlaxAutoModelForSpeechSeq2Seq
 
 ### AutoModelForAudioXVector[[transformers.AutoModelForAudioXVector]]
 
@@ -346,17 +226,9 @@ AutoModel.register(NewModelConfig, NewModel)
 
 [[autodoc]] AutoModelForTableQuestionAnswering
 
-### TFAutoModelForTableQuestionAnswering[[transformers.TFAutoModelForTableQuestionAnswering]]
-
-[[autodoc]] TFAutoModelForTableQuestionAnswering
-
 ### AutoModelForDocumentQuestionAnswering[[transformers.AutoModelForDocumentQuestionAnswering]]
 
 [[autodoc]] AutoModelForDocumentQuestionAnswering
-
-### TFAutoModelForDocumentQuestionAnswering[[transformers.TFAutoModelForDocumentQuestionAnswering]]
-
-[[autodoc]] TFAutoModelForDocumentQuestionAnswering
 
 ### AutoModelForVisualQuestionAnswering[[transformers.AutoModelForVisualQuestionAnswering]]
 
@@ -366,10 +238,9 @@ AutoModel.register(NewModelConfig, NewModel)
 
 [[autodoc]] AutoModelForVision2Seq
 
-### TFAutoModelForVision2Seq[[transformers.TFAutoModelForVision2Seq]]
+## Time Series
 
-[[autodoc]] TFAutoModelForVision2Seq
+### AutoModelForTimeSeriesPrediction[[transformers.AutoModelForTimeSeriesPrediction]]
 
-### FlaxAutoModelForVision2Seq[[transformers.FlaxAutoModelForVision2Seq]]
+[[autodoc]] AutoModelForTimeSeriesPrediction
 
-[[autodoc]] FlaxAutoModelForVision2Seq

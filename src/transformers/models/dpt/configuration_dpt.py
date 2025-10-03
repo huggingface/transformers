@@ -67,7 +67,7 @@ class DPTConfig(PretrainedConfig):
             Whether to use a hybrid backbone. Useful in the context of loading DPT-Hybrid models.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
-        backbone_out_indices (`List[int]`, *optional*, defaults to `[2, 5, 8, 11]`):
+        backbone_out_indices (`list[int]`, *optional*, defaults to `[2, 5, 8, 11]`):
             Indices of the intermediate hidden states to use from backbone.
         readout_type (`str`, *optional*, defaults to `"project"`):
             The readout type to use when processing the readout token (CLS token) of the intermediate hidden states of
@@ -78,9 +78,9 @@ class DPTConfig(PretrainedConfig):
             - "project" passes information to the other tokens by concatenating the readout to all other tokens before
               projecting the
             representation to the original feature dimension D using a linear layer followed by a GELU non-linearity.
-        reassemble_factors (`List[int]`, *optional*, defaults to `[4, 2, 1, 0.5]`):
+        reassemble_factors (`list[int]`, *optional*, defaults to `[4, 2, 1, 0.5]`):
             The up/downsampling factors of the reassemble layers.
-        neck_hidden_sizes (`List[str]`, *optional*, defaults to `[96, 192, 384, 768]`):
+        neck_hidden_sizes (`list[str]`, *optional*, defaults to `[96, 192, 384, 768]`):
             The hidden sizes to project to for the feature maps of the backbone.
         fusion_hidden_size (`int`, *optional*, defaults to 256):
             The number of channels before fusion.
@@ -100,11 +100,11 @@ class DPTConfig(PretrainedConfig):
             The index that is ignored by the loss function of the semantic segmentation model.
         semantic_classifier_dropout (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the semantic classification head.
-        backbone_featmap_shape (`List[int]`, *optional*, defaults to `[1, 1024, 24, 24]`):
+        backbone_featmap_shape (`list[int]`, *optional*, defaults to `[1, 1024, 24, 24]`):
             Used only for the `hybrid` embedding type. The shape of the feature maps of the backbone.
-        neck_ignore_stages (`List[int]`, *optional*, defaults to `[0, 1]`):
+        neck_ignore_stages (`list[int]`, *optional*, defaults to `[0, 1]`):
             Used only for the `hybrid` embedding type. The stages of the readout layers to ignore.
-        backbone_config (`Union[Dict[str, Any], PretrainedConfig]`, *optional*):
+        backbone_config (`Union[dict[str, Any], PretrainedConfig]`, *optional*):
             The configuration of the backbone model. Only used in case `is_hybrid` is `True` or in case you want to
             leverage the [`AutoBackbone`] API.
         backbone (`str`, *optional*):
@@ -122,9 +122,7 @@ class DPTConfig(PretrainedConfig):
         pooler_output_size (`int`, *optional*):
            Dimensionality of the pooler layer. If None, defaults to `hidden_size`.
         pooler_act (`str`, *optional*, defaults to `"tanh"`):
-           The activation function to be used by the pooler. Keys of ACT2FN are supported for Flax and
-           Pytorch, and elements of https://www.tensorflow.org/api_docs/python/tf/keras/activations are
-           supported for Tensorflow.
+           The activation function to be used by the pooler.
 
     Example:
 
@@ -202,9 +200,7 @@ class DPTConfig(PretrainedConfig):
             if isinstance(backbone_config, dict):
                 logger.info("Initializing the config with a `BiT` backbone.")
                 backbone_config = BitConfig(**backbone_config)
-            elif isinstance(backbone_config, PretrainedConfig):
-                backbone_config = backbone_config
-            else:
+            elif not isinstance(backbone_config, PretrainedConfig):
                 raise ValueError(
                     f"backbone_config must be a dictionary or a `PretrainedConfig`, got {backbone_config.__class__}."
                 )
@@ -282,7 +278,7 @@ class DPTConfig(PretrainedConfig):
     def to_dict(self):
         """
         Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`]. Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+            `dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
         """
         output = copy.deepcopy(self.__dict__)
 
@@ -294,7 +290,11 @@ class DPTConfig(PretrainedConfig):
 
     @property
     def sub_configs(self):
-        return {"backbone_config": type(self.backbone_config)} if self.backbone_config is not None else {}
+        return (
+            {"backbone_config": type(self.backbone_config)}
+            if getattr(self, "backbone_config", None) is not None
+            else {}
+        )
 
 
 __all__ = ["DPTConfig"]

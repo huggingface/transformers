@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -222,9 +221,9 @@ class GPTNeoXModelTester:
         model.eval()
 
         # We want this for SDPA, eager works with a `None` attention mask
-        assert (
-            model.config._attn_implementation == "sdpa"
-        ), "This test assumes the model to have the SDPA implementation for its attention calculations."
+        assert model.config._attn_implementation == "sdpa", (
+            "This test assumes the model to have the SDPA implementation for its attention calculations."
+        )
 
         # Prepare cache and non_cache input, needs a full attention mask
         cached_len = input_ids.shape[-1] // 2
@@ -236,8 +235,8 @@ class GPTNeoXModelTester:
             """Deep copy a DynamicCache to reuse the same one multiple times."""
             new_cache = cache
             for i in range(len(cache)):
-                new_cache.key_cache[i] = cache.key_cache[i].clone()
-                new_cache.value_cache[i] = cache.value_cache[i].clone()
+                new_cache.layers[i].keys = cache.layers[i].keys.clone()
+                new_cache.layers[i].values = cache.layers[i].values.clone()
 
         # Cached forward once with the attention mask provided and the other time without it (which should assume full attention)
         # We need to run both on a copy of the cache, otherwise it is modified in-place
@@ -288,8 +287,6 @@ class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     )
     test_pruning = False
     test_missing_keys = False
-    test_model_parallel = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = GPTNeoXModelTester(self)
@@ -307,7 +304,6 @@ class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self.model_tester.create_and_check_model_as_decoder(config, input_ids, input_mask)
 
     def test_model_as_decoder_with_default_input_mask(self):
-        # This regression test was failing with PyTorch < 1.3
         config, input_ids, input_mask, token_labels = self.model_tester.prepare_config_and_inputs_for_decoder()
 
         input_mask = None
@@ -343,7 +339,6 @@ class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         pass
 
     @parameterized.expand([("linear",), ("dynamic",)])
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_model_rope_scaling_from_config with Llama->GPTNeoX
     def test_model_rope_scaling_from_config(self, scaling_type):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         short_input = ids_tensor([1, 10], config.vocab_size)
@@ -476,7 +471,7 @@ class GPTNeoXLanguageGenerationTest(unittest.TestCase):
 
     def pythia_integration_test(self):
         model_name_or_path = "EleutherAI/pythia-70m"
-        model = GPTNeoXForCausalLM.from_pretrained(model_name_or_path, torch_dtype=torch.float16).to(torch_device)
+        model = GPTNeoXForCausalLM.from_pretrained(model_name_or_path, dtype=torch.float16).to(torch_device)
         EXPECTED_LOGITS = torch.tensor([1069.0000,  228.7500, 1072.0000, 1072.0000, 1069.0000, 1068.0000, 1068.0000, 1071.0000, 1071.0000, 1071.0000, 1073.0000, 1070.0000, 1071.0000, 1075.0000, 1073.0000, 1075.0000, 1074.0000, 1069.0000, 1072.0000, 1071.0000, 1071.0000, 1071.0000, 1070.0000, 1069.0000, 1069.0000, 1069.0000, 1070.0000, 1075.0000, 1073.0000, 1074.0000])  # fmt: skip
         input_ids = [29, 93, 303, 64, 5478, 49651, 10394, 187, 34, 12939, 875]
         # alternative: tokenizer('<|im_start|>system\nA chat between')

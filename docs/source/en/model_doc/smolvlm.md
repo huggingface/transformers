@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-02-20 and added to Hugging Face Transformers on 2025-02-20.*
 
 # SmolVLM
 
@@ -23,7 +24,7 @@ rendered properly in your Markdown viewer.
 </div>
 
 ## Overview
-SmolVLM2 is an adaptation of the Idefics3 model with two main differences:
+[SmolVLM2](https://huggingface.co/papers/2504.05299) ([blog post](https://huggingface.co/blog/smolvlm2)) is an adaptation of the Idefics3 model with two main differences:
 
 - It uses SmolLM2 for the text model.
 - It supports multi-image and video inputs
@@ -32,12 +33,13 @@ SmolVLM2 is an adaptation of the Idefics3 model with two main differences:
 
 Input images are processed either by upsampling (if resizing is enabled) or at their original resolution. The resizing behavior depends on two parameters: do_resize and size.
 
-Videos should not be upsampled. 
+Videos should not be upsampled.
 
 If `do_resize` is set to `True`, the model resizes images so that the longest edge is 4*512 pixels by default.
 The default resizing behavior can be customized by passing a dictionary to the `size` parameter. For example, `{"longest_edge": 4 * 512}` is the default, but you can change it to a different value if needed.
 
-Here’s how to control resizing and set a custom size:
+Here's how to control resizing and set a custom size:
+
 ```python
 image_processor = SmolVLMImageProcessor(do_resize=True, size={"longest_edge": 2 * 512}, max_image_size=512)
 ```
@@ -45,8 +47,6 @@ image_processor = SmolVLMImageProcessor(do_resize=True, size={"longest_edge": 2 
 Additionally, the `max_image_size` parameter, which controls the size of each square patch the image is decomposed into, is set to 512 by default but can be adjusted as needed. After resizing (if applicable), the image processor decomposes the images into square patches based on the `max_image_size` parameter.
 
 This model was contributed by [orrzohar](https://huggingface.co/orrzohar).
-
-
 
 ## Usage example
 
@@ -61,8 +61,8 @@ from transformers import AutoProcessor, AutoModelForImageTextToText
 processor = AutoProcessor.from_pretrained("HuggingFaceTB/SmolVLM2-256M-Video-Instruct")
 model = AutoModelForImageTextToText.from_pretrained(
     "HuggingFaceTB/SmolVLM2-256M-Video-Instruct",
-    torch_dtype=torch.bfloat16,
-    device_map="cuda"
+    dtype=torch.bfloat16,
+    device_map="auto"
 )
 
 conversation = [
@@ -123,8 +123,8 @@ from transformers import AutoProcessor, AutoModelForImageTextToText
 processor = AutoProcessor.from_pretrained("HuggingFaceTB/SmolVLM2-256M-Video-Instruct")
 model = AutoModelForImageTextToText.from_pretrained(
     "HuggingFaceTB/SmolVLM2-256M-Video-Instruct",
-    torch_dtype=torch.bfloat16,
-    device_map="cuda"
+    dtype=torch.bfloat16,
+    device_map="auto"
 )
 
 # Conversation for the first image
@@ -192,11 +192,17 @@ print(generated_texts[0])
 [[autodoc]] SmolVLMForConditionalGeneration
     - forward
 
-
 ## SmolVLMImageProcessor
 [[autodoc]] SmolVLMImageProcessor
     - preprocess
 
+## SmolVLMImageProcessorFast
+[[autodoc]] SmolVLMImageProcessorFast
+    - preprocess
+
+## SmolVLMVideoProcessor
+[[autodoc]] SmolVLMVideoProcessor
+    - preprocess
 
 ## SmolVLMProcessor
 [[autodoc]] SmolVLMProcessor

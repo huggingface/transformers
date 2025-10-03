@@ -14,6 +14,8 @@
 # limitations under the License.
 """VitPose model configuration"""
 
+from typing import Optional
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
@@ -75,11 +77,11 @@ class VitPoseConfig(PretrainedConfig):
 
     def __init__(
         self,
-        backbone_config: PretrainedConfig = None,
-        backbone: str = None,
+        backbone_config: Optional[PretrainedConfig] = None,
+        backbone: Optional[str] = None,
         use_pretrained_backbone: bool = False,
         use_timm_backbone: bool = False,
-        backbone_kwargs: dict = None,
+        backbone_kwargs: Optional[dict] = None,
         initializer_range: float = 0.02,
         scale_factor: int = 4,
         use_simple_decoder: bool = True,
@@ -119,6 +121,14 @@ class VitPoseConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.scale_factor = scale_factor
         self.use_simple_decoder = use_simple_decoder
+
+    @property
+    def sub_configs(self):
+        return (
+            {"backbone_config": type(self.backbone_config)}
+            if getattr(self, "backbone_config", None) is not None
+            else {}
+        )
 
 
 __all__ = ["VitPoseConfig"]

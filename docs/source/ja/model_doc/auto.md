@@ -77,14 +77,6 @@ AutoModel.register(NewModelConfig, NewModel)
 
 [[autodoc]] AutoModel
 
-### TFAutoModel
-
-[[autodoc]] TFAutoModel
-
-### FlaxAutoModel
-
-[[autodoc]] FlaxAutoModel
-
 ## Generic pretraining classes
 
 以下の自動クラスは、事前学習ヘッドを持つモデルをインスタンス化するために利用可能です。
@@ -92,14 +84,6 @@ AutoModel.register(NewModelConfig, NewModel)
 ### AutoModelForPreTraining
 
 [[autodoc]] AutoModelForPreTraining
-
-### TFAutoModelForPreTraining
-
-[[autodoc]] TFAutoModelForPreTraining
-
-### FlaxAutoModelForPreTraining
-
-[[autodoc]] FlaxAutoModelForPreTraining
 
 ## Natural Language Processing
 
@@ -109,113 +93,42 @@ AutoModel.register(NewModelConfig, NewModel)
 
 [[autodoc]] AutoModelForCausalLM
 
-### TFAutoModelForCausalLM
-
-[[autodoc]] TFAutoModelForCausalLM
-
-### FlaxAutoModelForCausalLM
-
-[[autodoc]] FlaxAutoModelForCausalLM
-
 ### AutoModelForMaskedLM
 
 [[autodoc]] AutoModelForMaskedLM
 
-### TFAutoModelForMaskedLM
-
-[[autodoc]] TFAutoModelForMaskedLM
-
-### FlaxAutoModelForMaskedLM
-
-[[autodoc]] FlaxAutoModelForMaskedLM
 
 ### AutoModelForMaskGeneration
 
 [[autodoc]] AutoModelForMaskGeneration
 
-### TFAutoModelForMaskGeneration
-
-[[autodoc]] TFAutoModelForMaskGeneration
-
 ### AutoModelForSeq2SeqLM
 
 [[autodoc]] AutoModelForSeq2SeqLM
-
-### TFAutoModelForSeq2SeqLM
-
-[[autodoc]] TFAutoModelForSeq2SeqLM
-
-### FlaxAutoModelForSeq2SeqLM
-
-[[autodoc]] FlaxAutoModelForSeq2SeqLM
 
 ### AutoModelForSequenceClassification
 
 [[autodoc]] AutoModelForSequenceClassification
 
-### TFAutoModelForSequenceClassification
-
-[[autodoc]] TFAutoModelForSequenceClassification
-
-### FlaxAutoModelForSequenceClassification
-
-[[autodoc]] FlaxAutoModelForSequenceClassification
-
 ### AutoModelForMultipleChoice
 
 [[autodoc]] AutoModelForMultipleChoice
-
-### TFAutoModelForMultipleChoice
-
-[[autodoc]] TFAutoModelForMultipleChoice
-
-### FlaxAutoModelForMultipleChoice
-
-[[autodoc]] FlaxAutoModelForMultipleChoice
 
 ### AutoModelForNextSentencePrediction
 
 [[autodoc]] AutoModelForNextSentencePrediction
 
-### TFAutoModelForNextSentencePrediction
-
-[[autodoc]] TFAutoModelForNextSentencePrediction
-
-### FlaxAutoModelForNextSentencePrediction
-
-[[autodoc]] FlaxAutoModelForNextSentencePrediction
-
 ### AutoModelForTokenClassification
 
 [[autodoc]] AutoModelForTokenClassification
-
-### TFAutoModelForTokenClassification
-
-[[autodoc]] TFAutoModelForTokenClassification
-
-### FlaxAutoModelForTokenClassification
-
-[[autodoc]] FlaxAutoModelForTokenClassification
 
 ### AutoModelForQuestionAnswering
 
 [[autodoc]] AutoModelForQuestionAnswering
 
-### TFAutoModelForQuestionAnswering
-
-[[autodoc]] TFAutoModelForQuestionAnswering
-
-### FlaxAutoModelForQuestionAnswering
-
-[[autodoc]] FlaxAutoModelForQuestionAnswering
-
 ### AutoModelForTextEncoding
 
 [[autodoc]] AutoModelForTextEncoding
-
-### TFAutoModelForTextEncoding
-
-[[autodoc]] TFAutoModelForTextEncoding
 
 ## Computer vision
 
@@ -229,14 +142,6 @@ AutoModel.register(NewModelConfig, NewModel)
 
 [[autodoc]] AutoModelForImageClassification
 
-### TFAutoModelForImageClassification
-
-[[autodoc]] TFAutoModelForImageClassification
-
-### FlaxAutoModelForImageClassification
-
-[[autodoc]] FlaxAutoModelForImageClassification
-
 ### AutoModelForVideoClassification
 
 [[autodoc]] AutoModelForVideoClassification
@@ -244,10 +149,6 @@ AutoModel.register(NewModelConfig, NewModel)
 ### AutoModelForMaskedImageModeling
 
 [[autodoc]] AutoModelForMaskedImageModeling
-
-### TFAutoModelForMaskedImageModeling
-
-[[autodoc]] TFAutoModelForMaskedImageModeling
 
 ### AutoModelForObjectDetection
 
@@ -265,10 +166,6 @@ AutoModel.register(NewModelConfig, NewModel)
 
 [[autodoc]] AutoModelForSemanticSegmentation
 
-### TFAutoModelForSemanticSegmentation
-
-[[autodoc]] TFAutoModelForSemanticSegmentation
-
 ### AutoModelForInstanceSegmentation
 
 [[autodoc]] AutoModelForInstanceSegmentation
@@ -280,10 +177,6 @@ AutoModel.register(NewModelConfig, NewModel)
 ### AutoModelForZeroShotImageClassification
 
 [[autodoc]] AutoModelForZeroShotImageClassification
-
-### TFAutoModelForZeroShotImageClassification
-
-[[autodoc]] TFAutoModelForZeroShotImageClassification
 
 ### AutoModelForZeroShotObjectDetection
 
@@ -299,10 +192,6 @@ AutoModel.register(NewModelConfig, NewModel)
 
 ### AutoModelForAudioFrameClassification
 
-[[autodoc]] TFAutoModelForAudioClassification
-
-### TFAutoModelForAudioFrameClassification
-
 [[autodoc]] AutoModelForAudioFrameClassification
 
 ### AutoModelForCTC
@@ -312,14 +201,6 @@ AutoModel.register(NewModelConfig, NewModel)
 ### AutoModelForSpeechSeq2Seq
 
 [[autodoc]] AutoModelForSpeechSeq2Seq
-
-### TFAutoModelForSpeechSeq2Seq
-
-[[autodoc]] TFAutoModelForSpeechSeq2Seq
-
-### FlaxAutoModelForSpeechSeq2Seq
-
-[[autodoc]] FlaxAutoModelForSpeechSeq2Seq
 
 ### AutoModelForAudioXVector
 
@@ -341,17 +222,9 @@ AutoModel.register(NewModelConfig, NewModel)
 
 [[autodoc]] AutoModelForTableQuestionAnswering
 
-### TFAutoModelForTableQuestionAnswering
-
-[[autodoc]] TFAutoModelForTableQuestionAnswering
-
 ### AutoModelForDocumentQuestionAnswering
 
 [[autodoc]] AutoModelForDocumentQuestionAnswering
-
-### TFAutoModelForDocumentQuestionAnswering
-
-[[autodoc]] TFAutoModelForDocumentQuestionAnswering
 
 ### AutoModelForVisualQuestionAnswering
 
@@ -361,14 +234,14 @@ AutoModel.register(NewModelConfig, NewModel)
 
 [[autodoc]] AutoModelForVision2Seq
 
-### TFAutoModelForVision2Seq
-
-[[autodoc]] TFAutoModelForVision2Seq
-
-### FlaxAutoModelForVision2Seq
-
-[[autodoc]] FlaxAutoModelForVision2Seq
 
 ### AutoModelForImageTextToText
 
 [[autodoc]] AutoModelForImageTextToText
+
+## Time Series
+
+### AutoModelForTimeSeriesPrediction
+
+[[autodoc]] AutoModelForTimeSeriesPrediction
+

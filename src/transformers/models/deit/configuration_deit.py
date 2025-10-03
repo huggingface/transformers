@@ -15,7 +15,7 @@
 """DeiT model configuration"""
 
 from collections import OrderedDict
-from typing import Mapping
+from collections.abc import Mapping
 
 from packaging import version
 
@@ -72,9 +72,7 @@ class DeiTConfig(PretrainedConfig):
         pooler_output_size (`int`, *optional*):
            Dimensionality of the pooler layer. If None, defaults to `hidden_size`.
         pooler_act (`str`, *optional*, defaults to `"tanh"`):
-           The activation function to be used by the pooler. Keys of ACT2FN are supported for Flax and
-           Pytorch, and elements of https://www.tensorflow.org/api_docs/python/tf/keras/activations are
-           supported for Tensorflow.
+           The activation function to be used by the pooler.
 
     Example:
 

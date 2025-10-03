@@ -23,16 +23,12 @@
     title: 🤗 PEFT を使用してアダプターをロードしてトレーニングする
   - local: model_sharing
     title: モデルを共有する
-  - local: transformers_agents
-    title: エージェント
   - local: llm_tutorial
     title: LLM を使用した生成
   title: Tutorials
 - sections:
   - isExpanded: false
     sections:
-    - local: tasks/sequence_classification
-      title: テキストの分類
     - local: tasks/token_classification
       title: トークンの分類
     - local: tasks/question_answering
@@ -113,14 +109,10 @@
     title: チャットモデルのテンプレート
   - local: serialization
     title: ONNX へのエクスポート
-  - local: tflite
-    title: TFLite へのエクスポート
   - local: torchscript
     title: トーチスクリプトへのエクスポート
   - local: community
     title: コミュニティリソース
-  - local: custom_tools
-    title: カスタムツールとプロンプト
   - local: troubleshooting
     title: トラブルシューティング
   title: 開発者ガイド
@@ -138,8 +130,6 @@
       title: 分散CPUトレーニング
     - local: perf_train_tpu
       title: TPU に関するトレーニング
-    - local: perf_train_tpu_tf
-      title: TensorFlow を使用した TPU のトレーニング
     - local: perf_train_special
       title: 特殊なハードウェアに関するトレーニング
     - local: perf_hardware
@@ -159,8 +149,6 @@
     title: 推論の最適化
   - local: big_models
     title: 大きなモデルのインスタンス化
-  - local: tf_xla
-    title: TensorFlowモデルのXLA統合
   - local: perf_torch_compile
     title: torch.compile()を使用した推論の最適化
   title: パフォーマンスとスケーラビリティ
@@ -200,8 +188,6 @@
   title: コンセプチュアルガイド
 - sections:
   - sections:
-    - local: main_classes/agent
-      title: エージェントとツール
     - local: model_doc/auto
       title: Auto Classes
     - local: main_classes/callback
@@ -210,8 +196,6 @@
       title: 構成
     - local: main_classes/data_collator
       title: データ照合者
-    - local: main_classes/keras_callbacks
-      title: Keras コールバック
     - local: main_classes/logging
       title: ロギング
     - local: main_classes/model

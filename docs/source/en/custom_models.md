@@ -47,7 +47,7 @@ class ResnetConfig(PretrainedConfig):
     def __init__(
         self,
         block_type="bottleneck",
-        layers: List[int] = [3, 4, 6, 3],
+        layers: list[int] = [3, 4, 6, 3],
         num_classes: int = 1000,
         input_channels: int = 3,
         cardinality: int = 1,
@@ -271,7 +271,7 @@ The model is ready to be pushed to the Hub now. Log in to your Hugging Face acco
 <hfoption id="huggingface-CLI">
 
 ```bash
-huggingface-cli login
+hf auth login
 ```
 
 </hfoption>

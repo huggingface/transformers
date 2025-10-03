@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -58,7 +57,7 @@ class Pop2PianoModelTester:
         use_attention_mask=True,
         use_labels=True,
         hidden_size=64,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         d_ff=37,
         relative_attention_num_buckets=8,
@@ -358,24 +357,6 @@ class Pop2PianoModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    def create_and_check_generate_with_past_key_values(
-        self,
-        config,
-        input_ids,
-        decoder_input_ids,
-        attention_mask,
-        decoder_attention_mask,
-        lm_labels,
-    ):
-        model = Pop2PianoForConditionalGeneration(config=config).to(torch_device).eval()
-        torch.manual_seed(0)
-        output_without_past_cache = model.generate(
-            input_ids[:1], num_beams=2, max_length=5, do_sample=True, use_cache=False
-        )
-        torch.manual_seed(0)
-        output_with_past_cache = model.generate(input_ids[:1], num_beams=2, max_length=5, do_sample=True)
-        self.parent.assertTrue(torch.all(output_with_past_cache == output_without_past_cache))
-
     def create_and_check_model_fp16_forward(
         self,
         config,
@@ -510,11 +491,9 @@ class Pop2PianoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     pipeline_model_mapping = (
         {"automatic-speech-recognition": Pop2PianoForConditionalGeneration} if is_torch_available() else {}
     )
-    all_parallelizable_model_classes = ()
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True
-    test_model_parallel = False
     is_encoder_decoder = True
 
     def setUp(self):
@@ -594,7 +573,7 @@ class Pop2PianoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_encoder_decoder_shared_weights(*config_and_inputs)
 
-    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
+    @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
     def test_model_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -34,7 +33,6 @@ from transformers.testing_utils import (
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
-    _config_zero_init,
     floats_tensor,
     ids_tensor,
     random_attention_mask,
@@ -55,10 +53,10 @@ if is_torch_available():
         Wav2Vec2FeatureExtractor,
         Wav2Vec2Processor,
     )
+    from transformers.models.wav2vec2.modeling_wav2vec2 import _sample_negative_indices
     from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import (
         Wav2Vec2ConformerGumbelVectorQuantizer,
         _compute_mask_indices,
-        _sample_negative_indices,
     )
 
 
@@ -228,7 +226,7 @@ class Wav2Vec2ConformerModelTester:
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
-            model = Wav2Vec2ConformerModel.from_pretrained(tmpdirname, torch_dtype=torch.float16)
+            model = Wav2Vec2ConformerModel.from_pretrained(tmpdirname, dtype=torch.float16)
 
         model.to(torch_device)
         model.eval()
@@ -239,32 +237,6 @@ class Wav2Vec2ConformerModelTester:
         self.parent.assertEqual(
             result.last_hidden_state.shape, (self.batch_size, self.output_seq_length, self.hidden_size)
         )
-
-    def create_and_check_batch_inference(self, config, input_values, *args):
-        # test does not pass for models making use of `group_norm`
-        # check: https://github.com/pytorch/fairseq/issues/3227
-        model = Wav2Vec2ConformerModel(config=config)
-        model.to(torch_device)
-        model.eval()
-
-        input_values = input_values[:3]
-        attention_mask = torch.ones(input_values.shape, device=torch_device, dtype=torch.bool)
-
-        input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
-
-        # pad input
-        for i in range(len(input_lengths)):
-            input_values[i, input_lengths[i] :] = 0.0
-            attention_mask[i, input_lengths[i] :] = 0.0
-
-        batch_outputs = model(input_values, attention_mask=attention_mask).last_hidden_state
-
-        for i in range(input_values.shape[0]):
-            input_slice = input_values[i : i + 1, : input_lengths[i]]
-            output = model(input_slice).last_hidden_state
-
-            batch_output = batch_outputs[i : i + 1, : output.shape[1]]
-            self.parent.assertTrue(torch.allclose(output, batch_output, atol=1e-3))
 
     def check_ctc_loss(self, config, input_values, *args):
         model = Wav2Vec2ConformerForCTC(config=config)
@@ -438,7 +410,6 @@ class Wav2Vec2ConformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
         else {}
     )
     test_pruning = False
-    test_headmasking = False
     test_torchscript = False
 
     def setUp(self):
@@ -455,8 +426,8 @@ class Wav2Vec2ConformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
     @is_flaky(
         description="The `codevector_idx` computed with `argmax()` in `Wav2Vec2ConformerGumbelVectorQuantizer.forward` is not stable."
     )
-    def test_batching_equivalence(self):
-        super().test_batching_equivalence()
+    def test_batching_equivalence(self, atol=1e-4, rtol=1e-4):
+        super().test_batching_equivalence(atol=atol, rtol=rtol)
 
     def test_model_with_relative(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs(position_embeddings_type="relative")
@@ -573,44 +544,6 @@ class Wav2Vec2ConformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
 
         self.assertIsNotNone(hidden_states.grad)
         self.assertIsNotNone(attentions.grad)
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                uniform_init_parms = [
-                    "conv.weight",
-                    "conv.parametrizations.weight",
-                    "masked_spec_embed",
-                    "codevectors",
-                    "quantizer.weight_proj.weight",
-                    "project_hid.weight",
-                    "project_hid.bias",
-                    "project_q.weight",
-                    "project_q.bias",
-                    "pos_bias_v",
-                    "pos_bias_u",
-                    "pointwise_conv1",
-                    "pointwise_conv2",
-                    "feature_projection.projection.weight",
-                    "feature_projection.projection.bias",
-                    "objective.weight",
-                ]
-                if param.requires_grad:
-                    if any(x in name for x in uniform_init_parms):
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
 
     # overwrite from test_modeling_common
     def _mock_init_weights(self, module):

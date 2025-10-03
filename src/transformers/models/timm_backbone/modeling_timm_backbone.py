@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 
@@ -40,7 +40,7 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
 
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
-    config_class = TimmBackboneConfig
+    config: TimmBackboneConfig
 
     def __init__(self, config, **kwargs):
         requires_backends(self, "timm")
@@ -126,7 +126,7 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[BackboneOutput, Tuple[Tensor, ...]]:
+    ) -> Union[BackboneOutput, tuple[Tensor, ...]]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

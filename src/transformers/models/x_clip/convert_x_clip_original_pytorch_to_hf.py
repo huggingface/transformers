@@ -118,7 +118,7 @@ def rename_key(name):
 
 
 def convert_state_dict(orig_state_dict, config):
-    for key in orig_state_dict.copy().keys():
+    for key in orig_state_dict.copy():
         val = orig_state_dict.pop(key)
 
         if "attn.in_proj" in key:
@@ -279,7 +279,7 @@ def convert_xclip_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
     if "drive" in checkpoint_url:
         output = "pytorch_model.bin"
         gdown.cached_download(checkpoint_url, output, quiet=False)
-        state_dict = torch.load(output, map_location="cpu")["model"]
+        state_dict = torch.load(output, map_location="cpu", weights_only=True)["model"]
     else:
         state_dict = torch.hub.load_state_dict_from_url(checkpoint_url)["model"]
 

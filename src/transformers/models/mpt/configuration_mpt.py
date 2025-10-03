@@ -14,11 +14,7 @@
 # limitations under the License.
 """Mpt configuration"""
 
-from typing import TYPE_CHECKING, Optional, Union
-
-
-if TYPE_CHECKING:
-    pass
+from typing import Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -225,10 +224,6 @@ class EsmFoldModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_head_pruning_save_load_from_pretrained(self):
         pass
 
-    @unittest.skip(reason="ESMFold does not support head pruning.")
-    def test_headmasking(self):
-        pass
-
     @unittest.skip(reason="ESMFold does not output hidden states in the normal way.")
     def test_hidden_states_output(self):
         pass
@@ -241,18 +236,8 @@ class EsmFoldModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_model_outputs_equivalence(self):
         pass
 
-    @unittest.skip(reason="This test doesn't work for ESMFold and doesn't test core functionality")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
     @unittest.skip(reason="ESMFold does not support input chunking.")
     def test_feed_forward_chunking(self):
-        pass
-
-    @unittest.skip(
-        reason="ESMFold doesn't respect you and it certainly doesn't respect your initialization arguments."
-    )
-    def test_initialization(self):
         pass
 
     @unittest.skip(reason="ESMFold doesn't support torchscript compilation.")

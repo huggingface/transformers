@@ -17,7 +17,7 @@
 import json
 import os
 from functools import lru_cache
-from typing import List, Optional, Tuple
+from typing import Optional
 
 import regex as re
 
@@ -35,7 +35,7 @@ VOCAB_FILES_NAMES = {
 }
 
 
-@lru_cache()
+@lru_cache
 # Copied from transformers.models.roberta.tokenization_roberta.bytes_to_unicode
 def bytes_to_unicode():
     """
@@ -302,7 +302,7 @@ class BlenderbotTokenizer(PreTrainedTokenizer):
         return text
 
     # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.save_vocabulary with Roberta->Blenderbot, RoBERTa->Blenderbot
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
@@ -333,22 +333,22 @@ class BlenderbotTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.get_special_tokens_mask with Roberta->Blenderbot, RoBERTa->Blenderbot
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+    ) -> list[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer `prepare_for_model` method.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
             already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
-            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+            `list[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
         if already_has_special_tokens:
             return super().get_special_tokens_mask(
@@ -361,20 +361,20 @@ class BlenderbotTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.create_token_type_ids_from_sequences with Roberta->Blenderbot, RoBERTa->Blenderbot
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. Blenderbot does not
         make use of token type ids, therefore a list of zeros is returned.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of zeros.
+            `list[int]`: List of zeros.
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
@@ -390,19 +390,19 @@ class BlenderbotTokenizer(PreTrainedTokenizer):
             text = " " + text
         return (text, kwargs)
 
-    def build_inputs_with_special_tokens(self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None):
+    def build_inputs_with_special_tokens(self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None):
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A Blenderbot sequence has the following format:
         - single sequence: ` X </s>`
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs to which the special tokens will be added
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Will be ignored
         Returns:
-            `List[int]`: list of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+            `list[int]`: list of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
         return token_ids_0 + [self.eos_token_id]
 

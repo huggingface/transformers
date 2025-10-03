@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 Microsoft Authors and the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -241,7 +240,6 @@ class DebertaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     fx_compatible = True
     test_torchscript = False
     test_pruning = False
-    test_head_masking = False
     is_encoder_decoder = False
 
     def setUp(self):

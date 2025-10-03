@@ -16,7 +16,7 @@
 
 import os
 from shutil import copyfile
-from typing import List, Optional, Tuple
+from typing import Optional
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
@@ -77,7 +77,7 @@ class XGLMTokenizerFast(PreTrainedTokenizerFast):
             token instead.
         pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        additional_special_tokens (`List[str]`, *optional*, defaults to `["<s>NOTUSED", "</s>NOTUSED"]`):
+        additional_special_tokens (`list[str]`, *optional*, defaults to `["<s>NOTUSED", "</s>NOTUSED"]`):
             Additional special tokens used by the tokenizer.
     """
 
@@ -120,13 +120,9 @@ class XGLMTokenizerFast(PreTrainedTokenizerFast):
 
         self.vocab_file = vocab_file
 
-    @property
-    def can_save_slow_tokenizer(self) -> bool:
-        return os.path.isfile(self.vocab_file) if self.vocab_file else False
-
     def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. An XLM-RoBERTa sequence has the following format:
@@ -135,13 +131,13 @@ class XGLMTokenizerFast(PreTrainedTokenizerFast):
         - pair of sequences: `<s> A </s></s> B </s>`
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs to which the special tokens will be added.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+            `list[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
 
         if token_ids_1 is None:
@@ -150,20 +146,20 @@ class XGLMTokenizerFast(PreTrainedTokenizerFast):
         return sep + token_ids_0 + sep + sep + token_ids_1
 
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. XLM-RoBERTa does
         not make use of token type ids, therefore a list of zeros is returned.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of zeros.
+            `list[int]`: List of zeros.
 
         """
 
@@ -173,7 +169,7 @@ class XGLMTokenizerFast(PreTrainedTokenizerFast):
             return len(sep + token_ids_0) * [0]
         return len(sep + token_ids_0 + sep + sep + token_ids_1) * [0]
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not self.can_save_slow_tokenizer:
             raise ValueError(
                 "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "

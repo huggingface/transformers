@@ -16,33 +16,19 @@
 
 import collections.abc
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from torch import nn
 
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_mgp_str import MgpstrConfig
 
 
 logger = logging.get_logger(__name__)
-
-# General docstring
-_CONFIG_FOR_DOC = "MgpstrConfig"
-_TOKENIZER_FOR_DOC = "MgpstrTokenizer"
-
-# Base docstring
-_CHECKPOINT_FOR_DOC = "alibaba-damo/mgp-str-base"
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
@@ -50,11 +36,6 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
-    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
-    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
-    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
-    argument.
     """
     if drop_prob == 0.0 or not training:
         return input
@@ -78,45 +59,36 @@ class MgpstrDropPath(nn.Module):
         return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
+        return f"p={self.drop_prob}"
 
 
 @dataclass
-class MgpstrModelOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
+    """
+)
+class MgpstrModelOutput(ModelOutput):
+    r"""
+    logits (`tuple(torch.FloatTensor)` of shape `(batch_size, config.num_character_labels)`):
+        Tuple of `torch.FloatTensor` (one for the output of character of shape `(batch_size,
+        config.max_token_length, config.num_character_labels)`, + one for the output of bpe of shape `(batch_size,
+        config.max_token_length, config.num_bpe_labels)`, + one for the output of wordpiece of shape `(batch_size,
+        config.max_token_length, config.num_wordpiece_labels)`) .
 
-    Args:
-        logits (`tuple(torch.FloatTensor)` of shape `(batch_size, config.num_character_labels)`):
-            Tuple of `torch.FloatTensor` (one for the output of character of shape `(batch_size,
-            config.max_token_length, config.num_character_labels)`, + one for the output of bpe of shape `(batch_size,
-            config.max_token_length, config.num_bpe_labels)`, + one for the output of wordpiece of shape `(batch_size,
-            config.max_token_length, config.num_wordpiece_labels)`) .
+        Classification scores (before SoftMax) of character, bpe and wordpiece.
+    a3_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_a3_attentions=True` is passed or when `config.output_a3_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for the attention of character, + one for the attention of bpe`, + one
+        for the attention of wordpiece) of shape `(batch_size, config.max_token_length, sequence_length)`.
 
-            Classification scores (before SoftMax) of character, bpe and wordpiece.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, config.max_token_length,
-            sequence_length, sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        a3_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_a3_attentions=True` is passed or when `config.output_a3_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for the attention of character, + one for the attention of bpe`, + one
-            for the attention of wordpiece) of shape `(batch_size, config.max_token_length, sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+        Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+        heads.
     """
 
-    logits: Tuple[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    a3_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    logits: Optional[tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
+    a3_attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 class MgpstrEmbeddings(nn.Module):
@@ -246,7 +218,7 @@ class MgpstrEncoder(nn.Module):
     def __init__(self, config: MgpstrConfig):
         super().__init__()
         # stochastic depth decay rule
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers)]
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers, device="cpu")]
 
         self.blocks = nn.Sequential(
             *[MgpstrLayer(config=config, drop_path=dpr[i]) for i in range(config.num_hidden_layers)]
@@ -306,23 +278,20 @@ class MgpstrA3Module(nn.Module):
         return (a3_out, attentions)
 
 
+@auto_docstring
 class MgpstrPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = MgpstrConfig
+    config: MgpstrConfig
     base_model_prefix = "mgp_str"
     _no_split_modules = []
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
+    def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
+        std = self.config.initializer_range
         if isinstance(module, MgpstrEmbeddings):
-            nn.init.trunc_normal_(module.pos_embed, mean=0.0, std=self.config.initializer_range)
-            nn.init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
+            nn.init.trunc_normal_(module.pos_embed, mean=0.0, std=std)
+            nn.init.trunc_normal_(module.cls_token, mean=0.0, std=std)
         elif isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data = nn.init.trunc_normal_(module.weight.data, mean=0.0, std=self.config.initializer_range)
+            nn.init.trunc_normal_(module.weight.data, mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.LayerNorm):
@@ -330,37 +299,7 @@ class MgpstrPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-MGP_STR_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`MgpstrConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-MGP_STR_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
-            for details.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare MGP-STR Model transformer outputting raw hidden-states without any specific head on top.",
-    MGP_STR_START_DOCSTRING,
-)
+@auto_docstring
 class MgpstrModel(MgpstrPreTrainedModel):
     def __init__(self, config: MgpstrConfig):
         super().__init__(config)
@@ -368,17 +307,20 @@ class MgpstrModel(MgpstrPreTrainedModel):
         self.embeddings = MgpstrEmbeddings(config)
         self.encoder = MgpstrEncoder(config)
 
+        # Initialize weights and apply final processing
+        self.post_init()
+
     def get_input_embeddings(self) -> nn.Module:
         return self.embeddings.proj
 
-    @add_start_docstrings_to_model_forward(MGP_STR_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], BaseModelOutput]:
+    ) -> Union[tuple[torch.FloatTensor], BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -406,15 +348,14 @@ class MgpstrModel(MgpstrPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     MGP-STR Model transformer with three classification heads on top (three A^3 modules and three linear layer on top
     of the transformer encoder output) for scene text recognition (STR) .
-    """,
-    MGP_STR_START_DOCSTRING,
+    """
 )
 class MgpstrForSceneTextRecognition(MgpstrPreTrainedModel):
-    config_class = MgpstrConfig
+    config: MgpstrConfig
     main_input_name = "pixel_values"
 
     def __init__(self, config: MgpstrConfig) -> None:
@@ -431,8 +372,10 @@ class MgpstrForSceneTextRecognition(MgpstrPreTrainedModel):
         self.bpe_head = nn.Linear(config.hidden_size, config.num_bpe_labels)
         self.wp_head = nn.Linear(config.hidden_size, config.num_wordpiece_labels)
 
-    @add_start_docstrings_to_model_forward(MGP_STR_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MgpstrModelOutput, config_class=MgpstrConfig)
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -440,13 +383,11 @@ class MgpstrForSceneTextRecognition(MgpstrPreTrainedModel):
         output_a3_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], MgpstrModelOutput]:
+    ) -> Union[tuple[torch.FloatTensor], MgpstrModelOutput]:
         r"""
         output_a3_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of a3 modules. See `a3_attentions` under returned tensors
             for more detail.
-
-        Returns:
 
         Example:
 

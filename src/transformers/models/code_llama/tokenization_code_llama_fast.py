@@ -14,16 +14,13 @@
 # limitations under the License.
 import os
 from shutil import copyfile
-from typing import List, Optional, Tuple
+from typing import Optional
 
 from tokenizers import normalizers, processors
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
-from ...utils.versions import require_version
 
-
-require_version("tokenizers>=0.13.3")
 
 if is_sentencepiece_available():
     from .tokenization_code_llama import CodeLlamaTokenizer
@@ -101,7 +98,7 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
             End of text token used for infilling.
         fill_token (`str`, *optional*, defaults to `"<FILL_ME>"`):
             The token used to split the input between the prefix and suffix.
-        additional_special_tokens (`List[str]`, *optional*):
+        additional_special_tokens (`list[str]`, *optional*):
             Additional special tokens used by the tokenizer.
         add_bos_token (`bool`, *optional*, defaults to `True`):
             Whether to add a beginning of sequence token at the start of sequences.
@@ -171,10 +168,6 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         self._eot_token = eot_token
         self.fill_token = fill_token
 
-    @property
-    def can_save_slow_tokenizer(self) -> bool:
-        return os.path.isfile(self.vocab_file) if self.vocab_file else False
-
     # Copied from transformers.models.llama.tokenization_llama_fast.LlamaTokenizerFast.update_post_processor
     def update_post_processor(self):
         """
@@ -190,8 +183,8 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         if eos is None and self.add_eos_token:
             raise ValueError("add_eos_token = True but eos_token = None")
 
-        single = f"{(bos+':0 ') if self.add_bos_token else ''}$A:0{(' '+eos+':0') if self.add_eos_token else ''}"
-        pair = f"{single}{(' '+bos+':1') if self.add_bos_token else ''} $B:1{(' '+eos+':1') if self.add_eos_token else ''}"
+        single = f"{(bos + ':0 ') if self.add_bos_token else ''}$A:0{(' ' + eos + ':0') if self.add_eos_token else ''}"
+        pair = f"{single}{(' ' + bos + ':1') if self.add_bos_token else ''} $B:1{(' ' + eos + ':1') if self.add_eos_token else ''}"
 
         special_tokens = []
         if self.add_bos_token:
@@ -330,7 +323,7 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         return tokens
 
     # Copied from transformers.models.llama.tokenization_llama_fast.LlamaTokenizerFast.save_vocabulary
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not self.can_save_slow_tokenizer:
             raise ValueError(
                 "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "
@@ -350,8 +343,8 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         return (out_vocab_file,)
 
     def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. The special tokens depend on calling set_lang.
@@ -365,13 +358,13 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         separator.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs to which the special tokens will be added.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: list of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+            `list[int]`: list of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
         if token_ids_1 is None:
             return self.bos_token_id + token_ids_0 + self.eos_token_id

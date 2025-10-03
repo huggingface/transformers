@@ -16,13 +16,11 @@
 
 import collections
 import math
-from typing import Optional, Tuple
+from typing import Optional
 
 import numpy as np
 import torch
-import torch.utils.checkpoint
 from torch import Tensor, nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
@@ -32,32 +30,15 @@ from ...modeling_outputs import (
     ImageClassifierOutputWithNoAttention,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import auto_docstring, logging
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_bit import BitConfig
 
 
 logger = logging.get_logger(__name__)
 
-# General docstring
-_CONFIG_FOR_DOC = "BitConfig"
 
-# Base docstring
-_CHECKPOINT_FOR_DOC = "google/bit-50"
-_EXPECTED_OUTPUT_SHAPE = [1, 2048, 7, 7]
-
-# Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "google/bit-50"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "tiger cat"
-
-
-def get_padding_value(padding=None, kernel_size=7, stride=1, dilation=1) -> Tuple[Tuple, bool]:
+def get_padding_value(padding=None, kernel_size=7, stride=1, dilation=1) -> tuple[tuple, bool]:
     r"""
     Utility function to get the tuple padding value given the kernel_size and padding.
 
@@ -99,10 +80,10 @@ def get_padding_value(padding=None, kernel_size=7, stride=1, dilation=1) -> Tupl
 
 
 class WeightStandardizedConv2d(nn.Conv2d):
-    """Conv2d with Weight Standardization. Includes TensorFlow compatible SAME padding. Used for ViT Hybrid model.
+    """Conv2d with Weight Standardization. Used for ViT Hybrid model.
 
     Paper: [Micro-Batch Training with Batch-Channel Normalization and Weight
-    Standardization](https://arxiv.org/abs/1903.10520v2)
+    Standardization](https://huggingface.co/papers/1903.10520v2)
     """
 
     def __init__(
@@ -152,7 +133,7 @@ class BitGroupNormActivation(nn.GroupNorm):
     """
 
     def __init__(self, config, num_channels, eps=1e-5, affine=True, apply_activation=True):
-        super(BitGroupNormActivation, self).__init__(config.num_groups, num_channels, eps=eps, affine=affine)
+        super().__init__(config.num_groups, num_channels, eps=eps, affine=affine)
         if apply_activation:
             self.activation = ACT2FN[config.hidden_act]
         else:
@@ -216,8 +197,6 @@ class DynamicPad2d(nn.Module):
 
 
 class BitMaxPool2d(nn.MaxPool2d):
-    """Tensorflow like 'SAME' wrapper for 2D max pooling"""
-
     def __init__(
         self,
         kernel_size: int,
@@ -269,7 +248,7 @@ class BitEmbeddings(nn.Module):
         else:
             self.pad = nn.ConstantPad2d(padding=(1, 1, 1, 1), value=0.0)
 
-        if not config.layer_type == "preactivation":
+        if config.layer_type != "preactivation":
             self.norm = BitGroupNormActivation(config, num_channels=config.embedding_size)
         else:
             self.norm = nn.Identity()
@@ -299,11 +278,6 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
-    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
-    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
-    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
-    argument.
     """
     if drop_prob == 0.0 or not training:
         return input
@@ -327,7 +301,7 @@ class BitDropPath(nn.Module):
         return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
+        return f"p={self.drop_prob}"
 
 
 def make_div(value, divisor=8):
@@ -646,13 +620,9 @@ class BitEncoder(nn.Module):
         )
 
 
+@auto_docstring
 class BitPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = BitConfig
+    config: BitConfig
     base_model_prefix = "bit"
     main_input_name = "pixel_values"
     _no_split_modules = ["BitEmbeddings"]
@@ -672,35 +642,7 @@ class BitPreTrainedModel(PreTrainedModel):
             nn.init.constant_(module.bias, 0)
 
 
-BIT_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`BitConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-BIT_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`BitImageProcessor.__call__`]
-            for details.
-
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare BiT model outputting raw features without any specific head on top.",
-    BIT_START_DOCSTRING,
-)
+@auto_docstring
 class BitModel(BitPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -719,14 +661,7 @@ class BitModel(BitPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(BIT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPoolingAndNoAttention,
-        config_class=_CONFIG_FOR_DOC,
-        modality="vision",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
+    @auto_docstring
     def forward(
         self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
     ) -> BaseModelOutputWithPoolingAndNoAttention:
@@ -757,12 +692,11 @@ class BitModel(BitPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     BiT Model with an image classification head on top (a linear layer on top of the pooled features), e.g. for
     ImageNet.
-    """,
-    BIT_START_DOCSTRING,
+    """
 )
 class BitForImageClassification(BitPreTrainedModel):
     def __init__(self, config):
@@ -777,13 +711,7 @@ class BitForImageClassification(BitPreTrainedModel):
         # initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(BIT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=ImageClassifierOutputWithNoAttention,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -807,25 +735,7 @@ class BitForImageClassification(BitPreTrainedModel):
         loss = None
 
         if labels is not None:
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
+            loss = self.loss_function(labels, logits, self.config)
 
         if not return_dict:
             output = (logits,) + outputs[2:]
@@ -834,13 +744,14 @@ class BitForImageClassification(BitPreTrainedModel):
         return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     BiT backbone, to be used with frameworks like DETR and MaskFormer.
-    """,
-    BIT_START_DOCSTRING,
+    """
 )
 class BitBackbone(BitPreTrainedModel, BackboneMixin):
+    has_attentions = False
+
     def __init__(self, config):
         super().__init__(config)
         super()._init_backbone(config)
@@ -851,14 +762,11 @@ class BitBackbone(BitPreTrainedModel, BackboneMixin):
         # initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(BIT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
     ) -> BackboneOutput:
-        """
-        Returns:
-
+        r"""
         Examples:
 
         ```python

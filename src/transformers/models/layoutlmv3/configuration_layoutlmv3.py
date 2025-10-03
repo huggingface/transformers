@@ -15,7 +15,8 @@
 """LayoutLMv3 model configuration"""
 
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, Mapping, Optional
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any
 
 from packaging import version
 
@@ -27,7 +28,6 @@ from ...utils import logging
 
 if TYPE_CHECKING:
     from ...processing_utils import ProcessorMixin
-    from ...utils import TensorType
 
 
 logger = logging.get_logger(__name__)
@@ -226,13 +226,12 @@ class LayoutLMv3OnnxConfig(OnnxConfig):
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
-        framework: Optional["TensorType"] = None,
         num_channels: int = 3,
         image_width: int = 40,
         image_height: int = 40,
     ) -> Mapping[str, Any]:
         """
-        Generate inputs to provide to the ONNX exporter for the specific framework
+        Generate inputs to provide to the ONNX exporter
 
         Args:
             processor ([`ProcessorMixin`]):
@@ -243,8 +242,6 @@ class LayoutLMv3OnnxConfig(OnnxConfig):
                 The sequence length to export the model for (-1 means dynamic axis).
             is_pair (`bool`, *optional*, defaults to `False`):
                 Indicate if the input is a pair (sentence 1, sentence 2).
-            framework (`TensorType`, *optional*, defaults to `None`):
-                The framework (PyTorch or TensorFlow) that the processor will generate tensors for.
             num_channels (`int`, *optional*, defaults to 3):
                 The number of channels of the generated images.
             image_width (`int`, *optional*, defaults to 40):
@@ -283,7 +280,7 @@ class LayoutLMv3OnnxConfig(OnnxConfig):
                 dummy_image,
                 text=dummy_text,
                 boxes=dummy_bboxes,
-                return_tensors=framework,
+                return_tensors="pt",
             )
         )
 

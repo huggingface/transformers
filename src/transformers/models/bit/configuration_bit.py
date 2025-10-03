@@ -37,9 +37,9 @@ class BitConfig(BackboneConfigMixin, PretrainedConfig):
             The number of input channels.
         embedding_size (`int`, *optional*, defaults to 64):
             Dimensionality (hidden size) for the embedding layer.
-        hidden_sizes (`List[int]`, *optional*, defaults to `[256, 512, 1024, 2048]`):
+        hidden_sizes (`list[int]`, *optional*, defaults to `[256, 512, 1024, 2048]`):
             Dimensionality (hidden size) at each stage.
-        depths (`List[int]`, *optional*, defaults to `[3, 4, 6, 3]`):
+        depths (`list[int]`, *optional*, defaults to `[3, 4, 6, 3]`):
             Depth (number of layers) for each stage.
         layer_type (`str`, *optional*, defaults to `"preactivation"`):
             The layer to use, it can be either `"preactivation"` or `"bottleneck"`.
@@ -58,12 +58,12 @@ class BitConfig(BackboneConfigMixin, PretrainedConfig):
             The output stride of the model.
         width_factor (`int`, *optional*, defaults to 1):
             The width factor for the model.
-        out_features (`List[str]`, *optional*):
+        out_features (`list[str]`, *optional*):
             If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
             (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
             corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
             same order as defined in the `stage_names` attribute.
-        out_indices (`List[int]`, *optional*):
+        out_indices (`list[int]`, *optional*):
             If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
             many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
             If unset and `out_features` is unset, will default to the last stage. Must be in the

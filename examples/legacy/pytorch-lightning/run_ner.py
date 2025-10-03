@@ -63,7 +63,7 @@ class NERTransformer(BaseTransformer):
             cached_features_file = self._feature_file(mode)
             if os.path.exists(cached_features_file) and not args.overwrite_cache:
                 logger.info("Loading features from cached file %s", cached_features_file)
-                features = torch.load(cached_features_file)
+                features = torch.load(cached_features_file, weights_only=True)
             else:
                 logger.info("Creating features from dataset file at %s", args.data_dir)
                 examples = self.token_classification_task.read_examples_from_file(args.data_dir, mode)
@@ -72,12 +72,12 @@ class NERTransformer(BaseTransformer):
                     self.labels,
                     args.max_seq_length,
                     self.tokenizer,
-                    cls_token_at_end=bool(self.config.model_type in ["xlnet"]),
+                    cls_token_at_end=bool(self.config.model_type == "xlnet"),
                     cls_token=self.tokenizer.cls_token,
-                    cls_token_segment_id=2 if self.config.model_type in ["xlnet"] else 0,
+                    cls_token_segment_id=2 if self.config.model_type == "xlnet" else 0,
                     sep_token=self.tokenizer.sep_token,
                     sep_token_extra=False,
-                    pad_on_left=bool(self.config.model_type in ["xlnet"]),
+                    pad_on_left=bool(self.config.model_type == "xlnet"),
                     pad_token=self.tokenizer.pad_token_id,
                     pad_token_segment_id=self.tokenizer.pad_token_type_id,
                     pad_token_label_id=self.pad_token_label_id,
@@ -89,7 +89,7 @@ class NERTransformer(BaseTransformer):
         "Load datasets. Called after prepare data."
         cached_features_file = self._feature_file(mode)
         logger.info("Loading features from cached file %s", cached_features_file)
-        features = torch.load(cached_features_file)
+        features = torch.load(cached_features_file, weights_only=True)
         all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
         all_attention_mask = torch.tensor([f.attention_mask for f in features], dtype=torch.long)
         if features[0].token_type_ids is not None:
