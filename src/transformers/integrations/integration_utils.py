@@ -1796,7 +1796,7 @@ class NeptuneCallback(TrainerCallback):
 
     def on_init_end(self, args, state, control, **kwargs):
         self._volatile_checkpoints_dir = None
-        if self._log_checkpoints and (args.overwrite_output_dir or args.save_total_limit is not None):
+        if self._log_checkpoints and args.save_total_limit is not None:
             self._volatile_checkpoints_dir = tempfile.TemporaryDirectory().name
 
         if self._log_checkpoints == "best" and not args.load_best_model_at_end:
