@@ -439,9 +439,9 @@ def convert_transformer_weights(
         decoder_block_start = path.find(_TRANSFORMER_DECODER_BLOCK)
         decoder_block_offset = decoder_block_start + _TRANSFORMER_DECODER_BLOCK_LEN
         decoder_block_path = path[decoder_block_offset:]
-        next_path_seperator_idx = decoder_block_path.find("/")
-        layer_idx = decoder_block_path[:next_path_seperator_idx]
-        decoder_block_path = decoder_block_path[next_path_seperator_idx:]
+        next_path_separator_idx = decoder_block_path.find("/")
+        layer_idx = decoder_block_path[:next_path_separator_idx]
+        decoder_block_path = decoder_block_path[next_path_separator_idx:]
 
         base_path = f"language_model.model.layers.{layer_idx}"
 

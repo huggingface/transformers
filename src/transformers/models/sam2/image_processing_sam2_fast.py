@@ -40,10 +40,7 @@ from ...image_utils import (
     pil_torch_interpolation_mapping,
 )
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-)
+from ...utils import TensorType, auto_docstring
 
 
 class Sam2FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):

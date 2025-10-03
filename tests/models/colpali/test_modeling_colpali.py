@@ -272,12 +272,6 @@ class ColPaliForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_parallelism(self):
         pass
 
-    @unittest.skip(
-        reason="PaliGemma's SigLip encoder uses the same initialization scheme as the Flax original implementation"
-    )
-    def test_initialization(self):
-        pass
-
     # TODO extend valid outputs to include this test @Molbap
     @unittest.skip(reason="PaliGemma has currently one output format.")
     def test_model_outputs_equivalence(self):

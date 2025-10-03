@@ -90,7 +90,6 @@ class RotaryEmbedding(torch.nn.Module):
         super().__init__()
         # Generate and save the inverse frequency buffer (non trainable)
         inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
-        inv_freq = inv_freq
         self.register_buffer("inv_freq", inv_freq)
 
         self._seq_len_cached = None
@@ -590,6 +589,7 @@ class EsmPreTrainedModel(PreTrainedModel):
     config: EsmConfig
     base_model_prefix = "esm"
     supports_gradient_checkpointing = True
+    accepts_loss_kwargs = False
     _no_split_modules = ["EsmLayer", "EsmFoldTriangularSelfAttentionBlock", "EsmEmbeddings"]
     _keys_to_ignore_on_load_unexpected = ["position_embeddings.weight"]
     _supports_flash_attn = True

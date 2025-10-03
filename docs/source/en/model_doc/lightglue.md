@@ -143,10 +143,9 @@ processed_outputs = processor.post_process_keypoint_matching(outputs, image_size
 ## LightGlueImageProcessor
 
 [[autodoc]] LightGlueImageProcessor
-
-- preprocess
-- post_process_keypoint_matching
-- visualize_keypoint_matching
+    - preprocess
+    - post_process_keypoint_matching
+    - visualize_keypoint_matching
 
 <frameworkcontent>
 <pt>

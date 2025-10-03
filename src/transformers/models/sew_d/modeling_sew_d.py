@@ -509,7 +509,7 @@ class XSoftmax(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_output):
         (output,) = ctx.saved_tensors
-        inputGrad = softmax_backward_data(ctx, grad_output, output, ctx.dim, output)
+        inputGrad = softmax_backward_data(ctx, grad_output, output)
         return inputGrad, None, None
 
     @staticmethod
@@ -755,7 +755,6 @@ class DisentangledSelfAttention(nn.Module):
 
         if rel_att is not None:
             attention_scores = attention_scores + rel_att
-        attention_scores = attention_scores
         attention_scores = attention_scores.view(
             -1, self.num_attention_heads, attention_scores.size(-2), attention_scores.size(-1)
         )

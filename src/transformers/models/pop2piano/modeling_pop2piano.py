@@ -88,7 +88,7 @@ class Pop2PianoLayerNorm(nn.Module):
 
 
 if not _load_pop2piano_layer_norm:
-    Pop2PianoLayerNorm = FusedRMSNorm  # noqa
+    Pop2PianoLayerNorm = FusedRMSNorm
 
 
 # Copied from transformers.models.t5.modeling_t5.T5DenseActDense with T5->Pop2Piano,t5->pop2piano

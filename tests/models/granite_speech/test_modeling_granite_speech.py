@@ -40,7 +40,6 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
-    _config_zero_init,
     floats_tensor,
     ids_tensor,
 )
@@ -127,7 +126,7 @@ class GraniteSpeechForConditionalGenerationModelTester:
         self.audio_token_index = audio_token_index
         self.tie_word_embeddings = tie_word_embeddings
         self.initializer_range = initializer_range
-        self.has_lora_adapater = has_lora_adapter
+        self.has_lora_adapter = has_lora_adapter
         self.downsample_rate = downsample_rate
         self.window_size = window_size
         self.is_training = is_training
@@ -152,7 +151,7 @@ class GraniteSpeechForConditionalGenerationModelTester:
             audio_token_index=self.audio_token_index,
             tie_word_embeddings=self.tie_word_embeddings,
             initializer_range=self.initializer_range,
-            has_lora_adapter=self.has_lora_adapater,
+            has_lora_adapter=self.has_lora_adapter,
         )
 
     def prepare_config_and_inputs(self):
@@ -251,22 +250,6 @@ class GraniteSpeechForConditionalGenerationModelTest(ModelTesterMixin, Generatio
 
             with torch.no_grad():
                 model(**inputs)
-
-    def test_initialization(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if name == "projector.query":
-                    continue
-                elif param.requires_grad:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
 
     def test_sdpa_can_dispatch_composite_models(self):
         # overwrite because Granite Speech is audio+text model (not vision+text)

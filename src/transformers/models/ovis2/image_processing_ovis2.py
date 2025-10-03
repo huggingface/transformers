@@ -169,10 +169,10 @@ def get_min_tile_covering_grid(
 
     if sufficient_covering_grids:
         # Prefer fewer tiles and higher covering ratio
-        return sorted(sufficient_covering_grids, key=lambda x: (x[0][0] * x[0][1], -x[1]))[0][0]
+        return min(sufficient_covering_grids, key=lambda x: (x[0][0] * x[0][1], -x[1]))[0]
     else:
         # Fallback: prefer higher covering even if below threshold
-        return sorted(evaluated_grids, key=lambda x: (-x[1], x[0][0] * x[0][1]))[0][0]
+        return min(evaluated_grids, key=lambda x: (-x[1], x[0][0] * x[0][1]))[0]
 
 
 class Ovis2ImageProcessor(BaseImageProcessor):

@@ -65,7 +65,7 @@ class Cohere2VisionText2TextModelTester:
             "vocab_size": 99,
             "hidden_size": 128,
             "intermediate_size": 37,
-            "num_hidden_layers": 4,
+            "num_hidden_layers": 2,
             "num_attention_heads": 4,
             "output_channels": 64,
             "hidden_act": "silu",
@@ -169,10 +169,6 @@ class Cohere2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     def test_config(self):
         self.config_tester.run_common_tests()
-
-    @unittest.skip(reason="Siglip backbone uses the same initialization scheme as the Flax original implementation")
-    def test_initialization(self):
-        pass
 
 
 @require_read_token

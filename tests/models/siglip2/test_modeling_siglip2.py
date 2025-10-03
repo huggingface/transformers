@@ -332,10 +332,6 @@ class Siglip2VisionModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="Siglip2 uses the same initialization scheme as the Flax original implementation")
-    def test_initialization(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "google/siglip2-base-patch16-naflex"
@@ -474,10 +470,6 @@ class Siglip2TextModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="Siglip2 uses the same initialization scheme as the Flax original implementation")
-    def test_initialization(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "google/siglip2-base-patch16-naflex"
@@ -591,10 +583,6 @@ class Siglip2ModelTest(Siglip2ModelTesterMixin, PipelineTesterMixin, unittest.Te
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="Siglip2 uses the same initialization scheme as the Flax original implementation")
-    def test_initialization(self):
-        pass
-
     def test_load_vision_text_config(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -687,10 +675,6 @@ class Siglip2ForImageClassificationModelTest(Siglip2ModelTesterMixin, PipelineTe
 
     @unittest.skip(reason="Siglip2ForImageClassification does not support gradient checkpointing yet")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="Siglip2 uses the same initialization scheme as the Flax original implementation")
-    def test_initialization(self):
         pass
 
 

@@ -56,7 +56,6 @@ from huggingface_hub.utils import (
     build_hf_headers,
     get_session,
     hf_raise_for_status,
-    send_telemetry,
 )
 from requests.exceptions import HTTPError
 
@@ -155,6 +154,7 @@ def list_repo_templates(
     local_files_only: bool,
     revision: Optional[str] = None,
     cache_dir: Optional[str] = None,
+    token: Union[bool, str, None] = None,
 ) -> list[str]:
     """List template files from a repo.
 
@@ -171,6 +171,7 @@ def list_repo_templates(
                     revision=revision,
                     path_in_repo=CHAT_TEMPLATE_DIR,
                     recursive=False,
+                    token=token,
                 )
                 if entry.path.endswith(".jinja")
             ]
@@ -993,41 +994,6 @@ class PushToHubMixin:
             )
 
 
-def send_example_telemetry(example_name, *example_args, framework="pytorch"):
-    """
-    Sends telemetry that helps tracking the examples use.
-
-    Args:
-        example_name (`str`): The name of the example.
-        *example_args (dataclasses or `argparse.ArgumentParser`): The arguments to the script. This function will only
-            try to extract the model and dataset name from those. Nothing else is tracked.
-        framework (`str`, *optional*, defaults to `"pytorch"`): The framework for the example.
-    """
-    if is_offline_mode():
-        return
-
-    data = {"example": example_name, "framework": framework}
-    for args in example_args:
-        args_as_dict = {k: v for k, v in args.__dict__.items() if not k.startswith("_") and v is not None}
-        if "model_name_or_path" in args_as_dict:
-            model_name = args_as_dict["model_name_or_path"]
-            # Filter out local paths
-            if not os.path.isdir(model_name):
-                data["model_name"] = args_as_dict["model_name_or_path"]
-        if "dataset_name" in args_as_dict:
-            data["dataset_name"] = args_as_dict["dataset_name"]
-        elif "task_name" in args_as_dict:
-            # Extract script name from the example_name
-            script_name = example_name.replace("tf_", "").replace("flax_", "").replace("run_", "")
-            script_name = script_name.replace("_no_trainer", "")
-            data["dataset_name"] = f"{script_name}-{args_as_dict['task_name']}"
-
-    # Send telemetry in the background
-    send_telemetry(
-        topic="examples", library_name="transformers", library_version=__version__, user_agent=http_user_agent(data)
-    )
-
-
 def convert_file_size_to_int(size: Union[int, str]):
     """
     Converts a size expressed as a string with digits an unit (like `"5MB"`) to an integer (in bytes).
@@ -1086,7 +1052,6 @@ def get_checkpoint_shard_files(
     For the description of each arg, see [`PreTrainedModel.from_pretrained`]. `index_filename` is the full path to the
     index (downloaded and cached if `pretrained_model_name_or_path` is a model ID on the Hub).
     """
-    import json
 
     use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
     if use_auth_token is not None:

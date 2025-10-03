@@ -117,7 +117,7 @@ def convert_sparse_cross_attention_mask_to_dense(
     """
 
     batch_size = len(cross_attention_token_mask)
-    max_num_images = max([len(masks) for masks in cross_attention_token_mask])
+    max_num_images = max(len(masks) for masks in cross_attention_token_mask)
 
     cross_attention_mask = np.zeros(
         shape=(batch_size, length, max_num_images, max_num_tiles),

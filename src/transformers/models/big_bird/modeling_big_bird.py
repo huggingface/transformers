@@ -1272,14 +1272,14 @@ class BigBirdBlockSparseAttention(nn.Module):
         if block_id == to_end_block_id - 2:
             illegal_blocks.append(1)
 
-        selected_random_blokcs = []
+        selected_random_blocks = []
 
         for i in range(to_end_block_id - to_start_block_id):
             if perm_block[i] not in illegal_blocks:
-                selected_random_blokcs.append(perm_block[i])
-            if len(selected_random_blokcs) == num_rand_blocks:
+                selected_random_blocks.append(perm_block[i])
+            if len(selected_random_blocks) == num_rand_blocks:
                 break
-        return np.array(selected_random_blokcs, dtype=np.int32)
+        return np.array(selected_random_blocks, dtype=np.int32)
 
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->BigBird
@@ -2877,7 +2877,6 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
             logits_mask = self.prepare_question_mask(question_lengths, seqlen)
             if token_type_ids is None:
                 token_type_ids = torch.ones(logits_mask.size(), dtype=int, device=logits_mask.device) - logits_mask
-            logits_mask = logits_mask
             logits_mask[:, 0] = False
             logits_mask.unsqueeze_(2)
 

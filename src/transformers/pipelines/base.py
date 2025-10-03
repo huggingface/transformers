@@ -64,7 +64,7 @@ if is_tf_available():
 
     from ..models.auto.modeling_tf_auto import TFAutoModel
 
-if is_torch_available():
+if is_torch_available() or TYPE_CHECKING:
     import torch
     from torch.utils.data import DataLoader, Dataset
 
@@ -186,7 +186,7 @@ def pad_collate_fn(tokenizer, feature_extractor):
         # input_values, input_pixels, input_ids, ...
         padded = {}
         for key in keys:
-            if key in {"input_ids"}:
+            if key == "input_ids":
                 # ImageGPT uses a feature extractor
                 if tokenizer is None and feature_extractor is not None:
                     _padding_value = f_padding_value
@@ -1122,7 +1122,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         self,
         save_directory: Union[str, os.PathLike],
         safe_serialization: bool = True,
-        **kwargs,
+        **kwargs: Any,
     ):
         """
         Save the pipeline's model and tokenizer.

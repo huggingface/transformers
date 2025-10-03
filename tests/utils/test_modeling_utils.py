@@ -29,7 +29,7 @@ from pathlib import Path
 
 import pytest
 import requests
-from huggingface_hub import HfApi, HfFolder
+from huggingface_hub import HfApi, HfFolder, split_torch_state_dict_into_shards
 from parameterized import parameterized
 from pytest import mark
 from requests.exceptions import HTTPError
@@ -71,7 +71,6 @@ from transformers.testing_utils import (
     require_accelerate,
     require_non_hpu,
     require_read_token,
-    require_safetensors,
     require_torch,
     require_torch_accelerator,
     require_torch_multi_accelerator,
@@ -88,6 +87,7 @@ from transformers.utils import (
 from transformers.utils.import_utils import (
     is_flash_attn_2_available,
     is_flash_attn_3_available,
+    is_kernels_available,
     is_torch_npu_available,
 )
 
@@ -135,6 +135,32 @@ if is_torch_available():
             super().__init__(config)
             self.linear = nn.Linear(5, 5)
             self.linear_2 = nn.Linear(5, 5)
+
+        def forward(self, x):
+            return self.linear_2(self.linear(x))
+
+    class BaseModelWithUnexpectedKeys(PreTrainedModel):
+        base_model_prefix = "base"
+        config_class = PretrainedConfig
+        _keys_to_ignore_on_load_unexpected = [r"^mtp.*"]
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.linear = nn.Linear(50, 50)
+            self.linear_2 = nn.Linear(50, 50)
+
+        def forward(self, x):
+            return self.linear_2(self.linear(x))
+
+    class BaseModelWithMissingKeys(PreTrainedModel):
+        base_model_prefix = "base"
+        config_class = PretrainedConfig
+        _keys_to_ignore_on_load_missing = [r"^linear"]
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.linear = nn.Linear(50, 50)
+            self.linear_2 = nn.Linear(50, 50)
 
         def forward(self, x):
             return self.linear_2(self.linear(x))
@@ -849,7 +875,6 @@ class ModelUtilsTest(TestCasePlus):
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             torch.testing.assert_close(p1, p2)
 
-    @require_safetensors
     def test_checkpoint_variant_local_safe(self):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
 
@@ -870,7 +895,6 @@ class ModelUtilsTest(TestCasePlus):
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             torch.testing.assert_close(p1, p2)
 
-    @require_safetensors
     def test_checkpoint_variant_local_sharded_safe(self):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
 
@@ -981,7 +1005,6 @@ class ModelUtilsTest(TestCasePlus):
             )
         self.assertIsNotNone(model)
 
-    @require_safetensors
     def test_checkpoint_variant_hub_safe(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             with self.assertRaises(EnvironmentError):
@@ -991,7 +1014,6 @@ class ModelUtilsTest(TestCasePlus):
             )
         self.assertIsNotNone(model)
 
-    @require_safetensors
     def test_checkpoint_variant_hub_sharded_safe(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             with self.assertRaises(EnvironmentError):
@@ -1248,7 +1270,6 @@ class ModelUtilsTest(TestCasePlus):
         with tempfile.TemporaryDirectory() as tmp_dir:
             model.save_pretrained(tmp_dir)
 
-    @require_safetensors
     def test_use_safetensors(self):
         # Should not raise anymore
         AutoModel.from_pretrained("hf-internal-testing/tiny-random-RobertaModel", use_safetensors=True)
@@ -1305,7 +1326,6 @@ class ModelUtilsTest(TestCasePlus):
             "Error no file named pytorch_model.bin, model.safetensors" in str(missing_model_file_error.exception)
         )
 
-    @require_safetensors
     def test_safetensors_save_and_load(self):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -1320,7 +1340,6 @@ class ModelUtilsTest(TestCasePlus):
             for p1, p2 in zip(model.parameters(), new_model.parameters()):
                 torch.testing.assert_close(p1, p2)
 
-    @require_safetensors
     def test_safetensors_load_from_hub(self):
         safetensors_model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert-safetensors")
         pytorch_model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
@@ -1329,7 +1348,6 @@ class ModelUtilsTest(TestCasePlus):
         for p1, p2 in zip(safetensors_model.parameters(), pytorch_model.parameters()):
             torch.testing.assert_close(p1, p2)
 
-    @require_safetensors
     def test_safetensors_save_and_load_sharded(self):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -1347,7 +1365,6 @@ class ModelUtilsTest(TestCasePlus):
             for p1, p2 in zip(model.parameters(), new_model.parameters()):
                 torch.testing.assert_close(p1, p2)
 
-    @require_safetensors
     def test_safetensors_load_from_hub_sharded(self):
         safetensors_model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert-sharded-safetensors")
         pytorch_model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert-sharded")
@@ -1561,7 +1578,6 @@ class ModelUtilsTest(TestCasePlus):
         model = AutoModelForCausalLM.from_pretrained(TINY_MISTRAL, device_map="auto")
         self.assertEqual(model.generation_config.bos_token_id, 1)
 
-    @require_safetensors
     def test_safetensors_torch_from_torch(self):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-bert-pt-only")
 
@@ -1572,7 +1588,6 @@ class ModelUtilsTest(TestCasePlus):
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
 
-    @require_safetensors
     def test_safetensors_torch_from_torch_sharded(self):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-bert-pt-only")
 
@@ -1608,7 +1623,6 @@ class ModelUtilsTest(TestCasePlus):
         self.assertTrue("Moving the following attributes" in str(warning_list[0].message))
         self.assertTrue("repetition_penalty" in str(warning_list[0].message))
 
-    @require_safetensors
     def test_model_from_pretrained_from_mlx(self):
         from safetensors import safe_open
 
@@ -2027,6 +2041,92 @@ class ModelUtilsTest(TestCasePlus):
         self.assertIs(MyModelB.config_class, MyConfigB)
         self.assertIs(MyModelC.config_class, MyConfigC)
         self.assertIs(MyModelD.config_class, MyConfigA)
+
+    def test_ignore_missing_key_works(self):
+        """Test that if a parameter (not buffer) is specified in `_keys_to_ignore_on_load_missing` and is actually
+        missing from the checkpoint, it will still be moved to cpu and initialized"""
+        temp = tempfile.TemporaryDirectory()
+        # Create dummy model
+        model = BaseModelWithMissingKeys(PretrainedConfig())
+
+        # Save the config
+        model.config.save_pretrained(temp.name)
+        # Get the state dict to save
+        state_dict = model.state_dict()
+        # Remove the layer that we should ignore if missing
+        del state_dict["linear.weight"], state_dict["linear.bias"]
+        # Save the state dict as a single shard
+        safe_save_file(state_dict, Path(temp.name) / "model.safetensors", metadata={"format": "pt"})
+
+        # Try loading back, with the missing key not present in the state_dict
+        model = BaseModelWithMissingKeys.from_pretrained(temp.name)
+
+        # Make sure the skipped missing key is not still on meta device!
+        for k, v in model.state_dict().items():
+            self.assertTrue(v.device.type == "cpu", f"{k} is not on cpu!")
+
+    def test_device_map_works_with_unexpected_keys(self):
+        """Test that if a parameter is specified in `_keys_to_ignore_on_load_unexpected` and is actually
+        present in the checkpoint, it will correctly be removed from the weights we load, especially those
+        we use if the device map has offloading"""
+        temp = tempfile.TemporaryDirectory()
+
+        # Create dummy model
+        model = BaseModelWithUnexpectedKeys(PretrainedConfig())
+
+        # Save the config
+        model.config.save_pretrained(temp.name)
+
+        # Get the state dict to save
+        state_dict = model.state_dict()
+        # Add a layer that is in the "_keys_to_ignore_on_load_unexpected" list to ignore
+        state_dict["mtp"] = torch.randn(12, 12)
+        # Save the state dict as a single shard
+        safe_save_file(state_dict, Path(temp.name) / "model.safetensors", metadata={"format": "pt"})
+
+        # Load the model with entire shards placed on disk in order to trigger `get_disk_only_shard_files`.
+        # Unexpected keys (mtp) should be removed from the state dict, therefore this should not error out.
+        BaseModelWithUnexpectedKeys.from_pretrained(temp.name, device_map={"linear": "cpu", "linear_2": "disk"})
+
+    def test_device_map_works_with_unexpected_keys_sharded(self):
+        """Test that if a parameter is specified in `_keys_to_ignore_on_load_unexpected` and is actually
+        present in the checkpoint, it will correctly be removed from the weights we load, especially those
+        we use if the device map has offloading"""
+        temp = tempfile.TemporaryDirectory()
+
+        # Create dummy model
+        model = BaseModelWithUnexpectedKeys(PretrainedConfig())
+
+        # Save the config
+        model.config.save_pretrained(temp.name)
+
+        # Get the state dict to save
+        state_dict = model.state_dict()
+
+        # Add a layer that is in the "_keys_to_ignore_on_load_unexpected" list to ignore
+        state_dict["mtp"] = torch.randn(50, 50)
+
+        # Split the state dict in shards, save the index and the shards
+        shards = split_torch_state_dict_into_shards(state_dict, max_shard_size="1kb")
+        index = {
+            "metadata": {"total_parameters": model.num_parameters(), **shards.metadata},
+            "weight_map": shards.tensor_to_filename,
+        }
+        with open(Path(temp.name) / SAFE_WEIGHTS_INDEX_NAME, "w", encoding="utf-8") as f:
+            content = json.dumps(index, indent=2, sort_keys=True) + "\n"
+            f.write(content)
+
+        # Save each shard
+        filename_to_tensors = shards.filename_to_tensors.items()
+        for shard_file, tensors in filename_to_tensors:
+            shard = {}
+            for tensor in tensors:
+                shard[tensor] = state_dict[tensor].contiguous()
+            safe_save_file(shard, Path(temp.name) / shard_file, metadata={"format": "pt"})
+
+        # Load the model with entire shards placed on disk in order to trigger `get_disk_only_shard_files`.
+        # Unexpected keys (mtp) should be removed from the state dict, therefore this should not error out.
+        BaseModelWithUnexpectedKeys.from_pretrained(temp.name, device_map={"linear": "cpu", "linear_2": "disk"})
 
 
 @slow
@@ -2737,6 +2837,9 @@ class TestAttentionImplementation(unittest.TestCase):
                 reason="FlashAttention2 is supported on Ascend NPU without using package `flash-attn`, ignore this test case."
             )
 
+        if is_kernels_available():
+            self.skipTest(reason="Please uninstall `kernels` package to run `test_not_available_flash`")
+
         with self.assertRaises(ImportError) as cm:
             _ = AutoModel.from_pretrained(
                 "hf-internal-testing/tiny-random-GPTBigCodeModel", attn_implementation="flash_attention_2"
@@ -2752,6 +2855,9 @@ class TestAttentionImplementation(unittest.TestCase):
                 reason="FlashAttention2 is supported on Ascend NPU without using package `flash-attn`, ignore this test case."
             )
 
+        if is_kernels_available():
+            self.skipTest(reason="Please uninstall `kernels` package to run `test_not_available_flash_with_config`")
+
         config = AutoConfig.from_pretrained("hf-internal-testing/tiny-random-GPTBigCodeModel")
 
         with self.assertRaises(ImportError) as cm:
@@ -2762,6 +2868,41 @@ class TestAttentionImplementation(unittest.TestCase):
             )
 
         self.assertTrue("the package flash_attn seems to be not installed" in str(cm.exception))
+
+    def test_kernels_fallback(self):
+        if not is_kernels_available():
+            self.skipTest(reason="Please install `kernels` package to run `test_kernels_fallback`")
+
+        if is_flash_attn_2_available():
+            self.skipTest(reason="Please uninstall flash-attn package to run test_kernels_fallback")
+
+        if is_torch_npu_available():
+            self.skipTest(
+                reason="FlashAttention2 is supported on Ascend NPU without using package `flash-attn`, ignore this test case."
+            )
+
+        logger = logging.get_logger("transformers.modeling_utils")
+        with LoggingLevel(logging.WARNING):
+            with CaptureLogger(logger) as cl:
+                _ = AutoModel.from_pretrained(
+                    "hf-internal-testing/tiny-random-GPTBigCodeModel", attn_implementation="flash_attention_2"
+                )
+
+        self.assertTrue(
+            "You do not have `flash_attn` installed, using `kernels-community/flash-attn` from the `kernels` library instead!"
+            in cl.out
+        )
+
+    def test_not_available_kernels(self):
+        if is_kernels_available():
+            self.skipTest(reason="Please uninstall `kernels` package to run `test_not_available_kernels`")
+
+        with self.assertRaises(ImportError) as cm:
+            _ = AutoModel.from_pretrained(
+                "hf-tiny-model-private/tiny-random-MCTCTModel", attn_implementation="kernels-community/flash-attn"
+            )
+
+        self.assertTrue("`kernels` is either not installed or uses an incompatible version." in str(cm.exception))
 
 
 @require_torch

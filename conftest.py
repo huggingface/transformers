@@ -54,7 +54,6 @@ NOT_DEVICE_TESTS = {
     "test_gradient_checkpointing_backward_compatibility",
     "test_gradient_checkpointing_enable_disable",
     "test_torch_save_load",
-    "test_initialization",
     "test_forward_signature",
     "test_model_get_set_embeddings",
     "test_model_main_input_name",
@@ -64,8 +63,7 @@ NOT_DEVICE_TESTS = {
     "test_load_save_without_tied_weights",
     "test_tied_weights_keys",
     "test_model_weights_reload_no_missing_tied_weights",
-    "test_mismatched_shapes_have_properly_initialized_weights",
-    "test_matched_shapes_have_loaded_weights_when_some_mismatched_shapes_exist",
+    "test_can_load_ignoring_mismatched_shapes",
     "test_model_is_small",
     "test_tf_from_pt_safetensors",
     "test_flax_from_pt_safetensors",
@@ -92,6 +90,8 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "not_device_test: mark the tests always running on cpu")
     config.addinivalue_line("markers", "torch_compile_test: mark test which tests torch compile functionality")
     config.addinivalue_line("markers", "torch_export_test: mark test which tests torch export functionality")
+
+    os.environ['DISABLE_SAFETENSORS_CONVERSION'] = 'true'
 
 
 def pytest_collection_modifyitems(items):

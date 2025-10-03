@@ -76,7 +76,7 @@ Note that 🤗 Optimum must be installed before using this feature. [Here's how 
 
 Flash Attention 2 is an even faster, optimized version of the previous optimization.
 
-##### Installation 
+##### Installation
 
 First, check whether your hardware is compatible with Flash Attention 2. The latest list of compatible hardware can be found in the [official documentation](https://github.com/Dao-AILab/flash-attention#installation-and-features). If your hardware is not compatible with Flash Attention 2, you can still benefit from attention kernel optimisations through Better Transformer support covered [above](https://huggingface.co/docs/transformers/main/en/model_doc/bark#using-better-transformer).
 
@@ -85,7 +85,6 @@ Next, [install](https://github.com/Dao-AILab/flash-attention#installation-and-fe
 ```bash
 pip install -U flash-attn --no-build-isolation
 ```
-
 
 ##### Usage
 
@@ -97,7 +96,6 @@ model = BarkModel.from_pretrained("suno/bark-small", dtype=torch.float16, attn_i
 
 ##### Performance comparison
 
-
 The following diagram shows the latency for the native attention implementation (no optimisation) against Better Transformer and Flash Attention 2. In all cases, we generate 400 semantic tokens on a 40GB A100 GPU with PyTorch 2.1. Flash Attention 2 is also consistently faster than Better Transformer, and its performance improves even more as batch sizes increase:
 
 <div style="text-align: center">
@@ -107,7 +105,6 @@ The following diagram shows the latency for the native attention implementation 
 To put this into perspective, on an NVIDIA A100 and when generating 400 semantic tokens with a batch size of 16, you can get 17 times the [throughput](https://huggingface.co/blog/optimizing-bark#throughput) and still be 2 seconds faster than generating sentences one by one with the native model implementation. In other words, all the samples will be generated 17 times faster.
 
 At batch size 8, on an NVIDIA A100, Flash Attention 2 is also 10% faster than Better Transformer, and at batch size 16, 25%.
-
 
 #### Combining optimization techniques
 
@@ -147,7 +144,7 @@ These presets are also uploaded in the hub [here](https://huggingface.co/suno/ba
 >>> audio_array = audio_array.cpu().numpy().squeeze()
 ```
 
-Bark can generate highly realistic, **multilingual** speech as well as other audio - including music, background noise and simple sound effects. 
+Bark can generate highly realistic, **multilingual** speech as well as other audio - including music, background noise and simple sound effects.
 
 ```python
 >>> # Multilingual speech - simplified Chinese
@@ -164,7 +161,6 @@ Bark can generate highly realistic, **multilingual** speech as well as other aud
 ```
 
 The model can also produce **nonverbal communications** like laughing, sighing and crying.
-
 
 ```python
 >>> # Adding non-speech cues to the input text
@@ -235,4 +231,3 @@ To save the audio, simply take the sample rate from the model config and some sc
 
 [[autodoc]] BarkSemanticConfig
     - all
-

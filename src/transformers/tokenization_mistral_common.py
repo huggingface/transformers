@@ -433,7 +433,7 @@ class MistralCommonTokenizer(PushToHubMixin):
 
     def decode(
         self,
-        token_ids: Union[int, list[int], "np.ndarray", "torch.Tensor"],
+        token_ids: Union[int, list[int], np.ndarray, "torch.Tensor"],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: Optional[bool] = None,
         **kwargs,
@@ -475,7 +475,7 @@ class MistralCommonTokenizer(PushToHubMixin):
 
     def batch_decode(
         self,
-        sequences: Union[list[int], list[list[int]], "np.ndarray", "torch.Tensor"],
+        sequences: Union[list[int], list[list[int]], np.ndarray, "torch.Tensor"],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: Optional[bool] = None,
         **kwargs,
@@ -1794,7 +1794,7 @@ class MistralCommonTokenizer(PushToHubMixin):
                 if "tekken.json" in valid_tokenizer_files:
                     tokenizer_file = "tekken.json"
                 else:
-                    tokenizer_file = sorted(valid_tokenizer_files)[-1]
+                    tokenizer_file = max(valid_tokenizer_files)
                 logger.warning(
                     f"Multiple tokenizer files found in directory: {pretrained_model_name_or_path}. Using {tokenizer_file}."
                 )
@@ -1824,7 +1824,7 @@ class MistralCommonTokenizer(PushToHubMixin):
         repo_url: Optional[str] = None,
         organization: Optional[str] = None,
         **kwargs,
-    ) -> tuple[str]:
+    ) -> tuple[str, ...]:
         """
         Save the full tokenizer state.
 

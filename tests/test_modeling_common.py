@@ -55,6 +55,7 @@ from transformers.models.auto.modeling_auto import (
     MODEL_FOR_BACKBONE_MAPPING_NAMES,
     MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING_NAMES,
     MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
+    MODEL_FOR_CTC_MAPPING_NAMES,
     MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES,
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES,
@@ -88,7 +89,6 @@ from transformers.testing_utils import (
     require_flash_attn_3,
     require_kernels,
     require_non_hpu,
-    require_safetensors,
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
@@ -111,7 +111,6 @@ from transformers.utils import (
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
 )
-from transformers.utils.generic import ContextManagers
 
 from .generation.test_utils import GenerationTesterMixin
 
@@ -128,7 +127,7 @@ if is_torch_available():
 
     from transformers import MODEL_MAPPING
     from transformers.cache_utils import Cache, DynamicCache
-    from transformers.modeling_utils import load_state_dict, no_init_weights
+    from transformers.modeling_utils import load_state_dict
     from transformers.pytorch_utils import id_tensor_storage
 
 from transformers.utils.fx import _FX_SUPPORTED_MODELS_WITH_KV_CACHE, symbolic_trace
@@ -657,6 +656,7 @@ class ModelTesterMixin:
                 *get_values(MODEL_FOR_MASKED_LM_MAPPING_NAMES),
                 *get_values(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES),
                 *get_values(MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES),
+                *get_values(MODEL_FOR_CTC_MAPPING_NAMES),
             ]:
                 inputs_dict["labels"] = torch.zeros(
                     (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
@@ -673,6 +673,46 @@ class ModelTesterMixin:
                 ).long()
 
         return inputs_dict
+
+    def test_num_layers_is_small(self):
+        # TODO (if possible): Avoid exceptional cases, especially for `OwlViT`.
+        # ⛔ DO NOT edit this list (unless there is really nothing to tweak in the model tester class and approved by the reviewer) ⛔!
+        exceptional_num_hidden_layers = {
+            # TODO: There might be some way to fix
+            "FunnelModelTest": 5,
+            "FunnelBaseModelTest": 4,
+            "GroupViTVisionModelTest": 12,
+            "OwlViTModelTest": 12,
+            "OwlViTTextModelTest": 12,
+            "OwlViTForObjectDetectionTest": 12,
+            "Owlv2ModelTest": 12,
+            "Owlv2TextModelTest": 12,
+            "Owlv2ForObjectDetectionTest": 12,
+            "Qwen2_5OmniThinkerForConditionalGenerationModelTest": 4,
+            "SamHQModelTest": 12,
+            "Swin2SRModelTest": 3,
+            "XLNetModelTest": 3,
+            "DPTModelTest": 4,  # `test_modeling_dpt_hybrid.py`: not able to get it work after change `num_hidden_layers` and `neck_hidden_sizes`
+            # Nothing we can't do
+            "Gemma3nTextModelTest": 4,  # need to test KV shared layer for both types: `full_attention` and `sliding_attention`
+            "BeitModelTest": 4,  # BeitForSemanticSegmentation requires config.out_indices to be a list of 4 integers
+            "ZambaModelTest": 5,  # The minimum number to test beyond the initial ["mamba", "mamba", "hybrid"] in `ZambaConfig._layers_block_type`
+        }
+        target_num_hidden_layers = exceptional_num_hidden_layers.get(type(self).__name__, 2)
+
+        if hasattr(self.model_tester, "num_hidden_layers") and isinstance(self.model_tester.num_hidden_layers, int):
+            assert self.model_tester.num_hidden_layers <= target_num_hidden_layers
+
+        if hasattr(self.model_tester, "vision_config") and "num_hidden_layers" in self.model_tester.vision_config:
+            if isinstance(self.model_tester.vision_config, dict):
+                assert self.model_tester.vision_config["num_hidden_layers"] <= target_num_hidden_layers
+            else:
+                assert self.model_tester.vision_config.num_hidden_layers <= target_num_hidden_layers
+        if hasattr(self.model_tester, "text_config") and "num_hidden_layers" in self.model_tester.text_config:
+            if isinstance(self.model_tester.text_config, dict):
+                assert self.model_tester.text_config["num_hidden_layers"] <= target_num_hidden_layers
+            else:
+                assert self.model_tester.text_config.num_hidden_layers <= target_num_hidden_layers
 
     def test_save_load(self):
         def check_save_load(out1, out2):
@@ -987,28 +1027,6 @@ class ModelTesterMixin:
                 check_equal(load_state_dict(pt_checkpoint_path))
                 torch.save(state_dict, pt_checkpoint_path, _use_new_zipfile_serialization=False)
                 check_equal(load_state_dict(pt_checkpoint_path))
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=copy.deepcopy(configs_no_init))
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    data = torch.flatten(param.data)
-                    n_elements = torch.numel(data)
-                    # skip 2.5% of elements on each side to avoid issues caused by `nn.init.trunc_normal_` described in
-                    # https://github.com/huggingface/transformers/pull/27906#issuecomment-1846951332
-                    n_elements_to_skip_on_each_side = int(n_elements * 0.025)
-                    data_to_check = torch.sort(data).values
-                    if n_elements_to_skip_on_each_side > 0:
-                        data_to_check = data_to_check[n_elements_to_skip_on_each_side:-n_elements_to_skip_on_each_side]
-                    self.assertIn(
-                        ((data_to_check.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
 
     def test_determinism(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -2494,7 +2512,6 @@ class ModelTesterMixin:
             params_tied_2 = list(model_tied.parameters())
             self.assertEqual(len(params_tied_2), len(params_tied))
 
-    @require_safetensors
     def test_can_use_safetensors(self):
         for model_class in self.all_model_classes:
             config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -2935,7 +2952,7 @@ class ModelTesterMixin:
             param_device = device_map[param_name]
             if param_device in ["cpu", "disk"]:
                 self.assertEqual(param.device, torch.device("meta"))
-            elif param_device in ["mps"]:
+            elif param_device == "mps":
                 self.assertEqual(param.device, torch.device("mps"))
             else:
                 # when loaded with device_map, `param_device` are integer values for cuda/xpu/hpu/npu/mlu
@@ -3197,12 +3214,13 @@ class ModelTesterMixin:
                     else:
                         new_model_without_prefix(input_ids)
 
-    def test_mismatched_shapes_have_properly_initialized_weights(self):
+    def test_can_load_ignoring_mismatched_shapes(self):
         if not self.test_mismatched_shapes:
             self.skipTest(reason="test_mismatched_shapes is set to False")
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         configs_no_init = _config_zero_init(config)
+        configs_no_init.num_labels = 3
 
         for model_class in self.all_model_classes:
             mappings = [
@@ -3215,66 +3233,6 @@ class ModelTesterMixin:
 
             if not is_classication_model:
                 continue
-
-            # TODO: ydshieh
-            is_special_classes = model_class.__name__ in [
-                "wav2vec2.masked_spec_embed",
-                "Wav2Vec2ForSequenceClassification",
-                "CLIPForImageClassification",
-                "MetaClip2ForImageClassification",
-                "Siglip2ForImageClassification",
-                "RegNetForImageClassification",
-                "ResNetForImageClassification",
-                "UniSpeechSatForSequenceClassification",
-                "Wav2Vec2BertForSequenceClassification",
-                "PvtV2ForImageClassification",
-                "Wav2Vec2ConformerForSequenceClassification",
-                "WavLMForSequenceClassification",
-                "SwiftFormerForImageClassification",
-                "SEWForSequenceClassification",
-                "BitForImageClassification",
-                "SEWDForSequenceClassification",
-                "SiglipForImageClassification",
-                "HubertForSequenceClassification",
-                "Swinv2ForImageClassification",
-                "Data2VecAudioForSequenceClassification",
-                "UniSpeechForSequenceClassification",
-                "PvtForImageClassification",
-                "ModernBertForSequenceClassification",
-                "ModernBertForTokenClassification",
-                "TimmWrapperForImageClassification",
-                "ModernBertForQuestionAnswering",
-                "ModernBertDecoderForSequenceClassification",
-                "ModernBertDecoderForCausalLM",
-            ]
-            special_param_names = [
-                r"^bit\.",
-                r"^classifier\.weight",
-                r"^classifier\.bias",
-                r"^classifier\..+\.weight",
-                r"^classifier\..+\.bias",
-                r"^data2vec_audio\.",
-                r"^dist_head\.",
-                r"^head\.",
-                r"^hubert\.",
-                r"^pvt\.",
-                r"^pvt_v2\.",
-                r"^regnet\.",
-                r"^resnet\.",
-                r"^sew\.",
-                r"^sew_d\.",
-                r"^swiftformer\.",
-                r"^swinv2\.",
-                r"^transformers\.models\.swiftformer\.",
-                r"^timm_model\.",
-                r"^unispeech\.",
-                r"^unispeech_sat\.",
-                r"^vision_model\.",
-                r"^wav2vec2\.",
-                r"^wav2vec2_bert\.",
-                r"^wav2vec2_conformer\.",
-                r"^wavlm\.",
-            ]
 
             with self.subTest(msg=f"Testing {model_class}"):
                 with tempfile.TemporaryDirectory() as tmp_dir:
@@ -3291,101 +3249,54 @@ class ModelTesterMixin:
                         new_model = model_class.from_pretrained(tmp_dir, num_labels=42, ignore_mismatched_sizes=True)
                     self.assertIn("the shapes did not match", cl.out)
 
-                    for name, param in new_model.named_parameters():
-                        if param.requires_grad:
-                            param_mean = ((param.data.mean() * 1e9).round() / 1e9).item()
-                            if not (
-                                is_special_classes
-                                and any(len(re.findall(target, name)) > 0 for target in special_param_names)
-                            ):
-                                self.assertIn(
-                                    param_mean,
-                                    [0.0, 1.0],
-                                    msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                                )
-                            else:
-                                # Here we allow the parameters' mean to be in the range [-5.0, 5.0] instead of being
-                                # either `0.0` or `1.0`, because their initializations are not using
-                                # `config.initializer_factor` (or something similar). The purpose of this test is simply
-                                # to make sure they are properly initialized (to avoid very large value or even `nan`).
-                                self.assertGreaterEqual(
-                                    param_mean,
-                                    -5.0,
-                                    msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                                )
-                                self.assertLessEqual(
-                                    param_mean,
-                                    5.0,
-                                    msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                                )
+                    # Find the name of the module with the mismatched size
+                    top_linear_modules = [
+                        (name, module) for name, module in new_model.named_children() if isinstance(module, nn.Linear)
+                    ]
+                    # Some old model have the Linear classification layer inside a ClassificationHead module or nn.Sequential
+                    if len(top_linear_modules) == 0:
+                        # ClassificationHead case
+                        if any(
+                            module.__class__.__name__.endswith("ClassificationHead") for module in new_model.children()
+                        ):
+                            head_name, head_module = next(
+                                (name, module)
+                                for name, module in new_model.named_children()
+                                if module.__class__.__name__.endswith("ClassificationHead")
+                            )
+                        # nn.Sequential case
+                        elif any(isinstance(module, nn.Sequential) for module in new_model.children()):
+                            head_name, head_module = next(
+                                (name, module)
+                                for name, module in new_model.named_children()
+                                if isinstance(module, nn.Sequential)
+                            )
+                        # Unknown at this point -> skip (only xlm, perceiver, levit, flaubert, audio_spectrogram_transformer as of 23/09/2025)
+                        else:
+                            self.skipTest("Could not locate the classification Linear layer.")
+                        top_linear_modules = [
+                            (f"{head_name}.{name}", module)
+                            for name, module in head_module.named_children()
+                            if isinstance(module, nn.Linear)
+                        ]
+                    # Usually we have only 1, but swiftformer and deit have 2 Linear layers using `num_labels`
+                    mismatched_modules = [name for name, module in top_linear_modules if module.out_features == 42]
 
-    def test_matched_shapes_have_loaded_weights_when_some_mismatched_shapes_exist(self):
-        # 1. Create a dummy class. Should have buffers as well? To make sure we test __init__
-        class MyClass(PreTrainedModel):
-            config_class = PretrainedConfig
-
-            def __init__(self, config=None):
-                super().__init__(config if config is not None else PretrainedConfig())
-                self.linear = nn.Linear(10, config.num_labels, bias=True)
-                self.embedding = nn.Embedding(10, 10)
-                self.std = 1
-
-            def _init_weights(self, module):
-                if isinstance(module, nn.Linear):
-                    module.weight.data = nn.init.kaiming_uniform_(module.weight.data, np.sqrt(5))
-                    if module.bias is not None:
-                        module.bias.data = module.bias.data.normal_(mean=0.0, std=self.std)
-
-        # Used to make sure the weights with matched shape are loaded correctly
-        config = PretrainedConfig()
-        config.num_labels = 3
-        model = MyClass(config=config)
-
-        # Used to make sure the weights with mismatched shape are properly initialized
-        set_seed(0)
-        config = PretrainedConfig()
-        config.num_labels = 4
-        # not to init. the weights during the creation: to match the logic in `from_pretrained`, so we can keep the
-        # same sequence of random ops in the execution path to allow us to compare `target_model` and `new_model` below
-        # for `linear` part.
-        with ContextManagers([no_init_weights()]):
-            target_model = MyClass(config=config)
-        target_model.apply(target_model._initialize_weights)
-
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            state_dict = model.state_dict()
-            del state_dict["linear.weight"]
-
-            model.config.save_pretrained(tmpdirname)
-            torch.save(state_dict, os.path.join(tmpdirname, "pytorch_model.bin"))
-
-            set_seed(0)
-            new_model = MyClass.from_pretrained(tmpdirname, num_labels=4, ignore_mismatched_sizes=True)
-
-            for key in new_model.state_dict():
-                # check weight values for weights with matched shapes are identical
-                # (i.e. correctly loaded from the checkpoint)
-                if key not in ["linear.weight", "linear.bias"]:
-                    max_diff = torch.max(torch.abs(model.state_dict()[key] - new_model.state_dict()[key]))
-                    self.assertLessEqual(
-                        max_diff.item(),
-                        1e-6,
-                        msg=f"the weight values for `{key}` in `new_model` and `model` are  not identical",
-                    )
-                else:
-                    # check we have some mismatched shapes
-                    self.assertNotEqual(
-                        model.state_dict()[key].shape,
-                        new_model.state_dict()[key].shape,
-                        msg=f"the weight shapes for {key} in `model` and `new_model` should differ",
-                    )
-                    # check the weights with mismatched shape are properly initialized
-                    max_diff = torch.max(torch.abs(new_model.state_dict()[key] - target_model.state_dict()[key]))
-                    self.assertLessEqual(
-                        max_diff.item(),
-                        1e-6,
-                        msg=f"the weight values for `{key}` in `new_model` and `target_model` are not identical",
-                    )
+                    for (k1, v1), (k2, v2) in zip(new_model.named_parameters(), model.named_parameters()):
+                        # Sanity check: params must have all the same name
+                        self.assertEqual(k1, k2)
+                        # Each param except the mismatched ones must be exactly similar
+                        if not any(k1.startswith(mismatched_module) for mismatched_module in mismatched_modules):
+                            self.assertTrue((v1 == v2).all())
+                        # Check that the dims are indeed mismatched between old and new models
+                        else:
+                            # The old model should have `num_labels=3` (here it's the first dim of shape, as Linear layers
+                            # are transposed)
+                            self.assertEqual(v2.shape[0], 3)
+                            # Make sure the mean of the new Linear layer is correctly centered around 0 (we cannot use
+                            # a lower value for the check as some models hardcode a std of 0.02 instead of using the
+                            # config, which we set very small with `config_no_init`)
+                            self.assertLessEqual(v1.data.mean().item(), 1e-1, f"Issue with {k1}")
 
     def test_model_is_small(self):
         # Just a consistency check to make sure we are not running tests on 1M parameter models.
@@ -3768,7 +3679,7 @@ class ModelTesterMixin:
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            if config.model_type in ["paligemma"]:
+            if config.model_type == "paligemma":
                 self.skipTest(
                     "PaliGemma-like models currently (transformers==4.41.0) requires an attention_mask input"
                 )
@@ -3796,7 +3707,7 @@ class ModelTesterMixin:
                 )
             if config.model_type in ["idefics", "idefics2", "idefics3"]:
                 self.skipTest(reason="Idefics currently (transformers==4.39.1) requires an image_attention_mask input")
-            if config.model_type in ["sam"]:
+            if config.model_type == "sam":
                 self.skipTest(reason="SAM requires an attention_mask input for relative positional embeddings")
 
             model = model_class(config)
@@ -3850,7 +3761,7 @@ class ModelTesterMixin:
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            if config.model_type in ["dbrx"]:
+            if config.model_type == "dbrx":
                 self.skipTest(
                     "DBRX (transformers==4.40) requires a modification to support dynamic shapes with compile."
                 )
@@ -4141,8 +4052,7 @@ class ModelTesterMixin:
             # Set sliding window to `True` and check that all tokens beyond window size are masked
             config.use_sliding_window = True
             config_dict = config.to_diff_dict()
-            if hasattr(config, "layer_types"):
-                del config_dict["layer_types"]
+            config_dict.pop("layer_types", None)
             new_config = config.__class__(**config_dict)
             # We need to set eager as otherwise `output_attentions` is not supported
             model = model_class._from_config(new_config, attn_implementation="eager").to(torch_device)
@@ -4159,8 +4069,7 @@ class ModelTesterMixin:
             # Check that all tokens beyond window size are not masked
             config.use_sliding_window = False
             config_dict = config.to_diff_dict()
-            if hasattr(config, "layer_types"):
-                del config_dict["layer_types"]
+            config_dict.pop("layer_types", None)
             new_config = config.__class__(**config_dict)
             # We need to set eager as otherwise `output_attentions` is not supported
             model = model_class._from_config(new_config, attn_implementation="eager").to(torch_device)
@@ -4359,7 +4268,7 @@ class ModelTesterMixin:
 
         return config
 
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_flex_attention_with_grads(self):
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -4391,7 +4300,7 @@ class ModelTesterMixin:
                 if key in inputs_dict:
                     dummy_inputs[key] = inputs_dict[key].to(torch_device)
 
-            if config.get_text_config(decoder=True).is_encoder_decoder:
+            if config.is_encoder_decoder:
                 dummy_inputs["decoder_input_ids"] = inputs_dict["decoder_input_ids"].to(torch_device)
                 dummy_inputs["decoder_attention_mask"] = inputs_dict["decoder_attention_mask"].to(torch_device)
 

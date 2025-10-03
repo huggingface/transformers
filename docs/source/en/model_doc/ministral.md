@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on {release_date} and added to Hugging Face Transformers on 2025-09-11.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -28,7 +29,6 @@ rendered properly in your Markdown viewer.
 [Ministral](https://huggingface.co/mistralai/Ministral-8B-Instruct-2410) is a 8B parameter language model that extends the Mistral architecture with alternating attention pattern. Unlike Mistral, that uses either full attention or sliding window attention consistently, Ministral alternates between full attention and sliding window attention layers, in a pattern of 1 full attention layer followed by 3 sliding window attention layers. This allows for a 128K context length support.
 
 This architecture turns out to coincide with Qwen2, with the main difference being the presence of biases in attention projections in Ministral.
-
 
 You can find the Ministral checkpoints under the [Mistral AI](https://huggingface.co/mistralai) organization.
 
@@ -83,4 +83,4 @@ The example below demonstrates how to use Ministral for text generation:
 ## MinistralForQuestionAnswering
 
 [[autodoc]] MinistralForQuestionAnswering
-- forward
+    - forward

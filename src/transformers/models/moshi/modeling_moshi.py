@@ -1708,7 +1708,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
 
             if audio_codes is not None:
                 audio_inputs_embeds = sum(
-                    [self.embed_tokens[codebook](audio_codes[:, codebook]) for codebook in range(audio_codes.shape[1])]
+                    self.embed_tokens[codebook](audio_codes[:, codebook]) for codebook in range(audio_codes.shape[1])
                 )
                 inputs_embeds = (
                     audio_inputs_embeds
@@ -1878,20 +1878,18 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
             if user_audio_codes is not None and moshi_audio_codes is not None:
                 audio_codes = torch.cat([moshi_audio_codes, user_audio_codes], dim=1)
                 audio_inputs_embeds = sum(
-                    [self.embed_tokens[codebook](audio_codes[:, codebook]) for codebook in range(audio_codes.shape[1])]
+                    self.embed_tokens[codebook](audio_codes[:, codebook]) for codebook in range(audio_codes.shape[1])
                 )
             elif moshi_audio_codes is not None:
                 audio_codes = moshi_audio_codes
                 audio_inputs_embeds = sum(
-                    [self.embed_tokens[codebook](audio_codes[:, codebook]) for codebook in range(audio_codes.shape[1])]
+                    self.embed_tokens[codebook](audio_codes[:, codebook]) for codebook in range(audio_codes.shape[1])
                 )
             elif user_audio_codes is not None:
                 audio_codes = user_audio_codes
                 audio_inputs_embeds = sum(
-                    [
-                        self.embed_tokens[codebook](audio_codes[:, codebook + self.num_codebooks])
-                        for codebook in range(audio_codes.shape[1])
-                    ]
+                    self.embed_tokens[codebook](audio_codes[:, codebook + self.num_codebooks])
+                    for codebook in range(audio_codes.shape[1])
                 )
 
             if input_ids is not None:

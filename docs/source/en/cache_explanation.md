@@ -59,10 +59,8 @@ Refer to the table below to compare how caching improves efficiency.
 
 | without caching | with caching |
 |---|---|
-| for each step, recompute all previous `K` and `V`  | for each step, only compute current `K` and `V` 
+| for each step, recompute all previous `K` and `V`  | for each step, only compute current `K` and `V`
 | attention cost per step is **quadratic** with sequence length | attention cost per step is **linear** with sequence length (memory grows linearly, but compute/token remains low) |
-
-
 
 ## Cache class
 
@@ -138,11 +136,10 @@ The cache position tracks where to insert new tokens in the attention cache. It 
 
 Cache position is used internally for two purposes:
 
-1. Selecting new tokens to process in the input sequence and ensuring only tokens that haven’t been cached yet are passed to the model's `forward`.
+1. Selecting new tokens to process in the input sequence and ensuring only tokens that haven't been cached yet are passed to the model's `forward`.
 2. Storing key/value pairs at the correct positions in the cache. This is especially important for fixed-size caches, that pre-allocates a specific cache length.
 
 The generation loop usually takes care of the cache position, but if you're writing a custom generation method, it is important that cache positions are accurate since they are used to write and read key/value states into fixed slots.
-
 
 ```py
 import torch
@@ -160,12 +157,12 @@ generated_ids = model.generate(**inputs, use_cache=True, max_new_tokens=10)
 
 ```
 
-
 ## Legacy cache format
 
 Before the [`Cache`] class, the cache used to be stored as a tuple of tuples of tensors. This format is dynamic because it grows as text is generated, similar to [`DynamicCache`].
 
 The legacy format is essentially the same data structure but organized differently.
+
 - It's a tuple of tuples, where each inner tuple contains the key and value tensors for a layer.
 - The tensors have the same shape `[batch_size, num_heads, seq_len, head_dim]`.
 - The format is less flexible and doesn't support features like quantization or offloading.

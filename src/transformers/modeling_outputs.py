@@ -1651,7 +1651,7 @@ class Seq2SeqTSPredictionOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    params: Optional[tuple[torch.FloatTensor]] = None
+    params: Optional[tuple[torch.FloatTensor, ...]] = None
     past_key_values: Optional[EncoderDecoderCache] = None
     decoder_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
     decoder_attentions: Optional[tuple[torch.FloatTensor, ...]] = None

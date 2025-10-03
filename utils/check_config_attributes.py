@@ -432,9 +432,9 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
         case_allowed = False
         for attribute in attributes:
             # Allow if the default value in the configuration class is different from the one in `PretrainedConfig`
-            if attribute in ["is_encoder_decoder"] and default_value is True:
+            if attribute == "is_encoder_decoder" and default_value is True:
                 case_allowed = True
-            elif attribute in ["tie_word_embeddings"] and default_value is False:
+            elif attribute == "tie_word_embeddings" and default_value is False:
                 case_allowed = True
 
             # Allow cases without checking the default value in the configuration class

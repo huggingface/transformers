@@ -208,6 +208,17 @@ ENDPOINT_STAGING = "https://hub-ci.huggingface.co"
 # Not critical, only usable on the sandboxed CI instance.
 TOKEN = "hf_94wBhPGp6KrrTH3KDchhKpRxZwd6dmHWLL"
 
+
+# Used in CausalLMModelTester (and related classes/methods) to infer the common model classes from the base model class
+_COMMON_MODEL_NAMES_MAP = {
+    "config_class": "Config",
+    "causal_lm_class": "ForCausalLM",
+    "question_answering_class": "ForQuestionAnswering",
+    "sequence_classification_class": "ForSequenceClassification",
+    "token_classification_class": "ForTokenClassification",
+}
+
+
 if is_torch_available():
     import torch
 
@@ -1629,65 +1640,13 @@ def evaluate_side_effect_factory(
 # final message
 # it can handle a single string or a multiline buffer
 def apply_print_resets(buf):
-    return re.sub(r"^.*\r", "", buf, 0, re.M)
+    return re.sub(r"^.*\r", "", buf, 0, re.MULTILINE)
 
 
 def assert_screenout(out, what):
     out_pr = apply_print_resets(out).lower()
     match_str = out_pr.find(what.lower())
     assert match_str != -1, f"expecting to find {what} in output: f{out_pr}"
-
-
-def set_model_tester_for_less_flaky_test(test_case):
-    # NOTE: this function edits the config object, which may lead to hard-to-debug side-effects. Use with caution.
-    # Do not use in tests/models where objects behave very differently based on the config's hidden layer settings
-    # (e.g. KV caches, sliding window attention, ...)
-
-    # TODO (if possible): Avoid exceptional cases
-    exceptional_classes = [
-        "ZambaModelTester",
-        "Zamba2ModelTester",
-        "RwkvModelTester",
-        "AriaVisionText2TextModelTester",
-        "GPTNeoModelTester",
-        "DPTModelTester",
-        "Qwen3NextModelTester",
-    ]
-    if test_case.model_tester.__class__.__name__ in exceptional_classes:
-        return
-
-    target_num_hidden_layers = 1
-    if hasattr(test_case.model_tester, "out_features") or hasattr(test_case.model_tester, "out_indices"):
-        target_num_hidden_layers = None
-
-    if hasattr(test_case.model_tester, "num_hidden_layers") and target_num_hidden_layers is not None:
-        test_case.model_tester.num_hidden_layers = target_num_hidden_layers
-    if (
-        hasattr(test_case.model_tester, "vision_config")
-        and "num_hidden_layers" in test_case.model_tester.vision_config
-        and target_num_hidden_layers is not None
-    ):
-        test_case.model_tester.vision_config = copy.deepcopy(test_case.model_tester.vision_config)
-        if isinstance(test_case.model_tester.vision_config, dict):
-            test_case.model_tester.vision_config["num_hidden_layers"] = 1
-        else:
-            test_case.model_tester.vision_config.num_hidden_layers = 1
-    if (
-        hasattr(test_case.model_tester, "text_config")
-        and "num_hidden_layers" in test_case.model_tester.text_config
-        and target_num_hidden_layers is not None
-    ):
-        test_case.model_tester.text_config = copy.deepcopy(test_case.model_tester.text_config)
-        if isinstance(test_case.model_tester.text_config, dict):
-            test_case.model_tester.text_config["num_hidden_layers"] = 1
-        else:
-            test_case.model_tester.text_config.num_hidden_layers = 1
-
-    # A few model class specific handling
-
-    # For Albert
-    if hasattr(test_case.model_tester, "num_hidden_groups"):
-        test_case.model_tester.num_hidden_groups = test_case.model_tester.num_hidden_layers
 
 
 def set_config_for_less_flaky_test(config):
@@ -2398,7 +2357,7 @@ def pytest_terminal_summary_main(tr, id):
             msg = tr._getfailureheadline(rep)
             tr.write_sep("_", msg, red=True, bold=True)
             # chop off the optional leading extra frames, leaving only the last one
-            longrepr = re.sub(r".*_ _ _ (_ ){10,}_ _ ", "", rep.longreprtext, 0, re.M | re.S)
+            longrepr = re.sub(r".*_ _ _ (_ ){10,}_ _ ", "", rep.longreprtext, 0, re.MULTILINE | re.DOTALL)
             tr._tw.line(longrepr)
             # note: not printing out any rep.sections to keep the report short
 
@@ -2546,7 +2505,7 @@ def pytest_xdist_worker_id():
     if `-n 1` or `pytest-xdist` isn't being used.
     """
     worker = os.environ.get("PYTEST_XDIST_WORKER", "gw0")
-    worker = re.sub(r"^gw", "", worker, 0, re.M)
+    worker = re.sub(r"^gw", "", worker, 0, re.MULTILINE)
     return int(worker)
 
 
@@ -2847,8 +2806,6 @@ def run_test_using_subprocess(func):
         else:
             test = " ".join(os.environ.get("PYTEST_CURRENT_TEST").split(" ")[:-1])
             try:
-                import copy
-
                 env = copy.deepcopy(os.environ)
                 env["_INSIDE_SUB_PROCESS"] = "1"
                 # This prevents the entries in `short test summary info` given by the subprocess being truncated. so the
@@ -2864,7 +2821,7 @@ def run_test_using_subprocess(func):
                             test = test.split("::")[1:]
                             command[idx] = "::".join([f"{func.__globals__['__file__']}"] + test)
                     command = [f"{sys.executable}", "-m", "pytest"] + command
-                    command = [x for x in command if x not in ["--no-summary"]]
+                    command = [x for x in command if x != "--no-summary"]
                 # Otherwise, simply run the test with no option at all
                 else:
                     command = [f"{sys.executable}", "-m", "pytest", f"{test}"]
@@ -3340,7 +3297,9 @@ def unpack_device_properties(
 class Expectations(UserDict[PackedDeviceProperties, Any]):
     def get_expectation(self) -> Any:
         """
-        Find best matching expectation based on environment device properties.
+        Find best matching expectation based on environment device properties. We look at device_type, major and minor
+        versions of the drivers. Expectations are stored as a dictionary with keys of the form
+        (device_type, (major, minor)). If the major and minor versions are not provided, we use None.
         """
         return self.find_expectation(get_device_properties())
 
@@ -3453,15 +3412,27 @@ def _get_test_info():
     stack_from_inspect = inspect.stack()
     # but visit from the top frame to the most recent frame
 
+    actual_test_file, _actual_test_class = test_file, test_class
     test_frame, test_obj, test_method = None, None, None
     for frame in reversed(stack_from_inspect):
-        if test_file in str(frame).replace(r"\\", "/"):
-            if test_name == frame.frame.f_locals["self"]._testMethodName:
-                test_frame = frame
-                # The test instance
-                test_obj = frame.frame.f_locals["self"]
-                test_method = getattr(test_obj, test_name)
-                break
+        # if test_file in str(frame).replace(r"\\", "/"):
+        # check frame's function + if it has `self` as locals; double check if self has the (function) name
+        # TODO: Question: How about expanded?
+        if (
+            frame.function == test_name
+            and "self" in frame.frame.f_locals
+            and hasattr(frame.frame.f_locals["self"], test_name)
+        ):
+            # if test_name == frame.frame.f_locals["self"]._testMethodName:
+            test_frame = frame
+            # The test instance
+            test_obj = frame.frame.f_locals["self"]
+            # TODO: Do we get the (relative?) path or it's just a file name?
+            # TODO: Does `test_obj` always have `tearDown` object?
+            actual_test_file = frame.filename
+            # TODO: check `test_method` will work used at the several places!
+            test_method = getattr(test_obj, test_name)
+            break
 
     if test_frame is not None:
         line_number = test_frame.lineno
@@ -3475,9 +3446,12 @@ def _get_test_info():
     # From the most outer (i.e. python's `runpy.py`) frame to most inner frame (i.e. the frame of this method)
     # Between `the test method being called` and `before entering `patched``.
     for frame in reversed(stack_from_inspect):
-        if test_file in str(frame).replace(r"\\", "/"):
-            if "self" in frame.frame.f_locals and test_name == frame.frame.f_locals["self"]._testMethodName:
-                to_capture = True
+        if (
+            frame.function == test_name
+            and "self" in frame.frame.f_locals
+            and hasattr(frame.frame.f_locals["self"], test_name)
+        ):
+            to_capture = True
         # TODO: check simply with the name is not robust.
         elif "patched" == frame.frame.f_code.co_name:
             frame_of_patched_obj = frame
@@ -3511,7 +3485,7 @@ def _get_test_info():
     # Get the code context in the test function/method.
     from _pytest._code.source import Source
 
-    with open(test_file) as fp:
+    with open(actual_test_file) as fp:
         s = fp.read()
         source = Source(s)
         test_code_context = "\n".join(source.getstatement(test_lineno - 1).lines)
@@ -3522,9 +3496,7 @@ def _get_test_info():
         source = Source(s)
         caller_code_context = "\n".join(source.getstatement(caller_lineno - 1).lines)
 
-    test_info = (
-        f"test:\n\n{full_test_name}\n\n{'-' * 80}\n\ntest context: {test_file}:{test_lineno}\n\n{test_code_context}"
-    )
+    test_info = f"test:\n\n{full_test_name}\n\n{'-' * 80}\n\ntest context: {actual_test_file}:{test_lineno}\n\n{test_code_context}"
     test_info = f"{test_info}\n\n{'-' * 80}\n\ncaller context: {caller_path}:{caller_lineno}\n\n{caller_code_context}"
 
     return (
@@ -3745,6 +3717,17 @@ def _patch_with_call_info(module_or_class, attr_name, _parse_call_info_func, tar
             info = _parse_call_info_func(orig_method, args, kwargs, call_argument_expressions, target_args)
             info = _prepare_debugging_info(test_info, info)
 
+            # If the test is running in a CI environment (e.g. not a manual run), let's raise and fail the test, so it
+            # behaves as usual.
+            # On Github Actions or CircleCI, this is set automatically.
+            # When running manually, it's the user to determine if to set it.
+            # This is to avoid the patched function being called `with self.assertRaises(AssertionError):` and fails
+            # because of the missing expected `AssertionError`.
+            # TODO (ydshieh): If there is way to raise only when we are inside such context managers?
+            # TODO (ydshieh): How not to record the failure if it happens inside `self.assertRaises(AssertionError)`?
+            if os.getenv("CI") == "true":
+                raise captured_exception.with_traceback(test_traceback)
+
             # Save this, so we can raise at the end of the current test
             captured_failure = {
                 "result": "failed",
@@ -3827,6 +3810,18 @@ def patch_testing_methods_to_collect_info():
         _patch_with_call_info(torch.testing, "assert_close", _parse_call_info, target_args=("actual", "expected"))
 
     _patch_with_call_info(unittest.case.TestCase, "assertEqual", _parse_call_info, target_args=("first", "second"))
+    _patch_with_call_info(unittest.case.TestCase, "assertListEqual", _parse_call_info, target_args=("list1", "list2"))
+    _patch_with_call_info(
+        unittest.case.TestCase, "assertTupleEqual", _parse_call_info, target_args=("tuple1", "tuple2")
+    )
+    _patch_with_call_info(unittest.case.TestCase, "assertSetEqual", _parse_call_info, target_args=("set1", "set1"))
+    _patch_with_call_info(unittest.case.TestCase, "assertDictEqual", _parse_call_info, target_args=("d1", "d2"))
+    _patch_with_call_info(unittest.case.TestCase, "assertIn", _parse_call_info, target_args=("member", "container"))
+    _patch_with_call_info(unittest.case.TestCase, "assertNotIn", _parse_call_info, target_args=("member", "container"))
+    _patch_with_call_info(unittest.case.TestCase, "assertLess", _parse_call_info, target_args=("a", "b"))
+    _patch_with_call_info(unittest.case.TestCase, "assertLessEqual", _parse_call_info, target_args=("a", "b"))
+    _patch_with_call_info(unittest.case.TestCase, "assertGreater", _parse_call_info, target_args=("a", "b"))
+    _patch_with_call_info(unittest.case.TestCase, "assertGreaterEqual", _parse_call_info, target_args=("a", "b"))
 
 
 def torchrun(script: str, nproc_per_node: int, is_torchrun: bool = True, env: Optional[dict] = None):
@@ -4139,7 +4134,7 @@ def _format_py_obj(obj, indent=0, mode="", cache=None, prefix=""):
                     if element_types[0] in [int, float]:
                         # one-line repr. without width limit
                         return no_new_line_in_elements
-                    elif element_types[0] in [str]:
+                    elif element_types[0] is str:
                         if len(obj) == 1:
                             # one single string element --> one-line repr. without width limit
                             return no_new_line_in_elements

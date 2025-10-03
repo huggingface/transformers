@@ -21,6 +21,7 @@ from typing import Callable, Optional, Union
 
 import numpy as np
 import torch
+from safetensors.torch import load_file as safe_load_file
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
@@ -50,7 +51,6 @@ from ...utils import (
     cached_file,
     check_torch_load_is_safe,
     is_peft_available,
-    is_safetensors_available,
     is_torch_flex_attn_available,
     logging,
 )
@@ -59,10 +59,6 @@ from .configuration_wav2vec2 import Wav2Vec2Config
 
 WAV2VEC2_ADAPTER_PT_FILE = "adapter.{}.bin"
 WAV2VEC2_ADAPTER_SAFE_FILE = "adapter.{}.safetensors"
-
-if is_safetensors_available():
-    from safetensors.torch import load_file as safe_load_file
-
 
 if is_torch_flex_attn_available():
     from ...integrations.flex_attention import make_flex_block_causal_mask
@@ -1224,7 +1220,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
         token = kwargs.pop("token", None)
         use_auth_token = kwargs.pop("use_auth_token", None)
         revision = kwargs.pop("revision", None)
-        use_safetensors = kwargs.pop("use_safetensors", None if is_safetensors_available() else False)
+        use_safetensors = kwargs.pop("use_safetensors", None)
 
         if use_auth_token is not None:
             warnings.warn(

@@ -206,10 +206,6 @@ class T5GemmaConfig(PretrainedConfig):
             setattr(self.decoder, key, value)
         super().__setattr__(key, value)
 
-    def get_text_config(self, *args, **kwargs):
-        # Always return self, regardless of the decoder option.
-        return self
-
 
 class T5GemmaRMSNorm(Gemma2RMSNorm):
     pass
@@ -491,6 +487,9 @@ class T5GemmaPreTrainedModel(Gemma2PreTrainedModel):
             if not self.config.tie_word_embeddings:
                 scale = module.out_proj.weight.shape[0] ** -0.5
                 module.out_proj.weight.data.normal_(mean=0.0, std=std * scale)
+        # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
+        elif "RMSNorm" in module.__class__.__name__:
+            module.weight.data.zero_()
 
     def _shift_right(self, input_ids):
         """
@@ -1234,7 +1233,7 @@ __all__ = [
     "T5GemmaForConditionalGeneration",
     "T5GemmaModel",
     "T5GemmaEncoderModel",
-    "T5GemmaPreTrainedModel",  # noqa: F822
+    "T5GemmaPreTrainedModel",
     "T5GemmaForSequenceClassification",
     "T5GemmaForTokenClassification",
 ]

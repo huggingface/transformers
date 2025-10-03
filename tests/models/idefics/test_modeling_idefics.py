@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch Idefics model."""
 
-import inspect
 import unittest
 from functools import cached_property
 
@@ -67,7 +66,7 @@ class IdeficsModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -85,7 +84,7 @@ class IdeficsModelTester:
         vision_patch_size=2,
         vision_image_size=30,
         vision_num_attention_heads=4,
-        vision_num_hidden_layers=5,
+        vision_num_hidden_layers=2,
         vision_intermediate_size=37,
         perceiver_qk_layer_norms_perceiver=False,
         perceiver_resampler_depth=2,
@@ -327,7 +326,6 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMi
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
-    has_attentions = False  # only supports SDOA and thus no attention probs returned
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
@@ -594,6 +592,33 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMi
     ):
         pass
 
+    @pytest.mark.generate
+    def test_left_padding_compatibility(self):
+        # Overwrite -- Idefics needs to prepare `image_attention_mask`, and it must be padded accordingly
+        _, inputs_dict = self.prepare_config_and_inputs_for_generate()
+        input_ids = inputs_dict["input_ids"]
+        image_attention_mask = inputs_dict["image_attention_mask"]
+
+        pad_size_img = (input_ids.shape[0], 32, image_attention_mask.shape[-1])
+        extra_img_mask = torch.zeros(pad_size_img, dtype=image_attention_mask.dtype, device=torch_device)
+        padded_image_attention_mask = torch.cat([extra_img_mask, image_attention_mask], dim=1)
+
+        # `image_attention_mask` is randomly generated in `prepare_config_and_inputs_for_generate`, and it must match
+        # its padded version for the test to be valid -- we need to pass both
+        unpadded_custom_inputs = {"image_attention_mask": image_attention_mask}
+        padded_custom_inputs = {"image_attention_mask": padded_image_attention_mask}
+        super().test_left_padding_compatibility(
+            unpadded_custom_inputs=unpadded_custom_inputs, padded_custom_inputs=padded_custom_inputs
+        )
+
+    @unittest.skip(reason="Idefics can't do text-only inference (test filters non-text inputs)")
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip(reason="Idefics can't do text-only inference (test filters non-text inputs)")
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        pass
+
 
 @require_torch
 class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, unittest.TestCase):
@@ -612,66 +637,6 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
         self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
     ):
         pass
-
-    @pytest.mark.generate
-    def test_left_padding_compatibility(self):
-        """Overwrite because IDEFICS needs image attention mask to be also padded"""
-        # NOTE: left-padding results in small numerical differences. This is expected.
-        # See https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535
-
-        def _prepare_model_kwargs(input_ids, attention_mask, image_attention_mask, signature):
-            model_kwargs = {
-                "input_ids": input_ids,
-                "attention_mask": attention_mask,
-                "image_attention_mask": image_attention_mask,
-            }
-            if "position_ids" in signature:
-                position_ids = torch.cumsum(attention_mask, dim=-1) - 1
-                position_ids.masked_fill_(attention_mask == 0, 1)
-                model_kwargs["position_ids"] = position_ids
-            if "cache_position" in signature:
-                cache_position = torch.arange(input_ids.shape[-1], device=torch_device)
-                model_kwargs["cache_position"] = cache_position
-            return model_kwargs
-
-        for model_class in self.all_generative_model_classes:
-            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-            input_ids = inputs_dict.pop("input_ids")
-            attention_mask = inputs_dict.pop("attention_mask")
-            if attention_mask is None:
-                attention_mask = torch.ones_like(input_ids)
-            image_attention_mask = inputs_dict.pop("image_attention_mask", None)
-
-            model = model_class(config).to(torch_device).eval()
-            signature = inspect.signature(model.forward).parameters.keys()
-
-            # no cache as some models require special cache classes to be init outside forward
-            model.generation_config.use_cache = False
-
-            # Without padding
-            model_kwargs = _prepare_model_kwargs(input_ids, attention_mask, image_attention_mask, signature)
-            next_logits_wo_padding = model(**model_kwargs, **inputs_dict).logits[:, -1, :]
-
-            # With left-padding (length 32)
-            # can hardcode pad_token to be 0 as we'll do attn masking anyway
-            pad_token_id = (
-                config.get_text_config().pad_token_id if config.get_text_config().pad_token_id is not None else 0
-            )
-            pad_size = (input_ids.shape[0], 32)
-            padding = torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device) * pad_token_id
-            padded_input_ids = torch.cat((padding, input_ids), dim=1)
-            padded_attention_mask = torch.cat((torch.zeros_like(padding), attention_mask), dim=1)
-
-            pad_size_img = (input_ids.shape[0], 32, image_attention_mask.shape[-1])
-            extra_img_mask = torch.zeros(pad_size_img, dtype=image_attention_mask.dtype, device=torch_device)
-            padded_image_attention_mask = torch.cat([extra_img_mask, image_attention_mask], dim=1)
-            model_kwargs = _prepare_model_kwargs(
-                padded_input_ids, padded_attention_mask, padded_image_attention_mask, signature
-            )
-            next_logits_with_padding = model(**model_kwargs, **inputs_dict).logits[:, -1, :]
-
-            # They should result in very similar logits
-            torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-5, atol=1e-5)
 
     @pytest.mark.generate
     def test_generate_continue_from_past_key_values(self):

@@ -526,6 +526,9 @@ class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Gemma3MultiModalProjector):
             module.mm_input_projection_weight.data.zero_()
+        # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
+        elif "RMSNorm" in module.__class__.__name__:
+            module.weight.data.zero_()
 
 
 def _bidirectional_window_overlay(sliding_window: int) -> Callable[[int, int, int, int], bool]:
@@ -1208,7 +1211,7 @@ class Gemma3TextForSequenceClassification(GenericForSequenceClassification, Gemm
 __all__ = [
     "Gemma3Config",
     "Gemma3TextConfig",
-    "Gemma3PreTrainedModel",  # noqa: F822
+    "Gemma3PreTrainedModel",
     "Gemma3TextModel",
     "Gemma3ForCausalLM",
     "Gemma3ForConditionalGeneration",
