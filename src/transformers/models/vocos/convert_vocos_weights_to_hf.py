@@ -93,7 +93,7 @@ def convert_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=No
 
 """
 # Download the original model checkpoint
-wget https://huggingface.co/charactr/vocos-mel-24khz/resolve/main/pytorch_model.bin -0 vocos_mel_original.bin
+wget https://huggingface.co/charactr/vocos-mel-24khz/resolve/main/pytorch_model.bin -O vocos_mel_original.bin
 
 # run conversion:
 mkdir -p vocos-mel-converted
