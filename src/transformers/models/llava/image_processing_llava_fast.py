@@ -22,7 +22,6 @@ from torchvision.transforms.v2 import functional as F
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -30,19 +29,14 @@ from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
     ChannelDimension,
-    ImageInput,
     PILImageResampling,
     SizeDict,
     get_image_size,
 )
-from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
 )
-
-
-class LlavaFastImageProcessorKwargs(DefaultFastImageProcessorKwargs): ...
 
 
 @auto_docstring
@@ -59,14 +53,6 @@ class LlavaImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
-    valid_kwargs = LlavaFastImageProcessorKwargs
-
-    def __init__(self, **kwargs: Unpack[LlavaFastImageProcessorKwargs]) -> None:
-        super().__init__(**kwargs)
-
-    @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[LlavaFastImageProcessorKwargs]) -> BatchFeature:
-        return super().preprocess(images, **kwargs)
 
     def pad_to_square(
         self,

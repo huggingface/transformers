@@ -42,6 +42,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -64,6 +65,25 @@ if TYPE_CHECKING:
 if is_torch_available():
     import torch
     from torch import nn
+
+
+class MaskFormerImageProcessorKwargs(ImagesKwargs):
+    r"""
+    ignore_index (`int`, *optional*):
+        Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels
+        denoted with 0 (background) will be replaced with `ignore_index`.
+    do_reduce_labels (`bool`, *optional*, defaults to `False`):
+        Whether or not to decrement all label values of segmentation maps by 1. Usually used for datasets where 0
+        is used for background, and background itself is not included in all classes of a dataset (e.g. ADE20k).
+        The background label will be replaced by `ignore_index`.
+    num_labels (`int`, *optional*):
+        The number of labels in the segmentation map.
+    """
+
+    size_divisor: Optional[int]
+    ignore_index: Optional[int]
+    do_reduce_labels: Optional[bool]
+    num_labels: Optional[int]
 
 
 # Copied from transformers.models.detr.image_processing_detr.get_size_with_aspect_ratio
@@ -446,6 +466,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values", "pixel_mask"]
+    valid_kwargs = MaskFormerImageProcessorKwargs
 
     @filter_out_non_signature_kwargs(extra=["max_size", *INIT_SERVICE_KWARGS])
     def __init__(
