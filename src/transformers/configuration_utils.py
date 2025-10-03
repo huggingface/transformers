@@ -50,9 +50,9 @@ logger = logging.get_logger(__name__)
 SpecificPretrainedConfigType = TypeVar("SpecificPretrainedConfigType", bound="PretrainedConfig")
 
 
-# Map containing deprecated/deleted model types, and the last version that supports them.
+# Map containing deprecated/deleted model types, and the first version that does NOT support them.
 # - set version > current version: the model type is deprecated, and users will see a warning;
-# - set version < current version: the model type is deleted, and users will see an exception pointing to the last
+# - set version <= current version: the model type is deleted, and users will see an exception pointing to the last
 #   version that supported it.
 # NOTE: this variable is set here (and not in `models.auto`) to avoid circular imports. We want to use it with
 # `PretrainedConfig` to make sure the deprecation warning is seen even if the user doesn't use auto classes.
