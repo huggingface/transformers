@@ -209,12 +209,25 @@ class DeepseekV2Config(PretrainedConfig):
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self)
         self.first_k_dense_replace = first_k_dense_replace
+        
+        if kv_lora_rank is None:
+            kv_lora_rank = 512
         self.kv_lora_rank = kv_lora_rank
+
+        if q_lora_rank is None:
+            q_lora_rank = 1536
         self.q_lora_rank = q_lora_rank
+        
         self.n_group = n_group
         self.n_routed_experts = n_routed_experts
         self.n_shared_experts = n_shared_experts
+        
+        if qk_nope_head_dim == 0:
+            qk_nope_head_dim = 128
         self.qk_nope_head_dim = qk_nope_head_dim
+        
+        if qk_rope_head_dim == 0:
+            qk_rope_head_dim = 64
         self.qk_rope_head_dim = qk_rope_head_dim
         self.routed_scaling_factor = routed_scaling_factor
         self.topk_group = topk_group
