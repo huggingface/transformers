@@ -41,15 +41,6 @@ class ModernBertDecoderModelTester(CausalLMModelTester):
 
 @require_torch
 class ModernBertDecoderModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": ModernBertDecoderModel,
-            "text-generation": ModernBertDecoderForCausalLM,
-            "text-classification": ModernBertDecoderForSequenceClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
     model_tester_class = ModernBertDecoderModelTester
 
 

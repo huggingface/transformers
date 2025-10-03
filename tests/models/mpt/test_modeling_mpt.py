@@ -100,9 +100,6 @@ class MptModelTester:
         self.eos_token_id = vocab_size - 1
         self.pad_token_id = vocab_size - 1
 
-    def get_large_model_config(self):
-        return MptConfig.from_pretrained("mosaicml/mpt-7b")
-
     def prepare_config_and_inputs(self, gradient_checkpointing=False):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 

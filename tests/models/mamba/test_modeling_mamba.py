@@ -82,9 +82,6 @@ class MambaModelTester:
         self.pad_token_id = vocab_size - 1
         self.tie_word_embeddings = tie_word_embeddings
 
-    def get_large_model_config(self):
-        return MambaConfig.from_pretrained("hf-internal-testing/mamba-2.8b")
-
     def prepare_config_and_inputs(
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
     ):
