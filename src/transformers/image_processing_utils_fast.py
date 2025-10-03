@@ -40,13 +40,12 @@ from .image_utils import (
     validate_kwargs,
     validate_preprocess_arguments,
 )
-from .processing_utils import Unpack
+from .processing_utils import ImagesKwargs, Unpack
 from .utils import (
     TensorType,
     auto_docstring,
     is_torch_available,
     is_torchvision_available,
-    is_torchvision_v2_available,
     is_vision_available,
     logging,
 )
@@ -61,14 +60,13 @@ if is_torch_available():
     import torch
 
 if is_torchvision_available():
+    from torchvision.transforms.v2 import functional as F
+
     from .image_utils import pil_torch_interpolation_mapping
+
 else:
     pil_torch_interpolation_mapping = None
 
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-elif is_torchvision_available():
-    from torchvision.transforms import functional as F
 
 logger = logging.get_logger(__name__)
 
@@ -166,28 +164,6 @@ def divide_to_patches(
     return patches
 
 
-class DefaultFastImageProcessorKwargs(TypedDict, total=False):
-    do_resize: Optional[bool]
-    size: Annotated[Optional[Union[int, list[int], tuple[int, ...], dict[str, int]]], image_size_validator()]
-    default_to_square: Optional[bool]
-    resample: Optional[Union["PILImageResampling", "F.InterpolationMode", int]]
-    do_center_crop: Optional[bool]
-    crop_size: Annotated[Optional[Union[int, list[int], tuple[int, ...], dict[str, int]]], image_size_validator()]
-    do_rescale: Optional[bool]
-    rescale_factor: Optional[Union[int, float]]
-    do_normalize: Optional[bool]
-    image_mean: Optional[Union[float, list[float], tuple[float, ...]]]
-    image_std: Optional[Union[float, list[float], tuple[float, ...]]]
-    do_pad: Optional[bool]
-    pad_size: Annotated[Optional[Union[int, list[int], tuple[int, ...], dict[str, int]]], image_size_validator()]
-    do_convert_rgb: Optional[bool]
-    return_tensors: Annotated[Optional[Union[str, TensorType]], tensor_type_validator()]
-    data_format: Optional[Union[str, ChannelDimension]]
-    input_data_format: Optional[Union[str, ChannelDimension]]
-    device: Annotated[Optional[str], device_validator()]
-    disable_grouping: Optional[bool]
-
-
 @auto_docstring
 class BaseImageProcessorFast(BaseImageProcessor):
     resample = None
@@ -209,10 +185,10 @@ class BaseImageProcessorFast(BaseImageProcessor):
     input_data_format = None
     device = None
     model_input_names = ["pixel_values"]
-    valid_kwargs = DefaultFastImageProcessorKwargs
+    valid_kwargs = ImagesKwargs
     unused_kwargs = None
 
-    def __init__(self, **kwargs: Unpack[DefaultFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[ImagesKwargs]):
         super().__init__(**kwargs)
         kwargs = self.filter_out_unused_kwargs(kwargs)
         size = kwargs.pop("size", self.size)
@@ -249,7 +225,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         pad_size: SizeDict = None,
         fill_value: Optional[int] = 0,
         padding_mode: Optional[str] = "constant",
-        return_mask: Optional[bool] = False,
+        return_mask: bool = False,
         disable_grouping: Optional[bool] = False,
         **kwargs,
     ) -> "torch.Tensor":
@@ -731,11 +707,8 @@ class BaseImageProcessorFast(BaseImageProcessor):
             data_format=data_format,
         )
 
-    def __call__(self, images: ImageInput, *args, **kwargs: Unpack[DefaultFastImageProcessorKwargs]) -> BatchFeature:
-        return self.preprocess(images, *args, **kwargs)
-
     @auto_docstring
-    def preprocess(self, images: ImageInput, *args, **kwargs: Unpack[DefaultFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, *args, **kwargs: Unpack[ImagesKwargs]) -> BatchFeature:
         # args are not validated, but their order in the `preprocess` and `_preprocess` signatures must be the same
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_kwargs_names)
 
@@ -773,7 +746,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         device: Optional[Union[str, "torch.device"]] = None,
-        **kwargs: Unpack[DefaultFastImageProcessorKwargs],
+        **kwargs: Unpack[ImagesKwargs],
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.

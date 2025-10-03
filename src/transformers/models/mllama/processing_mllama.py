@@ -21,17 +21,11 @@ import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 
-class MllamaImagesKwargs(ImagesKwargs, total=False):
-    max_image_tiles: Optional[int]
-
-
 class MllamaProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: MllamaImagesKwargs
-
     _defaults = {
         "image_kwargs": {
             "max_image_tiles": 4,
@@ -117,7 +111,7 @@ def convert_sparse_cross_attention_mask_to_dense(
     """
 
     batch_size = len(cross_attention_token_mask)
-    max_num_images = max([len(masks) for masks in cross_attention_token_mask])
+    max_num_images = max(len(masks) for masks in cross_attention_token_mask)
 
     cross_attention_mask = np.zeros(
         shape=(batch_size, length, max_num_images, max_num_tiles),
@@ -225,8 +219,6 @@ class MllamaProcessor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[MllamaProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -266,8 +258,6 @@ class MllamaProcessor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-
-        # Pop return_tensors for now because we perform manipulations with token ids below
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
 
         data = {}

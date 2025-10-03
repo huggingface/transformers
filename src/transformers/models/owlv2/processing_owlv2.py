@@ -47,7 +47,6 @@ class Owlv2ProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {
             "padding": "max_length",
         },
-        "images_kwargs": {},
         "common_kwargs": {
             "return_tensors": "np",
         },
@@ -79,8 +78,6 @@ class Owlv2Processor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[Owlv2ProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -139,7 +136,7 @@ class Owlv2Processor(ProcessorMixin):
                 encodings = []
 
                 # Maximum number of queries across batch
-                max_num_queries = max([len(text_single) for text_single in text])
+                max_num_queries = max(len(text_single) for text_single in text)
 
                 # Pad all batch samples to max number of text queries
                 for text_single in text:

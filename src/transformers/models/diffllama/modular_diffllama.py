@@ -439,7 +439,7 @@ class DiffLlamaForTokenClassification(LlamaForTokenClassification):
 
 __all__ = [
     "DiffLlamaPreTrainedModel",
-    "DiffLlamaModel",  # noqa: F822
+    "DiffLlamaModel",
     "DiffLlamaForCausalLM",
     "DiffLlamaForSequenceClassification",
     "DiffLlamaForQuestionAnswering",

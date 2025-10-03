@@ -46,7 +46,6 @@ from .utils import (
     is_remote_url,
     is_torch_available,
     is_torchcodec_available,
-    is_torchvision_available,
     is_torchvision_v2_available,
     logging,
 )
@@ -71,8 +70,6 @@ if is_torch_available():
 
 if is_torchvision_v2_available():
     from torchvision.transforms.v2 import functional as F
-elif is_torchvision_available():
-    from torchvision.transforms import functional as F
 
 
 logger = logging.get_logger(__name__)
@@ -475,9 +472,6 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force to (re-)download the video processor files and override the cached versions if
                 they exist.
-            resume_download:
-                Deprecated and ignored. All downloads are now resumed by default when possible.
-                Will be removed in v5 of Transformers.
             proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -639,7 +633,6 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         """
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
-        resume_download = kwargs.pop("resume_download", None)
         proxies = kwargs.pop("proxies", None)
         token = kwargs.pop("token", None)
         use_auth_token = kwargs.pop("use_auth_token", None)
@@ -692,7 +685,6 @@ class BaseVideoProcessor(BaseImageProcessorFast):
                             cache_dir=cache_dir,
                             force_download=force_download,
                             proxies=proxies,
-                            resume_download=resume_download,
                             local_files_only=local_files_only,
                             token=token,
                             user_agent=user_agent,

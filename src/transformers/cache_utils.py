@@ -395,7 +395,12 @@ class StaticSlidingWindowLayer(StaticLayer):
         if not self.is_initialized:
             self.lazy_initialization(key_states)
 
-        cache_position = cache_kwargs.get("cache_position")
+        # Some old models give None for `cache_position` or even omit passing `cache_kwargs` when used as cross-attention,
+        # in which case we should copy the whole Layer (key_states.shape[-2] == self.max_cache_len)
+        cache_position = cache_kwargs.get("cache_position") if cache_kwargs is not None else None
+        cache_position = (
+            cache_position if cache_position is not None else torch.arange(key_states.shape[-2], device=self.device)
+        )
 
         cumulative_length = self.cumulative_length
         is_full = cumulative_length >= self.max_cache_len
@@ -790,7 +795,7 @@ class Cache:
         for layer in self.layers:
             layer.lazy_initialization(fake_keys_tensor)
 
-    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
+    def get_seq_length(self, layer_idx: int = 0) -> int:
         """Returns the sequence length of the cache for the given layer."""
         if layer_idx >= len(self.layers):
             return 0
@@ -955,17 +960,19 @@ class DynamicCache(Cache):
         layers = []
         # If a config is passed, use it to infer the layer types and initialize accordingly
         if config is not None:
-            config = config.get_text_config(decoder=True)
-            sliding_window = getattr(config, "sliding_window", None) or getattr(config, "attention_chunk_size", None)
-            layer_types = getattr(config, "layer_types", None)
+            decoder_config = config.get_text_config(decoder=True)
+            sliding_window = getattr(decoder_config, "sliding_window", None) or getattr(
+                decoder_config, "attention_chunk_size", None
+            )
+            layer_types = getattr(decoder_config, "layer_types", None)
             if layer_types is None:
                 layer_types = [
                     "sliding_attention" if sliding_window is not None else "full_attention"
-                    for _ in range(config.num_hidden_layers)
+                    for _ in range(decoder_config.num_hidden_layers)
                 ]
             # Some models have shared layers thus no cache is needed for them (e.g. Gemma3n)
-            if hasattr(config, "num_kv_shared_layers"):
-                layer_types = layer_types[: -config.num_kv_shared_layers]
+            if hasattr(decoder_config, "num_kv_shared_layers"):
+                layer_types = layer_types[: -decoder_config.num_kv_shared_layers]
 
             for layer_type in layer_types:
                 # From a cache point of view, both sliding and chunked are the same in how they should behave and how many
@@ -1286,7 +1293,7 @@ class EncoderDecoderCache(Cache):
                     cache.is_updated[layer_idx] = True
         return cache
 
-    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
+    def get_seq_length(self, layer_idx: int = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         return self.self_attention_cache.get_seq_length(layer_idx)
 
@@ -1469,18 +1476,3 @@ class HQQQuantizedCache(QuantizedCache):
             "Use `QuantizedCache(backend='hqq', ...)` instead."
         )
         super().__init__("hqq", config, nbits, axis_key, axis_value, q_group_size, residual_length)
-
-
-class SinkCache(Cache):
-    """
-    It is now a `custom_generate` repository on the Hub: https://huggingface.co/transformers-community/sink_cache.
-    See [these docs](https://huggingface.co/docs/transformers/generation_strategies#custom-decoding-methods) for
-    general `custom_generate`usage.
-    """
-
-    # TODO (joao, manuel): Remove this class in v4.59.0
-    def __init__(self, **kwargs) -> None:
-        raise NotImplementedError(
-            "`SinkCache` has been moved as a `custom_generate` repository on the Hub: "
-            "https://huggingface.co/transformers-community/sink_cache. See the repository for usage examples."
-        )

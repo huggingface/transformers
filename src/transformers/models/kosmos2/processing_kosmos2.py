@@ -138,8 +138,6 @@ class Kosmos2Processor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Union[TextInput, list[TextInput]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[Kosmos2ProcessorKwargs],
     ) -> BatchFeature:
         """

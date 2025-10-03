@@ -38,6 +38,7 @@ The abstract from the paper is the following:
 *We introduce Moshi, a speech-text foundation model and full-duplex spoken dialogue framework. Current systems for spoken dialogue rely on pipelines of independent components, namely voice activity detection, speech recognition, textual dialogue and text-to-speech. Such frameworks cannot emulate the experience of real conversations. First, their complexity induces a latency of several seconds between interactions. Second, text being the intermediate modality for dialogue, non-linguistic information that modifies meaning— such as emotion or non-speech sounds— is lost in the interaction. Finally, they rely on a segmentation into speaker turns, which does not take into account overlapping speech, interruptions and interjections. Moshi solves these independent issues altogether by casting spoken dialogue as speech-to-speech generation. Starting from a text language model backbone, Moshi generates speech as tokens from the residual quantizer of a neural audio codec, while modeling separately its own speech and that of the user into parallel streams. This allows for the removal of explicit speaker turns, and the modeling of arbitrary conversational dynamics. We moreover extend the hierarchical semantic-to-acoustic token generation of previous work to first predict time-aligned text tokens as a prefix to audio tokens. Not only this “Inner Monologue” method significantly improves the linguistic quality of generated speech, but we also illustrate how it can provide streaming speech recognition and text-to-speech. Our resulting model is the first real-time full-duplex spoken large language model, with a theoretical latency of 160ms, 200ms in practice, and is available at github.com/kyutai-labs/moshi.*
 
 Moshi deals with 3 streams of information:
+
 1. The user's audio
 2. Moshi's audio
 3. Moshi's textual output
@@ -70,6 +71,7 @@ The original checkpoints can be converted using the conversion script `src/trans
 ### How to use the model:
 
 This implementation has two main aims:
+
 1. quickly test model generation by simplifying the original API
 2. simplify training. A training guide will come soon, but user contributions are welcomed!
 
@@ -84,6 +86,7 @@ It is designed for intermediate use. We strongly recommend using the original [i
 Moshi is a streaming auto-regressive model with two streams of audio. To put it differently, one audio stream corresponds to what the model said/will say and the other audio stream corresponds to what the user said/will say.
 
 [`MoshiForConditionalGeneration.generate`] thus needs 3 inputs:
+
 1. `input_ids` - corresponding to the text token history
 2. `moshi_input_values` or `moshi_audio_codes`- corresponding to the model audio history
 3. `user_input_values` or `user_audio_codes` - corresponding to the user audio history
@@ -91,6 +94,7 @@ Moshi is a streaming auto-regressive model with two streams of audio. To put it 
 These three inputs must be synchronized. Meaning that their lengths must correspond to the same number of tokens.
 
 You can dynamically use the 3 inputs depending on what you want to test:
+
 1. Simply check the model response to an user prompt - in that case, `input_ids` can be filled with pad tokens and `user_input_values` can be a zero tensor of the same shape than the user prompt.
 2. Test more complex behaviour - in that case, you must be careful about how the input tokens are synchronized with the audios.
 

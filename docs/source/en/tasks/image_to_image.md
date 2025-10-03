@@ -21,6 +21,7 @@ rendered properly in your Markdown viewer.
 Image-to-Image task is the task where an application receives an image and outputs another image. This has various subtasks, including image enhancement (super resolution, low light enhancement, deraining and so on), image inpainting, and more.
 
 This guide will show you how to:
+
 - Use an image-to-image pipeline for super resolution task,
 - Run image-to-image models for same task without a pipeline.
 
@@ -102,7 +103,7 @@ with torch.no_grad():
 
 Output is an object of type `ImageSuperResolutionOutput` that looks like below 👇
 
-```
+```text
 (loss=None, reconstruction=tensor([[[[0.8270, 0.8269, 0.8275,  ..., 0.7463, 0.7446, 0.7453],
           [0.8287, 0.8278, 0.8283,  ..., 0.7451, 0.7448, 0.7457],
           [0.8280, 0.8273, 0.8269,  ..., 0.7447, 0.7446, 0.7452],
