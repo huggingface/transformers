@@ -20,6 +20,7 @@ in the ./benches directory, organizing outputs into model-specific subfolders.
 
 import argparse
 import logging
+import random
 import sys
 import uuid
 
@@ -70,6 +71,7 @@ if __name__ == "__main__":
         sequence_length=args.sequence_length,
         num_tokens_to_generate=args.num_tokens_to_generate,
     )
+    random.shuffle(benchmark_configs)
 
     runner = BenchmarkRunner(logger, args.output_dir, args.commit_id)
     results = runner.run_benchmarks(args.model_id, benchmark_configs, args.num_tokens_to_profile)
