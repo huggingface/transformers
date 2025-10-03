@@ -55,7 +55,7 @@ from transformers import (
     Wav2Vec2Processor,
     set_seed,
 )
-from transformers.trainer_utils import get_last_checkpoint, is_main_process
+from transformers.trainer_utils import is_main_process
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 
@@ -766,7 +766,7 @@ def main():
     # Training
     if training_args.do_train:
         # use last checkpoint if exist
-        elif os.path.isdir(model_args.model_name_or_path):
+        if os.path.isdir(model_args.model_name_or_path):
             checkpoint = model_args.model_name_or_path
         else:
             checkpoint = None

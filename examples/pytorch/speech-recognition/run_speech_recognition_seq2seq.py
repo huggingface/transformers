@@ -54,7 +54,7 @@ from transformers import (
     Seq2SeqTrainingArguments,
     set_seed,
 )
-from transformers.trainer_utils import get_last_checkpoint, is_main_process
+from transformers.trainer_utils import is_main_process
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 

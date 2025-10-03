@@ -51,7 +51,6 @@ from transformers import (
 from transformers.image_processing_utils import BatchFeature
 from transformers.image_transforms import center_to_corners_format
 from transformers.trainer import EvalPrediction
-from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 
@@ -493,7 +492,7 @@ def main():
 
     # Training
     if training_args.do_train:
-        train_result = trainer.train(resume_from_checkpoint=checkpoint)
+        train_result = trainer.train(resume_from_checkpoint=training_args.resume_from_checkpoint)
         trainer.save_model()
         trainer.log_metrics("train", train_result.metrics)
         trainer.save_metrics("train", train_result.metrics)

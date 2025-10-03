@@ -49,7 +49,6 @@ from transformers import (
 )
 from transformers.image_processing_utils import BatchFeature
 from transformers.trainer import EvalPrediction
-from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 

@@ -61,7 +61,6 @@ from transformers import (
     Seq2SeqTrainingArguments,
     set_seed,
 )
-from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version, is_offline_mode
 from transformers.utils.versions import require_version
 
