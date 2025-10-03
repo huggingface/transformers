@@ -35,7 +35,7 @@ from transformers.models.llava_next_video.modeling_llava_next_video import (
 
 from ...cache_utils import Cache
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import group_images_by_shape, reorder_images
+from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,

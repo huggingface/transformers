@@ -15,7 +15,7 @@
 from collections.abc import Iterable
 from copy import deepcopy
 from functools import lru_cache, partial
-from typing import Annotated, Any, Optional, TypedDict, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 
@@ -50,7 +50,7 @@ from .utils import (
     logging,
 )
 from .utils.import_utils import is_rocm_platform
-from .utils.type_validators import TypedDictAdapter, device_validator, image_size_validator, tensor_type_validator
+from .utils.type_validators import TypedDictAdapter
 
 
 if is_vision_available():

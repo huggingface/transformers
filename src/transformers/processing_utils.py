@@ -84,8 +84,6 @@ from .utils.deprecation import deprecate_kwarg
 
 
 if is_torch_available():
-    import torch
-
     from .modeling_utils import PreTrainedAudioTokenizerBase
 
 
