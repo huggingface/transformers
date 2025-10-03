@@ -17,17 +17,31 @@ from transformers import BertConfig, BertModel, BertTokenizer, pipeline, AutoMod
 from transformers.testing_utils import TestCasePlus, require_torch
 
 class OfflineTests(TestCasePlus):
+    @classmethod
+    def setUpClass(cls):
+        # Cache warmup for all required models (run once per test class)
+        models = [
+            ("hf-internal-testing/tiny-random-bert", ["BertConfig", "BertModel", "BertTokenizer"]),
+            ("hf-internal-testing/tiny-random-bert-sharded", ["BertConfig", "BertModel"]),
+            ("hf-internal-testing/test_dynamic_model", ["AutoModel"])
+        ]
+        for mname, components in models:
+            try:
+                if "BertConfig" in components:
+                    BertConfig.from_pretrained(mname)
+                if "BertModel" in components:
+                    BertModel.from_pretrained(mname)
+                if "BertTokenizer" in components:
+                    BertTokenizer.from_pretrained(mname)
+                if mname == "hf-internal-testing/tiny-random-bert":
+                    pipeline(task="fill-mask", model=mname)
+                if "AutoModel" in components:
+                    AutoModel.from_pretrained(mname, trust_remote_code=True)
+            except Exception as e:
+                print(f"Cache warmup failed for {mname}: {e}")
 
     @require_torch
     def test_offline_mode(self):
-        # Step 1: Cache Warmup - Download model online (network ON)
-        mname = "hf-internal-testing/tiny-random-bert"
-        BertConfig.from_pretrained(mname)
-        BertModel.from_pretrained(mname)
-        BertTokenizer.from_pretrained(mname)
-        pipeline(task="fill-mask", model=mname)
-
-        # Step 2: Prepare offline mode test via subprocess
         load = """from transformers import BertConfig, BertModel, BertTokenizer, pipeline"""
         run = """
 mname = "hf-internal-testing/tiny-random-bert"
@@ -47,12 +61,6 @@ socket.socket = offline_socket
 
     @require_torch
     def test_offline_mode_no_internet(self):
-        mname = "hf-internal-testing/tiny-random-bert"
-        BertConfig.from_pretrained(mname)
-        BertModel.from_pretrained(mname)
-        BertTokenizer.from_pretrained(mname)
-        pipeline(task="fill-mask", model=mname)
-
         load = """from transformers import BertConfig, BertModel, BertTokenizer, pipeline"""
         run = """
 mname = "hf-internal-testing/tiny-random-bert"
@@ -72,11 +80,6 @@ socket.socket = offline_socket
 
     @require_torch
     def test_offline_mode_sharded_checkpoint(self):
-        # Warmup cache for sharded checkpoint
-        mname = "hf-internal-testing/tiny-random-bert-sharded"
-        BertConfig.from_pretrained(mname)
-        BertModel.from_pretrained(mname)
-
         load = """from transformers import BertConfig, BertModel, BertTokenizer"""
         run = """
 mname = "hf-internal-testing/tiny-random-bert-sharded"
@@ -92,7 +95,6 @@ socket.socket = offline_socket
         stdout, _ = self._execute_with_env(load, run)
         self.assertIn("success", stdout)
 
-        # Should succeed as HF_HUB_OFFLINE=1 tells it to use local files
         stdout, _ = self._execute_with_env(load, mock, run, HF_HUB_OFFLINE="1")
         self.assertIn("success", stdout)
 
@@ -116,23 +118,15 @@ socket.socket = offline_socket
 
     @require_torch
     def test_offline_model_dynamic_model(self):
-        mname = "hf-internal-testing/test_dynamic_model"
-        from transformers import AutoModel
-
-        # Warmup cache
-        AutoModel.from_pretrained(mname, trust_remote_code=True)
-
         load = """from transformers import AutoModel"""
         run = """
 mname = "hf-internal-testing/test_dynamic_model"
 AutoModel.from_pretrained(mname, trust_remote_code=True)
 print("success")
 """
-        # Should succeed normally
         stdout, _ = self._execute_with_env(load, run)
         self.assertIn("success", stdout)
 
-        # Should succeed as HF_HUB_OFFLINE=1 tells it to use local files
         stdout, _ = self._execute_with_env(load, run, HF_HUB_OFFLINE="1")
         self.assertIn("success", stdout)
 
