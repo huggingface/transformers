@@ -198,10 +198,6 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
         self.model_tester = AriaVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=AriaConfig, has_text_modality=False)
 
-    @unittest.skip(reason="Unstable test")
-    def test_initialization(self):
-        pass
-
 
 SKIP = False
 torch_accelerator_module = getattr(torch, torch_device)
