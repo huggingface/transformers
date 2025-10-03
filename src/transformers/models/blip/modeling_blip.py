@@ -826,6 +826,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel, GenerationMixin):
         attention_mask: Optional[torch.LongTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         interpolate_pos_encoding: bool = False,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BlipForConditionalGenerationModelOutput]:
         r"""
@@ -862,6 +863,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel, GenerationMixin):
             encoder_hidden_states=image_embeds,
             labels=labels,
             reduction="mean",
+            logits_to_keep=logits_to_keep,
             **kwargs,
         )
 
@@ -994,6 +996,7 @@ class BlipForQuestionAnswering(BlipPreTrainedModel, GenerationMixin):
         attention_mask: Optional[torch.LongTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         interpolate_pos_encoding: bool = False,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BlipTextVisionModelOutput]:
         r"""
@@ -1065,6 +1068,7 @@ class BlipForQuestionAnswering(BlipPreTrainedModel, GenerationMixin):
             encoder_attention_mask=attention_mask,
             labels=labels,
             reduction="mean",
+            logits_to_keep=logits_to_keep,
             **kwargs,
         )
 
