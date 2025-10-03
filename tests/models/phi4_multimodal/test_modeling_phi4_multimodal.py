@@ -208,10 +208,6 @@ class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
         self.model_tester = Phi4MultimodalModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Phi4MultimodalConfig)
 
-    @unittest.skip(reason="Unstable test")
-    def test_initialization(self):
-        pass
-
     @unittest.skip(reason="Depending on input modalities, some params may not have gradients")
     def test_training_gradient_checkpointing(self):
         pass

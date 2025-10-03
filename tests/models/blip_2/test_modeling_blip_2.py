@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch BLIP-2 model."""
 
-import copy
 import inspect
 import tempfile
 import unittest
@@ -42,7 +41,6 @@ from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
-    _config_zero_init,
     floats_tensor,
     ids_tensor,
     random_attention_mask,
@@ -988,23 +986,6 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
             (self.model_tester.vision_model_tester.batch_size, 10, config.vision_config.hidden_size),
         )
 
-    # override from common to deal with nested configurations (`vision_config`, `text_config` and `qformer_config`)
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for key in ["vision_config", "qformer_config", "text_config"]:
-            setattr(configs_no_init, key, _config_zero_init(getattr(configs_no_init, key)))
-        for model_class in self.all_model_classes:
-            model = model_class(config=copy.deepcopy(configs_no_init))
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
-
     @unittest.skip("T5 backbone deepcopies the configs, and fixing it would be more involved")
     def test_internal_model_config_and_subconfig_are_same(self):
         pass
@@ -1510,36 +1491,6 @@ class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Training is not yet supported")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    # check if `logit_scale` is initialized as per the original implementation
-                    if name == "logit_scale":
-                        self.assertAlmostEqual(
-                            param.data.item(),
-                            np.log(1 / 0.07),
-                            delta=1e-3,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    elif name == "temp":
-                        self.assertAlmostEqual(
-                            param.data.item(),
-                            0.07,
-                            delta=1e-3,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
 
 
 # We will verify our results on an image of cute cats
