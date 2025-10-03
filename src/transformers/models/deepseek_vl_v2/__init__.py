@@ -21,15 +21,20 @@ if TYPE_CHECKING:
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], {
-        "configuration_deepseek_vl_v2": [
-            "DeepseekVLV2Config",
-            "MlpProjectorConfig",
-        ],
-        "modeling_deepseek_vl_v2": [
-            "DeepseekVLV2ForCausalLM",
-            "DeepseekVLV2Model",
-            "DeepseekVLV2PreTrainedModel",
-        ],
-        "processing_deepseek_vl_v2": ["DeepseekVLV2Processor"],
-    }, module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(
+        __name__,
+        globals()["__file__"],
+        {
+            "configuration_deepseek_vl_v2": [
+                "DeepseekVLV2Config",
+                "MlpProjectorConfig",
+            ],
+            "modeling_deepseek_vl_v2": [
+                "DeepseekVLV2ForCausalLM",
+                "DeepseekVLV2Model",
+                "DeepseekVLV2PreTrainedModel",
+            ],
+            "processing_deepseek_vl_v2": ["DeepseekVLV2Processor"],
+        },
+        module_spec=__spec__,
+    )
