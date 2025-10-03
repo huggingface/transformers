@@ -314,10 +314,9 @@ class Blip2Config(PretrainedConfig):
         self.image_token_index = image_token_index
         self.qformer_config.encoder_hidden_size = self.vision_config.hidden_size
         self.use_decoder_only_language_model = self.text_config.model_type in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
-        self.is_encoder_decoder = self.text_config.is_encoder_decoder
         self.initializer_factor = 1.0
         self.initializer_range = 0.02
-        super().__init__(**kwargs)
+        super().__init__(**kwargs, is_encoder_decoder=self.text_config.is_encoder_decoder)
 
 
 __all__ = ["Blip2Config", "Blip2QFormerConfig", "Blip2VisionConfig"]

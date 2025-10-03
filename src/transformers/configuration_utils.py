@@ -1147,11 +1147,11 @@ class PretrainedConfig(PushToHubMixin):
         non_default_generation_parameters = {}
         decoder_attribute_name = None
 
-        # Composite models don't have a default config, use their decoder config as a fallback for default values
+        # Some composite models don't have a default config, use their decoder config as a fallback for default values
         # If no known pattern is matched, then `default_config = None` -> check against the global generation defaults
-        try:
+        if not self.has_no_defaults_at_init:
             default_config = self.__class__()
-        except ValueError:
+        else:
             decoder_config = self.get_text_config(decoder=True)
             if decoder_config is not self:
                 default_config = decoder_config.__class__()
