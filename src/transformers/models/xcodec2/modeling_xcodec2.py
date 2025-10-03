@@ -411,7 +411,7 @@ class Xcodec2SnakeBeta(nn.Module):
             - alpha controls the frequency of the periodic components
             - beta controls the magnitude of the periodic components
         """
-        super(Xcodec2SnakeBeta, self).__init__()
+        super().__init__()
         self.dim = dim
 
         # initialize alpha
@@ -1487,7 +1487,7 @@ class Xcodec2SemanticEncoder(nn.Module):
         kernel_size: int = 3,
         bias: bool = True,
     ):
-        super(Xcodec2SemanticEncoder, self).__init__()
+        super().__init__()
 
         # Initial convolution, maps input_channels to encode_channels
         self.initial_conv = nn.Conv1d(
