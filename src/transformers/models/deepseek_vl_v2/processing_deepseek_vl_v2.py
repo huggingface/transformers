@@ -4,23 +4,29 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_deepseek_vl_v2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-
 import torch
-from PIL import Image, ImageOps
-from torch.nn.utils.rnn import pad_sequence
 
-from transformers.image_processing_utils import BatchFeature
-
+from ...image_processing_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
 
 
 class DeepseekVLV2Processor(ProcessorMixin):
-    """
-    Transformers-compatible processor for Deepseek VL v2.
-    Inherits from DeepseekVLProcessor but overrides the behavior to:
-      - handle tiling and cropping (global + local views)
-      - expand <image> placeholders into the right number of tokens
-      - build `images_seq_mask`, `images_spatial_crop`, and `num_image_tokens`.
+    r"""
+    Constructs a DeepseekVLV2 processor which wraps a DeepseekVLV2 Image Processor and a Llama tokenizer into a single processor.
+
+    [`DeepseekVLV2Processor`] offers all the functionalities of [`DeepseekVLV2ImageProcessor`] and [`LlamaTokenizerFast`]. See the
+    [`~DeepseekVLV2Processor.__call__`] and [`~DeepseekVLV2Processor.decode`] for more information.
+
+    Args:
+        image_processor ([`DeepseekVLV2ImageProcessor`]):
+            The image processor is a required input.
+        tokenizer ([`LlamaTokenizerFast`]):
+            The tokenizer is a required input.
+        chat_template (`str`, *optional*):
+            A Jinja template which will be used to convert lists of messages
+            in a chat into a tokenizable string.
+        num_image_tokens (`int`, *optional*, defaults to 576):
+            The number of special image tokens used as placeholders for visual content in text sequences.
     """
 
     attributes = ["image_processor", "tokenizer"]
@@ -30,74 +36,99 @@ class DeepseekVLV2Processor(ProcessorMixin):
 
     def __init__(
         self,
-        *args,
-        candidate_resolutions: list[tuple[int, int]] = ((384, 384),),
-        patch_size: int = 14,
-        downsample_ratio: int = 2,
-        **kwargs,
+        image_processor,
+        tokenizer,
+        chat_template=None,
     ):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
         self.image_token = tokenizer.image_token
+        self.image_token = tokenizer.image_token
         self.num_image_tokens = num_image_tokens
 
-        self.candidate_resolutions = candidate_resolutions
-        self.image_size = candidate_resolutions[0][0]
-        self.patch_size = patch_size
-        self.downsample_ratio = downsample_ratio
-
-    def __call__(self, text=None, images=None, return_tensors="pt", **kwargs) -> BatchFeature:
+    def __call__(
+        self,
+        conversation,
+        images=None,
+        tokenize=True,
+        return_tensors="pt",
+        **kwargs,
+    ) -> BatchFeature:
         """
-        Override __call__ to return both text and image features.
+        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
+        and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
+        the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
+        DeepseekVLV2ImageProcessor's [`~DeepseekVLV2ImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
+        of the above two methods for more information.
+
+        Args:
+            text (`str`, `List[str]`, `List[List[str]]`):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                tensor. Both channels-first and channels-last formats are supported.
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors of a particular framework. Acceptable values are:
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return NumPy `np.ndarray` objects.
+                - `'jax'`: Return JAX `jnp.ndarray` objects.
+
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `None`).
+            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
-        if text is None and images is None:
-            raise ValueError("You must specify either text or images.")
+        prompt = self.apply_chat_template(conversation, **kwargs)
 
-        if isinstance(text, str):
-            text = [text]
-        if images is None:
-            images = [None] * len(text)
+        if not tokenize:
+            return prompt
 
-        (
-            all_input_ids,
-            all_attention_mask,
-            all_images,
-            all_masks,
-            all_spatial,
-            all_num_tokens,
-        ) = ([], [], [], [], [], [])
+        batch_pixel_values = []
+        batch_spatial_crops = []
 
-        for t, im in zip(text, images):
-            if im is None:
-                enc = self.tokenizer(t, return_tensors=return_tensors)
-                all_input_ids.append(enc["input_ids"].squeeze(0))
-                all_attention_mask.append(enc["attention_mask"].squeeze(0))
-                all_images.append(torch.zeros(1, 3, self.image_size, self.image_size))
-                all_masks.append(torch.zeros_like(enc["input_ids"], dtype=torch.bool).squeeze(0))
-                all_spatial.append(torch.zeros((1, 2), dtype=torch.long))
-                all_num_tokens.append([0])
-            else:
-                ids, ims, mask, spatial, num_tokens = self.tokenize_with_images(t, [im])
-                all_input_ids.append(torch.tensor(ids))
-                all_attention_mask.append(torch.ones(len(ids), dtype=torch.long))
-                all_images.append(torch.stack(ims))
-                all_masks.append(torch.tensor(mask, dtype=torch.bool))
-                all_spatial.append(torch.tensor(spatial, dtype=torch.long))
-                all_num_tokens.append(num_tokens)
+        for img in images:
+            out = self.image_processor.preprocess(img)
+            batch_pixel_values.append(out["pixel_values"])
+            # shape: [num_tiles, 3, 384, 384]
+            batch_spatial_crops.append([out["num_width_tiles"], out["num_height_tiles"]])
 
-        # pad sequences
-        input_ids = pad_sequence(all_input_ids, batch_first=True, padding_value=self.tokenizer.pad_token_id)
-        attention_mask = pad_sequence(all_attention_mask, batch_first=True, padding_value=0)
-        images_seq_mask = pad_sequence(all_masks, batch_first=True, padding_value=0)
+        max_tiles = max(pv.shape[0] for pv in batch_pixel_values)
+        padded_pixel_values = torch.zeros(len(batch_pixel_values), max_tiles, 3, 384, 384)
+        for i, pv in enumerate(batch_pixel_values):
+            padded_pixel_values[i, : pv.shape[0]] = pv
+
+        images_spatial_crop = torch.zeros(len(batch_spatial_crops), max_tiles, 2, dtype=torch.long)
+        for i, (w, h) in enumerate(batch_spatial_crops):
+            images_spatial_crop[i, 0] = torch.tensor([w, h])
+
+        expanded_prompt = prompt
+        for w, h in batch_spatial_crops:
+            num_tokens = (h * 14) * (w * 14 + 1) + 210 + 1
+            expanded_prompt = expanded_prompt.replace(self.image_token, self.image_token * num_tokens, 1)
+
+        enc = self.tokenizer(expanded_prompt, return_tensors=return_tensors)
+
+        image_token_id = self.tokenizer.convert_tokens_to_ids(self.image_token)
+        images_seq_mask = (enc["input_ids"] == image_token_id).to(torch.bool)
+
+        labels = enc["input_ids"].clone()
+        labels[labels == self.tokenizer.pad_token_id] = -100
 
         return BatchFeature(
-            data=dict(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                pixel_values=torch.nested.to_padded_tensor(torch.nested.nested_tensor(all_images), 0.0),
-                images_seq_mask=images_seq_mask,
-                images_spatial_crop=all_spatial,
-                num_image_tokens=all_num_tokens,
-            )
+            {
+                "input_ids": enc["input_ids"],
+                "labels": labels,
+                "attention_mask": enc["attention_mask"],
+                "pixel_values": padded_pixel_values,
+                "images_spatial_crop": images_spatial_crop,
+                "images_seq_mask": images_seq_mask,
+            }
         )
 
     def batch_decode(self, *args, **kwargs):
@@ -119,69 +150,3 @@ class DeepseekVLV2Processor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
-
-    def tokenize_with_images(self, text: str, images: list[Image.Image]):
-        """
-        Tokenize text with <image> placeholders expanded into correct number of image tokens.
-        Also preprocess images into tiles + global view.
-        """
-        assert text.count(self.image_token) == len(images), (
-            f"Mismatched <image> count ({text.count(self.image_token)}) vs {len(images)} images."
-        )
-
-        (
-            tokenized_str,
-            images_list,
-            images_seq_mask,
-            images_spatial_crop,
-            num_image_tokens,
-        ) = ([], [], [], [], [])
-        splits = text.split(self.image_token)
-
-        for split_text, image in zip(splits, images):
-            # text part
-            token_ids = self.tokenizer.encode(split_text, add_special_tokens=False)
-            tokenized_str.extend(token_ids)
-            images_seq_mask.extend([False] * len(token_ids))
-
-            # preprocess image: global + local views
-            best_w, best_h = self.candidate_resolutions[0]  # TODO: select best like official code
-            global_view = ImageOps.pad(image, (self.image_size, self.image_size))
-            images_list.append(self.image_processor(global_view)["pixel_values"])
-
-            local_view = ImageOps.pad(image, (best_w, best_h))
-            for i in range(0, best_h, self.image_size):
-                for j in range(0, best_w, self.image_size):
-                    crop = local_view.crop((j, i, j + self.image_size, i + self.image_size))
-                    images_list.append(self.image_processor(crop)["pixel_values"])
-
-            # track tiling shape
-            num_w_tiles, num_h_tiles = (
-                best_w // self.image_size,
-                best_h // self.image_size,
-            )
-            images_spatial_crop.append([num_w_tiles, num_h_tiles])
-
-            # expand <image> token → num_image_tokens
-            h = w = (self.image_size // self.patch_size) // self.downsample_ratio
-            image_token_ids = [self.tokenizer.convert_tokens_to_ids(self.image_token)] * (
-                h * (w + 1) + 1 + (num_h_tiles * h) * (num_w_tiles * w + 1)
-            )
-            tokenized_str.extend(image_token_ids)
-            images_seq_mask.extend([True] * len(image_token_ids))
-            num_image_tokens.append(len(image_token_ids))
-
-        # last text after final image
-        last_split = splits[-1]
-        if last_split:
-            token_ids = self.tokenizer.encode(last_split, add_special_tokens=False)
-            tokenized_str.extend(token_ids)
-            images_seq_mask.extend([False] * len(token_ids))
-
-        return (
-            tokenized_str,
-            images_list,
-            images_seq_mask,
-            images_spatial_crop,
-            num_image_tokens,
-        )

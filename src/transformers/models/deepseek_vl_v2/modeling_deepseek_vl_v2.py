@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_deepseek_vl_v2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-import gc
 from dataclasses import dataclass
 from typing import Optional, Union
 
@@ -109,7 +108,7 @@ class MlpProjector(nn.Module):
         return self.layers(x)
 
 
-@auto_docstring
+# @auto_docstringe
 class DeepseekVLV2PreTrainedModel(PreTrainedModel):
     config: DeepseekVLV2Config
     base_model_prefix = "deepseek_vl_v2"
@@ -127,17 +126,17 @@ class DeepseekVLV2PreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         # Required only for Linear layer in DeepseekVLV2Aligner
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.text_config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=self.config.language_config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
 
 
 @dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for DeepseekVLV2 model's outputs that may also contain a past key/values (to speed up sequential decoding).
-    """
-)
+# @auto_docstring(
+#     custom_intro="""
+#     Base class for DeepseekVLV2 model's outputs that may also contain a past key/values (to speed up sequential decoding).
+#     """
+# )
 class DeepseekVLV2BaseModelOutputWithPast(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -168,7 +167,7 @@ class DeepseekVLV2BaseModelOutputWithPast(ModelOutput):
     image_hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
-@auto_docstring
+# @auto_docstring
 class DeepseekVLV2Model(DeepseekVLV2PreTrainedModel):
     def __init__(self, config: DeepseekVLV2Config):
         super().__init__(config)
@@ -218,7 +217,7 @@ class DeepseekVLV2Model(DeepseekVLV2PreTrainedModel):
         return special_image_mask
 
     @can_return_tuple
-    @auto_docstring
+    # @auto_docstringe
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -276,9 +275,9 @@ class DeepseekVLV2ForCausalLM(DeepseekVLV2PreTrainedModel, GenerationMixin):
         super().__init__(config)
         self.config = config
         self.model = DeepseekVLV2Model(config)
-        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.language_config.hidden_size, config.language_config.vocab_size, bias=False)
         self.vision_model = AutoModel.from_config(config.vision_config)
-        self.language_model = AutoModelForCausalLM(config.language_config)
+        self.language_model = AutoModelForCausalLM.from_config(config.language_config)
 
         projector_config = config.projector_config
         self.projector = MlpProjector(projector_config)
@@ -316,7 +315,7 @@ class DeepseekVLV2ForCausalLM(DeepseekVLV2PreTrainedModel, GenerationMixin):
         raise AttributeError("Not needed for DeepseekVLV2")
 
     @can_return_tuple
-    @auto_docstring
+    # @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -340,7 +339,6 @@ class DeepseekVLV2ForCausalLM(DeepseekVLV2PreTrainedModel, GenerationMixin):
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         """
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -359,7 +357,6 @@ class DeepseekVLV2ForCausalLM(DeepseekVLV2PreTrainedModel, GenerationMixin):
             if attention_mask is not None:
                 attention_mask = attention_mask.to(inputs_embeds.device)
 
-        # print(inputs_embeds.shape)
         outputs = self.language.forward(
             input_ids=None,
             attention_mask=attention_mask,
@@ -391,7 +388,6 @@ class DeepseekVLV2ForCausalLM(DeepseekVLV2PreTrainedModel, GenerationMixin):
         num_logits_to_keep=None,
         **kwargs,
     ):
-        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
         model_inputs = self.language.prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
@@ -402,8 +398,6 @@ class DeepseekVLV2ForCausalLM(DeepseekVLV2PreTrainedModel, GenerationMixin):
             **kwargs,
         )
 
-        # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
-        # Otherwise we need pixel values to be passed to model
         cache_position = model_inputs["cache_position"]
         if cache_position[0] == 0:
             model_inputs["images"] = images
@@ -411,6 +405,11 @@ class DeepseekVLV2ForCausalLM(DeepseekVLV2PreTrainedModel, GenerationMixin):
             model_inputs["images_spatial_crop"] = images_spatial_crop
 
         return model_inputs
+
+    def get_image_features(self, tiles):
+        image_features = self.vision_model(tiles)
+        image_embeds = self.projector(image_features.last_hidden_state)
+        return image_embeds
 
     def prepare_inputs_embeds(
         self,
@@ -444,9 +443,7 @@ class DeepseekVLV2ForCausalLM(DeepseekVLV2PreTrainedModel, GenerationMixin):
         if total_tiles.shape[0] == 0:
             return self.language_model.get_input_embeddings()(input_ids)
 
-        images_features = self.vision_model(total_tiles)
-
-        images_embeds = self.projector(images_features)
+        images_embeds = self.get_image_features(total_tiles)
         _, hw, n_dim = images_embeds.shape
         h = w = int(hw**0.5)
 
@@ -489,17 +486,31 @@ class DeepseekVLV2ForCausalLM(DeepseekVLV2PreTrainedModel, GenerationMixin):
 
                     if self.global_view_pos == "head":
                         global_local_features = torch.cat(
-                            [global_features, self.view_seperator[None, :], local_features], dim=0
+                            [
+                                global_features,
+                                self.view_seperator[None, :],
+                                local_features,
+                            ],
+                            dim=0,
                         )
                     else:
                         global_local_features = torch.cat(
-                            [local_features, self.view_seperator[None, :], global_features], dim=0
+                            [
+                                local_features,
+                                self.view_seperator[None, :],
+                                global_features,
+                            ],
+                            dim=0,
                         )
                 else:
                     global_features = torch.cat([self.tile_indicators[0:1], global_features], dim=0)
 
                     local_features = torch.cat(
-                        [self.tile_indicators[1 : num_tiles_in_image + 1].unsqueeze(1), local_features], dim=1
+                        [
+                            self.tile_indicators[1 : num_tiles_in_image + 1].unsqueeze(1),
+                            local_features,
+                        ],
+                        dim=1,
                     )
 
                     local_features = rearrange(
@@ -520,106 +531,3 @@ class DeepseekVLV2ForCausalLM(DeepseekVLV2PreTrainedModel, GenerationMixin):
                 inputs_embeds[idx].masked_scatter_(images_seq_mask[idx].unsqueeze(-1), images_in_this_batch)
 
         return inputs_embeds
-
-    @torch.no_grad()
-    def incremental_prefilling(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        images: Optional[torch.FloatTensor] = None,
-        images_seq_mask: Optional[torch.LongTensor] = None,
-        images_spatial_crop: Optional[torch.LongTensor] = None,
-        chunk_size: int = 1024,
-    ):
-        if inputs_embeds is None:
-            inputs_embeds = self.prepare_inputs_embeds(
-                inputs_ids=input_ids,
-                images=images,
-                images_seq_mask=images_seq_mask,
-                images_spatial_crop=images_spatial_crop,
-            )
-
-            del images
-            del images_seq_mask
-            del images_spatial_crop
-
-            if attention_mask is not None:
-                attention_mask = attention_mask.to(inputs_embeds.device)
-
-            self._clear_cuda_cache()
-
-        bs, seq_len, _ = inputs_embeds.shape
-        past_key_values = None
-
-        prefilling_len = seq_len - 1
-        for i in range(0, prefilling_len, chunk_size):
-            chunk_start = i
-            chunk_end = min(i + chunk_size, prefilling_len)
-            chunk_inputs_embeds = inputs_embeds[:, chunk_start:chunk_end]
-            chunk_attention_mask = attention_mask[:, 0:chunk_end]
-
-            if past_key_values is not None:
-                position_ids = torch.arange(
-                    chunk_start,
-                    chunk_end,
-                    dtype=torch.long,
-                    device=inputs_embeds.device,
-                ).unsqueeze(0)
-                past_key_values = self._move_past_key_values_to_gpu(past_key_values, inputs_embeds.device)
-            else:
-                position_ids = None
-
-            with torch.no_grad():
-                outputs = self.forward(
-                    inputs_embeds=chunk_inputs_embeds,
-                    attention_mask=chunk_attention_mask,
-                    past_key_values=outputs.past_key_values,
-                    position_ids=position_ids,
-                    use_cache=True,
-                )
-
-                past_key_values = (outputs.past_key_values,)
-                past_key_values = self._move_past_key_values_to_cpu(past_key_values)
-
-                del outputs, position_ids
-                self._clear_cuda_cache()
-
-        prefilling_key_values = []
-        for layer_past in past_key_values:
-            prefilling_key_values.append(
-                (
-                    layer_past[0][:, :, 0:prefilling_len, ...].to(inputs_embeds.device),
-                    layer_past[1][:, :, 0:prefilling_len, ...].to(inputs_embeds.device),
-                )
-            )
-
-        return inputs_embeds, prefilling_key_values
-
-    def _clear_cuda_cache(self):
-        """clear CUDA memory cache"""
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            torch.cuda.synchronize()
-
-    def _move_past_key_values_to_cpu(self, past_key_values):
-        # print(f"past_key_values -> cpu")
-        if past_key_values is None:
-            return None
-        return tuple(tuple(t.cpu() for t in layer) for layer in past_key_values)
-
-    def _move_past_key_values_to_gpu(self, past_key_values, device="cuda:0"):
-        # print(f"past_key_values -> gpu")
-        if past_key_values is None:
-            return None
-        return tuple(tuple(t.to(device) for t in layer) for layer in past_key_values)
-
-    @staticmethod
-    def _reorder_cache(past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past

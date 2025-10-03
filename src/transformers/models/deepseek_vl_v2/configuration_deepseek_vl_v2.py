@@ -58,13 +58,13 @@ class DeepseekVLV2Config(PretrainedConfig):
 
     def __init__(
         self,
-        text_config: DeepseekV2Config = None,
-        vision_config: AutoConfig = None,
-        projector_config: MlpProjectorConfig = None,
         tile_tag: str = "tile_tag",
         global_view_pos: str = "head",
         candidate_resolutions: tuple[tuple[int, int]] = ((384, 384),),
         n_embed: int = 512,
+        language_config: dict = None,
+        vision_config: dict = None,
+        projector_config: dict = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -73,31 +73,26 @@ class DeepseekVLV2Config(PretrainedConfig):
         self.candidate_resolutions = candidate_resolutions
         self.n_embed = n_embed
 
-        if text_config is None:
-            text_config = {}
+        if language_config is None:
+            language_config = {}
             logger.info("`language_config` is `None`. Initializing the `DeepseekV2Config` with default values.")
 
         if vision_config is None:
             vision_config = {}
             logger.info("`vision_config` is `None`. Initializing the `SiglipVisionConfig` with default values.")
 
-        if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "deepseek_v2")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
+        if isinstance(language_config, dict):
+            language_config["model_type"] = language_config.get("model_type", "deepseek_v2")
+            language_config = CONFIG_MAPPING[language_config["model_type"]](**language_config)
 
         if isinstance(vision_config, dict):
-            if vision_config.get("model_type") == "vision":
-                vision_config["model_type"] = "siglip_vision_model"
-
-            vision_config.setdefault("model_type", "siglip_vision_model")
-            self.vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
-        else:
-            self.vision_config = vision_config
+            vision_config["model_type"] =  "siglip_vision_model"
+            vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
 
         if isinstance(projector_config, dict):
-            if projector_config.get("model_type") == "mlp_projector":
-                self.projector_config = MlpProjectorConfig(**projector_config)
-            else:
-                self.projector_config = CONFIG_MAPPING[projector_config["model_type"]](**projector_config)
-        else:
-            self.projector_config = projector_config
+            projector_config["model_type"] = "mlp_projector"
+            projector_config = MlpProjectorConfig(**projector_config)
+
+        self.language_config = language_config
+        self.vision_config = vision_config
+        self.projector_config = projector_config
