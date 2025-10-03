@@ -1756,8 +1756,36 @@ decoder.block.{0...11}.layer.0.SelfAttention.k.weight
 encoder.block.{0...11}.layer.0.SelfAttention.q.weight
 decoder.final_layer_norm.weight
 decoder.block.{0...11}.layer.0.SelfAttention.v.weight
-encoder.block.{0...11}.layer.1.DenseReluDense.wo.weight
-"""
+encoder.block.{0...11}.layer.1.DenseReluDense.wo.weight"""
+        self.assertEqual(new_keys, EXPECTED_KEYS)
+
+        EXPECTED_KEYS = """layers.{0...60}.post_attention_layernorm.weight
+layers.{3...60}.mlp.experts.{0, 1, 2, 3, 4, 5, 6, 7}.up_proj.weight
+layers.{0...60}.self_attn.kv_b_proj.weight
+layers.{3...60}.mlp.shared_experts.gate_proj.weight
+layers.{0...60}.self_attn.kv_a_layernorm.weight
+norm.weight
+layers.{3...60}.mlp.shared_experts.up_proj.weight
+layers.{0, 1, 2}.mlp.down_proj.weight
+layers.{0, 1, 2}.mlp.gate_proj.weight
+layers.{0...60}.self_attn.kv_a_proj_with_mqa.weight
+layers.{3...60}.mlp.experts.{0, 1, 2, 3, 4, 5, 6, 7}.down_proj.weight
+layers.{0...60}.self_attn.o_proj.weight
+layers.{3...60}.mlp.experts.{0, 1, 2, 3, 4, 5, 6, 7}.gate_proj.weight
+layers.{3...60}.mlp.shared_experts.down_proj.weight
+layers.{3...60}.mlp.gate.e_score_correction_bias
+embed_tokens.weight
+layers.{3...60}.mlp.gate.weight
+layers.{0...60}.self_attn.q_a_proj.weight
+layers.{0...60}.self_attn.q_a_layernorm.weight
+layers.{0...60}.self_attn.q_b_proj.weight
+layers.{0, 1, 2}.mlp.up_proj.weight
+layers.{0...60}.input_layernorm.weight"""
+        config = AutoConfig.from_pretrained("deepseek-ai/DeepSeek-V3.1")
+        with torch.device("meta"):
+            model = AutoModel.from_config(config)
+
+        new_keys = update_key_name(model.state_dict().keys()).join("\n")
         self.assertEqual(new_keys, EXPECTED_KEYS)
 
     def test_can_generate(self):
