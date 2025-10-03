@@ -854,7 +854,7 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
         head_dim = getattr(self.config, "head_dim", self.config.hidden_size // self.config.num_attention_heads)
         num_heads = getattr(self.config, "num_key_value_heads", self.config.num_attention_heads)
         self.static_cache.early_initialization(batch_size, num_heads, head_dim, torch.float32, model_device)
-        self.cache = EncoderDecoderCache(self.static_cache, DynamicCache())
+        self.cache = EncoderDecoderCache(self.static_cache, DynamicCache(config=self.config))
 
         register_dynamic_cache_export_support()
 
@@ -1051,7 +1051,7 @@ def export_with_dynamic_cache(
             {
                 "input_ids": example_input_ids,
                 "attention_mask": example_attention_mask,
-                "past_key_values": DynamicCache(),
+                "past_key_values": DynamicCache(config=model.config),
                 "use_cache": True,
             },
             strict=False,

@@ -16,7 +16,7 @@
 
 from collections import OrderedDict
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from packaging import version
 
@@ -27,7 +27,7 @@ from ..auto.configuration_auto import AutoConfig
 
 
 if TYPE_CHECKING:
-    from ... import PreTrainedTokenizerBase, TensorType
+    from ... import PreTrainedTokenizerBase
 
 logger = logging.get_logger(__name__)
 
@@ -154,14 +154,16 @@ class VisionEncoderDecoderDecoderOnnxConfig(OnnxConfig):
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
-        framework: Optional["TensorType"] = None,
     ) -> Mapping[str, Any]:
         import torch
 
         common_inputs = OrderedDict()
 
         dummy_input = super().generate_dummy_inputs(
-            tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
+            tokenizer,
+            batch_size=batch_size,
+            seq_length=seq_length,
+            is_pair=is_pair,
         )
 
         batch, encoder_sequence = dummy_input["input_ids"].shape

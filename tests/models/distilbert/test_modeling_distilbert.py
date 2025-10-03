@@ -223,7 +223,7 @@ class DistilBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         if is_torch_available()
         else {}
     )
-    fx_compatible = True
+    fx_compatible = False  # won't be maintained
     test_pruning = True
     test_resize_embeddings = True
     test_resize_position_embeddings = True
@@ -383,7 +383,7 @@ class DistilBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
 
 @require_torch
-class DistilBertModelIntergrationTest(unittest.TestCase):
+class DistilBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head_absolute_embedding(self):
         model = DistilBertModel.from_pretrained("distilbert-base-uncased")

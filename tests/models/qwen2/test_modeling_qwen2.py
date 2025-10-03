@@ -19,7 +19,7 @@ import unittest
 import pytest
 from packaging import version
 
-from transformers import AutoTokenizer, Qwen2Config, is_torch_available, set_seed
+from transformers import AutoTokenizer, is_torch_available, set_seed
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
     Expectations,
@@ -27,7 +27,6 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -49,30 +48,12 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 class Qwen2ModelTester(CausalLMModelTester):
-    config_class = Qwen2Config
     if is_torch_available():
         base_model_class = Qwen2Model
-        causal_lm_class = Qwen2ForCausalLM
-        sequence_class = Qwen2ForSequenceClassification
-        token_class = Qwen2ForTokenClassification
-        question_answering_class = Qwen2ForQuestionAnswering
 
 
 @require_torch
 class Qwen2ModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            Qwen2Model,
-            Qwen2ForCausalLM,
-            Qwen2ForSequenceClassification,
-            Qwen2ForTokenClassification,
-            Qwen2ForQuestionAnswering,
-        )
-        if is_torch_available()
-        else ()
-    )
-    test_headmasking = False
-    test_pruning = False
     model_tester_class = Qwen2ModelTester
     pipeline_model_mapping = (
         {
@@ -98,13 +79,6 @@ class Qwen2ModelTest(CausalLMModelTest, unittest.TestCase):
         processor_name,
     ):
         return True
-
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest(reason="Qwen2 flash attention does not support right padding")
 
 
 @require_torch
@@ -215,7 +189,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
     @slow
     def test_speculative_generation(self):
         EXPECTED_TEXT_COMPLETION = (
-            "My favourite condiment is 100% natural honey, and I always like to use it in my recipes. I love"
+            "My favourite condiment is 100% natural and organic, and I love to use it to make my own sauces."
         )
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-7B", use_fast=False)
@@ -255,6 +229,9 @@ class Qwen2IntegrationTest(unittest.TestCase):
             ],
             ("cuda", 8): [
                 "My favourite condiment is 100% natural, organic, gluten free, vegan, and vegetarian. I love to use"
+            ],
+            ("rocm", (9, 4)): [
+                "My favourite condiment is 100% natural, organic and vegan. I love to use it in my cooking, but"
             ],
             ("rocm", (9, 5)): [
                 "My favourite condiment is 100% natural, organic, gluten free, vegan, and vegetarian. I love to use"

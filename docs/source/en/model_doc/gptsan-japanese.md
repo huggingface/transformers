@@ -50,7 +50,7 @@ The `generate()` method can be used to generate text using GPTSAN-Japanese model
 >>> model = AutoModel.from_pretrained("Tanrei/GPTSAN-japanese").to(device)
 >>> x_tok = tokenizer("は、", prefix_text="織田信長", return_tensors="pt")
 >>> torch.manual_seed(0)
->>> gen_tok = model.generate(x_tok.input_ids.to(model.device), token_type_ids=x_tok.token_type_ids.to(mdoel.device), max_new_tokens=20)
+>>> gen_tok = model.generate(x_tok.input_ids.to(model.device), token_type_ids=x_tok.token_type_ids.to(model.device), max_new_tokens=20)
 >>> tokenizer.decode(gen_tok[0])
 '織田信長は、2004年に『戦国BASARA』のために、豊臣秀吉'
 ```

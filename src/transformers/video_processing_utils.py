@@ -35,20 +35,21 @@ from .image_utils import (
 )
 from .processing_utils import Unpack, VideosKwargs
 from .utils import (
+    IMAGE_PROCESSOR_NAME,
+    PROCESSOR_NAME,
     VIDEO_PROCESSOR_NAME,
     TensorType,
     add_start_docstrings,
-    cached_file,
     copy_func,
     download_url,
     is_offline_mode,
     is_remote_url,
     is_torch_available,
     is_torchcodec_available,
-    is_torchvision_available,
     is_torchvision_v2_available,
     logging,
 )
+from .utils.hub import cached_file
 from .utils.import_utils import requires
 from .video_utils import (
     VideoInput,
@@ -66,11 +67,9 @@ from .video_utils import (
 if is_torch_available():
     import torch
 
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
+if is_torchvision_v2_available():
+    from torchvision.transforms.v2 import functional as F
+
 
 logger = logging.get_logger(__name__)
 
@@ -93,8 +92,6 @@ BASE_VIDEO_PROCESSOR_DOCSTRING = r"""
         do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
             Whether to center crop the video to the specified `crop_size`. Can be overridden by `do_center_crop` in the
             `preprocess` method.
-        do_pad (`bool`, *optional*):
-            Whether to pad the video to the `(max_height, max_width)` of the videos in the batch.
         crop_size (`dict[str, int]` *optional*, defaults to `self.crop_size`):
             Size of the output video after applying `center_crop`. Can be overridden by `crop_size` in the `preprocess`
             method.
@@ -162,7 +159,6 @@ class BaseVideoProcessor(BaseImageProcessorFast):
     crop_size = None
     do_resize = None
     do_center_crop = None
-    do_pad = None
     do_rescale = None
     rescale_factor = 1 / 255
     do_normalize = None
@@ -303,10 +299,14 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         # Only sample frames if an array video is passed, otherwise first decode -> then sample
         if is_valid_video(videos[0]) and do_sample_frames:
             sampled_videos = []
+            sampled_metadata = []
             for video, metadata in zip(videos, video_metadata):
                 indices = sample_indices_fn(metadata=metadata)
+                metadata.frames_indices = indices
                 sampled_videos.append(video[indices])
+                sampled_metadata.append(metadata)
             videos = sampled_videos
+            video_metadata = sampled_metadata
         elif not is_valid_video(videos[0]):
             if isinstance(videos[0], list):
                 # Videos sometimes are passed as a list of image URLs, especially through templates
@@ -395,12 +395,10 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
-        size_divisor: Optional[int],
         interpolation: Optional["F.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
-        do_pad: bool,
         rescale_factor: float,
         do_normalize: bool,
         image_mean: Optional[Union[float, list[float]]],
@@ -415,9 +413,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             if do_convert_rgb:
                 stacked_videos = self.convert_to_rgb(stacked_videos)
             if do_resize:
-                stacked_videos = self.resize(
-                    stacked_videos, size=size, size_divisor=size_divisor, interpolation=interpolation
-                )
+                stacked_videos = self.resize(stacked_videos, size=size, interpolation=interpolation)
             resized_videos_grouped[shape] = stacked_videos
         resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)
 
@@ -463,16 +459,13 @@ class BaseVideoProcessor(BaseImageProcessorFast):
                   [`~video_processing_utils.VideoProcessorBase.save_pretrained`] method, e.g.,
                   `./my_model_directory/`.
                 - a path or url to a saved video processor JSON *file*, e.g.,
-                  `./my_model_directory/preprocessor_config.json`.
+                  `./my_model_directory/video_preprocessor_config.json`.
             cache_dir (`str` or `os.PathLike`, *optional*):
                 Path to a directory in which a downloaded pretrained model video processor should be cached if the
                 standard cache should not be used.
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force to (re-)download the video processor files and override the cached versions if
                 they exist.
-            resume_download:
-                Deprecated and ignored. All downloads are now resumed by default when possible.
-                Will be removed in v5 of Transformers.
             proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -518,7 +511,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         video_processor = LlavaOnevisionVideoProcessor.from_pretrained(
             "./test/saved_model/"
         )  # E.g. video processor (or model) was saved using *save_pretrained('./test/saved_model/')*
-        video_processor = LlavaOnevisionVideoProcessor.from_pretrained("./test/saved_model/preprocessor_config.json")
+        video_processor = LlavaOnevisionVideoProcessor.from_pretrained("./test/saved_model/video_preprocessor_config.json")
         video_processor = LlavaOnevisionVideoProcessor.from_pretrained(
             "llava-hf/llava-onevision-qwen2-0.5b-ov-hf", do_normalize=False, foo=False
         )
@@ -634,7 +627,6 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         """
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
-        resume_download = kwargs.pop("resume_download", None)
         proxies = kwargs.pop("proxies", None)
         token = kwargs.pop("token", None)
         use_auth_token = kwargs.pop("use_auth_token", None)
@@ -673,47 +665,33 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             video_processor_file = pretrained_model_name_or_path
             resolved_video_processor_file = download_url(pretrained_model_name_or_path)
         else:
+            video_processor_file = VIDEO_PROCESSOR_NAME
             try:
-                # Try to load with a new config name first and if not successful try with
-                # the old file name. In case we can load with old name only, raise a deprecation warning
-                # Deprecated until v5.0
-                video_processor_file = VIDEO_PROCESSOR_NAME
-                resolved_video_processor_file = cached_file(
-                    pretrained_model_name_or_path,
-                    video_processor_file,
-                    cache_dir=cache_dir,
-                    force_download=force_download,
-                    proxies=proxies,
-                    resume_download=resume_download,
-                    local_files_only=local_files_only,
-                    token=token,
-                    user_agent=user_agent,
-                    revision=revision,
-                    subfolder=subfolder,
-                )
+                # Try to load with a new config name first and if not successful try with the old file name
+                # NOTE: we will gradually change to saving all processor configs as nested dict in PROCESSOR_NAME
+                resolved_video_processor_files = [
+                    resolved_file
+                    for filename in [VIDEO_PROCESSOR_NAME, IMAGE_PROCESSOR_NAME, PROCESSOR_NAME]
+                    if (
+                        resolved_file := cached_file(
+                            pretrained_model_name_or_path,
+                            filename=filename,
+                            cache_dir=cache_dir,
+                            force_download=force_download,
+                            proxies=proxies,
+                            local_files_only=local_files_only,
+                            token=token,
+                            user_agent=user_agent,
+                            revision=revision,
+                            subfolder=subfolder,
+                            _raise_exceptions_for_missing_entries=False,
+                        )
+                    )
+                    is not None
+                ]
+                resolved_video_processor_file = resolved_video_processor_files[0]
             except OSError:
-                video_processor_file = "preprocessor_config.json"
-                resolved_video_processor_file = cached_file(
-                    pretrained_model_name_or_path,
-                    video_processor_file,
-                    cache_dir=cache_dir,
-                    force_download=force_download,
-                    proxies=proxies,
-                    resume_download=resume_download,
-                    local_files_only=local_files_only,
-                    token=token,
-                    user_agent=user_agent,
-                    revision=revision,
-                    subfolder=subfolder,
-                )
-                logger.warning_once(
-                    "You have video processor config saved in `preprocessor.json` file which is deprecated. "
-                    "Video processor configs should be saved in their own `video_preprocessor.json` file. You can rename "
-                    "the file or load and save the processor back which renames it automatically. "
-                    "Loading from `preprocessor.json` will be removed in v5.0."
-                )
-            except OSError:
-                # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
+                # Raise any OS error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
                 raise
             except Exception:
@@ -730,6 +708,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             with open(resolved_video_processor_file, "r", encoding="utf-8") as reader:
                 text = reader.read()
             video_processor_dict = json.loads(text)
+            video_processor_dict = video_processor_dict.get("video_processor", video_processor_dict)
 
         except json.JSONDecodeError:
             raise OSError(

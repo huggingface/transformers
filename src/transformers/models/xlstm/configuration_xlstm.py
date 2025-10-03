@@ -171,7 +171,7 @@ class xLSTMConfig(PretrainedConfig):
         chunkwise_kernel: ChunkwiseKernelType = "chunkwise--native_autograd",
         sequence_kernel: SequenceKernelType = "native_sequence__native",
         step_kernel: StepKernelType = "native",
-        # nedded to enable generation
+        # needed to enable generation
         mode: BackendModeType = "inference",
         chunk_size: int = 64,
         # needed to be true for generation

@@ -16,17 +16,8 @@ import unittest
 
 from transformers import MyT5Tokenizer
 from transformers.testing_utils import slow
-from transformers.utils import is_tf_available, is_torch_available
 
 from ...test_tokenization_common import TokenizerTesterMixin
-
-
-if is_torch_available():
-    FRAMEWORK = "pt"
-elif is_tf_available():
-    FRAMEWORK = "tf"
-else:
-    FRAMEWORK = "jax"
 
 
 def bytes_to_hex(bline: bytes, sep: str = " ") -> str:

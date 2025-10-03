@@ -17,14 +17,17 @@ and remove unnecessary dependencies.
 """
 
 import base64
+import importlib
 import io
 import os
 import warnings
+from collections.abc import Sequence
 from io import BytesIO
-from typing import Any, Optional, Sequence, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
+import httpx
 import numpy as np
-import requests
+from packaging import version
 
 from .utils import (
     is_librosa_available,
@@ -36,6 +39,9 @@ from .utils import (
 )
 
 
+if TYPE_CHECKING:
+    import torch
+
 if is_soundfile_available():
     import soundfile as sf
 
@@ -46,10 +52,9 @@ if is_librosa_available():
     import soxr
 
 if is_torchcodec_available():
-    from torchcodec.decoders import AudioDecoder
+    TORCHCODEC_VERSION = version.parse(importlib.metadata.version("torchcodec"))
 
-
-AudioInput = Union[np.ndarray, "torch.Tensor", Sequence[np.ndarray], Sequence["torch.Tensor"]]  # noqa: F821
+AudioInput = Union[np.ndarray, "torch.Tensor", Sequence[np.ndarray], Sequence["torch.Tensor"]]
 
 
 def load_audio(audio: Union[str, np.ndarray], sampling_rate=16000, timeout=None) -> np.ndarray:
@@ -71,14 +76,12 @@ def load_audio(audio: Union[str, np.ndarray], sampling_rate=16000, timeout=None)
     if isinstance(audio, str):
         # Try to load with `torchcodec` but do not enforce users to install it. If not found
         # fallback to `librosa`. If using an audio-only model, most probably `torchcodec` won't be
-        # needed.
-        if is_torchcodec_available():
+        # needed. Do not raise any errors if not installed or versions do not match
+        if is_torchcodec_available() and TORCHCODEC_VERSION >= version.parse("0.3.0"):
             audio = load_audio_torchcodec(audio, sampling_rate=sampling_rate)
         else:
             audio = load_audio_librosa(audio, sampling_rate=sampling_rate, timeout=timeout)
-    elif isinstance(audio, np.ndarray):
-        audio = audio
-    else:
+    elif not isinstance(audio, np.ndarray):
         raise TypeError(
             "Incorrect format used for `audio`. Should be an url linking to an audio, a local path, or numpy array."
         )
@@ -99,7 +102,9 @@ def load_audio_torchcodec(audio: Union[str, np.ndarray], sampling_rate=16000) ->
     Returns:
         `np.ndarray`: A numpy array representing the audio.
     """
-    requires_backends(load_audio, ["torchcodec"])
+    # Lazy import so that issues in torchcodec compatibility don't crash the whole library
+    requires_backends(load_audio_torchcodec, ["torchcodec"])
+    from torchcodec.decoders import AudioDecoder
 
     # Set `num_channels` to `1` which is what most models expects and the default in librosa
     decoder = AudioDecoder(audio, sample_rate=sampling_rate, num_channels=1)
@@ -123,11 +128,13 @@ def load_audio_librosa(audio: Union[str, np.ndarray], sampling_rate=16000, timeo
     Returns:
         `np.ndarray`: A numpy array representing the audio.
     """
-    requires_backends(load_audio, ["librosa"])
+    requires_backends(load_audio_librosa, ["librosa"])
 
     # Load audio from URL (e.g https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/translate_to_chinese.wav)
     if audio.startswith("http://") or audio.startswith("https://"):
-        audio = librosa.load(BytesIO(requests.get(audio, timeout=timeout).content), sr=sampling_rate)[0]
+        audio = librosa.load(
+            BytesIO(httpx.get(audio, follow_redirects=True, timeout=timeout).content), sr=sampling_rate
+        )[0]
     elif os.path.isfile(audio):
         audio = librosa.load(audio, sr=sampling_rate)[0]
     return audio
@@ -169,7 +176,7 @@ def load_audio_as(
         # Load audio bytes from URL or file
         audio_bytes = None
         if audio.startswith(("http://", "https://")):
-            response = requests.get(audio, timeout=timeout)
+            response = httpx.get(audio, follow_redirects=True, timeout=timeout)
             response.raise_for_status()
             audio_bytes = response.content
         elif os.path.isfile(audio):
@@ -314,9 +321,7 @@ def mel_to_hertz(mels: Union[float, np.ndarray], mel_scale: str = "htk") -> Unio
     return freq
 
 
-def hertz_to_octave(
-    freq: Union[float, np.ndarray], tuning: Optional[float] = 0.0, bins_per_octave: Optional[int] = 12
-):
+def hertz_to_octave(freq: Union[float, np.ndarray], tuning: float = 0.0, bins_per_octave: int = 12):
     """
     Convert frequency from hertz to fractional octave numbers.
     Adapted from *librosa*.
@@ -366,7 +371,7 @@ def chroma_filter_bank(
     tuning: float = 0.0,
     power: Optional[float] = 2.0,
     weighting_parameters: Optional[tuple[float, float]] = (5.0, 2.0),
-    start_at_c_chroma: Optional[bool] = True,
+    start_at_c_chroma: bool = True,
 ):
     """
     Creates a chroma filter bank, i.e a linear transformation to project spectrogram bins onto chroma bins.
@@ -387,7 +392,7 @@ def chroma_filter_bank(
         weighting_parameters (`tuple[float, float]`, *optional*, defaults to `(5., 2.)`):
             If specified, apply a Gaussian weighting parameterized by the first element of the tuple being the center and
             the second element being the Gaussian half-width.
-        start_at_c_chroma (`float`, *optional*, defaults to `True`):
+        start_at_c_chroma (`bool`, *optional*, defaults to `True`):
             If True, the filter bank will start at the 'C' pitch class. Otherwise, it will start at 'A'.
     Returns:
         `np.ndarray` of shape `(num_frequency_bins, num_chroma)`
@@ -582,7 +587,7 @@ def window_function(
         window = np.hamming(length)
     elif name in ["hann", "hann_window"]:
         window = np.hanning(length)
-    elif name in ["povey"]:
+    elif name == "povey":
         window = np.power(np.hanning(length), 0.85)
     else:
         raise ValueError(f"Unknown window function '{name}'")
@@ -623,7 +628,7 @@ def spectrogram(
     reference: float = 1.0,
     min_value: float = 1e-10,
     db_range: Optional[float] = None,
-    remove_dc_offset: Optional[bool] = None,
+    remove_dc_offset: bool = False,
     dtype: np.dtype = np.float32,
 ) -> np.ndarray:
     """
@@ -834,7 +839,7 @@ def spectrogram_batch(
     reference: float = 1.0,
     min_value: float = 1e-10,
     db_range: Optional[float] = None,
-    remove_dc_offset: Optional[bool] = None,
+    remove_dc_offset: bool = False,
     dtype: np.dtype = np.float32,
 ) -> list[np.ndarray]:
     """

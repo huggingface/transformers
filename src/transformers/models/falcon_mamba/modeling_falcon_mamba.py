@@ -35,6 +35,7 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
 from ...utils.import_utils import (
     is_causal_conv1d_available,
+    is_kernels_available,
     is_mamba_ssm_available,
     is_mambapy_available,
 )
@@ -54,11 +55,6 @@ if is_mamba_ssm_available():
 else:
     selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
 
-if is_causal_conv1d_available():
-    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
-else:
-    causal_conv1d_update, causal_conv1d_fn = None, None
-
 
 logger = logging.get_logger(__name__)
 
@@ -71,7 +67,8 @@ class FalconMambaCache:
         config (`PretrainedConfig):
             The configuration file defining the shape-related attributes required to initialize the static cache.
         max_batch_size (`int`):
-            The maximum batch size with which the model will be used. Note that a new instance must be instantiated if a smaller batch size is used.
+            The maximum batch size with which the model will be used. Note that a new instance must be instantiated if
+            a smaller batch size is used.
         dtype (`torch.dtype`, *optional*, defaults to `torch.float16`):
             The default `dtype` to use when initializing the layer.
         device (`torch.device` or `str`, *optional*):
@@ -80,18 +77,19 @@ class FalconMambaCache:
     Example:
 
         ```python
+        >>> import torch
         >>> from transformers import AutoTokenizer, FalconMambaForCausalLM, FalconMambaCache
 
-        >>> model = FalconMambaForCausalLM.from_pretrained("state-spaces/falcon_mamba-130m-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("state-spaces/falcon_mamba-130m-hf")
+        >>> model = FalconMambaForCausalLM.from_pretrained("tiiuae/falcon-mamba-7b")
+        >>> tokenizer = AutoTokenizer.from_pretrained("tiiuae/falcon-mamba-7b")
 
         >>> inputs = tokenizer(text="My name is FalconMamba", return_tensors="pt")
 
         >>> # Prepare a cache class and pass it to model's forward
-        >>> past_key_values = FalconMambaCache(config=model.config, max_batch_size=1, device=model.device, dtype=model.dtype)
-        >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> outputs.past_key_values
-        FalconMambaCache()
+        >>> cache_params = FalconMambaCache(config=model.config, max_batch_size=1, device=model.device, dtype=model.dtype)
+        >>> cache_position = torch.arange(len(inputs["input_ids"][0]), device=model.device)  # sequence length
+        >>> outputs = model(**inputs, cache_params=cache_params, cache_position=cache_position, use_cache=True)
+        >>> outputs.cache_params
         ```
     """
 
@@ -162,6 +160,28 @@ class FalconMambaCache:
             # In-place ops prevent breaking the static address
             self.conv_states[layer_idx].zero_()
             self.ssm_states[layer_idx].zero_()
+
+
+def _lazy_load_causal_conv1d():
+    global _causal_conv1d_cache
+    if _causal_conv1d_cache is not None:
+        return _causal_conv1d_cache
+
+    if is_kernels_available():
+        from kernels import get_kernel
+
+        _causal_conv1d_kernel = get_kernel("kernels-community/causal-conv1d")
+        _causal_conv1d_cache = (_causal_conv1d_kernel.causal_conv1d_update, _causal_conv1d_kernel.causal_conv1d_fn)
+    elif is_causal_conv1d_available():
+        from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
+
+        _causal_conv1d_cache = (causal_conv1d_update, causal_conv1d_fn)
+    else:
+        _causal_conv1d_cache = (None, None)
+    return _causal_conv1d_cache
+
+
+_causal_conv1d_cache = None
 
 
 def rms_forward(hidden_states, variance_epsilon=1e-6):
@@ -243,6 +263,7 @@ class FalconMambaMixer(nn.Module):
         self.rms_eps = config.mixer_rms_eps
 
     def warn_slow_implementation(self):
+        causal_conv1d_update, causal_conv1d_fn = _lazy_load_causal_conv1d()
         is_fast_path_available = all(
             (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
         )
@@ -251,8 +272,8 @@ class FalconMambaMixer(nn.Module):
                 if is_mambapy_available():
                     logger.warning_once(
                         "The fast path is not available because one of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)`"
-                        " is None. Falling back to the mamba.py backend. To install follow https://github.com/state-spaces/mamba/#installation and"
-                        " https://github.com/Dao-AILab/causal-conv1d"
+                        " is None. Falling back to the mamba.py backend. To install follow https://github.com/state-spaces/mamba/#installation for mamba-ssm and"
+                        " https://github.com/Dao-AILab/causal-conv1d or `pip install kernels` for causal-conv1d"
                     )
                 else:
                     raise ImportError(
@@ -261,8 +282,8 @@ class FalconMambaMixer(nn.Module):
             else:
                 logger.warning_once(
                     "The fast path is not available because one of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)`"
-                    " is None. Falling back to the sequential implementation of Mamba, as use_mambapy is set to False. To install follow https://github.com/state-spaces/mamba/#installation and"
-                    " https://github.com/Dao-AILab/causal-conv1d. For the mamba.py backend, follow https://github.com/alxndrTL/mamba.py."
+                    " is None. Falling back to the sequential implementation of Mamba, as use_mambapy is set to False. To install follow https://github.com/state-spaces/mamba/#installation for mamba-ssm and"
+                    " https://github.com/Dao-AILab/causal-conv1d or `pip install kernels` for causal-conv1d. For the mamba.py backend, follow https://github.com/alxndrTL/mamba.py."
                 )
 
     def cuda_kernels_forward(
@@ -297,6 +318,7 @@ class FalconMambaMixer(nn.Module):
             )
 
         else:
+            causal_conv1d_update, causal_conv1d_fn = _lazy_load_causal_conv1d()
             hidden_states, gate = projected_states.chunk(2, dim=1)
 
             if attention_mask is not None:
@@ -491,6 +513,7 @@ class FalconMambaMixer(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ):
+        causal_conv1d_update, causal_conv1d_fn = _lazy_load_causal_conv1d()
         is_fast_path_available = all(
             (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
         )
@@ -562,8 +585,6 @@ class FalconMambaPreTrainedModel(PreTrainedModel):
             A = torch.arange(1, module.ssm_state_size + 1, dtype=torch.float32)[None, :]
             A = A.expand(module.intermediate_size, -1).contiguous()
             module.A_log.copy_(torch.log(A))
-            module.A_log._no_weight_decay = True
-            module.D._no_weight_decay = True
             module.D.data.fill_(1.0)
 
             dt_init_std = self.config.time_step_rank**-0.5 * self.config.time_step_scale
@@ -841,6 +862,12 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
                 "attention_mask": attention_mask,
             }
         )
+
+        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
+        for key, value in kwargs.items():
+            if key not in model_inputs:
+                model_inputs[key] = value
+
         return model_inputs
 
     @auto_docstring
@@ -886,7 +913,7 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            # move labels to correct device to enable model parallelism
+            # move labels to correct device
             labels = labels.to(logits.device)
             # Shift so that tokens < n predict n
             shift_logits = logits[..., :-1, :].contiguous()

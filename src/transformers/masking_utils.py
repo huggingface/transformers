@@ -26,7 +26,7 @@ from .utils.import_utils import is_torch_flex_attn_available, is_torch_greater_o
 
 
 if is_torch_flex_attn_available():
-    from torch.nn.attention.flex_attention import _DEFAULT_SPARSE_BLOCK_SIZE as flex_default_block_size  # noqa: N811
+    from torch.nn.attention.flex_attention import _DEFAULT_SPARSE_BLOCK_SIZE as flex_default_block_size
     from torch.nn.attention.flex_attention import BlockMask, create_block_mask
 else:
     # Register a fake type to avoid crashing for annotations and `isinstance` checks
@@ -43,7 +43,7 @@ if _is_torch_greater_or_equal_than_2_6:
 logger = logging.get_logger(__name__)
 
 
-def and_masks(*mask_functions: list[Callable]) -> Callable:
+def and_masks(*mask_functions: Callable) -> Callable:
     """Returns a mask function that is the intersection of provided mask functions"""
     if not all(callable(arg) for arg in mask_functions):
         raise RuntimeError(f"All inputs should be callable mask_functions: {mask_functions}")
@@ -57,7 +57,7 @@ def and_masks(*mask_functions: list[Callable]) -> Callable:
     return and_mask
 
 
-def or_masks(*mask_functions: list[Callable]) -> Callable:
+def or_masks(*mask_functions: Callable) -> Callable:
     """Returns a mask function that is the union of provided mask functions"""
     if not all(callable(arg) for arg in mask_functions):
         raise RuntimeError(f"All inputs should be callable mask_functions: {mask_functions}")
@@ -625,6 +625,7 @@ class AttentionMaskInterface(GeneralInterface):
         "sdpa": sdpa_mask,
         "eager": eager_mask,
         "flash_attention_2": flash_attention_mask,
+        "flash_attention_3": flash_attention_mask,
         "flex_attention": flex_attention_mask,
     }
 
@@ -799,14 +800,11 @@ def create_causal_mask(
     if _is_torch_xpu_available:
         allow_is_causal_skip = True
     else:
-        allow_is_causal_skip = not past_key_values.is_compileable if past_key_values is not None else True
-
-    # If we detected packing format
-    if packed_sequence_mask is not None and _is_torch_greater_or_equal_than_2_6:
-        mask_factory_function = and_masks(mask_factory_function, packed_sequence_mask_function(packed_sequence_mask))
-        allow_is_causal_skip = False
+        allow_is_causal_skip = not getattr(past_key_values, "is_compileable", False)
 
     # Allow slight deviations from causal mask
+    # Note that it is very important to apply this before any other deviations of the mask (such as packed sequence mask,
+    # padding mask, etc) as the resulting mask may otherwise not be correct!
     if or_mask_function is not None:
         if not _is_torch_greater_or_equal_than_2_6:
             raise ValueError("Using `or_mask_function` or `and_mask_function` arguments require torch>=2.6")
@@ -816,6 +814,11 @@ def create_causal_mask(
         if not _is_torch_greater_or_equal_than_2_6:
             raise ValueError("Using `or_mask_function` or `and_mask_function` arguments require torch>=2.6")
         mask_factory_function = and_masks(mask_factory_function, and_mask_function)
+        allow_is_causal_skip = False
+
+    # If we detected packing format
+    if packed_sequence_mask is not None and _is_torch_greater_or_equal_than_2_6:
+        mask_factory_function = and_masks(mask_factory_function, packed_sequence_mask_function(packed_sequence_mask))
         allow_is_causal_skip = False
 
     # We now create the mask
@@ -893,14 +896,11 @@ def create_sliding_window_causal_mask(
 
     # Do not allow skip if we are compiling (this is to match BC)
     # TODO: cyril -> probably revisit and remove this, but a lot of tests rely on it
-    allow_is_causal_skip = not past_key_values.is_compileable if past_key_values is not None else True
+    allow_is_causal_skip = not getattr(past_key_values, "is_compileable", False)
 
-    # If we detected packing format
-    if packed_sequence_mask is not None and _is_torch_greater_or_equal_than_2_6:
-        mask_factory_function = and_masks(mask_factory_function, packed_sequence_mask_function(packed_sequence_mask))
-        allow_is_causal_skip = False
-
-    # Allow slight deviations from sliding causal mask
+    # Allow slight deviations from causal mask
+    # Note that it is very important to apply this before any other deviations of the mask (such as packed sequence mask,
+    # padding mask, etc) as the resulting mask may otherwise not be correct!
     if or_mask_function is not None:
         if not _is_torch_greater_or_equal_than_2_6:
             raise ValueError("Using `or_mask_function` or `and_mask_function` arguments require torch>=2.6")
@@ -910,6 +910,11 @@ def create_sliding_window_causal_mask(
         if not _is_torch_greater_or_equal_than_2_6:
             raise ValueError("Using `or_mask_function` or `and_mask_function` arguments require torch>=2.6")
         mask_factory_function = and_masks(mask_factory_function, and_mask_function)
+        allow_is_causal_skip = False
+
+    # If we detected packing format
+    if packed_sequence_mask is not None and _is_torch_greater_or_equal_than_2_6:
+        mask_factory_function = and_masks(mask_factory_function, packed_sequence_mask_function(packed_sequence_mask))
         allow_is_causal_skip = False
 
     # We now create the mask
@@ -1013,14 +1018,11 @@ def create_chunked_causal_mask(
 
     # Do not allow skip if we are compiling (this is to match BC)
     # TODO: cyril -> probably revisit and remove this, but a lot of tests rely on it
-    allow_is_causal_skip = not past_key_values.is_compileable if past_key_values is not None else True
+    allow_is_causal_skip = not getattr(past_key_values, "is_compileable", False)
 
-    # If we detected packing format
-    if packed_sequence_mask is not None and _is_torch_greater_or_equal_than_2_6:
-        mask_factory_function = and_masks(mask_factory_function, packed_sequence_mask_function(packed_sequence_mask))
-        allow_is_causal_skip = False
-
-    # Allow slight deviations from chunked causal mask
+    # Allow slight deviations from causal mask
+    # Note that it is very important to apply this before any other deviations of the mask (such as packed sequence mask,
+    # padding mask, etc) as the resulting mask may otherwise not be correct!
     if or_mask_function is not None:
         if not _is_torch_greater_or_equal_than_2_6:
             raise ValueError("Using `or_mask_function` or `and_mask_function` arguments require torch>=2.6")
@@ -1030,6 +1032,11 @@ def create_chunked_causal_mask(
         if not _is_torch_greater_or_equal_than_2_6:
             raise ValueError("Using `or_mask_function` or `and_mask_function` arguments require torch>=2.6")
         mask_factory_function = and_masks(mask_factory_function, and_mask_function)
+        allow_is_causal_skip = False
+
+    # If we detected packing format
+    if packed_sequence_mask is not None and _is_torch_greater_or_equal_than_2_6:
+        mask_factory_function = and_masks(mask_factory_function, packed_sequence_mask_function(packed_sequence_mask))
         allow_is_causal_skip = False
 
     # We now create the mask
@@ -1067,8 +1074,8 @@ def create_masks_for_generate(
     **kwargs,
 ):
     """
-    This function mimics how we create the masks in the `modeling_xxx.py` files, and is used in `generate` in order
-    to easily create the masks in advance, when we compile the forwards with Static caches.
+    This function mimics how we create the masks in the `modeling_xxx.py` files, and is used in places like `generate`
+    in order to easily create the masks in advance, when we compile the forwards with Static caches.
 
     Args:
         config (`PretrainedConfig`):

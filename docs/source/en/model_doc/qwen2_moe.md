@@ -24,7 +24,6 @@ rendered properly in your Markdown viewer.
 
 # Qwen2MoE
 
-
 [Qwen2MoE](https://huggingface.co/papers/2407.10671) is a Mixture-of-Experts (MoE) variant of [Qwen2](./qwen2), available as a base model and an aligned chat model. It uses SwiGLU activation, group query attention and a mixture of sliding window attention and full attention. The tokenizer can also be adapted to multiple languages and codes.
 
 The MoE architecture uses upcyled models from the dense language models. For example, Qwen1.5-MoE-A2.7B is upcycled from Qwen-1.8B. It has 14.3B parameters but only 2.7B parameters are activated during runtime.
@@ -57,6 +56,7 @@ messages = [
 outputs = pipe(messages, max_new_tokens=256, do_sample=True, temperature=0.7, top_k=50, top_p=0.95)
 print(outputs[0]["generated_text"][-1]['content'])
 ```
+
 </hfoption>
 <hfoption id="AutoModel">
 
@@ -100,14 +100,14 @@ generated_ids = [
 response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 print(response)
 ```
-</hfoption> 
+
+</hfoption>
 <hfoption id="transformers CLI">
 ```bash
 transformers chat Qwen/Qwen1.5-MoE-A2.7B-Chat --dtype auto --attn_implementation flash_attention_2
 ```
 </hfoption>
- </hfoptions> 
-
+ </hfoptions>
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 

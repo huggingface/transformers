@@ -7,7 +7,7 @@ from typing import Optional, Union
 import numpy as np
 
 
-def ffmpeg_read(bpayload: bytes, sampling_rate: int) -> np.array:
+def ffmpeg_read(bpayload: bytes, sampling_rate: int) -> np.ndarray:
     """
     Helper function to read an audio file through ffmpeg.
     """
@@ -173,7 +173,7 @@ def ffmpeg_microphone_live(
     Return:
         A generator yielding dictionaries of the following form
 
-        `{"sampling_rate": int, "raw": np.array(), "partial" bool}` With optionally a `"stride" (int, int)` key if
+        `{"sampling_rate": int, "raw": np.ndarray, "partial" bool}` With optionally a `"stride" (int, int)` key if
         `stride_length_s` is defined.
 
         `stride` and `raw` are all expressed in `samples`, and `partial` is a boolean saying if the current yield item

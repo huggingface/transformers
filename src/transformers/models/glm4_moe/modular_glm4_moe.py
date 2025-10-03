@@ -17,7 +17,6 @@
 from typing import Optional
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...configuration_utils import PretrainedConfig
@@ -182,6 +181,9 @@ class Glm4MoeConfig(PretrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    attribute_map = {
+        "num_local_experts": "n_routed_experts",
+    }
 
     def __init__(
         self,
@@ -255,7 +257,7 @@ class Glm4MoeConfig(PretrainedConfig):
         )
 
 
-class Glm4MoeAttention(CohereAttention, nn.Module):
+class Glm4MoeAttention(CohereAttention):
     def __init__(self, config: Glm4MoeConfig, layer_idx: Optional[int] = None):
         nn.Module.__init__(self)
         self.config = config
@@ -287,7 +289,7 @@ class Glm4MoeMLP(DeepseekV3MLP):
     pass
 
 
-class Glm4MoeTopkRouter(DeepseekV3TopkRouter, nn.Module):
+class Glm4MoeTopkRouter(DeepseekV3TopkRouter):
     def __init__(self, config: Glm4MoeConfig):
         nn.Module.__init__(self)
         self.config = config

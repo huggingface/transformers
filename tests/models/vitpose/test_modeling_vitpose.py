@@ -15,12 +15,13 @@
 
 import inspect
 import unittest
+from functools import cached_property
 
 import requests
 
 from transformers import VitPoseBackboneConfig, VitPoseConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 from transformers.utils.import_utils import get_torch_major_and_minor_version
 
 from ...test_configuration_common import ConfigTester
@@ -50,7 +51,7 @@ class VitPoseModelTester:
         is_training=True,
         use_labels=True,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -153,7 +154,6 @@ class VitPoseModelTest(ModelTesterMixin, unittest.TestCase):
 
     test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     test_torch_exportable = True
     test_torch_exportable_strictly = get_torch_major_and_minor_version() != "2.7"
 

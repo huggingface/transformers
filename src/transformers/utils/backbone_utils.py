@@ -76,7 +76,7 @@ def verify_out_features_out_indices(
 
 def _align_output_features_output_indices(
     out_features: Optional[list[str]],
-    out_indices: Optional[Union[list[int], tuple[int]]],
+    out_indices: Optional[Union[list[int], tuple[int, ...]]],
     stage_names: list[str],
 ):
     """
@@ -284,7 +284,7 @@ class BackboneConfigMixin:
         return self._out_indices
 
     @out_indices.setter
-    def out_indices(self, out_indices: Union[tuple[int], list[int]]):
+    def out_indices(self, out_indices: Union[tuple[int, ...], list[int]]):
         """
         Set the out_indices attribute. This will also update the out_features attribute to match the new out_indices.
         """

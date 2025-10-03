@@ -49,7 +49,7 @@ class BrosModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=64,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -323,7 +323,7 @@ class BrosModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     dtype=torch.bool,
                     device=torch_device,
                 )
-            elif model_class.__name__ in ["BrosSpadeEEForTokenClassification"]:
+            elif model_class.__name__ == "BrosSpadeEEForTokenClassification":
                 inputs_dict["initial_token_labels"] = torch.zeros(
                     (self.model_tester.batch_size, self.model_tester.seq_length),
                     dtype=torch.long,

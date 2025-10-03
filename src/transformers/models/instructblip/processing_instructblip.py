@@ -17,7 +17,7 @@ Processor class for InstructBLIP. Largely copy of Blip2Processor with addition o
 """
 
 import os
-from typing import Union
+from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
@@ -43,7 +43,6 @@ class InstructBlipProcessorKwargs(ProcessingKwargs, total=False):
             "return_length": False,
             "verbose": True,
         },
-        "images_kwargs": {},
     }
 
 
@@ -83,10 +82,8 @@ class InstructBlipProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[InstructBlipProcessorKwargs],
     ) -> BatchFeature:
         """

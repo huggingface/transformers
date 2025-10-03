@@ -62,7 +62,14 @@ class GptOssConfig(PretrainedConfig):
         initializer_range: float = 0.02,
         max_position_embeddings=131072,
         rms_norm_eps: float = 1e-5,
-        rope_scaling={"rope_type": "yarn", "factor": 32.0, "beta_fast": 32.0, "beta_slow": 1.0, "truncate": False},
+        rope_scaling={
+            "rope_type": "yarn",
+            "factor": 32.0,
+            "beta_fast": 32.0,
+            "beta_slow": 1.0,
+            "truncate": False,
+            "original_max_position_embeddings": 4096,
+        },
         attention_dropout: float = 0.0,
         num_experts_per_tok=4,
         router_aux_loss_coef: float = 0.9,
@@ -96,7 +103,13 @@ class GptOssConfig(PretrainedConfig):
             self.layer_types = [
                 "sliding_attention" if bool((i + 1) % 2) else "full_attention" for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types)
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
+
+        self.attention_bias = True
+        self.max_position_embeddings = max_position_embeddings
+        self.router_aux_loss_coef = router_aux_loss_coef
+        self.output_router_logits = output_router_logits
+        self.use_cache = use_cache
 
         # Validate the correctness of rotary position embeddings parameters
         # BC: if there is a 'type' field, copy it it to 'rope_type'.
@@ -104,11 +117,6 @@ class GptOssConfig(PretrainedConfig):
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self)
 
-        self.attention_bias = True
-        self.max_position_embeddings = max_position_embeddings
-        self.router_aux_loss_coef = router_aux_loss_coef
-        self.output_router_logits = output_router_logits
-        self.use_cache = use_cache
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,

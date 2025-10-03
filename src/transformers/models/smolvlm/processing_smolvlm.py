@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
-from ...processing_utils import AllKwargsForChatTemplate, ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import AllKwargsForChatTemplate, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, TextInput
 from ...utils import is_num2words_available, is_vision_available, logging
 from ...video_utils import VideoInput
@@ -103,14 +103,7 @@ def get_image_prompt_string(
     )
 
 
-class SmolVLMImagesKwargs(ImagesKwargs, total=False):
-    return_row_col_info: Optional[bool]
-    max_image_size: Optional[dict[str, int]]
-
-
 class SmolVLMProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: SmolVLMImagesKwargs
-
     _defaults = {
         "text_kwargs": {
             "add_special_tokens": True,
@@ -179,6 +172,8 @@ class SmolVLMProcessor(ProcessorMixin):
 
     def expand_text_with_image_tokens(self, text, image_rows, image_cols):
         prompt_strings = []
+        image_rows = image_rows if image_rows is not None else [[0] * len(text)]
+        image_cols = image_cols if image_cols is not None else [[0] * len(text)]
         for sample, sample_rows, sample_cols in zip(text, image_rows, image_cols):
             # Replace the image token with fake tokens around the expanded image token sequence of length `image_seq_len`
             image_prompt_strings = []
@@ -246,8 +241,7 @@ class SmolVLMProcessor(ProcessorMixin):
         self,
         images: Union[ImageInput, list[ImageInput], list[list[ImageInput]]] = None,
         text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
-        audio=None,
-        videos: VideoInput = None,
+        videos: Optional[VideoInput] = None,
         **kwargs: Unpack[SmolVLMProcessorKwargs],
     ) -> BatchEncoding:
         """
@@ -314,7 +308,7 @@ class SmolVLMProcessor(ProcessorMixin):
                 text = [text]
             elif not isinstance(text, list) and not isinstance(text[0], str):
                 raise ValueError("Invalid input text. Please provide a string, or a list of strings")
-            n_images_in_text = sum([sample.count(self.image_token) for sample in text])
+            n_images_in_text = sum(sample.count(self.image_token) for sample in text)
             if n_images_in_text > 0 and (images is None and videos is None):
                 raise ValueError(f"We detected {n_images_in_text} tokens in the text but no images/videos were passed")
 
@@ -325,8 +319,8 @@ class SmolVLMProcessor(ProcessorMixin):
             images = make_nested_list_of_images(images)
             vision_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
 
-            image_rows = vision_inputs.pop("rows", [[0] * len(text)])
-            image_cols = vision_inputs.pop("cols", [[0] * len(text)])
+            image_rows = vision_inputs.pop("rows", None)
+            image_cols = vision_inputs.pop("cols", None)
             inputs.update(vision_inputs)
 
             if text is not None:

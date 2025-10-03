@@ -293,7 +293,7 @@ class EsmFoldLayerNorm(nn.Module):
     def forward(self, x):
         d = x.dtype
         if d is torch.bfloat16 and not is_deepspeed_initialized():
-            with torch.cuda.amp.autocast(enabled=False):
+            with torch.autocast(device_type="cuda", enabled=False):
                 out = nn.functional.layer_norm(x, self.c_in, self.weight.to(dtype=d), self.bias.to(dtype=d), self.eps)
         else:
             out = nn.functional.layer_norm(x, self.c_in, self.weight, self.bias, self.eps)
@@ -308,7 +308,7 @@ def softmax_no_cast(t: torch.Tensor, dim: int = -1) -> torch.Tensor:
     """
     d = t.dtype
     if d is torch.bfloat16 and not is_deepspeed_initialized():
-        with torch.cuda.amp.autocast(enabled=False):
+        with torch.autocast(device_type="cuda", enabled=False):
             s = torch.nn.functional.softmax(t, dim=dim)
     else:
         s = torch.nn.functional.softmax(t, dim=dim)
@@ -1991,6 +1991,10 @@ class EsmFoldingTrunk(nn.Module):
 class EsmForProteinFolding(EsmPreTrainedModel):
     _no_split_modules = ["EsmFoldStructureModule", "EsmFoldTriangularSelfAttentionBlock"]
     _supports_flash_attn = False
+    _supports_sdpa = False
+    _supports_attention_backend = False
+
+    _can_record_outputs = None
 
     def __init__(self, config):
         super().__init__(config)

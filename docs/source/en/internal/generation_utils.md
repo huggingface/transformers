@@ -65,7 +65,6 @@ values. Here, for instance, it has two keys that are `sequences` and `scores`.
 
 We document here all output types.
 
-
 [[autodoc]] generation.GenerateDecoderOnlyOutput
 
 [[autodoc]] generation.GenerateEncoderDecoderOutput
@@ -74,12 +73,10 @@ We document here all output types.
 
 [[autodoc]] generation.GenerateBeamEncoderDecoderOutput
 
-
 ## LogitsProcessor
 
 A [`LogitsProcessor`] can be used to modify the prediction scores of a language model head for
 generation.
-
 
 [[autodoc]] AlternatingCodebooksLogitsProcessor
     - __call__
@@ -106,9 +103,6 @@ generation.
     - __call__
 
 [[autodoc]] ForcedEOSTokenLogitsProcessor
-    - __call__
-
-[[autodoc]] HammingDiversityLogitsProcessor
     - __call__
 
 [[autodoc]] InfNanRemoveLogitsProcessor
@@ -177,8 +171,6 @@ generation.
 [[autodoc]] WatermarkLogitsProcessor
     - __call__
 
-
-
 ## StoppingCriteria
 
 A [`StoppingCriteria`] can be used to change when to stop generation (other than EOS token). Please note that this is exclusively available to our PyTorch implementations.
@@ -200,32 +192,6 @@ A [`StoppingCriteria`] can be used to change when to stop generation (other than
 
 [[autodoc]] EosTokenCriteria
     - __call__
-
-## Constraints
-
-A [`Constraint`] can be used to force the generation to include specific tokens or sequences in the output. Please note that this is exclusively available to our PyTorch implementations.
-
-[[autodoc]] Constraint
-
-[[autodoc]] PhrasalConstraint
-
-[[autodoc]] DisjunctiveConstraint
-
-[[autodoc]] ConstraintListState
-
-## BeamSearch
-
-[[autodoc]] BeamScorer
-    - process
-    - finalize
-
-[[autodoc]] BeamSearchScorer
-    - process
-    - finalize
-
-[[autodoc]] ConstrainedBeamSearchScorer
-    - process
-    - finalize
 
 ## Streamers
 
@@ -257,7 +223,7 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
     - update
     - lazy_initialization
 
-[[autodoc]] SlidingWindowLayer
+[[autodoc]] StaticSlidingWindowLayer
     - update
     - lazy_initialization
 
@@ -306,7 +272,6 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 [[autodoc]] EncoderDecoderCache
     - to_legacy_cache
     - from_legacy_cache
-
 
 ## Watermark Utils
 

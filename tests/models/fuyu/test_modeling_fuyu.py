@@ -16,6 +16,7 @@
 import copy
 import io
 import unittest
+from functools import cached_property
 
 import pytest
 import requests
@@ -24,7 +25,6 @@ from parameterized import parameterized
 
 from transformers import FuyuConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
-from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -169,11 +169,9 @@ class FuyuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         {"text-generation": FuyuForCausalLM, "image-text-to-text": FuyuForCausalLM} if is_torch_available() else {}
     )
 
-    test_head_masking = False
     test_pruning = False
     test_cpu_offload = False
     test_disk_offload = False
-    test_model_parallel = False
 
     def setUp(self):
         self.model_tester = FuyuModelTester(self)
@@ -244,7 +242,15 @@ class FuyuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         super().test_model_parallelism()
 
     @unittest.skip(reason="Fuyu `prepare_inputs_for_generation` function doesn't have cache position.")
-    def test_generate_continue_from_inputs_embeds():
+    def test_generate_continue_from_inputs_embeds(self):
+        pass
+
+    @unittest.skip("Persimmon backbone applies key/query norm which doesn't work with packing")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Persimmon backbone applies key/query norm which doesn't work with packing")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
         pass
 
     @unittest.skip("Persimmon backbone applies key/query norm which doesn't work with packing")

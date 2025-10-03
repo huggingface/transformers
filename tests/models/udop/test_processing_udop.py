@@ -15,6 +15,7 @@
 import shutil
 import tempfile
 import unittest
+from functools import cached_property
 
 from transformers import (
     PreTrainedTokenizer,
@@ -31,7 +32,7 @@ from transformers.testing_utils import (
     require_torch,
     slow,
 )
-from transformers.utils import cached_property, is_pytesseract_available, is_torch_available
+from transformers.utils import is_pytesseract_available, is_torch_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
@@ -195,6 +196,10 @@ class UdopProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         train_data = preprocess_data(datasets["train"])
 
         self.assertEqual(len(train_data["pixel_values"]), len(train_data["input_ids"]))
+
+    @unittest.skip("We will not support batch input with and without images for UDOP!")
+    def test_processor_text_has_no_visual(self):
+        pass
 
 
 # different use cases tests

@@ -17,11 +17,13 @@
 from typing import Optional
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...utils import auto_docstring, logging
-from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available, is_mambapy_available
+from ...utils.import_utils import (
+    is_mamba_ssm_available,
+    is_mambapy_available,
+)
 from ..mamba.configuration_mamba import MambaConfig
 from ..mamba.modeling_mamba import (
     MambaBlock,
@@ -33,6 +35,7 @@ from ..mamba.modeling_mamba import (
     MambaOutput,
     MambaPreTrainedModel,
     MambaRMSNorm,
+    _lazy_load_causal_conv1d,
 )
 
 
@@ -51,10 +54,7 @@ if is_mamba_ssm_available():
 else:
     selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
 
-if is_causal_conv1d_available():
-    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
-else:
-    causal_conv1d_update, causal_conv1d_fn = None, None
+_causal_conv1d_cache = None
 
 
 class FalconMambaConfig(MambaConfig):
@@ -201,6 +201,39 @@ class FalconMambaConfig(MambaConfig):
 
 
 class FalconMambaCache(MambaCache):
+    """
+    Cache for falcon_mamba model which does not have attention mechanism and key value states.
+
+    Arguments:
+        config (`PretrainedConfig):
+            The configuration file defining the shape-related attributes required to initialize the static cache.
+        max_batch_size (`int`):
+            The maximum batch size with which the model will be used. Note that a new instance must be instantiated if
+            a smaller batch size is used.
+        dtype (`torch.dtype`, *optional*, defaults to `torch.float16`):
+            The default `dtype` to use when initializing the layer.
+        device (`torch.device` or `str`, *optional*):
+            The device on which the cache should be initialized. Should be the same as the layer.
+
+    Example:
+
+        ```python
+        >>> import torch
+        >>> from transformers import AutoTokenizer, FalconMambaForCausalLM, FalconMambaCache
+
+        >>> model = FalconMambaForCausalLM.from_pretrained("tiiuae/falcon-mamba-7b")
+        >>> tokenizer = AutoTokenizer.from_pretrained("tiiuae/falcon-mamba-7b")
+
+        >>> inputs = tokenizer(text="My name is FalconMamba", return_tensors="pt")
+
+        >>> # Prepare a cache class and pass it to model's forward
+        >>> cache_params = FalconMambaCache(config=model.config, max_batch_size=1, device=model.device, dtype=model.dtype)
+        >>> cache_position = torch.arange(len(inputs["input_ids"][0]), device=model.device)  # sequence length
+        >>> outputs = model(**inputs, cache_params=cache_params, cache_position=cache_position, use_cache=True)
+        >>> outputs.cache_params
+        ```
+    """
+
     pass
 
 
@@ -225,6 +258,7 @@ def rms_forward(hidden_states, variance_epsilon=1e-6):
 
 class FalconMambaMixer(MambaMixer):
     def warn_slow_implementation(self):
+        causal_conv1d_update, causal_conv1d_fn = _lazy_load_causal_conv1d()
         is_fast_path_available = all(
             (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
         )
@@ -233,8 +267,8 @@ class FalconMambaMixer(MambaMixer):
                 if is_mambapy_available():
                     logger.warning_once(
                         "The fast path is not available because one of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)`"
-                        " is None. Falling back to the mamba.py backend. To install follow https://github.com/state-spaces/mamba/#installation and"
-                        " https://github.com/Dao-AILab/causal-conv1d"
+                        " is None. Falling back to the mamba.py backend. To install follow https://github.com/state-spaces/mamba/#installation for mamba-ssm and"
+                        " https://github.com/Dao-AILab/causal-conv1d or `pip install kernels` for causal-conv1d"
                     )
                 else:
                     raise ImportError(
@@ -243,8 +277,8 @@ class FalconMambaMixer(MambaMixer):
             else:
                 logger.warning_once(
                     "The fast path is not available because one of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)`"
-                    " is None. Falling back to the sequential implementation of Mamba, as use_mambapy is set to False. To install follow https://github.com/state-spaces/mamba/#installation and"
-                    " https://github.com/Dao-AILab/causal-conv1d. For the mamba.py backend, follow https://github.com/alxndrTL/mamba.py."
+                    " is None. Falling back to the sequential implementation of Mamba, as use_mambapy is set to False. To install follow https://github.com/state-spaces/mamba/#installation for mamba-ssm and"
+                    " https://github.com/Dao-AILab/causal-conv1d or `pip install kernels` for causal-conv1d. For the mamba.py backend, follow https://github.com/alxndrTL/mamba.py."
                 )
 
     def __init__(self, config: FalconMambaConfig, layer_idx: int):
@@ -290,6 +324,7 @@ class FalconMambaMixer(MambaMixer):
             )
 
         else:
+            causal_conv1d_update, causal_conv1d_fn = _lazy_load_causal_conv1d()
             hidden_states, gate = projected_states.chunk(2, dim=1)
 
             if attention_mask is not None:
@@ -483,6 +518,7 @@ class FalconMambaMixer(MambaMixer):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ):
+        causal_conv1d_update, causal_conv1d_fn = _lazy_load_causal_conv1d()
         is_fast_path_available = all(
             (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
         )
@@ -517,7 +553,7 @@ class FalconMambaCausalLMOutput(MambaCausalLMOutput):
 
 class FalconMambaModel(MambaModel, FalconMambaPreTrainedModel):
     def __init__(self, config):
-        FalconMambaPreTrainedModel.__init__(config)
+        FalconMambaPreTrainedModel.__init__(self, config)
 
         self.embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
         self.layers = nn.ModuleList(

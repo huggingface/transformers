@@ -85,10 +85,8 @@ class ShieldGemma2Processor(Gemma3Processor):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text=None,
-        videos=None,
-        audio=None,
         **kwargs: Unpack[ShieldGemma2ProcessorKwargs],
     ) -> BatchFeature:
         """Generates a batch of inputs from the provided images.
@@ -120,8 +118,6 @@ class ShieldGemma2Processor(Gemma3Processor):
             `(len(images) * len(policies), )`, and the order within the batch will be
             img1_policy1, ... img1_policyN, ... imgM_policyN.
         """
-        del text, videos, audio
-
         if not images:
             raise ValueError("ShieldGemma 2 needs images to classify")
         elif not isinstance(images, Sequence):
@@ -154,19 +150,36 @@ class ShieldGemma2Processor(Gemma3Processor):
         messages = []
         expanded_images = []
         for img in images:
+            if not isinstance(img, list):
+                img = [img]
+            elif len(img) > 1:
+                raise ValueError(f"SheildGemma can process at most one image per sample, but got {len(img)} images")
+
             for policy in policies:
-                messages.append(
-                    [
-                        {
-                            "role": "user",
-                            "content": [
-                                {"type": "image"},
-                                {"type": "text", "text": policy_definitions[policy]},
-                            ],
-                        }
-                    ]
-                )
-                expanded_images.append([img])
+                if img:
+                    messages.append(
+                        [
+                            {
+                                "role": "user",
+                                "content": [
+                                    {"type": "image"},
+                                    {"type": "text", "text": policy_definitions[policy]},
+                                ],
+                            }
+                        ]
+                    )
+                else:
+                    messages.append(
+                        [
+                            {
+                                "role": "user",
+                                "content": [
+                                    {"type": "text", "text": policy_definitions[policy]},
+                                ],
+                            }
+                        ]
+                    )
+                expanded_images.append(img)
 
         text = self.apply_chat_template(messages, tokenize=False)
         return super().__call__(images=expanded_images, text=text, **kwargs)

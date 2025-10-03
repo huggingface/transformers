@@ -635,6 +635,12 @@ class DFinePreTrainedModel(RTDetrPreTrainedModel):
                     nn.init.constant_(layer.layers[-1].weight, 0)
                     nn.init.constant_(layer.layers[-1].bias, 0)
 
+            if hasattr(module, "reg_scale"):
+                module.reg_scale.fill_(self.config.reg_scale)
+
+            if hasattr(module, "up"):
+                module.up.fill_(self.config.up)
+
         if isinstance(module, DFineMultiscaleDeformableAttention):
             nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
             default_dtype = torch.get_default_dtype()
@@ -671,6 +677,10 @@ class DFinePreTrainedModel(RTDetrPreTrainedModel):
         if isinstance(module, DFineLQE):
             init.constant_(module.reg_conf.layers[-1].bias, 0)
             init.constant_(module.reg_conf.layers[-1].weight, 0)
+
+        if isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
 
         if hasattr(module, "weight_embedding") and self.config.learn_initial_query:
             nn.init.xavier_uniform_(module.weight_embedding.weight)
@@ -898,7 +908,7 @@ class DFineModel(RTDetrModel):
 
 class DFineForObjectDetection(RTDetrForObjectDetection, DFinePreTrainedModel):
     def __init__(self, config: DFineConfig):
-        DFinePreTrainedModel.__init__(config)
+        DFinePreTrainedModel.__init__(self, config)
 
         # D-FINE encoder-decoder model
         self.eval_idx = config.eval_idx if config.eval_idx >= 0 else config.decoder_layers + config.eval_idx
@@ -1100,8 +1110,6 @@ class DFineCSPRepLayer(nn.Module):
         self, config: DFineConfig, in_channels: int, out_channels: int, num_blocks: int, expansion: float = 1.0
     ):
         super().__init__()
-        in_channels = in_channels
-        out_channels = out_channels
         activation = config.activation_function
 
         hidden_channels = int(out_channels * expansion)

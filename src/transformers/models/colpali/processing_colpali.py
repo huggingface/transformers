@@ -106,10 +106,6 @@ class ColPaliProcessor(ProcessorMixin):
         query_prefix: str = "Question: ",
     ):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
-        if image_processor is None:
-            raise ValueError("You need to specify an `image_processor`.")
-        if tokenizer is None:
-            raise ValueError("You need to specify a `tokenizer`.")
         if not hasattr(image_processor, "image_seq_length"):
             raise ValueError("Image processor is missing an `image_seq_length` attribute.")
 
@@ -133,10 +129,8 @@ class ColPaliProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[ColPaliProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -162,10 +156,8 @@ class ColPaliProcessor(ProcessorMixin):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -183,7 +175,7 @@ class ColPaliProcessor(ProcessorMixin):
         )
         suffix = output_kwargs["text_kwargs"].pop("suffix", None)
 
-        return_token_type_ids = suffix is not None
+        return_token_type_ids = True
 
         if text is None and images is None:
             raise ValueError("Either text or images must be provided")
@@ -214,7 +206,7 @@ class ColPaliProcessor(ProcessorMixin):
 
             inputs = self.tokenizer(
                 input_strings,
-                return_token_type_ids=False,
+                return_token_type_ids=return_token_type_ids,
                 **output_kwargs["text_kwargs"],
             )
 
@@ -244,7 +236,7 @@ class ColPaliProcessor(ProcessorMixin):
 
             batch_query = self.tokenizer(
                 texts_query,
-                return_token_type_ids=False,
+                return_token_type_ids=return_token_type_ids,
                 **output_kwargs["text_kwargs"],
             )
 
@@ -269,6 +261,12 @@ class ColPaliProcessor(ProcessorMixin):
         return MultiModalData(**vision_data)
 
     @property
+    def model_input_names(self):
+        tokenizer_input_names = self.tokenizer.model_input_names + ["token_type_ids", "labels"]
+        image_processor_input_names = self.image_processor.model_input_names
+        return list(tokenizer_input_names + image_processor_input_names)
+
+    @property
     def query_augmentation_token(self) -> str:
         """
         Return the query augmentation token.
@@ -279,7 +277,7 @@ class ColPaliProcessor(ProcessorMixin):
 
     def process_images(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         **kwargs: Unpack[ColPaliProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -296,10 +294,8 @@ class ColPaliProcessor(ProcessorMixin):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -331,10 +327,8 @@ class ColPaliProcessor(ProcessorMixin):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
