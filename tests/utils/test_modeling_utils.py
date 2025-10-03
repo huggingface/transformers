@@ -1717,7 +1717,7 @@ class ModelUtilsTest(TestCasePlus):
             "model.language_model.10.self_attn.0.mlp.layer.1.weight",
             "model.language_model.11.self_attn.0.mlp.layer.1.weight",
             "model.language_model.12.self_attn.0.mlp.layer.1.weight",
-            "model.language_model.13.self_attn.0.mlp.layer.1.weigh,t",
+            "model.language_model.13.self_attn.0.mlp.layer.1.weight",
         ]
         new_keys = update_key_name(original_keys)
         expected_new_keys = [
@@ -1728,6 +1728,37 @@ class ModelUtilsTest(TestCasePlus):
             "model.language_model.{0, 1, 2, 3}.self_attn.{0, 1}.mlp.layer.conv1.weight",
         ]
         self.assertListEqual(list(new_keys), expected_new_keys)
+        model = AutoModel.from_pretrained("google-t5/t5-base", device_map="auto")
+
+        new_keys = update_key_name(model.state_dict().keys()).join("\n")
+
+        EXPECTED_KEYS = """decoder.block.{0...11}.layer.0.SelfAttention.q.weight
+decoder.embed_tokens.weight
+der.block.{0...11}.layer.0.SelfAttention.v.weight
+encoder.block.{0...11}.layer.{0, 1}.layer_norm.weight
+decoder.block.{0...11}.layer.1.EncDecAttention.q.weight
+encoder.block.{0...11}.layer.0.SelfAttention.o.weight
+decoder.block.{0...11}.layer.1.EncDecAttention.v.weight
+encoder.final_layer_norm.weight
+decoder.block.{0...11}.layer.{0, 1, 2}.layer_norm.weight
+decoder.block.{0...11}.layer.0.SelfAttention.o.weight
+encoder.block.{0...11}.layer.0.SelfAttention.k.weight
+decoder.block.{0...11}.layer.1.EncDecAttention.o.weight
+decoder.block.{0...11}.layer.2.DenseReluDense.wo.weight
+encoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight
+shared.weight
+decoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight
+decoder.block.{0...11}.layer.2.DenseReluDense.wi.weight
+decoder.block.{0...11}.layer.1.EncDecAttention.k.weight
+encoder.block.{0...11}.layer.1.DenseReluDense.wi.weight
+encoder.embed_tokens.weight
+decoder.block.{0...11}.layer.0.SelfAttention.k.weight
+encoder.block.{0...11}.layer.0.SelfAttention.q.weight
+decoder.final_layer_norm.weight
+decoder.block.{0...11}.layer.0.SelfAttention.v.weight
+encoder.block.{0...11}.layer.1.DenseReluDense.wo.weight
+"""
+        self.assertEqual(new_keys, EXPECTED_KEYS)
 
     def test_can_generate(self):
         """Tests the behavior of `PreTrainedModel.can_generate` method."""
