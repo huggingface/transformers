@@ -57,8 +57,8 @@ from transformers import (
     is_torch_available,
     logging,
 )
-from transformers.modeling_utils import update_key_name
 from transformers.modeling_flash_attention_utils import is_flash_attn_available
+from transformers.modeling_utils import update_key_name
 from transformers.models.mistral.modeling_mistral import MistralModel
 from transformers.testing_utils import (
     TOKEN,
@@ -1730,7 +1730,7 @@ class ModelUtilsTest(TestCasePlus):
         self.assertListEqual(list(new_keys), expected_new_keys)
         model = AutoModel.from_pretrained("google-t5/t5-base", device_map="auto")
 
-        new_keys = update_key_name(model.state_dict().keys()).join("\n")
+        new_keys = "\n".join(update_key_name(model.state_dict().keys()))
 
         EXPECTED_KEYS = """decoder.block.{0...11}.layer.0.SelfAttention.q.weight
 decoder.embed_tokens.weight
@@ -1785,7 +1785,7 @@ layers.{0...60}.input_layernorm.weight"""
         with torch.device("meta"):
             model = AutoModel.from_config(config)
 
-        new_keys = update_key_name(model.state_dict().keys()).join("\n")
+        new_keys = "\n".join(update_key_name(model.state_dict().keys()))
         self.assertEqual(new_keys, EXPECTED_KEYS)
 
     def test_can_generate(self):
