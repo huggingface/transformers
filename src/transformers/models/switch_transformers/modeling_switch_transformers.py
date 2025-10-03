@@ -997,6 +997,9 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         else:
             encoder_extended_attention_mask = None
 
+        # Prepare head mask if needed
+        head_mask = self.get_head_mask(head_mask, self.config.num_layers)
+        cross_attn_head_mask = self.get_head_mask(cross_attn_head_mask, self.config.num_layers)
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
         all_router_probs = () if output_router_logits else None
