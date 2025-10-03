@@ -46,7 +46,6 @@ class DeepseekVLImageProcessorFast(BaseImageProcessorFast):
 
     def __init__(self, **kwargs: Unpack[DeepseekVLImageProcessorKwargs]):
         super().__init__(**kwargs)
-
         if kwargs.get("image_mean") is None:
             background_color = (127, 127, 127)
         else:
