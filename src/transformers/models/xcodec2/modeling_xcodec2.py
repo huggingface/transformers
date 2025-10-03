@@ -923,7 +923,7 @@ class Xcodec2VocosBackbone(nn.Module):
 
 class Xcodec2ISTFT(nn.Module):
     """
-    As in original Vocos code: 
+    As in original Vocos code:
     https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/spectral_ops.py#L7
 
     Custom ISTFT implementation to support "same" padding as in Vocos.
@@ -953,11 +953,11 @@ class Xcodec2ISTFT(nn.Module):
         """
         if spec.dim() != 3:
             raise ValueError("Expected a 3D tensor as input")
-        
+
         if self.padding == "center":
             # Fallback to pytorch native implementation
             return torch.istft(spec, self.n_fft, self.hop_length, self.win_length, self.window, center=True)
-        
+
         elif self.padding == "same":
             # Custom implementation from Vocos codebase
             pad = (self.win_length - self.hop_length) // 2
