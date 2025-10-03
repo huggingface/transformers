@@ -629,7 +629,7 @@ class SwitchTransformersPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(factor * 1.0)
         elif isinstance(
             module,
-            (SwitchTransformersModel, SwitchTransformersForConditionalGeneration, SwitchTransformersEncoderModel),
+            SwitchTransformersModel | SwitchTransformersForConditionalGeneration | SwitchTransformersEncoderModel,
         ):
             module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
             if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
