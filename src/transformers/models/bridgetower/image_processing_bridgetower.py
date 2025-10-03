@@ -35,6 +35,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
 
 
@@ -122,6 +123,10 @@ def get_resize_output_image_size(
     return new_height, new_width
 
 
+class BridgeTowerImageProcessorKwargs(ImagesKwargs):
+    size_divisor: Optional[int]
+
+
 class BridgeTowerImageProcessor(BaseImageProcessor):
     r"""
     Constructs a BridgeTower image processor.
@@ -169,6 +174,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values", "pixel_mask"]
+    valid_kwargs = BridgeTowerImageProcessorKwargs
 
     def __init__(
         self,

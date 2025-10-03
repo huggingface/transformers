@@ -25,7 +25,6 @@ from transformers.testing_utils import (
     require_read_token,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     require_torch_large_accelerator,
     slow,
     torch_device,
@@ -235,7 +234,6 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
     test_pruning = False
     fx_compatible = False
 
@@ -449,7 +447,7 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                     msg=f"\n{tokenizer.batch_decode(res_eager)} \nvs\n{tokenizer.batch_decode(res_sdpa)}",
                 )
 
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_flex_attention_with_grads(self):
         """
         Overwriting as the namings/functionality on the attention part are different; for now it's more of a unique model.

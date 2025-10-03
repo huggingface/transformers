@@ -219,7 +219,6 @@ class InstructBlipAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
@@ -285,7 +284,6 @@ class InstructBlipEncoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
         residual = hidden_states
@@ -293,7 +291,6 @@ class InstructBlipEncoderLayer(GradientCheckpointingLayer):
         hidden_states = self.layer_norm1(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
-            head_mask=attention_mask,
             **kwargs,
         )
         hidden_states = hidden_states + residual
@@ -366,14 +363,12 @@ class InstructBlipEncoder(nn.Module):
     def forward(
         self,
         inputs_embeds,
-        attention_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BaseModelOutput]:
         hidden_states = inputs_embeds
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
                 hidden_states,
-                attention_mask=attention_mask,
                 **kwargs,
             )
 
@@ -483,7 +478,6 @@ class InstructBlipQFormerMultiHeadAttention(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         **kwargs: Unpack[TransformersKwargs],
@@ -542,10 +536,6 @@ class InstructBlipQFormerMultiHeadAttention(nn.Module):
         # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs_dropped = self.dropout(attention_probs)
 
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs_dropped = attention_probs_dropped * head_mask
-
         context_layer = torch.matmul(attention_probs_dropped, value_layer)
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
@@ -600,7 +590,6 @@ class InstructBlipQFormerAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -608,7 +597,6 @@ class InstructBlipQFormerAttention(nn.Module):
         attn_output, _ = self.attention(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             **kwargs,
@@ -673,7 +661,6 @@ class InstructBlipQFormerLayer(GradientCheckpointingLayer):
         self,
         hidden_states,
         attention_mask=None,
-        head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         query_length=0,
@@ -682,7 +669,6 @@ class InstructBlipQFormerLayer(GradientCheckpointingLayer):
         attention_output = self.attention(
             hidden_states,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             **kwargs,
         )
 
@@ -695,7 +681,6 @@ class InstructBlipQFormerLayer(GradientCheckpointingLayer):
                 query_attention_output = self.crossattention(
                     query_attention_output,
                     attention_mask=attention_mask,
-                    head_mask=head_mask,
                     encoder_hidden_states=encoder_hidden_states,
                     encoder_attention_mask=encoder_attention_mask,
                     **kwargs,
@@ -751,7 +736,6 @@ class InstructBlipQFormerEncoder(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         query_length=0,
@@ -759,12 +743,10 @@ class InstructBlipQFormerEncoder(nn.Module):
     ):
         for i in range(self.config.num_hidden_layers):
             layer_module = self.layer[i]
-            layer_head_mask = head_mask[i] if head_mask is not None else None
 
             hidden_states = layer_module(
                 hidden_states,
                 attention_mask,
-                layer_head_mask,
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,
                 query_length=query_length,
@@ -923,7 +905,6 @@ class InstructBlipQFormerModel(InstructBlipPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         query_embeds: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -974,17 +955,9 @@ class InstructBlipQFormerModel(InstructBlipPreTrainedModel):
         else:
             encoder_extended_attention_mask = None
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
         encoder_outputs: BaseModelOutput = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
-            head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_extended_attention_mask,
             query_length=query_length,

@@ -327,7 +327,6 @@ class BlipAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Input shape: Batch x Time x Channel"""
@@ -352,10 +351,6 @@ class BlipAttention(nn.Module):
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
 
         context_layer = torch.matmul(attention_probs, value_states).permute(0, 2, 1, 3)
 
@@ -396,7 +391,6 @@ class BlipEncoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
         residual = hidden_states
@@ -404,7 +398,6 @@ class BlipEncoderLayer(GradientCheckpointingLayer):
         hidden_states = self.layer_norm1(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
-            head_mask=attention_mask,
             **kwargs,
         )
         hidden_states = hidden_states + residual
@@ -475,14 +468,12 @@ class BlipEncoder(nn.Module):
     def forward(
         self,
         inputs_embeds,
-        attention_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BaseModelOutput]:
         hidden_states = inputs_embeds
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
                 hidden_states,
-                attention_mask=attention_mask,
                 **kwargs,
             )
 

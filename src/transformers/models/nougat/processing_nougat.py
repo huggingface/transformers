@@ -65,13 +65,13 @@ class NougatProcessor(ProcessorMixin):
         data_format: Optional["ChannelDimension"] = "channels_first",  # noqa: F821
         input_data_format: Optional[Union[str, "ChannelDimension"]] = None,  # noqa: F821
         text_pair: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
-        text_target: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        text_target: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
         text_pair_target: Optional[
             Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]
         ] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
+        truncation: Optional[Union[bool, str, TruncationStrategy]] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         is_split_into_words: bool = False,

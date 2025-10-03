@@ -549,7 +549,7 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
                     continue
 
                 # Get number of segments to be fused
-                fuse_targets = [1 for el in el_unfused if el["label_id"] in {1}]
+                fuse_targets = [1 for el in el_unfused if el["label_id"] == 1]
                 num_to_fuse = 0 if len(fuse_targets) == 0 else sum(fuse_targets) - 1
                 # Expected number of segments after fusing
                 expected_num_segments = max([el["id"] for el in el_unfused]) - num_to_fuse

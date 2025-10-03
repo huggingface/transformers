@@ -40,6 +40,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, filter_out_non_signature_kwargs, logging
 from ...utils.import_utils import is_vision_available
 
@@ -49,6 +50,21 @@ logger = logging.get_logger(__name__)
 
 if is_vision_available():
     import PIL
+
+
+class NougatImageProcessorKwargs(ImagesKwargs):
+    r"""
+    do_crop_margin (`bool`, *optional*, defaults to `True`):
+        Whether to crop the image margins.
+    do_thumbnail (`bool`, *optional*, defaults to `True`):
+        Whether to resize the image using thumbnail method.
+    do_align_long_axis (`bool`, *optional*, defaults to `False`):
+        Whether to align the long axis of the image with the long axis of `size` by rotating by 90 degrees.
+    """
+
+    do_crop_margin: Optional[bool]
+    do_thumbnail: Optional[bool]
+    do_align_long_axis: Optional[bool]
 
 
 class NougatImageProcessor(BaseImageProcessor):
@@ -87,6 +103,7 @@ class NougatImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
+    valid_kwargs = NougatImageProcessorKwargs
 
     def __init__(
         self,

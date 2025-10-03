@@ -68,15 +68,15 @@ def markdown_compatible(text: str) -> str:
     """
     # equation tag
     # Replace lines that start with a pattern like (decimal) \[some text\] with \[[some text] \tag{decimal}\].
-    text = re.sub(r"^\(([\d.]+[a-zA-Z]?)\) \\\[(.+?)\\\]$", r"\[\2 \\tag{\1}\]", text, flags=re.M)
+    text = re.sub(r"^\(([\d.]+[a-zA-Z]?)\) \\\[(.+?)\\\]$", r"\[\2 \\tag{\1}\]", text, flags=re.MULTILINE)
     # Replace lines that start with a pattern like \[some text\] (decimal)  with \[[some text] \tag{decimal}\].
-    text = re.sub(r"^\\\[(.+?)\\\] \(([\d.]+[a-zA-Z]?)\)$", r"\[\1 \\tag{\2}\]", text, flags=re.M)
+    text = re.sub(r"^\\\[(.+?)\\\] \(([\d.]+[a-zA-Z]?)\)$", r"\[\1 \\tag{\2}\]", text, flags=re.MULTILINE)
     # Replace lines that start with a pattern like \[some text\] (digits) \[another text\]  with \[[some text] \tag{digits}\] [another text].
     text = re.sub(
         r"^\\\[(.+?)\\\] \(([\d.]+[a-zA-Z]?)\) (\\\[.+?\\\])$",
         r"\[\1 \\tag{\2}\] \3",
         text,
-        flags=re.M,
+        flags=re.MULTILINE,
     )
     # multi line
     text = text.replace(r"\. ", ". ")
@@ -90,7 +90,7 @@ def markdown_compatible(text: str) -> str:
         text,
     )
     # algorithms
-    text = re.sub(r"```\s*(.+?)\s*```", r"```\n\1\n```", text, flags=re.S)
+    text = re.sub(r"```\s*(.+?)\s*```", r"```\n\1\n```", text, flags=re.DOTALL)
 
     return text
 
@@ -131,7 +131,7 @@ def normalize_list_like_lines(generation):
             if not rest:
                 continue
             # Infer current nesting level based on detected numbering
-            if re.match(r"^[\dixv]+((?:\.[\dixv])?)+$", potential_numeral, flags=re.I | re.M):
+            if re.match(r"^[\dixv]+((?:\.[\dixv])?)+$", potential_numeral, flags=re.IGNORECASE | re.MULTILINE):
                 level = potential_numeral.count(".")
 
             replacement += (
@@ -477,7 +477,7 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
         generation = generation.replace("\\end{tabular} \\end{table}", "\\end{tabular}\n\\end{table}")
         generation = generation.replace("\\end{table} Tab", "\\end{table}\nTab")
 
-        generation = re.sub(r"(^.+)\\begin{tab", r"\1\n\\begin{tab", generation, flags=re.M)
+        generation = re.sub(r"(^.+)\\begin{tab", r"\1\n\\begin{tab", generation, flags=re.MULTILINE)
 
         # Remove left-aligned empty LaTeX tabular blocks.
         generation = generation.replace(r"\begin{tabular}{l l}  & \\ \end{tabular}", "")
@@ -505,7 +505,7 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
         generation = generation.replace("\n* [leftmargin=*]\n", "\n")
         # Remove lines with markdown headings starting with #, with numerals,
         # and possibly roman numerals with trailing spaces and newlines
-        generation = re.sub(r"^#+ (?:[\d+\.]+|[ixv\.]+)?\s*(?:$|\n\s*)", "", generation, flags=re.M)
+        generation = re.sub(r"^#+ (?:[\d+\.]+|[ixv\.]+)?\s*(?:$|\n\s*)", "", generation, flags=re.MULTILINE)
         # most likely hallucinated titles
         lines = generation.split("\n")
         if lines[-1].startswith("#") and lines[-1].lstrip("#").startswith(" ") and len(lines) > 1:
@@ -516,9 +516,9 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
         # Reference corrections
         generation = self.remove_hallucinated_references(generation)
         # Remove lines starting with asterisks and numbers like "*[1]" and followed by capital letters and periods (ie too long references)
-        generation = re.sub(r"^\* \[\d+\](\s?[A-W]\.+\s?){10,}.*$", "", generation, flags=re.M)
+        generation = re.sub(r"^\* \[\d+\](\s?[A-W]\.+\s?){10,}.*$", "", generation, flags=re.MULTILINE)
         # Remove empty brackets after a reference number in brackets. *[12][]ABC will become *[12]ABC
-        generation = re.sub(r"^(\* \[\d+\])\[\](.*)$", r"\1\2", generation, flags=re.M)
+        generation = re.sub(r"^(\* \[\d+\])\[\](.*)$", r"\1\2", generation, flags=re.MULTILINE)
         # Remove single characters before or after 2 new lines
         generation = re.sub(r"(^\w\n\n|\n\n\w$)", "", generation)
         # pmc math artifact correction
@@ -570,9 +570,9 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
         # Remove lines containing "S.A.B." one or more times. Was included in Nougat's code.
         generation = re.sub(r"(\*\*S\. A\. B\.\*\*\n+){2,}", "", generation)
         # Remove markdown-style headers that are incomplete or empty on multiple lines.
-        generation = re.sub(r"^#+( [\[\d\w])?$", "", generation, flags=re.M)
+        generation = re.sub(r"^#+( [\[\d\w])?$", "", generation, flags=re.MULTILINE)
         # Remove lines with just one period.
-        generation = re.sub(r"^\.\s*$", "", generation, flags=re.M)
+        generation = re.sub(r"^\.\s*$", "", generation, flags=re.MULTILINE)
         # Replace instances of three or more newlines with just two newlines.
         generation = re.sub(r"\n{3,}", "\n\n", generation)
         if fix_markdown:
