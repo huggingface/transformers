@@ -74,8 +74,6 @@ class DeepseekVLHybridConfig(PretrainedConfig):
         image_token_id: int = 100015,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         if text_config is None:
             text_config = {}
             logger.info("`text_config` is `None`. Initializing the `LlamaConfig` with default values.")
@@ -105,6 +103,7 @@ class DeepseekVLHybridConfig(PretrainedConfig):
             high_res_vision_config = CONFIG_MAPPING[high_res_vision_config["model_type"]](**high_res_vision_config)
 
         self.high_res_vision_config = high_res_vision_config
+        super().__init__(**kwargs)
 
 
 __all__ = ["DeepseekVLHybridConfig"]

@@ -379,13 +379,6 @@ class Phi4MultimodalConfig(PretrainedConfig):
         audio_config=None,
         **kwargs,
     ):
-        super().__init__(
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            pad_token_id=pad_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
@@ -423,6 +416,14 @@ class Phi4MultimodalConfig(PretrainedConfig):
         elif vision_config is None:
             audio_config = Phi4MultimodalAudioConfig()
         self.audio_config = audio_config
+
+        super().__init__(
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            pad_token_id=pad_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
 
     def _rope_scaling_adjustment(self):
         """

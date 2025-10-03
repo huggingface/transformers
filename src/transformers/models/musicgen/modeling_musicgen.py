@@ -1315,7 +1315,9 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
                 "Either a configuration has to be provided, or all three of text encoder, audio encoder and MusicGen decoder."
             )
         if config is None:
-            config = MusicgenConfig.from_sub_models_config(text_encoder.config, audio_encoder.config, decoder.config)
+            config = MusicgenConfig(
+                text_encoder=text_encoder.config, audio_encoder=audio_encoder.config, decoder=decoder.config
+            )
         else:
             if not isinstance(config, self.config_class):
                 raise ValueError(f"Config: {config} has to be of type {self.config_class}")
@@ -1623,8 +1625,8 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
             decoder = MusicgenForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
 
         # instantiate config with corresponding kwargs
-        config = MusicgenConfig.from_sub_models_config(
-            text_encoder.config, audio_encoder.config, decoder.config, **kwargs
+        config = MusicgenConfig(
+            text_encoder=text_encoder.config, audio_encoder=audio_encoder.config, decoder=decoder.config, **kwargs
         )
         return cls(text_encoder=text_encoder, audio_encoder=audio_encoder, decoder=decoder, config=config)
 

@@ -242,7 +242,6 @@ class SiglipConfig(PretrainedConfig):
             text_config = SiglipTextConfig()
             logger.info("`text_config` is `None`. Initializing the `SiglipTextConfig` with default values.")
         elif isinstance(text_config, dict):
-            print("vision_config" in text_config)
             text_config = SiglipTextConfig(**text_config)
 
         if vision_config is None:

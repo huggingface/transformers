@@ -490,7 +490,7 @@ class BarkModelTester:
         self.is_training = is_training
 
     def get_config(self):
-        return BarkConfig.from_sub_model_configs(
+        return BarkConfig(
             self.semantic_model_tester.get_config(),
             self.coarse_acoustics_model_tester.get_config(),
             self.fine_acoustics_model_tester.get_config(),

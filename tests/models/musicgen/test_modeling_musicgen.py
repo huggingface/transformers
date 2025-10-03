@@ -555,7 +555,7 @@ class MusicgenTester:
             tie_word_embeddings=False,
             audio_channels=self.audio_channels,
         )
-        config = MusicgenConfig.from_sub_models_config(text_encoder_config, audio_encoder_config, decoder_config)
+        config = MusicgenConfig(text_encoder_config, audio_encoder_config, decoder_config)
         return config
 
     def prepare_config_and_inputs_for_common(self):

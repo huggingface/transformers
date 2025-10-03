@@ -4257,7 +4257,7 @@ class ModelTesterMixin:
                     check_attn_implementation_setter(attribute_value, attn_implementation)
 
         # Check that attention implementation can be passed with init args
-        config_dict = config.to_dict()
+        config_dict = config.to_diff_dict()
         config_dict.pop("_attn_implementation_internal", None)
         config_dict.pop("_attn_implementation", None)
         config_dict["attn_implementation"] = "eager"

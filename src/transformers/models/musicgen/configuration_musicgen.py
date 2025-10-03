@@ -168,8 +168,10 @@ class MusicgenConfig(PretrainedConfig):
     >>> audio_encoder_config = EncodecConfig()
     >>> decoder_config = MusicgenDecoderConfig()
 
-    >>> configuration = MusicgenConfig.from_sub_models_config(
-    ...     text_encoder_config, audio_encoder_config, decoder_config
+    >>> configuration = MusicgenConfig(
+    ...     text_encoder=text_encoder_config,
+    ...     audio_encoder=audio_encoder_config,
+    ...     decoder=decoder_config,
     ... )
 
     >>> # Initializing a MusicgenForConditionalGeneration (with random weights) from the facebook/musicgen-small style configuration
@@ -197,21 +199,21 @@ class MusicgenConfig(PretrainedConfig):
     }
     has_no_defaults_at_init = True
 
-    def __init__(self, **kwargs):
-        if "text_encoder" not in kwargs or "audio_encoder" not in kwargs or "decoder" not in kwargs:
-            raise ValueError("Config has to be initialized with text_encoder, audio_encoder and decoder config")
+    def __init__(self, text_encoder, audio_encoder, decoder, **kwargs):
+        if isinstance(text_encoder, dict):
+            text_encoder_model_type = text_encoder.pop("model_type")
+            text_encoder = AutoConfig.for_model(text_encoder_model_type, **text_encoder)
 
-        text_encoder_config = kwargs.pop("text_encoder")
-        text_encoder_model_type = text_encoder_config.pop("model_type")
+        if isinstance(audio_encoder, dict):
+            audio_encoder_model_type = audio_encoder.pop("model_type")
+            audio_encoder = AutoConfig.for_model(audio_encoder_model_type, **audio_encoder)
 
-        audio_encoder_config = kwargs.pop("audio_encoder")
-        audio_encoder_model_type = audio_encoder_config.pop("model_type")
+        if isinstance(decoder, dict):
+            decoder = MusicgenDecoderConfig(**decoder)
 
-        decoder_config = kwargs.pop("decoder")
-
-        self.text_encoder = AutoConfig.for_model(text_encoder_model_type, **text_encoder_config)
-        self.audio_encoder = AutoConfig.for_model(audio_encoder_model_type, **audio_encoder_config)
-        self.decoder = MusicgenDecoderConfig(**decoder_config)
+        self.text_encoder = text_encoder
+        self.audio_encoder = audio_encoder
+        self.decoder = decoder
         self.is_encoder_decoder = True
         self.initializer_factor = self.decoder.initializer_factor
 

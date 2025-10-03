@@ -674,30 +674,5 @@ class FlavaConfig(PretrainedConfig):
         self.return_loss = return_loss
         super().__init__(**kwargs)
 
-    @classmethod
-    def from_configs(
-        cls,
-        image_config: FlavaImageConfig,
-        text_config: FlavaTextConfig,
-        multimodal_config: FlavaMultimodalConfig,
-        image_codebook_config: FlavaImageCodebookConfig,
-        **kwargs,
-    ):
-        r"""
-        Instantiate a [`FlavaConfig`] (or a derived class) from flava text model configuration, flava image model
-        configuration, flava multimodal model and flava codebook model configuration.
-
-        Returns:
-            [`FlavaConfig`]: An instance of a configuration object
-        """
-
-        return cls(
-            image_config=image_config.to_dict(),
-            text_config=text_config.to_dict(),
-            multimodal_config=multimodal_config.to_dict(),
-            image_codebook_config=image_codebook_config.to_dict(),
-            **kwargs,
-        )
-
 
 __all__ = ["FlavaConfig", "FlavaImageCodebookConfig", "FlavaImageConfig", "FlavaMultimodalConfig", "FlavaTextConfig"]
