@@ -37,59 +37,6 @@ class VocosOutput(ModelOutput):
     audio: torch.FloatTensor
 
 
-def _vocos_inverse_stft(spectrogram, padding, n_fft, hop_length, win_length, window):
-    """
-    Performs the Inverse Short Time Fourier Transform (ISTFT) on a STFT coefficients to reconstruct audio in the time domain.
-    It computes ISTFT differently depending on padding:
-        if `center` : uses PyTorch's built-in ISTFT implementation since it uses `center=True` by default.
-        if `same` : uses custom implementation of ISTFT with the overlap-add method, since the Pytorch version fails the
-        Nonzero Overlap Add (NOLA) condition when center is False. See issue: https://github.com/pytorch/pytorch/issues/62323
-        You can find the original vocos implementation here: https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/spectral_ops.py#L7
-    """
-    if padding == "center":
-        audio = torch.istft(
-            spectrogram,
-            n_fft=n_fft,
-            hop_length=hop_length,
-            win_length=win_length,
-            window=window,
-            center=True,
-        )
-
-    else:
-        batch_size, num_freq_bins, num_time_frames = spectrogram.shape
-        pad = (win_length - hop_length) // 2
-        # the inverse FFT of each frame
-        inverse_fft = torch.fft.irfft(spectrogram, n=n_fft, dim=1, norm="backward")
-        inverse_fft = inverse_fft * window[None, :, None]
-
-        # combine the overlapping frame with windowing and normalizing by the sum of squared window values across overlapping frames
-        # to make sure the reconstruction of the audio is accurate
-        output_length = (num_time_frames - 1) * hop_length + win_length
-        audio = F.fold(
-            inverse_fft,
-            output_size=(1, output_length),
-            kernel_size=(1, win_length),
-            stride=(1, hop_length),
-        )[:, 0, 0, pad:-pad]
-        window_sqrt = window.square().expand(1, num_time_frames, -1).transpose(1, 2)
-        norm = F.fold(
-            window_sqrt,
-            output_size=(1, output_length),
-            kernel_size=(1, win_length),
-            stride=(1, hop_length),
-        ).squeeze()[pad:-pad]
-
-        if torch.any(norm <= 1e-11):
-            raise ValueError(
-                "Normalization tensor `norm` contains values ≤ 1e-11, it would cause division by zero. check the n_fft, hop_length and padding parameters."
-            )
-
-        audio = audio / norm
-
-    return audio
-
-
 class VocosAdaptiveLayerNorm(nn.Module):
     """
     Weight and bias parameters come from a lookup table based on the target bandwidth.
@@ -98,13 +45,13 @@ class VocosAdaptiveLayerNorm(nn.Module):
     def __init__(self, config: VocosConfig):
         super().__init__()
         self.eps = config.layer_norm_eps
-        self.hidden_dim = config.hidden_dim
+        self.hidden_size = config.hidden_size
         adanorm_num_embeddings = len(config.bandwidths)
-        self.weight = nn.Parameter(torch.ones(adanorm_num_embeddings, config.hidden_dim))
-        self.bias = nn.Parameter(torch.zeros(adanorm_num_embeddings, config.hidden_dim))
+        self.weight = nn.Parameter(torch.ones(adanorm_num_embeddings, config.hidden_size))
+        self.bias = nn.Parameter(torch.zeros(adanorm_num_embeddings, config.hidden_size))
 
     def forward(self, hidden_states: torch.Tensor, cond_embedding_id: torch.LongTensor):
-        hidden_states = F.layer_norm(hidden_states, (self.hidden_dim,), weight=None, bias=None, eps=self.eps)
+        hidden_states = F.layer_norm(hidden_states, (self.hidden_size,), weight=None, bias=None, eps=self.eps)
         return hidden_states * self.weight[cond_embedding_id].unsqueeze(0) + self.bias[cond_embedding_id].unsqueeze(0)
 
 
@@ -114,22 +61,22 @@ class VocosConvNeXtBlock(nn.Module):
     def __init__(self, config: VocosConfig):
         super().__init__()
         self.dwconv = nn.Conv1d(
-            config.hidden_dim,
-            config.hidden_dim,
+            config.hidden_size,
+            config.hidden_size,
             kernel_size=config.kernel_size,
             padding=config.padding,
-            groups=config.hidden_dim,
+            groups=config.hidden_size,
         )
         if config.use_adaptive_norm:
             self.norm = VocosAdaptiveLayerNorm(config)
         else:
-            self.norm = nn.LayerNorm(config.hidden_dim, eps=config.layer_norm_eps)
-        self.pwconv1 = nn.Linear(config.hidden_dim, config.intermediate_dim)
+            self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.pwconv1 = nn.Linear(config.hidden_size, config.intermediate_size)
         self.act = nn.GELU()
-        self.pwconv2 = nn.Linear(config.intermediate_dim, config.hidden_dim)
+        self.pwconv2 = nn.Linear(config.intermediate_size, config.hidden_size)
         if config.layer_scale_init_value > 0:
             self.layer_scale_parameter = nn.Parameter(
-                config.layer_scale_init_value * torch.ones(config.hidden_dim), requires_grad=True
+                config.layer_scale_init_value * torch.ones(config.hidden_size), requires_grad=True
             )
         else:
             self.layer_scale_parameter = None
@@ -158,14 +105,14 @@ class VocosBackbone(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.embed = nn.Conv1d(
-            config.input_channels, config.hidden_dim, kernel_size=config.kernel_size, padding=config.padding
+            config.input_channels, config.hidden_size, kernel_size=config.kernel_size, padding=config.padding
         )
         if config.use_adaptive_norm:
             self.norm = VocosAdaptiveLayerNorm(config)
         else:
-            self.norm = nn.LayerNorm(config.hidden_dim, eps=config.layer_norm_eps)
+            self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layers = nn.ModuleList([VocosConvNeXtBlock(config) for _ in range(config.num_layers)])
-        self.final_layer_norm = nn.LayerNorm(config.hidden_dim, eps=config.layer_norm_eps)
+        self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(self, hidden_states, bandwidth_id=None):
         hidden_states = self.embed(hidden_states)
@@ -179,41 +126,115 @@ class VocosBackbone(nn.Module):
             hidden_states = layer(hidden_states, bandwidth_id)
         hidden_states = self.final_layer_norm(hidden_states.transpose(1, 2))
         return hidden_states
+    
 
-
-class VocosISTFTHead(nn.Module):
+class VocosISTFT(nn.Module):
     """
-    Projects hidden states to magnitude and phase predictions, combines them into complex
-    STFT coefficients, and applies ISTFT to reconstruct the audio waveform.
+    As in original Vocos code:
+    https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/spectral_ops.py#L7
+
+    Custom ISTFT implementation to support "same" padding as in Vocos.
     """
 
     def __init__(self, config: VocosConfig):
         super().__init__()
-        self.out_proj = nn.Linear(config.hidden_dim, config.n_fft + 2)
-        self.padding = config.spec_padding
+        if config.istft_padding not in ["center", "same"]:
+            raise ValueError("Padding must be 'center' or 'same'.")
+        self.padding = config.istft_padding
         self.n_fft = config.n_fft
         self.hop_length = config.hop_length
-        self.win_length = config.n_fft
+        self.win_length = getattr(config, "win_length", config.n_fft)
         window = torch.hann_window(self.win_length)
         self.register_buffer("window", window)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        spectrogram = self.out_proj(hidden_states)
-        spectrogram = spectrogram.transpose(1, 2)
-        magnitude, phase = spectrogram.chunk(2, dim=1)
-        # safeguard to prevent excessively large magnitudes
-        magnitude = torch.exp(magnitude).clamp(max=1e2)
-        real = torch.cos(phase)
-        imag = torch.sin(phase)
-        stft_complex_coeffs = magnitude * (real + 1j * imag)
-        audio = _vocos_inverse_stft(
-            stft_complex_coeffs,
-            padding=self.padding,
-            n_fft=self.n_fft,
-            hop_length=self.hop_length,
-            win_length=self.win_length,
-            window=self.window,
-        )
+    def forward(self, spec: torch.Tensor) -> torch.Tensor:
+        """
+        Compute the Inverse Short Time Fourier Transform (ISTFT) of a complex spectrogram.
+
+        Args:
+            spec (Tensor): Input complex spectrogram of shape (B, N, T), where B is the batch size,
+                  is the number of frequency bins, and T is the number of time frames.
+
+        Returns:
+            Tensor: Reconstructed time-domain signal of shape (B, L), where L is the length of the output signal.
+        """
+        if spec.dim() != 3:
+            raise ValueError("Expected a 3D tensor as input")
+
+        if self.padding == "center":
+            # Fallback to pytorch native implementation
+            return torch.istft(spec, self.n_fft, self.hop_length, self.win_length, self.window, center=True)
+
+        elif self.padding == "same":
+            # Custom implementation from Vocos codebase
+            pad = (self.win_length - self.hop_length) // 2
+            n_frames = spec.shape[-1]
+
+            # Inverse FFT
+            ifft = torch.fft.irfft(spec, self.n_fft, dim=1, norm="backward")
+            ifft = ifft * self.window[None, :, None]
+
+            # Overlap and Add
+            output_size = (n_frames - 1) * self.hop_length + self.win_length
+            y = F.fold(
+                ifft,
+                output_size=(1, output_size),
+                kernel_size=(1, self.win_length),
+                stride=(1, self.hop_length),
+            )[:, 0, 0, pad:-pad]
+
+            # Window envelope
+            window_sq = self.window.square().expand(1, n_frames, -1).transpose(1, 2)
+            window_envelope = F.fold(
+                window_sq,
+                output_size=(1, output_size),
+                kernel_size=(1, self.win_length),
+                stride=(1, self.hop_length),
+            ).squeeze()[pad:-pad]
+
+            # Normalize
+            if not (window_envelope > 1e-11).all():
+                raise ValueError("Window envelope values are too small (<=1e-11)")
+            return y / window_envelope
+
+        else:
+            raise ValueError("Padding must be 'center' or 'same'.")
+
+
+class VocosISTFTHead(nn.Module):
+    """
+    As in original Vocos code:
+    https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/heads.py#L26
+    - Projects the hidden states to STFT coefficients (magnitude and phase)
+    - Applies ISTFT to reconstruct the time-domain audio signal
+    """
+
+    def __init__(self, config: VocosConfig):
+        super().__init__()
+        self.out = torch.nn.Linear(config.hidden_size, config.n_fft + 2)
+        self.istft = VocosISTFT(config)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass of the ISTFTHead module.
+
+        Args:
+            x (Tensor): Input tensor of shape (B, L, H), where B is the batch size,
+                        L is the sequence length, and H denotes the model dimension.
+
+        Returns:
+            Tensor: Reconstructed time-domain audio signal of shape (B, T), where T is the length of the output signal.
+            Tensor: Predicted STFT coefficients of shape (B, L, N+2), where N is the number of frequency bins.
+        """
+        x_pred = self.out(x).transpose(1, 2)
+        mag, p = x_pred.chunk(2, dim=1)
+        mag = torch.exp(mag)
+        mag = torch.clip(mag, max=1e2)  # safeguard to prevent excessively large magnitudes
+        # wrapping happens here. These two lines produce real and imaginary value
+        spectrogram_real = torch.cos(p)
+        spectrogram_imag = torch.sin(p)
+        spectrogram_complex = mag * (spectrogram_real + 1j * spectrogram_imag)
+        audio = self.istft(spectrogram_complex)
         return audio
 
 

@@ -34,9 +34,9 @@ class VocosConfig(PretrainedConfig):
     Args:
         input_channels (`int`, *optional*, defaults to 100):
             Number of mel-spectrogram input channels (i.e. number of mel filter bins).
-        hidden_dim (`int`, *optional*, defaults to 512):
+        hidden_size (`int`, *optional*, defaults to 512):
             Hidden dimension for the ConvNeXt backbone.
-        intermediate_dim (`int`, *optional*, defaults to 1536):
+        intermediate_size (`int`, *optional*, defaults to 1536):
             Dimension of the feed-forward layers inside each ConvNeXt block.
         num_layers (`int`, *optional*, defaults to 8):
             Number of ConvNeXt blocks to stack.
@@ -54,7 +54,7 @@ class VocosConfig(PretrainedConfig):
             FFT size for STFT/ISTFT used in `VocosISTFTHead`.
         hop_length (`int`, *optional*, defaults to 256):
             Hop length between STFT frames used in `VocosISTFTHead`.
-        spec_padding (`str`, *optional*, defaults to `"center"`):
+        istft_padding (`str`, *optional*, defaults to `"center"`):
             Padding mode for spectrogram inversion (`"center"` or `"same"`).
         bandwidths (`List[float]`, *optional*, defaults to `[1.5, 3.0, 6.0, 12.0]`):
             Supported target bandwidths in kbps, This determines the number of quantizers/codebooks used in RVQ part of
@@ -76,8 +76,8 @@ class VocosConfig(PretrainedConfig):
     def __init__(
         self,
         input_channels=100,
-        hidden_dim=512,
-        intermediate_dim=1536,
+        hidden_size=512,
+        intermediate_size=1536,
         num_layers=8,
         kernel_size=7,
         padding=3,
@@ -86,15 +86,15 @@ class VocosConfig(PretrainedConfig):
         layer_norm_eps=1e-6,
         n_fft=1024,
         hop_length=256,
-        spec_padding="center",
+        istft_padding="center",
         bandwidths=[1.5, 3.0, 6.0, 12.0],
         sampling_rate=24000,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.input_channels = input_channels
-        self.hidden_dim = hidden_dim
-        self.intermediate_dim = intermediate_dim
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
         self.num_layers = num_layers
         self.kernel_size = kernel_size
         self.padding = padding
@@ -103,7 +103,7 @@ class VocosConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.n_fft = n_fft
         self.hop_length = hop_length
-        self.spec_padding = spec_padding
+        self.istft_padding = istft_padding
         self.bandwidths = list(bandwidths)
         self.sampling_rate = sampling_rate
 

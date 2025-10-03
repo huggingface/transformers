@@ -257,7 +257,7 @@ class VocosModelIntegrationTest(unittest.TestCase):
             self.encodec_batch_expected = json.load(f)
 
     def test_inference_mel_vocos(self):
-        hf_repo_id = self.mel_expected["hf_repo_id"]
+        hf_repo_id = "bezzam/vocos-mel-24khz"
         processor = VocosProcessor.from_pretrained(hf_repo_id)
         model = VocosModel.from_pretrained(hf_repo_id).to(torch_device).eval()
 
@@ -278,7 +278,7 @@ class VocosModelIntegrationTest(unittest.TestCase):
         )
 
     def test_inference_encodec_vocos(self):
-        hf_repo_id = self.encodec_expected[0]["hf_repo_id"]
+        hf_repo_id = "bezzam/vocos-encodec-24khz"
         model = VocosModel.from_pretrained(hf_repo_id).to(torch_device).eval()
         processor = VocosProcessor.from_pretrained(hf_repo_id)
 
@@ -319,7 +319,7 @@ class VocosModelIntegrationTest(unittest.TestCase):
             )
 
     def test_inference_batch_mel_vocos(self):
-        repo_id = self.mel_batch_expected["hf_repo_id"]
+        repo_id = "bezzam/vocos-mel-24khz"
         processor = VocosProcessor.from_pretrained(repo_id)
         model = VocosModel.from_pretrained(repo_id).to(torch_device).eval()
 
@@ -338,7 +338,7 @@ class VocosModelIntegrationTest(unittest.TestCase):
             )
 
     def test_batch_encodec_vocos(self):
-        repo_id = self.encodec_batch_expected[0]["hf_repo_id"]
+        repo_id = "bezzam/vocos-encodec-24khz"
         processor = VocosProcessor.from_pretrained(repo_id)
         model = VocosModel.from_pretrained(repo_id).to(torch_device).eval()
 

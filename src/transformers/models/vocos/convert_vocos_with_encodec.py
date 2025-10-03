@@ -37,11 +37,6 @@ BACKBONE_MAPPING = {
     "backbone.convnext.*": "backbone.layers.*",
 }
 
-HEAD_MAPPING = {
-    "head.out.weight": "head.out_proj.weight",
-    "head.out.bias": "head.out_proj.bias",
-}
-
 
 def _rewrite_weight_norm(key):
     key = key.replace("weight_g", "parametrizations.weight.original0")
@@ -85,10 +80,14 @@ def convert_old_keys_to_new_keys(original_state_dict: dict, model_name: str = "e
     for old_key, value in original_state_dict.items():
         if old_key.startswith("backbone."):
             converted_checkpoint[_remap_key(old_key, BACKBONE_MAPPING)] = value
-        elif old_key.startswith("head.out."):
-            converted_checkpoint[_remap_key(old_key, HEAD_MAPPING)] = value
-        elif old_key == "head.istft.window":
-            converted_checkpoint["head.window"] = value
+        elif old_key.startswith("head."):
+            # Map head parameters to the new structure
+            if old_key == "head.out.weight":
+                converted_checkpoint["head.out.weight"] = value
+            elif old_key == "head.out.bias":
+                converted_checkpoint["head.out.bias"] = value
+            elif old_key == "head.istft.window":
+                converted_checkpoint["head.istft.window"] = value
 
     return converted_checkpoint, hf_encodec
 
@@ -106,11 +105,11 @@ def convert_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_to_hub=No
     # Original encodec variant of Vocos  has different slightly different architecture
     config = VocosConfig(
         input_channels=128,
-        hidden_dim=384,
-        intermediate_dim=1152,
+        hidden_size=384,
+        intermediate_size=1152,
         n_fft=1280,
         hop_length=320,
-        spec_padding="same",
+        istft_padding="same",
         use_adaptive_norm=True,
     )
 

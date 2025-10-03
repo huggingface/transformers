@@ -32,9 +32,6 @@ def convert_old_keys_to_new_keys(original_state_dict) -> dict[str, torch.Tensor]
     for key, value in original_state_dict.items():
         if key.startswith("feature_extractor."):
             continue
-        if key == "head.istft.window":
-            key = "head.window"
-        key = key.replace("head.out.", "head.out_proj.")
         key = key.replace("backbone.convnext.", "backbone.layers.")
         key = key.replace(".gamma", ".layer_scale_parameter")
         converted_checkpoint[key] = value
