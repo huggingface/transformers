@@ -1043,10 +1043,7 @@ class SwitchTransformerRouterTest(unittest.TestCase):
         router.eval()  # Set to eval mode first to test training mode separately
 
         # Create input hidden states
-        hidden_states = torch.tensor([
-            [[0.5, 0.2, 0.1, 0.3],
-             [0.4, 0.6, 0.2, 0.8]]
-        ], dtype=torch.float32)
+        hidden_states = torch.tensor([[[0.5, 0.2, 0.1, 0.3], [0.4, 0.6, 0.2, 0.8]]], dtype=torch.float32)
 
         # Test in eval mode - no jitter noise should be applied
         original_hidden_states = hidden_states.clone()

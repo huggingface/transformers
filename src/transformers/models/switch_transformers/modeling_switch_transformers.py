@@ -109,7 +109,9 @@ class SwitchTransformersTop1Router(nn.Module):
 
         if self.training and self.jitter_noise > 0:
             # Apply jitter noise only to the routing copy
-            routing_states *= torch.empty_like(routing_states).uniform_(1.0 - self.jitter_noise, 1.0 + self.jitter_noise)
+            routing_states *= torch.empty_like(routing_states).uniform_(
+                1.0 - self.jitter_noise, 1.0 + self.jitter_noise
+            )
 
         # Use jittered states for routing decisions
         router_logits = self.classifier(routing_states)
