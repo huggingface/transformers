@@ -15,7 +15,6 @@ import argparse
 import json
 import os
 
-import regex as re
 import torch
 from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
 from safetensors.torch import load_file as safe_load_file
@@ -28,6 +27,7 @@ from transformers import (
     PixtralProcessor,
     PixtralVisionConfig,
 )
+from transformers.utils.safe import regex as re
 
 
 """

@@ -17,7 +17,6 @@ import gc
 import os
 from typing import Optional
 
-import regex as re
 import torch
 from huggingface_hub import hf_hub_download
 
@@ -26,6 +25,7 @@ from transformers import (
     DepthProForDepthEstimation,
     DepthProImageProcessorFast,
 )
+from transformers.utils.safe import regex as re
 
 
 # fmt: off

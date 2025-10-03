@@ -22,7 +22,6 @@ from functools import lru_cache
 from typing import Optional, Union
 
 import numpy as np
-import regex as re
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import (
@@ -38,6 +37,7 @@ from ...tokenization_utils_base import (
     to_py_obj,
 )
 from ...utils import add_end_docstrings, is_torch_tensor, logging
+from ...utils.safe import regex as re
 
 
 logger = logging.get_logger(__name__)

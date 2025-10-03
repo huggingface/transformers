@@ -18,7 +18,6 @@ import json
 import os
 from typing import Optional
 
-import regex as re
 import torch
 from accelerate import init_empty_weights
 from huggingface_hub import snapshot_download
@@ -39,6 +38,7 @@ from transformers.image_utils import (
     OPENAI_CLIP_STD,
     PILImageResampling,
 )
+from transformers.utils.safe import regex as re
 
 
 # fmt: off

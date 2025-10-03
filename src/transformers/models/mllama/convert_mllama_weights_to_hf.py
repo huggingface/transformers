@@ -19,7 +19,6 @@ import math
 import os
 from typing import Optional
 
-import regex as re
 import torch
 import torch.nn.functional as F
 
@@ -33,6 +32,7 @@ from transformers import (
 from transformers.convert_slow_tokenizer import TikTokenConverter
 from transformers.models.mllama.configuration_mllama import MllamaTextConfig, MllamaVisionConfig
 from transformers.models.mllama.image_processing_mllama import get_all_supported_aspect_ratios
+from transformers.utils.safe import regex as re
 
 
 # fmt: off
