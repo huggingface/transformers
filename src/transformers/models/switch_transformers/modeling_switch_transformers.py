@@ -767,11 +767,16 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
 
 @auto_docstring
 class SwitchTransformersPreTrainedModel(PreTrainedModel):
-    config: SwitchTransformersConfig
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = SwitchTransformersConfig
     base_model_prefix = "switch_transformers"
     supports_gradient_checkpointing = True
-
-    _can_compile_fullgraph = False
+    _supports_cache_class = True
+    _supports_static_cache = False
     _no_split_modules = ["SwitchTransformersBlock"]
 
     @property
