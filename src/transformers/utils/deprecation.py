@@ -174,3 +174,52 @@ def deprecate_kwarg(
         return wrapped_func
 
     return wrapper
+
+
+groups = {
+    "audio": ["input_values", "raw_audio", "raw_speech", "waveform", "waveforms"],
+    "audio_spectrogram": ["input_features", "spectrogram", "mel_spectrogram", "mel_spectrograms"],
+    "sample_rate": ["sampling_rate"],
+    "n_mels": ["num_mel_bins", "n_mel_bins", "feature_size"],
+    "f_min": ["fmin"],
+    "f_max": ["fmax"],
+}
+
+AUDIO_KWARGS_MAPPING = {key: category for category, keys in groups.items() for key in keys}
+
+
+from . import logging
+
+logger = logging.get_logger(__name__)
+
+
+def deprecate_audio_kwargs(func):
+    """
+    Deprecate audio kwargs by a soft logging info message. This soft depracation intends to unify audio-related variables names throughout the library without being to heavy on usage.
+    old names mapped to a unified name, a logging info message indicates it.
+    """
+    @wraps(func)
+    def wrapped_func(*args, **kwargs):
+        # Get function signature to understand parameter names
+        sig = inspect.signature(func)
+        
+        # Check for deprecated audio kwargs and map them to unified names
+        deprecated_kwargs = {}
+        for kwarg_name, kwarg_value in list(kwargs.items()):
+            if kwarg_name in AUDIO_KWARGS_MAPPING:
+                unified_name = AUDIO_KWARGS_MAPPING[kwarg_name]
+                
+                # Map deprecated kwarg to unified name and log info
+                logger.info(
+                    f"The `{kwarg_name}` argument is deprecated and will be removed in a future version. "
+                    f"Use `{unified_name}` instead."
+                )
+                kwargs[unified_name] = kwargs.pop(kwarg_name)
+        
+        return func(*args, **kwargs)
+    
+    return wrapped_func
+
+
+    
+
