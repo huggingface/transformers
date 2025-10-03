@@ -132,20 +132,20 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
 
     def _extract_fbank_features_numpy(
         self,
-        waveform_list: list[np.ndarray],
+        audio_list: list[np.ndarray],
     ) -> list[np.ndarray]:
         """
         Batch version of mel-filter bank feature extraction for improved efficiency for a batch.
         """
-        # Process waveforms: extract left channel if stereo and apply Kaldi scaling
-        processed_waveforms = []
-        for waveform in waveform_list:
-            waveform = np.squeeze(waveform) * (2**15)  # Kaldi compliance: 16-bit signed integers
-            processed_waveforms.append(waveform)
+        # Process audio: apply Kaldi scaling
+        processed_audio = []
+        for audio in audio_list:
+            audio = np.squeeze(audio) * (2**15)  # Kaldi compliance: 16-bit signed integers
+            processed_audio.append(audio)
 
         # Use batch spectrogram processing
         features_list = spectrogram_batch(
-            processed_waveforms,
+            processed_audio,
             self.window,
             frame_length=self.window_length,
             hop_length=self.spec_hop_length,
@@ -164,20 +164,21 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
 
     def _extract_fbank_features_torch(
         self,
-        audio: torch.Tensor,
+        audio: np.ndarray,
         device: str = "cpu",
     ) -> list[np.ndarray]:
         """
         torch-based mel-filter bank feature extraction.
         """
-        processed_waveforms = []
-        for waveform in audio:
-            waveform = waveform.squeeze().to(device) * (2**15)  # Kaldi compliance: 16-bit signed integers
-            processed_waveforms.append(waveform)
-
-        # to tensor
+        audio = torch.from_numpy(audio).to(device)
         window = torch.from_numpy(self.window).to(device)
         mel_filters = torch.from_numpy(self.mel_filters).to(device)
+
+        # To list of tensors for `spectrogram_torch`
+        processed_waveforms = []
+        for waveform in audio:
+            waveform = waveform.squeeze() * (2**15)  # Kaldi compliance: 16-bit signed integers
+            processed_waveforms.append(waveform)
 
         # Use batch spectrogram processing
         features_list = spectrogram_torch(
@@ -328,7 +329,8 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
 
         # Compute Mel Spectrogram like in SeamlessM4TFeatureExtractor
         if use_torch:
-            semantic_input = torch.from_numpy(semantic_input).to(device)
+            if not is_torch_available():
+                raise ImportError("`use_torch=True` requires PyTorch to be installed.")
             mel_features = self._extract_fbank_features_torch(semantic_input, device=device)
             mel_features = [x.cpu().numpy() for x in mel_features]
         else:
