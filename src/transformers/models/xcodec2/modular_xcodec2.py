@@ -142,6 +142,13 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=2):
     return q_embed, k_embed
 
 
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
 # See here for their attention implementation:
 # https://huggingface.co/HKUSTAudio/xcodec2/blob/main/vq/bs_roformer5.py
 class Xcodec2Attention(LlamaAttention):

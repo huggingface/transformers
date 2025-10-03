@@ -43,25 +43,32 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
     This feature extractor inherits from [`SequenceFeatureExtractor`] which contains most of the main methods. Users
     should refer to this superclass for more information regarding those methods.
 
-    This class extracts mel-filter bank features from raw speech.
+    This class extracts mel-filter bank features for the semantic encoder, and also returns padded audio for the
+    acoustic encoder.
 
     Args:
         feature_size (`int`, *optional*, defaults to 80):
             The feature dimension of the extracted features.
         sampling_rate (`int`, *optional*, defaults to 16000):
             The sample rate at which the audio files should be digitalized expressed in hertz (Hz).
+        n_fft (`int`, *optional*, defaults to 512):
+            FFT length for STFT.
+        window_length (`int`, *optional*, defaults to 400):
+            Length of window used in FFT.
         num_mel_bins (`int`, *optional*, defaults to 80):
             Number of Mel-frequency bins.
         padding_value (`float`, *optional*, defaults to 1.0):
             The value that is used to fill the padding vectors for the mel spectrogram.
         stride (`int`, *optional*, defaults to 2):
             Stride used to reshape audios from shape (batch_size,num_frames,num_mel_bins) to
-            (batch_size,num_frames//stride,num_mel_bins*stride).
+            (batch_size,num_frames//stride,num_mel_bins*stride). Namely grouping adjacent frames.
         n_channels (`int`, *optional*, defaults to 1):
             Number of channels in the input audio.
+        spec_hop_length (`int`, *optional*, defaults to 160):
+            Hop length used for computing Mel spectrogram.
         hop_length (`int`, *optional*, defaults to 320):
             Number of audio samples encoded per frame. Equivalent to product of downsampling ratios.
-        pre_padding_value  (`float`, *optional*, defaults to 0.0):
+        pre_padding_value (`float`, *optional*, defaults to 0.0):
             The value that is used to fill the padding vectors for the input audio (before computing the spectrogram).
     """
 
@@ -80,11 +87,9 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
         spec_hop_length=160,
         hop_length=320,
         pre_padding_value=0.0,
-        return_attention_mask=True,
         **kwargs,
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
-        self.return_attention_mask = return_attention_mask
 
         # For DAC-like padding before Mel feature extraction
         self.n_channels = n_channels
@@ -193,7 +198,6 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
         self,
         audio: AudioInput,
         padding: Union[bool, str, PaddingStrategy] = True,
-        pad_to_multiple_of: Optional[int] = 2,
         max_length: Optional[int] = None,
         truncation: bool = False,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -229,19 +233,6 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
                 Maximum length of the returned list and optionally padding length (see above).
             truncation (`bool`):
                 Activates truncation to cut input sequences longer than *max_length* to *max_length*.
-            return_attention_mask (`bool`, *optional*):
-                Whether to return the attention mask. If left to the default, will return the attention mask according
-                to the specific feature_extractor's default.
-
-                [What are attention masks?](../glossary#attention-mask)
-
-                <Tip>
-
-                For Xcodec2 models, `attention_mask` should always be passed for batched inference, to avoid subtle
-                bugs.
-
-                </Tip>
-
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
@@ -349,7 +340,7 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
             padding=padding,
             max_length=max_length,
             truncation=truncation,
-            pad_to_multiple_of=pad_to_multiple_of,
+            pad_to_multiple_of=self.stride,
             return_attention_mask=False,
             return_tensors="np",
         )

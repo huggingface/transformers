@@ -25,8 +25,8 @@ from transformers import (
     AutoConfig,
     AutoFeatureExtractor,
     Xcodec2Config,
-    Xcodec2Model,
     Xcodec2FeatureExtractor,
+    Xcodec2Model,
     logging,
 )
 

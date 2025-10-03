@@ -76,6 +76,11 @@ The original code can be found [here](https://github.com/zhenye234/X-Codec-2.0).
 
 [[autodoc]] Xcodec2Config
 
+## Xcodec2FeatureExtractor
+
+[[autodoc]] Xcodec2FeatureExtractor
+    - __call__
+
 ## Xcodec2Model
 
 [[autodoc]] Xcodec2Model
