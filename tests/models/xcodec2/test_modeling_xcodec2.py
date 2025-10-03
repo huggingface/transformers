@@ -48,20 +48,30 @@ class Xcodec2ModelTester:
         batch_size=4,
         num_channels=1,
         sample_rate=16000,
-        num_samples=400,
+        hop_length=320,
+        num_mel_bins=80,
+        mel_hop_length=160,
+        stride=2,
         is_training=False,
     ):
         self.parent = parent
         self.batch_size = batch_size
         self.sample_rate = sample_rate
         self.is_training = is_training
-        self.num_samples = num_samples
+        self.hop_length = hop_length
+        self.num_samples = hop_length * 4  # feature extractor will pad to multiple of hop_length
         self.num_channels = num_channels
+        self.num_mel_bins = num_mel_bins
+        self.stride = stride
+        self.mel_hop_length = mel_hop_length
 
     def prepare_config_and_inputs(self):
         audio = floats_tensor([self.batch_size, self.num_channels, self.num_samples], scale=1.0)
+        audio_spectrogram = floats_tensor(
+            [self.batch_size, self.num_samples // self.mel_hop_length, self.num_mel_bins * self.stride], scale=1.0
+        )
         config = self.get_config()
-        inputs_dict = {"audio": audio}
+        inputs_dict = {"audio": audio, "audio_spectrogram": audio_spectrogram}
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_common(self):
@@ -81,7 +91,8 @@ class Xcodec2ModelTester:
     def create_and_check_model_forward(self, config, inputs_dict):
         model = Xcodec2Model(config=config).to(torch_device).eval()
         audio = inputs_dict["audio"]
-        result = model(audio)
+        audio_spectrogram = inputs_dict["audio_spectrogram"]
+        result = model(audio, audio_spectrogram)
         self.parent.assertEqual(
             result.audio_values.shape,
             (self.batch_size, self.num_channels, self.num_samples),
@@ -135,7 +146,7 @@ class Xcodec2ModelTest(ModelTesterMixin, unittest.TestCase):
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
-            expected_arg_names = ["audio", "return_dict"]
+            expected_arg_names = ["audio", "audio_spectrogram", "padding_mask", "return_dict"]
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     def test_gradient_checkpointing_backward_compatibility(self):
@@ -375,7 +386,7 @@ class Xcodec2ModelTest(ModelTesterMixin, unittest.TestCase):
 Integration tests for Xcodec2
 
 Code for reproducing expected outputs can be found here:
-https://gist.github.com/ebezzam/909243aa00934cab1c1aad3d6a161580
+https://gist.github.com/ebezzam/909243aa00934cab1c1aad3d6a161580#file-xcodec2_integration-py
 
 PyPI model does not support batch inference.
 
