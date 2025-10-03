@@ -142,12 +142,12 @@ def remove_conversion_scripts():
     for conversion_script in list(model_dir.glob("**/convert*.py")):
         conversion_script.unlink()
 
+
 def remove_internal_utils():
     """
     Delete internal utils that should not be included in releases for security reasons.
     """
     (Path(PATH_TO_UTILS) / "modular_model_detector.py").unlink()
-    
 
 
 def get_version() -> packaging.version.Version:

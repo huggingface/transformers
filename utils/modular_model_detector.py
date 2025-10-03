@@ -239,13 +239,7 @@ class CodeSimilarityAnalyzer:
         self.models_root = MODELS_ROOT
         self.hub_dataset = hub_dataset
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.dtype = (
-            torch.bfloat16
-            if self.device.type == "cuda" and torch.cuda.is_bf16_supported()
-            else torch.float16
-            if self.device.type == "cuda"
-            else torch.float32
-        )
+        self.dtype = "auto"
         self.tokenizer = AutoTokenizer.from_pretrained(EMBEDDING_MODEL)
         self.model = (
             AutoModel.from_pretrained(
