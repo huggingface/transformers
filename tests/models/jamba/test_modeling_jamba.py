@@ -533,6 +533,14 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 # with attention mask
                 _ = model(dummy_input, attention_mask=dummy_attention_mask)
 
+    @unittest.skip("Jamba has a non standard cache format (mamba cache)")
+    def test_past_key_values_format(self):
+        pass
+
+    @unittest.skip("Jamba has a non standard cache which is not compatible with dp/ddp")
+    def test_multi_gpu_data_parallel_forward(self):
+        pass
+
 
 @require_torch
 class JambaModelIntegrationTest(unittest.TestCase):
