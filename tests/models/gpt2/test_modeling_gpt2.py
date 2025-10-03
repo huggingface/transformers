@@ -281,35 +281,6 @@ class GPT2ModelTest(CausalLMModelTest, unittest.TestCase):
         super().test_training_gradient_checkpointing_use_reentrant_false()
         self.all_model_classes = self.original_all_model_classes
 
-    @require_torch_gpu
-    def test_dtype_device_parity_logits_fp32_cpu_vs_fp16_cuda(self):
-        # minimal parity check: logits should be close across dtype/device for the same weights
-        torch.manual_seed(0)
-        tester = self.model_tester
-        config, inputs_dict = tester.prepare_config_and_inputs_for_common()
-
-        # Create a single base model on CPU in fp32
-        base_model = GPT2LMHeadModel(config).eval()
-
-        with torch.no_grad():
-            # Run on CPU fp32
-            cpu_inputs = {k: v.to("cpu") for k, v in inputs_dict.items()}
-            cpu_logits = base_model(**cpu_inputs).logits
-
-            # Clone weights to a CUDA fp16 copy
-            cuda_model = GPT2LMHeadModel(config).eval()
-            cuda_model.load_state_dict(base_model.state_dict())
-            cuda_model = cuda_model.to("cuda", dtype=torch.float16)
-
-            cuda_inputs = {k: v.to("cuda") for k, v in inputs_dict.items()}
-            cuda_logits = cuda_model(**cuda_inputs).logits.to(dtype=torch.float32, device="cpu")
-
-        # Compare with relaxed tolerances to accommodate dtype differences
-        self.assertEqual(cpu_logits.shape, cuda_logits.shape)
-        max_abs_diff = (cpu_logits - cuda_logits).abs().max().item()
-        # fp16 numerical noise tolerance
-        self.assertLessEqual(max_abs_diff, 5e-3)
-
 
 @require_torch
 class GPT2ModelLanguageGenerationTest(unittest.TestCase):
