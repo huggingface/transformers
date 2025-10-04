@@ -16,7 +16,7 @@ import unittest
 from parameterized import parameterized
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import (
     ImageProcessingTestMixin,
@@ -32,6 +32,9 @@ if is_torch_available():
 
 if is_vision_available():
     from transformers import SuperGlueImageProcessor
+
+    if is_torchvision_available():
+        from transformers import SuperGlueImageProcessorFast
 
 
 def random_array(size):
@@ -119,6 +122,7 @@ class SuperGlueImageProcessingTester:
 @require_vision
 class SuperGlueImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = SuperGlueImageProcessor if is_vision_available() else None
+    fast_image_processing_class = SuperGlueImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self) -> None:
         super().setUp()
@@ -397,3 +401,43 @@ class SuperGlueImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             tensor_post_processed_outputs = image_processor.post_process_keypoint_matching(outputs, tensor_image_sizes)
 
             check_post_processed_output(tensor_post_processed_outputs, tensor_image_sizes)
+
+    @require_vision
+    @require_torch
+    def test_slow_fast_equivalence(self):
+        if not self.test_slow_image_processor or not self.test_fast_image_processor:
+            self.skipTest(reason="Skipping slow/fast equivalence test")
+
+        if self.image_processing_class is None or self.fast_image_processing_class is None:
+            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+
+        dummy_image = self.image_processor_tester.prepare_image_inputs(
+            equal_resolution=False, numpify=True, batch_size=2, pairs=False
+        )
+        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
+        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+
+        encoding_slow = image_processor_slow(dummy_image, return_tensors="pt")
+        encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
+        encoding_slow.pixel_values = encoding_slow.pixel_values.to(torch.float64)
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
+
+    @require_vision
+    @require_torch
+    def test_slow_fast_equivalence_batched(self):
+        if not self.test_slow_image_processor or not self.test_fast_image_processor:
+            self.skipTest(reason="Skipping slow/fast equivalence test")
+
+        if self.image_processing_class is None or self.fast_image_processing_class is None:
+            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+
+        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
+        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+
+        encoding_slow = image_processor_slow(dummy_images, return_tensors="pt")
+        encoding_fast = image_processor_fast(dummy_images, return_tensors="pt")
+        encoding_slow.pixel_values = encoding_slow.pixel_values.to(torch.float64)
+
+        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
+

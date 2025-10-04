@@ -170,7 +170,7 @@ else:
             ("siglip", ("SiglipImageProcessor", "SiglipImageProcessorFast")),
             ("siglip2", ("Siglip2ImageProcessor", "Siglip2ImageProcessorFast")),
             ("smolvlm", ("SmolVLMImageProcessor", "SmolVLMImageProcessorFast")),
-            ("superglue", ("SuperGlueImageProcessor", None)),
+            ("superglue", ("SuperGlueImageProcessor", "SuperGlueImageProcessorFast")),
             ("superpoint", ("SuperPointImageProcessor", "SuperPointImageProcessorFast")),
             ("swiftformer", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("swin", ("ViTImageProcessor", "ViTImageProcessorFast")),
@@ -557,6 +557,7 @@ class AutoImageProcessor:
                     if image_processor_type in image_processors:
                         break
                 else:
+                    # do something
                     image_processor_type = image_processor_type[:-4]
                     use_fast = False
                     logger.warning_once(
