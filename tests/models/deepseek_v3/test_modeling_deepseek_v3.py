@@ -246,7 +246,7 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
     def setUp(self):
         self.model_tester = DeepseekV3ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DeepseekV3Config, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=DeepseekV3Config, hidden_size=32)
 
     @parameterized.expand([("random",), ("same",)])
     @unittest.skip("DeepseekV3 is not compatible with assisted decoding")

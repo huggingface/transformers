@@ -14,7 +14,7 @@
 # limitations under the License.
 """openai model configuration"""
 
-from ...configuration_utils import PretrainedConfig, layer_type_validation
+from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 
 
@@ -103,7 +103,6 @@ class GptOssConfig(PretrainedConfig):
             self.layer_types = [
                 "sliding_attention" if bool((i + 1) % 2) else "full_attention" for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         self.attention_bias = True
         self.max_position_embeddings = max_position_embeddings

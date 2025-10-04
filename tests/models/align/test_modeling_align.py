@@ -143,7 +143,7 @@ class AlignVisionModelTest(ModelTesterMixin, unittest.TestCase):
             self,
             config_class=AlignVisionConfig,
             has_text_modality=False,
-            hidden_size=37,
+            hidden_size=32,
             common_properties=["num_channels", "image_size"],
         )
 
@@ -340,7 +340,7 @@ class AlignTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = AlignTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=AlignTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=AlignTextConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()

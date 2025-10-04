@@ -14,10 +14,13 @@
 
 import math
 from functools import wraps
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
-from .configuration_utils import PretrainedConfig
 from .utils import is_torch_available, logging
+
+
+if TYPE_CHECKING:
+    from .configuration_utils import PretrainedConfig
 
 
 logger = logging.get_logger(__name__)
@@ -90,14 +93,14 @@ def dynamic_rope_update(rope_forward):
 
 
 def _compute_default_rope_parameters(
-    config: Optional[PretrainedConfig] = None,
+    config: Optional["PretrainedConfig"] = None,
     device: Optional["torch.device"] = None,
     seq_len: Optional[int] = None,
 ) -> tuple["torch.Tensor", float]:
     """
     Computes the inverse frequencies according to the original RoPE implementation
     Args:
-        config ([`~transformers.PretrainedConfig`]):
+        config ([`~transformers."PretrainedConfig"`]):
             The model configuration. This function assumes that the config will provide at least the following
             properties:
 
@@ -133,14 +136,14 @@ def _compute_default_rope_parameters(
 
 
 def _compute_linear_scaling_rope_parameters(
-    config: Optional[PretrainedConfig] = None,
+    config: Optional["PretrainedConfig"] = None,
     device: Optional["torch.device"] = None,
     seq_len: Optional[int] = None,
 ) -> tuple["torch.Tensor", float]:
     """
     Computes the inverse frequencies with linear scaling. Credits to the Reddit user /u/kaiokendev
     Args:
-        config ([`~transformers.PretrainedConfig`]):
+        config ([`~transformers."PretrainedConfig"`]):
             The model configuration. This function assumes that the config will provide at least the following
             properties:
 
@@ -176,7 +179,7 @@ def _compute_linear_scaling_rope_parameters(
 
 
 def _compute_dynamic_ntk_parameters(
-    config: Optional[PretrainedConfig] = None,
+    config: Optional["PretrainedConfig"] = None,
     device: Optional["torch.device"] = None,
     seq_len: Optional[int] = None,
 ) -> tuple["torch.Tensor", float]:
@@ -184,7 +187,7 @@ def _compute_dynamic_ntk_parameters(
     Computes the inverse frequencies with NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla
 
     Args:
-        config ([`~transformers.PretrainedConfig`]):
+        config ([`~transformers."PretrainedConfig"`]):
             The model configuration. This function assumes that the config will provide at least the following
             properties:
 
@@ -244,14 +247,14 @@ def _compute_dynamic_ntk_parameters(
 
 
 def _compute_yarn_parameters(
-    config: PretrainedConfig, device: "torch.device", seq_len: Optional[int] = None
+    config: "PretrainedConfig", device: "torch.device", seq_len: Optional[int] = None
 ) -> tuple["torch.Tensor", float]:
     """
     Computes the inverse frequencies with NTK scaling. Please refer to the
     [original paper](https://huggingface.co/papers/2309.00071)
 
     Args:
-        config ([`~transformers.PretrainedConfig`]):
+        config ([`~transformers."PretrainedConfig"`]):
             The model configuration. This function assumes that the config will provide at least the following
             properties:
 
@@ -369,14 +372,14 @@ def _compute_yarn_parameters(
 
 
 def _compute_longrope_parameters(
-    config: PretrainedConfig, device: "torch.device", seq_len: Optional[int] = None
+    config: "PretrainedConfig", device: "torch.device", seq_len: Optional[int] = None
 ) -> tuple["torch.Tensor", float]:
     """
     Computes the inverse frequencies with LongRoPE scaling. Please refer to the
     [original implementation](https://github.com/microsoft/LongRoPE)
 
     Args:
-        config ([`~transformers.PretrainedConfig`]):
+        config ([`~transformers."PretrainedConfig"`]):
             The model configuration. This function assumes that the config will provide at least the following
             properties:
 
@@ -451,13 +454,13 @@ def _compute_longrope_parameters(
 
 
 def _compute_llama3_parameters(
-    config: PretrainedConfig, device: "torch.device", seq_len: Optional[int] = None
+    config: "PretrainedConfig", device: "torch.device", seq_len: Optional[int] = None
 ) -> tuple["torch.Tensor", float]:
     """
     Computes the inverse frequencies for llama 3.1.
 
     Args:
-        config ([`~transformers.PretrainedConfig`]):
+        config ([`~transformers."PretrainedConfig"`]):
             The model configuration. This function assumes that the config will provide at least the following
             properties:
 
@@ -557,7 +560,7 @@ def _check_received_keys(
         logger.warning(f"Unrecognized keys in `rope_scaling` for 'rope_type'='{rope_type}': {unused_keys}")
 
 
-def _validate_default_rope_parameters(config: PretrainedConfig, ignore_keys: Optional[set] = None):
+def _validate_default_rope_parameters(config: "PretrainedConfig", ignore_keys: Optional[set] = None):
     rope_scaling = config.rope_scaling
     rope_type = rope_scaling.get("rope_type", rope_scaling.get("type", None))  # BC: "rope_type" was originally "type"
     required_keys = {"rope_type"}
@@ -565,7 +568,7 @@ def _validate_default_rope_parameters(config: PretrainedConfig, ignore_keys: Opt
     _check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
 
 
-def _validate_linear_scaling_rope_parameters(config: PretrainedConfig, ignore_keys: Optional[set] = None):
+def _validate_linear_scaling_rope_parameters(config: "PretrainedConfig", ignore_keys: Optional[set] = None):
     rope_scaling = config.rope_scaling
     rope_type = rope_scaling.get("rope_type", rope_scaling.get("type", None))  # BC: "rope_type" was originally "type"
     required_keys = {"rope_type", "factor"}
@@ -577,7 +580,7 @@ def _validate_linear_scaling_rope_parameters(config: PretrainedConfig, ignore_ke
         logger.warning(f"`rope_scaling`'s factor field must be a float >= 1, got {factor}")
 
 
-def _validate_dynamic_scaling_rope_parameters(config: PretrainedConfig, ignore_keys: Optional[set] = None):
+def _validate_dynamic_scaling_rope_parameters(config: "PretrainedConfig", ignore_keys: Optional[set] = None):
     rope_scaling = config.rope_scaling
     rope_type = rope_scaling.get("rope_type", rope_scaling.get("type", None))  # BC: "rope_type" was originally "type"
     required_keys = {"rope_type", "factor"}
@@ -591,7 +594,7 @@ def _validate_dynamic_scaling_rope_parameters(config: PretrainedConfig, ignore_k
         logger.warning(f"`rope_scaling`'s factor field must be a float >= 1, got {factor}")
 
 
-def _validate_yarn_parameters(config: PretrainedConfig, ignore_keys: Optional[set] = None):
+def _validate_yarn_parameters(config: "PretrainedConfig", ignore_keys: Optional[set] = None):
     rope_scaling = config.rope_scaling
     rope_type = rope_scaling.get("rope_type", rope_scaling.get("type", None))  # BC: "rope_type" was originally "type"
     required_keys = {"rope_type", "factor"}
@@ -657,7 +660,7 @@ def _validate_yarn_parameters(config: PretrainedConfig, ignore_keys: Optional[se
         )
 
 
-def _validate_longrope_parameters(config: PretrainedConfig, ignore_keys: Optional[set] = None):
+def _validate_longrope_parameters(config: "PretrainedConfig", ignore_keys: Optional[set] = None):
     rope_scaling = config.rope_scaling
     rope_type = rope_scaling.get("rope_type", rope_scaling.get("type", None))  # BC: "rope_type" was originally "type"
     required_keys = {"rope_type", "short_factor", "long_factor"}
@@ -707,7 +710,7 @@ def _validate_longrope_parameters(config: PretrainedConfig, ignore_keys: Optiona
                 )
 
 
-def _validate_llama3_parameters(config: PretrainedConfig, ignore_keys: Optional[set] = None):
+def _validate_llama3_parameters(config: "PretrainedConfig", ignore_keys: Optional[set] = None):
     rope_scaling = config.rope_scaling
     rope_type = rope_scaling.get("rope_type", rope_scaling.get("type", None))  # BC: "rope_type" was originally "type"
     required_keys = {"rope_type", "factor", "original_max_position_embeddings", "low_freq_factor", "high_freq_factor"}
@@ -754,11 +757,11 @@ ROPE_VALIDATION_FUNCTIONS = {
 }
 
 
-def rope_config_validation(config: PretrainedConfig, ignore_keys: Optional[set] = None):
+def rope_config_validation(config: "PretrainedConfig", ignore_keys: Optional[set] = None):
     """
-    Validate the RoPE config arguments, given a `PretrainedConfig` object
+    Validate the RoPE config arguments, given a `"PretrainedConfig"` object
     """
-    rope_scaling = getattr(config, "rope_scaling", None)  # not a default parameter in `PretrainedConfig`
+    rope_scaling = getattr(config, "rope_scaling", None)  # not a default parameter in `"PretrainedConfig"`
     if rope_scaling is None:
         return
 

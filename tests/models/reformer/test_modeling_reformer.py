@@ -608,7 +608,7 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
 
     def setUp(self):
         self.model_tester = ReformerModelTester(self, text_seq_length=16)
-        self.config_tester = ConfigTester(self, config_class=ReformerConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=ReformerConfig, hidden_size=32)
 
     @slow
     def test_model_from_pretrained(self):
@@ -791,7 +791,7 @@ class ReformerLSHAttnModelTest(
             hash_seed=0,
             num_labels=2,
         )
-        self.config_tester = ConfigTester(self, config_class=ReformerConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=ReformerConfig, hidden_size=32)
 
     def _check_attentions_for_generate(
         self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values

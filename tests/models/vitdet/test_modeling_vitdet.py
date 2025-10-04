@@ -171,7 +171,7 @@ class VitDetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = VitDetModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=VitDetConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=VitDetConfig, has_text_modality=False, hidden_size=32)
 
     # TODO: Fix me (once this model gets more usage)
     @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")

@@ -220,7 +220,7 @@ class MPNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = MPNetModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MPNetConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=MPNetConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()

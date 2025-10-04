@@ -153,7 +153,7 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
             self,
             config_class=SwiftFormerConfig,
             has_text_modality=False,
-            hidden_size=37,
+            hidden_size=32,
             num_attention_heads=12,
             num_hidden_layers=12,
         )
