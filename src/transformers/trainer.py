@@ -86,6 +86,7 @@ from .trainer_callback import (
     TrainerCallback,
     TrainerControl,
     TrainerState,
+    PytorchProfilerCallback,
 )
 from .trainer_pt_utils import (
     EvalLoopContainer,
@@ -2161,8 +2162,16 @@ class Trainer:
         if self.neftune_noise_alpha is not None:
             self.model = self._activate_neftune(self.model)
 
+        # Add PytorchProfilerCallback if required
+        if args.profiler == "pytorch":
+            profiler_callback = PytorchProfilerCallback(
+                profile_memory = True,
+                export_chrome_trace = True,
+                profiler_kwargs = args.profiler_kwargs,
+                table_kwargs = args.profiler_table_kwargs)
+            self.add_callback(profiler_callback)
+
         # do_train is not a reliable argument, as it might not be set and .train() still called, so
-        # the following is a workaround:
         if (
             (args.fp16_full_eval or args.bf16_full_eval)
             and not args.do_train
@@ -2722,7 +2731,6 @@ class Trainer:
                     shutil.rmtree(checkpoint, ignore_errors=True)
 
         self.control = self.callback_handler.on_train_end(args, self.state, self.control)
-
         # Wait for the checkpoint to be uploaded.
         self._finish_current_push()
 
