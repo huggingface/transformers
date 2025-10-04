@@ -4916,7 +4916,7 @@ class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
         self.original_threshold = self.assistant_model.generation_config.assistant_confidence_threshold
 
     def assert_no_sklearn(self):
-        with patch("transformers.utils.import_utils._sklearn_available", False):
+        with patch("transformers.generation.candidate_generator.is_sklearn_available", lambda: False):
             self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
             self.assertEqual(self.candidate_generator.matches, self.original_matches)
             self.assertEqual(self.candidate_generator.probs, self.original_probs)
