@@ -267,7 +267,6 @@ class TestTrainerExt(TestCasePlus):
             --validation_file {data_dir}/val.json
             --test_file {data_dir}/test.json
             --output_dir {output_dir}
-            --overwrite_output_dir
             --max_train_samples 8
             --max_source_length {max_len}
             --max_target_length {max_len}

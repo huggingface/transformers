@@ -378,7 +378,7 @@ Most of the training arguments are self-explanatory, but one that is quite impor
 ...     learning_rate=5e-5,
 ...     per_device_train_batch_size=batch_size,
 ...     per_device_eval_batch_size=batch_size,
-...     warmup_ratio=0.1,
+...     warmup_steps=0.1,
 ...     logging_steps=10,
 ...     load_best_model_at_end=True,
 ...     metric_for_best_model="accuracy",

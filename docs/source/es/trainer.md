@@ -381,7 +381,6 @@ accelerate launch \
     --learning_rate 5e-5 \
     --num_train_epochs 3 \
     --output_dir /tmp/$TASK_NAME/ \
-    --overwrite_output_dir
 ```
 
 También puedes especificar los parámetros del archivo config_file.yaml directamente en la línea de comandos:
@@ -404,7 +403,6 @@ accelerate launch --num_processes=2 \
     --learning_rate 5e-5 \
     --num_train_epochs 3 \
     --output_dir /tmp/$TASK_NAME/ \
-    --overwrite_output_dir
 ```
 
 Consulta el tutorial [Lanzamiento de tus scripts con Accelerate](https://huggingface.co/docs/accelerate/basic_tutorials/launch) para obtener más información sobre `accelerate_launch` y las configuraciones personalizadas.

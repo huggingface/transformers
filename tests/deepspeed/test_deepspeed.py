@@ -1303,7 +1303,6 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             --train_file {data_dir}/train.json
             --validation_file {data_dir}/val.json
             --output_dir {output_dir}
-            --overwrite_output_dir
             --max_source_length {max_len}
             --max_target_length {max_len}
             --val_max_target_length {max_len}
@@ -1373,7 +1372,6 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             --train_file {data_dir}/sample_text.txt
             --validation_file {data_dir}/sample_text.txt
             --output_dir {output_dir}
-            --overwrite_output_dir
             --do_train
             --do_eval
             --max_train_samples 16
@@ -1410,7 +1408,6 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             --train_file {data_dir}/sample_text.txt
             --validation_file {data_dir}/sample_text.txt
             --output_dir {output_dir}
-            --overwrite_output_dir
             --do_train
             --max_train_samples 4
             --per_device_train_batch_size 2
