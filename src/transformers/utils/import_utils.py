@@ -106,7 +106,7 @@ USE_TORCH_XLA = os.environ.get("USE_TORCH_XLA", "1").upper()
 # This is the version of torch required to run torch.fx features and torch.onnx with dictionary inputs.
 TORCH_FX_REQUIRED_VERSION = version.parse("1.10")
 
-ACCELERATE_MIN_VERSION = "0.26.0"
+ACCELERATE_MIN_VERSION = "1.1.0"
 SCHEDULEFREE_MIN_VERSION = "1.2.6"
 FSDP_MIN_VERSION = "1.12.0"
 GGUF_MIN_VERSION = "0.10.0"
