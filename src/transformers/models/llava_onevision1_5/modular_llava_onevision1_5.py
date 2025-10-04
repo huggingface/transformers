@@ -254,9 +254,6 @@ class LlavaOnevision1_5VisionPretrainedModel(Qwen2_5_VisionTransformerPretrained
 
     def __init__(self, config, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
-        del self.fullatt_block_indexes
-        del self.window_size
-        del self.spatial_merge_unit
 
         self.patch_embed = LlavaOnevision1_5VisionPatchEmbed(
             patch_size=config.patch_size,

@@ -350,6 +350,9 @@ class LlavaOnevision1_5VisionPretrainedModel(LlavaOnevision1_5PreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.spatial_merge_size = config.spatial_merge_size
         self.patch_size = config.patch_size
+        self.fullatt_block_indexes = config.fullatt_block_indexes
+        self.window_size = config.window_size
+        self.spatial_merge_unit = self.spatial_merge_size * self.spatial_merge_size
 
         self.patch_embed = LlavaOnevision1_5VisionPatchEmbed(
             patch_size=config.patch_size,
