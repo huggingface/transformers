@@ -416,7 +416,7 @@ def main():
         return
 
     # Get the column names for input/target.
-    dataset_columns = question_answering_column_name_mapping.get(data_args.dataset_name, None)
+    dataset_columns = question_answering_column_name_mapping.get(data_args.dataset_name)
     if data_args.question_column is None:
         question_column = dataset_columns[0] if dataset_columns is not None else column_names[0]
     else:

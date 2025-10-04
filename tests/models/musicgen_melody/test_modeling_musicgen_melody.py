@@ -251,7 +251,7 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
             input_ids = input_ids.reshape(-1, config.num_codebooks, input_ids.shape[-1])
 
             inputs["inputs_embeds"] = sum(
-                [embed_tokens[codebook](input_ids[:, codebook]) for codebook in range(config.num_codebooks)]
+                embed_tokens[codebook](input_ids[:, codebook]) for codebook in range(config.num_codebooks)
             )
 
             with torch.no_grad():

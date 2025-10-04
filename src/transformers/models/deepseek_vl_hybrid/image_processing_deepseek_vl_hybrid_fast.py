@@ -65,7 +65,7 @@ class DeepseekVLHybridImageProcessorFast(BaseImageProcessorFast):
         if kwargs.get("image_mean") is None:
             background_color = (127, 127, 127)
         else:
-            background_color = tuple([int(x * 255) for x in kwargs.get("image_mean")])
+            background_color = tuple(int(x * 255) for x in kwargs.get("image_mean"))
         if kwargs.get("high_res_image_mean") is None:
             high_res_background_color = (127, 127, 127)
         else:

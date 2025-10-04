@@ -476,7 +476,7 @@ def main():
     column_names = raw_datasets["train"].column_names
 
     # Get the column names for input/target.
-    dataset_columns = summarization_name_mapping.get(args.dataset_name, None)
+    dataset_columns = summarization_name_mapping.get(args.dataset_name)
     if args.text_column is None:
         text_column = dataset_columns[0] if dataset_columns is not None else column_names[0]
     else:
