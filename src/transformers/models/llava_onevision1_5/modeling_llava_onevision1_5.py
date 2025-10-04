@@ -404,8 +404,45 @@ class LlavaOnevision1_5VisionPretrainedModel(LlavaOnevision1_5PreTrainedModel):
         return rotary_pos_emb
 
     def get_window_index(self, grid_thw):
-        """Unused this function since LlavaOnevision1_5VisionModel does not use window attention."""
-        return None, None
+        window_index: list = []
+        cu_window_seqlens: list = [0]
+        window_index_id = 0
+        vit_merger_window_size = self.window_size // self.spatial_merge_size // self.patch_size
+
+        for grid_t, grid_h, grid_w in grid_thw:
+            llm_grid_h, llm_grid_w = (
+                grid_h // self.spatial_merge_size,
+                grid_w // self.spatial_merge_size,
+            )
+            index = torch.arange(grid_t * llm_grid_h * llm_grid_w).reshape(grid_t, llm_grid_h, llm_grid_w)
+            pad_h = vit_merger_window_size - llm_grid_h % vit_merger_window_size
+            pad_w = vit_merger_window_size - llm_grid_w % vit_merger_window_size
+            num_windows_h = (llm_grid_h + pad_h) // vit_merger_window_size
+            num_windows_w = (llm_grid_w + pad_w) // vit_merger_window_size
+            index_padded = F.pad(index, (0, pad_w, 0, pad_h), "constant", -100)
+            index_padded = index_padded.reshape(
+                grid_t,
+                num_windows_h,
+                vit_merger_window_size,
+                num_windows_w,
+                vit_merger_window_size,
+            )
+            index_padded = index_padded.permute(0, 1, 3, 2, 4).reshape(
+                grid_t,
+                num_windows_h * num_windows_w,
+                vit_merger_window_size,
+                vit_merger_window_size,
+            )
+            seqlens = (index_padded != -100).sum([2, 3]).reshape(-1)
+            index_padded = index_padded.reshape(-1)
+            index_new = index_padded[index_padded != -100]
+            window_index.append(index_new + window_index_id)
+            cu_seqlens_tmp = seqlens.cumsum(0) * self.spatial_merge_unit + cu_window_seqlens[-1]
+            cu_window_seqlens.extend(cu_seqlens_tmp.tolist())
+            window_index_id += (grid_t * llm_grid_h * llm_grid_w).item()
+        window_index = torch.cat(window_index, dim=0)
+
+        return window_index, cu_window_seqlens
 
     def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor) -> torch.Tensor:
         """

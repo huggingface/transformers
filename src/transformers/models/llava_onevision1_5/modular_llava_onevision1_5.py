@@ -14,17 +14,21 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import Callable, Optional, Union
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import LayerNorm
 
+from ...cache_utils import Cache
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import (
+    TransformersKwargs,
     auto_docstring,
     can_return_tuple,
+    is_torchdynamo_compiling,
     logging,
 )
 from ..auto import CONFIG_MAPPING, AutoModel
@@ -60,9 +64,6 @@ class LlavaOnevision1_5VisionConfig(Qwen2_5_VLVisionConfig):
         self.layer_norm_eps = layer_norm_eps
         self.text_hidden_size = text_hidden_size
         self.attention_dropout = attention_dropout
-        del self.fullatt_block_indexes
-        del self.out_hidden_size
-        del self.window_size
 
 
 class LlavaOnevision1_5Config(Qwen2_5_VLConfig):
@@ -279,10 +280,6 @@ class LlavaOnevision1_5VisionPretrainedModel(Qwen2_5_VisionTransformerPretrained
             layer_norm_eps=config.layer_norm_eps,
         )
 
-    def get_window_index(self, grid_thw):
-        """Unused this function since LlavaOnevision1_5VisionModel does not use window attention."""
-        return None, None
-
     def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor) -> torch.Tensor:
         """
         Args:
@@ -358,9 +355,96 @@ class LlavaOnevision1_5Model(Qwen2_5_VLModel, PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    # modified from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl.Qwen2_5_VLModel.forward
     @auto_docstring
-    def forward(self, **super_kwargs):
-        super().forward(self, **super_kwargs)
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        pixel_values: Optional[torch.Tensor] = None,
+        pixel_values_videos: Optional[torch.FloatTensor] = None,
+        image_grid_thw: Optional[torch.LongTensor] = None,
+        video_grid_thw: Optional[torch.LongTensor] = None,
+        rope_deltas: Optional[torch.LongTensor] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        second_per_grid_ts: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Union[tuple, LlavaOnevision1_5ModelOutputWithPast]:
+        r"""
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
+            The rope index difference between sequence length and multimodal rope.
+        second_per_grid_ts (`torch.Tensor` of shape `(num_videos)`, *optional*):
+            The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
+        """
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
+        if pixel_values is not None:
+            image_embeds = self.get_image_features(pixel_values, image_grid_thw)
+            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            image_mask, _ = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+
+        if pixel_values_videos is not None:
+            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw)
+            video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            _, video_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
+
+        if position_ids is None:
+            # Calculate RoPE index once per generation in the pre-fill stage only.
+            # When compiling, we can't check tensor values thus we check only input length
+            # It is safe to assume that `length!=1` means we're in pre-fill because compiled
+            # models currently cannot do asssisted decoding
+            prefill_compiled_stage = is_torchdynamo_compiling() and (
+                (input_ids is not None and input_ids.shape[1] != 1)
+                or (inputs_embeds is not None and inputs_embeds.shape[1] != 1)
+            )
+            prefill_noncompiled_stage = not is_torchdynamo_compiling() and (
+                (cache_position is not None and cache_position[0] == 0)
+                or (past_key_values is None or past_key_values.get_seq_length() == 0)
+            )
+            if (prefill_compiled_stage or prefill_noncompiled_stage) or self.rope_deltas is None:
+                position_ids, rope_deltas = self.get_rope_index(
+                    input_ids,
+                    image_grid_thw,
+                    video_grid_thw,
+                    second_per_grid_ts=second_per_grid_ts,
+                    attention_mask=attention_mask,
+                )
+                self.rope_deltas = rope_deltas
+            else:
+                batch_size, seq_length, _ = inputs_embeds.shape
+                position_ids = torch.arange(seq_length, device=inputs_embeds.device)
+                position_ids = position_ids.view(1, 1, -1).expand(3, batch_size, -1)
+                if cache_position is not None:
+                    delta = (cache_position[0] + self.rope_deltas).to(inputs_embeds.device)
+                else:
+                    delta = torch.zeros((batch_size, seq_length), device=inputs_embeds.device)
+                delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=1)
+                position_ids = position_ids + delta.to(position_ids.device)
 
         outputs = self.language_model(
             input_ids=None,

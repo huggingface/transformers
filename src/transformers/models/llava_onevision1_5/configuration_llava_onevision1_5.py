@@ -60,6 +60,9 @@ class LlavaOnevision1_5VisionConfig(PretrainedConfig):
         self.spatial_merge_size = spatial_merge_size
         self.temporal_patch_size = temporal_patch_size
         self.tokens_per_second = tokens_per_second
+        self.window_size = window_size
+        self.fullatt_block_indexes = fullatt_block_indexes
+        self.out_hidden_size = out_hidden_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.text_hidden_size = text_hidden_size
