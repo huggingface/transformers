@@ -463,7 +463,6 @@ else:
         "Conv1D",
         "apply_chunking_to_forward",
         "prune_layer",
-        "infer_device",
     ]
     _import_structure["time_series_utils"] = []
     _import_structure["trainer"] = ["Trainer"]
