@@ -60,8 +60,6 @@ class YosoConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
-            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`.
         use_expectation (`bool`, *optional*, defaults to `True`):
             Whether or not to use YOSO Expectation. Overrides any effect of num_hash.
         hash_code_len (`int`, *optional*, defaults to 9):
@@ -106,7 +104,6 @@ class YosoConfig(PretrainedConfig):
         type_vocab_size=1,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        position_embedding_type="absolute",
         use_expectation=True,
         hash_code_len=9,
         num_hash=64,
@@ -132,7 +129,6 @@ class YosoConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.type_vocab_size = type_vocab_size
         self.layer_norm_eps = layer_norm_eps
-        self.position_embedding_type = position_embedding_type
         self.use_expectation = use_expectation
         self.hash_code_len = hash_code_len
         self.num_hash = num_hash
