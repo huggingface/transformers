@@ -91,5 +91,4 @@ deps = {
     "rich": "rich",
     "opentelemetry-api": "opentelemetry-api",
     "mistral-common[opencv]": "mistral-common[opencv]>=1.6.3",
-    "optax": "optax>=0.1.7",
 }
