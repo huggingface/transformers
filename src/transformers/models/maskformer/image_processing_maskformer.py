@@ -86,7 +86,6 @@ class MaskFormerImageProcessorKwargs(ImagesKwargs):
     num_labels: Optional[int]
 
 
-# Copied from transformers.models.detr.image_processing_detr.get_size_with_aspect_ratio
 def max_across_indices(values: Iterable[Any]) -> list[Any]:
     """
     Return the maximum value across all indices of an iterable of values.

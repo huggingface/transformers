@@ -108,7 +108,6 @@ class DeformableDetrImageProcessorKwargs(ImagesKwargs):
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 
 
-# Copied from transformers.models.detr.image_processing_detr.get_size_with_aspect_ratio
 def get_resize_output_image_size(
     input_image: np.ndarray,
     size: Union[int, tuple[int, int], list[int]],

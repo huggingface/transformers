@@ -91,7 +91,6 @@ class RTDetrImageProcessorKwargs(ImagesKwargs):
     masks_path: Optional[Union[str, pathlib.Path]]
 
 
-# Copied from transformers.models.detr.image_processing_detr.get_size_with_aspect_ratio
 def get_resize_output_image_size(
     input_image: np.ndarray,
     size: Union[int, tuple[int, int], list[int]],

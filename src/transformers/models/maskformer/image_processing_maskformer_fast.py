@@ -22,6 +22,8 @@ import torch
 from torch import nn
 from torchvision.transforms.v2 import functional as F
 
+from transformers.image_transforms import get_size_with_aspect_ratio
+
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
@@ -44,7 +46,6 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from transformers.image_transforms import get_size_with_aspect_ratio
 from .image_processing_maskformer import (
     MaskFormerImageProcessorKwargs,
     compute_segments,
