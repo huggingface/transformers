@@ -4525,9 +4525,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if tp_plan is not None and tp_plan != "auto":
             # TODO: we can relax this check when we support taking tp_plan from a json file, for example.
             raise ValueError(f"tp_plan supports 'auto' only for now but got {tp_plan}.")
-        if tp_plan is not None and device_map is not None:
+        if tp_plan is not None and device_map is not None and device_map != "meta" and device_mesh is None:
             raise ValueError(
-                "`tp_plan` and `device_map` are mutually exclusive. Choose either one for parallelization."
+                "`tp_plan` and `device_map` are mutually exclusive. "
+                "Choose either one for parallelization or include a `device_mesh`."
             )
 
         if device_map == "auto" and int(os.environ.get("WORLD_SIZE", "0")):
@@ -4551,7 +4552,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         )
                     device_mesh = device_mesh["tp"]
                 tp_size = device_mesh.size()
-                device_map = torch.device(f"{device_mesh.device_type}:{int(os.environ['LOCAL_RANK'])}")
+                if device_map is None:
+                    device_map = torch.device(f"{device_mesh.device_type}:{int(os.environ['LOCAL_RANK'])}")
 
             if tp_size is None:
                 tp_size = torch.distributed.get_world_size()
@@ -5285,14 +5287,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             disk_offload_index = None
 
         # Post-processing for tensor parallelism
-        if device_mesh is not None:
+        if device_mesh is not None and "tp" in device_mesh.mesh_dim_names:
             # When using TP, the device map is a single device for all parameters
             tp_device = list(device_map.values())[0]
             # This is needed for the RotaryEmbedding, which was not initialized on the correct device as it is
             # not part of the state_dict (persistent=False)
             for buffer in model.buffers():
-                if buffer.device != tp_device:
-                    buffer.data = buffer.to(tp_device)
+                if buffer.device.type == "meta":
+                    model.to(tp_device)
+                    break
+                if buffer.device != tp_device and tp_device.type != "meta":
+                    buffer.data.copy_(buffer.to(tp_device))
 
             # In this case, the top-most task module weights were not moved to device and parallelized as they
             # were not part of the loaded weights: do it now
