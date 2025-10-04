@@ -229,7 +229,7 @@ class MarianModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         else {}
     )
     is_encoder_decoder = True
-    fx_compatible = True
+    fx_compatible = False
     test_pruning = False
     test_missing_keys = False
 
