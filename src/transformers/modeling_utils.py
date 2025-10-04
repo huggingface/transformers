@@ -1188,13 +1188,13 @@ def _get_dtype(
                 dtype = getattr(torch, dtype)
                 config.dtype = dtype
                 for sub_config_key in config.sub_configs:
-                    sub_config = getattr(config, sub_config_key)
-                    sub_config.dtype = dtype
+                    if (sub_config := getattr(config, sub_config_key)) is not None:
+                        sub_config.dtype = dtype
         elif isinstance(dtype, torch.dtype):
             config.dtype = dtype
             for sub_config_key in config.sub_configs:
-                sub_config = getattr(config, sub_config_key)
-                sub_config.dtype = dtype
+                if (sub_config := getattr(config, sub_config_key)) is not None:
+                    sub_config.dtype = dtype
         elif isinstance(dtype, dict):
             for key, curr_dtype in dtype.items():
                 if hasattr(config, key):
@@ -1219,8 +1219,8 @@ def _get_dtype(
         default_dtype = torch.get_default_dtype()
         config.dtype = default_dtype
         for key in config.sub_configs:
-            value = getattr(config, key)
-            value.dtype = default_dtype
+            if (sub_config := getattr(config, key)) is not None:
+                sub_config.dtype = default_dtype
 
     return config, dtype, dtype_orig
 
@@ -2691,34 +2691,34 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # We need this as some old and badly designed models use subconfigs without declaring the corresponding modules as PreTrainedModel
         for subconfig_key in self.config.sub_configs:
-            subconfig = getattr(self.config, subconfig_key)
-            sub_implementation = (
-                requested_implementation
-                if not isinstance(attn_implementation, dict)
-                else attn_implementation.get(subconfig_key, subconfig._attn_implementation)
-            )
-            # This means we did not perform any check above for this particular subconfig -> set it in the dark if it is registered
-            if (
-                not hasattr(subconfig, "_attn_was_changed")
-                # If it's already the same, then no need to enter here and raise warnings
-                and sub_implementation != subconfig._attn_implementation
-            ):
-                if sub_implementation not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
-                    raise ValueError(
-                        f'Specified `attn_implementation="{sub_implementation}"` is not supported for {subconfig_key}. '
-                        'The only possible arguments are "eager" (manual attention implementation)'
-                        f"or one of the following: {list(ALL_ATTENTION_FUNCTIONS.valid_keys())}"
-                    )
-                subconfig._attn_implementation_internal = sub_implementation
-                logger.warning(
-                    f"We set the attention implementation for the sub-config `{subconfig_key}` to `{sub_implementation}` "
-                    "without finding the associated sub-model. For this reason we could not check if the model supports it. "
-                    "You may encounter undefined behavior."
+            if (subconfig := getattr(self.config, subconfig_key)) is not None:
+                sub_implementation = (
+                    requested_implementation
+                    if not isinstance(attn_implementation, dict)
+                    else attn_implementation.get(subconfig_key, subconfig._attn_implementation)
                 )
-            # Unset the attribute in this case, to avoid issues in the future
-            else:
-                if hasattr(subconfig, "_attn_was_changed"):
-                    del subconfig._attn_was_changed
+                # This means we did not perform any check above for this particular subconfig -> set it in the dark if it is registered
+                if (
+                    not hasattr(subconfig, "_attn_was_changed")
+                    # If it's already the same, then no need to enter here and raise warnings
+                    and sub_implementation != subconfig._attn_implementation
+                ):
+                    if sub_implementation not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
+                        raise ValueError(
+                            f'Specified `attn_implementation="{sub_implementation}"` is not supported for {subconfig_key}. '
+                            'The only possible arguments are "eager" (manual attention implementation)'
+                            f"or one of the following: {list(ALL_ATTENTION_FUNCTIONS.valid_keys())}"
+                        )
+                    subconfig._attn_implementation_internal = sub_implementation
+                    logger.warning(
+                        f"We set the attention implementation for the sub-config `{subconfig_key}` to `{sub_implementation}` "
+                        "without finding the associated sub-model. For this reason we could not check if the model supports it. "
+                        "You may encounter undefined behavior."
+                    )
+                # Unset the attribute in this case, to avoid issues in the future
+                else:
+                    if hasattr(subconfig, "_attn_was_changed"):
+                        del subconfig._attn_was_changed
 
     def enable_input_require_grads(self):
         """

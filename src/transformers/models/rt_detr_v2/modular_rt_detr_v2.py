@@ -25,7 +25,7 @@ from ...utils import is_torchdynamo_compiling, logging
 from ...utils.backbone_utils import (
     verify_backbone_config_arguments,
 )
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 from ..rt_detr.modeling_rt_detr import (
     RTDetrDecoder,
     RTDetrDecoderLayer,
@@ -196,6 +196,7 @@ class RTDetrV2Config(PretrainedConfig):
     """
 
     model_type = "rt_detr_v2"
+    sub_configs = {"backbone_config": AutoConfig}
     layer_types = ["basic", "bottleneck"]
     attribute_map = {
         "hidden_size": "d_model",
@@ -368,14 +369,6 @@ class RTDetrV2Config(PretrainedConfig):
         self.decoder_n_levels = decoder_n_levels
         self.decoder_offset_scale = decoder_offset_scale
         self.decoder_method = decoder_method
-
-    @property
-    def sub_configs(self):
-        return (
-            {"backbone_config": type(self.backbone_config)}
-            if getattr(self, "backbone_config", None) is not None
-            else {}
-        )
 
     @classmethod
     def from_backbone_configs(cls, backbone_config: PretrainedConfig, **kwargs):

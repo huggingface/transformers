@@ -19,7 +19,7 @@ from typing import Optional
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -128,6 +128,7 @@ class Mask2FormerConfig(PretrainedConfig):
     """
 
     model_type = "mask2former"
+    sub_configs = {"backbone_config": AutoConfig}
     backbones_supported = ["swin"]
     attribute_map = {"hidden_size": "hidden_dim"}
 
@@ -235,14 +236,6 @@ class Mask2FormerConfig(PretrainedConfig):
         self.backbone_kwargs = backbone_kwargs
 
         super().__init__(**kwargs)
-
-    @property
-    def sub_configs(self):
-        return (
-            {"backbone_config": type(self.backbone_config)}
-            if getattr(self, "backbone_config", None) is not None
-            else {}
-        )
 
     @classmethod
     def from_backbone_config(cls, backbone_config: PretrainedConfig, **kwargs):
