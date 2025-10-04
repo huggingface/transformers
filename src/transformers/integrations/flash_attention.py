@@ -76,7 +76,7 @@ def flash_attention_forward(
         softcap=softcap,
         use_top_left_mask=_use_top_left_mask,
         target_dtype=target_dtype,
-        attn_implementation=module.config._attn_implementation,
+        implementation=module.config._attn_implementation,
         layer_idx=module.layer_idx if hasattr(module, "layer_idx") else None,
         **kwargs,
     )
