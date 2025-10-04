@@ -1313,7 +1313,7 @@ class EncoderDecoderCache(Cache):
             isinstance(self.self_attention_cache, DynamicCache)
             and isinstance(self.cross_attention_cache, DynamicCache)
         ):
-            raise ValueError(
+            raise TypeError(
                 f"`{method}` is only defined for dynamic cache, got {self.self_attention_cache.__str__()} for the self "
                 f"attention cache and {self.cross_attention_cache.__str__()} for the cross attention cache."
             )
