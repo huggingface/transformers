@@ -44,7 +44,6 @@ class NougatProcessor(ProcessorMixin):
 
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
-        self.current_processor = self.image_processor
 
     def __call__(
         self,
