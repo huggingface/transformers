@@ -220,9 +220,6 @@ class TrainingArguments:
     Parameters:
         output_dir (`str`, *optional*, defaults to `"trainer_output"`):
             The output directory where the model predictions and checkpoints will be written.
-        overwrite_output_dir (`bool`, *optional*, defaults to `False`):
-            If `True`, overwrite the content of the output directory. Use this to continue training if `output_dir`
-            points to a checkpoint directory.
         do_train (`bool`, *optional*, defaults to `False`):
             Whether to run training or not. This argument is not directly used by [`Trainer`], it's intended to be used
             by your training/evaluation scripts instead. See the [example
@@ -809,12 +806,7 @@ class TrainingArguments:
     )
     overwrite_output_dir: bool = field(
         default=False,
-        metadata={
-            "help": (
-                "Overwrite the content of the output directory. "
-                "Use this to continue training if output_dir points to a checkpoint directory."
-            )
-        },
+        metadata={"help": ("This argument is deprecated and will be removed in v5.")},
     )
 
     do_train: bool = field(default=False, metadata={"help": "Whether to run training."})

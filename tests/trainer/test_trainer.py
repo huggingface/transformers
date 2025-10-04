@@ -4459,7 +4459,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 "1",
                 "--output_dir",
                 tmpdir,
-                "--overwrite_output_dir",
                 "--do_train",
                 "--max_train_samples",
                 "64",
