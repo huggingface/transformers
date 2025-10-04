@@ -1117,15 +1117,30 @@ def is_flash_attn_2_available() -> bool:
     if not (torch.cuda.is_available() or is_torch_mlu_available()):
         return False
 
+    flash_attn_version = importlib.metadata.version("flash_attn")
     if torch.version.cuda:
-        return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.1.0")
+        is_compatible = version.parse(flash_attn_version) >= version.parse("2.1.0")
     elif torch.version.hip:
         # TODO: Bump the requirement to 2.1.0 once released in https://github.com/ROCmSoftwarePlatform/flash-attention
-        return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.0.4")
+        is_compatible = version.parse(flash_attn_version) >= version.parse("2.0.4")
     elif is_torch_mlu_available():
-        return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.3.3")
+        is_compatible = version.parse(flash_attn_version) >= version.parse("2.3.3")
     else:
+        is_compatible = False
+
+    if not is_compatible:
         return False
+
+    # finally try import flash_attn
+    try:
+        import flash_attn  # noqa: F401
+    except ImportError as e:
+        logger.warning_once(
+            f"[WARN] Flash-attention seems to be installed but not available due to the following error: {e}"
+        )
+        return False
+
+    return True
 
 
 @lru_cache
