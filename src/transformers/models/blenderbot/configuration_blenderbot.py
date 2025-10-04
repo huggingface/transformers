@@ -19,7 +19,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from ... import PreTrainedTokenizer
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...file_utils import is_torch_available
 from ...onnx import OnnxConfig, OnnxConfigWithPast, OnnxSeq2SeqConfigWithPast
 from ...onnx.utils import compute_effective_axis_dimension
@@ -29,15 +29,15 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class BlenderbotConfig(PretrainedConfig):
+class BlenderbotConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BlenderbotModel`]. It is used to instantiate an
     Blenderbot model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Blenderbot
     [facebook/blenderbot-3B](https://huggingface.co/facebook/blenderbot-3B) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:

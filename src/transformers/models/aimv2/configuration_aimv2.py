@@ -21,22 +21,22 @@
 
 from typing import Optional
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class Aimv2VisionConfig(PretrainedConfig):
+class Aimv2VisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Aimv2VisionModel`]. It is used to instantiate a
     AIMv2 vision encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the vision encoder of the AIMv2
     [apple/aimv2-large-patch14-224](https://huggingface.co/apple/aimv2-large-patch14-224) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 1024):
@@ -127,15 +127,15 @@ class Aimv2VisionConfig(PretrainedConfig):
         self.is_native = is_native
 
 
-class Aimv2TextConfig(PretrainedConfig):
+class Aimv2TextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Aimv2TextModel`]. It is used to instantiate a
     AIMv2 text encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the text encoder of the AIMv2
     [apple/aimv2-large-patch14-224-lit](https://huggingface.co/apple/aimv2-large-patch14-224-lit) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 49408):
@@ -212,15 +212,15 @@ class Aimv2TextConfig(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
 
 
-class Aimv2Config(PretrainedConfig):
+class Aimv2Config(PreTrainedConfig):
     r"""
     [`Aimv2Config`] is the configuration class to store the configuration of a [`Aimv2Model`]. It is used to
     instantiate a AIMv2 model according to the specified arguments, defining the text model and vision model configs.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the AIMv2
     [apple/aimv2-large-patch14-224-lit](https://huggingface.co/apple/aimv2-large-patch14-224-lit) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`dict`, *optional*):

@@ -13,19 +13,19 @@
 # limitations under the License.
 from typing import Optional
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 
 
-class EfficientLoFTRConfig(PretrainedConfig):
+class EfficientLoFTRConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`EfficientLoFTRFromKeypointMatching`].
     It is used to instantiate a EfficientLoFTR model according to the specified arguments, defining the model
     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
     EfficientLoFTR [zju-community/efficientloftr](https://huggingface.co/zju-community/efficientloftr) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         stage_num_blocks (`List`, *optional*, defaults to [1, 2, 4, 14]):

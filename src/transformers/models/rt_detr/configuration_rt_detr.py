@@ -14,7 +14,7 @@
 # limitations under the License.
 """RT-DETR model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto import CONFIG_MAPPING
@@ -24,15 +24,15 @@ from .configuration_rt_detr_resnet import RTDetrResNetConfig
 logger = logging.get_logger(__name__)
 
 
-class RTDetrConfig(PretrainedConfig):
+class RTDetrConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`RTDetrModel`]. It is used to instantiate a
     RT-DETR model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the RT-DETR
     [PekingU/rtdetr_r50vd](https://huggingface.co/PekingU/rtdetr_r50vd) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         initializer_range (`float`, *optional*, defaults to 0.01):
@@ -352,12 +352,12 @@ class RTDetrConfig(PretrainedConfig):
         )
 
     @classmethod
-    def from_backbone_configs(cls, backbone_config: PretrainedConfig, **kwargs):
+    def from_backbone_configs(cls, backbone_config: PreTrainedConfig, **kwargs):
         """Instantiate a [`RTDetrConfig`] (or a derived class) from a pre-trained backbone model configuration and DETR model
         configuration.
 
             Args:
-                backbone_config ([`PretrainedConfig`]):
+                backbone_config ([`PreTrainedConfig`]):
                     The backbone configuration.
 
             Returns:

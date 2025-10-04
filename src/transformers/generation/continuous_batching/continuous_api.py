@@ -25,7 +25,7 @@ import torch
 from torch import nn
 from tqdm import tqdm
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...generation.configuration_utils import GenerationConfig
 from ...utils.logging import logging
 from ...utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
@@ -140,7 +140,7 @@ class ContinuousBatchProcessor:
     def __init__(
         self,
         cache: PagedAttentionCache,
-        config: PretrainedConfig,
+        config: PreTrainedConfig,
         generation_config: GenerationConfig,
         input_queue: queue.Queue,
         output_queue: queue.Queue,

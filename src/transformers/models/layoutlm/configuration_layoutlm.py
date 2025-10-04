@@ -18,7 +18,7 @@ from collections import OrderedDict
 from collections.abc import Mapping
 from typing import Any, Optional
 
-from ... import PretrainedConfig, PreTrainedTokenizer
+from ... import PreTrainedConfig, PreTrainedTokenizer
 from ...onnx import OnnxConfig, PatchingSpec
 from ...utils import is_torch_available, logging
 
@@ -26,7 +26,7 @@ from ...utils import is_torch_available, logging
 logger = logging.get_logger(__name__)
 
 
-class LayoutLMConfig(PretrainedConfig):
+class LayoutLMConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LayoutLMModel`]. It is used to instantiate a
     LayoutLM model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -130,7 +130,7 @@ class LayoutLMConfig(PretrainedConfig):
 class LayoutLMOnnxConfig(OnnxConfig):
     def __init__(
         self,
-        config: PretrainedConfig,
+        config: PreTrainedConfig,
         task: str = "default",
         patching_specs: Optional[list[PatchingSpec]] = None,
     ):

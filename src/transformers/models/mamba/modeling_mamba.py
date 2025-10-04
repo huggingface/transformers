@@ -23,7 +23,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
@@ -81,7 +81,7 @@ class MambaCache:
     Cache for mamba model which does not have attention mechanism and key value states.
 
     Arguments:
-        config (`PretrainedConfig):
+        config (`PreTrainedConfig):
             The configuration file defining the shape-related attributes required to initialize the static cache.
         max_batch_size (`int`):
             The maximum batch size with which the model will be used. Note that a new instance must be instantiated if
@@ -115,7 +115,7 @@ class MambaCache:
     # TODO (joao): add layer_device_map arg and update code in `generate` accordingly
     def __init__(
         self,
-        config: PretrainedConfig,
+        config: PreTrainedConfig,
         max_batch_size: int,
         dtype: torch.dtype = torch.float16,
         device: Union[torch.device, str, None] = None,

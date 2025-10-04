@@ -14,14 +14,14 @@
 # limitations under the License.
 """DPR model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class DPRConfig(PretrainedConfig):
+class DPRConfig(PreTrainedConfig):
     r"""
     [`DPRConfig`] is the configuration class to store the configuration of a *DPRModel*.
 

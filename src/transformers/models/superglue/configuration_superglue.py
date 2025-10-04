@@ -13,7 +13,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING, Optional
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING
 
@@ -24,15 +24,15 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-class SuperGlueConfig(PretrainedConfig):
+class SuperGlueConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SuperGlueModel`]. It is used to instantiate a
     SuperGlue model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the SuperGlue
     [magic-leap-community/superglue_indoor](https://huggingface.co/magic-leap-community/superglue_indoor) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         keypoint_detector_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `SuperPointConfig`):

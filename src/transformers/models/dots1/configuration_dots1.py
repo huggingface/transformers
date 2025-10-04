@@ -12,22 +12,22 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...configuration_utils import PretrainedConfig, layer_type_validation
+from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class Dots1Config(PretrainedConfig):
+class Dots1Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Dots1Model`]. It is used to instantiate a
     `dots.llm1` model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of
     [rednote-hilab/dots.llm1.base](https://huggingface.co/rednote-hilab/dots.llm1.base).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 152064):

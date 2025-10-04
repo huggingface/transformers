@@ -85,7 +85,7 @@ design.
 
 To successfully add a model, it is important to understand the
 interaction between your model and its config,
-`PreTrainedModel`, and `PretrainedConfig`. For
+`PreTrainedModel`, and `PreTrainedConfig`. For
 exemplary purposes, we will call the PyTorch model to be added to 🤗 Transformers
 `BrandNewBert`.
 
@@ -128,12 +128,12 @@ model.config  # model has access to its config
 
 Similar to the model, the configuration inherits basic serialization and
 deserialization functionalities from
-`PretrainedConfig`. Note
+`PreTrainedConfig`. Note
 that the configuration and the model are always serialized into two
 different formats - the model to a `pytorch_model.bin` file
 and the configuration to a `config.json` file. Calling
 `PreTrainedModel.save_pretrained` will automatically call
-`PretrainedConfig.save_pretrained`, so that both model and configuration are saved.
+`PreTrainedConfig.save_pretrained`, so that both model and configuration are saved.
 
 ### Overview of tokenizers
 

@@ -22,7 +22,7 @@ import torch
 from torch import nn
 
 from ...cache_utils import Cache, EncoderDecoderCache
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationConfig, GenerationMixin, LogitsProcessorList, StoppingCriteriaList
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -373,7 +373,7 @@ class RagPreTrainedModel(PreTrainedModel):
 class RagModel(RagPreTrainedModel):
     def __init__(
         self,
-        config: Optional[PretrainedConfig] = None,
+        config: Optional[PreTrainedConfig] = None,
         question_encoder: Optional[PreTrainedModel] = None,
         generator: Optional[PreTrainedModel] = None,
         retriever: Optional[RagRetriever] = None,  # or maybe just use a `set_retriever(...)` method
@@ -661,7 +661,7 @@ class RagModel(RagPreTrainedModel):
 class RagSequenceForGeneration(RagPreTrainedModel):
     def __init__(
         self,
-        config: Optional[PretrainedConfig] = None,
+        config: Optional[PreTrainedConfig] = None,
         question_encoder: Optional[PreTrainedModel] = None,
         generator: Optional[PreTrainedModel] = None,
         retriever: Optional[RagRetriever] = None,
@@ -1096,7 +1096,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
 class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
     def __init__(
         self,
-        config: Optional[PretrainedConfig] = None,
+        config: Optional[PreTrainedConfig] = None,
         question_encoder: Optional[PreTrainedModel] = None,
         generator: Optional[PreTrainedModel] = None,
         retriever: Optional[RagRetriever] = None,

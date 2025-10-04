@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.s
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 
@@ -21,7 +21,7 @@ from ..auto.configuration_auto import AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class KyutaiSpeechToTextConfig(PretrainedConfig):
+class KyutaiSpeechToTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`KyutaiSpeechToTextForConditionalGeneration`].
     It is used to instantiate a Kyutai Speech-to-Text model according to the specified arguments, defining the model
@@ -30,8 +30,8 @@ class KyutaiSpeechToTextConfig(PretrainedConfig):
 
     e.g. [kyutai/stt-2.6b-en-trfs](https://huggingface.co/kyutai/stt-2.6b-en-trfs)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         codebook_vocab_size (`int`, *optional*, defaults to 2049):
@@ -87,13 +87,13 @@ class KyutaiSpeechToTextConfig(PretrainedConfig):
             Padding token id.
         bos_token_id (`int`, *optional*, defaults to 48000):
             Beginning of stream token id for text tokens.
-        codec_config (`PretrainedConfig`, *optional*):
+        codec_config (`PreTrainedConfig`, *optional*):
             Configuration for the codec.
         kwargs (*optional*):
             Dictionary of keyword arguments. Notably:
-                - **audio_encoder_config** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
+                - **audio_encoder_config** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that
                   defines the audio encoder config.
-                - **depth__config** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
+                - **depth__config** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that
                   defines the depth decoder config.
 
 
@@ -151,7 +151,7 @@ class KyutaiSpeechToTextConfig(PretrainedConfig):
             logger.info("codec_config is None, using default audio encoder config.")
         elif isinstance(codec_config, dict):
             self.codec_config = AutoConfig.for_model(**codec_config)
-        elif isinstance(codec_config, PretrainedConfig):
+        elif isinstance(codec_config, PreTrainedConfig):
             self.codec_config = codec_config
 
         self.num_codebooks = num_codebooks

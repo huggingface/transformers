@@ -43,7 +43,7 @@ from transformers import (
     AutoTokenizer,
     DataCollatorForLanguageModeling,
     IntervalStrategy,
-    PretrainedConfig,
+    PreTrainedConfig,
     TrainerCallback,
     TrainingArguments,
     default_data_collator,
@@ -351,7 +351,7 @@ class AlmostAccuracyBatched:
             return result
 
 
-class RegressionModelConfig(PretrainedConfig):
+class RegressionModelConfig(PreTrainedConfig):
     def __init__(self, a=0, b=0, double_output=False, random_torch=True, **kwargs):
         super().__init__(**kwargs)
         self.a = a

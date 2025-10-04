@@ -14,22 +14,22 @@
 # limitations under the License.
 """Siglip model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class SiglipTextConfig(PretrainedConfig):
+class SiglipTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SiglipTextModel`]. It is used to instantiate a
     Siglip text encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the text encoder of the Siglip
     [google/siglip-base-patch16-224](https://huggingface.co/google/siglip-base-patch16-224) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 32000):
@@ -113,15 +113,15 @@ class SiglipTextConfig(PretrainedConfig):
         self.projection_size = projection_size if projection_size is not None else hidden_size
 
 
-class SiglipVisionConfig(PretrainedConfig):
+class SiglipVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SiglipVisionModel`]. It is used to instantiate a
     Siglip vision encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the vision encoder of the Siglip
     [google/siglip-base-patch16-224](https://huggingface.co/google/siglip-base-patch16-224) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -192,15 +192,15 @@ class SiglipVisionConfig(PretrainedConfig):
         self.hidden_act = hidden_act
 
 
-class SiglipConfig(PretrainedConfig):
+class SiglipConfig(PreTrainedConfig):
     r"""
     [`SiglipConfig`] is the configuration class to store the configuration of a [`SiglipModel`]. It is used to
     instantiate a Siglip model according to the specified arguments, defining the text model and vision model configs.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the Siglip
     [google/siglip-base-patch16-224](https://huggingface.co/google/siglip-base-patch16-224) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`dict`, *optional*):

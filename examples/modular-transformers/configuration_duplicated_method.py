@@ -5,19 +5,19 @@
 #                          modular_duplicated_method.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 
 
-class DuplicatedMethodConfig(PretrainedConfig):
+class DuplicatedMethodConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DuplicatedMethodModel`]. It is used to instantiate an DuplicatedMethod
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the DuplicatedMethod-7B.
     e.g. [meta-duplicated_method/DuplicatedMethod-2-7b-hf](https://huggingface.co/meta-duplicated_method/DuplicatedMethod-2-7b-hf)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:

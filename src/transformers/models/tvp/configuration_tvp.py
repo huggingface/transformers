@@ -16,7 +16,7 @@
 
 import copy
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto import CONFIG_MAPPING
@@ -25,19 +25,19 @@ from ..auto import CONFIG_MAPPING
 logger = logging.get_logger(__name__)
 
 
-class TvpConfig(PretrainedConfig):
+class TvpConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`TvpModel`]. It is used to instantiate an Tvp
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Tvp
     [Intel/tvp-base](https://huggingface.co/Intel/tvp-base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
-        backbone_config (`PretrainedConfig` or `dict`, *optional*):
+        backbone_config (`PreTrainedConfig` or `dict`, *optional*):
             The configuration of the backbone model.
         backbone (`str`, *optional*):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
@@ -181,11 +181,11 @@ class TvpConfig(PretrainedConfig):
         )
 
     @classmethod
-    def from_backbone_config(cls, backbone_config: PretrainedConfig, **kwargs):
+    def from_backbone_config(cls, backbone_config: PreTrainedConfig, **kwargs):
         """Instantiate a [`TvpConfig`] (or a derived class) from a pre-trained backbone model configuration.
 
         Args:
-            backbone_config ([`PretrainedConfig`]):
+            backbone_config ([`PreTrainedConfig`]):
                 The backbone configuration.
         Returns:
             [`TvpConfig`]: An instance of a configuration object
@@ -194,7 +194,7 @@ class TvpConfig(PretrainedConfig):
 
     def to_dict(self):
         """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
+        Serializes this instance to a Python dictionary. Override the default [`~PreTrainedConfig.to_dict`].
 
         Returns:
             `dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,

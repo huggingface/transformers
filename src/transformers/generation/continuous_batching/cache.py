@@ -18,14 +18,14 @@ from typing import Optional, Union
 
 import torch
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...generation.configuration_utils import GenerationConfig
 from ...utils.metrics import attach_tracer, traced
 from .cache_manager import CacheAllocator, FullAttentionCacheAllocator, SlidingAttentionCacheAllocator
 from .requests import get_device_and_memory_breakdown, logger
 
 
-def group_layers_by_attn_type(config: PretrainedConfig) -> tuple[list[list[int]], list[str]]:
+def group_layers_by_attn_type(config: PreTrainedConfig) -> tuple[list[list[int]], list[str]]:
     """
     Group layers depending on the attention mix, according to VLLM's hybrid allocator rules:
         - Layers in each group need to have the same type of attention
@@ -119,7 +119,7 @@ class PagedAttentionCache:
     # TODO: this init is quite long, maybe a refactor is in order
     def __init__(
         self,
-        config: PretrainedConfig,
+        config: PreTrainedConfig,
         generation_config: GenerationConfig,
         device: torch.device,
         dtype: torch.dtype = torch.float16,

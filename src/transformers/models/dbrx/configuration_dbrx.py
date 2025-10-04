@@ -16,21 +16,21 @@
 
 from typing import Any, Optional
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class DbrxAttentionConfig(PretrainedConfig):
+class DbrxAttentionConfig(PreTrainedConfig):
     """Configuration class for Dbrx Attention.
 
     [`DbrxAttention`] class. It is used to instantiate attention layers
     according to the specified arguments, defining the layers architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         attn_pdrop (`float`, *optional*, defaults to 0.0):
@@ -56,14 +56,14 @@ class DbrxAttentionConfig(PretrainedConfig):
         self.kv_n_heads = kv_n_heads
 
 
-class DbrxFFNConfig(PretrainedConfig):
+class DbrxFFNConfig(PreTrainedConfig):
     """Configuration class for Dbrx FFN.
 
     [`DbrxFFN`] class. It is used to instantiate feedforward layers according to
     the specified arguments, defining the layers architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         ffn_act_fn (`dict`, *optional*, defaults to `None`): A dict specifying activation function for the FFN.
@@ -110,15 +110,15 @@ class DbrxFFNConfig(PretrainedConfig):
             raise ValueError(f"Found unknown {kwargs=}")
 
 
-class DbrxConfig(PretrainedConfig):
+class DbrxConfig(PreTrainedConfig):
     r"""
 
     This is the configuration class to store the configuration of a [`DbrxModel`]. It is used to instantiate a Dbrx model according to the
     specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a different configuration to that of the [databricks/dbrx-instruct](https://huggingface.co/databricks/dbrx-instruct) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:

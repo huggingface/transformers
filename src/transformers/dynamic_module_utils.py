@@ -613,7 +613,7 @@ def custom_object_save(obj: Any, folder: Union[str, os.PathLike], config: Option
     Args:
         obj (`Any`): The object for which to save the module files.
         folder (`str` or `os.PathLike`): The folder where to save.
-        config (`PretrainedConfig` or dictionary, `optional`):
+        config (`PreTrainedConfig` or dictionary, `optional`):
             A config in which to register the auto_map corresponding to this custom object.
 
     Returns:

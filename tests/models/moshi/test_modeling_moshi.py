@@ -25,7 +25,7 @@ from parameterized import parameterized
 
 from transformers import (
     MoshiConfig,
-    PretrainedConfig,
+    PreTrainedConfig,
 )
 from transformers.integrations.deepspeed import (
     is_deepspeed_available,
@@ -71,7 +71,7 @@ def _config_zero_init(config):
     for key in configs_no_init.__dict__:
         if "_range" in key or "_std" in key or "initializer_factor" in key or "layer_scale" in key:
             setattr(configs_no_init, key, 1e-10)
-        if isinstance(getattr(configs_no_init, key, None), PretrainedConfig):
+        if isinstance(getattr(configs_no_init, key, None), PreTrainedConfig):
             no_init_subconfig = _config_zero_init(getattr(configs_no_init, key))
             setattr(configs_no_init, key, no_init_subconfig)
     return configs_no_init

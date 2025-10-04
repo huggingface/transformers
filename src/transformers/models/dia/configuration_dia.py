@@ -16,7 +16,7 @@
 
 from typing import Optional
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 
@@ -24,13 +24,13 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class DiaEncoderConfig(PretrainedConfig):
+class DiaEncoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DiaEncoder`]. It is used to instantiate a Dia
     encoder according to the specified arguments, defining the encoder architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         max_position_embeddings (`int`, *optional*, defaults to 1024):
@@ -138,13 +138,13 @@ class DiaEncoderConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
 
-class DiaDecoderConfig(PretrainedConfig):
+class DiaDecoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DiaDecoder`]. It is used to instantiate a Dia
     decoder according to the specified arguments, defining the decoder architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         max_position_embeddings (`int`, *optional*, defaults to 3072):
@@ -279,15 +279,15 @@ class DiaDecoderConfig(PretrainedConfig):
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
-class DiaConfig(PretrainedConfig):
+class DiaConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DiaModel`]. It is used to instantiate a
     Dia model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the
     [nari-labs/Dia-1.6B](https://huggingface.co/nari-labs/Dia-1.6B) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         encoder_config (`DiaEncoderConfig`, *optional*):

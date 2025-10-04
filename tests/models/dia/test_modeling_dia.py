@@ -48,7 +48,7 @@ if is_torch_available():
         DiaForConditionalGeneration,
         DiaModel,
         DiaProcessor,
-        PretrainedConfig,
+        PreTrainedConfig,
         PreTrainedModel,
     )
     from transformers.cache_utils import (
@@ -438,7 +438,7 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 else:
                     model_sdpa = model_class.from_pretrained(tmpdirname, attn_implementation="sdpa")
                     for key in model_sdpa.config:
-                        if isinstance(getattr(model_sdpa.config, key), PretrainedConfig):
+                        if isinstance(getattr(model_sdpa.config, key), PreTrainedConfig):
                             sub_config = getattr(model_sdpa.config, key)
                             self.assertTrue(sub_config._attn_implementation == "sdpa")
 

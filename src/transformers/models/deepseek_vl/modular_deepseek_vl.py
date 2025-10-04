@@ -17,7 +17,7 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
@@ -39,15 +39,15 @@ from ..janus.modeling_janus import JanusForConditionalGeneration, JanusModel, Ja
 logger = logging.get_logger(__name__)
 
 
-class DeepseekVLConfig(PretrainedConfig):
+class DeepseekVLConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DeepseekVLModel`]. It is used to instantiate a
     DeepseekVL model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the DeepseekVL
     [deepseek-community/deepseek-vl-1.3b-chat](https://huggingface.co/deepseek-community/deepseek-vl-1.3b-chat) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `LlamaConfig`):
