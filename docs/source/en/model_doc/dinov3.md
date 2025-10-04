@@ -169,6 +169,11 @@ print("Pooled output shape:", pooled_output.shape)
 [[autodoc]] DINOv3ViTModel
     - forward
 
+## DINOv3ViTForImageClassification
+
+[[autodoc]] DINOv3ViTForImageClassification
+    - forward
+
 ## DINOv3ConvNextModel
 
 [[autodoc]] DINOv3ConvNextModel
