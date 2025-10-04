@@ -35,7 +35,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 @requires(backends=("torchvision", "torch"))
-class DINOv3ViTImageProcessorFast(BaseImageProcessorFast):
+class Dinov3VitImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
     image_std = IMAGENET_DEFAULT_STD
@@ -93,4 +93,4 @@ class DINOv3ViTImageProcessorFast(BaseImageProcessorFast):
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
 
-__all__ = ["DINOv3ViTImageProcessorFast"]
+__all__ = ["Dinov3VitImageProcessorFast"]

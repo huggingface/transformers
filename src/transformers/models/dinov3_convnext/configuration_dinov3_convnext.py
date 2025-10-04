@@ -23,11 +23,11 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class DINOv3ConvNextConfig(PretrainedConfig):
+class Dinov3ConvNextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`DINOv3ConvNextModel`]. It is used to instantiate an
-    DINOv3ConvNext model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the DINOv3ConvNext
+    This is the configuration class to store the configuration of a [`Dinov3ConvNextModel`]. It is used to instantiate an
+    Dinov3ConvNext model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the Dinov3ConvNext
     [facebook/dinov3-convnext-tiny-pretrain-lvd1689m](https://huggingface.co/facebook/dinov3-convnext-tiny-pretrain-lvd1689m) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -56,13 +56,13 @@ class DINOv3ConvNextConfig(PretrainedConfig):
 
     Example:
     ```python
-    >>> from transformers import DINOv3ConvNextConfig, DINOv3ConvNextModel
+    >>> from transformers import Dinov3ConvNextConfig, Dinov3ConvNextModel
 
-    >>> # Initializing a DINOv3ConvNext (tiny variant) style configuration
-    >>> config = DINOv3ConvNextConfig()
+    >>> # Initializing a DINOv3 convnext-tiny style configuration
+    >>> config = Dinov3ConvNextConfig()
 
     >>> # Initializing a model (with random weights)
-    >>> model = DINOv3ConvNextModel(config)
+    >>> model = Dinov3ConvNextModel(config)
 
     >>> # Accessing the model config
     >>> config = model.config
@@ -100,4 +100,4 @@ class DINOv3ConvNextConfig(PretrainedConfig):
         return len(self.hidden_sizes)
 
 
-__all__ = ["DINOv3ConvNextConfig"]
+__all__ = ["Dinov3ConvNextConfig"]
