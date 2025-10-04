@@ -12,95 +12,88 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import os
-from shutil import copyfile
 from typing import Optional
 
-from tokenizers import processors
+from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers.models import Unigram
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
-from ...utils import is_sentencepiece_available, logging
+from ...utils import logging
 
-
-if is_sentencepiece_available():
-    from .tokenization_gemma import GemmaTokenizer
-else:
-    GemmaTokenizer = None
 
 logger = logging.get_logger(__name__)
-VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model", "tokenizer_file": "tokenizer.json"}
+VOCAB_FILES_NAMES = {"tokenizer_file": "tokenizer.json"}
 
 
 class GemmaTokenizerFast(PreTrainedTokenizerFast):
     """
-    Construct a Gemma tokenizer fast. Based on byte-level Byte-Pair-Encoding.
+    Construct a fast Gemma tokenizer (backed by HuggingFace's tokenizers library).
 
-    This uses notably ByteFallback and no prefix space. Normalization is applied to replace  `" "` with `"▁"`
-
-    ```python
-    >>> from transformers import GemmaTokenizerFast
-
-    >>> tokenizer = GemmaTokenizerFast.from_pretrained("hf-internal-testing/dummy-gemma")
-    >>> tokenizer.encode("Hello this is a test")
-    [2, 4521, 736, 603, 476, 2121]
-    ```
-
-    If you want to change the `bos_token` or the `eos_token`, make sure to specify them when initializing the model, or
-    call `tokenizer.update_post_processor()` to make sure that the post-processing is correctly done (otherwise the
-    values of the first token and final token of an encoded sequence will not be correct). For more details, checkout
-    [post-processors] (https://huggingface.co/docs/tokenizers/api/post-processors) documentation.
-
-
-    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
-    refer to this superclass for more information regarding those methods.
+    This tokenizer uses a Unigram model with ByteFallback, no prefix space, and a normalizer that replaces
+    spaces with "▁". It supports creating a minimal, trainable tokenizer from scratch via `from_scratch=True`.
 
     Args:
-        vocab_file (`str`, *optional*):
-            [SentencePiece](https://github.com/google/sentencepiece) file (generally has a .model extension) that
-            contains the vocabulary necessary to instantiate a tokenizer.
-        tokenizer_file (`str`, *optional*):
-            [tokenizers](https://github.com/huggingface/tokenizers) file (generally has a .json extension) that
-            contains everything needed to load the tokenizer.
-        clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
-            Whether or not to cleanup spaces after decoding, cleanup consists in removing potential artifacts like
-            extra spaces.
-        unk_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<unk>"`):
-            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
-            token instead.
-        bos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<bos>"`):
-            The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
-        eos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<eos>"`):
+        tokenizer_file (`str`, optional):
+            A tokenizers JSON file containing the serialization of a tokenizer.
+        unk_token (`str`, optional, defaults to "<unk>"):
+            The unknown token.
+        bos_token (`str`, optional, defaults to "<bos>"):
+            The beginning of sequence token.
+        eos_token (`str`, optional, defaults to "<eos>"):
             The end of sequence token.
-        pad_token (`str`, *optional*, defaults to `"<pad>"`):
-            The padding token
-        add_bos_token (`bool`, *optional*, defaults to `True`):
-            Whether or not to add an `bos_token` at the start of sequences.
-        add_eos_token (`bool`, *optional*, defaults to `False`):
+        pad_token (`str`, optional, defaults to "<pad>"):
+            The padding token.
+        add_bos_token (`bool`, optional, defaults to True):
+            Whether or not to add a `bos_token` at the start of sequences.
+        add_eos_token (`bool`, optional, defaults to False):
             Whether or not to add an `eos_token` at the end of sequences.
+        from_scratch (`bool`, optional, defaults to False):
+            When True, creates a minimal trainable tokenizer with only special tokens.
+        vocab_scores (`list[tuple[str, float]]`, optional):
+            Custom initial Unigram vocabulary with scores. If unset and `from_scratch=True`, a minimal
+            vocabulary is created using the provided special tokens.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    slow_tokenizer_class = GemmaTokenizer
+    slow_tokenizer_class = None
     padding_side = "left"
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
         self,
-        vocab_file=None,
-        tokenizer_file=None,
-        clean_up_tokenization_spaces=False,
-        unk_token="<unk>",
-        bos_token="<bos>",
-        eos_token="<eos>",
-        pad_token="<pad>",
-        add_bos_token=True,
-        add_eos_token=False,
+        tokenizer_file: Optional[str] = None,
+        unk_token: str = "<unk>",
+        bos_token: str = "<bos>",
+        eos_token: str = "<eos>",
+        pad_token: str = "<pad>",
+        add_bos_token: bool = True,
+        add_eos_token: bool = False,
+        from_scratch: bool = False,
+        vocab_scores: Optional[list[tuple[str, float]]] = None,
         **kwargs,
     ):
+        self._add_bos_token = add_bos_token
+        self._add_eos_token = add_eos_token
+
+        # Build a backend config when no tokenizer_file is provided (from scratch / programmatic init)
+        tokenizer_backend_config = None
+        if tokenizer_file is None:
+            self._vocab_scores = (
+                vocab_scores if vocab_scores is not None else (self._default_vocab_scores() if from_scratch else None)
+            )
+
+            if self._vocab_scores is not None:
+                tokenizer_backend_config = {
+                    "type": "unigram",
+                    "normalizer": self._normalizer,
+                    "pre_tokenizer": self._pre_tokenizer,
+                    "decoder": self._decoder,
+                    "tokenizer": self._tokenizer,
+                }
+
         super().__init__(
-            vocab_file=vocab_file,
             tokenizer_file=tokenizer_file,
-            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            tokenizer_backend_config=tokenizer_backend_config,
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,
@@ -109,87 +102,37 @@ class GemmaTokenizerFast(PreTrainedTokenizerFast):
             add_eos_token=add_eos_token,
             **kwargs,
         )
-        self._add_bos_token = add_bos_token
-        self._add_eos_token = add_eos_token
-        self.update_post_processor()
-        self.vocab_file = vocab_file
 
-    # Copied from transformers.models.llama.tokenization_llama_fast.LlamaTokenizerFast.update_post_processor
-    def update_post_processor(self):
-        """
-        Updates the underlying post processor with the current `bos_token` and `eos_token`.
-        """
-        bos = self.bos_token
-        bos_token_id = self.bos_token_id
-        if bos is None and self.add_bos_token:
-            raise ValueError("add_bos_token = True but bos_token = None")
+        # Ensure special tokens exist in the vocabulary
+        self.add_tokens([token for token in self.all_special_tokens], special_tokens=True)
 
-        eos = self.eos_token
-        eos_token_id = self.eos_token_id
-        if eos is None and self.add_eos_token:
-            raise ValueError("add_eos_token = True but eos_token = None")
-
-        single = f"{(bos + ':0 ') if self.add_bos_token else ''}$A:0{(' ' + eos + ':0') if self.add_eos_token else ''}"
-        pair = f"{single}{(' ' + bos + ':1') if self.add_bos_token else ''} $B:1{(' ' + eos + ':1') if self.add_eos_token else ''}"
-
-        special_tokens = []
-        if self.add_bos_token:
-            special_tokens.append((bos, bos_token_id))
-        if self.add_eos_token:
-            special_tokens.append((eos, eos_token_id))
-        self._tokenizer.post_processor = processors.TemplateProcessing(
-            single=single, pair=pair, special_tokens=special_tokens
-        )
-
-    @property
-    def add_eos_token(self):
-        return self._add_eos_token
-
-    @property
-    def add_bos_token(self):
-        return self._add_bos_token
-
-    @add_eos_token.setter
-    def add_eos_token(self, value):
-        self._add_eos_token = value
+        # Set the post-processor to manage BOS/EOS as configured
         self.update_post_processor()
 
-    @add_bos_token.setter
-    def add_bos_token(self, value):
-        self._add_bos_token = value
-        self.update_post_processor()
+    # Backend construction helpers
+    def _unk_id(self) -> int:
+        # Align with historical Gemma convention: pad, eos, bos, unk
+        return 3
 
-    # Copied from transformers.models.llama.tokenization_llama_fast.LlamaTokenizerFast.save_vocabulary
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
-        if not self.can_save_slow_tokenizer:
-            raise ValueError(
-                "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "
-                "tokenizer."
-            )
+    def _default_vocab_scores(self) -> list[tuple[str, float]]:
+        return [
+            (self.pad_token, 0.0),
+            (self.eos_token, 0.0),
+            (self.bos_token, 0.0),
+            (self.unk_token, 0.0),
+        ]
 
-        if not os.path.isdir(save_directory):
-            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
-            return
-        out_vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
-        )
+    def _tokenizer(self) -> Tokenizer:
+        return Tokenizer(Unigram(self._vocab_scores, unk_id=self._unk_id(), byte_fallback=True))
 
-        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
-            copyfile(self.vocab_file, out_vocab_file)
+    def _normalizer(self):
+        return normalizers.Replace(" ", "▁")
 
-        return (out_vocab_file,)
+    def _pre_tokenizer(self, replacement=None, add_prefix_space=None):
+        return pre_tokenizers.Split(" ", "merged_with_previous")
 
-    # Copied from transformers.models.llama.tokenization_llama_fast.LlamaTokenizerFast.build_inputs_with_special_tokens
-    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
-        bos_token_id = [self.bos_token_id] if self.add_bos_token else []
-        eos_token_id = [self.eos_token_id] if self.add_eos_token else []
-
-        output = bos_token_id + token_ids_0 + eos_token_id
-
-        if token_ids_1 is not None:
-            output = output + bos_token_id + token_ids_1 + eos_token_id
-
-        return output
+    def _decoder(self, replacement=None, add_prefix_space=None):
+        return decoders.Sequence([decoders.Replace("▁", " "), decoders.ByteFallback(), decoders.Fuse()])
 
 
 __all__ = ["GemmaTokenizerFast"]
