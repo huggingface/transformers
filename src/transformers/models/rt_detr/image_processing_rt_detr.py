@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...image_transforms import get_size_with_aspect_ratio
 """Image processor class for RT-DETR."""
 
 import pathlib
@@ -27,6 +26,7 @@ from ...image_transforms import (
     PaddingMode,
     center_to_corners_format,
     corners_to_center_format,
+    get_size_with_aspect_ratio,
     pad,
     rescale,
     resize,

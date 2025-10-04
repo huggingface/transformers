@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...image_transforms import get_size_with_aspect_ratio
 """Image processor class for Mask2Former."""
 
 import math

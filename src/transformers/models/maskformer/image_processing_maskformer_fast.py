@@ -44,11 +44,11 @@ from ...utils import (
     auto_docstring,
     logging,
 )
+from transformers.image_transforms import get_size_with_aspect_ratio
 from .image_processing_maskformer import (
     MaskFormerImageProcessorKwargs,
     compute_segments,
     convert_segmentation_to_rle,
-    get_size_with_aspect_ratio,
     remove_low_and_no_objects,
 )
 

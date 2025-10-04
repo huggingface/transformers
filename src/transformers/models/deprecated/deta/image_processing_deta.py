@@ -22,11 +22,11 @@ import numpy as np
 
 from ....feature_extraction_utils import BatchFeature
 from ....image_processing_utils import BaseImageProcessor, get_size_dict
-from ....image_transforms import get_size_with_aspect_ratio
 from ....image_transforms import (
     PaddingMode,
     center_to_corners_format,
     corners_to_center_format,
+    get_size_with_aspect_ratio,
     pad,
     rescale,
     resize,
