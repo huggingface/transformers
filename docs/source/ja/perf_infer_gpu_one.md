@@ -124,14 +124,14 @@ model = AutoModelForCausalLM.from_pretrained(
 
 ```python
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, LlamaForCausalLM
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, LlamaForCausalLM
 
 model_id = "tiiuae/falcon-7b"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
-    load_in_4bit=True,
+    quantization_config=BitsAndBytesConfig(load_in_4bit=True),
     attn_implementation="flash_attention_2",
 )
 ```
@@ -142,7 +142,7 @@ model = AutoModelForCausalLM.from_pretrained(
 
 ```python
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, LlamaForCausalLM
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, LlamaForCausalLM
 from peft import LoraConfig
 
 model_id = "tiiuae/falcon-7b"
@@ -150,7 +150,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
-    load_in_4bit=True,
+    quantization_config=BitsAndBytesConfig(load_in_4bit=True),
     attn_implementation="flash_attention_2",
 )
 
@@ -290,10 +290,10 @@ Note that this feature can also be used in a multi GPU setup.
 
 
 ```py
-from transformers import AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
 model_name = "bigscience/bloom-2b5"
-model_4bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", load_in_4bit=True)
+model_4bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", quantization_config=BitsAndBytesConfig(load_in_4bit=True))
 ```
 
 注意: `device_map`はオプションですが、推論時に `device_map = 'auto'` を設定することが推奨されています。これにより、利用可能なリソースに効率的にモデルがディスパッチされます。
@@ -304,7 +304,7 @@ model_4bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto",
 
 ```py
 model_name = "bigscience/bloom-2b5"
-model_4bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", load_in_4bit=True)
+model_4bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", quantization_config=BitsAndBytesConfig(load_in_4bit=True))
 ```
 
 しかし、`accelerate`を使用して、各GPUに割り当てるGPU RAMを制御することができます。以下のように、`max_memory`引数を使用します：
@@ -314,7 +314,7 @@ model_4bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto",
 max_memory_mapping = {0: "600MB", 1: "1GB"}
 model_name = "bigscience/bloom-3b"
 model_4bit = AutoModelForCausalLM.from_pretrained(
-    model_name, device_map="auto", load_in_4bit=True, max_memory=max_memory_mapping
+    model_name, device_map="auto", quantization_config=BitsAndBytesConfig(load_in_4bit=True), max_memory=max_memory_mapping
 )
 ```
 

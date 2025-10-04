@@ -20,7 +20,7 @@ import unittest
 
 import pytest
 
-from transformers import AutoTokenizer, GenerationConfig, is_torch_available
+from transformers import AutoTokenizer, BitsAndBytesConfig, GenerationConfig, is_torch_available
 from transformers.testing_utils import (
     backend_empty_cache,
     cleanup,
@@ -233,7 +233,7 @@ class MinistralIntegrationTest(unittest.TestCase):
         model = MinistralForCausalLM.from_pretrained(
             "mistralai/Ministral-8B-Instruct-2410",
             device_map="auto",
-            load_in_4bit=True,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
         )
         tokenizer = AutoTokenizer.from_pretrained("mistralai/Ministral-8B-Instruct-2410", legacy=False)
 

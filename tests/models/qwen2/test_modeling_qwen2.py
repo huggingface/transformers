@@ -19,7 +19,7 @@ import unittest
 import pytest
 from packaging import version
 
-from transformers import AutoTokenizer, is_torch_available, set_seed
+from transformers import AutoTokenizer, BitsAndBytesConfig, is_torch_available, set_seed
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
     Expectations,
@@ -132,7 +132,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
         model = Qwen2ForCausalLM.from_pretrained(
             "Qwen/Qwen2-0.5B",
             device_map="auto",
-            load_in_4bit=True,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
             attn_implementation="flash_attention_2",
         )
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)

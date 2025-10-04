@@ -19,7 +19,7 @@ import unittest
 import requests
 from parameterized import parameterized
 
-from transformers import ChameleonConfig, is_torch_available, is_vision_available, set_seed
+from transformers import BitsAndBytesConfig, ChameleonConfig, is_torch_available, is_vision_available, set_seed
 from transformers.testing_utils import (
     Expectations,
     require_bitsandbytes,
@@ -366,7 +366,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
     @require_read_token
     def test_model_7b(self):
         model = ChameleonForConditionalGeneration.from_pretrained(
-            "facebook/chameleon-7b", load_in_4bit=True, device_map="auto"
+            "facebook/chameleon-7b", quantization_config=BitsAndBytesConfig(load_in_4bit=True), device_map="auto"
         )
         processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
 
@@ -396,7 +396,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
     @require_read_token
     def test_model_7b_batched(self):
         model = ChameleonForConditionalGeneration.from_pretrained(
-            "facebook/chameleon-7b", load_in_4bit=True, device_map="auto"
+            "facebook/chameleon-7b", quantization_config=BitsAndBytesConfig(load_in_4bit=True), device_map="auto"
         )
         processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
 
@@ -443,7 +443,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
     @require_read_token
     def test_model_7b_multi_image(self):
         model = ChameleonForConditionalGeneration.from_pretrained(
-            "facebook/chameleon-7b", load_in_4bit=True, device_map="auto"
+            "facebook/chameleon-7b", quantization_config=BitsAndBytesConfig(load_in_4bit=True), device_map="auto"
         )
         processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
 

@@ -18,7 +18,7 @@ import unittest
 
 import pytest
 
-from transformers import is_torch_available
+from transformers import BitsAndBytesConfig, is_torch_available
 from transformers.testing_utils import (
     cleanup,
     is_flaky,
@@ -159,7 +159,7 @@ class Ernie4_5_MoeIntegrationTest(unittest.TestCase):
             cls.model = Ernie4_5_MoeForCausalLM.from_pretrained(
                 "baidu/ERNIE-4.5-21B-A3B-PT",
                 device_map="auto",
-                load_in_4bit=True,
+                quantization_config=BitsAndBytesConfig(load_in_4bit=True),
             )
 
         return cls.model

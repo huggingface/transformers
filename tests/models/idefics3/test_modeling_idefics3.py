@@ -42,6 +42,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        BitsAndBytesConfig,
         Idefics3Config,
         Idefics3ForConditionalGeneration,
         Idefics3Model,
@@ -533,7 +534,7 @@ class Idefics3ForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Let' s make sure we test the preprocessing to replace what is used
         model = Idefics3ForConditionalGeneration.from_pretrained(
             "HuggingFaceM4/Idefics3-8B-Llama3",
-            load_in_4bit=True,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
             device_map="auto",
         )
 

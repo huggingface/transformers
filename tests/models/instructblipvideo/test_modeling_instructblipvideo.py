@@ -22,6 +22,7 @@ from huggingface_hub import hf_hub_download
 
 from transformers import (
     CONFIG_MAPPING,
+    BitsAndBytesConfig,
     InstructBlipVideoConfig,
     InstructBlipVideoProcessor,
     InstructBlipVideoQFormerConfig,
@@ -643,7 +644,7 @@ class InstructBlipVideoModelIntegrationTest(unittest.TestCase):
         processor = InstructBlipVideoProcessor.from_pretrained("Salesforce/instructblip-vicuna-7b")
         model = InstructBlipVideoForConditionalGeneration.from_pretrained(
             "Salesforce/instructblip-vicuna-7b",
-            load_in_8bit=True,
+            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
         )
 
         clip = prepare_video()
