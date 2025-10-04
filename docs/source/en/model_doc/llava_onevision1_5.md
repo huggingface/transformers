@@ -21,37 +21,20 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-**LLaVA-OneVision1.5** introduces a novel family of **fully open-source** Large Multimodal Models (LMMs) that achieves **state-of-the-art performance**  with substantially **lower cost** through training on **native resolution** images.
+The LLaVA-OneVision 1.5 model was proposed in [LLaVA-OneVision-1.5: Fully Open Framework for Democratized Multimodal Training](https://huggingface.co/papers/2509.23661) by <Xiang An, Yin Xie, Kaicheng Yang, Wenkang Zhang, Xiuwei Zhao, Zheng Cheng, Yirui Wang, Songcen Xu, Changrui Chen, Chunsheng Wu, Huajie Tan, Chunyuan Li, Jing Yang, Jie Yu, Xiyao Wang, Bin Qin, Yumeng Wang, Zizhen Yan, Ziyong Feng, Ziwei Liu, Bo Li, Jiankang Deng
 
-- **Superior Performance**
-A family of fully open-source large multimodal models demonstrating 
-    - Superior performance across multiple multimodal benchmarks
-    - outperforming **Qwen2.5-VL** in most evaluation tasks.
+**LLaVA-OneVision1.5** introduces a novel family of **fully open-source** Large Multimodal Models (LMMs) that achieves **state-of-the-art performance**  with substantially **lower cost** through training on **native resolution** images. 
 
-- **High-Quality Data at Scale**
-Meticulously curated **pre-training and SFT data** with rigorous filtering and quality control, achieving **superior data efficiency** with only **64B tokens**.
-    - Concept-balanced, highly diverse, high-quality caption data
-    - Comprehensive instruction fine-tuning data covering a wide range of tasks
+The abstract from the paper is the following:
 
-- **Ultra-Efficient Training Framework** Complete end-to-end training framework designed for maximum efficiency:
-    - $16000 total budget for full model training on A100 GPUs  ($0.6 per GPU/Hour)
-    - 45% HFU efficiency in 8k context length
-    - Built on **MegatronLM** with support for **MoE**, **FP8**, and **long sequence parallelization**
-    - Optimized codebase for cost-effective scaling
-
-
-- **Fully Open Framework** for community access and reproducibility:
-    - High-quality pre-training & SFT data
-    - Complete training framework & code
-    - Training recipes & configurations
-    - Comprehensive training logs & metrics
+*We present LLaVA-OneVision-1.5, a novel family of Large Multimodal Models (LMMs) that achieve state-of-the-art performance with significantly reduced computational and financial costs. Different from the existing works, LLaVA-OneVision-1.5 provides an open, efficient, and reproducible framework for building high-quality vision-language models entirely from scratch. The LLaVA-OneVision-1.5 release comprises three primary components: (1) Large-Scale Curated Datasets: We construct an 85M concept-balanced pretraining dataset LLaVA-OneVision-1.5-Mid-Traning and a meticulously curated 22M instruction dataset LLaVA-OneVision-1.5-Instruct. (2) Efficient Training Framework: We develop a complete end-to-end efficient training framework leveraging an offline parallel data packing strategy to facilitate the training of LLaVA-OneVision-1.5 within a $16,000 budget. (3) State-of-the-art Performance: Experimental results demonstrate that LLaVA-OneVision-1.5 yields exceptionally competitive performance across a broad range of downstream tasks. Specifically, LLaVA-OneVision-1.5-8B outperforms Qwen2.5-VL-7B on 18 of 27 benchmarks, and LLaVA-OneVision-1.5-4B surpasses Qwen2.5-VL-3B on all 27 benchmarks. We anticipate releasing LLaVA-OneVision-1.5-RL shortly and encourage the community to await further updates.*
 
 
 ## Quick Start with HuggingFace
 
 ```python
 from transformers import AutoProcessor, LlavaOnevision1_5ForConditionalGeneration
-from qwen_vl_utils import process_vision_info
+
 model_path = "lmms-lab/LLaVA-One-Vision-1.5-8B-Instruct"
 
 # default: Load the model on the available device(s)
@@ -76,18 +59,13 @@ messages = [
 ]
 
 # Preparation for inference
-text = processor.apply_chat_template(
-    messages, tokenize=False, add_generation_prompt=True
-)
-image_inputs, video_inputs = process_vision_info(messages)
-inputs = processor(
-    text=[text],
-    images=image_inputs,
-    videos=video_inputs,
-    padding=True,
-    return_tensors="pt",
-)
-inputs = inputs.to("cuda")
+inputs = processor.apply_chat_template(
+    messages,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt"
+).to(model.device)
 
 # Inference: Generation of the output
 generated_ids = model.generate(**inputs, max_new_tokens=1024)

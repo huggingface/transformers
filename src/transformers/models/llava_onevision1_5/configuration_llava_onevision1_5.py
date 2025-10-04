@@ -19,30 +19,29 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Optional
-
 from ...configuration_utils import PretrainedConfig
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import CONFIG_MAPPING
 
 
-# ------------------------- Configurations -------------------------
-
-
-class RiceConfig(PretrainedConfig):
-    model_type = "rice_vit"
+class LlavaOnevision1_5VisionConfig(PretrainedConfig):
+    model_type = "llava_onevision1_5"
     base_config_key = "vision_config"
 
     def __init__(
         self,
-        depth=24,
-        hidden_size=1024,
-        hidden_act="gelu",
-        intermediate_size=4096,
+        depth=32,
+        hidden_size=3584,
+        hidden_act="silu",
+        intermediate_size=3420,
         num_heads=16,
         in_channels=3,
         patch_size=14,
         spatial_merge_size=2,
-        temporal_patch_size=1,
+        temporal_patch_size=2,
+        tokens_per_second=4,
+        window_size=112,
+        out_hidden_size=3584,
+        fullatt_block_indexes=[7, 15, 23, 31],
         initializer_range=0.02,
         layer_norm_eps=1e-05,
         text_hidden_size=2560,
@@ -60,6 +59,7 @@ class RiceConfig(PretrainedConfig):
         self.patch_size = patch_size
         self.spatial_merge_size = spatial_merge_size
         self.temporal_patch_size = temporal_patch_size
+        self.tokens_per_second = tokens_per_second
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.text_hidden_size = text_hidden_size
@@ -68,67 +68,99 @@ class RiceConfig(PretrainedConfig):
 
 class LlavaOnevision1_5Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a `LlavaOnevision1_5` model.
-    [Deep-VLM/LLaVA-OneVision-1.5-8B-Instruct-hf](https://huggingface.co/Deep-VLM/LLaVA-OneVision-1.5-8B-Instruct-hf) architecture.
+    This is the configuration class to store the configuration of a [`LlavaOnevision1_5Model`]. It is used to instantiate a
+    LlavaOnevision1_5Model model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of
+    Llava-Onevision 1.5 [lmms-lab/LLaVA-OneVision-1.5-8B-Instruct](https://huggingface.co/lmms-lab/LLaVA-OneVision-1.5-8B-Instruct).
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vision_config (`RiceConfig` or `dict`):
-            Vision tower config. If a dict is provided, it will be passed to `RiceConfig`.
-        text_config (`Qwen3Config` or `dict`):
-            Language model config. If a dict is provided, it will be passed to the text config class used by `AutoModel`.
-        image_token_id (`int`, *optional*, defaults to `151655`):
-            The special token id in `input_ids` used as a placeholder for image features.
-        video_token_id (`int`, *optional*, defaults to `151656`):
-            The special token id in `input_ids` used as a placeholder for video features.
-        vision_start_token_id (`int`, *optional*, defaults to `151657`):
-            The token id that precedes a vision placeholder token to mark the start of a vision segment.
-        vocab_size (`int`, *optional*, defaults to `152064`):
-            Vocabulary size of the language model. Defines the number of different tokens that can be represented by the
-            `input_ids` passed when calling [`~PreTrainedModel`]. Vocabulary size of the model. Defines the number of
-            different tokens that can be represented by the `input_ids` passed to the model.
-        **kwargs:
-            Additional keyword arguments passed to `PretrainedConfig`.
-    """
+        text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `Qwen3Config`):
+            The config object or dictionary of the text backbone.
+        vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `LlavaOnevision1_5VisionConfig`):
+            The config object or dictionary of the vision backbone.
+        image_token_id (`int`, *optional*, defaults to 151655):
+            The image token index to encode the image prompt.
+        video_token_id (`int`, *optional*, defaults to 151656):
+            The video token index to encode the image prompt.
+        vision_start_token_id (`int`, *optional*, defaults to 151652):
+            The token index to denote start of vision input.
+        vision_end_token_id (`int`, *optional*, defaults to 151653):
+            The token index to denote end of vision input.
+
+    ```python
+    >>> from transformers import LlavaOnevision1_5Model, LlavaOnevision1_5Config
+
+    >>> # Initializing a LlavaOnevision1_5 style configuration
+    >>> configuration = LlavaOnevision1_5Config()
+
+    >>> # Initializing a model from the Llava-Onevision-1.5-8B style configuration
+    >>> model = LlavaOnevision1_5Model(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
 
     model_type = "llava_onevision1_5"
-    sub_configs = {"vision_config": RiceConfig, "text_config": AutoConfig}
+    sub_configs = {"vision_config": LlavaOnevision1_5VisionConfig, "text_config": CONFIG_MAPPING["qwen3"]}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
         self,
-        vision_config: Optional[dict] = None,
-        text_config: Optional[dict] = None,
-        image_token_id: int = 151655,
-        video_token_id: int = 151656,
-        vision_start_token_id: Optional[int] = None,
-        vocab_size: int = 152064,
+        text_config=None,
+        vision_config=None,
+        image_token_id=151655,
+        video_token_id=151656,
+        vision_start_token_id=151652,
+        vision_end_token_id=151653,
         **kwargs,
     ):
-        # Vision
+        # We need to init super() here so that it does not reset values
+        # that are in text config to the BaseClass defaults. The Base
+        # config has many text related defaults and not all defaults are same as for `LlavaOnevision1_5TextConfig`
+        super().__init__(**kwargs)
+
         if isinstance(vision_config, dict):
             self.vision_config = self.sub_configs["vision_config"](**vision_config)
         elif vision_config is None:
             self.vision_config = self.sub_configs["vision_config"]()
 
-        # Text
         if isinstance(text_config, dict):
-            self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
+            self.text_config = self.sub_configs["text_config"](**text_config)
         elif text_config is None:
-            self.text_config = CONFIG_MAPPING["qwen3"](**kwargs)
+            # For BC use all kwargs to init `TextConfig`
+            self.text_config = self.sub_configs["text_config"](**kwargs)
 
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id
         self.vision_start_token_id = vision_start_token_id
-        self.vocab_size = vocab_size
+        self.vision_end_token_id = vision_end_token_id
 
-        super().__init__(**kwargs)
+        # Attention implementation to use. It sets it recursively on sub-configs so we call it again in the end
+        self._attn_implementation = kwargs.pop("attn_implementation", None)
 
-    # Helpers expected by many model implementations
-    def get_text_config(self, decoder=True) -> Any:
-        return self.text_config
+    def __setattr__(self, key, value):
+        if (
+            (text_config := super().__getattribute__("__dict__").get("text_config")) is not None
+            and key not in ["dtype", "_attn_implementation_internal"]
+            and key in text_config.__dict__
+        ):
+            setattr(text_config, key, value)
+        else:
+            super().__setattr__(key, value)
 
-    def get_vision_config(self) -> RiceConfig:
-        return self.vision_config
+    def __getattribute__(self, key):
+        if "text_config" in super().__getattribute__("__dict__") and key not in [
+            "dtype",
+            "_attn_implementation_internal",
+        ]:
+            text_config = super().__getattribute__("text_config")
+            if key in text_config.__dict__:
+                return getattr(text_config, key)
+
+        return super().__getattribute__(key)
 
 
 __all__ = ["LlavaOnevision1_5Config"]

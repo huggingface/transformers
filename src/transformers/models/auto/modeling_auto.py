@@ -988,7 +988,6 @@ MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
         ("llava_next", "LlavaNextForConditionalGeneration"),
         ("llava_next_video", "LlavaNextVideoForConditionalGeneration"),
         ("llava_onevision", "LlavaOnevisionForConditionalGeneration"),
-        ("llava_onevision1_5", "LlavaOnevision1_5ForConditionalGeneration"),
         ("mistral3", "Mistral3ForConditionalGeneration"),
         ("mllama", "MllamaForConditionalGeneration"),
         ("ovis2", "Ovis2ForConditionalGeneration"),

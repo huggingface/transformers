@@ -68,8 +68,9 @@ class LlavaOnevisionVision1_5Text2TextModelTester:
         eos_token_id=1,
         pad_token_id=2,
         vision_start_token_id=3,
-        image_token_id=4,
-        video_token_id=5,
+        vision_end_token_id=4,
+        image_token_id=5,
+        video_token_id=6,
         vocab_size=500,
         is_training=True,
         text_config={
@@ -77,7 +78,6 @@ class LlavaOnevisionVision1_5Text2TextModelTester:
             "attention_dropout": 0.0,
             "hidden_act": "silu",
             "hidden_size": 32,
-            "image_token_id": None,
             "initializer_range": 0.02,
             "intermediate_size": 37,
             "tie_word_embeddings": False,
@@ -94,7 +94,6 @@ class LlavaOnevisionVision1_5Text2TextModelTester:
             "sliding_window": None,
             "use_cache": True,
             "use_sliding_window": False,
-            "video_token_id": None,
             "vocab_size": 500,
         },
         vision_config={
@@ -134,6 +133,7 @@ class LlavaOnevisionVision1_5Text2TextModelTester:
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
         self.vision_start_token_id = vision_start_token_id
+        self.vision_end_token_id = vision_end_token_id
         self.is_training = is_training
 
     def get_config(self):
@@ -143,7 +143,7 @@ class LlavaOnevisionVision1_5Text2TextModelTester:
             image_token_id=self.image_token_id,
             video_token_id=self.video_token_id,
             vision_start_token_id=self.vision_start_token_id,
-            vocab_size=self.vocab_size,
+            vision_end_token_id=self.vision_end_token_id,
         )
 
     def prepare_config_and_inputs(self):
@@ -199,12 +199,6 @@ class LlavaOnevision1_5ForConditionalGenerationModelTest(ModelTesterMixin, Gener
     )
     test_pruning = False
     test_head_masking = False
-    # MP works but offload doesn't work when the MultiheadAttention is offloaded
-    # TODO: One potential solution would be to add to set preload_module_classes = ["Siglip2MultiheadAttentionPoolingHead"]
-    # in the dispatch_model function
-    test_cpu_offload = False
-    test_disk_offload_safetensors = False
-    test_disk_offload_bin = False
     _is_composite = True
 
     def setUp(self):
@@ -221,7 +215,7 @@ class LlavaOnevision1_5ForConditionalGenerationModelTest(ModelTesterMixin, Gener
         for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
-                if param.requires_grad:  # and "class_pos_emb" not in name and "class_embedding" not in name:
+                if param.requires_grad and "class_pos_emb" not in name and "class_embedding" not in name:
                     self.assertIn(
                         ((param.data.mean() * 1e9).round() / 1e9).item(),
                         [0.0, 1.0],
@@ -271,20 +265,8 @@ class LlavaOnevision1_5ForConditionalGenerationModelTest(ModelTesterMixin, Gener
                 image_grid_thw=image_grid_thw,
             )
 
-    @unittest.skip(reason="TODO: nn.Parameter (class_embedding and class_pos_emb) can't be initialized correctly")
-    def test_can_init_all_missing_weights(self):
-        pass
-
-    @unittest.skip(reason="Llava-Onevision 1.5 does not support feed_forward chunking yet")
-    def test_feed_forward_chunking(self):
-        pass
-
-    @unittest.skip(reason="Llava-Onevision 1.5 does not support generation from inputs_embeds yet")
-    def test_generate_from_inputs_embeds_1_beam_search(self):
-        pass
-
     @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, RiceVisionModel does not support standalone training"
+        reason="This architecture seem to not compute gradients properly when using GC, LlavaOnevision1_5VisionPretrainedModel does not support standalone training"
     )
     def test_training_gradient_checkpointing(self):
         pass
@@ -294,13 +276,13 @@ class LlavaOnevision1_5ForConditionalGenerationModelTest(ModelTesterMixin, Gener
         pass
 
     @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, RiceVisionModel does not support standalone training"
+        reason="This architecture seem to not compute gradients properly when using GC, LlavaOnevision1_5VisionPretrainedModel does not support standalone training"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, RiceVisionModel does not support standalone training"
+        reason="This architecture seem to not compute gradients properly when using GC, LlavaOnevision1_5VisionPretrainedModel does not support standalone training"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass

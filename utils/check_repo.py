@@ -101,7 +101,7 @@ PRIVATE_MODELS = [
     "BltLocalDecoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
     "BltGlobalTransformer",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
     "Ovis2VisionModel",
-    "RicePretrainedModel",
+    "LlavaOnevision1_5VisionPretrainedModel",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
