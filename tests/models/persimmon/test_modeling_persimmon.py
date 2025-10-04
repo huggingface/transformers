@@ -62,7 +62,6 @@ class PersimmonModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    model_tester_class = PersimmonModelTester
 
     @unittest.skip("Persimmon applies key/query norm which doesn't work with packing")
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
