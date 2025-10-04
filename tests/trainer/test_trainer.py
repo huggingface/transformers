@@ -111,7 +111,12 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR, HPSearchBackend, check_target_module_exists
+from transformers.trainer_utils import (
+    PREFIX_CHECKPOINT_DIR,
+    HPSearchBackend,
+    check_target_module_exists,
+    get_last_checkpoint,
+)
 from transformers.training_args import OptimizerNames
 from transformers.utils import (
     SAFE_WEIGHTS_INDEX_NAME,
@@ -5303,6 +5308,196 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # Trainer saves non-PreTrainedModel models as `model.safetensors` by default if safetensors is available.
         final_model_path = os.path.join(final_checkpoint_path, SAFE_WEIGHTS_NAME)
         self.assertTrue(os.path.exists(final_model_path), "Final model checkpoint was not saved!")
+
+    @require_safetensors
+    def test_resume_batch_order(self):
+        """
+        Tests that the dataloader order is reproducible when resuming from partial checkpoints.
+        """
+        import shutil
+
+        from safetensors.torch import load_file
+
+        # --- Helper classes and functions defined locally for this test ---
+        class DummyDataset(torch.utils.data.Dataset):
+            def __init__(self, size: int = 32):
+                self.size = size
+                self.data = torch.randn((size, 10))
+                self.data[:, 0] = torch.arange(0, size)  # encode the data order
+                self.labels = torch.randint(0, 10, (size,))
+
+            def __len__(self) -> int:
+                return self.size
+
+            def __getitem__(self, idx: int):
+                return {"input_ids": self.data[idx], "labels": self.labels[idx]}
+
+        class DummyModel(nn.Module):
+            def __init__(self, size: int):
+                super().__init__()
+                self.fc = nn.Linear(10, 10, bias=False)
+                # data_order logs the order of data points seen by the model
+                self.register_buffer("data_order", torch.empty(0, dtype=torch.long))
+
+            def load_state_dict(self, state_dict, strict=True):
+                # Handle data_order buffer size mismatch during checkpoint loading
+                if "data_order" in state_dict:
+                    saved_data_order = state_dict["data_order"]
+                    if hasattr(self, "data_order") and self.data_order.shape != saved_data_order.shape:
+                        # Resize the buffer to match the saved state
+                        self.data_order = saved_data_order.clone()
+
+                return super().load_state_dict(state_dict, strict=strict)
+
+            def forward(self, input_ids: torch.Tensor, labels: torch.Tensor = None):
+                logits = self.fc(input_ids)
+                loss = None
+                if labels is not None:
+                    loss_fn = nn.CrossEntropyLoss()
+                    loss = loss_fn(logits, labels)
+
+                # Log the data order for verification
+                data_indices = input_ids[:, 0].int()
+                self.data_order = torch.cat([self.data_order, data_indices.detach().clone()])
+
+                return {"loss": loss, "logits": logits}
+
+        def load_data_order_from_safetensors(path):
+            """Load the 'data_order' tensor from a safetensors file."""
+            try:
+                state_dict = load_file(path / "model.safetensors")
+                if "data_order" not in state_dict:
+                    raise KeyError("'data_order' tensor not found in the safetensors file.")
+                return state_dict["data_order"]
+            except Exception as e:
+                raise RuntimeError(f"Error loading safetensors file: {e}") from e
+
+        def run_training_experiment(
+            seed: int,
+            data_size: int,
+            batch_size: int,
+            grad_acc: int,
+            save_steps: int,
+            num_epochs: int,
+            exp_dir,
+            resume_from=None,
+        ):
+            """Run a training experiment with the given parameters."""
+            # Set random seeds for reproducibility
+            set_seed(seed)
+
+            exp_dir.mkdir(parents=True, exist_ok=True)
+            train_dataset = DummyDataset(size=data_size)
+            model = DummyModel(size=data_size)
+
+            args = TrainingArguments(
+                output_dir=str(exp_dir),
+                seed=seed,
+                learning_rate=0.1,
+                per_device_train_batch_size=batch_size,
+                gradient_accumulation_steps=grad_acc,
+                save_strategy="steps",
+                save_steps=save_steps,
+                num_train_epochs=num_epochs,
+                optim="sgd",
+                disable_tqdm=True,
+                dataloader_num_workers=0,  # ensures that main process loads the data
+                report_to=[],  # Disable all reporting
+            )
+
+            trainer = Trainer(
+                model=model,
+                args=args,
+                train_dataset=train_dataset,
+            )
+
+            last_checkpoint = None
+            print(f"Getting last checkpoint in {exp_dir}")
+
+            last_checkpoint = get_last_checkpoint(str(exp_dir))
+            print(f"Last checkpoint found in {exp_dir}: {last_checkpoint}")
+
+            trainer.train(resume_from_checkpoint=last_checkpoint)
+
+        # Test parameters
+        num_epochs = 3
+        data_size = 10
+        batch_size = 2
+        grad_acc = 1
+        save_steps = 1
+        last_ckpt_num = int(data_size * num_epochs / (batch_size * grad_acc))
+        seed = 42
+
+        # Test resuming from checkpoint 2 (within epoch 0) and checkpoint 7 (within epoch 1)
+        for target_ckpt_num in [2, 7]:
+            print(f"\n{'=' * 80}")
+            print(
+                f"Testing resuming from middle of epoch {round((target_ckpt_num - 1) * batch_size / data_size)} (target_ckpt_num = {target_ckpt_num})"
+            )
+            print(f"{'=' * 80}")
+
+            # Create temporary directories
+            exp_dir_baseline = Path(self.get_auto_remove_tmp_dir())
+            exp_dir_checkpoint_deletion = Path(self.get_auto_remove_tmp_dir())
+
+            # Scenario 1: Run baseline training to completion
+            run_training_experiment(
+                seed=seed,
+                data_size=data_size,
+                batch_size=batch_size,
+                grad_acc=grad_acc,
+                save_steps=save_steps,
+                num_epochs=num_epochs,
+                exp_dir=exp_dir_baseline,
+            )
+
+            baseline_data_order = load_data_order_from_safetensors(exp_dir_baseline / f"checkpoint-{last_ckpt_num}")
+
+            # Scenario 2: Run training with checkpoint deletion and resume
+            # First, run training to completion
+            run_training_experiment(
+                seed=seed,
+                data_size=data_size,
+                batch_size=batch_size,
+                grad_acc=grad_acc,
+                save_steps=save_steps,
+                num_epochs=num_epochs,
+                exp_dir=exp_dir_checkpoint_deletion,
+            )
+
+            # Delete checkpoints from target_ckpt_num onwards
+            print(f"Deleting checkpoints from checkpoint-{target_ckpt_num} onwards...")
+            for ckpt_num in range(target_ckpt_num, last_ckpt_num + 1):
+                ckpt_path = exp_dir_checkpoint_deletion / f"checkpoint-{ckpt_num}"
+                if ckpt_path.exists():
+                    # print(f"Deleting {ckpt_path}")
+                    shutil.rmtree(ckpt_path)
+
+            # Resume training from the remaining checkpoints
+            checkpoint_path = exp_dir_checkpoint_deletion / f"checkpoint-{target_ckpt_num - 1}"
+            run_training_experiment(
+                seed=seed,
+                data_size=data_size,
+                batch_size=batch_size,
+                grad_acc=grad_acc,
+                save_steps=save_steps,
+                num_epochs=num_epochs,
+                exp_dir=exp_dir_checkpoint_deletion,
+                resume_from=str(checkpoint_path),
+            )
+
+            # Load the final results after resume
+            resumed_data_order = load_data_order_from_safetensors(
+                exp_dir_checkpoint_deletion / f"checkpoint-{last_ckpt_num}"
+            )
+
+            # Compare results - the data order should be identical
+            self.assertTrue(
+                torch.equal(baseline_data_order, resumed_data_order),
+                f"Data order mismatch after checkpoint deletion and resume.\n"
+                f"Baseline: {baseline_data_order}\n"
+                f"Resumed: {resumed_data_order}",
+            )
 
 
 @require_torch
