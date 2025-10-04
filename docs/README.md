@@ -14,6 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
+# Setup
+
+```bash
+pip install -e ".[dev]"  # Installs dev dependencies
+pip install git+https://github.com/huggingface/doc-builder  # Installs doc-builder
+
+```
+
 # Generating the documentation
 
 To generate the documentation, you first have to build it. Several packages are necessary to build the doc, 
