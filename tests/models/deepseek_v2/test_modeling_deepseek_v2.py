@@ -27,7 +27,7 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 if is_torch_available():
     import torch
 
-    from transformers import AutoTokenizer, DeepseekV2ForCausalLM, DeepseekV2ForSequenceClassification, DeepseekV2Model
+    from transformers import AutoTokenizer, DeepseekV2ForCausalLM, DeepseekV2Model
     from transformers.models.deepseek_v2.modeling_deepseek_v2 import DeepseekV2RotaryEmbedding
 
 
@@ -54,16 +54,6 @@ class DeepseekV2ModelTester(CausalLMModelTester):
 
 @require_torch
 class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": DeepseekV2Model,
-            "text-classification": DeepseekV2ForSequenceClassification,
-            "text-generation": DeepseekV2ForCausalLM,
-            "zero-shot": DeepseekV2ForSequenceClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
     fx_compatible = False
     test_torchscript = False
     test_all_params_have_gradient = False

@@ -39,9 +39,6 @@ if is_torch_available():
 
     from transformers import (
         LlamaForCausalLM,
-        LlamaForQuestionAnswering,
-        LlamaForSequenceClassification,
-        LlamaForTokenClassification,
         LlamaModel,
         LlamaTokenizer,
     )
@@ -54,18 +51,6 @@ class LlamaModelTester(CausalLMModelTester):
 
 @require_torch
 class LlamaModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": LlamaModel,
-            "text-classification": LlamaForSequenceClassification,
-            "text-generation": LlamaForCausalLM,
-            "zero-shot": LlamaForSequenceClassification,
-            "question-answering": LlamaForQuestionAnswering,
-            "token-classification": LlamaForTokenClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
     fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
     model_tester_class = LlamaModelTester
 

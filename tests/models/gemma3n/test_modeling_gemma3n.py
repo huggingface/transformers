@@ -323,14 +323,6 @@ class Gemma3nTextModelTester(CausalLMModelTester):
 @require_torch
 class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Gemma3nTextModelTester
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": Gemma3nTextModel,
-            "text-generation": Gemma3nForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
 

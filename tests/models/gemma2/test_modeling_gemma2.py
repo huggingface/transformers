@@ -45,9 +45,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        Gemma2ForCausalLM,
-        Gemma2ForSequenceClassification,
-        Gemma2ForTokenClassification,
         Gemma2Model,
     )
 
@@ -59,18 +56,6 @@ class Gemma2ModelTester(CausalLMModelTester):
 
 @require_torch
 class Gemma2ModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": Gemma2Model,
-            "text-classification": Gemma2ForSequenceClassification,
-            "token-classification": Gemma2ForTokenClassification,
-            "text-generation": Gemma2ForCausalLM,
-            "zero-shot": Gemma2ForSequenceClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
-
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
     model_tester_class = Gemma2ModelTester

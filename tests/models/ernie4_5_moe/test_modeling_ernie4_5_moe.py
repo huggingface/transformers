@@ -52,15 +52,6 @@ class Ernie4_5_MoeModelTester(CausalLMModelTester):
 
 @require_torch
 class Ernie4_5_MoeModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": Ernie4_5_MoeModel,
-            "text-generation": Ernie4_5_MoeForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
-
     test_all_params_have_gradient = False
     model_tester_class = Ernie4_5_MoeModelTester
 

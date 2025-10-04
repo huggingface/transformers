@@ -36,8 +36,6 @@ if is_torch_available():
     from transformers import (
         AutoTokenizer,
         Phi3ForCausalLM,
-        Phi3ForSequenceClassification,
-        Phi3ForTokenClassification,
         Phi3Model,
     )
 
@@ -92,17 +90,6 @@ class Phi3ModelTester(CausalLMModelTester):
 
 @require_torch
 class Phi3ModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": Phi3Model,
-            "text-classification": Phi3ForSequenceClassification,
-            "token-classification": Phi3ForTokenClassification,
-            "text-generation": Phi3ForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
-
     model_tester_class = Phi3ModelTester
 
 

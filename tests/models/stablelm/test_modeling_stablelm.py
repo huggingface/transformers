@@ -33,8 +33,6 @@ if is_torch_available():
     from transformers import (
         AutoTokenizer,
         StableLmForCausalLM,
-        StableLmForSequenceClassification,
-        StableLmForTokenClassification,
         StableLmModel,
     )
 
@@ -48,17 +46,6 @@ class StableLmModelTester(CausalLMModelTester):
 
 @require_torch
 class StableLmModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": StableLmModel,
-            "text-classification": StableLmForSequenceClassification,
-            "text-generation": StableLmForCausalLM,
-            "zero-shot": StableLmForSequenceClassification,
-            "token-classification": StableLmForTokenClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
     fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
     model_tester_class = StableLmModelTester
 
