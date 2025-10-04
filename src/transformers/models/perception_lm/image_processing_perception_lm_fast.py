@@ -68,7 +68,7 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
-    vision_input_type = "thumb+tail"
+    vision_input_type = "thumb+tile"
     tile_size = 448
     max_num_tiles = 36
     size = {"width": 448, "height": 448}  # for backward compatibility in tests

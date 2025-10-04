@@ -24,13 +24,21 @@ import numpy as np
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils import PreTokenizedInput, TextInput
 from ...utils import TensorType
 from ..auto import AutoTokenizer
 
 
+class AriaImagesKwargs(ImagesKwargs, total=False):
+    split_image: Optional[bool]
+    max_image_size: Optional[int]
+    min_image_size: Optional[int]
+
+
 class AriaProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: AriaImagesKwargs
+
     _defaults = {
         "text_kwargs": {
             "padding": False,
