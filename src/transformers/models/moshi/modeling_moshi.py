@@ -269,7 +269,7 @@ class MoshiLinear(nn.Module):
             return self.linear(x)
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralRotaryEmbedding with Mistral->Moshi
+# Adapted from transformers.models.mistral.modeling_mistral.MistralRotaryEmbedding with Mistral->Moshi
 class MoshiRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
@@ -284,7 +284,6 @@ class MoshiRotaryEmbedding(nn.Module):
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        # Always use the default RoPE path explicitly
         if self.rope_type == "default":
             self.rope_init_fn = ROPE_INIT_FUNCTIONS["default"]
         else:

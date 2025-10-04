@@ -501,7 +501,7 @@ class MimiLayerScale(nn.Module):
         return self.scale * x
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralRotaryEmbedding with Mistral->Mimi
+# adapted from transformers.models.mistral.modeling_mistral.MistralRotaryEmbedding with Mistral->Mimi
 class MimiRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
@@ -516,7 +516,6 @@ class MimiRotaryEmbedding(nn.Module):
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        # Always use the default RoPE path explicitly
         if self.rope_type == "default":
             self.rope_init_fn = ROPE_INIT_FUNCTIONS["default"]
         else:
