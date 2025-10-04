@@ -68,7 +68,7 @@ This model was contributed by [anugunj](https://huggingface.co/anugunj). The ori
   prepare images for the model.
 - [`LevitForImageClassificationWithTeacher`] currently supports only inference and not training or fine-tuning.
 - You can check out demo notebooks regarding inference as well as fine-tuning on custom data [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/VisionTransformer)
-  (you can just replace [`ViTFeatureExtractor`] by [`LevitImageProcessor`] and [`ViTForImageClassification`] by [`LevitForImageClassification`] or [`LevitForImageClassificationWithTeacher`]).
+  (you can just replace [`ViTImageProcessor`] by [`LevitImageProcessor`] and [`ViTForImageClassification`] by [`LevitForImageClassification`] or [`LevitForImageClassificationWithTeacher`]).
 
 ## Resources
 
@@ -84,11 +84,6 @@ If you're interested in submitting a resource to be included here, please feel f
 ## LevitConfig
 
 [[autodoc]] LevitConfig
-
-## LevitFeatureExtractor
-
-[[autodoc]] LevitFeatureExtractor
-    - __call__
 
 ## LevitImageProcessor
 

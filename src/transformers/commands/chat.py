@@ -59,9 +59,7 @@ if is_torch_available():
 
     from transformers import (
         AutoModelForCausalLM,
-        AutoTokenizer,
         BitsAndBytesConfig,
-        GenerationConfig,
     )
 
 ALLOWED_KEY_CHARS = set(string.ascii_letters + string.whitespace)
@@ -443,8 +441,7 @@ class ChatCommand(BaseTransformersCLICommand):
         # 2. b. strings should be quoted
         def is_number(s: str) -> bool:
             # handle negative numbers
-            if s.startswith("-"):
-                s = s[1:]
+            s = s.removeprefix("-")
             return s.replace(".", "", 1).isdigit()
 
         generate_flags_as_dict = {k: f'"{v}"' if not is_number(v) else v for k, v in generate_flags_as_dict.items()}
@@ -534,7 +531,7 @@ class ChatCommand(BaseTransformersCLICommand):
     # -----------------------------------------------------------------------------------------------------------------
     # Model loading and performance automation methods
     @staticmethod
-    def get_quantization_config(model_args: ChatArguments) -> Optional["BitsAndBytesConfig"]:
+    def get_quantization_config(model_args: ChatArguments) -> Optional[BitsAndBytesConfig]:
         if model_args.load_in_4bit:
             quantization_config = BitsAndBytesConfig(
                 load_in_4bit=True,
@@ -690,7 +687,6 @@ class ChatCommand(BaseTransformersCLICommand):
 
         model = self.args.model_name_or_path + "@" + self.args.model_revision
         host = "http://localhost" if self.args.host == "localhost" else self.args.host
-        client = AsyncInferenceClient(f"{host}:{self.args.port}")
 
         args = self.args
         if args.examples_path is None:
@@ -713,48 +709,47 @@ class ChatCommand(BaseTransformersCLICommand):
 
         # Starts the session with a minimal help message at the top, so that a user doesn't get stuck
         interface.print_help(minimal=True)
-        while True:
-            try:
-                user_input = interface.input()
 
-                # User commands
-                if user_input.startswith("!"):
-                    # `!exit` is special, it breaks the loop
-                    if user_input == "!exit":
-                        break
+        async with AsyncInferenceClient(f"{host}:{self.args.port}") as client:
+            while True:
+                try:
+                    user_input = interface.input()
+
+                    # User commands
+                    if user_input.startswith("!"):
+                        # `!exit` is special, it breaks the loop
+                        if user_input == "!exit":
+                            break
+                        else:
+                            chat, valid_command, generation_config, model_kwargs = self.handle_non_exit_user_commands(
+                                user_input=user_input,
+                                args=args,
+                                interface=interface,
+                                examples=examples,
+                                generation_config=generation_config,
+                                model_kwargs=model_kwargs,
+                                chat=chat,
+                            )
+                        # `!example` sends a user message to the model
+                        if not valid_command or not user_input.startswith("!example"):
+                            continue
                     else:
-                        chat, valid_command, generation_config, model_kwargs = self.handle_non_exit_user_commands(
-                            user_input=user_input,
-                            args=args,
-                            interface=interface,
-                            examples=examples,
-                            generation_config=generation_config,
-                            model_kwargs=model_kwargs,
-                            chat=chat,
-                        )
-                    # `!example` sends a user message to the model
-                    if not valid_command or not user_input.startswith("!example"):
-                        continue
-                else:
-                    chat.append({"role": "user", "content": user_input})
+                        chat.append({"role": "user", "content": user_input})
 
-                stream = client.chat_completion(
-                    chat,
-                    stream=True,
-                    extra_body={
-                        "generation_config": generation_config.to_json_string(),
-                        "model": model,
-                    },
-                )
+                    stream = client.chat_completion(
+                        chat,
+                        stream=True,
+                        extra_body={
+                            "generation_config": generation_config.to_json_string(),
+                            "model": model,
+                        },
+                    )
 
-                model_output = await interface.stream_output(stream)
+                    model_output = await interface.stream_output(stream)
 
-                chat.append({"role": "assistant", "content": model_output})
-
-            except KeyboardInterrupt:
-                break
-            finally:
-                await client.close()
+                    chat.append({"role": "assistant", "content": model_output})
+                except KeyboardInterrupt:
+                    break
 
 
 if __name__ == "__main__":

@@ -37,6 +37,9 @@ from zipfile import is_zipfile
 import torch
 from huggingface_hub import split_torch_state_dict_into_shards
 from packaging import version
+from safetensors import safe_open
+from safetensors.torch import load_file as safe_load_file
+from safetensors.torch import save_file as safe_save_file
 from torch import Tensor, nn
 from torch.distributions import constraints
 from torch.utils.checkpoint import checkpoint
@@ -97,7 +100,6 @@ from .utils import (
     is_optimum_available,
     is_peft_available,
     is_remote_url,
-    is_safetensors_available,
     is_torch_flex_attn_available,
     is_torch_greater_or_equal,
     is_torch_mlu_available,
@@ -133,11 +135,6 @@ if is_accelerate_available():
     accelerate_version = version.parse(importlib.metadata.version("accelerate"))
     if accelerate_version >= version.parse("0.31"):
         from accelerate.utils.modeling import get_state_dict_from_offload
-
-if is_safetensors_available():
-    from safetensors import safe_open
-    from safetensors.torch import load_file as safe_load_file
-    from safetensors.torch import save_file as safe_save_file
 
 if is_peft_available():
     from .utils import find_adapter_config_file
@@ -403,24 +400,11 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
     index_present = os.path.isfile(index_file)
     safe_index_present = os.path.isfile(safe_index_file)
 
-    if not index_present and not (safe_index_present and is_safetensors_available()):
-        filenames = (
-            (WEIGHTS_INDEX_NAME, SAFE_WEIGHTS_INDEX_NAME) if is_safetensors_available() else (WEIGHTS_INDEX_NAME,)
-        )
+    if not index_present and not safe_index_present:
+        filenames = (WEIGHTS_INDEX_NAME, SAFE_WEIGHTS_INDEX_NAME)
         raise ValueError(f"Can't find a checkpoint index ({' or '.join(filenames)}) in {folder}.")
 
-    load_safe = False
-    if safe_index_present:
-        if prefer_safe:
-            if is_safetensors_available():
-                load_safe = True  # load safe due to preference
-            else:
-                logger.warning(
-                    f"Cannot load sharded checkpoint at {folder} safely since safetensors is not installed!"
-                )
-        elif not index_present:
-            load_safe = True  # load safe since we have no other choice
-
+    load_safe = safe_index_present and (prefer_safe or not index_present)
     load_index = safe_index_file if load_safe else index_file
 
     with open(load_index, "r", encoding="utf-8") as f:
@@ -493,7 +477,7 @@ def load_state_dict(
     Reads a `safetensor` or a `.bin` checkpoint file. We load the checkpoint on "cpu" by default.
     """
     # Use safetensors if possible
-    if checkpoint_file.endswith(".safetensors") and is_safetensors_available():
+    if checkpoint_file.endswith(".safetensors"):
         with safe_open(checkpoint_file, framework="pt") as f:
             state_dict = {}
             for k in f.keys():
@@ -1037,7 +1021,12 @@ def _get_resolved_checkpoint_files(
                         is_sharded = True
                 if not local_files_only and not is_offline_mode():
                     if resolved_archive_file is not None:
-                        if filename in [WEIGHTS_NAME, WEIGHTS_INDEX_NAME]:
+                        # In a CI environment (CircleCI / Github Actions workflow runs) or in a pytest run,
+                        # we set `DISABLE_SAFETENSORS_CONVERSION=true` to prevent the conversion.
+                        if (
+                            filename in [WEIGHTS_NAME, WEIGHTS_INDEX_NAME]
+                            and os.getenv("DISABLE_SAFETENSORS_CONVERSION", None) != "true"
+                        ):
                             # If the PyTorch file was found, check if there is a safetensors file on the repository
                             # If there is no safetensors file on the repositories, start an auto conversion
                             safe_weights_name = SAFE_WEIGHTS_INDEX_NAME if is_sharded else SAFE_WEIGHTS_NAME
@@ -2065,8 +2054,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if hasattr(self, "named_parameters"):
                 model_param_names = [name for name, _ in self.named_parameters()]
                 if model_param_names:  # Only validate if model has parameters
-                    import re
-
                     for layer_pattern in plan.keys():
                         # Convert pattern to regex (replace * with .*)
                         regex_pattern = layer_pattern.replace("*", r"\d+")
@@ -2575,7 +2562,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
             # preload flash attention here to allow compile with fullgraph
             if applicable_attn_implementation.startswith("flash_attention"):
-                lazy_import_flash_attention(applicable_attn_implementation)
+                lazy_import_flash_attention(applicable_attn_implementation, force_import=True)
 
         return applicable_attn_implementation
 
@@ -3746,8 +3733,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 "`save_config` is deprecated and will be removed in v5 of Transformers. Use `is_main_process` instead."
             )
             is_main_process = kwargs.pop("save_config")
-        if safe_serialization and not is_safetensors_available():
-            raise ImportError("`safe_serialization` requires the `safetensors library: `pip install safetensors`.")
 
         # we need to check against tp_size, not tp_plan, as tp_plan is substituted to the class one
         if self._tp_size is not None and not is_huggingface_hub_greater_or_equal("0.31.4"):
@@ -4016,7 +4001,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 if _is_dtensor_available and isinstance(state_dict[tensor], DTensor):
                     full_tensor = state_dict[tensor].full_tensor()
                     # to get the correctly ordered tensor we need to repack if packed
-                    if _get_parameter_tp_plan(tensor, self._tp_plan) in ("local_packed_rowwise",):
+                    if _get_parameter_tp_plan(tensor, self._tp_plan) == "local_packed_rowwise":
                         full_tensor = repack_weights(full_tensor, -1, self._tp_size, 2)
                     shard[tensor] = full_tensor.contiguous()  # only do contiguous after it's permuted correctly
                 else:
@@ -4118,9 +4103,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 are tensors that do not require gradients and not registered as parameters. E.g. mean and std in batch
                 norm layers. Please see: https://discuss.pytorch.org/t/what-pytorch-means-by-buffers/120266/2
         """
-        mem = sum([param.nelement() * param.element_size() for param in self.parameters()])
+        mem = sum(param.nelement() * param.element_size() for param in self.parameters())
         if return_buffers:
-            mem_bufs = sum([buf.nelement() * buf.element_size() for buf in self.buffers()])
+            mem_bufs = sum(buf.nelement() * buf.element_size() for buf in self.buffers())
             mem = mem + mem_bufs
         return mem
 
@@ -4518,7 +4503,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             tp_plan = "auto"
 
         # Not used anymore -- remove them from the kwargs
-        _ = kwargs.pop("resume_download", None)
         _ = kwargs.pop("mirror", None)
         _ = kwargs.pop("_fast_init", None)
         _ = kwargs.pop("low_cpu_mem_usage", None)
@@ -4585,9 +4569,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if token is not None and adapter_kwargs is not None and "token" not in adapter_kwargs:
             adapter_kwargs["token"] = token
-
-        if use_safetensors is None and not is_safetensors_available():
-            use_safetensors = False
 
         if gguf_file is not None and not is_accelerate_available():
             raise ValueError("accelerate is required when loading a GGUF file `pip install accelerate`.")
@@ -4781,7 +4762,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         is_from_file = pretrained_model_name_or_path is not None or gguf_file is not None
 
         # Just a helpful message in case we try to load safetensors files coming from old Transformers tf/flax classes
-        if is_safetensors_available() and is_from_file and checkpoint_files[0].endswith(".safetensors"):
+        if is_from_file and checkpoint_files[0].endswith(".safetensors"):
             with safe_open(checkpoint_files[0], framework="pt") as f:
                 metadata = f.metadata()
             if metadata is not None and metadata.get("format") in ["tf", "flax"]:
@@ -5397,7 +5378,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         for name, module in self.named_modules():
             if remove_prefix:
                 _prefix = f"{self.base_model_prefix}."
-                name = name[len(_prefix) :] if name.startswith(_prefix) else name
+                name = name.removeprefix(_prefix)
             elif add_prefix:
                 name = ".".join([self.base_model_prefix, name]) if len(name) > 0 else self.base_model_prefix
 
@@ -5717,7 +5698,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # in the warnings. For missing keys, we should show the prefix in the warning as it's part of the final model
         if loading_task_model_from_base_state_dict:
             _prefix = f"{self.base_model_prefix}."
-            unexpected_keys = [k[len(_prefix) :] if k.startswith(_prefix) else k for k in unexpected_keys]
+            unexpected_keys = [k.removeprefix(_prefix) for k in unexpected_keys]
 
         return missing_keys, unexpected_keys
 

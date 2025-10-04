@@ -47,6 +47,7 @@ from .integrations import (
 
 import huggingface_hub.utils as hf_hub_utils
 import numpy as np
+import safetensors.torch
 import torch
 import torch.distributed as dist
 from huggingface_hub import CommitInfo, ModelCard, create_repo, upload_folder
@@ -156,7 +157,6 @@ from .utils import (
     is_liger_kernel_available,
     is_lomo_available,
     is_peft_available,
-    is_safetensors_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_schedulefree_available,
@@ -206,13 +206,8 @@ if is_sagemaker_mp_enabled():
 
     from .trainer_pt_utils import smp_forward_backward, smp_forward_only, smp_gather, smp_nested_concat
 
-
-if is_safetensors_available():
-    import safetensors.torch
-
 if is_peft_available():
     from peft import PeftModel
-
 
 if is_accelerate_available():
     from accelerate import Accelerator, skip_first_batches
@@ -5238,7 +5233,7 @@ class Trainer:
         if count_num_items_in_batch:
             # For now we don't support object detection
             try:
-                num_items_in_batch = sum([(batch["labels"].ne(-100)).sum() for batch in batch_samples])
+                num_items_in_batch = sum((batch["labels"].ne(-100)).sum() for batch in batch_samples)
             except (TypeError, AttributeError):
                 pass
 
