@@ -80,7 +80,6 @@ class Lfm2RotaryEmbedding(nn.Module):
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        # Always use the default RoPE path explicitly
         if self.rope_type == "default":
             self.rope_init_fn = ROPE_INIT_FUNCTIONS["default"]
         else:
