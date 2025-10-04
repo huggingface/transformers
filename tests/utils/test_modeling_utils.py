@@ -58,6 +58,7 @@ from transformers import (
     logging,
 )
 from transformers.modeling_flash_attention_utils import is_flash_attn_available
+from transformers.modeling_utils import update_key_name
 from transformers.models.mistral.modeling_mistral import MistralModel
 from transformers.testing_utils import (
     TOKEN,
@@ -1688,6 +1689,67 @@ class ModelUtilsTest(TestCasePlus):
         self.assertTrue(
             torch.equal(torch.isin(random_ids, random_test_tensor), isin_mps_friendly(random_ids, random_test_tensor))
         )
+
+    def test_update_key_name(self):
+        model = AutoModel.from_pretrained("google-t5/t5-base", device_map="auto")
+
+        new_keys = "\n".join(update_key_name(model.state_dict().keys()))
+
+        EXPECTED_KEYS = """decoder.block.{0...11}.layer.0.SelfAttention.q.weight
+decoder.embed_tokens.weight
+der.block.{0...11}.layer.0.SelfAttention.v.weight
+encoder.block.{0...11}.layer.{0, 1}.layer_norm.weight
+decoder.block.{0...11}.layer.1.EncDecAttention.q.weight
+encoder.block.{0...11}.layer.0.SelfAttention.o.weight
+decoder.block.{0...11}.layer.1.EncDecAttention.v.weight
+encoder.final_layer_norm.weight
+decoder.block.{0...11}.layer.{0, 1, 2}.layer_norm.weight
+decoder.block.{0...11}.layer.0.SelfAttention.o.weight
+encoder.block.{0...11}.layer.0.SelfAttention.k.weight
+decoder.block.{0...11}.layer.1.EncDecAttention.o.weight
+decoder.block.{0...11}.layer.2.DenseReluDense.wo.weight
+encoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight
+shared.weight
+decoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight
+decoder.block.{0...11}.layer.2.DenseReluDense.wi.weight
+decoder.block.{0...11}.layer.1.EncDecAttention.k.weight
+encoder.block.{0...11}.layer.1.DenseReluDense.wi.weight
+encoder.embed_tokens.weight
+decoder.block.{0...11}.layer.0.SelfAttention.k.weight
+encoder.block.{0...11}.layer.0.SelfAttention.q.weight
+decoder.final_layer_norm.weight
+decoder.block.{0...11}.layer.0.SelfAttention.v.weight
+encoder.block.{0...11}.layer.1.DenseReluDense.wo.weight"""
+        self.assertEqual(new_keys, EXPECTED_KEYS)
+
+        EXPECTED_KEYS = """layers.{0...60}.post_attention_layernorm.weight
+layers.{3...60}.mlp.experts.{0, 1, 2, 3, 4, 5, 6, 7}.up_proj.weight
+layers.{0...60}.self_attn.kv_b_proj.weight
+layers.{3...60}.mlp.shared_experts.gate_proj.weight
+layers.{0...60}.self_attn.kv_a_layernorm.weight
+norm.weight
+layers.{3...60}.mlp.shared_experts.up_proj.weight
+layers.{0, 1, 2}.mlp.down_proj.weight
+layers.{0, 1, 2}.mlp.gate_proj.weight
+layers.{0...60}.self_attn.kv_a_proj_with_mqa.weight
+layers.{3...60}.mlp.experts.{0, 1, 2, 3, 4, 5, 6, 7}.down_proj.weight
+layers.{0...60}.self_attn.o_proj.weight
+layers.{3...60}.mlp.experts.{0, 1, 2, 3, 4, 5, 6, 7}.gate_proj.weight
+layers.{3...60}.mlp.shared_experts.down_proj.weight
+layers.{3...60}.mlp.gate.e_score_correction_bias
+embed_tokens.weight
+layers.{3...60}.mlp.gate.weight
+layers.{0...60}.self_attn.q_a_proj.weight
+layers.{0...60}.self_attn.q_a_layernorm.weight
+layers.{0...60}.self_attn.q_b_proj.weight
+layers.{0, 1, 2}.mlp.up_proj.weight
+layers.{0...60}.input_layernorm.weight"""
+        config = AutoConfig.from_pretrained("deepseek-ai/DeepSeek-V3.1")
+        with torch.device("meta"):
+            model = AutoModel.from_config(config)
+
+        new_keys = "\n".join(update_key_name(model.state_dict().keys()))
+        self.assertEqual(new_keys, EXPECTED_KEYS)
 
     def test_can_generate(self):
         """Tests the behavior of `PreTrainedModel.can_generate` method."""
