@@ -75,7 +75,9 @@ and adjacent modeling libraries (llama.cpp, mlx, ...) which leverage the model d
 We pledge to help support new state-of-the-art models and democratize their usage by having their model definition be
 simple, customizable, and efficient.
 
-There are over 1M+ Transformers [model checkpoints](https://huggingface.co/models?library=transformers&sort=trending) on the [Hugging Face Hub](https://huggingface.com/models) you can use.
+There are over 1M Transformers [model checkpoints](https://huggingface.co/models?library=transformers&sort=trending) on the [Hugging Face Hub](https://huggingface.com/models) you can use.
+
+
 
 Explore the [Hub](https://huggingface.com/) today to find a model and use Transformers to help you get started right away.
 
