@@ -422,7 +422,7 @@ class InstructBlipForConditionalGenerationDecoderOnlyModelTester:
         return config, input_ids, attention_mask, qformer_input_ids, qformer_attention_mask, pixel_values
 
     def get_config(self):
-        return InstructBlipConfig.from_vision_qformer_text_configs(
+        return InstructBlipConfig(
             vision_config=self.vision_model_tester.get_config(),
             qformer_config=self.qformer_model_tester.get_config(),
             text_config=self.text_model_tester.get_config(),

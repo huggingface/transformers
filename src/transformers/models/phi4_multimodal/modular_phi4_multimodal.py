@@ -402,6 +402,18 @@ class Phi4MultimodalConfig(Phi3Config):
         audio_config=None,
         **kwargs,
     ):
+        if isinstance(vision_config, dict):
+            vision_config = Phi4MultimodalVisionConfig(**vision_config)
+        elif vision_config is None:
+            Phi4MultimodalVisionConfig()
+        self.vision_config = vision_config
+
+        if isinstance(audio_config, dict):
+            audio_config = Phi4MultimodalAudioConfig(**audio_config)
+        elif vision_config is None:
+            audio_config = Phi4MultimodalAudioConfig()
+        self.audio_config = audio_config
+
         super().__init__(
             vocab_size=vocab_size,
             hidden_size=hidden_size,
@@ -428,18 +440,6 @@ class Phi4MultimodalConfig(Phi3Config):
             sliding_window=sliding_window,
             **kwargs,
         )
-
-        if isinstance(vision_config, dict):
-            vision_config = Phi4MultimodalVisionConfig(**vision_config)
-        elif vision_config is None:
-            Phi4MultimodalVisionConfig()
-        self.vision_config = vision_config
-
-        if isinstance(audio_config, dict):
-            audio_config = Phi4MultimodalAudioConfig(**audio_config)
-        elif vision_config is None:
-            audio_config = Phi4MultimodalAudioConfig()
-        self.audio_config = audio_config
 
 
 class Phi4MultimodalVisionMLP(SiglipMLP):

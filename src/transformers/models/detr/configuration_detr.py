@@ -260,18 +260,6 @@ class DetrConfig(PretrainedConfig):
             else {}
         )
 
-    @classmethod
-    def from_backbone_config(cls, backbone_config: PretrainedConfig, **kwargs):
-        """Instantiate a [`DetrConfig`] (or a derived class) from a pre-trained backbone model configuration.
-
-        Args:
-            backbone_config ([`PretrainedConfig`]):
-                The backbone configuration.
-        Returns:
-            [`DetrConfig`]: An instance of a configuration object
-        """
-        return cls(backbone_config=backbone_config, **kwargs)
-
 
 class DetrOnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")

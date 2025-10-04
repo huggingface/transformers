@@ -197,7 +197,6 @@ class MMGroundingDinoConfig(PretrainedConfig):
         layer_norm_eps=1e-5,
         **kwargs,
     ):
-        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
         if backbone_config is None and backbone is None:
             logger.info("`backbone_config` is `None`. Initializing the config with the default `Swin` backbone.")
             backbone_config = CONFIG_MAPPING["swin"](
@@ -280,13 +279,7 @@ class MMGroundingDinoConfig(PretrainedConfig):
         self.init_std = init_std
         self.layer_norm_eps = layer_norm_eps
 
-    @property
-    def num_attention_heads(self) -> int:
-        return self.encoder_attention_heads
-
-    @property
-    def hidden_size(self) -> int:
-        return self.d_model
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     @property
     def sub_configs(self):

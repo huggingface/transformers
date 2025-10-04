@@ -109,7 +109,6 @@ class DepthAnythingConfig(PretrainedConfig):
         max_depth=None,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         if backbone_config is None and backbone is None:
             logger.info("`backbone_config` is `None`. Initializing the config with the default `Dinov2` backbone.")
             backbone_config = CONFIG_MAPPING["dinov2"](
@@ -150,6 +149,8 @@ class DepthAnythingConfig(PretrainedConfig):
             raise ValueError("depth_estimation_type must be one of ['relative', 'metric']")
         self.depth_estimation_type = depth_estimation_type
         self.max_depth = max_depth if max_depth else 1
+
+        super().__init__(**kwargs)
 
     @property
     def sub_configs(self):

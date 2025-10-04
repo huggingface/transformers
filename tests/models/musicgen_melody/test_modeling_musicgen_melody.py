@@ -573,7 +573,7 @@ class MusicgenMelodyTester:
             tie_word_embeddings=False,
             audio_channels=self.audio_channels,
         )
-        config = MusicgenMelodyConfig.from_sub_models_config(
+        config = MusicgenMelodyConfig(
             text_encoder_config, audio_encoder_config, decoder_config, chroma_length=self.chroma_length
         )
         return config
