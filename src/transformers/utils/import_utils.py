@@ -107,6 +107,7 @@ USE_TORCH_XLA = os.environ.get("USE_TORCH_XLA", "1").upper()
 TORCH_FX_REQUIRED_VERSION = version.parse("1.10")
 
 ACCELERATE_MIN_VERSION = "0.26.0"
+BITSANDBYTES_MIN_VERSION = "0.46.1"
 SCHEDULEFREE_MIN_VERSION = "1.2.6"
 FSDP_MIN_VERSION = "1.12.0"
 GGUF_MIN_VERSION = "0.10.0"
@@ -126,7 +127,7 @@ _av_available = importlib.util.find_spec("av") is not None
 _decord_available = importlib.util.find_spec("decord") is not None
 _torchcodec_available = importlib.util.find_spec("torchcodec") is not None
 _libcst_available = _is_package_available("libcst")
-_bitsandbytes_available = _is_package_available("bitsandbytes")
+_bitsandbytes_available, _bitsandbytes_version = _is_package_available("bitsandbytes", return_version=True)
 _eetq_available = _is_package_available("eetq")
 _fbgemm_gpu_available = _is_package_available("fbgemm_gpu")
 _galore_torch_available = _is_package_available("galore_torch")
@@ -1073,35 +1074,8 @@ def is_torch_xpu_available(check_device: bool = False) -> bool:
     return hasattr(torch, "xpu") and torch.xpu.is_available()
 
 
-@lru_cache
-def is_bitsandbytes_available(check_library_only: bool = False) -> bool:
-    if not _bitsandbytes_available:
-        return False
-
-    if check_library_only:
-        return True
-
-    if not is_torch_available():
-        return False
-
-    import torch
-
-    # `bitsandbytes` versions older than 0.43.1 eagerly require CUDA at import time,
-    # so those versions of the library are practically only available when CUDA is too.
-    if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.43.1"):
-        return torch.cuda.is_available()
-
-    # Newer versions of `bitsandbytes` can be imported on systems without CUDA.
-    return True
-
-
-def is_bitsandbytes_multi_backend_available() -> bool:
-    if not is_bitsandbytes_available():
-        return False
-
-    import bitsandbytes as bnb
-
-    return "multi_backend" in getattr(bnb, "features", set())
+def is_bitsandbytes_available(min_version: str = BITSANDBYTES_MIN_VERSION) -> bool:
+    return _bitsandbytes_available and version.parse(_bitsandbytes_version) >= version.parse(min_version)
 
 
 def is_flash_attn_2_available() -> bool:
