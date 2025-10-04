@@ -110,7 +110,7 @@ class LlavaOnevisionVision1_5Text2TextModelTester:
             "patch_size": 14,
             "spatial_merge_size": 1,
             "temporal_patch_size": 1,
-            "text_hidden_size": 32,
+            "out_hidden_size": 32,
         },
     ):
         self.parent = parent

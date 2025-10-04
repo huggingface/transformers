@@ -59,10 +59,9 @@ logger = logging.get_logger(__name__)
 class LlavaOnevision1_5VisionConfig(Qwen2_5_VLVisionConfig):
     model_type = "llava_onevision1_5"
 
-    def __init__(self, layer_norm_eps=1e-05, text_hidden_size=2560, attention_dropout=0.0, **super_kwargs):
+    def __init__(self, layer_norm_eps=1e-05, attention_dropout=0.0, **super_kwargs):
         super().__init__(self, **super_kwargs)
         self.layer_norm_eps = layer_norm_eps
-        self.text_hidden_size = text_hidden_size
         self.attention_dropout = attention_dropout
 
 
@@ -271,7 +270,7 @@ class LlavaOnevision1_5VisionPretrainedModel(Qwen2_5_VisionTransformerPretrained
         self.pre_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.blocks = nn.ModuleList([LlavaOnevision1_5VisionBlock(config) for _ in range(config.depth)])
         self.merger = LlavaOnevision1_5VisionPatchMerger(
-            dim=config.text_hidden_size,
+            dim=config.out_hidden_size,
             context_dim=config.hidden_size,
             spatial_merge_size=config.spatial_merge_size,
             layer_norm_eps=config.layer_norm_eps,

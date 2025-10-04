@@ -365,7 +365,7 @@ class LlavaOnevision1_5VisionPretrainedModel(LlavaOnevision1_5PreTrainedModel):
         self.rotary_pos_emb = LlavaOnevision1_5VisionRotaryEmbedding(head_dim // 2)
         self.blocks = nn.ModuleList([LlavaOnevision1_5VisionBlock(config) for _ in range(config.depth)])
         self.merger = LlavaOnevision1_5VisionPatchMerger(
-            dim=config.text_hidden_size,
+            dim=config.out_hidden_size,
             context_dim=config.hidden_size,
             spatial_merge_size=config.spatial_merge_size,
             layer_norm_eps=config.layer_norm_eps,

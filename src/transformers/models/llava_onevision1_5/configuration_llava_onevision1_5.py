@@ -44,7 +44,6 @@ class LlavaOnevision1_5VisionConfig(PretrainedConfig):
         fullatt_block_indexes=[7, 15, 23, 31],
         initializer_range=0.02,
         layer_norm_eps=1e-05,
-        text_hidden_size=2560,
         attention_dropout=0.0,
         **kwargs,
     ):
@@ -65,7 +64,6 @@ class LlavaOnevision1_5VisionConfig(PretrainedConfig):
         self.out_hidden_size = out_hidden_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-        self.text_hidden_size = text_hidden_size
         self.attention_dropout = attention_dropout
 
 
