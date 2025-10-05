@@ -13,56 +13,61 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as np
+
+from ... import is_vision_available
 from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature, get_size_dict
 from ...image_utils import (
     PILImageResampling,
     ChannelDimension,
     ImageInput,
-    is_pil_image,
     ImageType,
+    is_pil_image,
     valid_images,
     is_scaled_image,
     infer_channel_dimension_format,
     validate_preprocess_arguments,
     to_numpy_array,
     is_valid_image,
-    is_vision_available,
-    get_image_type,
+    get_image_type, SizeDict, pil_torch_interpolation_mapping,
 )
 
 import torch
-from ...image_transforms import to_channel_dimension_format, resize
+from ...image_transforms import to_channel_dimension_format
 from typing import Optional, Union
-from ...utils import auto_docstring, TensorType, logging, requires_backends
-
+from ...utils import auto_docstring, TensorType, logging, requires_backends, is_torchvision_v2_available
+import numpy as np
 if is_vision_available():
     import PIL
-    from PIL import Image
+    from PIL import Image, ImageDraw
 
-logger = logging.get_logger(__name__)
+if is_torchvision_v2_available():
+    from torchvision.transforms.v2 import functional as F
+else:
+    from torchvision.transforms import functional as F, InterpolationMode
+
 
 def is_grayscale(
-    image: np.ndarray,
-    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    image: torch.Tensor,
+    input_data_format: ChannelDimension = None,
 ):
     if input_data_format == ChannelDimension.FIRST:
         if image.shape[0] == 1:
             return True
-        return np.all(image[0, ...] == image[1, ...]) and np.all(image[1, ...] == image[2, ...])
+        return bool(torch.equal(image[0, ...], image[1, ...]) and torch.equal(image[1, ...], image[2, ...]))
+
     elif input_data_format == ChannelDimension.LAST:
         if image.shape[-1] == 1:
             return True
-        return np.all(image[..., 0] == image[..., 1]) and np.all(image[..., 1] == image[..., 2])
+        return bool(torch.equal(image[..., 0], image[..., 1]) and torch.equal(image[..., 1], image[..., 2]))
+    return None
 
 
-# Copied from transformers.models.superpoint.image_processing_superpoint.convert_to_grayscale
 def convert_to_grayscale(
-    image: ImageInput,
-    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    image: torch.Tensor,
+    input_data_format: ChannelDimension = None,
 ) -> ImageInput:
     """
-    Converts an image to grayscale format using the NTSC formula. Only support numpy and PIL Image.
+    Converts an image to grayscale format. Only support numpy and PIL Image.
 
     This function is supposed to return a 1-channel image, but it returns a 3-channel image with the same value in each
     channel, because of an issue that is discussed in :
@@ -74,24 +79,56 @@ def convert_to_grayscale(
         input_data_format (`ChannelDimension` or `str`, *optional*):
             The channel dimension format for the input image.
     """
-    requires_backends(convert_to_grayscale, ["vision"])
 
-    if isinstance(image, np.ndarray):
-        if is_grayscale(image, input_data_format=input_data_format):
-            return image
-        if input_data_format == ChannelDimension.FIRST:
-            gray_image = image[0, ...] * 0.2989 + image[1, ...] * 0.5870 + image[2, ...] * 0.1140
-            gray_image = np.stack([gray_image] * 3, axis=0)
-        elif input_data_format == ChannelDimension.LAST:
-            gray_image = image[..., 0] * 0.2989 + image[..., 1] * 0.5870 + image[..., 2] * 0.1140
-            gray_image = np.stack([gray_image] * 3, axis=-1)
-        return gray_image
-
-    if not isinstance(image, PIL.Image.Image):
+    # Already grayscale?
+    if is_grayscale(image, input_data_format=input_data_format):
         return image
 
-    image = image.convert("L")
-    return image
+    if input_data_format == ChannelDimension.LAST:
+        # Convert from (H, W, C) → (C, H, W) for torchvision
+        image = image.permute(2, 0, 1)
+
+    # torchvision rgb_to_grayscale → returns (1, H, W)
+    gray = F.rgb_to_grayscale(image, num_output_channels=3)
+
+    if input_data_format == ChannelDimension.LAST:
+        # Convert back to (H, W, C)
+        gray = gray.permute(1, 2, 0)
+
+    return gray
+"""
+    # numpy path → wrap to torch
+    if isinstance(image, np.ndarray):
+        tensor = torch.from_numpy(image)
+        gray_tensor = convert_to_grayscale(tensor, input_data_format=input_data_format)
+        return gray_tensor.numpy()
+
+    # PIL path
+    if isinstance(image, PIL.Image.Image):
+        return image.convert("L").convert("RGB")  # ensure 3 channels
+
+    return image"""
+
+
+def pil_resampling_to_interpolation(
+        mode: Union[PIL.Image.Resampling, F.InterpolationMode]
+) -> F.InterpolationMode:
+    """
+    Convert a PIL.Image.Resampling or torchvision InterpolationMode
+    to torchvision InterpolationMode.
+    Args:
+        mode: PIL.Image.Resampling, InterpolationMode
+
+    Returns:
+        InterpolationMode
+    """
+    # If it's already a torch InterpolationMode
+    if isinstance(mode, F.InterpolationMode):
+        return mode
+    if mode not in pil_torch_interpolation_mapping:
+        raise ValueError(f"Unsupported interpolation mode: {mode}")
+    return pil_torch_interpolation_mapping[mode]
+
 
 def validate_and_format_image_pairs(images: ImageInput):
     error_message = (
@@ -145,52 +182,14 @@ class SuperGlueImageProcessorFast(BaseImageProcessorFast):
     do_normalize = None
     do_convert_rgb = None
 
-    # Copied from transformers.models.superpoint.image_processing_superpoint.SuperPointImageProcessor.resize
-    def resize(
-            self,
-            image: np.ndarray,
-            size: dict[str, int],
-            data_format: Optional[Union[str, ChannelDimension]] = None,
-            input_data_format: Optional[Union[str, ChannelDimension]] = None,
-            **kwargs,
-    ):
-        """
-        Resize an image.
 
-        Args:
-            image (`np.ndarray`):
-                Image to resize.
-            size (`dict[str, int]`):
-                Dictionary of the form `{"height": int, "width": int}`, specifying the size of the output image.
-            data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format of the output image. If not provided, it will be inferred from the input
-                image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-        """
-        size = get_size_dict(size, default_to_square=False)
-
-        return resize(
-            image,
-            size=(size["height"], size["width"]),
-            data_format=data_format,
-            input_data_format=input_data_format,
-            **kwargs,
-        )
 
     def preprocess(
         self,
-        images,
+        images: ImageInput,
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
-        resample: Optional[PILImageResampling] = None,
+        resample: Optional[Union["PILImageResampling", "F.InterpolationMode"]] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_grayscale: Optional[bool] = None,
@@ -240,9 +239,10 @@ class SuperGlueImageProcessorFast(BaseImageProcessorFast):
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
-
         do_resize = do_resize if do_resize is not None else self.do_resize
         resample = resample if resample is not None else self.resample
+        resample = pil_resampling_to_interpolation(resample)
+
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         do_grayscale = do_grayscale if do_grayscale is not None else self.do_grayscale
@@ -259,7 +259,7 @@ class SuperGlueImageProcessorFast(BaseImageProcessorFast):
         validate_preprocess_arguments(
             do_resize=do_resize,
             size=size,
-            resample=resample,
+            interpolation=resample,
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,
         )
@@ -267,26 +267,26 @@ class SuperGlueImageProcessorFast(BaseImageProcessorFast):
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
-        if is_scaled_image(images[0]) and do_rescale:
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-            )
-
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(images[0])
 
         all_images = []
         for image in images:
+            deep_copy = torch.from_numpy(np.ascontiguousarray(image))
             if do_resize:
-                image = self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+                if input_data_format == ChannelDimension.LAST:
+                    deep_copy = deep_copy.permute(2, 0, 1)
+                deep_copy = self.resize(deep_copy, size=SizeDict(**size), interpolation=pil_resampling_to_interpolation(resample) )
+                if input_data_format == ChannelDimension.LAST:
+                    deep_copy = deep_copy.permute(1, 2, 0)
 
             if do_rescale:
-                image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                deep_copy = self.rescale(deep_copy, scale=rescale_factor, input_data_format=input_data_format)
 
             if do_grayscale:
-                image = convert_to_grayscale(image, input_data_format=input_data_format)
+                deep_copy = convert_to_grayscale(deep_copy, input_data_format=input_data_format)
+            image = deep_copy.numpy()
 
             image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
             all_images.append(image)
