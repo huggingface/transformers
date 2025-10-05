@@ -21,6 +21,7 @@ import re
 import subprocess
 from abc import ABC, abstractmethod
 from collections import Counter, defaultdict, deque
+from functools import partial
 from typing import Optional, Union
 
 import libcst as cst
@@ -1209,10 +1210,12 @@ class ModularFileMapper(ModuleMapper):
             return
         if m.matches(node.module, m.Attribute()):
             for imported_ in node.names:
-                _import = re.search(
-                    rf"(?:transformers\.models\.)|(?:\.\.\.models\.)|(?:\.\.)\w+\.({self.match_patterns}).*",
-                    import_statement,
-                )
+                if "modeling_all_models" in import_statement:
+                    _import = None
+                else:
+                    _import = re.search(
+                        rf"(?:transformers\.models\.)|(?:\.\.)\w+\.({self.match_patterns})_.*", import_statement
+                    )
                 if _import:
                     source = _import.group(1)
                     if source == "modeling" and "Config" in self.python_module.code_for_node(imported_):
@@ -1258,8 +1261,8 @@ class ModularFileMapper(ModuleMapper):
             elif m.matches(node, m.SimpleStatementLine(body=[m.ImportFrom()])):
                 import_module = self.python_module.code_for_node(node.body[0].module)
                 import_statement = "." * len(node.body[0].relative) + import_module
-                if not (
-                    re.search(rf"(?:transformers\.models\.)|(?:\.\.)\w+\.({self.match_patterns}).*", import_statement)
+                if "modeling_all_models" in import_statement or not (
+                    re.search(rf"(?:transformers\.models\.)|(?:\.\.)\w+\.({self.match_patterns})_.*", import_statement)
                     and not any(import_to_skip in import_statement for import_to_skip in IMPORTS_TO_SKIP_IN_MODULAR)
                 ):
                     self.imports.append(node)
@@ -1322,7 +1325,10 @@ class ModularFileMapper(ModuleMapper):
         # Note that we may visit several of the same file types, thus we save them per file type, not file
         self.imported_objects_per_file = defaultdict(set)
         for file, mapper in self.visited_modules.items():
-            file_type = re.search(rf"^transformers\.models\.\w+\.({self.match_patterns})", file).group(1)
+            if file.split(".")[-1] == "modeling_all_models":
+                file_type = "modeling"
+            else:
+                file_type = re.search(rf"^.*transformers\.models\.\w+\.({self.match_patterns})_.*", file).group(1)
             self.imported_objects_per_file[file_type].update(mapper.objects_imported_from_modeling)
 
     def merge_model_specific_imports(self, visited_modules):
@@ -1346,7 +1352,7 @@ class ModularFileMapper(ModuleMapper):
                             self.functions[dep] = visited_module.global_nodes[dep]
 
                 # Add/overwrite the imported functions to other visited modules as well, in case it is absent/different
-                # in he modeling source file of the inherited class. See `examples/modular-tranformers/modular_switch_function.py`
+                # in the modeling source file of the inherited class. See `examples/modular-tranformers/modular_switch_function.py`
                 # and `examples/modular-tranformers/modular_add_function.py` for examples
                 recursive_dependencies = visited_module.object_recursive_dependency_mapping.get(object_name, set())
                 node_recursive_dependencies_mapping = {
@@ -1619,7 +1625,11 @@ def get_class_node_and_dependencies(
     return nodes_to_add, file_type, new_imports
 
 
-def create_modules(modular_mapper: ModularFileMapper) -> dict[str, cst.Module]:
+def create_modules(
+        modular_mapper: ModularFileMapper,
+        file_path: str = None,
+        package_name: str = "transformers",
+    ) -> dict[str, cst.Module]:
     """Create all the new modules based on visiting the modular file. It replaces all classes as necessary."""
     files = defaultdict(dict)
     current_file_indices = defaultdict(lambda: 0)
@@ -1627,6 +1637,14 @@ def create_modules(modular_mapper: ModularFileMapper) -> dict[str, cst.Module]:
     # For each class defined in modular, potentially replace the node and add it with its dependencies
     for class_name, node in modular_mapper.classes.items():
         nodes_to_add, file_type, new_imports = get_class_node_and_dependencies(modular_mapper, class_name, node, files)
+
+
+        if package_name != "transformers":
+            # New imports involve new files like configuration_xxx.py, etc
+            # Those are imported with relative imports by default in the modeling file
+            # Since relative imports are Transformers imports at this point in the code, convert them to absolute imports from the source library (e.g. optimum-habana)
+            for key, new_import in new_imports.items():
+                new_imports[key] = new_import.with_changes(body=[convert_relative_import_to_absolute(import_node=new_import.body[0], file_path=file_path, package_name=package_name)])
 
         # Add the new potential new imports that we may need to the `modular_mapper` variable
         modular_mapper.imported_objects_per_file[file_type].update(new_imports.keys())
@@ -1666,11 +1684,167 @@ def create_modules(modular_mapper: ModularFileMapper) -> dict[str, cst.Module]:
     for file, body in files.items():
         new_body = [k[1]["node"] for k in sorted(body.items(), key=lambda x: x[1]["insert_idx"])]
         needed_imports = get_needed_imports(body, all_imports)
+
+        if package_name != "transformers":
+            # Convert all transformers relative imports to absolute ones
+            for imp in needed_imports:
+                if m.matches(imp, m.SimpleStatementLine(body=[m.ImportFrom()])):
+                    imp.body[0] = convert_relative_import_to_absolute(import_node=imp.body[0], file_path=file_path, package_name="transformers")
+
         full_module = needed_imports + new_body
         new_module = cst.Module(body=full_module, header=modular_mapper.python_module.header)
         files[file] = new_module
 
     return files
+
+
+def convert_relative_import_to_absolute(
+    import_node: cst.ImportFrom,
+    file_path: Optional[str],
+    package_name: str = "transformers",
+) -> cst.ImportFrom:
+    """
+    Convert a relative libcst.ImportFrom node into an absolute one,
+    using the file path and package name.
+
+    Args:
+        import_node: A relative import node (e.g. `from ..utils import helper`)
+        file_path: Path to the file containing the import (can be absolute or relative)
+        package_name: The top-level package name (e.g. 'myproject')
+
+    Returns:
+        A new ImportFrom node with the absolute import path
+    """
+    if not (import_node.relative and len(import_node.relative) > 0):
+        return import_node  # Already absolute
+
+    file_path = os.path.abspath(file_path)
+    rel_level = len(import_node.relative)
+
+    # Strip file extension and split into parts
+    file_path_no_ext = file_path[:-3] if file_path.endswith(".py") else file_path
+    file_parts = file_path_no_ext.split(os.path.sep)
+
+    # Ensure the file path includes the package name
+    if package_name not in file_parts:
+        raise ValueError(f"Package name '{package_name}' not found in file path '{file_path}'")
+
+    # Slice file_parts starting from the package name
+    pkg_index = file_parts.index(package_name)
+    module_parts = file_parts[pkg_index + 1:]  # e.g. ['module', 'submodule', 'foo']
+    if len(module_parts) < rel_level:
+        raise ValueError(f"Relative import level ({rel_level}) goes beyond package root.")
+
+    base_parts = module_parts[:-rel_level]
+
+    # Flatten the module being imported (if any)
+    def flatten_module(module: Optional[cst.BaseExpression]) -> list[str]:
+        if not module:
+            return []
+        if isinstance(module, cst.Name):
+            return [module.value]
+        elif isinstance(module, cst.Attribute):
+            parts = []
+            while isinstance(module, cst.Attribute):
+                parts.insert(0, module.attr.value)
+                module = module.value
+            if isinstance(module, cst.Name):
+                parts.insert(0, module.value)
+            return parts
+        return []
+
+    import_parts = flatten_module(import_node.module)
+
+    # Combine to get the full absolute import path
+    full_parts = [package_name] + base_parts + import_parts
+
+    # Handle special case where the import comes from a namespace package (e.g. optimum with `optimum.habana`, `optimum.intel` instead of `src.optimum`)
+    if package_name != "transformers" and file_parts[pkg_index - 1] != "src":
+        full_parts = [file_parts[pkg_index - 1]] + full_parts
+
+    # Build the dotted module path
+    dotted_module: Optional[cst.BaseExpression] = None
+    for part in full_parts:
+        name = cst.Name(part)
+        dotted_module = name if dotted_module is None else cst.Attribute(value=dotted_module, attr=name)
+
+    # Return a new ImportFrom node with absolute import
+    return import_node.with_changes(module=dotted_module, relative=[])
+
+
+def convert_to_relative_import(import_node: cst.ImportFrom, file_path: str, package_name: str) -> cst.ImportFrom:
+    """
+    Convert an absolute import to a relative one if it belongs to `package_name`.
+
+    Parameters:
+    - node: The ImportFrom node to possibly transform.
+    - file_path: Absolute path to the file containing the import (e.g., '/path/to/mypackage/foo/bar.py').
+    - package_name: The top-level package name (e.g., 'mypackage').
+
+    Returns:
+    - A possibly modified ImportFrom node.
+    """
+    if import_node.relative:
+        return import_node  # Already relative import
+
+    # Extract module name string from ImportFrom
+    def get_module_name(module):
+        if isinstance(module, cst.Name):
+            return module.value, [module.value]
+        elif isinstance(module, cst.Attribute):
+            parts = []
+            while isinstance(module, cst.Attribute):
+                parts.append(module.attr.value)
+                module = module.value
+            if isinstance(module, cst.Name):
+                parts.append(module.value)
+            parts.reverse()
+            return ".".join(parts), parts
+        return "", None
+
+    module_name, submodule_list = get_module_name(import_node.module)
+
+    # Check if it's from the target package
+    if not (module_name.startswith(package_name + ".") or module_name.startswith("optimum." + package_name + ".")) and module_name != package_name:
+        return import_node  # Not from target package
+
+    # Locate the package root inside the file path
+    norm_file_path = os.path.normpath(file_path)
+    parts = norm_file_path.split(os.sep)
+
+    try:
+        pkg_index = parts.index(package_name)
+    except ValueError:
+        # Package name not found in path — assume we can't resolve relative depth
+        return import_node
+
+    # Depth is how many directories after the package name before the current file
+    depth = len(parts) - pkg_index - 1  # exclude the .py file itself
+    for i, submodule in enumerate(parts[pkg_index + 1:]):
+        if submodule == submodule_list[2+i]:
+            depth -= 1
+        else:
+            break
+
+    # Create the correct number of dots
+    relative = [cst.Dot()] * depth if depth > 0 else [cst.Dot()]
+
+    # Strip package prefix from import module path
+    if module_name.startswith("optimum." + package_name + "."):
+        stripped_name = module_name[len("optimum." + package_name):].lstrip(".")
+    else:
+        stripped_name = module_name[len(package_name):].lstrip(".")
+
+    # Build new module node
+    if stripped_name == "":
+        new_module = None
+    else:
+        name_parts = stripped_name.split(".")[i:]
+        new_module = cst.Name(name_parts[0])
+        for part in name_parts[1:]:
+            new_module = cst.Attribute(value=new_module, attr=cst.Name(part))
+
+    return import_node.with_changes(module=new_module, relative=relative)
 
 
 def run_ruff(code, check=False):
@@ -1683,7 +1857,7 @@ def run_ruff(code, check=False):
     return stdout.decode()
 
 
-def convert_modular_file(modular_file: str) -> dict[str, str]:
+def convert_modular_file(modular_file: str, source_library: str = "transformers") -> dict[str, str]:
     """Convert a `modular_file` into all the different model-specific files it depicts."""
     pattern = re.search(r"modular_(.*)(?=\.py$)", modular_file)
     output = {}
@@ -1693,15 +1867,44 @@ def convert_modular_file(modular_file: str) -> dict[str, str]:
         with open(modular_file, "r", encoding="utf-8") as file:
             code = file.read()
         module = cst.parse_module(code)
+
+        # Get relative path starting from src/transformers/
+        if source_library != "transformers":
+            relative_path = os.path.abspath(modular_file).replace("\\", "/")
+        else:
+            relative_path = re.search(
+                r"(src/transformers/.*|examples/.*)", os.path.abspath(modular_file).replace("\\", "/")
+            )
+            if relative_path is None:
+                raise ValueError(
+                    f"Cannot find the relative path of {modular_file} inside this `transformers` repository. If this modular file is located in another repository and you would like to generate the modeling file there, use the `--external` flag."
+                )
+            relative_path = relative_path.group(1)
+
+        # Convert all source library relative imports to absolute ones
+        if source_library != "transformers":
+            class AbsoluteImportTransformer(cst.CSTTransformer):
+                def leave_ImportFrom(self, original_node: cst.ImportFrom, updated_node: cst.ImportFrom) -> cst.ImportFrom:
+                    return convert_relative_import_to_absolute(
+                        import_node=updated_node,
+                        file_path=relative_path,
+                        package_name=source_library
+                    )
+            module = module.visit(AbsoluteImportTransformer())
+
         wrapper = MetadataWrapper(module)
         cst_transformers = ModularFileMapper(module, model_name)
         wrapper.visit(cst_transformers)
-        for file, module in create_modules(cst_transformers).items():
+        for file, module in create_modules(cst_transformers, file_path=relative_path, package_name=source_library).items():
             if module != {}:
-                # Get relative path starting from src/transformers/
-                relative_path = re.search(
-                    r"(src/transformers/.*|examples/.*)", os.path.abspath(modular_file).replace("\\", "/")
-                ).group(1)
+                class RelativeImportTransformer(cst.CSTTransformer):
+                    def leave_ImportFrom(self, original_node, updated_node):
+                        return convert_to_relative_import(
+                            updated_node,
+                            relative_path,
+                            source_library,
+                        )
+                module = module.visit(RelativeImportTransformer())
 
                 header = AUTO_GENERATED_MESSAGE.format(
                     relative_path=relative_path, short_name=os.path.basename(relative_path)
@@ -1727,10 +1930,10 @@ def save_modeling_files(modular_file: str, converted_files: dict[str, str]):
             f.write(converted_files[file_type])
 
 
-def run_converter(modular_file: str):
+def run_converter(modular_file: str, source_library: str = "transformers"):
     """Convert a modular file, and save resulting files."""
     print(f"Converting {modular_file} to a single model single file format")
-    converted_files = convert_modular_file(modular_file)
+    converted_files = convert_modular_file(modular_file, source_library=source_library)
     save_modeling_files(modular_file, converted_files)
 
 
@@ -1757,6 +1960,12 @@ if __name__ == "__main__":
         default=-1,
         type=int,
         help="The number of workers to use. Default is -1, which means the number of CPU cores.",
+    )
+    parser.add_argument(
+        "--source-library",
+        type=str,
+        default="transformers",
+        help="The top-level package name (default: 'transformers')",
     )
     args = parser.parse_args()
     # Both arg represent the same data, but as positional and optional
@@ -1792,4 +2001,4 @@ if __name__ == "__main__":
         # Process files with diff
         workers = min(num_workers, len(dependency_level_files))
         with mp.Pool(workers) as pool:
-            pool.map(run_converter, dependency_level_files)
+            pool.map(partial(run_converter, source_library=args.source_library), dependency_level_files)
