@@ -22,7 +22,7 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 
-from transformers import PreTrainedModel, add_start_docstrings
+from transformers import PreTrainedModel
 from transformers.activations import get_activation
 from transformers.modeling_outputs import (
     BaseModelOutput,
@@ -32,221 +32,16 @@ from transformers.modeling_outputs import (
     SequenceClassifierOutput,
 )
 from transformers.models.beit3.configuration_beit3 import Beit3Config
-from transformers.utils import ModelOutput, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from transformers.utils import ModelOutput, logging
+
+from ...utils import auto_docstring
 
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "Beit3Config"
-
-
-BEIT3_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`Beit3Config`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-BEIT3_MODEL = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`, *optional*):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`BeitImageProcessor.__call__`] for details.
-        attention_mask (`torch.LongTensor` of shape `({0})`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the token is **not masked**,
-            - 0 indicates the token is **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        image_text_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
-            Mask to avoid performing attention on image-text tokens. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-        vision_masked_position (`torch.LongTensor` of shape pixel_values, *optional*):
-            Padding mask for input tokens , of same shape as `pixel_values`
-
-            - 1 indicates the token is **not masked**,
-            - 0 indicates the token is **masked**.
-        past_key_values (`Tuple`, *optional*):
-            A Tuple containing the incremental states layerwise.This can be used to when generating next token in
-            case of image captioning.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-BEIT3_FOR_VISUAL_REASONING_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `({0})`):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, 2, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained by combining two images after preprocessing using
-             [`AutoImageProcessor`]. See [`BeitImageProcessor.__call__`] for details. Use torch.cat with two images,
-             with dim=1.
-        attention_mask (`torch.LongTensor` of shape `({0})`,*optional*):
-            Padding mask for input tokens , of same shape as `input_ids`
-            - 1 indicates the token is **not masked**,
-            - 0 indicates the token is **masked**.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. A classification loss is computed (Cross-Entropy) against these labels.
-"""
-
-
-BEIT3_FOR_IMAGE_CLASSIFICATION_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`BeitImageProcessor.__call__`] for details.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the classification loss. Indices should be in `[0, ..., config.num_labels - 1]`. A
-            classification loss is computed (Cross-Entropy) against these labels.
-"""
-
-
-BEIT3_FOR_CAPTIONING_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `({0})`):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`BeitImageProcessor.__call__`] for details.
-        attention_mask (`torch.LongTensor` of shape `({0})`, *optional*):
-            Padding mask for input tokens , of same shape as `input_ids`
-
-            - 1 indicates the token is **not masked**,
-            - 0 indicates the token is **masked**.
-        language_masked_pos (`torch.LongTensor` of shape `({0})`, *optional*):
-            language_masked_pos for denoting tokens for captioning
-
-            - 1 indicates the token is **present**,
-            - 0 indicates the token is **absent**.
-        text_len (`torch.LongTensor` of shape `({0})`, *optional*):
-            Length of text for captioning, this is the length of the final caption to be generated, includes the
-            input_ids and tokens marked as 64001 (token id marked as to be filled).
-        past_key_values (`Tuple`, *optional*):
-            A Tuple containing the incremental states layerwise
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the classification loss. Indices should be in `[0, ..., config.num_labels - 1]`. A
-            classification loss is computed (Cross-Entropy) against these labels.
-"""
-
-
-BEIT3_FOR_VQA_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `({0})`):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details. [What are input IDs?](../glossary#input-ids)
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`BeitImageProcessor.__call__`] for details.
-        attention_mask (`torch.LongTensor` of shape `({0})`, *optional*):
-            Padding mask for input tokens , of same shape as `input_ids`
-
-            - 1 indicates the token is **not masked**,
-            - 0 indicates the token is **masked**.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the classification loss. Indices should be in `[0, ..., config.num_labels - 1]`. A
-            classification loss is computed (Cross-Entropy) against these labels.
-"""
-
-
-BEIT3_FOR_TEXT_RETRIEVAL_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `({0})`):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`BeitImageProcessor.__call__`] for details.
-        attention_mask (`torch.LongTensor` of shape `({0})`, *optional*):
-            Padding mask for input tokens , of same shape as `input_ids`
-
-            - 1 indicates the token is **not masked**,
-            - 0 indicates the token is **masked**.
-        return_loss (`bool`, *optional*):
-            Whether or not to return the contrastive loss.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
 
 @dataclass
+@auto_docstring
 # Copied from transformers.models.clip.modeling_clip.CLIPOutput with CLIPTextModel->Beit3Model, CLIPVisionModel->Beit3Model, CLIP->Beit3ImageTextMatching
 class Beit3ImageTextMatchingOutput(ModelOutput):
     r"""
@@ -754,16 +549,13 @@ class Beit3PreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
 
-@add_start_docstrings(
-    """BEiT-3 is a general-purpose multimodal foundation model that excels in both vision and vision-language tasks. It
+@auto_docstring(
+    custom_intro="""
+    BEiT-3 is a general-purpose multimodal foundation model that excels in both vision and vision-language tasks. It
         utilizes [Multiway transformers] (https://arxiv.org/abs/2208.10442) for deep fusion and modality-specific
         encoding, and unifies masked modeling on images, texts, and image-text pairs, achieving top performance on
-        multiple benchmarks.""",
-    BEIT3_START_DOCSTRING,
+        multiple benchmarks.
     """
-        add_pooling_layer (`bool`, *optional*, defaults to `False`):
-                Whether or not to add a pooling layer on top of the encoder.
-    """,
 )
 class Beit3Model(Beit3PreTrainedModel):
     def __init__(self, config, add_pooling_layer=False):
@@ -786,8 +578,7 @@ class Beit3Model(Beit3PreTrainedModel):
     def get_num_layers(self):
         return self.encoder.num_layers
 
-    @add_start_docstrings_to_model_forward(BEIT3_MODEL)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -801,8 +592,6 @@ class Beit3Model(Beit3PreTrainedModel):
         return_dict: Optional[torch.LongTensor] = None,
     ):
         r"""
-        Returns:
-
         Examples:
 
         ```python
@@ -887,10 +676,11 @@ class Beit3Model(Beit3PreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """Beit3ForImagesAndTextClassification with a MLP head on top of Beit3Model, for images and text classification tasks
-    such as NLVR2""",
-    BEIT3_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    Beit3ForImagesAndTextClassification with a MLP head on top of Beit3Model, for images and text classification tasks
+    such as NLVR2
+    """
 )
 class Beit3ForImagesAndTextClassification(Beit3PreTrainedModel):
     def __init__(self, config):
@@ -899,8 +689,7 @@ class Beit3ForImagesAndTextClassification(Beit3PreTrainedModel):
         self.classifier = Beit3MLP(config)
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(BEIT3_FOR_VISUAL_REASONING_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor,
@@ -993,11 +782,12 @@ class Beit3ForImagesAndTextClassification(Beit3PreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """Beit3ForImageClassification has a Linear head on top of Beit3Model for classification. Beit3 is a multimodal
+@auto_docstring(
+    custom_intro="""
+    Beit3ForImageClassification has a Linear head on top of Beit3Model for classification. Beit3 is a multimodal
     foundation model, The key idea in BEiT-3 is to model images as another language. Beit3 uses multiway Transformers
-    architecture which uses a shared self-attention module.""",
-    BEIT3_START_DOCSTRING,
+    architecture which uses a shared self-attention module.
+    """
 )
 class Beit3ForImageClassification(Beit3PreTrainedModel):
     main_input_name = "pixel_values"
@@ -1011,8 +801,7 @@ class Beit3ForImageClassification(Beit3PreTrainedModel):
         self.num_labels = config.num_labels
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(BEIT3_FOR_IMAGE_CLASSIFICATION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=ImageClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1022,8 +811,6 @@ class Beit3ForImageClassification(Beit3PreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
     ) -> Union[tuple[Any], ImageClassifierOutput]:
         r"""
-        Returns:
-
         Examples:
 
         ```python
@@ -1096,11 +883,12 @@ class Beit3ForImageClassification(Beit3PreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """Beit3ForCaptioning has a linear head on top of Beit3Model for image captioning. BEiT-3 is a multimodal
+@auto_docstring(
+    custom_intro="""
+    Beit3ForCaptioning has a linear head on top of Beit3Model for image captioning. BEiT-3 is a multimodal
     foundation model, The key idea in BEiT-3 is to model images as another language. Beit3 uses multiway Transformers
-    architecture which uses a shared self-attention module.""",
-    BEIT3_START_DOCSTRING,
+    architecture which uses a shared self-attention module.
+    """
 )
 class Beit3ForCaptioning(Beit3PreTrainedModel):
     def __init__(self, config):
@@ -1111,8 +899,7 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
 
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(BEIT3_FOR_CAPTIONING_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor,
@@ -1127,8 +914,6 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
     ):
         r"""
-        Returns:
-
         Examples:
 
         ```python
@@ -1228,11 +1013,12 @@ class Beit3Pooler(nn.Module):
         return pooled_output
 
 
-@add_start_docstrings(
-    """BEiT-3 model with a linear head on top for visual question answering. BEiT-3 is a
+@auto_docstring(
+    custom_intro="""
+    BEiT-3 model with a linear head on top for visual question answering. BEiT-3 is a
     multimodal foundation model. The key idea in BEiT-3 is to model images as another language. Beit3 uses a multiway
-    Transformers architecture which uses a shared self-attention module.""",
-    BEIT3_START_DOCSTRING,
+    Transformers architecture which uses a shared self-attention module.
+    """
 )
 class Beit3ForQuestionAnswering(Beit3PreTrainedModel):
     def __init__(self, config):
@@ -1249,8 +1035,7 @@ class Beit3ForQuestionAnswering(Beit3PreTrainedModel):
         )
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(BEIT3_FOR_VQA_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids,
@@ -1262,8 +1047,6 @@ class Beit3ForQuestionAnswering(Beit3PreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
     ) -> Union[tuple[Any], SequenceClassifierOutput]:
         r"""
-        Returns:
-
         Examples:
 
         ```python
@@ -1335,9 +1118,10 @@ def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
     return (caption_loss + image_loss) / 2.0
 
 
-@add_start_docstrings(
-    """BEiT-3 Transformer model with language and image classifier heads on top for image-text retrieval.""",
-    BEIT3_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    BEiT-3 Transformer model with language and image classifier heads on top for image-text retrieval.
+    """
 )
 class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
     def __init__(self, config):
@@ -1349,8 +1133,7 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
         self.logit_scale = nn.Parameter(torch.ones([]) * config.logit_scale_init_value)
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(BEIT3_FOR_TEXT_RETRIEVAL_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Beit3ImageTextMatchingOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor,
@@ -1362,8 +1145,6 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[Any], Beit3ImageTextMatchingOutput]:
         r"""
-        Returns:
-
         Examples:
 
         ```python
