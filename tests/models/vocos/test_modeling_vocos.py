@@ -148,7 +148,7 @@ class VocosModelTest(ModelTesterMixin, unittest.TestCase):
                     "dwconv.weight",
                     "pwconv1.weight",
                     "pwconv2.weight",
-                    "out_proj.weight",
+                    "out.weight",
                 ]
                 if param.requires_grad:
                     if any(x in name for x in uniform_init_parms):

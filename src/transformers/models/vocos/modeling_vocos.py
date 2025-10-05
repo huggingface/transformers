@@ -126,7 +126,7 @@ class VocosBackbone(nn.Module):
             hidden_states = layer(hidden_states, bandwidth_id)
         hidden_states = self.final_layer_norm(hidden_states.transpose(1, 2))
         return hidden_states
-    
+
 
 class VocosISTFT(nn.Module):
     """
