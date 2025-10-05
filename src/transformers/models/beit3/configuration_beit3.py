@@ -75,7 +75,7 @@ class Beit3Config(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import BeitConfig, Beit3Model
+    >>> from transformers import Beit3Config, Beit3Model
 
     >>> # Initializing a BEiT3 beit3-base-patch16-224-pt22k style configuration
     >>> configuration = Beit3Config()
@@ -134,3 +134,6 @@ class Beit3Config(PretrainedConfig):
 
         self.logit_scale_init_value = logit_scale_init_value
         self.layer_norm_eps = layer_norm_eps
+
+
+__all__ = ["Beit3Config"]

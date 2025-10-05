@@ -1445,3 +1445,14 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
             text_model_output=text_outputs,
             vision_model_output=vision_outputs,
         )
+
+
+__all__ = [
+    "Beit3PreTrainedModel",
+    "Beit3Model",
+    "Beit3ForImagesAndTextClassification",
+    "Beit3ForImageClassification",
+    "Beit3ForCaptioning",
+    "Beit3ForQuestionAnswering",
+    "Beit3ForImageTextRetrieval",
+]
