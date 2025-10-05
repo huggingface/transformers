@@ -490,3 +490,22 @@ class HfArgumentParserTest(unittest.TestCase):
         parser = HfArgumentParser(TrainingArguments)
         training_args = parser.parse_args_into_dataclasses()[0]
         self.assertEqual(training_args.accelerator_config.gradient_accumulation_kwargs["num_steps"], 2)
+
+    def test_17_union_dict_str_parsing(self):
+        """Test that Union[dict, str] fields can accept JSON strings from CLI"""
+        @dataclass
+        class ArgsWithDictOrStr:
+            output_dir: str = "."
+            dict_or_str_field: Optional[Union[dict, str]] = None
+
+        parser = HfArgumentParser(ArgsWithDictOrStr)
+
+        # Test with JSON string input
+        args = parser.parse_args_into_dataclasses(["--dict-or-str-field", '{"min_lr": 1e-06}'])[0]
+        self.assertEqual(args.dict_or_str_field, '{"min_lr": 1e-06}')
+        self.assertIsInstance(args.dict_or_str_field, str)
+
+        # Test with regular string input
+        args = parser.parse_args_into_dataclasses(["--dict-or-str-field", "some_string"])[0]
+        self.assertEqual(args.dict_or_str_field, "some_string")
+        self.assertIsInstance(args.dict_or_str_field, str)

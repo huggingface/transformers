@@ -176,14 +176,37 @@ class HfArgumentParser(ArgumentParser):
                     f" Problem encountered in field '{field.name}'."
                 )
             if type(None) not in field.type.__args__:
-                # filter `str` in Union
-                field.type = field.type.__args__[0] if field.type.__args__[1] is str else field.type.__args__[1]
+                # filter `str` in Union, but keep str if the other type is dict (since dict needs str input)
+                non_str_type = field.type.__args__[0] if field.type.__args__[1] is str else field.type.__args__[1]
+                # Check if non_str_type is dict or dict[...]
+                non_str_origin = getattr(non_str_type, "__origin__", non_str_type)
+                if non_str_origin is dict:
+                    # Keep str as the type for dict fields, as argparse needs string input
+                    field.type = str
+                else:
+                    field.type = non_str_type
                 origin_type = getattr(field.type, "__origin__", field.type)
             elif bool not in field.type.__args__:
                 # filter `NoneType` in Union (except for `Union[bool, NoneType]`)
-                field.type = (
+                non_none_type = (
                     field.type.__args__[0] if isinstance(None, field.type.__args__[1]) else field.type.__args__[1]
                 )
+                # Check if non_none_type is Union[dict, str] - if so, use str
+                non_none_origin = getattr(non_none_type, "__origin__", non_none_type)
+                if non_none_origin is Union or (hasattr(types, "UnionType") and isinstance(non_none_origin, types.UnionType)):
+                    # This is Optional[Union[dict, str]] - check if it contains dict
+                    if str in non_none_type.__args__:
+                        other_type = non_none_type.__args__[0] if non_none_type.__args__[1] is str else non_none_type.__args__[1]
+                        other_origin = getattr(other_type, "__origin__", other_type)
+                        if other_origin is dict:
+                            # Keep str as the type for dict fields
+                            field.type = str
+                        else:
+                            field.type = non_none_type
+                    else:
+                        field.type = non_none_type
+                else:
+                    field.type = non_none_type
                 origin_type = getattr(field.type, "__origin__", field.type)
 
         # A variable to store kwargs for a boolean field, if needed
