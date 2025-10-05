@@ -1370,6 +1370,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
+        logits_to_keep: Optional[int] = None,  
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.Tensor], SequenceClassifierOutput]:
         r"""
@@ -1377,6 +1378,10 @@ class BertForSequenceClassification(BertPreTrainedModel):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        logits_to_keep (`int`, *optional*):
+            Number of logits to keep from the end of the sequence. If specified, only the last `logits_to_keep`
+            logits will be computed, which can save memory during generation. This is particularly useful when
+            only the final token's predictions are needed.
         """
         outputs = self.bert(
             input_ids,
@@ -1390,6 +1395,11 @@ class BertForSequenceClassification(BertPreTrainedModel):
         )
 
         pooled_output = outputs[1]
+
+        if logits_to_keep is not None:
+            # Get the sequence output (first element contains all hidden states)
+            sequence_output = outputs[0][:, -logits_to_keep:, :]
+            pooled_output = sequence_output[:, 0]
 
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
@@ -1423,8 +1433,6 @@ class BertForSequenceClassification(BertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-
 @auto_docstring
 class BertForMultipleChoice(BertPreTrainedModel):
     def __init__(self, config):
