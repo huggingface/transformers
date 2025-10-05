@@ -493,6 +493,7 @@ class HfArgumentParserTest(unittest.TestCase):
 
     def test_17_union_dict_str_parsing(self):
         """Test that Union[dict, str] fields can accept JSON strings from CLI"""
+
         @dataclass
         class ArgsWithDictOrStr:
             output_dir: str = "."

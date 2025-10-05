@@ -193,10 +193,16 @@ class HfArgumentParser(ArgumentParser):
                 )
                 # Check if non_none_type is Union[dict, str] - if so, use str
                 non_none_origin = getattr(non_none_type, "__origin__", non_none_type)
-                if non_none_origin is Union or (hasattr(types, "UnionType") and isinstance(non_none_origin, types.UnionType)):
+                if non_none_origin is Union or (
+                    hasattr(types, "UnionType") and isinstance(non_none_origin, types.UnionType)
+                ):
                     # This is Optional[Union[dict, str]] - check if it contains dict
                     if str in non_none_type.__args__:
-                        other_type = non_none_type.__args__[0] if non_none_type.__args__[1] is str else non_none_type.__args__[1]
+                        other_type = (
+                            non_none_type.__args__[0]
+                            if non_none_type.__args__[1] is str
+                            else non_none_type.__args__[1]
+                        )
                         other_origin = getattr(other_type, "__origin__", other_type)
                         if other_origin is dict:
                             # Keep str as the type for dict fields
