@@ -200,19 +200,15 @@ class VocosModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @unittest.skip(reason="VocosModel does not output any loss term in the forward pass")
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @unittest.skip(reason="VocosModel does not output any loss term in the forward pass")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="The VocosModel does not have the usual `attention` logic")
+    @unittest.skip(reason="VocosModel has no attention layers")
     def test_torchscript_output_attentions(self):
         pass
 
@@ -220,7 +216,7 @@ class VocosModelTest(ModelTesterMixin, unittest.TestCase):
     def test_can_load_with_meta_device_context_manager(self):
         pass
 
-    @unittest.skip(reason="The VocosModel does not have the usual `hidden_states` logic")
+    @unittest.skip(reason="The VocosModel does not have `hidden_states`")
     def test_torchscript_output_hidden_state(self):
         pass
 
