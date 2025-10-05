@@ -75,7 +75,6 @@ def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
     try:
         if torch.allclose(a, b, atol=atol):
             return True
-        raise
     except Exception:
         msg = f"{a} != {b}"
         if prefix:

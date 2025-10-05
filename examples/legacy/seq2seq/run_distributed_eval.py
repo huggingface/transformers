@@ -252,8 +252,7 @@ def gather_results_from_each_node(num_replicas, save_dir, timeout) -> list[dict[
             return json_data
         except JSONDecodeError:
             continue
-    else:
-        raise TimeoutError("Rank 0 gave up on waiting for other processes")
+    raise TimeoutError("Rank 0 gave up on waiting for other processes")
     # Unreachable
 
 
