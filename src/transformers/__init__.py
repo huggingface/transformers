@@ -776,6 +776,9 @@ if TYPE_CHECKING:
     from .utils.quantization_config import TorchAoConfig as TorchAoConfig
     from .utils.quantization_config import VptqConfig as VptqConfig
     from .video_processing_utils import BaseVideoProcessor as BaseVideoProcessor
+    from .models.deimv2.configuration_deimv2 import Deimv2Config
+    from .models.deimv2.image_processing_deimv2 import Deimv2ImageProcessor
+    from .models.deimv2.modeling_deimv2 import Deimv2ForObjectDetection
 
 else:
     import sys
