@@ -374,9 +374,10 @@ class JetMoeDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: JetMoeConfig, layer_idx: Optional[int] = None):
         super().__init__(config, layer_idx)
         self.input_layernorm = JetMoeRMSNorm(config.hidden_size)
-        self.self_attn = JetMoeAttention(config, layer_idx)
+        self.self_attention = JetMoeAttention(config, layer_idx)
         self.post_attention_layernorm = JetMoeRMSNorm(config.hidden_size)
         self.mlp = JetMoeMoE(config)
+        del self.self_attn
 
     def forward(
         self,
@@ -392,7 +393,7 @@ class JetMoeDecoderLayer(LlamaDecoderLayer):
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
         # Self Attention
-        hidden_states, _, _ = self.self_attn(
+        hidden_states, _, _ = self.self_attention(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,

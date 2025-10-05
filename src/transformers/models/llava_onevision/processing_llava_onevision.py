@@ -42,7 +42,6 @@ class LlavaOnevisionProcessorKwargs(ProcessingKwargs, total=False):
             "return_mm_token_type_ids": False,
         },
         "image_kwargs": {},
-        "videos_kwargs": {},
     }
 
 
@@ -114,7 +113,6 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        audio=None,
         videos: Optional[VideoInput] = None,
         **kwargs: Unpack[LlavaOnevisionProcessorKwargs],
     ) -> BatchFeature:

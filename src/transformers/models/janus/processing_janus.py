@@ -81,8 +81,6 @@ class JanusProcessor(ProcessorMixin):
         self,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         images: Optional[ImageInput] = None,
-        videos=None,
-        audio=None,
         **kwargs: Unpack[JanusProcessorKwargs],
     ) -> BatchFeature:
         """
