@@ -491,7 +491,7 @@ precision of 0.001! Since it is normal that the exact same model written
 in different libraries can give a slightly different output depending on
 the library framework, we accept an error tolerance of 1e-3 (0.001). It
 is not enough if the model gives nearly the same output, they have to be
-the almost identical. Therefore, you will certainly compare the
+almost identical. Therefore, you will certainly compare the
 intermediate outputs of the 🤗 Transformers version multiple times
 against the intermediate outputs of the original implementation of
 *[camelcase name of model]* in which case an **efficient** debugging environment
