@@ -1054,7 +1054,10 @@ class TrainingArguments:
         },
     )
     tpu_num_cores: Optional[int] = field(
-        default=None, metadata={"help": "This argument is deprecated and will be removed in v5.2. Please use `TPU_NUM_DEVICES` instead. By default, we will use all available devices. "}
+        default=None,
+        metadata={
+            "help": "This argument is deprecated and will be removed in v5.2. Please use `TPU_NUM_DEVICES` instead. By default, we will use all available devices. "
+        },
     )
     debug: Union[str, list[DebugOption]] = field(
         default="",
@@ -1913,11 +1916,12 @@ class TrainingArguments:
 
         if isinstance(self.include_num_input_tokens_seen, bool):
             self.include_num_input_tokens_seen = "all" if self.include_num_input_tokens_seen else "no"
-        
-        
+
         if self.tpu_num_cores is not None:
-            logger.warning("This argument is deprecated and will be removed in v5.2. Please use `TPU_NUM_DEVICES` instead. By default, we will use all available devices.")
-            
+            logger.warning(
+                "This argument is deprecated and will be removed in v5.2. Please use `TPU_NUM_DEVICES` instead. By default, we will use all available devices."
+            )
+
     def __str__(self):
         self_as_dict = asdict(self)
 
