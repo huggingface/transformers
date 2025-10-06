@@ -1835,7 +1835,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         # fmt: off
         EXPECTED_XPU = [
                 {
-                    'text': ' Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.', 
+                    'text': ' Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.',
                     'timestamp': (0.0, 6.38),
                 },
                 {
@@ -1845,7 +1845,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
                 {
                     'text': ' He tells us that at this festive season of the year,',
                     'timestamp': (11.32, 15.0),
-                }, 
+                },
                 {
                     'text': ' With Christmas and roast beef looming before us, similes drawn from eating and its results',
                     'timestamp': (30.0, 36.76),
