@@ -131,6 +131,11 @@ class ReformerDynamicCache:
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         return None
 
+    def get_start_idx(self) -> int:
+        if len(self) == 0:
+            return 0
+        return self.states_cache[0].shape[1]
+
     def reorder_cache(self, beam_idx):
         for layer_idx in len(self):
             if self.buckets_cache[layer_idx] is not None and self.buckets_cache[layer_idx].numel() > 0:
@@ -1961,7 +1966,7 @@ class ReformerModel(ReformerPreTrainedModel):
         position_ids: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         num_hashes: Optional[int] = None,
-        past_buckets_states: Optional[list[tuple[torch.Tensor]]] = None,
+        past_buckets_states: Optional[ReformerDynamicCache] = None,
         use_cache: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1982,7 +1987,7 @@ class ReformerModel(ReformerPreTrainedModel):
             the default defined in `config.num_hashes`.
 
             For more information, see `num_hashes` in [`ReformerConfig`].
-        past_buckets_states (`list[tuple(torch.LongTensor, torch.FloatTensor)]`, *optional*):
+        past_buckets_states (`ReformerDynamicCache`, *optional*):
             List of `tuple(torch.LongTensor, torch.FloatTensor` of length `config.n_layers`, with the first element
             being the previous *buckets* of shape `(batch_size, num_heads, num_hashes, sequence_length)`) and the
             second being the previous *hidden_states* of shape `(batch_size, sequence_length, hidden_size)`).
@@ -2052,10 +2057,7 @@ class ReformerModel(ReformerPreTrainedModel):
             )
 
         # start index for position encoding depends on incremental decoding
-        if past_buckets_states is not None:
-            start_idx_pos_encodings = past_buckets_states[0][1].shape[1]
-        else:
-            start_idx_pos_encodings = 0
+        start_idx_pos_encodings = past_buckets_states.get_start_idx() if past_buckets_states is not None else 0
 
         embedding_output = self.embeddings(
             input_ids=input_ids,
