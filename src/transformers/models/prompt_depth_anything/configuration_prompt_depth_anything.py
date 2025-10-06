@@ -26,18 +26,18 @@ from ..auto.configuration_auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class PromptDepthAnythingConfig(PretrainedConfig):
+class PromptDepthAnythingConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PromptDepthAnythingModel`]. It is used to instantiate a PromptDepthAnything
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the PromptDepthAnything
     [LiheYoung/depth-anything-small-hf](https://huggingface.co/LiheYoung/depth-anything-small-hf) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        backbone_config (`Union[dict[str, Any], PretrainedConfig]`, *optional*):
+        backbone_config (`Union[dict[str, Any], PreTrainedConfig]`, *optional*):
             The configuration of the backbone model. Only used in case `is_hybrid` is `True` or in case you want to
             leverage the [`AutoBackbone`] API.
         backbone (`str`, *optional*):

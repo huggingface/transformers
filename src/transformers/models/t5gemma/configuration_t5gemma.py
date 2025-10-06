@@ -21,17 +21,17 @@
 # limitations under the License.
 from typing import Any, Optional, Union
 
-from ...configuration_utils import PretrainedConfig, layer_type_validation
+from ...configuration_utils import PreTrainedConfig, layer_type_validation
 
 
-class T5GemmaModuleConfig(PretrainedConfig):
+class T5GemmaModuleConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`T5GemmaModuleModel`]. It is used to instantiate an T5GemmaModule
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the T5GemmaModule-7B.
     e.g. [google/t5_gemma_module-7b](https://huggingface.co/google/t5_gemma_module-7b)
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 256000):
@@ -182,7 +182,7 @@ class T5GemmaModuleConfig(PretrainedConfig):
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
 
-class T5GemmaConfig(PretrainedConfig):
+class T5GemmaConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`T5GemmaModel`]. It is used to instantiate an T5Gemma
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -193,8 +193,8 @@ class T5GemmaConfig(PretrainedConfig):
     >>> t5gemma_config = T5GemmaConfig.from_pretrained("google/t5gemma-2b-2b-prefixlm-it")
     >>> model = T5GemmaModel(t5gemma_config)
     ```
-    Configuration objects inherit from [PretrainedConfig] and can be used to control the model outputs. Read the
-    documentation from [PretrainedConfig] for more information.
+    Configuration objects inherit from [PreTrainedConfig] and can be used to control the model outputs. Read the
+    documentation from [PreTrainedConfig] for more information.
     Args:
         encoder (`Union[T5GemmaModuleConfig, dict]`, optional, *optional*):
             Configuration for the encoder.
@@ -213,7 +213,7 @@ class T5GemmaConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 256000):
             Vocabulary size of the T5Gemma model (the same as Gemma 2).
         kwargs (additional keyword arguments, optional, *optional*):
-            Will be passed to the PretrainedConfig base class.
+            Will be passed to the PreTrainedConfig base class.
     """
 
     model_type = "t5gemma"

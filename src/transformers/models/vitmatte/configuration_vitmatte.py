@@ -16,7 +16,7 @@
 
 from typing import Optional
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto.configuration_auto import CONFIG_MAPPING, AutoConfig
@@ -25,18 +25,18 @@ from ..auto.configuration_auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class VitMatteConfig(PretrainedConfig):
+class VitMatteConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of [`VitMatteForImageMatting`]. It is used to
     instantiate a ViTMatte model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the ViTMatte
     [hustvl/vitmatte-small-composition-1k](https://huggingface.co/hustvl/vitmatte-small-composition-1k) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        backbone_config (`PretrainedConfig` or `dict`, *optional*, defaults to `VitDetConfig()`):
+        backbone_config (`PreTrainedConfig` or `dict`, *optional*, defaults to `VitDetConfig()`):
             The configuration of the backbone model.
         backbone (`str`, *optional*):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
@@ -81,7 +81,7 @@ class VitMatteConfig(PretrainedConfig):
 
     def __init__(
         self,
-        backbone_config: Optional[PretrainedConfig] = None,
+        backbone_config: Optional[PreTrainedConfig] = None,
         backbone=None,
         use_pretrained_backbone=False,
         use_timm_backbone=False,

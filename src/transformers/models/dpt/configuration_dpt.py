@@ -24,15 +24,15 @@ from ..bit import BitConfig
 logger = logging.get_logger(__name__)
 
 
-class DPTConfig(PretrainedConfig):
+class DPTConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DPTModel`]. It is used to instantiate an DPT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the DPT
     [Intel/dpt-large](https://huggingface.co/Intel/dpt-large) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -102,7 +102,7 @@ class DPTConfig(PretrainedConfig):
             Used only for the `hybrid` embedding type. The shape of the feature maps of the backbone.
         neck_ignore_stages (`list[int]`, *optional*, defaults to `[0, 1]`):
             Used only for the `hybrid` embedding type. The stages of the readout layers to ignore.
-        backbone_config (`Union[dict[str, Any], PretrainedConfig]`, *optional*):
+        backbone_config (`Union[dict[str, Any], PreTrainedConfig]`, *optional*):
             The configuration of the backbone model. Only used in case `is_hybrid` is `True` or in case you want to
             leverage the [`AutoBackbone`] API.
         backbone (`str`, *optional*):
@@ -199,9 +199,9 @@ class DPTConfig(PretrainedConfig):
             if isinstance(backbone_config, dict):
                 logger.info("Initializing the config with a `BiT` backbone.")
                 backbone_config = BitConfig(**backbone_config)
-            elif not isinstance(backbone_config, PretrainedConfig):
+            elif not isinstance(backbone_config, PreTrainedConfig):
                 raise ValueError(
-                    f"backbone_config must be a dictionary or a `PretrainedConfig`, got {backbone_config.__class__}."
+                    f"backbone_config must be a dictionary or a `PreTrainedConfig`, got {backbone_config.__class__}."
                 )
             self.backbone_config = backbone_config
             self.backbone_featmap_shape = backbone_featmap_shape

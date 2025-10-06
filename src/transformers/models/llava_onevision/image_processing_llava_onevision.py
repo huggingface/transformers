@@ -47,6 +47,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, is_vision_available, logging
 
 
@@ -55,6 +56,17 @@ logger = logging.get_logger(__name__)
 
 if is_vision_available():
     from PIL import Image
+
+
+class LlavaOnevisionImageProcessorKwargs(ImagesKwargs):
+    r"""
+    image_grid_pinpoints (`list[list[int]]`, *optional*):
+        A list of possible resolutions to use for processing high resolution images. The best resolution is selected
+        based on the original size of the image. Can be overridden by `image_grid_pinpoints` in the `preprocess`
+        method.
+    """
+
+    image_grid_pinpoints: Optional[list[list[int]]]
 
 
 # Copied from transformers.models.llava_next.image_processing_llava_next.divide_to_patches
@@ -146,6 +158,7 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values", "image_sizes", "batch_num_images"]
+    valid_kwargs = LlavaOnevisionImageProcessorKwargs
 
     def __init__(
         self,

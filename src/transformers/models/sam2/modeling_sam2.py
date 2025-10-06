@@ -618,7 +618,7 @@ class Sam2HieraDetModel(Sam2PreTrainedModel):
         pos_embed = pos_embed.permute(0, 2, 3, 1)
         return pos_embed
 
-    @check_model_inputs
+    @check_model_inputs()
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -670,7 +670,7 @@ class Sam2VisionModel(Sam2PreTrainedModel):
     def get_input_embeddings(self):
         return self.backbone.get_input_embeddings()
 
-    @check_model_inputs
+    @check_model_inputs()
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1387,7 +1387,7 @@ class Sam2Model(Sam2PreTrainedModel):
         )
         return prompt_output
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
