@@ -4376,10 +4376,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             max_memory (`Dict`, *optional*):
                 A dictionary device identifier to maximum memory if using `device_map`. Will default to the maximum memory available for each
                 GPU and the available CPU RAM if unset.
-            tp_plan (`str`, *optional*):
-                A torch tensor parallel plan, see [here](https://pytorch.org/tutorials/intermediate/TP_tutorial.html). Currently, it only accepts
-                `tp_plan="auto"` to use predefined plan based on the model. Note that if you use it, you should launch your script accordingly with
-                `torchrun [args] script.py`. This will be much faster than using a `device_map`, but has limitations.
+            tp_plan (`Optional[Union[dict, str]]`, *optional*):
+                A torch tensor parallel plan, see [here](https://pytorch.org/tutorials/intermediate/TP_tutorial.html). Use `tp_plan="auto"` to
+                use the predefined plan based on the model. If it's a dict, then it should match between module names and desired layout.
+                Note that if you use it, you should launch your script accordingly with `torchrun [args] script.py`. This will be much
+                faster than using a `device_map`, but has limitations.
             tp_size (`str`, *optional*):
                 A torch tensor parallel degree. If not provided would default to world size.
             device_mesh (`torch.distributed.DeviceMesh`, *optional*):
@@ -4481,7 +4482,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         ):
             key_mapping = cls._checkpoint_conversion_mapping
 
-        if distributed_config is not None:
+        if distributed_config is not None and tp_plan is None:
             tp_plan = "auto"
 
         # Not used anymore -- remove them from the kwargs
