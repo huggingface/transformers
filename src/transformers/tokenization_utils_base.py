@@ -28,7 +28,7 @@ from collections.abc import Mapping, Sequence, Sized
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, NamedTuple, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, Literal, NamedTuple, Optional, Union, overload
 
 import numpy as np
 from packaging import version
@@ -1506,6 +1506,69 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             `dict[str, int]`: The vocabulary.
         """
         raise NotImplementedError()
+
+    # Case: tokenize=False → returns rendered string
+    @overload
+    def apply_chat_template(
+        self,
+        conversation: Union[list[dict[str, str]], list[list[dict[str, str]]]],
+        tools: Optional[list[Union[dict, Callable]]] = None,
+        documents: Optional[list[dict[str, str]]] = None,
+        chat_template: Optional[str] = None,
+        add_generation_prompt: bool = False,
+        continue_final_message: bool = False,
+        tokenize: Literal[False] = False,
+        padding: Union[bool, str, PaddingStrategy] = False,
+        truncation: bool = False,
+        max_length: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        return_dict: bool = False,
+        return_assistant_tokens_mask: bool = False,
+        tokenizer_kwargs: Optional[dict[str, Any]] = None,
+        **kwargs,
+    ) -> str: ...
+
+    # Case: tokenize=True, return_dict=False, return_tensors=None → returns ids
+    @overload
+    def apply_chat_template(
+        self,
+        conversation: Union[list[dict[str, str]], list[list[dict[str, str]]]],
+        tools: Optional[list[Union[dict, Callable]]] = None,
+        documents: Optional[list[dict[str, str]]] = None,
+        chat_template: Optional[str] = None,
+        add_generation_prompt: bool = False,
+        continue_final_message: bool = False,
+        tokenize: Literal[True] = True,
+        padding: Union[bool, str, PaddingStrategy] = False,
+        truncation: bool = False,
+        max_length: Optional[int] = None,
+        return_tensors: Literal[None] = None,
+        return_dict: Literal[False] = False,
+        return_assistant_tokens_mask: bool = False,
+        tokenizer_kwargs: Optional[dict[str, Any]] = None,
+        **kwargs,
+    ) -> Union[list[int], list[list[int]]]: ...
+
+    # Case: tokenize=True, return_dict=True → returns BatchEncoding
+    @overload
+    def apply_chat_template(
+        self,
+        conversation: Union[list[dict[str, str]], list[list[dict[str, str]]]],
+        tools: Optional[list[Union[dict, Callable]]] = None,
+        documents: Optional[list[dict[str, str]]] = None,
+        chat_template: Optional[str] = None,
+        add_generation_prompt: bool = False,
+        continue_final_message: bool = False,
+        tokenize: Literal[True] = True,
+        padding: Union[bool, str, PaddingStrategy] = False,
+        truncation: bool = False,
+        max_length: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        return_dict: Literal[True] = True,
+        return_assistant_tokens_mask: bool = False,
+        tokenizer_kwargs: Optional[dict[str, Any]] = None,
+        **kwargs,
+    ) -> BatchEncoding: ...
 
     def apply_chat_template(
         self,
