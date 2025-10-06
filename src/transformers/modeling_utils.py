@@ -97,7 +97,6 @@ from .utils import (
     is_flash_attn_3_available,
     is_kernels_available,
     is_offline_mode,
-    is_optimum_available,
     is_peft_available,
     is_remote_url,
     is_torch_flex_attn_available,
@@ -2269,9 +2268,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         Args:
             is_init_check (`bool`, *optional*):
                 Whether this check is performed early, i.e. at __init__ time, or later when the model and its weights are
-                fully instantiated. This is needed as we also check the devices of the weights, and/or if the model uses
-                BetterTransformer, which are only available later after __init__. This allows to raise proper exceptions early
-                before instantiating the full models if we know that the model does not support the requested attention.
+                fully instantiated. This is needed as we also check the devices of the weights, which are only available
+                later after __init__. This allows to raise proper exceptions early before instantiating the full models
+                if we know that the model does not support the requested attention.
         """
         dtype = self.config.dtype
 
@@ -2329,11 +2328,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # With the early check, the parameters are not yet initialized correctly
         if not is_init_check:
-            if getattr(self, "use_bettertransformer", False):
-                raise ValueError(
-                    "Flash Attention 2 and BetterTransformer API are not compatible. Please make sure to disable BetterTransformers by doing model.reverse_bettertransformer()"
-                )
-
             param_devices = list({param.device for param in self.parameters()})
             if len(param_devices) == 1 and param_devices[0].type == "cpu":
                 if torch.cuda.is_available():
@@ -2363,9 +2357,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         Args:
             is_init_check (`bool`, *optional*):
                 Whether this check is performed early, i.e. at __init__ time, or later when the model and its weights are
-                fully instantiated. This is needed as we also check the devices of the weights, and/or if the model uses
-                BetterTransformer, which are only available later after __init__. This allows to raise proper exceptions early
-                before instantiating the full models if we know that the model does not support the requested attention.
+                fully instantiated. This is needed as we also check the devices of the weights, which are only available
+                later after __init__. This allows to raise proper exceptions early before instantiating the full models
+                if we know that the model does not support the requested attention.
         """
         dtype = self.config.dtype
 
@@ -2440,9 +2434,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         Args:
             is_init_check (`bool`, *optional*):
                 Whether this check is performed early, i.e. at __init__ time, or later when the model and its weights are
-                fully instantiated. This is needed as we also check the devices of the weights, and/or if the model uses
-                BetterTransformer, which are only available later after __init__. This allows to raise proper exceptions early
-                before instantiating the full models if we know that the model does not support the requested attention.
+                fully instantiated. This is needed as we also check the devices of the weights, which are only available
+                later after __init__. This allows to raise proper exceptions early before instantiating the full models
+                if we know that the model does not support the requested attention.
         """
         if not self._supports_sdpa:
             raise ValueError(
@@ -2461,12 +2455,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
             torch.backends.cuda.enable_flash_sdp(False)
 
-        if not is_init_check:
-            if getattr(self, "use_bettertransformer", False):
-                raise ValueError(
-                    "SDPA and BetterTransformer API are not compatible. Please make sure to disable BetterTransformers by doing model.reverse_bettertransformer()"
-                )
-
         return True
 
     def _flex_attn_can_dispatch(self, is_init_check: bool = False) -> bool:
@@ -2476,9 +2464,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         Args:
             is_init_check (`bool`, *optional*):
                 Whether this check is performed early, i.e. at __init__ time, or later when the model and its weights are
-                fully instantiated. This is needed as we also check the devices of the weights, and/or if the model uses
-                BetterTransformer, which are only available later after __init__. This allows to raise proper exceptions early
-                before instantiating the full models if we know that the model does not support the requested attention.
+                fully instantiated. This is needed as we also check the devices of the weights, which are only available
+                later after __init__. This allows to raise proper exceptions early before instantiating the full models
+                if we know that the model does not support the requested attention.
         """
         if not self._supports_flex_attn:
             raise ValueError(
@@ -2492,12 +2480,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             raise ImportError(
                 "PyTorch Flex Attention requirements in Transformers are not met. Please install torch>=2.5.0."
             )
-
-        if not is_init_check:
-            if getattr(self, "use_bettertransformer", False):
-                raise ValueError(
-                    "FlexAttention and BetterTransformer API are not compatible. Please make sure to disable BetterTransformers by doing model.reverse_bettertransformer()"
-                )
 
         # If no error raise by this point, we can return `True`
         return True
@@ -2514,9 +2496,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 The attention implementation to check for existence/validity.
             is_init_check (`bool`, *optional*):
                 Whether this check is performed early, i.e. at __init__ time, or later when the model and its weights are
-                fully instantiated. This is needed as we also check the devices of the weights, and/or if the model uses
-                BetterTransformer, which are only available later after __init__. This allows to raise proper exceptions early
-                before instantiating the full models if we know that the model does not support the requested attention.
+                fully instantiated. This is needed as we also check the devices of the weights, which are only available
+                later after __init__. This allows to raise proper exceptions early before instantiating the full models
+                if we know that the model does not support the requested attention.
 
         Returns:
             `str`: The final attention implementation to use, including potential fallbacks from sdpa to eager, or from
@@ -5408,56 +5390,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             raise ValueError(f"{auto_class} is not a valid auto class.")
 
         cls._auto_class = auto_class
-
-    def to_bettertransformer(self) -> "PreTrainedModel":
-        """
-        Converts the model to use [PyTorch's native attention
-        implementation](https://pytorch.org/docs/stable/generated/torch.nn.MultiheadAttention.html), integrated to
-        Transformers through [Optimum library](https://huggingface.co/docs/optimum/bettertransformer/overview). Only a
-        subset of all Transformers models are supported.
-
-        PyTorch's attention fastpath allows to speed up inference through kernel fusions and the use of [nested
-        tensors](https://pytorch.org/docs/stable/nested.html). Detailed benchmarks can be found in [this blog
-        post](https://medium.com/pytorch/bettertransformer-out-of-the-box-performance-for-huggingface-transformers-3fbe27d50ab2).
-
-        Returns:
-            [`PreTrainedModel`]: The model converted to BetterTransformer.
-        """
-        if not is_optimum_available():
-            raise ImportError("The package `optimum` is required to use Better Transformer.")
-
-        from optimum.version import __version__ as optimum_version
-
-        if version.parse(optimum_version) < version.parse("1.7.0"):
-            raise ImportError(
-                f"Please install optimum>=1.7.0 to use Better Transformer. The version {optimum_version} was found."
-            )
-
-        from optimum.bettertransformer import BetterTransformer
-
-        return BetterTransformer.transform(self)
-
-    def reverse_bettertransformer(self):
-        """
-        Reverts the transformation from [`~PreTrainedModel.to_bettertransformer`] so that the original modeling is
-        used, for example in order to save the model.
-
-        Returns:
-            [`PreTrainedModel`]: The model converted back to the original modeling.
-        """
-        if not is_optimum_available():
-            raise ImportError("The package `optimum` is required to use Better Transformer.")
-
-        from optimum.version import __version__ as optimum_version
-
-        if version.parse(optimum_version) < version.parse("1.7.0"):
-            raise ImportError(
-                f"Please install optimum>=1.7.0 to use Better Transformer. The version {optimum_version} was found."
-            )
-
-        from optimum.bettertransformer import BetterTransformer
-
-        return BetterTransformer.reverse(self)
 
     def warn_if_padding_and_no_attention_mask(self, input_ids, attention_mask):
         """
