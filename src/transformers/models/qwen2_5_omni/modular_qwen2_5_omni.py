@@ -1124,12 +1124,12 @@ class Qwen2_5OmniConfig(PreTrainedConfig):
 
 class Qwen2_5OmniPreTrainedModel(Qwen2_5_VLPreTrainedModel):
     config: Qwen2_5OmniConfig
+    input_modalities = ["image", "video", "audio", "text"]
     _can_compile_fullgraph = False
 
 
 class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedModel):
     input_modalities = ["image", "video", "audio", "text"]
-    output_modalities = ["audio", "text"]
 
     def _prepare_4d_causal_attention_mask_with_cache_position(
         self,
@@ -1993,6 +1993,7 @@ class Qwen2_5OmniVisionBlock(Qwen2_5_VLVisionBlock):
 
 class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
     config: Qwen2_5OmniVisionEncoderConfig
+    input_modalities = ["image", "video"]
     _no_split_modules = ["Qwen2_5OmniVisionBlock"]
 
     def __init__(self, config: Qwen2_5OmniVisionEncoderConfig, *inputs, **kwargs) -> None:
@@ -2529,7 +2530,6 @@ class Qwen2_5OmniTalkerCausalLMOutputWithPast(ModelOutput):
 class Qwen2_5OmniTalkerModel(Qwen2_5_VLTextModel):
     config: Qwen2_5OmniTalkerConfig
     input_modalities = ["image", "video", "audio", "text"]
-    output_modalities = "audio"
 
     _no_split_modules = ["Qwen2_5OmniTalkerDecoderLayer"]
 
@@ -2541,6 +2541,7 @@ class Qwen2_5OmniTalkerModel(Qwen2_5_VLTextModel):
 class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForConditionalGeneration, GenerationMixin):
     config: Qwen2_5OmniTalkerConfig
     base_model_prefix = "talker"
+    output_modalities = "audio"
 
     def __init__(self, config: Qwen2_5OmniTalkerConfig):
         super().__init__(config)
@@ -3782,7 +3783,6 @@ class RungeKutta4ODESolver:
 class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
     config: Qwen2_5OmniDiTConfig
     input_modalities = "audio"
-    output_modalities = "audio"
     _no_split_modules = ["DiTDecoderLayer"]
 
     def __init__(self, config: Qwen2_5OmniDiTConfig):
@@ -3940,7 +3940,6 @@ class Qwen2_5OmniToken2WavModel(Qwen2_5OmniPreTrainedModel):
     config: Qwen2_5OmniToken2WavConfig
     base_model_prefix = "model"
     input_modalities = "audio"
-    output_modalities = "audio"
     _no_split_modules = ["Qwen2_5OmniToken2WavDiTModel", "Qwen2_5OmniToken2WavBigVGANModel"]
 
     def __init__(self, config: Qwen2_5OmniToken2WavConfig):
@@ -4008,6 +4007,7 @@ class Qwen2_5OmniToken2WavModel(Qwen2_5OmniPreTrainedModel):
 )
 class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, GenerationMixin):
     config: Qwen2_5OmniConfig
+    output_modalities = ["audio", "text"]
     _no_split_modules = [
         "Qwen2_5OmniTalkerForConditionalGeneration",
         "Qwen2_5OmniToken2WavModel",
