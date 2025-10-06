@@ -104,7 +104,7 @@ import logging
 import os
 import re
 from datetime import datetime
-from functools import lru_cache
+from functools import cache
 from pathlib import Path
 
 import numpy as np
@@ -279,11 +279,11 @@ class CodeSimilarityAnalyzer:
         logging.info(f"downloading index from hub cache: {self.hub_dataset}")
         snapshot_path = snapshot_download(repo_id=self.hub_dataset, repo_type="dataset")
         snapshot_dir = Path(snapshot_path)
-        missing = [fname for fname in (EMBEDDINGS_PATH, INDEX_MAP_PATH, TOKENS_PATH) if not (snapshot_dir / fname).exists()]
+        missing = [
+            fname for fname in (EMBEDDINGS_PATH, INDEX_MAP_PATH, TOKENS_PATH) if not (snapshot_dir / fname).exists()
+        ]
         if missing:
-            raise FileNotFoundError(
-                "Missing expected files in Hub snapshot: " + ", ".join(missing)
-            )
+            raise FileNotFoundError("Missing expected files in Hub snapshot: " + ", ".join(missing))
         self.index_dir = snapshot_dir
 
     def push_index_to_hub(self) -> None:
@@ -653,7 +653,7 @@ def _parse_release_date(value: str) -> datetime | None:
         return None
 
 
-@lru_cache(maxsize=None)
+@cache
 def _load_definition_line_map(relative_path: str) -> dict[str, int]:
     """Return {definition_name: line_number} for top-level definitions in the given file."""
     file_path = MODELS_ROOT / relative_path
