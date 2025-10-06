@@ -238,17 +238,10 @@ class CodeSimilarityAnalyzer:
 
         self.models_root = MODELS_ROOT
         self.hub_dataset = hub_dataset
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.dtype = "auto"
         self.tokenizer = AutoTokenizer.from_pretrained(EMBEDDING_MODEL)
-        self.model = (
-            AutoModel.from_pretrained(
-                EMBEDDING_MODEL,
-                torch_dtype=self.dtype if self.device.type == "cuda" else torch.float32,
-            )
-            .eval()
-            .to(self.device)
-        )
+        self.model = AutoModel.from_pretrained(EMBEDDING_MODEL, torch_dtype="auto", device_map="auto").eval()
+
+        self.device = self.model.device
 
     # ---------- HUB IO ----------
 
@@ -485,7 +478,7 @@ class CodeSimilarityAnalyzer:
         return scores[:k]
 
     def analyze_file(
-        self, modeling_file: Path, top_k_per_item: int = 5, allow_hub_fallback: bool = True
+        self, modeling_file: Path, top_k_per_item: int = 5, allow_hub_fallback: bool = True, use_jaccard=False
     ) -> dict[str, dict[str, list]]:
         """
         Analyze a modeling file and find similar code definitions in the index.
@@ -528,14 +521,55 @@ class CodeSimilarityAnalyzer:
             embedding_top = self._topk_embedding(
                 query_embeddings[i], base_embeddings, identifier_map, self_model_normalized, query_name, top_k_per_item
             )
-            jaccard_top = self._topk_jaccard(
-                query_tokens_list[i], identifiers, tokens_map, self_model_normalized, query_name, top_k_per_item
-            )
             embedding_set = {identifier for identifier, _ in embedding_top}
-            jaccard_set = {identifier for identifier, _ in jaccard_top}
-            intersection = list(embedding_set & jaccard_set)
-            output[query_name] = {"embedding": embedding_top, "jaccard": jaccard_top, "intersection": intersection}
+            output[query_name] = {"embedding": embedding_top}
+            if use_jaccard:
+                jaccard_top = self._topk_jaccard(
+                    query_tokens_list[i], identifiers, tokens_map, self_model_normalized, query_name, top_k_per_item
+                )
+                jaccard_set = {identifier for identifier, _ in jaccard_top}
+                intersection = set(embedding_set & jaccard_set)
+
+                output[query_name].update({"jaccard": jaccard_top, "intersection": intersection})
         return output
+
+
+_RELEASE_RE = re.compile(
+    r"(?:^|[\*_`\s>])(?:this|the)\s+model\s+was\s+released\s+on\s+(\d{4}-\d{2}-\d{2})\b", re.IGNORECASE
+)
+
+
+def build_date_data() -> dict[str, str]:
+    """
+    Scan Markdown files in `root_dir` and build {model_id: date_released}.
+
+    - model_id is the filename without extension (e.g., "llama" for "llama.md")
+    - date_released is the first YYYY-MM-DD matched after "...was released on ..."
+    - Ignores non-*.md files and directories.
+
+    Returns:
+        dict[str, str]: mapping of model_id -> ISO date string (YYYY-MM-DD).
+                        Files without a match are simply omitted.
+    """
+    import transformers
+
+    root_dir = transformers.__file__.split("src/transformers")[0]
+    root = Path(root_dir).joinpath("docs/source/en/model_doc")
+    result: dict[str, str] = {}
+
+    for md_path in root.glob("*.md"):
+        try:
+            text = md_path.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            # Skip unreadable files quietly
+            continue
+
+        m = _RELEASE_RE.search(text)
+        if m:
+            model_id = md_path.stem  # e.g., "llama" from "llama.md"
+            result[model_id] = m.group(1)
+
+    return result
 
 
 def main():
@@ -550,6 +584,7 @@ def main():
     parser.add_argument(
         "--hub-dataset", type=str, default=HUB_DATASET_DEFAULT, help="Hub dataset repo id to pull/push the index."
     )
+    parser.add_argument("--use_jaccard", type=bool, default=False, help="Whether or not to use jaccard index")
     args = parser.parse_args()
 
     analyzer = CodeSimilarityAnalyzer(hub_dataset=args.hub_dataset)
@@ -563,20 +598,22 @@ def main():
     if not args.modeling_file:
         raise SystemExit("Provide --modeling-file or use --build")
 
+    dates = build_date_data()
     results = analyzer.analyze_file(Path(args.modeling_file), top_k_per_item=5, allow_hub_fallback=True)
     modeling_filename = Path(args.modeling_file).name
     for query_name, data in results.items():
-        logging.info(f"{modeling_filename}::{query_name}:")
+        logging.info(f"{modeling_filename}::{query_name}")
         logging.info("  embedding:")
         for identifier, score in data["embedding"]:
-            logging.info(f"    {identifier} ({score:.4f})")
-        logging.info("  jaccard:")
-        for identifier, score in data["jaccard"]:
-            logging.info(f"    {identifier} ({score:.4f})")
-        logging.info("  intersection:")
-        for identifier in data["intersection"]:
-            logging.info(f"    {identifier}")
-        logging.info("")
+            logging.info(f"    {identifier} ({score:.4f})\t\t {dates[modeling_filename.split('modeling_')[-1]]}")
+        if args.use_jaccard:
+            logging.info("  jaccard:")
+            for identifier, score in data["jaccard"]:
+                logging.info(f"    {identifier} ({score:.4f})")
+            logging.info("  intersection:")
+            for identifier in data["intersection"]:
+                logging.info(f"    {identifier}")
+            logging.info("")
 
 
 if __name__ == "__main__":
