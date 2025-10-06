@@ -88,13 +88,6 @@ output_text = tokenizer.batch_decode(
 print(f"STT output = {output_text[0].upper()}")
 ```
 
-### Key Features:
-
-- **Audio Token Placeholder**: Use `<|audio|>` in your prompt to indicate where the audio should be processed
-- **Chat Template**: The model works with conversational formats using the tokenizer's chat template
-- **Automatic LoRA**: The model automatically enables its LoRA adapter when audio features are present
-- **Audio Requirements**: Input audio should be mono (single channel) and sampled at 16kHz
-
 ## GraniteSpeechConfig
 
 [[autodoc]] GraniteSpeechConfig
