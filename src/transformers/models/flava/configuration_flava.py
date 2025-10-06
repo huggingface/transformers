@@ -16,14 +16,14 @@
 
 from typing import Any, Optional
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class FlavaImageConfig(PretrainedConfig):
+class FlavaImageConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FlavaImageModel`]. It is used to instantiate an
     FLAVA model according to the specified arguments, defining the model architecture.
@@ -31,8 +31,8 @@ class FlavaImageConfig(PretrainedConfig):
     Instantiating a configuration with the defaults will yield a similar configuration to that of the FLAVA
     [facebook/flava-full](https://huggingface.co/facebook/flava-full) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -125,7 +125,7 @@ class FlavaImageConfig(PretrainedConfig):
         self.vocab_size = vocab_size
 
 
-class FlavaTextConfig(PretrainedConfig):
+class FlavaTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FlavaTextModel`]. It is used to instantiate an
     FLAVA model according to the specified arguments, defining the model architecture.
@@ -133,8 +133,8 @@ class FlavaTextConfig(PretrainedConfig):
     Instantiating a configuration with the defaults will yield a similar configuration to that of the FLAVA
     [facebook/flava-full](https://huggingface.co/facebook/flava-full) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -230,7 +230,7 @@ class FlavaTextConfig(PretrainedConfig):
         self.pad_token_id = pad_token_id
 
 
-class FlavaMultimodalConfig(PretrainedConfig):
+class FlavaMultimodalConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FlavaMultimodalModel`]. It is used to instantiate
     an FLAVA model according to the specified arguments, defining the model architecture.
@@ -238,8 +238,8 @@ class FlavaMultimodalConfig(PretrainedConfig):
     Instantiating a configuration with the defaults will yield a similar configuration to that of the FLAVA
     [facebook/flava-full](https://huggingface.co/facebook/flava-full) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -316,7 +316,7 @@ class FlavaMultimodalConfig(PretrainedConfig):
         self.use_cls_token = use_cls_token
 
 
-class FlavaImageCodebookConfig(PretrainedConfig):
+class FlavaImageCodebookConfig(PreTrainedConfig):
     model_type = "flava_image_codebook"
     base_config_key = "image_codebook_config"
 
@@ -326,8 +326,8 @@ class FlavaImageCodebookConfig(PretrainedConfig):
     Instantiating a configuration with the defaults will yield a similar configuration to that of the FLAVA
     [facebook/flava-image-codebook](https://huggingface.co/facebook/flava-image-codebook) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         num_groups (`int`, *optional*, defaults to 4):
@@ -384,15 +384,15 @@ class FlavaImageCodebookConfig(PretrainedConfig):
         self.initializer_range = initializer_range
 
 
-class FlavaConfig(PretrainedConfig):
+class FlavaConfig(PreTrainedConfig):
     r"""
     [`FlavaConfig`] is the configuration class to store the configuration of a [`FlavaModel`]. It is used to
     instantiate FLAVA model according to the specified arguments, defining the text model, image model, image codebook
     and multimodal model configs. Instantiating a configuration with the defaults will yield a similar configuration to
     that of the FLAVA [facebook/flava-full](https://huggingface.co/facebook/flava-full) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`dict`, *optional*):

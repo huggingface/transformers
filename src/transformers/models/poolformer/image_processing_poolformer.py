@@ -37,6 +37,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
 
 
@@ -45,6 +46,15 @@ if is_vision_available():
 
 
 logger = logging.get_logger(__name__)
+
+
+class PoolFormerImageProcessorKwargs(ImagesKwargs):
+    r"""
+    crop_pct (`float`, *optional*, defaults to `self.crop_pct`):
+        Percentage of the image to crop. Only has an effect if `do_resize` is set to `True`.
+    """
+
+    crop_pct: Optional[float]
 
 
 class PoolFormerImageProcessor(BaseImageProcessor):
@@ -99,6 +109,7 @@ class PoolFormerImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
+    valid_kwargs = PoolFormerImageProcessorKwargs
 
     def __init__(
         self,

@@ -14,22 +14,22 @@
 # limitations under the License.
 """CLIPSeg model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class CLIPSegTextConfig(PretrainedConfig):
+class CLIPSegTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`CLIPSegModel`]. It is used to instantiate an
     CLIPSeg model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the CLIPSeg
     [CIDAS/clipseg-rd64](https://huggingface.co/CIDAS/clipseg-rd64) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 49408):
@@ -116,15 +116,15 @@ class CLIPSegTextConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
 
 
-class CLIPSegVisionConfig(PretrainedConfig):
+class CLIPSegVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`CLIPSegModel`]. It is used to instantiate an
     CLIPSeg model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the CLIPSeg
     [CIDAS/clipseg-rd64](https://huggingface.co/CIDAS/clipseg-rd64) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -204,15 +204,15 @@ class CLIPSegVisionConfig(PretrainedConfig):
         self.hidden_act = hidden_act
 
 
-class CLIPSegConfig(PretrainedConfig):
+class CLIPSegConfig(PreTrainedConfig):
     r"""
     [`CLIPSegConfig`] is the configuration class to store the configuration of a [`CLIPSegModel`]. It is used to
     instantiate a CLIPSeg model according to the specified arguments, defining the text model and vision model configs.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the CLIPSeg
     [CIDAS/clipseg-rd64](https://huggingface.co/CIDAS/clipseg-rd64) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`dict`, *optional*):

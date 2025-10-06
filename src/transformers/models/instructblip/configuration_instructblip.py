@@ -14,7 +14,7 @@
 # limitations under the License.
 """InstructBLIP model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
@@ -23,15 +23,15 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class InstructBlipVisionConfig(PretrainedConfig):
+class InstructBlipVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`InstructBlipVisionModel`]. It is used to
     instantiate a InstructBLIP vision encoder according to the specified arguments, defining the model architecture.
     Instantiating a configuration defaults will yield a similar configuration to that of the InstructBLIP
     [Salesforce/instruct-blip-flan-t5](https://huggingface.co/Salesforce/instruct-blip-flan-t5) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 1408):
@@ -107,14 +107,14 @@ class InstructBlipVisionConfig(PretrainedConfig):
         self.qkv_bias = qkv_bias
 
 
-class InstructBlipQFormerConfig(PretrainedConfig):
+class InstructBlipQFormerConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`InstructBlipQFormerModel`]. It is used to
     instantiate a InstructBLIP Querying Transformer (Q-Former) model according to the specified arguments, defining the
     model architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
     the InstructBLIP [Salesforce/instruct-blip-flan-t5](https://huggingface.co/Salesforce/instruct-blip-flan-t5)
-    architecture. Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs.
-    Read the documentation from [`PretrainedConfig`] for more information.
+    architecture. Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs.
+    Read the documentation from [`PreTrainedConfig`] for more information.
 
     Note that [`InstructBlipQFormerModel`] is very similar to [`BertLMHeadModel`] with interleaved cross-attention.
 
@@ -203,7 +203,7 @@ class InstructBlipQFormerConfig(PretrainedConfig):
         self.encoder_hidden_size = encoder_hidden_size
 
 
-class InstructBlipConfig(PretrainedConfig):
+class InstructBlipConfig(PreTrainedConfig):
     r"""
     [`InstructBlipConfig`] is the configuration class to store the configuration of a
     [`InstructBlipForConditionalGeneration`]. It is used to instantiate a InstructBLIP model according to the specified
@@ -211,8 +211,8 @@ class InstructBlipConfig(PretrainedConfig):
     the defaults will yield a similar configuration to that of the InstructBLIP
     [Salesforce/instruct-blip-flan-t5](https://huggingface.co/Salesforce/instruct-blip-flan-t5) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vision_config (`dict`, *optional*):
@@ -220,7 +220,7 @@ class InstructBlipConfig(PretrainedConfig):
         qformer_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`InstructBlipQFormerConfig`].
         text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize any [`PretrainedConfig`].
+            Dictionary of configuration options used to initialize any [`PreTrainedConfig`].
         num_query_tokens (`int`, *optional*, defaults to 32):
             The number of query tokens passed through the Transformer.
 
@@ -249,7 +249,7 @@ class InstructBlipConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
 
-    >>> # We can also initialize a InstructBlipConfig from a InstructBlipVisionConfig, InstructBlipQFormerConfig and any PretrainedConfig
+    >>> # We can also initialize a InstructBlipConfig from a InstructBlipVisionConfig, InstructBlipQFormerConfig and any PreTrainedConfig
 
     >>> # Initializing InstructBLIP vision, InstructBLIP Q-Former and language model configurations
     >>> vision_config = InstructBlipVisionConfig()
@@ -309,7 +309,7 @@ class InstructBlipConfig(PretrainedConfig):
         cls,
         vision_config: InstructBlipVisionConfig,
         qformer_config: InstructBlipQFormerConfig,
-        text_config: PretrainedConfig,
+        text_config: PreTrainedConfig,
         **kwargs,
     ):
         r"""

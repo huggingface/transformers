@@ -19,7 +19,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from ... import PreTrainedTokenizer
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...onnx import OnnxConfig, OnnxConfigWithPast, OnnxSeq2SeqConfigWithPast
 from ...onnx.utils import compute_effective_axis_dimension
 from ...utils import is_torch_available, logging
@@ -28,15 +28,15 @@ from ...utils import is_torch_available, logging
 logger = logging.get_logger(__name__)
 
 
-class MBartConfig(PretrainedConfig):
+class MBartConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MBartModel`]. It is used to instantiate an MBART
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the MBART
     [facebook/mbart-large-cc25](https://huggingface.co/facebook/mbart-large-cc25) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:

@@ -20,12 +20,12 @@ from collections.abc import Mapping
 
 from packaging import version
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...onnx import OnnxConfig
 from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
 
-class BeitConfig(BackboneConfigMixin, PretrainedConfig):
+class BeitConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BeitModel`]. It is used to instantiate an BEiT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the

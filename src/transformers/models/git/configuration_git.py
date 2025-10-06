@@ -14,22 +14,22 @@
 # limitations under the License.
 
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class GitVisionConfig(PretrainedConfig):
+class GitVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GitVisionModel`]. It is used to instantiate a GIT
     vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the vision encoder of the GIT
     [microsoft/git-base](https://huggingface.co/microsoft/git-base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -102,15 +102,15 @@ class GitVisionConfig(PretrainedConfig):
         self.hidden_act = hidden_act
 
 
-class GitConfig(PretrainedConfig):
+class GitConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GitModel`]. It is used to instantiate a GIT model
     according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the GIT
     [microsoft/git-base](https://huggingface.co/microsoft/git-base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vision_config (`dict`, *optional*):

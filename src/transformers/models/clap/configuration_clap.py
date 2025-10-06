@@ -14,22 +14,22 @@
 # limitations under the License.
 """CLAP model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class ClapTextConfig(PretrainedConfig):
+class ClapTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ClapTextModel`]. It is used to instantiate a CLAP
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the CLAP
     [calp-hsat-fused](https://huggingface.co/laion/clap-hsat-fused) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -128,15 +128,15 @@ class ClapTextConfig(PretrainedConfig):
         self.projection_dim = projection_dim
 
 
-class ClapAudioConfig(PretrainedConfig):
+class ClapAudioConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ClapAudioModel`]. It is used to instantiate a
     CLAP audio encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the audio encoder of the CLAP
     [laion/clap-htsat-fused](https://huggingface.co/laion/clap-htsat-fused) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         window_size (`int`, *optional*, defaults to 8):
@@ -281,15 +281,15 @@ class ClapAudioConfig(PretrainedConfig):
         self.projection_hidden_act = projection_hidden_act
 
 
-class ClapConfig(PretrainedConfig):
+class ClapConfig(PreTrainedConfig):
     r"""
     [`ClapConfig`] is the configuration class to store the configuration of a [`ClapModel`]. It is used to instantiate
     a CLAP model according to the specified arguments, defining the text model and audio model configs. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the CLAP
     [laion/clap-htsat-fused](https://huggingface.co/laion/clap-htsat-fused) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`dict`, *optional*):

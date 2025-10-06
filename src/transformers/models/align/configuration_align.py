@@ -14,14 +14,14 @@
 # limitations under the License.
 """ALIGN model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class AlignTextConfig(PretrainedConfig):
+class AlignTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`AlignTextModel`]. It is used to instantiate a
     ALIGN text encoder according to the specified arguments, defining the model architecture. Instantiating a
@@ -29,8 +29,8 @@ class AlignTextConfig(PretrainedConfig):
     [kakaobrain/align-base](https://huggingface.co/kakaobrain/align-base) architecture. The default values here are
     copied from BERT.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
@@ -120,7 +120,7 @@ class AlignTextConfig(PretrainedConfig):
         self.pad_token_id = pad_token_id
 
 
-class AlignVisionConfig(PretrainedConfig):
+class AlignVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`AlignVisionModel`]. It is used to instantiate a
     ALIGN vision encoder according to the specified arguments, defining the model architecture. Instantiating a
@@ -128,8 +128,8 @@ class AlignVisionConfig(PretrainedConfig):
     [kakaobrain/align-base](https://huggingface.co/kakaobrain/align-base) architecture. The default values are copied
     from EfficientNet (efficientnet-b7)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         num_channels (`int`, *optional*, defaults to 3):
@@ -242,15 +242,15 @@ class AlignVisionConfig(PretrainedConfig):
         self.num_hidden_layers = sum(num_block_repeats) * 4
 
 
-class AlignConfig(PretrainedConfig):
+class AlignConfig(PreTrainedConfig):
     r"""
     [`AlignConfig`] is the configuration class to store the configuration of a [`AlignModel`]. It is used to
     instantiate a ALIGN model according to the specified arguments, defining the text model and vision model configs.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the ALIGN
     [kakaobrain/align-base](https://huggingface.co/kakaobrain/align-base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`dict`, *optional*):

@@ -913,7 +913,7 @@ class SpecialTokensMixin:
 
                 Tokens are only added if they are not already in the vocabulary (tested by checking if the tokenizer
                 assign the index of the `unk_token` to them).
-            replace_additional_special_tokens (`bool`, *optional*,, defaults to `True`):
+            replace_additional_special_tokens (`bool`, *optional*, defaults to `True`):
                 If `True`, the existing list of additional special tokens will be replaced by the list provided in
                 `special_tokens_dict`. Otherwise, `self._special_tokens_map["additional_special_tokens"]` is just extended. In the former
                 case, the tokens will NOT be removed from the tokenizer's full vocabulary - they are only being flagged

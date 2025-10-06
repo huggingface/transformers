@@ -51,7 +51,7 @@ from transformers import (
     OPTConfig,
     OPTForCausalLM,
     OwlViTForObjectDetection,
-    PretrainedConfig,
+    PreTrainedConfig,
     T5Config,
     T5ForConditionalGeneration,
     is_torch_available,
@@ -128,7 +128,7 @@ if is_torch_available():
     # Fake pretrained models for tests
     class BaseModel(PreTrainedModel):
         base_model_prefix = "base"
-        config_class = PretrainedConfig
+        config_class = PreTrainedConfig
 
         def __init__(self, config):
             super().__init__(config)
@@ -140,7 +140,7 @@ if is_torch_available():
 
     class BaseModelWithUnexpectedKeys(PreTrainedModel):
         base_model_prefix = "base"
-        config_class = PretrainedConfig
+        config_class = PreTrainedConfig
         _keys_to_ignore_on_load_unexpected = [r"^mtp.*"]
 
         def __init__(self, config):
@@ -153,7 +153,7 @@ if is_torch_available():
 
     class BaseModelWithMissingKeys(PreTrainedModel):
         base_model_prefix = "base"
-        config_class = PretrainedConfig
+        config_class = PreTrainedConfig
         _keys_to_ignore_on_load_missing = [r"^linear"]
 
         def __init__(self, config):
@@ -165,7 +165,7 @@ if is_torch_available():
             return self.linear_2(self.linear(x))
 
     class BaseModelWithTiedWeights(PreTrainedModel):
-        config_class = PretrainedConfig
+        config_class = PreTrainedConfig
 
         def __init__(self, config):
             super().__init__(config)
@@ -180,7 +180,7 @@ if is_torch_available():
 
     class ModelWithHead(PreTrainedModel):
         base_model_prefix = "base"
-        config_class = PretrainedConfig
+        config_class = PreTrainedConfig
 
         def _init_weights(self, module):
             pass
@@ -197,7 +197,7 @@ if is_torch_available():
 
     class ModelWithDirectParam(PreTrainedModel):
         base_model_prefix = "base"
-        config_class = PretrainedConfig
+        config_class = PreTrainedConfig
 
         def _init_weights(self, module):
             pass
@@ -213,7 +213,7 @@ if is_torch_available():
 
     class ModelWithDirectParamSubmodule(PreTrainedModel):
         base_model_prefix = "base"
-        config_class = PretrainedConfig
+        config_class = PreTrainedConfig
 
         def _init_weights(self, module):
             pass
@@ -229,7 +229,7 @@ if is_torch_available():
 
     class ModelWithHeadAndTiedWeights(PreTrainedModel):
         base_model_prefix = "base"
-        config_class = PretrainedConfig
+        config_class = PreTrainedConfig
 
         def _init_weights(self, module):
             pass
@@ -429,7 +429,7 @@ class ModelUtilsTest(TestCasePlus):
         model_name = "google-bert/bert-base-uncased"
         config = BertConfig.from_pretrained(model_name)
         self.assertIsNotNone(config)
-        self.assertIsInstance(config, PretrainedConfig)
+        self.assertIsInstance(config, PreTrainedConfig)
 
         model = BertModel.from_pretrained(model_name)
         model, loading_info = BertModel.from_pretrained(model_name, output_loading_info=True)
@@ -1242,7 +1242,7 @@ class ModelUtilsTest(TestCasePlus):
         from accelerate import dispatch_model
 
         device_map = {"submodule": "cpu", "linear": f"{torch_device}:0"}
-        model = ModelWithDirectParamSubmodule(PretrainedConfig())
+        model = ModelWithDirectParamSubmodule(PreTrainedConfig())
         dispatch_model(model, device_map)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -1255,7 +1255,7 @@ class ModelUtilsTest(TestCasePlus):
         from accelerate import dispatch_model
 
         device_map = {"base": f"{torch_device}:0", "linear": "cpu", "linear2": "cpu"}
-        model = ModelWithHead(PretrainedConfig())
+        model = ModelWithHead(PreTrainedConfig())
         dispatch_model(model, device_map)
 
         transform_a = torch.nn.Linear(1, 1, bias=False)
@@ -1375,7 +1375,7 @@ class ModelUtilsTest(TestCasePlus):
             torch.testing.assert_close(p1, p2)
 
     def test_base_model_to_head_model_load(self):
-        base_model = BaseModel(PretrainedConfig())
+        base_model = BaseModel(PreTrainedConfig())
         with tempfile.TemporaryDirectory() as tmp_dir:
             base_model.save_pretrained(tmp_dir, safe_serialization=False)
 
@@ -1398,7 +1398,7 @@ class ModelUtilsTest(TestCasePlus):
 
     def test_tied_weights_reload(self):
         # Base
-        model = BaseModelWithTiedWeights(PretrainedConfig())
+        model = BaseModelWithTiedWeights(PreTrainedConfig())
         with tempfile.TemporaryDirectory() as tmp_dir:
             model.save_pretrained(tmp_dir)
 
@@ -1421,7 +1421,7 @@ class ModelUtilsTest(TestCasePlus):
             self.assertListEqual(load_info["missing_keys"], ["decoder.bias"])
 
     def test_unexpected_keys_warnings(self):
-        model = ModelWithHead(PretrainedConfig())
+        model = ModelWithHead(PreTrainedConfig())
         logger = logging.get_logger("transformers.modeling_utils")
         with tempfile.TemporaryDirectory() as tmp_dir:
             model.save_pretrained(tmp_dir)
@@ -1453,7 +1453,7 @@ class ModelUtilsTest(TestCasePlus):
             logger.warning_once.cache_clear()
             with LoggingLevel(logging.WARNING):
                 with CaptureLogger(logger) as cl:
-                    config_no_pad_token = PretrainedConfig()
+                    config_no_pad_token = PreTrainedConfig()
                     config_no_pad_token.pad_token_id = None
                     model = ModelWithHead(config_no_pad_token)
                     input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
@@ -1464,7 +1464,7 @@ class ModelUtilsTest(TestCasePlus):
             logger.warning_once.cache_clear()
             with LoggingLevel(logging.WARNING):
                 with CaptureLogger(logger) as cl:
-                    config = PretrainedConfig()
+                    config = PreTrainedConfig()
                     config.pad_token_id = 0
                     model = ModelWithHead(config)
                     input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
@@ -1476,7 +1476,7 @@ class ModelUtilsTest(TestCasePlus):
             logger.warning_once.cache_clear()
             with LoggingLevel(logging.WARNING):
                 with CaptureLogger(logger) as cl:
-                    config = PretrainedConfig()
+                    config = PreTrainedConfig()
                     config.pad_token_id = 0
                     model = ModelWithHead(config)
                     input_ids = torch.tensor([[1, 345, 232, 328, 740, 140, 1695, 69, 6078, 2341, 25]])
@@ -1487,7 +1487,7 @@ class ModelUtilsTest(TestCasePlus):
             logger.warning_once.cache_clear()
             with LoggingLevel(logging.WARNING):
                 with CaptureLogger(logger) as cl:
-                    config = PretrainedConfig()
+                    config = PreTrainedConfig()
                     config.pad_token_id = 0
                     model = ModelWithHead(config)
                     input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 432, 5232]])
@@ -1498,7 +1498,7 @@ class ModelUtilsTest(TestCasePlus):
             logger.warning_once.cache_clear()
             with LoggingLevel(logging.WARNING):
                 with CaptureLogger(logger) as cl:
-                    config = PretrainedConfig()
+                    config = PreTrainedConfig()
                     config.pad_token_id = 0
                     model = ModelWithHead(config)
                     input_ids = torch.tensor([[432, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
@@ -1509,7 +1509,7 @@ class ModelUtilsTest(TestCasePlus):
             logger.warning_once.cache_clear()
             with LoggingLevel(logging.WARNING):
                 with CaptureLogger(logger) as cl:
-                    config = PretrainedConfig()
+                    config = PreTrainedConfig()
                     config.pad_token_id = 0
                     model = ModelWithHead(config)
                     input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
@@ -1521,7 +1521,7 @@ class ModelUtilsTest(TestCasePlus):
             logger.warning_once.cache_clear()
             with LoggingLevel(logging.WARNING):
                 with CaptureLogger(logger) as cl:
-                    config = PretrainedConfig()
+                    config = PreTrainedConfig()
                     config.pad_token_id = 0
                     config.bos_token_id = config.pad_token_id
                     model = ModelWithHead(config)
@@ -1533,7 +1533,7 @@ class ModelUtilsTest(TestCasePlus):
             logger.warning_once.cache_clear()
             from torch._dynamo import config, testing
 
-            config = PretrainedConfig()
+            config = PreTrainedConfig()
             config.pad_token_id = 0
             model = ModelWithHead(config)
             input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 432, 5232]])
@@ -1645,7 +1645,7 @@ class ModelUtilsTest(TestCasePlus):
 
     def test_warning_for_beta_gamma_parameters(self):
         logger = logging.get_logger("transformers.modeling_utils")
-        config = PretrainedConfig()
+        config = PreTrainedConfig()
         warning_msg_gamma = "`LayerNorm.gamma` -> `LayerNorm.weight`"
         warning_msg_beta = "`LayerNorm.beta` -> `LayerNorm.bias`"
         model = TestModelGammaBeta(config)
@@ -2014,13 +2014,13 @@ class ModelUtilsTest(TestCasePlus):
 
     def test_config_class_attribute(self):
         # custom configs
-        class MyConfigA(PretrainedConfig):
+        class MyConfigA(PreTrainedConfig):
             pass
 
-        class MyConfigB(PretrainedConfig):
+        class MyConfigB(PreTrainedConfig):
             pass
 
-        class MyConfigC(PretrainedConfig):
+        class MyConfigC(PreTrainedConfig):
             pass
 
         # custom models
@@ -2048,7 +2048,7 @@ class ModelUtilsTest(TestCasePlus):
         missing from the checkpoint, it will still be moved to cpu and initialized"""
         temp = tempfile.TemporaryDirectory()
         # Create dummy model
-        model = BaseModelWithMissingKeys(PretrainedConfig())
+        model = BaseModelWithMissingKeys(PreTrainedConfig())
 
         # Save the config
         model.config.save_pretrained(temp.name)
@@ -2073,7 +2073,7 @@ class ModelUtilsTest(TestCasePlus):
         temp = tempfile.TemporaryDirectory()
 
         # Create dummy model
-        model = BaseModelWithUnexpectedKeys(PretrainedConfig())
+        model = BaseModelWithUnexpectedKeys(PreTrainedConfig())
 
         # Save the config
         model.config.save_pretrained(temp.name)
@@ -2096,7 +2096,7 @@ class ModelUtilsTest(TestCasePlus):
         temp = tempfile.TemporaryDirectory()
 
         # Create dummy model
-        model = BaseModelWithUnexpectedKeys(PretrainedConfig())
+        model = BaseModelWithUnexpectedKeys(PreTrainedConfig())
 
         # Save the config
         model.config.save_pretrained(temp.name)
@@ -2949,7 +2949,7 @@ class TestSaveAndLoadModelWithExtraState(TestCasePlus):
     """
 
     def test_save_and_load_model_with_tensor_extra_state(self):
-        class MyConfig(PretrainedConfig):
+        class MyConfig(PreTrainedConfig):
             def __init__(self, **kwargs):
                 super().__init__(**kwargs)
 
@@ -2986,7 +2986,7 @@ class TestSaveAndLoadModelWithExtraState(TestCasePlus):
 
     @mark.xfail(reason="save and from_pretrained currently only supports tensor extra_state")
     def test_save_and_load_model_with_dict_extra_state(self):
-        class MyConfig(PretrainedConfig):
+        class MyConfig(PreTrainedConfig):
             def __init__(self, **kwargs):
                 super().__init__(**kwargs)
 

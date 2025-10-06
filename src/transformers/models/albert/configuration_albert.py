@@ -18,19 +18,19 @@
 from collections import OrderedDict
 from collections.abc import Mapping
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...onnx import OnnxConfig
 
 
-class AlbertConfig(PretrainedConfig):
+class AlbertConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`AlbertModel`] or a [`TFAlbertModel`]. It is used
     to instantiate an ALBERT model according to the specified arguments, defining the model architecture. Instantiating
     a configuration with the defaults will yield a similar configuration to that of the ALBERT
     [albert/albert-xxlarge-v2](https://huggingface.co/albert/albert-xxlarge-v2) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 30000):
