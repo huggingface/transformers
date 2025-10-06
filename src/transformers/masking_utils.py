@@ -877,7 +877,7 @@ def create_causal_mask(
 
 
 def create_bidirectional_mask(
-    config: PretrainedConfig,
+    config: PreTrainedConfig,
     input_embeds: torch.Tensor,
     attention_mask: Optional[torch.Tensor],
     encoder_hidden_states: Optional[torch.Tensor] = None,
@@ -888,7 +888,7 @@ def create_bidirectional_mask(
     Create a standard bidirectional mask based on the attention implementation used (stored in the config).
 
     Args:
-        config (`PretrainedConfig`):
+        config (`PreTrainedConfig`):
             The model config.
         input_embeds (`torch.Tensor`):
             The input embeddings of shape (batch_size, query_length, hidden_dim). This is only used to infer metadata
