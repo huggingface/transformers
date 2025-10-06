@@ -545,7 +545,7 @@ def _flash_attention_forward(
     max_length_q: Optional[int] = None,
     max_length_k: Optional[int] = None,
     target_dtype: Optional[torch.dtype] = None,
-    implementation: Optional[str] = None,
+    attn_implementation: Optional[str] = None,
     **kwargs,
 ):
     """
@@ -568,7 +568,7 @@ def _flash_attention_forward(
             The attention implementation to use. If None, will default to the one based on the environment.
     """
     (flash_fn, flash_varlen_fn, pad_fn, unpad_fn), process_flash_kwargs_fn = lazy_import_flash_attention(
-        implementation
+        attn_implementation
     )
 
     # PEFT possibly silently casts tensors to fp32, this potentially reconverts to correct dtype or is a no op
