@@ -604,6 +604,13 @@ class ContinuousBatchingManager:
             streaming: Whether to stream tokens as they are generated
         """
         self.model = model.eval()
+        attn_implementation = self.model.config._attn_implementation
+        # We need to use the wrapper around `paged_attention` but the implementation set.
+        # The user could be using the flash fallback `kernels-community/flash-attn` if fa2 is not installed
+        # this does: kernel_function = partial(attention_wrapper, implementation=kernel)
+        # which passes the loaded kernel.
+        # If the user selected "flash_attention2" but does not have it -> set_xxx will replace it
+        self.model.set_attn_implementation(f"paged_attention|{attn_implementation}")
         generation_config = model.generation_config if generation_config is None else generation_config
         self.generation_config = generation_config
         self.input_queue = queue.Queue(maxsize=max_queue_size)

@@ -2635,8 +2635,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             else attn_implementation.get("", self.config._attn_implementation)
         )
 
-        # At this point, the model was already instantiated, so instead of crashing on bad value, let's simply
-        # warn the user that the requested value is not working
         if requested_implementation != self.config._attn_implementation:
             # In this case, raise
             if not self._can_set_attn_implementation():
