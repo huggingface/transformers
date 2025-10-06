@@ -608,9 +608,10 @@ class ContinuousBatchingManager:
             streaming: Whether to stream tokens as they are generated
         """
         self.model = model.eval()
-        attn_implementation = "paged|" + self.model.config._attn_implementation
-        load_and_register_kernel(attn_implementation)
-        model.set_attn_implementation(attn_implementation)
+        if "paged|" not in model.config._attn_implementation:
+            attn_implementation = "paged|" + self.model.config._attn_implementation
+            load_and_register_kernel(attn_implementation)
+            model.set_attn_implementation(attn_implementation)
         generation_config = model.generation_config if generation_config is None else generation_config
         self.generation_config = generation_config
         self.input_queue = queue.Queue(maxsize=max_queue_size)

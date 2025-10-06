@@ -46,7 +46,8 @@ class TestBatchGeneration(unittest.TestCase):
         [
             ("paged|eager", 64, 128, 64),
             ("paged|sdpa", 32, 256, 128),
-            ("paged|flash_attention2", 16, 512, 256),
+            ("paged|flash_attention_2
+", 16, 512, 256),
             ("paged|flex_attention", 64, 128, 64),
         ]
     )
@@ -91,7 +92,8 @@ class TestBatchGeneration(unittest.TestCase):
         [
             ("paged|eager", 64, 128, 64),
             ("paged|sdpa", 32, 256, 128),
-            ("paged|flash_attention2", 16, 512, 256),
+            ("paged|flash_attention_2
+", 16, 512, 256),
             ("paged|flex_attention", 64, 128, 64),
         ]
     )
