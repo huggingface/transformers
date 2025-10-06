@@ -123,7 +123,7 @@ class HunYuanMoEV1IntegrationTest(unittest.TestCase):
             add_generation_prompt=True,
             return_tensors="pt",
         )
-        generated_ids = model.generate(tokenized_chat.to(model.device), max_new_tokens=30, top_k=1)
+        generated_ids = model.generate(tokenized_chat.to(model.device), max_new_tokens=10, top_k=1)
         text = tokenizer.decode(generated_ids[0])
         output = text.split("<think>")[1]
         self.assertEqual(EXPECTED_ANSWER, output)
