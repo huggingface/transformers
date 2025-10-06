@@ -14,21 +14,21 @@
 # limitations under the License.
 """BridgeTower model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class BridgeTowerVisionConfig(PretrainedConfig):
+class BridgeTowerVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the vision configuration of a [`BridgeTowerModel`]. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the bridgetower-base
     [BridgeTower/bridgetower-base](https://huggingface.co/BridgeTower/bridgetower-base/) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -94,15 +94,15 @@ class BridgeTowerVisionConfig(PretrainedConfig):
         self.remove_last_layer = remove_last_layer
 
 
-class BridgeTowerTextConfig(PretrainedConfig):
+class BridgeTowerTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the text configuration of a [`BridgeTowerModel`]. The default values here
     are copied from RoBERTa. Instantiating a configuration with the defaults will yield a similar configuration to that
     of the bridgetower-base [BridegTower/bridgetower-base](https://huggingface.co/BridgeTower/bridgetower-base/)
     architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 50265):
@@ -202,15 +202,15 @@ class BridgeTowerTextConfig(PretrainedConfig):
         self.eos_token_id = eos_token_id
 
 
-class BridgeTowerConfig(PretrainedConfig):
+class BridgeTowerConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BridgeTowerModel`]. It is used to instantiate a
     BridgeTower model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the bridgetower-base
     [BridgeTower/bridgetower-base](https://huggingface.co/BridgeTower/bridgetower-base/) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         share_cross_modal_transformer_layers (`bool`, *optional*, defaults to `True`):

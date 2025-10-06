@@ -14,7 +14,7 @@
 # limitations under the License.
 """Qwen3MoE model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 
@@ -22,14 +22,14 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class Qwen3MoeConfig(PretrainedConfig):
+class Qwen3MoeConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3MoeModel`]. It is used to instantiate a
     Qwen3MoE model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of [Qwen/Qwen3-15B-A2B](https://huggingface.co/Qwen/Qwen3-15B-A2B).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
