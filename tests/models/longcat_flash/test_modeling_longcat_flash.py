@@ -445,6 +445,6 @@ class LongcatFlashIntegrationTest(unittest.TestCase):
             outputs = model.generate(inputs, max_new_tokens=3, do_sample=False)
 
         response = tokenizer.batch_decode(outputs, skip_special_tokens=False)[0]
-        expected_output = "[Round 0] USER:Paris is... ASSISTANT:Paris is... a city of timeless charm, where"
+        expected_output = "[Round 0] USER:Paris is... ASSISTANT:Paris is..."
 
         self.assertEqual(response, expected_output)
