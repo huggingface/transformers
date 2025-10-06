@@ -109,7 +109,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from huggingface_hub import HfApi, hf_hub_download
+from huggingface_hub import HfApi, snapshot_download
 from huggingface_hub import logging as huggingface_hub_logging
 from safetensors.numpy import load_file as safetensors_load
 from safetensors.numpy import save_file as safetensors_save
@@ -255,23 +255,36 @@ class CodeSimilarityAnalyzer:
         self.model = AutoModel.from_pretrained(EMBEDDING_MODEL, torch_dtype="auto", device_map="auto").eval()
 
         self.device = self.model.device
+        self.index_dir: Path | None = None
 
     # ---------- HUB IO ----------
 
+    def _resolve_index_path(self, filename: str) -> Path:
+        if self.index_dir is None:
+            return Path(filename)
+        return self.index_dir / filename
+
     def ensure_local_index(self) -> None:
-        """Download index files from Hub if they don't exist locally."""
-        have_all = Path(EMBEDDINGS_PATH).exists() and Path(INDEX_MAP_PATH).exists() and Path(TOKENS_PATH).exists()
-        if have_all:
+        """Ensure index files are available locally, preferring Hub cache snapshots."""
+        if self.index_dir is not None and all(
+            (self.index_dir / fname).exists() for fname in (EMBEDDINGS_PATH, INDEX_MAP_PATH, TOKENS_PATH)
+        ):
             return
-        logging.info(f"downloading index from hub: {self.hub_dataset}")
-        for fname in (EMBEDDINGS_PATH, INDEX_MAP_PATH, TOKENS_PATH):
-            hf_hub_download(
-                repo_id=self.hub_dataset,
-                filename=fname,
-                repo_type="dataset",
-                local_dir=".",
-                local_dir_use_symlinks=False,
+
+        workspace_dir = Path.cwd()
+        if all((workspace_dir / fname).exists() for fname in (EMBEDDINGS_PATH, INDEX_MAP_PATH, TOKENS_PATH)):
+            self.index_dir = workspace_dir
+            return
+
+        logging.info(f"downloading index from hub cache: {self.hub_dataset}")
+        snapshot_path = snapshot_download(repo_id=self.hub_dataset, repo_type="dataset")
+        snapshot_dir = Path(snapshot_path)
+        missing = [fname for fname in (EMBEDDINGS_PATH, INDEX_MAP_PATH, TOKENS_PATH) if not (snapshot_dir / fname).exists()]
+        if missing:
+            raise FileNotFoundError(
+                "Missing expected files in Hub snapshot: " + ", ".join(missing)
             )
+        self.index_dir = snapshot_dir
 
     def push_index_to_hub(self) -> None:
         """Upload index files to the Hub dataset repository."""
@@ -433,6 +446,8 @@ class CodeSimilarityAnalyzer:
         with open(TOKENS_PATH, "w", encoding="utf-8") as file:
             json.dump(tokens_map, file)
 
+        self.index_dir = Path.cwd()
+
     def _topk_embedding(
         self,
         query_embedding_row: np.ndarray,
@@ -517,12 +532,12 @@ class CodeSimilarityAnalyzer:
         if allow_hub_fallback:
             self.ensure_local_index()
 
-        base = safetensors_load(EMBEDDINGS_PATH)
+        base = safetensors_load(str(self._resolve_index_path(EMBEDDINGS_PATH)))
         base_embeddings = base["embeddings"]
-        with open(INDEX_MAP_PATH, "r", encoding="utf-8") as file:
+        with open(self._resolve_index_path(INDEX_MAP_PATH), "r", encoding="utf-8") as file:
             identifier_map = {int(key): value for key, value in json.load(file).items()}
         identifiers = [identifier_map[i] for i in range(len(identifier_map))]
-        with open(TOKENS_PATH, "r", encoding="utf-8") as file:
+        with open(self._resolve_index_path(TOKENS_PATH), "r", encoding="utf-8") as file:
             tokens_map = json.load(file)
 
         self_model = self._infer_query_model_name(modeling_file)
