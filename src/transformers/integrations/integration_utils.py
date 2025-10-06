@@ -533,8 +533,7 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> Be
             torch.distributed.broadcast_object_list(args_main_rank, src=0)
             args = pickle.loads(bytes(args_main_rank))
             for key, value in asdict(args).items():
-                if key != "local_rank":
-                    setattr(trainer.args, key, value)
+                setattr(trainer.args, key, value)
             trainer.train(resume_from_checkpoint=None)
             # If there hasn't been any evaluation during the training loop.
             if getattr(trainer, "objective", None) is None:

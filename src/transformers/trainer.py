@@ -4637,9 +4637,7 @@ class Trainer:
             tensors = nested_xla_mesh_reduce(tensors, name)
         elif is_sagemaker_mp_enabled():
             tensors = smp_gather(tensors)
-        elif (self.args.distributed_state is not None and self.args.distributed_state.distributed_type != "NO") or (
-            self.args.distributed_state is None and self.args.local_rank != -1
-        ):
+        elif self.args.parallel_mode == ParallelMode.DISTRIBUTED:
             tensors = distributed_concat(tensors)
         return tensors
 
