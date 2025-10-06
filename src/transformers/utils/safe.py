@@ -33,13 +33,13 @@ class ThreadSafe(ModuleType):
         super().__init__(module.__name__)
         # `_hf_safe_` prefix is used to avoid colliding with the wrapped object namespace.
         self._hf_safe_module = module
-        # callable execution lock
+        # Callable execution lock
         self._hf_safe_lock = threading.Lock()
-        # cache dict lock
+        # Cache dict lock
         self._hf_safe_callable_cache_lock = threading.Lock()
         self._hf_safe_callable_cache: dict[str, object] = {}
-        # Keep core module metadata available so tools relying on attributes
-        # like __doc__ or __spec__ see the original values.
+        # Retain module metadata so introspection tools relying on attributes
+        # like __doc__, __spec__, etc, can see the original values.
         metadata = {"__doc__": module.__doc__}
         for attr in ("__package__", "__file__", "__spec__"):
             if hasattr(module, attr):
@@ -110,7 +110,7 @@ class _ThreadSafeProxy:
 class SafeRegex(ThreadSafe):
     """Proxy module that exposes ``regex`` through a shared lock."""
 
-    # We must bind the shared regex lock to any objects returned here since
+    # We must proxy the shared regex lock to any objects returned here since
     # compiled patterns expose methods (e.g. pattern.match) that must also be
     # serialized.
 
