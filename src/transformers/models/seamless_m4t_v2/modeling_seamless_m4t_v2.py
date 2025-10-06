@@ -1492,6 +1492,7 @@ class SeamlessM4Tv2PreTrainedModel(PreTrainedModel):
 # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TSpeechEncoder with SeamlessM4T->SeamlessM4Tv2
 class SeamlessM4Tv2SpeechEncoder(SeamlessM4Tv2PreTrainedModel):
     main_input_name = "input_features"
+    input_modalities = "audio"
 
     def __init__(self, config: SeamlessM4Tv2Config):
         super().__init__(config)

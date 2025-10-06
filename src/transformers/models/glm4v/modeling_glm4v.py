@@ -661,6 +661,7 @@ class Glm4vModelOutputWithPast(ModelOutput):
 class Glm4vPreTrainedModel(PreTrainedModel):
     config: Glm4vConfig
     base_model_prefix = "model"
+    input_modalities = ["image", "video", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = ["Glm4vTextDecoderLayer", "Glm4vVisionBlock"]
     _skip_keys_device_placement = "past_key_values"
@@ -677,6 +678,7 @@ class Glm4vPreTrainedModel(PreTrainedModel):
 
 class Glm4vVisionModel(Glm4vPreTrainedModel):
     config: Glm4vVisionConfig
+    input_modalities = ["image", "video"]
     _no_split_modules = ["Glm4vVisionBlock"]
 
     def __init__(self, config) -> None:
@@ -788,6 +790,7 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
 @auto_docstring
 class Glm4vTextModel(Glm4vPreTrainedModel):
     config: Glm4vTextConfig
+    input_modalities = "text"
 
     def __init__(self, config: Glm4vTextConfig):
         super().__init__(config)

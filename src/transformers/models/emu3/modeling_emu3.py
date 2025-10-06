@@ -928,6 +928,7 @@ class Emu3VQVAE(PreTrainedModel):
     config: Emu3VQVAEConfig
     base_model_prefix = "emuvideovq"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
@@ -1093,6 +1094,7 @@ class Emu3ImageVocabularyMapping:
 class Emu3PreTrainedModel(PreTrainedModel):
     config: Emu3Config
     base_model_prefix = "model"
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = [
         "Emu3DecoderLayer",
@@ -1105,6 +1107,7 @@ class Emu3PreTrainedModel(PreTrainedModel):
     _supports_param_buffer_assignment = False
     _supports_flex_attn = True
     _supports_attention_backend = True
+    output_modalities = ["image", "text"]
 
 
 class Emu3RotaryEmbedding(nn.Module):
@@ -1145,6 +1148,7 @@ class Emu3RotaryEmbedding(nn.Module):
 
 @auto_docstring
 class Emu3TextModel(Emu3PreTrainedModel):
+    output_modalities = "text"
     _can_record_outputs = {
         "hidden_states": Emu3DecoderLayer,
         "attentions": Emu3Attention,

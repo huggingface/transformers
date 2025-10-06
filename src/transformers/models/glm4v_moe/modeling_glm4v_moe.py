@@ -798,6 +798,7 @@ class Glm4vMoeModelOutputWithPast(ModelOutput):
 
 class Glm4vMoeVisionModel(Glm4vMoePreTrainedModel):
     config: Glm4vMoeVisionConfig
+    input_modalities = ["image", "video"]
     _no_split_modules = ["Glm4vMoeVisionBlock"]
 
     def __init__(self, config) -> None:
@@ -909,6 +910,7 @@ class Glm4vMoeVisionModel(Glm4vMoePreTrainedModel):
 @auto_docstring
 class Glm4vMoeTextModel(Glm4vMoePreTrainedModel):
     config: Glm4vMoeTextConfig
+    input_modalities = "text"
 
     def __init__(self, config: Glm4vMoeTextConfig):
         super().__init__(config)

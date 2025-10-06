@@ -204,6 +204,8 @@ class DeepseekVLHybridAligner(nn.Module):
 class DeepseekVLHybridPreTrainedModel(PreTrainedModel):
     config: DeepseekVLHybridConfig
     base_model_prefix = "model"
+    input_modalities = ["image", "text"]
+    output_modalities = "text"
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlamaDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values", "causal_mask"]

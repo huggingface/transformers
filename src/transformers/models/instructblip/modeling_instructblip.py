@@ -379,8 +379,8 @@ class InstructBlipEncoder(nn.Module):
 # Copied from transformers.models.blip.modeling_blip.BlipVisionModel with Blip->InstructBlip, BLIP->INSTRUCTBLIP
 class InstructBlipVisionModel(InstructBlipPreTrainedModel):
     main_input_name = "pixel_values"
-    config: InstructBlipVisionConfig
     input_modalities = "image"
+    config: InstructBlipVisionConfig
     _can_record_outputs = {
         "hidden_states": InstructBlipEncoderLayer,
         "attentions": InstructBlipAttention,

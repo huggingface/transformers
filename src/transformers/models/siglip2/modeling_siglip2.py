@@ -540,6 +540,7 @@ def default_flax_embed_init(tensor):
 class Siglip2PreTrainedModel(PreTrainedModel):
     config: Siglip2Config
     base_model_prefix = "siglip2"
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
 
     _no_split_modules = [
@@ -708,6 +709,7 @@ class Siglip2TextTransformer(nn.Module):
 )
 class Siglip2TextModel(Siglip2PreTrainedModel):
     config: Siglip2TextConfig
+    input_modalities = "text"
 
     def __init__(self, config: Siglip2TextConfig):
         super().__init__(config)
@@ -794,6 +796,7 @@ class Siglip2MultiheadAttentionPoolingHead(nn.Module):
 class Siglip2VisionModel(Siglip2PreTrainedModel):
     config: Siglip2VisionConfig
     main_input_name = "pixel_values"
+    input_modalities = "image"
 
     def __init__(self, config: Siglip2VisionConfig):
         super().__init__(config)
@@ -1083,6 +1086,7 @@ class Siglip2Model(Siglip2PreTrainedModel):
 )
 class Siglip2ForImageClassification(Siglip2PreTrainedModel):
     main_input_name = "pixel_values"
+    input_modalities = "image"
 
     def __init__(self, config: Siglip2Config) -> None:
         super().__init__(config)
