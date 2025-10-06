@@ -17,22 +17,22 @@
 import os
 from typing import Union
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class ClvpEncoderConfig(PretrainedConfig):
+class ClvpEncoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ClvpEncoder`]. It is used to instantiate a CLVP
     text or CLVP speech encoder according to the specified arguments. Instantiating a configuration with the defaults
     will yield a similar configuration to that of the encoder of the CLVP
     [susnato/clvp_dev](https://huggingface.co/susnato/clvp_dev) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 256):
@@ -156,15 +156,15 @@ class ClvpEncoderConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
-class ClvpDecoderConfig(PretrainedConfig):
+class ClvpDecoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ClvpDecoder`]. It is used to instantiate a CLVP
     Decoder Model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Decoder part of the CLVP
     [susnato/clvp_dev](https://huggingface.co/susnato/clvp_dev) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     The architecture is similar to GPT2.
 
@@ -313,15 +313,15 @@ class ClvpDecoderConfig(PretrainedConfig):
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
 
-class ClvpConfig(PretrainedConfig):
+class ClvpConfig(PreTrainedConfig):
     r"""
     [`ClvpConfig`] is the configuration class to store the configuration of a [`ClvpModelForConditionalGeneration`]. It
     is used to instantiate a CLVP model according to the specified arguments, defining the text model, speech model and
     decoder model configs. Instantiating a configuration with the defaults will yield a similar configuration to that
     of the CLVP [susnato/clvp_dev](https://huggingface.co/susnato/clvp_dev) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`dict`, *optional*):

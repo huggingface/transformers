@@ -14,17 +14,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 
 
-class Glm4Config(PretrainedConfig):
+class Glm4Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Glm4Model`]. It is used to instantiate an Glm4
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Glm4-4-9b-chat.
     e.g. [THUDM/GLM-4-9B-0414](https://huggingface.co/THUDM/GLM-4-9B-0414)
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
     Args:
         vocab_size (`int`, *optional*, defaults to 151552):
             Vocabulary size of the Glm4 model. Defines the number of different tokens that can be represented by the

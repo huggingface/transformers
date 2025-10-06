@@ -14,7 +14,6 @@ from torchvision.transforms.v2 import functional as F
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     SizeDict,
     get_image_size_for_max_height_width,
     get_max_height_width,
@@ -35,28 +34,10 @@ from ...image_utils import (
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, logging
 from ...utils.import_utils import requires
-from .image_processing_deformable_detr import get_size_with_aspect_ratio
+from .image_processing_deformable_detr import DeformableDetrImageProcessorKwargs, get_size_with_aspect_ratio
 
 
 logger = logging.get_logger(__name__)
-
-
-class DeformableDetrFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    r"""
-    format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
-        Data format of the annotations. One of "coco_detection" or "coco_panoptic".
-    do_convert_annotations (`bool`, *optional*, defaults to `True`):
-        Controls whether to convert the annotations to the format expected by the DEFORMABLE_DETR model. Converts the
-        bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
-        Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
-    return_segmentation_masks (`bool`, *optional*, defaults to `False`):
-        Whether to return segmentation masks.
-    """
-
-    format: Optional[Union[str, AnnotationFormat]]
-    do_convert_annotations: Optional[bool]
-    return_segmentation_masks: Optional[bool]
-
 
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 
@@ -272,9 +253,9 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
     size = {"shortest_edge": 800, "longest_edge": 1333}
     default_to_square = False
     model_input_names = ["pixel_values", "pixel_mask"]
-    valid_kwargs = DeformableDetrFastImageProcessorKwargs
+    valid_kwargs = DeformableDetrImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[DeformableDetrFastImageProcessorKwargs]) -> None:
+    def __init__(self, **kwargs: Unpack[DeformableDetrImageProcessorKwargs]) -> None:
         if "pad_and_return_pixel_mask" in kwargs:
             kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
 
@@ -536,25 +517,8 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        annotations: Optional[Union[AnnotationType, list[AnnotationType]]] = None,
-        masks_path: Optional[Union[str, pathlib.Path]] = None,
-        **kwargs: Unpack[DeformableDetrFastImageProcessorKwargs],
+        **kwargs: Unpack[DeformableDetrImageProcessorKwargs],
     ) -> BatchFeature:
-        r"""
-        annotations (`AnnotationType` or `list[AnnotationType]`, *optional*):
-            List of annotations associated with the image or batch of images. If annotation is for object
-            detection, the annotations should be a dictionary with the following keys:
-            - "image_id" (`int`): The image id.
-            - "annotations" (`list[Dict]`): List of annotations for an image. Each annotation should be a
-                dictionary. An image can have no annotations, in which case the list should be empty.
-            If annotation is for segmentation, the annotations should be a dictionary with the following keys:
-            - "image_id" (`int`): The image id.
-            - "segments_info" (`list[Dict]`): List of segments for an image. Each segment should be a dictionary.
-                An image can have no segments, in which case the list should be empty.
-            - "file_name" (`str`): The file name of the image.
-        masks_path (`str` or `pathlib.Path`, *optional*):
-            Path to the directory containing the segmentation masks.
-        """
         if "pad_and_return_pixel_mask" in kwargs:
             kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
             logger.warning_once(
@@ -569,7 +533,7 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
             )
             kwargs["size"] = kwargs.pop("max_size")
 
-        return super().preprocess(images, annotations, masks_path, **kwargs)
+        return super().preprocess(images, **kwargs)
 
     def _preprocess(
         self,

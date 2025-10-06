@@ -26,7 +26,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import get_activation
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -80,7 +80,7 @@ def _create_sinusoidal_embeddings(n_pos: int, dim: int, out: torch.Tensor):
 
 
 class Embeddings(nn.Module):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PreTrainedConfig):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.dim, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.dim)
@@ -148,7 +148,7 @@ def eager_attention_forward(
 
 
 class DistilBertSelfAttention(nn.Module):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PreTrainedConfig):
         super().__init__()
         self.config = config
 
@@ -222,7 +222,7 @@ class DistilBertSelfAttention(nn.Module):
 
 
 class FFN(nn.Module):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PreTrainedConfig):
         super().__init__()
         self.dropout = nn.Dropout(p=config.dropout)
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -243,7 +243,7 @@ class FFN(nn.Module):
 
 
 class TransformerBlock(GradientCheckpointingLayer):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PreTrainedConfig):
         super().__init__()
 
         # Have an even number of Configure multi-heads
@@ -278,7 +278,7 @@ class TransformerBlock(GradientCheckpointingLayer):
 
 
 class Transformer(nn.Module):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PreTrainedConfig):
         super().__init__()
         self.n_layers = config.n_layers
         self.layer = nn.ModuleList([TransformerBlock(config) for _ in range(config.n_layers)])
@@ -336,7 +336,7 @@ class DistilBertPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class DistilBertModel(DistilBertPreTrainedModel):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PreTrainedConfig):
         super().__init__(config)
 
         self.embeddings = Embeddings(config)  # Embeddings
@@ -407,7 +407,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.transformer.layer[layer].attention.prune_heads(heads)
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
@@ -456,7 +456,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
 class DistilBertForMaskedLM(DistilBertPreTrainedModel):
     _tied_weights_keys = ["vocab_projector.weight"]
 
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PreTrainedConfig):
         super().__init__(config)
 
         self.activation = get_activation(config.activation)
@@ -558,7 +558,7 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
     """
 )
 class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PreTrainedConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -656,7 +656,7 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
 
 @auto_docstring
 class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PreTrainedConfig):
         super().__init__(config)
 
         self.distilbert = DistilBertModel(config)
@@ -758,7 +758,7 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
 
 @auto_docstring
 class DistilBertForTokenClassification(DistilBertPreTrainedModel):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PreTrainedConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -833,7 +833,7 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
 
 @auto_docstring
 class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PreTrainedConfig):
         super().__init__(config)
 
         self.distilbert = DistilBertModel(config)

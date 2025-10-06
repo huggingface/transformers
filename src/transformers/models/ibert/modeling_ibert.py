@@ -73,7 +73,6 @@ class IBertEmbeddings(nn.Module):
         self.register_buffer(
             "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
         )
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
 
         # End copy
         self.padding_idx = config.pad_token_id
@@ -132,14 +131,13 @@ class IBertEmbeddings(nn.Module):
             identity_scaling_factor=token_type_embeddings_scaling_factor,
         )
 
-        if self.position_embedding_type == "absolute":
-            position_embeddings, position_embeddings_scaling_factor = self.position_embeddings(position_ids)
-            embeddings, embeddings_scaling_factor = self.embeddings_act1(
-                embeddings,
-                embeddings_scaling_factor,
-                identity=position_embeddings,
-                identity_scaling_factor=position_embeddings_scaling_factor,
-            )
+        position_embeddings, position_embeddings_scaling_factor = self.position_embeddings(position_ids)
+        embeddings, embeddings_scaling_factor = self.embeddings_act1(
+            embeddings,
+            embeddings_scaling_factor,
+            identity=position_embeddings,
+            identity_scaling_factor=position_embeddings_scaling_factor,
+        )
 
         embeddings, embeddings_scaling_factor = self.LayerNorm(embeddings, embeddings_scaling_factor)
         embeddings = self.dropout(embeddings)
@@ -217,9 +215,6 @@ class IBertSelfAttention(nn.Module):
         self.output_activation = QuantAct(self.act_bit, quant_mode=self.quant_mode)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        if self.position_embedding_type != "absolute":
-            raise ValueError("I-BERT only supports 'absolute' for `config.position_embedding_type`")
 
         self.softmax = IntSoftmax(self.act_bit, quant_mode=self.quant_mode, force_dequant=config.force_dequant)
 

@@ -1542,7 +1542,7 @@ class PatchTSMixerForPrediction(PatchTSMixerPreTrainedModel):
                 "normal": NormalOutput,
                 "negative_binomial": NegativeBinomialOutput,
             }
-            output_class = distribution_output_map.get(config.distribution_output, None)
+            output_class = distribution_output_map.get(config.distribution_output)
             if output_class is not None:
                 self.distribution_output = output_class(dim=dim)
             else:
