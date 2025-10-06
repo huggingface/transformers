@@ -1,4 +1,4 @@
-# Copyright 2025 The HRM Team and HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 Sapient Inc. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -147,6 +147,7 @@ class HrmModelTest(CausalLMModelTest, unittest.TestCase):
     )
     model_tester_class = HrmModelTester
     _torch_compile_train_cls = HrmForCausalLM if is_torch_available() else None
+    _is_stateful = True  # HRM uses carry state instead of PKV cache
 
     def setUp(self):
         super().setUp()
@@ -160,22 +161,6 @@ class HrmModelTest(CausalLMModelTest, unittest.TestCase):
     def test_attention_outputs(self):
         """Skip attention outputs test - HRM uses FlashAttention which doesn't expose attention weights."""
         self.skipTest("HRM uses FlashAttention and doesn't expose attention weights")
-
-    def test_greedy_generate_dict_outputs_use_cache(self):
-        """Skip cache test - HRM uses carry state instead of KV cache."""
-        self.skipTest("HRM uses carry state instead of standard KV cache")
-
-    def test_beam_search_generate_dict_outputs_use_cache(self):
-        """Skip cache test - HRM uses carry state instead of KV cache."""
-        self.skipTest("HRM uses carry state instead of standard KV cache")
-
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        """Skip cache test - HRM uses carry state instead of KV cache."""
-        self.skipTest("HRM uses carry state instead of standard KV cache")
-
-    def test_sample_generate_dict_outputs_use_cache(self):
-        """Skip cache test - HRM uses carry state instead of KV cache."""
-        self.skipTest("HRM uses carry state instead of standard KV cache")
 
     def test_assisted_decoding_matches_greedy_search_0_random(self):
         """Skip assisted decoding - HRM doesn't use attention masks."""
@@ -381,36 +366,30 @@ class HrmIntegrationTest(unittest.TestCase):
     @require_torch
     def test_pretrained_model_loading(self):
         """Test loading pre-trained HRM checkpoint from HuggingFace Hub."""
-        # This test requires the converted checkpoint to be available
-        # Skip if the model is not yet available on the Hub
-        try:
-            model = HrmForCausalLM.from_pretrained("zbloss/HRM-sudoku-extreme")
-            model.eval()
+        model = HrmForCausalLM.from_pretrained("zbloss/HRM-sudoku-extreme")
+        model.eval()
 
-            # Test model can perform inference
-            # Create a simple input for ARC-like reasoning task (30x30 grid max)
-            input_ids = torch.randint(0, 11, (1, 81), device=torch_device)
-            model = model.to(torch_device)
+        # Test model can perform inference
+        # Create a simple input for ARC-like reasoning task (30x30 grid max)
+        input_ids = torch.randint(0, 11, (1, 81), device=torch_device)
+        model = model.to(torch_device)
 
-            with torch.no_grad():
-                outputs = model(input_ids=input_ids)
+        with torch.no_grad():
+            outputs = model(input_ids=input_ids)
 
-            # Verify outputs have expected structure
-            self.assertIsNotNone(outputs)
-            self.assertIsNotNone(outputs.logits)
-            self.assertEqual(outputs.logits.shape[0], 1)  # batch size
-            self.assertEqual(outputs.logits.shape[1], 81)  # sequence length
-            self.assertEqual(outputs.logits.shape[2], 11)  # vocab size
+        # Verify outputs have expected structure
+        self.assertIsNotNone(outputs)
+        self.assertIsNotNone(outputs.logits)
+        self.assertEqual(outputs.logits.shape[0], 1)  # batch size
+        self.assertEqual(outputs.logits.shape[1], 81)  # sequence length
+        self.assertEqual(outputs.logits.shape[2], 11)  # vocab size
 
-            # Verify carry state is present
-            self.assertIsNotNone(outputs.carry)
+        # Verify carry state is present
+        self.assertIsNotNone(outputs.carry)
 
-            # Verify Q-values for ACT mechanism
-            self.assertIsNotNone(outputs.q_halt_logits)
-            self.assertIsNotNone(outputs.q_continue_logits)
-
-        except Exception as e:
-            self.skipTest(f"Pre-trained checkpoint not available: {e}")
+        # Verify Q-values for ACT mechanism
+        self.assertIsNotNone(outputs.q_halt_logits)
+        self.assertIsNotNone(outputs.q_continue_logits)
 
     def test_simple_reasoning_task(self):
         """Test HRM on a simple reasoning task with random initialization."""

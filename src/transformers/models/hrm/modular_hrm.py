@@ -23,6 +23,33 @@ hierarchical and multi-timescale processing with Adaptive Computation Time (ACT)
 on tasks like Sudoku solving, maze navigation, and abstract reasoning with minimal training data.
 
 This implementation follows the architecture described in the paper: https://arxiv.org/abs/2506.21734
+
+## Modular Design Notes
+
+HRM follows the modular transformers pattern by inheriting reusable components from Llama where appropriate:
+- `apply_rotary_pos_emb`, `rotate_half`: Inherited from Llama (identical implementations)
+- `LlamaRotaryEmbedding`: Available for import but not used (see HrmRotaryEmbedding below)
+
+However, HRM has several unique architectural components that cannot inherit from existing models:
+
+### Custom Components (cannot inherit):
+
+1. **HrmLinear, HrmEmbedding**: Use custom truncated normal initialization specific to HRM's training dynamics.
+   Cannot inherit from standard nn.Linear/nn.Embedding due to initialization requirements.
+
+2. **HrmRotaryEmbedding**: Precomputes cos/sin for all positions (simpler than LlamaRotaryEmbedding which
+   supports dynamic rope scaling). HRM doesn't need rope_scaling or position_ids in forward().
+
+3. **HrmAttention**: Uses fused QKV projection and custom initialization. While similar to standard attention,
+   the projection layout and initialization make inheritance from LlamaAttention impractical.
+
+4. **HrmCarry, HrmInner, HrmReasoningModule, HrmBlock**: Core hierarchical reasoning architecture unique to HRM.
+   These implement the two-level (H/L) hierarchical processing and carry state mechanism.
+
+5. **HrmModel, HrmForCausalLM**: Use carry state instead of KV cache, implement ACT halting mechanism,
+   and have unique forward passes that cannot inherit from standard transformer models.
+
+This design balances code reuse (via inherited functions) with the need to preserve HRM's novel architecture.
 """
 
 import math
@@ -39,6 +66,7 @@ from ...modeling_flash_attention_utils import _flash_attention_forward
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
+from ..llama.modeling_llama import apply_rotary_pos_emb
 
 
 logger = logging.get_logger(__name__)
@@ -282,25 +310,6 @@ def truncated_normal_init_(
     return tensor
 
 
-def rotate_half(x: torch.Tensor) -> torch.Tensor:
-    """Rotate half the hidden dimensions for RoPE."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
-def apply_rotary_pos_emb(
-    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """Apply Rotary Position Embeddings to query and key tensors."""
-    orig_dtype = q.dtype
-    q = q.to(cos.dtype)
-    k = k.to(cos.dtype)
-    q_embed = (q * cos.unsqueeze(-2)) + (rotate_half(q) * sin.unsqueeze(-2))
-    k_embed = (k * cos.unsqueeze(-2)) + (rotate_half(k) * sin.unsqueeze(-2))
-    return q_embed.to(orig_dtype), k_embed.to(orig_dtype)
-
-
 def rms_norm(hidden_states: torch.Tensor, variance_epsilon: float) -> torch.Tensor:
     """Root Mean Square Layer Normalization."""
     input_dtype = hidden_states.dtype
@@ -311,7 +320,13 @@ def rms_norm(hidden_states: torch.Tensor, variance_epsilon: float) -> torch.Tens
 
 
 class HrmLinear(nn.Module):
-    """Linear layer with automatic type casting for mixed-precision training."""
+    """
+    Linear layer with automatic type casting for mixed-precision training.
+
+    Note: Cannot inherit from nn.Linear due to custom truncated normal initialization
+    that is critical to HRM's training dynamics. This custom initialization differs from
+    standard PyTorch initialization and is applied during __init__.
+    """
 
     def __init__(self, in_features: int, out_features: int, bias: bool = False):
         super().__init__()
@@ -351,7 +366,16 @@ class HrmEmbedding(nn.Embedding):
 
 
 class HrmRotaryEmbedding(nn.Module):
-    """Rotary Position Embedding (RoPE) precomputation."""
+    """
+    Rotary Position Embedding (RoPE) precomputation.
+
+    Note: Does not inherit from LlamaRotaryEmbedding because HRM uses a simpler approach.
+    HRM precomputes cos/sin for all positions at initialization and doesn't need:
+    - Dynamic rope scaling (rope_scaling config)
+    - Position-dependent forward passes (position_ids parameter)
+    - Rope type variations (default/linear/dynamic/yarn/longrope)
+    This simpler design is sufficient for HRM's fixed-length reasoning tasks.
+    """
 
     def __init__(self, dim=None, max_position_embeddings=None, base=10000.0, device=None, config=None):
         super().__init__()
@@ -374,7 +398,16 @@ class HrmRotaryEmbedding(nn.Module):
 
 
 class HrmAttention(nn.Module):
-    """Multi-head self-attention with FlashAttention and eager fallback."""
+    """
+    Multi-head self-attention with FlashAttention and eager fallback.
+
+    Note: Does not inherit from LlamaAttention due to architectural differences:
+    - Uses fused QKV projection (single linear layer) instead of separate Q, K, V projections
+    - Custom truncated normal initialization via HrmLinear
+    - Simpler interface without cache_position, past_key_values, or output_attentions
+    These differences make inheritance from LlamaAttention impractical while still reusing
+    the core rope functions (apply_rotary_pos_emb, rotate_half).
+    """
 
     def __init__(self, config: HrmConfig, causal: bool = False):
         super().__init__()
@@ -430,7 +463,8 @@ class HrmAttention(nn.Module):
             # Slice RoPE embeddings to match actual sequence length
             cos = cos[:seq_len, :]
             sin = sin[:seq_len, :]
-            query, key = apply_rotary_pos_emb(query, key, cos, sin)
+            # HRM uses (batch, seq_len, heads, head_dim) so unsqueeze_dim=2
+            query, key = apply_rotary_pos_emb(query, key, cos, sin, unsqueeze_dim=2)
 
         # Try FlashAttention first, fall back to eager if not available
         try:
@@ -777,28 +811,44 @@ class HrmModel(HrmPreTrainedModel):
         new_inner_carry = self.inner.reset_carry(carry.halted, carry.inner_carry)
         new_steps = torch.where(carry.halted, torch.zeros_like(carry.steps), carry.steps)
 
-        # Handle size mismatch during generation - only update keys that exist in both batch and carry
+        # Handle size mismatch during generation - update carry data with batch data
+        # Use scatter operations for efficient batch-wise updates
         new_current_data = {}
-        for k in carry.current_data.keys():
-            if k in batch:
-                # Pad or truncate batch[k] to match carry size if needed
-                batch_val = batch[k]
-                carry_val = carry.current_data[k]
-                if batch_val.shape != carry_val.shape:
-                    # During generation, batch may have different seq length
-                    # Pad or truncate to match carry's sequence length
-                    if batch_val.shape[1] < carry_val.shape[1]:
-                        # Pad batch to carry size
-                        pad_size = carry_val.shape[1] - batch_val.shape[1]
-                        batch_val = F.pad(batch_val, (0, pad_size), value=0)
-                    elif batch_val.shape[1] > carry_val.shape[1]:
-                        # Truncate batch to carry size (take last tokens)
-                        batch_val = batch_val[:, -carry_val.shape[1] :]
-                new_current_data[k] = torch.where(
-                    carry.halted.view((-1,) + (1,) * (batch_val.ndim - 1)), batch_val, carry_val
-                )
-            else:
-                new_current_data[k] = carry.current_data[k]
+
+        # Separate keys into common and carry-only for batch processing
+        common_keys = [k for k in carry.current_data.keys() if k in batch]
+        carry_only_keys = [k for k in carry.current_data.keys() if k not in batch]
+
+        # Get halted indices once for reuse across all keys
+        halted_indices = carry.halted.nonzero(as_tuple=False).squeeze(-1)
+
+        # Process common keys using scatter operations
+        for k in common_keys:
+            batch_val = batch[k]
+            carry_val = carry.current_data[k]
+
+            # During generation, input_ids may be a single token while carry has full sequence
+            # We need to align shapes: pad short sequences, keep recent context for long ones
+            if batch_val.shape[1] < carry_val.shape[1]:
+                # Pad batch to carry size (e.g., generation with single new token)
+                pad_size = carry_val.shape[1] - batch_val.shape[1]
+                batch_val = F.pad(batch_val, (0, pad_size), value=0)
+            elif batch_val.shape[1] > carry_val.shape[1]:
+                # Truncate to carry size, keeping most recent tokens for causal LM
+                # This is expected during initial forward pass when batch > max_position_embeddings
+                batch_val = batch_val[:, -carry_val.shape[1] :]
+
+            # Use scatter operation to update halted sequences
+            # Clone carry and scatter batch values at halted positions (dim 0 is batch dimension)
+            result = carry_val.clone()
+            if halted_indices.numel() > 0:
+                result.index_copy_(0, halted_indices, batch_val.index_select(0, halted_indices))
+
+            new_current_data[k] = result
+
+        # Keep existing carry data for keys not in current batch
+        for k in carry_only_keys:
+            new_current_data[k] = carry.current_data[k]
 
         # Forward inner model
         new_inner_carry, logits, (q_halt_logits, q_continue_logits) = self.inner(new_inner_carry, new_current_data)
