@@ -393,3 +393,7 @@ When updating the main branch of a forked repository, please follow these steps 
    git commit -m '<your message without GitHub references>'
    git push --set-upstream origin your-branch-for-syncing
    ```
+### Feedback and Acknowledgment
+
+We welcome all contributions! Your PR may receive small suggestions from maintainers — don’t worry, this is normal.  
+Even minor feedback is meant to help improve your code and the project overall. Beginners, please don’t be discouraged; every contribution helps!
