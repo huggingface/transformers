@@ -18,17 +18,15 @@ import torch.nn.functional as F
 from torch import nn
 
 from ...masking_utils import create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeModelOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.import_utils import is_causal_conv1d_available
 from ..lfm2.modeling_lfm2 import (
     Lfm2Attention,
+    Lfm2DecoderLayer,
     Lfm2HybridConvCache,
     Lfm2ShortConv,
-    Lfm2DecoderLayer,
 )
 from ..llama.modeling_llama import (
     LlamaForCausalLM,
@@ -36,7 +34,7 @@ from ..llama.modeling_llama import (
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
 )
-from ..mixtral.modeling_mixtral import MixtralForCausalLM, MixtralModel
+from ..mixtral.modeling_mixtral import MixtralModel
 from .configuration_lfm2_moe import Lfm2MoeConfig
 
 
@@ -65,7 +63,7 @@ class Lfm2MoeMLP(nn.Module):
     def __init__(
         self,
         config: Lfm2MoeConfig,
-        intermediate_size: int = None,
+        intermediate_size: Optional[int] = None,
     ):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -166,9 +164,11 @@ class Lfm2MoeShortConv(Lfm2ShortConv):
 class Lfm2MoeDecoderLayer(Lfm2DecoderLayer):
     def __init__(self, config: Lfm2MoeConfig, layer_idx: int):
         super().__init__()
-        self.feed_forward = Lfm2MoeMLP(
-            config, intermediate_size=config.intermediate_size
-        ) if layer_idx < config.num_dense_layers else Lfm2MoeSparseMoeBlock(config)
+        self.feed_forward = (
+            Lfm2MoeMLP(config, intermediate_size=config.intermediate_size)
+            if layer_idx < config.num_dense_layers
+            else Lfm2MoeSparseMoeBlock(config)
+        )
 
     def forward(
         self,

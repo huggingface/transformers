@@ -106,7 +106,7 @@ class Lfm2MoeMLP(nn.Module):
     def __init__(
         self,
         config: Lfm2MoeConfig,
-        intermediate_size: int = None,
+        intermediate_size: Optional[int] = None,
     ):
         super().__init__()
         self.hidden_size = config.hidden_size
