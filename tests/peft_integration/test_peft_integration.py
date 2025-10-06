@@ -950,7 +950,7 @@ class PeftHotswapIntegrationTester(unittest.TestCase):
     def tearDown(self):
         # It is critical that the dynamo cache is reset for each test. Otherwise, if the test re-uses the same model,
         # there will be recompilation errors, as torch caches the model when run in the same process.
-        torch._dynamo.reset()
+        torch.compiler.reset()
         gc.collect()
 
     def _check_model_hotswap(self, *, rank1, rank2, do_compile):
@@ -1093,23 +1093,32 @@ class PeftHotswapIntegrationTester(unittest.TestCase):
     def test_hotswap_without_compile_and_same_ranks_works(self):
         self._check_model_hotswap(rank1=8, rank2=8, do_compile=False)
 
-    def test_hotswap_without_compile_and_with_lower_works(self):
+    def test_hotswap_without_compile_and_with_lower_rank_works(self):
         self._check_model_hotswap(rank1=13, rank2=7, do_compile=False)
 
-    def test_hotswap_without_compile_and_with_higher_works(self):
+    def test_hotswap_without_compile_and_with_higher_rank_works(self):
         self._check_model_hotswap(rank1=7, rank2=13, do_compile=False)
 
     def test_hotswap_with_compile_and_same_ranks_works(self):
         # It's important to add this context to raise an error on recompilation
-        with torch._dynamo.config.patch(error_on_recompile=True):
+        with (
+            torch._dynamo.config.patch(error_on_recompile=True),
+            torch._inductor.utils.fresh_inductor_cache(),
+        ):
             self._check_model_hotswap(rank1=8, rank2=8, do_compile=True)
 
-    def test_hotswap_with_compile_and_lower_works(self):
+    def test_hotswap_with_compile_and_lower_rank_works(self):
         # It's important to add this context to raise an error on recompilation
-        with torch._dynamo.config.patch(error_on_recompile=True):
+        with (
+            torch._dynamo.config.patch(error_on_recompile=True),
+            torch._inductor.utils.fresh_inductor_cache(),
+        ):
             self._check_model_hotswap(rank1=13, rank2=7, do_compile=True)
 
-    def test_hotswap_with_compile_and_higher_works(self):
+    def test_hotswap_with_compile_and_higher_rank_works(self):
         # It's important to add this context to raise an error on recompilation
-        with torch._dynamo.config.patch(error_on_recompile=True):
+        with (
+            torch._dynamo.config.patch(error_on_recompile=True),
+            torch._inductor.utils.fresh_inductor_cache(),
+        ):
             self._check_model_hotswap(rank1=7, rank2=13, do_compile=True)
