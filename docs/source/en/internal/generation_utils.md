@@ -248,30 +248,12 @@ A [`StoppingCriteria`] can be used to change when to stop generation (other than
     - batch_select_indices
 
 [[autodoc]] DynamicCache
-    - to_legacy_cache
-    - from_legacy_cache
-
-[[autodoc]] QuantizedCache
-
-[[autodoc]] QuantoQuantizedCache
-
-[[autodoc]] HQQQuantizedCache
-
-[[autodoc]] OffloadedCache
 
 [[autodoc]] StaticCache
 
-[[autodoc]] OffloadedStaticCache
-
-[[autodoc]] HybridCache
-
-[[autodoc]] HybridChunkedCache
-
-[[autodoc]] SlidingWindowCache
+[[autodoc]] QuantizedCache
 
 [[autodoc]] EncoderDecoderCache
-    - to_legacy_cache
-    - from_legacy_cache
 
 ## Watermark Utils
 

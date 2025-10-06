@@ -1606,7 +1606,7 @@ class ModelTesterMixin:
                             )
                             for i in range(model.config.num_hidden_layers)
                         )
-                        non_empty_pkv = DynamicCache.from_legacy_cache(non_empty_pkv)
+                        non_empty_pkv = DynamicCache(non_empty_pkv)
 
                         inps = copy.deepcopy(inputs_to_test[0])
 

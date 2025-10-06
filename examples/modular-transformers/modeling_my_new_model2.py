@@ -137,7 +137,7 @@ class MyNewModel2Attention(nn.Module):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
-        self.is_causal = True
+        self.is_causal = not getattr(config, "use_bidirectional_attention", False)
 
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
@@ -206,6 +206,7 @@ class MyNewModel2DecoderLayer(GradientCheckpointingLayer):
         self.mlp = MyNewModel2MLP(config)
         self.input_layernorm = MyNewModel2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MyNewModel2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.attention_type = config.layer_types[layer_idx]
 
     def forward(
         self,
@@ -258,6 +259,13 @@ class MyNewModel2PreTrainedModel(PreTrainedModel):
         "hidden_states": MyNewModel2DecoderLayer,
         "attentions": MyNewModel2Attention,
     }
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+
+        # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
+        if "RMSNorm" in module.__class__.__name__:
+            module.weight.data.zero_()
 
 
 class MyNewModel2ForSequenceClassification(GenericForSequenceClassification, MyNewModel2PreTrainedModel):

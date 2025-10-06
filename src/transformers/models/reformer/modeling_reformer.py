@@ -149,28 +149,15 @@ class ReformerDynamicCache:
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         return None
 
-    def to_legacy_cache(self) -> tuple[tuple[torch.Tensor, torch.Tensor]]:
-        """Converts the `ReformerDynamicCache` instance into the its equivalent in the legacy cache format. Used for
-        backward compatibility."""
-        legacy_cache = ()
-        for layer_idx in range(len(self)):
-            buckets, states = self.buckets_cache[layer_idx], self.states_cache[layer_idx]
-            buckets = buckets if buckets.numel() != 0 else None
-            legacy_cache += ((buckets, states),)
-        return legacy_cache
+    def reorder_cache(self, beam_idx):
+        for layer_idx in len(self):
+            if self.buckets_cache[layer_idx] is not None and self.buckets_cache[layer_idx].numel() > 0:
+                device = self.buckets_cache[layer_idx].device
+                self.buckets_cache[layer_idx] = self.buckets_cache[layer_idx].index_select(0, beam_idx.to(device))
 
-    @classmethod
-    def from_legacy_cache(
-        cls, past_buckets_states: Optional[tuple[tuple[torch.FloatTensor, torch.FloatTensor]]] = None
-    ) -> "ReformerDynamicCache":
-        """Converts a cache in the legacy cache format into an equivalent `ReformerDynamicCache`. Used for
-        backward compatibility."""
-        cache = cls()
-        if past_buckets_states is not None:
-            for layer_idx in range(len(past_buckets_states)):
-                buckets, states = past_buckets_states[layer_idx]
-                cache.update(buckets, states, layer_idx)
-        return cache
+            if self.states_cache[layer_idx] is not None and self.states_cache[layer_idx].numel() > 0:
+                device = self.states_cache[layer_idx].device
+                self.states_cache[layer_idx] = self.states_cache[layer_idx].index_select(0, beam_idx.to(device))
 
 
 def _stable_argsort(vector, dim):
@@ -1803,13 +1790,6 @@ class ReformerEncoder(nn.Module):
         # init cached hidden states if necessary
         if use_cache and past_buckets_states is None:
             past_buckets_states = ReformerDynamicCache()
-        elif use_cache and isinstance(past_buckets_states, tuple):
-            logger.warning_once(
-                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
-                "You should pass an instance of `ReformerDynamicCache` instead, e.g. "
-                "`past_key_values=ReformerDynamicCache.from_legacy_cache(past_key_values)`."
-            )
-            past_buckets_states = ReformerDynamicCache.from_legacy_cache(past_buckets_states)
 
         # concat same tensor for reversible ResNet
         hidden_states = torch.cat([hidden_states, hidden_states], dim=-1)
@@ -2327,23 +2307,6 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
                 model_inputs[key] = value
 
         return model_inputs
-
-    def _reorder_cache(self, past_key_values, beam_idx):
-        reord_past_buckets_states = []
-        for buckets, hidden_states in past_key_values:
-            # buckets
-            if buckets is not None and buckets.numel() > 0:
-                reord_buckets = buckets.index_select(0, beam_idx.to(buckets.device))
-            else:
-                reord_buckets = None
-
-            # hidden states
-            reord_hidden_states = hidden_states.index_select(0, beam_idx.to(hidden_states.device))
-            reord_past_buckets_states.append((reord_buckets, reord_hidden_states))
-
-        if isinstance(past_key_values, ReformerDynamicCache):
-            reord_past_buckets_states = ReformerDynamicCache.from_legacy_cache(reord_past_buckets_states)
-        return reord_past_buckets_states
 
 
 @auto_docstring
