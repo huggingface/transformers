@@ -152,7 +152,7 @@ class DeepseekV3Config(PretrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
     attribute_map = {
-        "num_experts": "n_routed_experts",
+        "num_local_experts": "n_routed_experts",
     }
 
     def __init__(
