@@ -21,7 +21,7 @@ import warnings
 from collections import OrderedDict
 
 # Build the list of all feature extractors
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...feature_extraction_utils import FeatureExtractionMixin
 from ...image_processing_utils import ImageProcessingMixin
@@ -356,7 +356,7 @@ class AutoProcessor:
 
         if processor_class is None:
             # Otherwise, load config, if it can be loaded.
-            if not isinstance(config, PretrainedConfig):
+            if not isinstance(config, PreTrainedConfig):
                 config = AutoConfig.from_pretrained(
                     pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
                 )
@@ -430,7 +430,7 @@ class AutoProcessor:
         Register a new processor for this class.
 
         Args:
-            config_class ([`PretrainedConfig`]):
+            config_class ([`PreTrainedConfig`]):
                 The configuration corresponding to the model to register.
             processor_class ([`ProcessorMixin`]): The processor to register.
         """

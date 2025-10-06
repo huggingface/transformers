@@ -1047,8 +1047,8 @@ def build(config_class, models_to_create, output_dir):
     """Create all models for a certain model type.
 
     Args:
-        config_class (`PretrainedConfig`):
-            A subclass of `PretrainedConfig` that is used to determine `models_to_create`.
+        config_class (`PreTrainedConfig`):
+            A subclass of `PreTrainedConfig` that is used to determine `models_to_create`.
         models_to_create (`dict`):
             A dictionary containing the processor/model classes that we want to create the instances. These models are
             of the same model type which is associated to `config_class`.

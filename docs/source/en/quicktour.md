@@ -73,7 +73,7 @@ Each pretrained model inherits from three base classes.
 
 | **Class** | **Description** |
 |---|---|
-| [`PretrainedConfig`] | A file that specifies a models attributes such as the number of attention heads or vocabulary size. |
+| [`PreTrainedConfig`] | A file that specifies a models attributes such as the number of attention heads or vocabulary size. |
 | [`PreTrainedModel`] | A model (or architecture) defined by the model attributes from the configuration file. A pretrained model only returns the raw hidden states. For a specific task, use the appropriate model head to convert the raw hidden states into a meaningful result (for example, [`LlamaModel`] versus [`LlamaForCausalLM`]). |
 | Preprocessor | A class for converting raw inputs (text, images, audio, multimodal) into numerical inputs to the model. For example, [`PreTrainedTokenizer`] converts text into tensors and [`ImageProcessingMixin`] converts pixels into tensors. |
 
