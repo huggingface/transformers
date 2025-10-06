@@ -14,10 +14,11 @@
 
 import sys
 import threading
+import types
 
 import pytest
 
-from transformers.utils.safe import regex
+from transformers.utils.safe import ThreadSafe, regex
 
 
 pytestmark = pytest.mark.skipif(
@@ -54,7 +55,7 @@ def _exercise_pattern(pattern_factory):
     for thread in threads:
         thread.start()
 
-    ready_group.wait()
+    ready_group.wait()  # Ensure every thread is ready before triggering execution
     run_event.set()
 
     for thread in threads:
@@ -91,3 +92,49 @@ def test_regex_thread_safety_direct_match_under_gil0():
 
     errors = _exercise_pattern(factory)
     assert not errors
+
+
+def test_threadsafe_callable_cache_is_serialized_under_gil0():
+    module = types.ModuleType("_threadsafe_test_module")
+
+    counter_lock = threading.Lock()
+    call_counter = {"count": 0}
+
+    def increment(value: int):
+        with counter_lock:
+            call_counter["count"] += 1
+        return value + 1
+
+    module.increment = increment
+    thread_safe_module = ThreadSafe(module)
+
+    num_threads = 32
+    errors = []
+    errors_lock = threading.Lock()
+    ready_group = threading.Barrier(num_threads + 1)
+    run_event = threading.Event()
+
+    def worker():
+        try:
+            ready_group.wait()
+            run_event.wait()
+            for _ in range(256):
+                func = thread_safe_module.increment
+                assert func(1) == 2
+        except Exception as exc:
+            with errors_lock:
+                errors.append(exc)
+
+    threads = [threading.Thread(target=worker) for _ in range(num_threads)]
+    for thread in threads:
+        thread.start()
+
+    ready_group.wait()  # Synchronize thread start to mimic high contention scenarios
+    run_event.set()
+
+    for thread in threads:
+        thread.join()
+
+    assert not errors
+    # Each invocation should be recorded; the exact count confirms every worker executed.
+    assert call_counter["count"] == num_threads * 256

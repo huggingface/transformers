@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Thread-safe utilities and module wrappers used across Transformers."""
+"""Thread-safe utilities and module wrappers usable across Transformers."""
 
 from __future__ import annotations
 
@@ -33,6 +33,7 @@ class ThreadSafe(ModuleType):
         super().__init__(module.__name__)
         self._module = module
         self._lock = threading.Lock()
+        self._cache_lock = threading.Lock()
         self._callable_cache: dict[str, object] = {}
         # Keep core module metadata available so tools relying on attributes
         # like __doc__ or __spec__ see the original values.
@@ -48,18 +49,19 @@ class ThreadSafe(ModuleType):
     def __getattr__(self, name: str):
         attr = getattr(self._module, name)
         if callable(attr):
-            cached = self._callable_cache.get(name)
-            if cached is not None and getattr(cached, "__wrapped__", None) is attr:
-                return cached
+            with self._cache_lock:
+                cached = self._callable_cache.get(name)
+                if cached is not None and getattr(cached, "__wrapped__", None) is attr:
+                    return cached
 
-            @wraps(attr)
-            def locked(*args, **kwargs):
-                with self._lock:
-                    return attr(*args, **kwargs)
+                @wraps(attr)
+                def locked(*args, **kwargs):
+                    with self._lock:
+                        return attr(*args, **kwargs)
 
-            locked.__wrapped__ = attr
-            self._callable_cache[name] = locked
-            return locked
+                locked.__wrapped__ = attr
+                self._callable_cache[name] = locked
+                return locked
         return attr
 
     def __dir__(self):
@@ -72,24 +74,26 @@ class _ThreadSafeProxy:
     def __init__(self, value, lock):
         object.__setattr__(self, "_value", value)
         object.__setattr__(self, "_lock", lock)
+        object.__setattr__(self, "_cache_lock", threading.Lock())
         object.__setattr__(self, "_callable_cache", {})
         object.__setattr__(self, "__wrapped__", value)
 
     def __getattr__(self, name: str):
         attr = getattr(self._value, name)
         if callable(attr):
-            cached = self._callable_cache.get(name)
-            if cached is not None and getattr(cached, "__wrapped__", None) is attr:
-                return cached
+            with self._cache_lock:
+                cached = self._callable_cache.get(name)
+                if cached is not None and getattr(cached, "__wrapped__", None) is attr:
+                    return cached
 
-            @wraps(attr)
-            def locked(*args, **kwargs):
-                with self._lock:
-                    return attr(*args, **kwargs)
+                @wraps(attr)
+                def locked(*args, **kwargs):
+                    with self._lock:
+                        return attr(*args, **kwargs)
 
-            locked.__wrapped__ = attr
-            self._callable_cache[name] = locked
-            return locked
+                locked.__wrapped__ = attr
+                self._callable_cache[name] = locked
+                return locked
         return attr
 
     def __setattr__(self, name, value):
