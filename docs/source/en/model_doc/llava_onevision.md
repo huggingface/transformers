@@ -54,18 +54,17 @@ Tips:
 
 </Tip>
 
-
 ### Formatting Prompts with Chat Templates  
 
 Each **checkpoint** is trained with a specific prompt format, depending on the underlying large language model backbone. To ensure correct formatting, use the processor’s `apply_chat_template` method.  
 
 **Important:**  
+
 - You must construct a conversation history — passing a plain string won't work.  
 - Each message should be a dictionary with `"role"` and `"content"` keys.  
 - The `"content"` should be a list of dictionaries for different modalities like `"text"` and `"image"`.  
 
-
-Here’s an example of how to structure your input. 
+Here’s an example of how to structure your input.
 We will use [llava-onevision-qwen2-7b-si-hf](https://huggingface.co/llava-hf/llava-onevision-qwen2-7b-si-hf) and a conversation history of text and image. Each content field has to be a list of dicts, as follows:
 
 ```python
@@ -103,10 +102,8 @@ print(text_prompt)
 
 🚀 **Bonus:** If you're using `transformers>=4.49.0`, you can also get a vectorized output from `apply_chat_template`. See the **Usage Examples** below for more details on how to use it.
 
-
 This model was contributed by [RaushanTurganbay](https://huggingface.co/RaushanTurganbay).
 The original code can be found [here](https://github.com/LLaVA-VL/LLaVA-NeXT/tree/main).
-
 
 ## Usage example
 
@@ -292,7 +289,6 @@ model = LlavaOnevisionForConditionalGeneration.from_pretrained(
     use_flash_attention_2=True
 ).to(0)
 ```
-
 
 ## LlavaOnevisionConfig
 

@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # MXFP4
 
-Note: MXFP4 quantisation currently only works for OpenAI GPT-OSS 120b and 20b. 
+Note: MXFP4 quantisation currently only works for OpenAI GPT-OSS 120b and 20b.
 
 MXFP4 is a 4-bit floating point format that dramatically reduces the memory requirements of large models. Large models (GPT-OSS-120B) can fit on a single 80GB GPU and smaller models (GPT-OSS-20B) only require 16GB of memory. It uses blockwise scaling to preserve it's range and accuracy, which typically becomes degraded at lower precisions.
 
@@ -24,7 +24,6 @@ To use MXPF4, make sure your hardware meets the following requirements.
 
 - Install Accelerate, kernels, and Triton ≥ 3.4. Only manually install Triton ≥ 3.4 if you're using PyTorch 2.7 because it is already supported in PyTorch 2.8.
 - NVIDIA GPU Compute Capability ≥ 7.5 which includes Tesla GPUs and newer. Use [get_device_capability](https://docs.pytorch.org/docs/stable/generated/torch.cuda.get_device_capability.html) to check Compute Capability.
-
 
 ```python
 from torch import cuda
@@ -54,7 +53,6 @@ print(cfg.quantization_config)
 # }
 ```
 
-
 ## MXFP4 kernels
 
 Transformers automatically pulls the MXFP4-aware Triton kernels from the community repository when you load a model that needs them. The kernels are stored in your local cache and used during the forward pass.
@@ -66,7 +64,6 @@ You can use [hf cache scan](https://huggingface.co/docs/huggingface_hub/en/guide
 ```shell
 hf cache scan
 ```
-
 
 ```shell
 REPO ID                          REPO TYPE SIZE ON DISK

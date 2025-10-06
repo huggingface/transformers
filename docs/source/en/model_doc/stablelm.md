@@ -92,7 +92,6 @@ Now, to run the model with Flash Attention 2, refer to the snippet below:
 ['The weather is always wonderful in Costa Rica, which makes it a prime destination for retirees. That’s where the Pensionado program comes in, offering']
 ```
 
-
 ## StableLmConfig
 
 [[autodoc]] StableLmConfig

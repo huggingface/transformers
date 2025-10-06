@@ -1,6 +1,6 @@
 from typing import Optional
 
-import requests
+import httpx
 from huggingface_hub import Discussion, HfApi, get_repo_discussions
 
 from .utils import cached_file, http_user_agent, logging
@@ -44,10 +44,10 @@ def spawn_conversion(token: str, private: bool, model_id: str):
 
     data = {"data": [model_id, private, token]}
 
-    result = requests.post(sse_url, stream=True, json=data).json()
+    result = httpx.post(sse_url, follow_redirects=True, json=data).json()
     event_id = result["event_id"]
 
-    with requests.get(f"{sse_url}/{event_id}", stream=True) as sse_connection:
+    with httpx.stream("GET", f"{sse_url}/{event_id}") as sse_connection:
         try:
             logger.debug("Spawning safetensors automatic conversion.")
             start(sse_connection)

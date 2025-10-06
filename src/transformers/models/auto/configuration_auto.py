@@ -127,6 +127,9 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("dots1", "Dots1Config"),
         ("dpr", "DPRConfig"),
         ("dpt", "DPTConfig"),
+        ("edgetam", "EdgeTamConfig"),
+        ("edgetam_video", "EdgeTamVideoConfig"),
+        ("edgetam_vision_model", "EdgeTamVisionConfig"),
         ("efficientformer", "EfficientFormerConfig"),
         ("efficientloftr", "EfficientLoFTRConfig"),
         ("efficientnet", "EfficientNetConfig"),
@@ -297,6 +300,8 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("owlv2", "Owlv2Config"),
         ("owlvit", "OwlViTConfig"),
         ("paligemma", "PaliGemmaConfig"),
+        ("parakeet_ctc", "ParakeetCTCConfig"),
+        ("parakeet_encoder", "ParakeetEncoderConfig"),
         ("patchtsmixer", "PatchTSMixerConfig"),
         ("patchtst", "PatchTSTConfig"),
         ("pegasus", "PegasusConfig"),
@@ -562,6 +567,9 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("dots1", "dots1"),
         ("dpr", "DPR"),
         ("dpt", "DPT"),
+        ("edgetam", "EdgeTAM"),
+        ("edgetam_video", "EdgeTamVideo"),
+        ("edgetam_vision_model", "EdgeTamVisionModel"),
         ("efficientformer", "EfficientFormer"),
         ("efficientloftr", "EfficientLoFTR"),
         ("efficientnet", "EfficientNet"),
@@ -747,6 +755,9 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("owlv2", "OWLv2"),
         ("owlvit", "OWL-ViT"),
         ("paligemma", "PaliGemma"),
+        ("parakeet", "Parakeet"),
+        ("parakeet_ctc", "Parakeet"),
+        ("parakeet_encoder", "ParakeetEncoder"),
         ("patchtsmixer", "PatchTSMixer"),
         ("patchtst", "PatchTST"),
         ("pegasus", "Pegasus"),
@@ -980,12 +991,15 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("qwen3_vl_moe_text", "qwen3_vl_moe"),
         ("sam_vision_model", "sam"),
         ("sam2_vision_model", "sam2"),
+        ("edgetam_vision_model", "edgetam"),
         ("sam2_hiera_det_model", "sam2"),
         ("sam_hq_vision_model", "sam_hq"),
         ("llama4_text", "llama4"),
         ("blip_2_qformer", "blip_2"),
         ("fastspeech2_conformer_with_hifigan", "fastspeech2_conformer"),
         ("perception_encoder", "perception_lm"),
+        ("parakeet_encoder", "parakeet"),
+        ("parakeet_ctc", "parakeet"),
     ]
 )
 
@@ -1243,9 +1257,6 @@ class AutoConfig:
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force the (re-)download the model weights and configuration files and override the
                 cached versions if they exist.
-            resume_download:
-                Deprecated and ignored. All downloads are now resumed by default when possible.
-                Will be removed in v5 of Transformers.
             proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.

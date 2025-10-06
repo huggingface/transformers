@@ -16,7 +16,7 @@ import unittest
 
 from huggingface_hub import VideoClassificationOutputElement, hf_hub_download
 
-from transformers import MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING, VideoMAEFeatureExtractor
+from transformers import MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING, VideoMAEImageProcessor
 from transformers.pipelines import VideoClassificationPipeline, pipeline
 from transformers.testing_utils import (
     compare_pipeline_output_to_hub_spec,
@@ -89,7 +89,7 @@ class VideoClassificationPipelineTests(unittest.TestCase):
     @require_torch
     def test_small_model_pt(self):
         small_model = "hf-internal-testing/tiny-random-VideoMAEForVideoClassification"
-        small_feature_extractor = VideoMAEFeatureExtractor(
+        small_feature_extractor = VideoMAEImageProcessor(
             size={"shortest_edge": 10}, crop_size={"height": 10, "width": 10}
         )
         video_classifier = pipeline(

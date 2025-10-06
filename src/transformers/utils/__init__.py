@@ -16,8 +16,6 @@
 
 from functools import lru_cache
 
-from huggingface_hub import get_full_repo_name  # for backward compatibility
-from huggingface_hub.constants import HF_HUB_DISABLE_TELEMETRY as DISABLE_TELEMETRY  # for backward compatibility
 from packaging import version
 
 from .. import __version__
@@ -103,7 +101,6 @@ from .hub import (
     is_offline_mode,
     is_remote_url,
     list_repo_templates,
-    send_example_telemetry,
     try_to_load_from_cache,
 )
 from .import_utils import (

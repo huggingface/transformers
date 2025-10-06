@@ -121,7 +121,6 @@ print(output)
 
 - Pad inputs on the right because BioGPT uses absolute position embeddings.
 - BioGPT can reuse previously computed key-value attention pairs. Access this feature with the [past_key_values](https://huggingface.co/docs/transformers/main/en/model_doc/biogpt#transformers.BioGptModel.forward.past_key_values) parameter in [`BioGPTModel.forward`].
-- The `head_mask` argument is ignored when using an attention implementation other than "eager". If you want to use `head_mask`, make sure `attn_implementation="eager"`).
 
    ```py
    from transformers import AutoModelForCausalLM
@@ -135,30 +134,25 @@ print(output)
 
 [[autodoc]] BioGptConfig
 
-
 ## BioGptTokenizer
 
 [[autodoc]] BioGptTokenizer
     - save_vocabulary
-
 
 ## BioGptModel
 
 [[autodoc]] BioGptModel
     - forward
 
-
 ## BioGptForCausalLM
 
 [[autodoc]] BioGptForCausalLM
     - forward
 
-
 ## BioGptForTokenClassification
 
 [[autodoc]] BioGptForTokenClassification
     - forward
-
 
 ## BioGptForSequenceClassification
 

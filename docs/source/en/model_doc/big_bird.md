@@ -47,6 +47,7 @@ pipeline = pipeline(
 )
 pipeline("Plants create [MASK] through a process known as photosynthesis.")
 ```
+
 </hfoption>
 <hfoption id="AutoModel">
 
@@ -81,10 +82,12 @@ print(f"The predicted token is: {predicted_token}")
 ```bash
 !echo -e "Plants create [MASK] through a process known as photosynthesis." | transformers run --task fill-mask --model google/bigbird-roberta-base --device 0
 ```
+
 </hfoption>
 </hfoptions>
 
 ## Notes
+
 - Inputs should be padded on the right because BigBird uses absolute position embeddings.
 - BigBird supports `original_full` and `block_sparse` attention. If the input sequence length is less than 1024, it is recommended to use `original_full` since sparse patterns don't offer much benefit for smaller inputs.
 - The current implementation uses window size of 3 blocks and 2 global blocks, only supports the ITC-implementation, and doesn't support `num_random_blocks=0`.

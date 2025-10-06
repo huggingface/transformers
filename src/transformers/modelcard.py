@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional, Union
 
-import requests
+import httpx
 import yaml
 from huggingface_hub import model_info
 from huggingface_hub.errors import OfflineModeIsEnabled
@@ -380,12 +380,7 @@ class TrainingSummary:
                 for tag in info.tags:
                     if tag.startswith("license:"):
                         self.license = tag[8:]
-            except (
-                requests.exceptions.HTTPError,
-                requests.exceptions.ConnectionError,
-                HFValidationError,
-                OfflineModeIsEnabled,
-            ):
+            except (httpx.HTTPError, HFValidationError, OfflineModeIsEnabled):
                 pass
 
     def create_model_index(self, metric_mapping):
@@ -672,8 +667,7 @@ def parse_log_history(log_history):
     if idx > 0:
         eval_results = {}
         for key, value in log_history[idx].items():
-            if key.startswith("eval_"):
-                key = key[5:]
+            key = key.removeprefix("eval_")
             if key not in ["runtime", "samples_per_second", "steps_per_second", "epoch", "step"]:
                 camel_cased_key = " ".join([part.capitalize() for part in key.split("_")])
                 eval_results[camel_cased_key] = value
@@ -769,10 +763,7 @@ def extract_hyperparameters_from_trainer(trainer):
         hyperparameters["num_epochs"] = trainer.args.num_train_epochs
 
     if trainer.args.fp16:
-        if trainer.use_apex:
-            hyperparameters["mixed_precision_training"] = f"Apex, opt level {trainer.args.fp16_opt_level}"
-        else:
-            hyperparameters["mixed_precision_training"] = "Native AMP"
+        hyperparameters["mixed_precision_training"] = "Native AMP"
 
     if trainer.args.label_smoothing_factor != 0.0:
         hyperparameters["label_smoothing_factor"] = trainer.args.label_smoothing_factor

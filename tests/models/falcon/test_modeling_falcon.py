@@ -36,7 +36,6 @@ if is_torch_available():
 
     from transformers import (
         FalconForCausalLM,
-        FalconForQuestionAnswering,
         FalconForSequenceClassification,
         FalconForTokenClassification,
         FalconModel,
@@ -45,11 +44,7 @@ if is_torch_available():
 
 class FalconModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = FalconConfig
         base_model_class = FalconModel
-        causal_lm_class = FalconForCausalLM
-        sequence_class = FalconForSequenceClassification
-        token_class = FalconForTokenClassification
 
     def __init__(self, parent, new_decoder_architecture=True):
         super().__init__(parent)
@@ -59,17 +54,6 @@ class FalconModelTester(CausalLMModelTester):
 @require_torch
 class FalconModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = FalconModelTester
-    all_model_classes = (
-        (
-            FalconModel,
-            FalconForCausalLM,
-            FalconForSequenceClassification,
-            FalconForTokenClassification,
-            FalconForQuestionAnswering,
-        )
-        if is_torch_available()
-        else ()
-    )
     pipeline_model_mapping = (
         {
             "feature-extraction": FalconModel,
@@ -81,8 +65,6 @@ class FalconModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
-    test_pruning = False
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(

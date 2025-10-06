@@ -2572,9 +2572,6 @@ class OneFormerTextMLP(nn.Module):
     ):
         super().__init__()
         self.activation_fn = ACT2FN["quick_gelu"]
-        hidden_size = hidden_size
-        intermediate_size = intermediate_size
-        output_size = output_size
         self.fc1 = nn.Linear(hidden_size, intermediate_size)
         self.fc2 = nn.Linear(intermediate_size, output_size)
 

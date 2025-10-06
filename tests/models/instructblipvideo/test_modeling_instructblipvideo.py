@@ -155,7 +155,6 @@ class InstructBlipVideoVisionModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = InstructBlipVideoVisionModelTester(self)
@@ -491,7 +490,6 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
     )
     additional_model_inputs = ["qformer_input_ids", "input_ids"]
     fx_compatible = False
-    test_head_masking = False
     test_pruning = False
     test_resize_embeddings = True
     test_attention_outputs = False

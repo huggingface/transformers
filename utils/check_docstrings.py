@@ -316,6 +316,7 @@ OBJECTS_TO_IGNORE = {
     "OpenAIGPTTokenizerFast",
     "OpenLlamaConfig",
     "PLBartConfig",
+    "ParakeetCTCConfig",
     "PegasusConfig",
     "PegasusTokenizer",
     "PegasusTokenizerFast",

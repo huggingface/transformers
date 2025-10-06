@@ -123,10 +123,6 @@ class GenerationTesterMixin:
 
         # We don't want a few model inputs in our model input dictionary for generation tests
         input_keys_to_ignore = [
-            # we don't want to mask attention heads
-            "head_mask",
-            "decoder_head_mask",
-            "cross_attn_head_mask",
             # we don't want encoder-decoder models to start from filled decoder ids
             "decoder_input_ids",
             "decoder_attention_mask",
@@ -744,8 +740,15 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             if model_class._is_stateful:
                 self.skipTest(reason="Stateful models don't support assisted generation")
-            if any(model_name in model_class.__name__.lower() for model_name in ["reformer"]):
-                self.skipTest(reason="Won't fix: old model with different cache format")
+            old_models = [  # models that we won't commit resources fixing because they are old and have little usage
+                # reformer: has a different cache format
+                "reformer",
+                # imagegpt: the output lm head uses `vocab_size - 1` tokens, so the `NoBadWordsLogitsProcessor` used
+                # by prompt lookup may fail
+                "imagegpt",
+            ]
+            if any(model_name in model_class.__name__.lower() for model_name in old_models):
+                self.skipTest(reason="Won't fix: old model")
             if any(
                 model_name in model_class.__name__.lower()
                 for model_name in [
@@ -1206,7 +1209,7 @@ class GenerationTesterMixin:
 
             # This test is for decoder-only models (encoder-decoder models have native input embeddings support in the
             # decoder)
-            if config.get_text_config(decoder=True).is_encoder_decoder:
+            if config.is_encoder_decoder:
                 continue
             config.is_decoder = True
 
@@ -1285,7 +1288,7 @@ class GenerationTesterMixin:
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
 
-            if config.get_text_config(decoder=True).is_encoder_decoder:
+            if config.is_encoder_decoder:
                 self.skipTest(reason="This model is encoder-decoder and has Encoder-Decoder Cache")
 
             model = model_class(config).to(torch_device).eval()
@@ -1436,7 +1439,7 @@ class GenerationTesterMixin:
             if "token_type_ids" in inputs_dict:
                 del inputs_dict["token_type_ids"]
 
-            if config.get_text_config(decoder=True).is_encoder_decoder:
+            if config.is_encoder_decoder:
                 self.skipTest(reason="This model is encoder-decoder")
             # TODO (joao, raushan): the correct line below is `if not hasattr(config.get_text_config(), "use_cache")`,
             # but it breaks a few models. Fix and then apply `has_similar_generate_outputs` pattern
@@ -1509,7 +1512,7 @@ class GenerationTesterMixin:
             set_config_for_less_flaky_test(config)
             main_input = inputs_dict[model_class.main_input_name]
 
-            if config.get_text_config(decoder=True).is_encoder_decoder:
+            if config.is_encoder_decoder:
                 self.skipTest(reason="This model is encoder-decoder and has Encoder-Decoder Cache")
 
             config.is_decoder = True
@@ -1564,10 +1567,7 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
 
-            if (
-                config.get_text_config(decoder=True).is_encoder_decoder
-                or not model_class._supports_default_dynamic_cache()
-            ):
+            if config.is_encoder_decoder or not model_class._supports_default_dynamic_cache():
                 self.skipTest(reason="This model does not support the quantized cache format")
 
             config.is_decoder = True
@@ -1667,7 +1667,7 @@ class GenerationTesterMixin:
                     if not has_defined_cache_implementation:
                         decoder_cache = (
                             gen_out.past_key_values.self_attention_cache
-                            if config.get_text_config(decoder=True).is_encoder_decoder
+                            if config.is_encoder_decoder
                             else gen_out.past_key_values
                         )
                         self.assertTrue(isinstance(decoder_cache, DynamicCache))
@@ -1693,7 +1693,7 @@ class GenerationTesterMixin:
                         # sanity checks
                         decoder_cache = (
                             gen_out.past_key_values.self_attention_cache
-                            if config.get_text_config(decoder=True).is_encoder_decoder
+                            if config.is_encoder_decoder
                             else gen_out.past_key_values
                         )
                         self.assertFalse(isinstance(decoder_cache, DynamicCache))
@@ -2012,7 +2012,7 @@ class GenerationTesterMixin:
                     .eval()
                 )
 
-                # Drop all keys except for `input_ids`. Hard to manipulate with multimodals/head_mask/etc
+                # Drop all keys except for `input_ids`. Hard to manipulate with multimodals etc
                 dummy_input_ids = inputs_dict["input_ids"]
                 dummy_position_ids = torch.arange(dummy_input_ids.shape[1], device=torch_device)
                 dummy_position_ids = dummy_position_ids.unsqueeze(0).repeat(dummy_input_ids.shape[0], 1)
@@ -2106,7 +2106,7 @@ class GenerationTesterMixin:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
 
-                # Drop all keys except for the minimal set. Hard to manipulate with multimodals/head_mask/etc
+                # Drop all keys except for the minimal set. Hard to manipulate with multimodals etc
                 inputs_dict = {k: v for k, v in inputs_dict.items() if k in ["input_ids", "attention_mask"]}
 
                 # Ensure left padding, to adapt for some models

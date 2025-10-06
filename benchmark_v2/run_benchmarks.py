@@ -357,7 +357,9 @@ Examples:
     )
 
     parser.add_argument(
-        "--token", type=str, help="HuggingFace token for dataset uploads (if not provided, will use HF_TOKEN environment variable)"
+        "--token",
+        type=str,
+        help="HuggingFace token for dataset uploads (if not provided, will use HF_TOKEN environment variable)",
     )
 
     args = parser.parse_args()

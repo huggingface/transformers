@@ -65,13 +65,6 @@ class QuantoQuantizedCache(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class SinkCache(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class SlidingWindowCache(metaclass=DummyObject):
     _backends = ["torch"]
 

@@ -45,10 +45,9 @@ from typing import Any, Callable, Optional, Union
 from unittest import mock
 from unittest.mock import patch
 
-import huggingface_hub.utils
-import requests
+import httpx
 import urllib3
-from huggingface_hub import delete_repo
+from huggingface_hub import create_repo, delete_repo
 from packaging import version
 
 from transformers import Trainer
@@ -204,6 +203,17 @@ ENDPOINT_STAGING = "https://hub-ci.huggingface.co"
 
 # Not critical, only usable on the sandboxed CI instance.
 TOKEN = "hf_94wBhPGp6KrrTH3KDchhKpRxZwd6dmHWLL"
+
+
+# Used in CausalLMModelTester (and related classes/methods) to infer the common model classes from the base model class
+_COMMON_MODEL_NAMES_MAP = {
+    "config_class": "Config",
+    "causal_lm_class": "ForCausalLM",
+    "question_answering_class": "ForQuestionAnswering",
+    "sequence_classification_class": "ForSequenceClassification",
+    "token_classification_class": "ForTokenClassification",
+}
+
 
 if is_torch_available():
     import torch
@@ -1589,7 +1599,7 @@ def evaluate_side_effect_factory(
 # final message
 # it can handle a single string or a multiline buffer
 def apply_print_resets(buf):
-    return re.sub(r"^.*\r", "", buf, 0, re.M)
+    return re.sub(r"^.*\r", "", buf, 0, re.MULTILINE)
 
 
 def assert_screenout(out, what):
@@ -1848,7 +1858,7 @@ class TemporaryHubRepo:
             repo_id = Path(tmp_dir).name
             if namespace is not None:
                 repo_id = f"{namespace}/{repo_id}"
-            self.repo_url = huggingface_hub.create_repo(repo_id, token=self.token)
+            self.repo_url = create_repo(repo_id, token=self.token)
 
     def __enter__(self):
         return self.repo_url
@@ -2306,7 +2316,7 @@ def pytest_terminal_summary_main(tr, id):
             msg = tr._getfailureheadline(rep)
             tr.write_sep("_", msg, red=True, bold=True)
             # chop off the optional leading extra frames, leaving only the last one
-            longrepr = re.sub(r".*_ _ _ (_ ){10,}_ _ ", "", rep.longreprtext, 0, re.M | re.S)
+            longrepr = re.sub(r".*_ _ _ (_ ){10,}_ _ ", "", rep.longreprtext, 0, re.MULTILINE | re.DOTALL)
             tr._tw.line(longrepr)
             # note: not printing out any rep.sections to keep the report short
 
@@ -2454,7 +2464,7 @@ def pytest_xdist_worker_id():
     if `-n 1` or `pytest-xdist` isn't being used.
     """
     worker = os.environ.get("PYTEST_XDIST_WORKER", "gw0")
-    worker = re.sub(r"^gw", "", worker, 0, re.M)
+    worker = re.sub(r"^gw", "", worker, 0, re.MULTILINE)
     return int(worker)
 
 
@@ -2660,13 +2670,14 @@ def hub_retry(max_attempts: int = 5, wait_before_retry: Optional[float] = 2):
             while retry_count < max_attempts:
                 try:
                     return test_func_ref(*args, **kwargs)
-                # We catch all exceptions related to network issues from requests
+                # We catch all exceptions related to network issues from httpx
                 except (
-                    requests.exceptions.ConnectionError,
-                    requests.exceptions.Timeout,
-                    requests.exceptions.ReadTimeout,
-                    requests.exceptions.HTTPError,
-                    requests.exceptions.RequestException,
+                    httpx.HTTPError,
+                    httpx.RequestError,
+                    httpx.TimeoutException,
+                    httpx.ReadTimeout,
+                    httpx.ConnectError,
+                    httpx.NetworkError,
                 ) as err:
                     logger.error(
                         f"Test failed with {err} at try {retry_count}/{max_attempts} as it couldn't connect to the specified Hub repository."
@@ -2768,7 +2779,7 @@ def run_test_using_subprocess(func):
                             test = test.split("::")[1:]
                             command[idx] = "::".join([f"{func.__globals__['__file__']}"] + test)
                     command = [f"{sys.executable}", "-m", "pytest"] + command
-                    command = [x for x in command if x not in ["--no-summary"]]
+                    command = [x for x in command if x != "--no-summary"]
                 # Otherwise, simply run the test with no option at all
                 else:
                     command = [f"{sys.executable}", "-m", "pytest", f"{test}"]
@@ -3244,7 +3255,9 @@ def unpack_device_properties(
 class Expectations(UserDict[PackedDeviceProperties, Any]):
     def get_expectation(self) -> Any:
         """
-        Find best matching expectation based on environment device properties.
+        Find best matching expectation based on environment device properties. We look at device_type, major and minor
+        versions of the drivers. Expectations are stored as a dictionary with keys of the form
+        (device_type, (major, minor)). If the major and minor versions are not provided, we use None.
         """
         return self.find_expectation(get_device_properties())
 
@@ -3357,15 +3370,27 @@ def _get_test_info():
     stack_from_inspect = inspect.stack()
     # but visit from the top frame to the most recent frame
 
+    actual_test_file, _actual_test_class = test_file, test_class
     test_frame, test_obj, test_method = None, None, None
     for frame in reversed(stack_from_inspect):
-        if test_file in str(frame).replace(r"\\", "/"):
-            if test_name == frame.frame.f_locals["self"]._testMethodName:
-                test_frame = frame
-                # The test instance
-                test_obj = frame.frame.f_locals["self"]
-                test_method = getattr(test_obj, test_name)
-                break
+        # if test_file in str(frame).replace(r"\\", "/"):
+        # check frame's function + if it has `self` as locals; double check if self has the (function) name
+        # TODO: Question: How about expanded?
+        if (
+            frame.function == test_name
+            and "self" in frame.frame.f_locals
+            and hasattr(frame.frame.f_locals["self"], test_name)
+        ):
+            # if test_name == frame.frame.f_locals["self"]._testMethodName:
+            test_frame = frame
+            # The test instance
+            test_obj = frame.frame.f_locals["self"]
+            # TODO: Do we get the (relative?) path or it's just a file name?
+            # TODO: Does `test_obj` always have `tearDown` object?
+            actual_test_file = frame.filename
+            # TODO: check `test_method` will work used at the several places!
+            test_method = getattr(test_obj, test_name)
+            break
 
     if test_frame is not None:
         line_number = test_frame.lineno
@@ -3379,9 +3404,12 @@ def _get_test_info():
     # From the most outer (i.e. python's `runpy.py`) frame to most inner frame (i.e. the frame of this method)
     # Between `the test method being called` and `before entering `patched``.
     for frame in reversed(stack_from_inspect):
-        if test_file in str(frame).replace(r"\\", "/"):
-            if "self" in frame.frame.f_locals and test_name == frame.frame.f_locals["self"]._testMethodName:
-                to_capture = True
+        if (
+            frame.function == test_name
+            and "self" in frame.frame.f_locals
+            and hasattr(frame.frame.f_locals["self"], test_name)
+        ):
+            to_capture = True
         # TODO: check simply with the name is not robust.
         elif "patched" == frame.frame.f_code.co_name:
             frame_of_patched_obj = frame
@@ -3415,7 +3443,7 @@ def _get_test_info():
     # Get the code context in the test function/method.
     from _pytest._code.source import Source
 
-    with open(test_file) as fp:
+    with open(actual_test_file) as fp:
         s = fp.read()
         source = Source(s)
         test_code_context = "\n".join(source.getstatement(test_lineno - 1).lines)
@@ -3426,9 +3454,7 @@ def _get_test_info():
         source = Source(s)
         caller_code_context = "\n".join(source.getstatement(caller_lineno - 1).lines)
 
-    test_info = (
-        f"test:\n\n{full_test_name}\n\n{'-' * 80}\n\ntest context: {test_file}:{test_lineno}\n\n{test_code_context}"
-    )
+    test_info = f"test:\n\n{full_test_name}\n\n{'-' * 80}\n\ntest context: {actual_test_file}:{test_lineno}\n\n{test_code_context}"
     test_info = f"{test_info}\n\n{'-' * 80}\n\ncaller context: {caller_path}:{caller_lineno}\n\n{caller_code_context}"
 
     return (
@@ -3648,6 +3674,17 @@ def _patch_with_call_info(module_or_class, attr_name, _parse_call_info_func, tar
             # This is specific
             info = _parse_call_info_func(orig_method, args, kwargs, call_argument_expressions, target_args)
             info = _prepare_debugging_info(test_info, info)
+
+            # If the test is running in a CI environment (e.g. not a manual run), let's raise and fail the test, so it
+            # behaves as usual.
+            # On Github Actions or CircleCI, this is set automatically.
+            # When running manually, it's the user to determine if to set it.
+            # This is to avoid the patched function being called `with self.assertRaises(AssertionError):` and fails
+            # because of the missing expected `AssertionError`.
+            # TODO (ydshieh): If there is way to raise only when we are inside such context managers?
+            # TODO (ydshieh): How not to record the failure if it happens inside `self.assertRaises(AssertionError)`?
+            if os.getenv("CI") == "true":
+                raise captured_exception.with_traceback(test_traceback)
 
             # Save this, so we can raise at the end of the current test
             captured_failure = {
@@ -4055,7 +4092,7 @@ def _format_py_obj(obj, indent=0, mode="", cache=None, prefix=""):
                     if element_types[0] in [int, float]:
                         # one-line repr. without width limit
                         return no_new_line_in_elements
-                    elif element_types[0] in [str]:
+                    elif element_types[0] is str:
                         if len(obj) == 1:
                             # one single string element --> one-line repr. without width limit
                             return no_new_line_in_elements
