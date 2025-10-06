@@ -166,14 +166,15 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
         if waveform.dim() == 3:
             waveform = waveform.squeeze(-1)
 
-        features = self.mel_filters(waveform)
+        self.mel_filters = self.mel_filters.to(waveform.device)
+        features = self.mel_filters(waveform).to(waveform.device)
+
+        if features.dim() == 4:
+            features = features.squeeze(1)
 
         features = torch.log(torch.clip(features, min=1e-7))
 
-        if features.device.type == "cuda":
-            features = features.detach().cpu()
-
-        return features.numpy()
+        return features
 
     def __call__(
         self,
@@ -263,7 +264,8 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
         if is_batched:
             raw_speech = [np.asarray(speech, dtype=np.float32) for speech in raw_speech]
         elif not is_batched and not isinstance(raw_speech, np.ndarray):
-            raw_speech = np.asarray(raw_speech, dtype=np.float32)
+            if not isinstance(raw_speech, torch.Tensor):
+                raw_speech = np.asarray(raw_speech, dtype=np.float32)
         elif isinstance(raw_speech, np.ndarray) and raw_speech.dtype is np.dtype(np.float64):
             raw_speech = raw_speech.astype(np.float32)
 
@@ -272,8 +274,17 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
             raw_speech = [raw_speech]
 
         if is_torchaudio_available():
-            # self.pad() requires 2d input
+            device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
             audio = [torch.from_numpy(speech).unsqueeze(-1) for speech in raw_speech]
+            tensors = [
+                speech.to(device)
+                if isinstance(speech, torch.Tensor)
+                else torch.as_tensor(speech, dtype=torch.float32, device=device)
+                for speech in raw_speech
+            ]
+
+            audio = [tensor.unsqueeze(-1) if tensor.dim() == 1 else tensor for tensor in tensors]
+
             batch = BatchFeature({"input_features": audio})
             padded_inputs = self.pad(
                 batch,
@@ -284,7 +295,7 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
                 return_attention_mask=return_attention_mask,
             )
 
-            input_features = self._torch_extract_fbank_features(padded_inputs["input_features"])
+            input_features = self._torch_extract_fbank_features(padded_inputs["input_features"].to(device))
             padded_inputs["input_features"] = input_features
 
         else:

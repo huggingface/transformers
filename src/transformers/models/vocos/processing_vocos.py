@@ -130,8 +130,8 @@ class VocosProcessor(ProcessorMixin):
                     encoded_frames = self.audio_tokenizer.encoder(audio.to(self.audio_tokenizer.device))
                     codes = self.audio_tokenizer.quantizer.encode(encoded_frames, bandwidth=bandwidth)
             else:
-                if isinstance(audio, torch.Tensor):
-                    audio = audio.cpu().numpy()
+                if isinstance(audio, torch.Tensor) and audio.device.type == "cpu":
+                    audio = audio.numpy()
                 features = self.feature_extractor(audio, **audio_kwargs).input_features
 
         if codes is not None:
