@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## 개요[[overview]]
 
-BLIP 모델은 Junnan Li, Dongxu Li, Caiming Xiong, Steven Hoi의 [BLIP: Bootstrapping Language-Image Pre-training for Unified Vision-Language Understanding and Generation](https://arxiv.org/abs/2201.12086) 논문에서 제안되었습니다.
+BLIP 모델은 Junnan Li, Dongxu Li, Caiming Xiong, Steven Hoi의 [BLIP: Bootstrapping Language-Image Pre-training for Unified Vision-Language Understanding and Generation](https://huggingface.co/papers/2201.12086) 논문에서 제안되었습니다.
 
 BLIP은 여러 멀티모달 작업을 수행할 수 있는 모델입니다:
 
@@ -61,8 +61,6 @@ BLIP은 여러 멀티모달 작업을 수행할 수 있는 모델입니다:
 [[autodoc]] BlipImageProcessor
     - preprocess
 
-<frameworkcontent>
-<pt>
 
 ## BlipModel[[transformers.BlipModel]]
 
@@ -98,39 +96,3 @@ BLIP은 여러 멀티모달 작업을 수행할 수 있는 모델입니다:
 [[autodoc]] BlipForQuestionAnswering
     - forward
 
-</pt>
-<tf>
-
-## TFBlipModel[[transformers.TFBlipModel]]
-
-[[autodoc]] TFBlipModel
-    - call
-    - get_text_features
-    - get_image_features
-
-## TFBlipTextModel[[transformers.TFBlipTextModel]]
-
-[[autodoc]] TFBlipTextModel
-    - call
-
-## TFBlipVisionModel[[transformers.TFBlipVisionModel]]
-
-[[autodoc]] TFBlipVisionModel
-    - call
-
-## TFBlipForConditionalGeneration[[transformers.TFBlipForConditionalGeneration]]
-
-[[autodoc]] TFBlipForConditionalGeneration
-    - call
-
-## TFBlipForImageTextRetrieval[[transformers.TFBlipForImageTextRetrieval]]
-
-[[autodoc]] TFBlipForImageTextRetrieval
-    - call
-
-## TFBlipForQuestionAnswering[[transformers.TFBlipForQuestionAnswering]]
-
-[[autodoc]] TFBlipForQuestionAnswering
-    - call
-</tf>
-</frameworkcontent>

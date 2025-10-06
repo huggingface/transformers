@@ -4,7 +4,7 @@ LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-ARG PYTORCH='2.6.0'
+ARG PYTORCH='2.8.0'
 # Example: `cu102`, `cu113`, etc.
 ARG CUDA='cu126'
 
@@ -21,7 +21,7 @@ RUN python3 -m pip install --no-cache-dir './transformers[deepspeed-testing]' 'p
 # Install latest release PyTorch
 # (PyTorch must be installed before pre-compiling any DeepSpeed c++/cuda ops.)
 # (https://www.deepspeed.ai/tutorials/advanced-install/#pre-install-deepspeed-ops)
-RUN python3 -m pip uninstall -y torch torchvision torchaudio && python3 -m pip install --no-cache-dir -U torch==$PYTORCH torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/$CUDA
+RUN python3 -m pip uninstall -y torch torchvision torchaudio && python3 -m pip install --no-cache-dir -U torch==$PYTORCH torchvision torchaudio torchcodec --extra-index-url https://download.pytorch.org/whl/$CUDA
 
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
 
@@ -44,6 +44,9 @@ RUN python3 -m pip uninstall -y deepspeed
 # The installation works here, but some tests fail, if we don't pre-build deepspeed again in the VMs running the tests.
 # TODO: Find out why test fail.
 RUN DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 python3 -m pip install deepspeed --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check 2>&1
+
+# `kernels` may give different outputs (within 1e-5 range) even with the same model (weights) and the same inputs
+RUN python3 -m pip uninstall -y kernels
 
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.

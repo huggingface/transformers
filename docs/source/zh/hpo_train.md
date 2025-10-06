@@ -56,7 +56,7 @@ pip install optuna/sigopt/wandb/ray[tune]
 ...     }
 ```
 
-Optuna提供了多目标HPO。您可以在`hyperparameter_search`中传递`direction`参数，并定义自己的`compute_objective`以返回多个目标值。在`hyperparameter_search`中将返回Pareto Front（`List[BestRun]`），您应该参考[test_trainer](https://github.com/huggingface/transformers/blob/main/tests/trainer/test_trainer.py)中的测试用例`TrainerHyperParameterMultiObjectOptunaIntegrationTest`。它类似于以下内容：
+Optuna提供了多目标HPO。您可以在`hyperparameter_search`中传递`direction`参数，并定义自己的`compute_objective`以返回多个目标值。在`hyperparameter_search`中将返回Pareto Front（`list[BestRun]`），您应该参考[test_trainer](https://github.com/huggingface/transformers/blob/main/tests/trainer/test_trainer.py)中的测试用例`TrainerHyperParameterMultiObjectOptunaIntegrationTest`。它类似于以下内容：
 
 ```py
 >>> best_trials = trainer.hyperparameter_search(
@@ -98,7 +98,6 @@ Optuna提供了多目标HPO。您可以在`hyperparameter_search`中传递`direc
 >>> def model_init(trial):
 ...     return AutoModelForSequenceClassification.from_pretrained(
 ...         model_args.model_name_or_path,
-...         from_tf=bool(".ckpt" in model_args.model_name_or_path),
 ...         config=config,
 ...         cache_dir=model_args.cache_dir,
 ...         revision=model_args.model_revision,

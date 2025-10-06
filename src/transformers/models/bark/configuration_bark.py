@@ -14,9 +14,9 @@
 # limitations under the License.
 """BARK model configuration"""
 
-from typing import Dict
+from typing import Optional
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import add_start_docstrings, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -30,8 +30,8 @@ BARK_SUBMODELCONFIG_START_DOCSTRING = """
     defaults will yield a similar configuration to that of the Bark [suno/bark](https://huggingface.co/suno/bark)
     architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         block_size (`int`, *optional*, defaults to 1024):
@@ -62,7 +62,7 @@ BARK_SUBMODELCONFIG_START_DOCSTRING = """
 """
 
 
-class BarkSubModelConfig(PretrainedConfig):
+class BarkSubModelConfig(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
 
     attribute_map = {
@@ -180,7 +180,7 @@ class BarkFineConfig(BarkSubModelConfig):
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 
-class BarkConfig(PretrainedConfig):
+class BarkConfig(PreTrainedConfig):
     """
     This is the configuration class to store the configuration of a [`BarkModel`]. It is used to instantiate a Bark
     model according to the specified sub-models configurations, defining the model architecture.
@@ -188,8 +188,8 @@ class BarkConfig(PretrainedConfig):
     Instantiating a configuration with the defaults will yield a similar configuration to that of the Bark
     [suno/bark](https://huggingface.co/suno/bark) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
     semantic_config ([`BarkSemanticConfig`], *optional*):
@@ -243,10 +243,10 @@ class BarkConfig(PretrainedConfig):
 
     def __init__(
         self,
-        semantic_config: Dict = None,
-        coarse_acoustics_config: Dict = None,
-        fine_acoustics_config: Dict = None,
-        codec_config: Dict = None,
+        semantic_config: Optional[dict] = None,
+        coarse_acoustics_config: Optional[dict] = None,
+        fine_acoustics_config: Optional[dict] = None,
+        codec_config: Optional[dict] = None,
         initializer_range=0.02,
         **kwargs,
     ):
@@ -269,7 +269,7 @@ class BarkConfig(PretrainedConfig):
         self.semantic_config = BarkSemanticConfig(**semantic_config)
         self.coarse_acoustics_config = BarkCoarseConfig(**coarse_acoustics_config)
         self.fine_acoustics_config = BarkFineConfig(**fine_acoustics_config)
-        codec_model_type = codec_config["model_type"] if "model_type" in codec_config else "encodec"
+        codec_model_type = codec_config.get("model_type", "encodec")
         self.codec_config = CONFIG_MAPPING[codec_model_type](**codec_config)
 
         self.initializer_range = initializer_range
@@ -282,7 +282,7 @@ class BarkConfig(PretrainedConfig):
         semantic_config: BarkSemanticConfig,
         coarse_acoustics_config: BarkCoarseConfig,
         fine_acoustics_config: BarkFineConfig,
-        codec_config: PretrainedConfig,
+        codec_config: PreTrainedConfig,
         **kwargs,
     ):
         r"""

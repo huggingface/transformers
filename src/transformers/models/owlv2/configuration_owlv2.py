@@ -14,13 +14,7 @@
 # limitations under the License.
 """OWLv2 model configuration"""
 
-from typing import TYPE_CHECKING, Dict
-
-
-if TYPE_CHECKING:
-    pass
-
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
@@ -28,15 +22,15 @@ logger = logging.get_logger(__name__)
 
 
 # Copied from transformers.models.owlvit.configuration_owlvit.OwlViTTextConfig with OwlViT->Owlv2, owlvit-base-patch32->owlv2-base-patch16, owlvit->owlv2, OWL-ViT->OWLv2
-class Owlv2TextConfig(PretrainedConfig):
+class Owlv2TextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`Owlv2TextModel`]. It is used to instantiate an
     Owlv2 text encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Owlv2
     [google/owlv2-base-patch16](https://huggingface.co/google/owlv2-base-patch16) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -125,15 +119,15 @@ class Owlv2TextConfig(PretrainedConfig):
 
 
 # Copied from transformers.models.owlvit.configuration_owlvit.OwlViTVisionConfig with OwlViT->Owlv2, owlvit-base-patch32->owlv2-base-patch16, owlvit->owlv2, OWL-ViT->OWLv2, 32->16
-class Owlv2VisionConfig(PretrainedConfig):
+class Owlv2VisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`Owlv2VisionModel`]. It is used to instantiate
     an OWLv2 image encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the OWLv2
     [google/owlv2-base-patch16](https://huggingface.co/google/owlv2-base-patch16) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -214,15 +208,15 @@ class Owlv2VisionConfig(PretrainedConfig):
 
 
 # Copied from transformers.models.owlvit.configuration_owlvit.OwlViTConfig with OwlViT->Owlv2, owlvit-base-patch32->owlv2-base-patch16, owlvit->owlv2, OWL-ViT->OWLv2
-class Owlv2Config(PretrainedConfig):
+class Owlv2Config(PreTrainedConfig):
     r"""
     [`Owlv2Config`] is the configuration class to store the configuration of an [`Owlv2Model`]. It is used to
     instantiate an OWLv2 model according to the specified arguments, defining the text model and vision model
     configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the OWLv2
     [google/owlv2-base-patch16](https://huggingface.co/google/owlv2-base-patch16) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`dict`, *optional*):
@@ -271,7 +265,7 @@ class Owlv2Config(PretrainedConfig):
         self.initializer_factor = 1.0
 
     @classmethod
-    def from_text_vision_configs(cls, text_config: Dict, vision_config: Dict, **kwargs):
+    def from_text_vision_configs(cls, text_config: dict, vision_config: dict, **kwargs):
         r"""
         Instantiate a [`Owlv2Config`] (or a derived class) from owlv2 text model configuration and owlv2 vision
         model configuration.

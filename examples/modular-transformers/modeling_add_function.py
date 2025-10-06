@@ -10,6 +10,8 @@ from typing import Optional
 import torch
 from torch import nn
 
+from ...utils.deprecation import deprecate_kwarg
+
 
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
@@ -53,7 +55,7 @@ class TestAttention(nn.Module):
     Adapted from transformers.models.mistral.modeling_mistral.MistralAttention:
     The input dimension here is attention_hidden_size = 2 * hidden_size, and head_dim = attention_hidden_size // num_heads.
     The extra factor of 2 comes from the input being the concatenation of original_hidden_states with the output of the previous (mamba) layer
-    (see fig. 2 in https://arxiv.org/pdf/2405.16712).
+    (see fig. 2 in https://huggingface.co/papers/2405.16712).
     Additionally, replaced
     attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim) with
     attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim/2)
@@ -62,5 +64,6 @@ class TestAttention(nn.Module):
     def __init__(self):
         pass
 
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(self) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         _ = apply_rotary_pos_emb(1, 1, 1, 1)

@@ -14,14 +14,14 @@
 # limitations under the License.
 """RecurrentGemma model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class RecurrentGemmaConfig(PretrainedConfig):
+class RecurrentGemmaConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`RecurrentGemmaModel`]. It is used to instantiate a RecurrentGemma
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -29,8 +29,8 @@ class RecurrentGemmaConfig(PretrainedConfig):
 
     e.g. [google/recurrentgemma-2b](https://huggingface.co/google/recurrentgemma-2b)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -76,7 +76,7 @@ class RecurrentGemmaConfig(PretrainedConfig):
             The partial rotary factor used in the initialization of the rotary embeddings.
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
-        block_types (`List[str]`, *optional*, defaults to `('recurrent', 'recurrent', 'attention')`):
+        block_types (`list[str]`, *optional*, defaults to `('recurrent', 'recurrent', 'attention')`):
             List of aleternating blocks that will be repeated to initialize the `temporal_block` layer.
         attention_dropout (`float`, *optional*, defaults to 0.0): dropout value to use after the attention softmax.
         num_key_value_heads (`16`, *optional*, defaults to 16): Number of key value heads to use GQA.

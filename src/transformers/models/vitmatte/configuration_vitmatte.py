@@ -15,9 +15,9 @@
 """VitMatte model configuration"""
 
 import copy
-from typing import List
+from typing import Optional
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto.configuration_auto import CONFIG_MAPPING
@@ -26,18 +26,18 @@ from ..auto.configuration_auto import CONFIG_MAPPING
 logger = logging.get_logger(__name__)
 
 
-class VitMatteConfig(PretrainedConfig):
+class VitMatteConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of [`VitMatteForImageMatting`]. It is used to
     instantiate a ViTMatte model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the ViTMatte
     [hustvl/vitmatte-small-composition-1k](https://huggingface.co/hustvl/vitmatte-small-composition-1k) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        backbone_config (`PretrainedConfig` or `dict`, *optional*, defaults to `VitDetConfig()`):
+        backbone_config (`PreTrainedConfig` or `dict`, *optional*, defaults to `VitDetConfig()`):
             The configuration of the backbone model.
         backbone (`str`, *optional*):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
@@ -57,9 +57,9 @@ class VitMatteConfig(PretrainedConfig):
             The epsilon used by the batch norm layers.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        convstream_hidden_sizes (`List[int]`, *optional*, defaults to `[48, 96, 192]`):
+        convstream_hidden_sizes (`list[int]`, *optional*, defaults to `[48, 96, 192]`):
             The output channels of the ConvStream module.
-        fusion_hidden_sizes (`List[int]`, *optional*, defaults to `[256, 128, 64, 32]`):
+        fusion_hidden_sizes (`list[int]`, *optional*, defaults to `[256, 128, 64, 32]`):
             The output channels of the Fusion blocks.
 
     Example:
@@ -81,7 +81,7 @@ class VitMatteConfig(PretrainedConfig):
 
     def __init__(
         self,
-        backbone_config: PretrainedConfig = None,
+        backbone_config: Optional[PreTrainedConfig] = None,
         backbone=None,
         use_pretrained_backbone=False,
         use_timm_backbone=False,
@@ -89,8 +89,8 @@ class VitMatteConfig(PretrainedConfig):
         hidden_size: int = 384,
         batch_norm_eps: float = 1e-5,
         initializer_range: float = 0.02,
-        convstream_hidden_sizes: List[int] = [48, 96, 192],
-        fusion_hidden_sizes: List[int] = [256, 128, 64, 32],
+        convstream_hidden_sizes: list[int] = [48, 96, 192],
+        fusion_hidden_sizes: list[int] = [256, 128, 64, 32],
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -122,10 +122,18 @@ class VitMatteConfig(PretrainedConfig):
         self.convstream_hidden_sizes = convstream_hidden_sizes
         self.fusion_hidden_sizes = fusion_hidden_sizes
 
+    @property
+    def sub_configs(self):
+        return (
+            {"backbone_config": type(self.backbone_config)}
+            if getattr(self, "backbone_config", None) is not None
+            else {}
+        )
+
     def to_dict(self):
         """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`]. Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+        Serializes this instance to a Python dictionary. Override the default [`~PreTrainedConfig.to_dict`]. Returns:
+            `dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
         """
         output = copy.deepcopy(self.__dict__)
         output["backbone_config"] = self.backbone_config.to_dict()

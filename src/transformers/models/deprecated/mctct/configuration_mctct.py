@@ -14,22 +14,22 @@
 # limitations under the License.
 """M-CTC-T model configuration"""
 
-from ....configuration_utils import PretrainedConfig
+from ....configuration_utils import PreTrainedConfig
 from ....utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class MCTCTConfig(PretrainedConfig):
+class MCTCTConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MCTCTModel`]. It is used to instantiate an
     M-CTC-T model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the M-CTC-T
     [speechbrain/m-ctc-t-large](https://huggingface.co/speechbrain/m-ctc-t-large) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -85,7 +85,7 @@ class MCTCTConfig(PretrainedConfig):
             Feature dimensions of the channels of the input to the Conv1D layer.
         input_channels (`int`, *optional*, defaults to 1):
             Number of input channels of the input to the Conv1D layer.
-        conv_channels (`List[int]`, *optional*):
+        conv_channels (`list[int]`, *optional*):
             Channel sizes of intermediate Conv1D layers.
         ctc_loss_reduction (`str`, *optional*, defaults to `"sum"`):
             Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an

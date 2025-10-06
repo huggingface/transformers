@@ -14,22 +14,22 @@
 # limitations under the License.
 """GPTSAN-japanese model configuration"""
 
-from ....configuration_utils import PretrainedConfig
+from ....configuration_utils import PreTrainedConfig
 from ....utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class GPTSanJapaneseConfig(PretrainedConfig):
+class GPTSanJapaneseConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GPTSanJapaneseModel`]. It is used to instantiate
     a GPTSANJapanese model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the GPTSANJapanese
     [Tanrei/GPTSAN-japanese](https://huggingface.co/Tanrei/GPTSAN-japanese) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Arguments:
         vocab_size (`int`, *optional*, defaults to 36000):
@@ -67,7 +67,7 @@ class GPTSanJapaneseConfig(PretrainedConfig):
             during training.
         router_dtype (`str`, *optional*, default to `"float32"`):
             The `dtype` used for the routers. It is preferable to keep the `dtype` to `"float32"` as specified in the
-            *selective precision* discussion in [the paper](https://arxiv.org/abs/2101.03961).
+            *selective precision* discussion in [the paper](https://huggingface.co/papers/2101.03961).
         router_ignore_padding_tokens (`bool`, *optional*, defaults to `False`):
             Whether to ignore padding tokens when routing.
         output_hidden_states (`bool`, *optional*, default to `False`):

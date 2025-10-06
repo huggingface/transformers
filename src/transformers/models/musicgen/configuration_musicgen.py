@@ -14,7 +14,7 @@
 # limitations under the License.
 """MusicGen model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 
@@ -22,15 +22,15 @@ from ..auto.configuration_auto import AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class MusicgenDecoderConfig(PretrainedConfig):
+class MusicgenDecoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`MusicgenDecoder`]. It is used to instantiate a
     MusicGen decoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the MusicGen
     [facebook/musicgen-small](https://huggingface.co/facebook/musicgen-small) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -60,7 +60,7 @@ class MusicgenDecoderConfig(PretrainedConfig):
         initializer_factor (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
             for more details.
         scale_embedding (`bool`, *optional*, defaults to `False`):
             Scale embeddings by diving by sqrt(hidden_size).
@@ -132,24 +132,24 @@ class MusicgenDecoderConfig(PretrainedConfig):
         )
 
 
-class MusicgenConfig(PretrainedConfig):
+class MusicgenConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MusicgenModel`]. It is used to instantiate a
     MusicGen model according to the specified arguments, defining the text encoder, audio encoder and MusicGen decoder
     configs.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         kwargs (*optional*):
             Dictionary of keyword arguments. Notably:
 
-                - **text_encoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
+                - **text_encoder** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that
                   defines the text encoder config.
-                - **audio_encoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
+                - **audio_encoder** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that
                   defines the audio encoder config.
-                - **decoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that defines
+                - **decoder** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that defines
                   the decoder config.
 
     Example:
@@ -214,12 +214,13 @@ class MusicgenConfig(PretrainedConfig):
         self.audio_encoder = AutoConfig.for_model(audio_encoder_model_type, **audio_encoder_config)
         self.decoder = MusicgenDecoderConfig(**decoder_config)
         self.is_encoder_decoder = True
+        self.initializer_factor = self.decoder.initializer_factor
 
     @classmethod
     def from_sub_models_config(
         cls,
-        text_encoder_config: PretrainedConfig,
-        audio_encoder_config: PretrainedConfig,
+        text_encoder_config: PreTrainedConfig,
+        audio_encoder_config: PreTrainedConfig,
         decoder_config: MusicgenDecoderConfig,
         **kwargs,
     ):

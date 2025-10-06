@@ -16,62 +16,26 @@
 
 from typing import Optional, Union
 
-from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-    BaseImageProcessorFast,
-    BatchFeature,
-    DefaultFastImageProcessorKwargs,
-)
+import torch
+from torchvision.transforms.v2 import functional as F
+
+from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature
 from ...image_transforms import ChannelDimension, group_images_by_shape, reorder_images
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
-    add_start_docstrings,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
+    auto_docstring,
     logging,
     requires_backends,
 )
-from .image_processing_layoutlmv3 import apply_tesseract
+from .image_processing_layoutlmv3 import LayoutLMv3ImageProcessorKwargs, apply_tesseract
 
 
 logger = logging.get_logger(__name__)
 
-if is_torch_available():
-    import torch
 
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
-
-
-class LayoutLMv3FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    apply_ocr: Optional[bool]
-    ocr_lang: Optional[str]
-    tesseract_config: Optional[str]
-
-
-@add_start_docstrings(
-    "Constructs a fast LayoutLMv3 image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    """
-        apply_ocr (`bool`, *optional*, defaults to `True`):
-            Whether to apply the Tesseract OCR engine to get words + normalized bounding boxes. Can be overridden by
-            the `apply_ocr` parameter in the `preprocess` method.
-        ocr_lang (`str`, *optional*):
-            The language, specified by its ISO code, to be used by the Tesseract OCR engine. By default, English is
-            used. Can be overridden by the `ocr_lang` parameter in the `preprocess` method.
-        tesseract_config (`str`, *optional*):
-            Any additional custom configuration flags that are forwarded to the `config` parameter when calling
-            Tesseract. For example: '--psm 6'. Can be overridden by the `tesseract_config` parameter in the
-            `preprocess` method.
-    """,
-)
+@auto_docstring
 class LayoutLMv3ImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_STANDARD_MEAN
@@ -83,27 +47,13 @@ class LayoutLMv3ImageProcessorFast(BaseImageProcessorFast):
     apply_ocr = True
     ocr_lang = None
     tesseract_config = ""
-    valid_kwargs = LayoutLMv3FastImageProcessorKwargs
+    valid_kwargs = LayoutLMv3ImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[LayoutLMv3FastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[LayoutLMv3ImageProcessorKwargs]):
         super().__init__(**kwargs)
 
-    @add_start_docstrings(
-        BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-        """
-            apply_ocr (`bool`, *optional*, defaults to `True`):
-                Whether to apply the Tesseract OCR engine to get words + normalized bounding boxes. Can be overridden by
-                the `apply_ocr` parameter in the `preprocess` method.
-            ocr_lang (`str`, *optional*):
-                The language, specified by its ISO code, to be used by the Tesseract OCR engine. By default, English is
-                used. Can be overridden by the `ocr_lang` parameter in the `preprocess` method.
-            tesseract_config (`str`, *optional*):
-                Any additional custom configuration flags that are forwarded to the `config` parameter when calling
-                Tesseract. For example: '--psm 6'. Can be overridden by the `tesseract_config` parameter in the
-                `preprocess` method.
-        """,
-    )
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[LayoutLMv3FastImageProcessorKwargs]) -> BatchFeature:
+    @auto_docstring
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[LayoutLMv3ImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def _preprocess(
@@ -123,6 +73,7 @@ class LayoutLMv3ImageProcessorFast(BaseImageProcessorFast):
         ocr_lang: Optional[str],
         tesseract_config: Optional[str],
         return_tensors: Optional[Union[str, TensorType]],
+        disable_grouping: Optional[bool],
         **kwargs,
     ) -> BatchFeature:
         # Tesseract OCR to get words + normalized bounding boxes
@@ -142,7 +93,7 @@ class LayoutLMv3ImageProcessorFast(BaseImageProcessorFast):
                 boxes_batch.append(boxes)
 
         # Group images by size for batched resizing
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
@@ -152,7 +103,7 @@ class LayoutLMv3ImageProcessorFast(BaseImageProcessorFast):
 
         # Group images by size for further processing
         # Needed in case do_resize is False, or resize returns images with different sizes
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images)
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_center_crop:

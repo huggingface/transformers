@@ -14,7 +14,7 @@
 # limitations under the License.
 """GPTNeoX model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 
@@ -22,15 +22,15 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class GPTNeoXConfig(PretrainedConfig):
+class GPTNeoXConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GPTNeoXModel`]. It is used to instantiate an
     GPTNeoX model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the GPTNeoX
     [EleutherAI/gpt-neox-20b](https://huggingface.co/EleutherAI/gpt-neox-20b) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -99,11 +99,11 @@ class GPTNeoXConfig(PretrainedConfig):
                 `beta_slow` (`float`, *optional*):
                     Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
                     ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`List[float]`, *optional*):
+                `short_factor` (`list[float]`, *optional*):
                     Only used with 'longrope'. The scaling factor to be applied to short contexts (<
                     `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
                     size divided by the number of attention heads divided by 2
-                `long_factor` (`List[float]`, *optional*):
+                `long_factor` (`list[float]`, *optional*):
                     Only used with 'longrope'. The scaling factor to be applied to long contexts (<
                     `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
                     size divided by the number of attention heads divided by 2
@@ -199,7 +199,7 @@ class GPTNeoXConfig(PretrainedConfig):
 
         if self.hidden_size % self.num_attention_heads != 0:
             raise ValueError(
-                "The hidden size is not divisble by the number of attention heads! Make sure to update them!"
+                "The hidden size is not divisible by the number of attention heads! Make sure to update them!"
             )
 
 

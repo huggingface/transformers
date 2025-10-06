@@ -33,7 +33,7 @@ import unittest
 import pytest
 from parameterized import parameterized
 
-from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 
 
 # skipping in unittest tests
@@ -43,7 +43,7 @@ params = [(1,)]
 
 # test that we can stack our skip decorators with 3rd party decorators
 def check_slow():
-    run_slow = bool(os.getenv("RUN_SLOW", 0))
+    run_slow = bool(os.getenv("RUN_SLOW", "0"))
     if run_slow:
         assert True
     else:
@@ -52,24 +52,29 @@ def check_slow():
 
 # test that we can stack our skip decorators
 def check_slow_torch_cuda():
-    run_slow = bool(os.getenv("RUN_SLOW", 0))
+    run_slow = bool(os.getenv("RUN_SLOW", "0"))
     if run_slow and torch_device == "cuda":
         assert True
     else:
         assert False, "should have been skipped"
 
 
+def check_slow_torch_accelerator():
+    run_slow = bool(os.getenv("RUN_SLOW", "0"))
+    assert run_slow and torch_device in ["cuda", "xpu"], "should have been skipped"
+
+
 @require_torch
 class SkipTester(unittest.TestCase):
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_2_skips_slow_first(self):
-        check_slow_torch_cuda()
+        check_slow_torch_accelerator()
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     def test_2_skips_slow_last(self):
-        check_slow_torch_cuda()
+        check_slow_torch_accelerator()
 
     # The combination of any skip decorator, followed by parameterized fails to skip the tests
     # 1. @slow manages to correctly skip `test_param_slow_first`
@@ -96,15 +101,15 @@ class SkipTester(unittest.TestCase):
 
 
 @slow
-@require_torch_gpu
+@require_torch_accelerator
 def test_pytest_2_skips_slow_first():
-    check_slow_torch_cuda()
+    check_slow_torch_accelerator()
 
 
-@require_torch_gpu
+@require_torch_accelerator
 @slow
 def test_pytest_2_skips_slow_last():
-    check_slow_torch_cuda()
+    check_slow_torch_accelerator()
 
 
 @slow

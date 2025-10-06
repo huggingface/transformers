@@ -90,6 +90,46 @@ GGUF_CONFIG_MAPPING = {
         "expert_count": "num_experts",
         "expert_used_count": "num_experts_per_tok",
     },
+    "lfm2": {
+        "context_length": "max_position_embeddings",
+        "block_count": "num_hidden_layers",
+        "feed_forward_length": "intermediate_size",
+        "embedding_length": "hidden_size",
+        "rope.dimension_count": None,
+        "rope.freq_base": "rope_theta",
+        "attention.head_count": "num_attention_heads",
+        "attention.head_count_kv": "num_key_value_heads",
+        "attention.layer_norm_rms_epsilon": "rms_norm_eps",
+        "vocab_size": "vocab_size",
+        "shortconv.l_cache": "conv_L_cache",
+    },
+    "qwen3": {
+        "context_length": "max_position_embeddings",
+        "block_count": "num_hidden_layers",
+        "feed_forward_length": "intermediate_size",
+        "embedding_length": "hidden_size",
+        "rope.dimension_count": None,
+        "rope.freq_base": "rope_theta",
+        "attention.head_count": "num_attention_heads",
+        "attention.head_count_kv": "num_key_value_heads",
+        "attention.layer_norm_rms_epsilon": "rms_norm_eps",
+        "vocab_size": "vocab_size",
+    },
+    "qwen3_moe": {
+        "context_length": "max_position_embeddings",
+        "block_count": "num_hidden_layers",
+        "feed_forward_length": "intermediate_size",
+        "embedding_length": "hidden_size",
+        "rope.dimension_count": None,
+        "rope.freq_base": "rope_theta",
+        "attention.key_length": "head_dim",
+        "attention.head_count": "num_attention_heads",
+        "attention.head_count_kv": "num_key_value_heads",
+        "attention.layer_norm_rms_epsilon": "rms_norm_eps",
+        "vocab_size": "vocab_size",
+        "expert_count": "num_experts",
+        "expert_used_count": "num_experts_per_tok",
+    },
     "falcon": {
         "context_length": "max_position_embeddings",
         "block_count": "num_hidden_layers",
@@ -223,6 +263,31 @@ GGUF_CONFIG_MAPPING = {
         "attention.sliding_window": "sliding_window",
         "vocab_size": "vocab_size",
     },
+    "umt5": {
+        "context_length": "n_positions",
+        "block_count": "num_layers",
+        "feed_forward_length": "d_ff",
+        "embedding_length": "d_model",
+        "attention.key_length": "d_kv",
+        "attention.head_count": "num_heads",
+        "attention.head_count_kv": "num_key_value_heads",
+        "attention.layer_norm_epsilon": "layer_norm_epsilon",
+        "attention.relative_buckets_count": "relative_attention_num_buckets",
+        "decoder_start_token_id": "decoder_start_token_id",
+        "vocab_size": "vocab_size",
+    },
+    "deci": {
+        "context_length": "max_position_embeddings",
+        "block_count": "num_hidden_layers",
+        "feed_forward_length": "intermediate_size",
+        "embedding_length": "hidden_size",
+        "rope.dimension_count": None,
+        "rope.freq_base": "rope_theta",
+        "attention.head_count": "num_attention_heads",
+        "attention.head_count_kv": "num_key_value_heads",
+        "attention.layer_norm_rms_epsilon": "rms_norm_eps",
+        "vocab_size": "vocab_size",
+    },
 }
 
 GGUF_TOKENIZER_MAPPING = {
@@ -264,11 +329,11 @@ def _gguf_parse_value(_value, data_type):
         _value = int(_value[0])
     elif data_type in [6, 12]:
         _value = float(_value[0])
-    elif data_type in [7]:
+    elif data_type == 7:
         _value = bool(_value[0])
-    elif data_type in [8]:
+    elif data_type == 8:
         _value = array("B", list(_value)).tobytes().decode()
-    elif data_type in [9]:
+    elif data_type == 9:
         _value = _gguf_parse_value(_value, array_data_type)
     return _value
 
@@ -424,7 +489,7 @@ class GGUFLlamaConverter(LlamaConverter):
         if post_processor:
             tokenizer.post_processor = post_processor
 
-        # HACK: patch the llama-3 tokenizer to use the correspinding pre-tokenizer
+        # HACK: patch the llama-3 tokenizer to use the corresponding pre-tokenizer
         # and normalizer
         if self.is_llama_3_tokenizer:
             tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(
@@ -676,6 +741,8 @@ GGUF_TO_FAST_CONVERTERS = {
     "llama": GGUFLlamaConverter,
     "qwen2": GGUFQwen2Converter,
     "qwen2_moe": GGUFQwen2Converter,
+    "qwen3": GGUFQwen2Converter,
+    "qwen3_moe": GGUFQwen2Converter,
     "phi3": GGUFPhi3Converter,
     "bloom": GGUFGPTConverter,
     "falcon": GGUFGPTConverter,
@@ -687,10 +754,13 @@ GGUF_TO_FAST_CONVERTERS = {
     "nemotron": GGUFGPTConverter,
     "gemma2": GGUFGemmaConverter,
     "gemma3_text": GGUFGemmaConverter,
+    "umt5": GGUFT5Converter,
+    "deci": GGUFLlamaConverter,
+    "decilm": GGUFLlamaConverter,
 }
 
 
-def convert_gguf_tokenizer(architecture, tokenizer_dict) -> Tokenizer:
+def convert_gguf_tokenizer(architecture: str, tokenizer_dict) -> tuple[Tokenizer, dict]:
     """
     Utilities to convert a slow tokenizer instance in a fast tokenizer instance.
 

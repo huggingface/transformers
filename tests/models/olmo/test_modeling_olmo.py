@@ -15,6 +15,7 @@
 
 import unittest
 
+import pytest
 from packaging import version
 from parameterized import parameterized
 
@@ -189,16 +190,6 @@ class OlmoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="OLMo does not support head pruning.")
-    def test_headmasking(self):
-        pass
-
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
-
     @parameterized.expand([("linear",), ("dynamic",)])
     def test_model_rope_scaling(self, scaling_type):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -327,6 +318,7 @@ class OlmoIntegrationTest(unittest.TestCase):
 
         self.assertEqual(rust_tokenizer.encode(" Hello"), [24387])
 
+    @pytest.mark.torch_export_test
     @slow
     def test_export_static_cache(self):
         if version.parse(torch.__version__) < version.parse("2.4.0"):
@@ -334,7 +326,6 @@ class OlmoIntegrationTest(unittest.TestCase):
 
         from transformers.integrations.executorch import (
             TorchExportableModuleWithStaticCache,
-            convert_and_export_with_cache,
         )
 
         olmo_model = "allenai/OLMo-1B-hf"
@@ -348,7 +339,7 @@ class OlmoIntegrationTest(unittest.TestCase):
         ].shape[-1]
 
         # Load model
-        device = "cpu"
+        device = "cpu"  # TODO (joao / export experts): should be on `torch_device`, but causes GPU OOM
         dtype = torch.bfloat16
         cache_implementation = "static"
         attn_implementation = "sdpa"
@@ -356,7 +347,7 @@ class OlmoIntegrationTest(unittest.TestCase):
         model = OlmoForCausalLM.from_pretrained(
             olmo_model,
             device_map=device,
-            torch_dtype=dtype,
+            dtype=dtype,
             attn_implementation=attn_implementation,
             generation_config=GenerationConfig(
                 use_cache=True,
@@ -382,7 +373,13 @@ class OlmoIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT_COMPLETION, eager_generated_text)
 
         # Static Cache + export
-        exported_program = convert_and_export_with_cache(model)
+        from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
+
+        exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
+        exported_program = exportable_module.export(
+            input_ids=torch.tensor([[1]], dtype=torch.long, device=model.device),
+            cache_position=torch.tensor([0], dtype=torch.long, device=model.device),
+        )
         ep_generated_ids = TorchExportableModuleWithStaticCache.generate(
             exported_program=exported_program, prompt_token_ids=prompt_token_ids, max_new_tokens=max_new_tokens
         )

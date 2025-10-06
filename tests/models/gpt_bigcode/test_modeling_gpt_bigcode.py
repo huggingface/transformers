@@ -29,6 +29,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        AutoTokenizer,
         GPT2TokenizerFast,
         GPTBigCodeForCausalLM,
         GPTBigCodeForSequenceClassification,
@@ -128,13 +129,10 @@ class GPTBigCodeModelTester:
             reorder_and_upcast_attn=reorder_and_upcast_attn,
         )
 
-        head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
-
         return (
             config,
             input_ids,
             input_mask,
-            head_mask,
             token_type_ids,
             mc_token_ids,
             sequence_labels,
@@ -174,19 +172,19 @@ class GPTBigCodeModelTester:
         config.vocab_size = 300
         return config
 
-    def create_and_check_gpt_bigcode_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_gpt_bigcode_model(self, config, input_ids, input_mask, token_type_ids, *args):
         model = GPTBigCodeModel(config=config)
         model.to(torch_device)
         model.eval()
 
-        result = model(input_ids, token_type_ids=token_type_ids, head_mask=head_mask)
+        result = model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids)
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(len(result.past_key_values), config.n_layer)
 
-    def create_and_check_gpt_bigcode_model_past(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_gpt_bigcode_model_past(self, config, input_ids, input_mask, token_type_ids, *args):
         model = GPTBigCodeModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -223,7 +221,7 @@ class GPTBigCodeModelTester:
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
     def create_and_check_gpt_bigcode_model_attention_mask_past(
-        self, config, input_ids, input_mask, head_mask, token_type_ids, *args
+        self, config, input_ids, input_mask, token_type_ids, *args
     ):
         model = GPTBigCodeModel(config=config)
         model.to(torch_device)
@@ -265,7 +263,7 @@ class GPTBigCodeModelTester:
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
     def create_and_check_gpt_bigcode_model_past_large_inputs(
-        self, config, input_ids, input_mask, head_mask, token_type_ids, *args
+        self, config, input_ids, input_mask, token_type_ids, *args
     ):
         model = GPTBigCodeModel(config=config)
         model.to(torch_device)
@@ -302,7 +300,7 @@ class GPTBigCodeModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    def create_and_check_lm_head_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_lm_head_model(self, config, input_ids, input_mask, token_type_ids, *args):
         model = GPTBigCodeForCausalLM(config)
         model.to(torch_device)
         model.eval()
@@ -312,7 +310,7 @@ class GPTBigCodeModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_forward_and_backwards(
-        self, config, input_ids, input_mask, head_mask, token_type_ids, *args, gradient_checkpointing=False
+        self, config, input_ids, input_mask, token_type_ids, *args, gradient_checkpointing=False
     ):
         model = GPTBigCodeForCausalLM(config)
         model.to(torch_device)
@@ -325,7 +323,7 @@ class GPTBigCodeModelTester:
         result.loss.backward()
 
     def create_and_check_gpt_bigcode_for_sequence_classification(
-        self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
+        self, config, input_ids, input_mask, token_type_ids, mc_token_ids, sequence_labels, *args
     ):
         config.num_labels = self.num_labels
         model = GPTBigCodeForSequenceClassification(config)
@@ -335,7 +333,7 @@ class GPTBigCodeModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def create_and_check_gpt_bigcode_for_token_classification(
-        self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
+        self, config, input_ids, input_mask, token_type_ids, mc_token_ids, sequence_labels, *args
     ):
         config.num_labels = self.num_labels
         model = GPTBigCodeForTokenClassification(config)
@@ -347,7 +345,7 @@ class GPTBigCodeModelTester:
     def create_and_check_gpt_bigcode_weight_initialization(self, config, *args):
         model = GPTBigCodeModel(config)
         model_std = model.config.initializer_range / math.sqrt(2 * model.config.n_layer)
-        for key in model.state_dict().keys():
+        for key in model.state_dict():
             if "c_proj" in key and "weight" in key:
                 self.parent.assertLessEqual(abs(torch.std(model.state_dict()[key]) - model_std), 0.001)
                 self.parent.assertLessEqual(abs(torch.mean(model.state_dict()[key]) - 0.0), 0.01)
@@ -359,7 +357,6 @@ class GPTBigCodeModelTester:
             config,
             input_ids,
             input_mask,
-            head_mask,
             token_type_ids,
             mc_token_ids,
             sequence_labels,
@@ -370,7 +367,6 @@ class GPTBigCodeModelTester:
         inputs_dict = {
             "input_ids": input_ids,
             "token_type_ids": token_type_ids,
-            "head_mask": head_mask,
         }
 
         return config, inputs_dict
@@ -426,14 +422,6 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
     @unittest.skip(reason="MQA models does not support retain_grad")
     def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    @unittest.skip(reason="Contrastive search not supported due to non-standard caching mechanism")
-    def test_contrastive_generate(self):
-        pass
-
-    @unittest.skip(reason="Contrastive search not supported due to non-standard caching mechanism")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
         pass
 
     @unittest.skip(reason="CPU offload seems to be broken for some reason - tiny models keep hitting corner cases")
@@ -515,7 +503,7 @@ class GPTBigCodeModelLanguageGenerationTest(unittest.TestCase):
         output_sequence = model.generate(input_ids)
         output_sentence = tokenizer.decode(output_sequence[0], skip_special_tokens=True)
 
-        expected_output = """def print_hello_world():\n    print("Hello World!")\n\n\ndef print_hello_"""
+        expected_output = 'def print_hello_world():\n    print("Hello World!")\n\n\ndef print_hello_world_with_args(name'  # fmt: skip
         self.assertEqual(output_sentence, expected_output)
 
     def test_generate_batched(self):
@@ -532,10 +520,26 @@ class GPTBigCodeModelLanguageGenerationTest(unittest.TestCase):
         outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
         expected_output = [
-            'def print_hello_world():\n    print("Hello World!")\n\n\ndef print_hello_',
-            'def say_hello():\n    print("Hello, World!")\n\n\nsay_hello()',
+            'def print_hello_world():\n    print("Hello World!")\n\n\ndef print_hello_world_with_args(name',
+            'def say_hello():\n    print("Hello, World!")\n\n\nsay_hello()\n',
         ]
         self.assertListEqual(outputs, expected_output)
+
+    def test_newline_regression(self):
+        """Added to prevent regressions regarding attention (scaling) indicated by excessive newlines"""
+        tokenizer = AutoTokenizer.from_pretrained("bigcode/tiny_starcoder_py")
+        model = GPTBigCodeForCausalLM.from_pretrained("bigcode/tiny_starcoder_py").to(torch_device)
+
+        input_ids = tokenizer(
+            "Analyze the impact of the COVID-19 pandemic on global economic structures and future business models.\n",
+            return_tensors="pt",
+        ).input_ids.to(torch_device)
+
+        output_sequence = model.generate(input_ids, max_new_tokens=20, do_sample=False)
+        output_sentence = tokenizer.decode(output_sequence[0], skip_special_tokens=True)
+
+        expected_output = 'Analyze the impact of the COVID-19 pandemic on global economic structures and future business models.\n\nThe impact of the COVID-19 pandemic on global economic structures and future business'  # fmt: skip
+        self.assertEqual(output_sentence, expected_output)
 
 
 @require_torch
@@ -547,6 +551,8 @@ class GPTBigCodeMQATest(unittest.TestCase):
             attn_pdrop=0,
             resid_pdrop=0,
         )
+        # We need to set it here as it's normally set by the Model's __init__
+        config._attn_implementation = "sdpa"
         return GPTBigCodeAttention(config)
 
     @parameterized.expand([(seed, is_train_mode) for seed in range(5) for is_train_mode in [True, False]])

@@ -16,7 +16,7 @@
 Text/audio processor class for MusicGen Melody
 """
 
-from typing import List, Optional
+from typing import Any
 
 import numpy as np
 
@@ -51,49 +51,16 @@ class MusicgenMelodyProcessor(ProcessorMixin):
     def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):
         return self.tokenizer.get_decoder_prompt_ids(task=task, language=language, no_timestamps=no_timestamps)
 
-    def __call__(self, audio=None, text=None, **kwargs):
+    def __call__(self, *args, **kwargs):
         """
-        Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `audio`
-        and `kwargs` arguments to MusicgenMelodyFeatureExtractor's [`~MusicgenMelodyFeatureExtractor.__call__`] if `audio` is not
-        `None` to pre-process the audio. It also forwards the `text` and `kwargs` arguments to
-        PreTrainedTokenizer's [`~PreTrainedTokenizer.__call__`] if `text` is not `None`. Please refer to the docstring of the above two methods for more information.
-
-        Args:
-            audio (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
-                The audio or batch of audios to be prepared. Each audio can be NumPy array or PyTorch tensor. In case
-                of a NumPy array/PyTorch tensor, each audio should be a mono-stereo signal of shape (T), where T is the sample length of the audio.
-            text (`str`, `List[str]`, `List[List[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            kwargs (*optional*):
-                Remaining dictionary of keyword arguments that will be passed to the feature extractor and/or the
-                tokenizer.
-        Returns:
-            [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **input_features** -- Audio input features to be fed to a model. Returned when `audio` is not `None`.
-            - **attention_mask** -- List of token indices specifying which tokens should be attended to by the model when `text` is not `None`.
-            When only `audio` is specified, returns the timestamps attention mask.
+        Forwards the `audio` argument to EncodecFeatureExtractor's [`~EncodecFeatureExtractor.__call__`] and the `text`
+        argument to [`~T5Tokenizer.__call__`]. Please refer to the docstring of the above two methods for more
+        information.
         """
 
-        sampling_rate = kwargs.pop("sampling_rate", None)
-
-        if audio is None and text is None:
-            raise ValueError("You need to specify either an `audio` or `text` input to process.")
-
-        if text is not None:
-            inputs = self.tokenizer(text, **kwargs)
-        if audio is not None:
-            audio_inputs = self.feature_extractor(audio, sampling_rate=sampling_rate, **kwargs)
-
-        if text is None:
-            return audio_inputs
-        elif audio is None:
-            return inputs
-        else:
-            inputs["input_features"] = audio_inputs["input_features"]
-            return inputs
+        if len(args) > 0:
+            kwargs["audio"] = args[0]
+        return super().__call__(*args, **kwargs)
 
     # Copied from transformers.models.musicgen.processing_musicgen.MusicgenProcessor.batch_decode with padding_mask->attention_mask
     def batch_decode(self, *args, **kwargs):
@@ -114,16 +81,8 @@ class MusicgenMelodyProcessor(ProcessorMixin):
         else:
             return self.tokenizer.batch_decode(*args, **kwargs)
 
-    # Copied from transformers.models.musicgen.processing_musicgen.MusicgenProcessor.decode
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to T5Tokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to the
-        docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
     # Copied from transformers.models.musicgen.processing_musicgen.MusicgenProcessor._decode_audio with padding_mask->attention_mask
-    def _decode_audio(self, audio_values, attention_mask: Optional = None) -> List[np.ndarray]:
+    def _decode_audio(self, audio_values, attention_mask: Any = None) -> list[np.ndarray]:
         """
         This method strips any padding from the audio values to return a list of numpy audio arrays.
         """

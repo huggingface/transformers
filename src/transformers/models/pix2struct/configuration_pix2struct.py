@@ -14,22 +14,22 @@
 # limitations under the License.
 """Pix2Struct model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class Pix2StructTextConfig(PretrainedConfig):
+class Pix2StructTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Pix2StructTextModel`]. It is used to instantiate
     a Pix2Struct text model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Pix2Struct text decoder used by
     the [google/pix2struct-base](https://huggingface.co/google/pix2struct-base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 50244):
@@ -145,15 +145,15 @@ class Pix2StructTextConfig(PretrainedConfig):
         )
 
 
-class Pix2StructVisionConfig(PretrainedConfig):
+class Pix2StructVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Pix2StructVisionModel`]. It is used to
     instantiate a Pix2Struct vision model according to the specified arguments, defining the model architecture.
     Instantiating a configuration defaults will yield a similar configuration to that of the Pix2Struct-base
     [google/pix2struct-base](https://huggingface.co/google/pix2struct-base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -244,7 +244,7 @@ class Pix2StructVisionConfig(PretrainedConfig):
         self.d_kv = d_kv
 
 
-class Pix2StructConfig(PretrainedConfig):
+class Pix2StructConfig(PreTrainedConfig):
     r"""
     [`Pix2StructConfig`] is the configuration class to store the configuration of a
     [`Pix2StructForConditionalGeneration`]. It is used to instantiate a Pix2Struct model according to the specified
@@ -252,8 +252,8 @@ class Pix2StructConfig(PretrainedConfig):
     yield a similar configuration to that of the Pix2Struct-base
     [google/pix2struct-base](https://huggingface.co/google/pix2struct-base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`dict`, *optional*):
@@ -293,6 +293,7 @@ class Pix2StructConfig(PretrainedConfig):
     ```"""
 
     model_type = "pix2struct"
+    sub_configs = {"text_config": Pix2StructTextConfig, "vision_config": Pix2StructVisionConfig}
 
     def __init__(
         self,
@@ -331,20 +332,6 @@ class Pix2StructConfig(PretrainedConfig):
         self.vision_config.initializer_range = self.initializer_range
 
         self.is_vqa = is_vqa
-
-    @classmethod
-    def from_text_vision_configs(
-        cls, text_config: Pix2StructTextConfig, vision_config: Pix2StructVisionConfig, **kwargs
-    ):
-        r"""
-        Instantiate a [`Pix2StructConfig`] (or a derived class) from pix2struct text model configuration and pix2struct
-        vision model configuration.
-
-        Returns:
-            [`Pix2StructConfig`]: An instance of a configuration object
-        """
-
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
 
 
 __all__ = ["Pix2StructConfig", "Pix2StructTextConfig", "Pix2StructVisionConfig"]

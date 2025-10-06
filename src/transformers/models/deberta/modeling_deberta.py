@@ -14,14 +14,14 @@
 # limitations under the License.
 """PyTorch DeBERTa model."""
 
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
@@ -30,29 +30,15 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import auto_docstring, logging
 from .configuration_deberta import DebertaConfig
 
 
 logger = logging.get_logger(__name__)
-_CONFIG_FOR_DOC = "DebertaConfig"
-_CHECKPOINT_FOR_DOC = "microsoft/deberta-base"
-
-# Masked LM docstring
-_CHECKPOINT_FOR_MASKED_LM = "lsanochkin/deberta-large-feedback"
-_MASKED_LM_EXPECTED_OUTPUT = "' Paris'"
-_MASKED_LM_EXPECTED_LOSS = "0.54"
-
-# QuestionAnswering docstring
-_CHECKPOINT_FOR_QA = "Palak/microsoft_deberta-large_squad"
-_QA_EXPECTED_OUTPUT = "' a nice puppet'"
-_QA_EXPECTED_LOSS = 0.14
-_QA_TARGET_START_INDEX = 12
-_QA_TARGET_END_INDEX = 14
 
 
 class DebertaLayerNorm(nn.Module):
-    """LayerNorm module in the TF style (epsilon inside the square root)."""
+    """LayerNorm module (epsilon inside the square root)."""
 
     def __init__(self, size, eps=1e-12):
         super().__init__()
@@ -224,7 +210,7 @@ class DisentangledSelfAttention(nn.Module):
         query_states: Optional[torch.Tensor] = None,
         relative_pos: Optional[torch.Tensor] = None,
         rel_embeddings: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """
         Call the module
 
@@ -456,7 +442,7 @@ class DebertaAttention(nn.Module):
         query_states=None,
         relative_pos=None,
         rel_embeddings=None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         self_output, att_matrix = self.self(
             hidden_states,
             attention_mask,
@@ -506,7 +492,7 @@ class DebertaOutput(nn.Module):
         return hidden_states
 
 
-class DebertaLayer(nn.Module):
+class DebertaLayer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.attention = DebertaAttention(config)
@@ -521,7 +507,7 @@ class DebertaLayer(nn.Module):
         relative_pos=None,
         rel_embeddings=None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         attention_output, att_matrix = self.attention(
             hidden_states,
             attention_mask,
@@ -587,32 +573,21 @@ class DebertaEncoder(nn.Module):
         attention_mask = self.get_attention_mask(attention_mask)
         relative_pos = self.get_rel_pos(hidden_states, query_states, relative_pos)
 
-        all_hidden_states: Optional[Tuple[torch.Tensor]] = (hidden_states,) if output_hidden_states else None
+        all_hidden_states: Optional[tuple[torch.Tensor]] = (hidden_states,) if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
         next_kv = hidden_states
 
         rel_embeddings = self.get_rel_embedding()
         for i, layer_module in enumerate(self.layer):
-            if self.gradient_checkpointing and self.training:
-                hidden_states, att_m = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    next_kv,
-                    attention_mask,
-                    query_states,
-                    relative_pos,
-                    rel_embeddings,
-                    output_attentions,
-                )
-            else:
-                hidden_states, att_m = layer_module(
-                    next_kv,
-                    attention_mask,
-                    query_states=query_states,
-                    relative_pos=relative_pos,
-                    rel_embeddings=rel_embeddings,
-                    output_attentions=output_attentions,
-                )
+            hidden_states, att_m = layer_module(
+                next_kv,
+                attention_mask,
+                query_states=query_states,
+                relative_pos=relative_pos,
+                rel_embeddings=rel_embeddings,
+                output_attentions=output_attentions,
+            )
 
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -632,13 +607,9 @@ class DebertaEncoder(nn.Module):
         )
 
 
+@auto_docstring
 class DebertaPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = DebertaConfig
+    config: DebertaConfig
     base_model_prefix = "deberta"
     _keys_to_ignore_on_load_unexpected = ["position_embeddings"]
     supports_gradient_checkpointing = True
@@ -646,8 +617,6 @@ class DebertaPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -665,71 +634,7 @@ class DebertaPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
-DEBERTA_START_DOCSTRING = r"""
-    The DeBERTa model was proposed in [DeBERTa: Decoding-enhanced BERT with Disentangled
-    Attention](https://arxiv.org/abs/2006.03654) by Pengcheng He, Xiaodong Liu, Jianfeng Gao, Weizhu Chen. It's build
-    on top of BERT/RoBERTa with two improvements, i.e. disentangled attention and enhanced mask decoder. With those two
-    improvements, it out perform BERT/RoBERTa on a majority of tasks with 80GB pretraining data.
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-
-    Parameters:
-        config ([`DebertaConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-DEBERTA_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `({0})`):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
-            1]`:
-
-            - 0 corresponds to a *sentence A* token,
-            - 1 corresponds to a *sentence B* token.
-
-            [What are token type IDs?](../glossary#token-type-ids)
-        position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare DeBERTa Model transformer outputting raw hidden-states without any specific head on top.",
-    DEBERTA_START_DOCSTRING,
-)
+@auto_docstring
 class DebertaModel(DebertaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -754,12 +659,7 @@ class DebertaModel(DebertaPreTrainedModel):
         """
         raise NotImplementedError("The prune function is not implemented in DeBERTa model.")
 
-    @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -770,7 +670,7 @@ class DebertaModel(DebertaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -933,7 +833,7 @@ class DebertaOnlyMLMHead(nn.Module):
         return prediction_scores
 
 
-@add_start_docstrings("""DeBERTa Model with a `language modeling` head on top.""", DEBERTA_START_DOCSTRING)
+@auto_docstring
 class DebertaForMaskedLM(DebertaPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
 
@@ -964,15 +864,7 @@ class DebertaForMaskedLM(DebertaPreTrainedModel):
             self.lm_predictions.lm_head.dense = new_embeddings
             self.lm_predictions.lm_head.bias = new_embeddings.bias
 
-    @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_MASKED_LM,
-        output_type=MaskedLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-        mask="[MASK]",
-        expected_output=_MASKED_LM_EXPECTED_OUTPUT,
-        expected_loss=_MASKED_LM_EXPECTED_LOSS,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -984,7 +876,7 @@ class DebertaForMaskedLM(DebertaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, MaskedLMOutput]:
+    ) -> Union[tuple, MaskedLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -1050,12 +942,11 @@ class ContextPooler(nn.Module):
         return self.config.hidden_size
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     DeBERTa Model transformer with a sequence classification/regression head on top (a linear layer on top of the
     pooled output) e.g. for GLUE tasks.
-    """,
-    DEBERTA_START_DOCSTRING,
+    """
 )
 class DebertaForSequenceClassification(DebertaPreTrainedModel):
     def __init__(self, config):
@@ -1082,12 +973,7 @@ class DebertaForSequenceClassification(DebertaPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.deberta.set_input_embeddings(new_embeddings)
 
-    @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=SequenceClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1099,7 +985,7 @@ class DebertaForSequenceClassification(DebertaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SequenceClassifierOutput]:
+    ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1168,13 +1054,7 @@ class DebertaForSequenceClassification(DebertaPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-    DeBERTa Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
-    Named-Entity-Recognition (NER) tasks.
-    """,
-    DEBERTA_START_DOCSTRING,
-)
+@auto_docstring
 class DebertaForTokenClassification(DebertaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1187,12 +1067,7 @@ class DebertaForTokenClassification(DebertaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TokenClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1204,7 +1079,7 @@ class DebertaForTokenClassification(DebertaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, TokenClassifierOutput]:
+    ) -> Union[tuple, TokenClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -1241,13 +1116,7 @@ class DebertaForTokenClassification(DebertaPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-    DeBERTa Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
-    layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
-    """,
-    DEBERTA_START_DOCSTRING,
-)
+@auto_docstring
 class DebertaForQuestionAnswering(DebertaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1259,16 +1128,7 @@ class DebertaForQuestionAnswering(DebertaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_QA,
-        output_type=QuestionAnsweringModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_QA_EXPECTED_OUTPUT,
-        expected_loss=_QA_EXPECTED_LOSS,
-        qa_target_start_index=_QA_TARGET_START_INDEX,
-        qa_target_end_index=_QA_TARGET_END_INDEX,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1281,17 +1141,7 @@ class DebertaForQuestionAnswering(DebertaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, QuestionAnsweringModelOutput]:
-        r"""
-        start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
-        end_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
-        """
+    ) -> Union[tuple, QuestionAnsweringModelOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.deberta(

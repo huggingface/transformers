@@ -19,6 +19,9 @@ Hyperparameter search discovers an optimal set of hyperparameters that produces 
 
 This guide will go over how to set up a hyperparameter search for each of the backends.
 
+> [!WARNING]
+> [SigOpt](https://github.com/sigopt/sigopt-server) is in public archive mode and is no longer actively maintained. Try using Optuna, Weights & Biases or Ray Tune instead.
+
 ```bash
 pip install optuna/sigopt/wandb/ray[tune]
 ```
@@ -34,7 +37,6 @@ An example `model_init` function is shown below.
 def model_init(trial):
     return AutoModelForSequenceClassification.from_pretrained(
         model_args.model_name_or_path,
-        from_tf=bool(".ckpt" in model_args.model_name_or_path),
         config=config,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
@@ -100,7 +102,7 @@ def ray_hp_space(trial):
         "per_device_train_batch_size": tune.choice([16, 32, 64, 128]),
     }
 
-best_trials = trainer.hyperparameter_search( 
+best_trials = trainer.hyperparameter_search(
     direction=["minimize", "maximize"],
     backend="ray",
     hp_space=ray_hp_space,
@@ -125,7 +127,7 @@ def sigopt_hp_space(trial):
         },
     ]
 
-best_trials = trainer.hyperparameter_search( 
+best_trials = trainer.hyperparameter_search(
     direction=["minimize", "maximize"],
     backend="sigopt",
     hp_space=sigopt_hp_space,
@@ -150,7 +152,7 @@ def wandb_hp_space(trial):
         },
     }
 
-best_trials = trainer.hyperparameter_search( 
+best_trials = trainer.hyperparameter_search(
     direction=["minimize", "maximize"],
     backend="wandb",
     hp_space=wandb_hp_space,

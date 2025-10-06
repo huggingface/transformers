@@ -25,7 +25,7 @@ from transformers import (
     AddedToken,
     LayoutLMv2TokenizerFast,
     SpecialTokensMixin,
-    is_tf_available,
+    is_mlx_available,
     is_torch_available,
     logging,
 )
@@ -96,6 +96,38 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         boxes = [
             [[423, 237, 440, 251], [427, 272, 441, 287], [419, 115, 437, 129]],
             [[256, 38, 330, 58], [256, 38, 330, 58], [336, 42, 353, 57], [34, 42, 66, 69]],
+        ]
+
+        return questions, words, boxes
+
+    def get_empty_words_and_boxes(self):
+        words = ["test", "empty", ""]
+        boxes = [[423, 237, 440, 251], [427, 272, 441, 287], [419, 115, 437, 129]]
+
+        return words, boxes
+
+    def get_empty_words_and_boxes_batch(self):
+        words = [["test", "empty", ""], ["one", "more", "empty", ""]]
+        boxes = [
+            [[423, 237, 440, 251], [427, 272, 441, 287], [419, 115, 437, 129]],
+            [[961, 885, 992, 912], [256, 38, 330, 58], [256, 38, 330, 58], [336, 42, 353, 57]],
+        ]
+
+        return words, boxes
+
+    def get_empty_question_words_and_boxes(self):
+        question = ""
+        words = ["test", "empty", ""]
+        boxes = [[423, 237, 440, 251], [427, 272, 441, 287], [419, 115, 437, 129]]
+
+        return question, words, boxes
+
+    def get_empty_question_words_and_boxes_batch(self):
+        questions = ["what's his name?", ""]
+        words = [["test", "empty", ""], ["one", "more", "empty", ""]]
+        boxes = [
+            [[423, 237, 440, 251], [427, 272, 441, 287], [419, 115, 437, 129]],
+            [[961, 885, 992, 912], [256, 38, 330, 58], [256, 38, 330, 58], [336, 42, 353, 57]],
         ]
 
         return questions, words, boxes
@@ -566,41 +598,6 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         tokenizer.num_special_tokens_to_add(pair=True), len(attached_sequences) - len(sequences)
                     )
 
-    def test_padding_to_max_length(self):
-        """We keep this test for backward compatibility but it should be removed when `pad_to_max_length` will be deprecated"""
-        tokenizers = self.get_tokenizers(do_lower_case=False)
-        for tokenizer in tokenizers:
-            with self.subTest(f"{tokenizer.__class__.__name__}"):
-                words, boxes = self.get_words_and_boxes()
-                padding_size = 10
-
-                # check correct behaviour if no pad_token_id exists and add it eventually
-                self._check_no_pad_token_padding(tokenizer, words)
-
-                padding_idx = tokenizer.pad_token_id
-
-                # Check that it correctly pads when a maximum length is specified along with the padding flag set to True
-                tokenizer.padding_side = "right"
-                encoded_sequence = tokenizer.encode(words, boxes=boxes)
-                sequence_length = len(encoded_sequence)
-                # FIXME: the next line should be padding(max_length) to avoid warning
-                padded_sequence = tokenizer.encode(
-                    words, boxes=boxes, max_length=sequence_length + padding_size, pad_to_max_length=True
-                )
-                padded_sequence_length = len(padded_sequence)
-                assert sequence_length + padding_size == padded_sequence_length
-                assert encoded_sequence + [padding_idx] * padding_size == padded_sequence
-
-                # Check that nothing is done when a maximum length is not specified
-                encoded_sequence = tokenizer.encode(words, boxes=boxes)
-                sequence_length = len(encoded_sequence)
-
-                tokenizer.padding_side = "right"
-                padded_sequence_right = tokenizer.encode(words, boxes=boxes, pad_to_max_length=True)
-                padded_sequence_right_length = len(padded_sequence_right)
-                assert sequence_length == padded_sequence_right_length
-                assert encoded_sequence == padded_sequence_right
-
     def test_padding(self, max_length=50):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -612,9 +609,6 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Encode - Simple input
                 words, boxes = self.get_words_and_boxes()
-                input_r = tokenizer_r.encode(words, boxes=boxes, max_length=max_length, pad_to_max_length=True)
-                input_p = tokenizer_p.encode(words, boxes=boxes, max_length=max_length, pad_to_max_length=True)
-                self.assert_padded_input_match(input_r, input_p, max_length, pad_token_id)
                 input_r = tokenizer_r.encode(words, boxes=boxes, max_length=max_length, padding="max_length")
                 input_p = tokenizer_p.encode(words, boxes=boxes, max_length=max_length, padding="max_length")
                 self.assert_padded_input_match(input_r, input_p, max_length, pad_token_id)
@@ -625,13 +619,6 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Encode - Pair input
                 question, words, boxes = self.get_question_words_and_boxes()
-                input_r = tokenizer_r.encode(
-                    question, words, boxes=boxes, max_length=max_length, pad_to_max_length=True
-                )
-                input_p = tokenizer_p.encode(
-                    question, words, boxes=boxes, max_length=max_length, pad_to_max_length=True
-                )
-                self.assert_padded_input_match(input_r, input_p, max_length, pad_token_id)
                 input_r = tokenizer_r.encode(question, words, boxes=boxes, max_length=max_length, padding="max_length")
                 input_p = tokenizer_p.encode(question, words, boxes=boxes, max_length=max_length, padding="max_length")
                 self.assert_padded_input_match(input_r, input_p, max_length, pad_token_id)
@@ -641,10 +628,6 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Encode_plus - Simple input
                 words, boxes = self.get_words_and_boxes()
-                input_r = tokenizer_r.encode_plus(words, boxes=boxes, max_length=max_length, pad_to_max_length=True)
-                input_p = tokenizer_p.encode_plus(words, boxes=boxes, max_length=max_length, pad_to_max_length=True)
-                self.assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length, pad_token_id)
-                self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
                 input_r = tokenizer_r.encode_plus(words, boxes=boxes, max_length=max_length, padding="max_length")
                 input_p = tokenizer_p.encode_plus(words, boxes=boxes, max_length=max_length, padding="max_length")
                 self.assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length, pad_token_id)
@@ -660,14 +643,6 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Encode_plus - Pair input
                 question, words, boxes = self.get_question_words_and_boxes()
-                input_r = tokenizer_r.encode_plus(
-                    question, words, boxes=boxes, max_length=max_length, pad_to_max_length=True
-                )
-                input_p = tokenizer_p.encode_plus(
-                    question, words, boxes=boxes, max_length=max_length, pad_to_max_length=True
-                )
-                self.assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length, pad_token_id)
-                self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
                 input_r = tokenizer_r.encode_plus(
                     question, words, boxes=boxes, max_length=max_length, padding="max_length"
                 )
@@ -685,20 +660,6 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Batch_encode_plus - Simple input
                 words, boxes = self.get_words_and_boxes_batch()
-
-                input_r = tokenizer_r.batch_encode_plus(
-                    words,
-                    boxes=boxes,
-                    max_length=max_length,
-                    pad_to_max_length=True,
-                )
-                input_p = tokenizer_p.batch_encode_plus(
-                    words,
-                    boxes=boxes,
-                    max_length=max_length,
-                    pad_to_max_length=True,
-                )
-                self.assert_batch_padded_input_match(input_r, input_p, max_length, pad_token_id)
 
                 input_r = tokenizer_r.batch_encode_plus(
                     words,
@@ -931,7 +892,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 encoded_sequences_batch_padded_2 = tokenizer.batch_encode_plus(
                     words, is_pair=False, boxes=boxes, max_length=maximum_length + 10, padding="longest"
                 )
-                for key in encoded_sequences_batch_padded_1.keys():
+                for key in encoded_sequences_batch_padded_1:
                     self.assertListEqual(
                         encoded_sequences_batch_padded_1[key],
                         encoded_sequences_batch_padded_2[key],
@@ -944,7 +905,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 encoded_sequences_batch_padded_2 = tokenizer.batch_encode_plus(
                     words, is_pair=False, boxes=boxes, max_length=maximum_length + 10, padding=False
                 )
-                for key in encoded_sequences_batch_padded_1.keys():
+                for key in encoded_sequences_batch_padded_1:
                     self.assertListEqual(
                         encoded_sequences_batch_padded_1[key],
                         encoded_sequences_batch_padded_2[key],
@@ -1408,7 +1369,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 ):
                     self.assertSequenceEqual(input_p[key], input_r[key][0])
 
-    def test_embeded_special_tokens(self):
+    def test_embedded_special_tokens(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
             self.skipTest(reason="test_slow_tokenizer is set to False")
@@ -1429,7 +1390,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     add_special_tokens=True,
                 )
 
-                for key in tokens_p.keys():
+                for key in tokens_p:
                     self.assertEqual(tokens_r[key], tokens_p[key])
 
                 if "token_type_ids" in tokens_r:
@@ -1460,7 +1421,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # encode_plus()
                 no_special_tokens = tokenizer_r.encode_plus(words, boxes=boxes, add_special_tokens=False)
                 with_special_tokens = tokenizer_r.encode_plus(words, boxes=boxes, add_special_tokens=True)
-                for key in no_special_tokens.keys():
+                for key in no_special_tokens:
                     self.assertEqual(
                         len(no_special_tokens[key]),
                         len(with_special_tokens[key]) - simple_num_special_tokens_to_add,
@@ -1471,7 +1432,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 no_special_tokens = tokenizer_r.batch_encode_plus(words, boxes=boxes, add_special_tokens=False)
                 with_special_tokens = tokenizer_r.batch_encode_plus(words, boxes=boxes, add_special_tokens=True)
-                for key in no_special_tokens.keys():
+                for key in no_special_tokens:
                     for i_no, i_with in zip(no_special_tokens[key], with_special_tokens[key]):
                         self.assertEqual(len(i_no), len(i_with) - simple_num_special_tokens_to_add)
 
@@ -1757,12 +1718,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             tokenizer = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name}, {tokenizer.__class__.__name__})"):
-                if is_torch_available():
-                    returned_tensor = "pt"
-                elif is_tf_available():
-                    returned_tensor = "tf"
-                else:
-                    returned_tensor = "jax"
+                returned_tensor = "pt"
 
                 # Single example
                 words, boxes = self.get_words_and_boxes()
@@ -1804,7 +1760,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         self.assertEqual(tokens[key].shape[-1], 4)
 
     @unittest.skip(reason="TO DO: overwrite this very extensive test.")
-    def test_alignement_methods(self):
+    def test_alignment_methods(self):
         pass
 
     def get_clean_sequence(self, tokenizer, with_prefix_space=False, max_length=20, min_length=5):
@@ -2442,7 +2398,7 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertDictEqual(dict(encoding_p), expected_results)
         self.assertDictEqual(dict(encoding_r), expected_results)
 
-    @unittest.skip(reason="Doesn't support another framework than PyTorch")
+    @unittest.skip(reason="Doesn't support returning Numpy arrays")
     def test_np_encode_plus_sent_to_model(self):
         pass
 
@@ -2457,3 +2413,48 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @unittest.skip("Chat is not supported")
     def test_chat_template_return_assistant_tokens_mask_truncated(self):
         pass
+
+    def test_empty_input_string(self):
+        tokenizer_return_type = []
+        output_tensor_type = []
+
+        if is_torch_available():
+            import numpy as np
+            import torch
+
+            tokenizer_return_type.append("pt")
+            output_tensor_type.append(torch.int64)
+            tokenizer_return_type.append("np")
+            output_tensor_type.append(np.int64)
+
+        if is_mlx_available():
+            import mlx.core as mx
+
+            tokenizer_return_type.append("mlx")
+            output_tensor_type.append(mx.int32)
+
+        if len(tokenizer_return_type) == 0:
+            self.skipTest(reason="No expected framework from PT or MLX found")
+
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                words, boxes = self.get_empty_words_and_boxes()
+                for return_type, target_type in zip(tokenizer_return_type, output_tensor_type):
+                    output = tokenizer(words, boxes=boxes, return_tensors=return_type)
+                    self.assertEqual(output.input_ids.dtype, target_type)
+
+                question, words, boxes = self.get_empty_question_words_and_boxes()
+                for return_type, target_type in zip(tokenizer_return_type, output_tensor_type):
+                    output = tokenizer(words, boxes=boxes, return_tensors=return_type)
+                    self.assertEqual(output.input_ids.dtype, target_type)
+
+                words, boxes = self.get_empty_words_and_boxes_batch()
+                for return_type, target_type in zip(tokenizer_return_type, output_tensor_type):
+                    output = tokenizer(words, boxes=boxes, padding=True, return_tensors=return_type)
+                    self.assertEqual(output.input_ids.dtype, target_type)
+
+                question, words, boxes = self.get_empty_question_words_and_boxes_batch()
+                for return_type, target_type in zip(tokenizer_return_type, output_tensor_type):
+                    output = tokenizer(words, boxes=boxes, padding=True, return_tensors=return_type)
+                    self.assertEqual(output.input_ids.dtype, target_type)

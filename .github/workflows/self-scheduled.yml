@@ -1,4 +1,4 @@
-name: Self-hosted runner (scheduled)
+name: Nvidia CI (job definitions)
 
 # Note that each job's dependencies go into a corresponding docker file.
 #
@@ -15,9 +15,6 @@ on:
       slack_report_channel:
         required: true
         type: string
-      runner:
-        required: true
-        type: string
       docker:
         required: true
         type: string
@@ -26,6 +23,19 @@ on:
         type: string
       working-directory-prefix:
         default: ''
+        required: false
+        type: string
+      report_repo_id:
+        required: true
+        type: string
+      commit_sha:
+        required: false
+        type: string
+      runner_type:
+        required: false
+        type: string
+      models:
+        default: ""
         required: false
         type: string
 
@@ -45,16 +55,16 @@ env:
 
 jobs:
   setup:
-    if: contains(fromJSON('["run_models_gpu", "run_trainer_and_fsdp_gpu", "run_quantization_torch_gpu"]'), inputs.job)
     name: Setup
+    if: contains(fromJSON('["run_models_gpu", "run_trainer_and_fsdp_gpu", "run_quantization_torch_gpu"]'), inputs.job)
     strategy:
       matrix:
-        machine_type: [aws-g4dn-2xlarge-cache, aws-g4dn-12xlarge-cache]
+        machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
     runs-on:
       group: '${{ matrix.machine_type }}'
     container:
       image: huggingface/transformers-all-latest-gpu
-      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     outputs:
       folder_slices: ${{ steps.set-matrix.outputs.folder_slices }}
       slice_ids: ${{ steps.set-matrix.outputs.slice_ids }}
@@ -63,7 +73,7 @@ jobs:
       - name: Update clone
         working-directory: /transformers
         run: |
-          git fetch && git checkout ${{ github.sha }}
+          git fetch && git checkout ${{ inputs.commit_sha || github.sha }}
 
       - name: Cleanup
         working-directory: /transformers
@@ -82,7 +92,7 @@ jobs:
         working-directory: /transformers/tests
         run: |
           if [ "${{ inputs.job }}" = "run_models_gpu" ]; then
-            echo "folder_slices=$(python3 ../utils/split_model_tests.py --num_splits ${{ env.NUM_SLICES }})" >> $GITHUB_OUTPUT
+            echo "folder_slices=$(python3 ../utils/split_model_tests.py --models '${{ inputs.models }}' --num_splits ${{ env.NUM_SLICES }})" >> $GITHUB_OUTPUT
             echo "slice_ids=$(python3 -c 'd = list(range(${{ env.NUM_SLICES }})); print(d)')" >> $GITHUB_OUTPUT
           elif [ "${{ inputs.job }}" = "run_trainer_and_fsdp_gpu" ]; then
             echo "folder_slices=[['trainer'], ['fsdp']]" >> $GITHUB_OUTPUT
@@ -107,15 +117,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [aws-g4dn-2xlarge-cache, aws-g4dn-12xlarge-cache]
+        machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
         slice_id: ${{ fromJSON(needs.setup.outputs.slice_ids) }}
     uses: ./.github/workflows/model_jobs.yml
     with:
       folder_slices: ${{ needs.setup.outputs.folder_slices }}
       machine_type: ${{ matrix.machine_type }}
       slice_id: ${{ matrix.slice_id }}
-      runner: ${{ inputs.runner }}
       docker: ${{ inputs.docker }}
+      commit_sha: ${{ inputs.commit_sha || github.sha }}
+      runner_type: ${{ inputs.runner_type }}
+      report_repo_id: ${{ inputs.report_repo_id }}
     secrets: inherit
 
   run_trainer_and_fsdp_gpu:
@@ -125,15 +137,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [aws-g4dn-2xlarge-cache, aws-g4dn-12xlarge-cache]
+        machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
         slice_id: [0, 1]
     uses: ./.github/workflows/model_jobs.yml
     with:
       folder_slices: ${{ needs.setup.outputs.folder_slices }}
       machine_type: ${{ matrix.machine_type }}
       slice_id: ${{ matrix.slice_id }}
-      runner: ${{ inputs.runner }}
       docker: ${{ inputs.docker }}
+      commit_sha: ${{ inputs.commit_sha || github.sha }}
+      runner_type: ${{ inputs.runner_type }}
+      report_repo_id: ${{ inputs.report_repo_id }}
       report_name_prefix: run_trainer_and_fsdp_gpu
     secrets: inherit
 
@@ -143,7 +157,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [aws-g4dn-2xlarge-cache, aws-g4dn-12xlarge-cache]
+        machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
     runs-on:
       group: '${{ matrix.machine_type }}'
     container:
@@ -152,7 +166,7 @@ jobs:
     steps:
       - name: Update clone
         working-directory: /transformers
-        run: git fetch && git checkout ${{ github.sha }}
+        run: git fetch && git checkout ${{ inputs.commit_sha || github.sha }}
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
@@ -177,9 +191,9 @@ jobs:
         run: |
           echo "${{ matrix.machine_type }}"
 
-          if [ "${{ matrix.machine_type }}" = "aws-g4dn-2xlarge-cache" ]; then
+          if [ "${{ matrix.machine_type }}" = "aws-g5-4xlarge-cache" ]; then
             machine_type=single-gpu
-          elif [ "${{ matrix.machine_type }}" = "aws-g4dn-12xlarge-cache" ]; then
+          elif [ "${{ matrix.machine_type }}" = "aws-g5-12xlarge-cache" ]; then
             machine_type=multi-gpu
           else
             machine_type=${{ matrix.machine_type }}
@@ -205,91 +219,22 @@ jobs:
           name: ${{ env.machine_type }}_run_pipelines_torch_gpu_test_reports
           path: /transformers/reports/${{ env.machine_type }}_run_pipelines_torch_gpu_test_reports
 
-  run_pipelines_tf_gpu:
-    if: ${{ inputs.job == 'run_pipelines_tf_gpu' }}
-    name: TensorFlow pipelines
-    strategy:
-      fail-fast: false
-      matrix:
-        machine_type: [aws-g4dn-2xlarge-cache, aws-g4dn-12xlarge-cache]
-    runs-on:
-      group: '${{ matrix.machine_type }}'
-    container:
-      image: huggingface/transformers-tensorflow-gpu
-      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    steps:
-      - name: Update clone
-        working-directory: /transformers
-        run: |
-          git fetch && git checkout ${{ github.sha }}
-
-      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
-        working-directory: /transformers
-        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
-
-      - name: NVIDIA-SMI
-        run: |
-          nvidia-smi
-
-      - name: Environment
-        working-directory: /transformers
-        run: |
-          python3 utils/print_env.py
-
-      - name: Show installed libraries and their versions
-        working-directory: /transformers
-        run: pip freeze
-
-      - name: Set `machine_type` for report and artifact names
-        working-directory: /transformers
-        shell: bash
-        run: |
-          echo "${{ matrix.machine_type }}"
-
-          if [ "${{ matrix.machine_type }}" = "aws-g4dn-2xlarge-cache" ]; then
-            machine_type=single-gpu
-          elif [ "${{ matrix.machine_type }}" = "aws-g4dn-12xlarge-cache" ]; then
-            machine_type=multi-gpu
-          else
-            machine_type=${{ matrix.machine_type }}
-          fi
-
-          echo "$machine_type"
-          echo "machine_type=$machine_type" >> $GITHUB_ENV
-
-      - name: Run all pipeline tests on GPU
-        working-directory: /transformers
-        run: |
-          python3 -m pytest -n 1 -v --dist=loadfile --make-reports=${{ env.machine_type }}_run_pipelines_tf_gpu_test_reports tests/pipelines
-
-      - name: Failure short reports
-        if: ${{ always() }}
-        run: |
-          cat /transformers/reports/${{ env.machine_type }}_run_pipelines_tf_gpu_test_reports/failures_short.txt
-
-      - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_pipelines_tf_gpu_test_reports"
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.machine_type }}_run_pipelines_tf_gpu_test_reports
-          path: /transformers/reports/${{ env.machine_type }}_run_pipelines_tf_gpu_test_reports
-
   run_examples_gpu:
     if: ${{ inputs.job == 'run_examples_gpu' }}
     name: Examples directory
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [aws-g4dn-2xlarge-cache]
+        machine_type: [aws-g5-4xlarge-cache]
     runs-on:
       group: '${{ matrix.machine_type }}'
     container:
       image: huggingface/transformers-all-latest-gpu
-      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
       - name: Update clone
         working-directory: /transformers
-        run: git fetch && git checkout ${{ github.sha }}
+        run: git fetch && git checkout ${{ inputs.commit_sha || github.sha }}
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
@@ -314,9 +259,9 @@ jobs:
         run: |
           echo "${{ matrix.machine_type }}"
 
-          if [ "${{ matrix.machine_type }}" = "aws-g4dn-2xlarge-cache" ]; then
+          if [ "${{ matrix.machine_type }}" = "aws-g5-4xlarge-cache" ]; then
             machine_type=single-gpu
-          elif [ "${{ matrix.machine_type }}" = "aws-g4dn-12xlarge-cache" ]; then
+          elif [ "${{ matrix.machine_type }}" = "aws-g5-12xlarge-cache" ]; then
             machine_type=multi-gpu
           else
             machine_type=${{ matrix.machine_type }}
@@ -349,7 +294,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [aws-g4dn-2xlarge-cache, aws-g4dn-12xlarge-cache]
+        machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
     runs-on:
       group: '${{ matrix.machine_type }}'
     container:
@@ -358,7 +303,7 @@ jobs:
     steps:
       - name: Update clone
         working-directory: ${{ inputs.working-directory-prefix }}/transformers
-        run: git fetch && git checkout ${{ github.sha }}
+        run: git fetch && git checkout ${{ inputs.commit_sha || github.sha }}
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: ${{ inputs.working-directory-prefix }}/transformers
@@ -411,9 +356,9 @@ jobs:
         run: |
           echo "${{ matrix.machine_type }}"
 
-          if [ "${{ matrix.machine_type }}" = "aws-g4dn-2xlarge-cache" ]; then
+          if [ "${{ matrix.machine_type }}" = "aws-g5-4xlarge-cache" ]; then
             machine_type=single-gpu
-          elif [ "${{ matrix.machine_type }}" = "aws-g4dn-12xlarge-cache" ]; then
+          elif [ "${{ matrix.machine_type }}" = "aws-g5-12xlarge-cache" ]; then
             machine_type=multi-gpu
           else
             machine_type=${{ matrix.machine_type }}
@@ -448,7 +393,7 @@ jobs:
       fail-fast: false
       matrix:
         folders: ${{ fromJson(needs.setup.outputs.quantization_matrix) }}
-        machine_type: [aws-g4dn-2xlarge-cache, aws-g4dn-12xlarge-cache]
+        machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
     runs-on:
       group: '${{ matrix.machine_type }}'
     container:
@@ -466,7 +411,7 @@ jobs:
 
       - name: Update clone
         working-directory: /transformers
-        run: git fetch && git checkout ${{ github.sha }}
+        run: git fetch && git checkout ${{ inputs.commit_sha || github.sha }}
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
@@ -491,9 +436,9 @@ jobs:
         run: |
           echo "${{ matrix.machine_type }}"
 
-          if [ "${{ matrix.machine_type }}" = "aws-g4dn-2xlarge-cache" ]; then
+          if [ "${{ matrix.machine_type }}" = "aws-g5-4xlarge-cache" ]; then
             machine_type=single-gpu
-          elif [ "${{ matrix.machine_type }}" = "aws-g4dn-12xlarge-cache" ]; then
+          elif [ "${{ matrix.machine_type }}" = "aws-g5-12xlarge-cache" ]; then
             machine_type=multi-gpu
           else
             machine_type=${{ matrix.machine_type }}
@@ -530,6 +475,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 2
+          ref: ${{ inputs.commit_sha || github.sha }}
 
       - name: Install transformers
         run: pip install transformers
@@ -567,13 +513,12 @@ jobs:
       run_models_gpu,
       run_trainer_and_fsdp_gpu,
       run_pipelines_torch_gpu,
-      run_pipelines_tf_gpu,
       run_examples_gpu,
       run_torch_cuda_extensions_gpu,
       run_quantization_torch_gpu,
       run_extract_warnings
     ]
-    if: ${{ always() }}
+    if: always() && !cancelled()
     uses: ./.github/workflows/slack-report.yml
     with:
       job: ${{ inputs.job }}
@@ -584,15 +529,22 @@ jobs:
       folder_slices: ${{ needs.setup.outputs.folder_slices }}
       quantization_matrix: ${{ needs.setup.outputs.quantization_matrix }}
       ci_event: ${{ inputs.ci_event }}
+      report_repo_id: ${{ inputs.report_repo_id }}
+      commit_sha: ${{ inputs.commit_sha || github.sha }}
 
     secrets: inherit
 
-  check_new_model_failures:
-    if: ${{ always() && inputs.ci_event == 'Daily CI' && inputs.job == 'run_models_gpu' && needs.send_results.result == 'success' }}
-    name: Check new model failures
+  check_new_failures:
+    if: ${{ always() && inputs.ci_event == 'Daily CI' && needs.send_results.result == 'success' }}
+    name: Check new failures
     needs: send_results
-    uses: ./.github/workflows/check_failed_model_tests.yml
+    uses: ./.github/workflows/check_failed_tests.yml
     with:
       docker: ${{ inputs.docker }}
-      start_sha: ${{ github.sha }}
+      start_sha: ${{ inputs.commit_sha || github.sha }}
+      job: ${{ inputs.job }}
+      slack_report_channel: ${{ inputs.slack_report_channel }}
+      ci_event: ${{ inputs.ci_event }}
+      report_repo_id: ${{ inputs.report_repo_id }}
+
     secrets: inherit

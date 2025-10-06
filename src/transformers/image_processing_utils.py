@@ -20,7 +20,8 @@ import numpy as np
 
 from .image_processing_base import BatchFeature, ImageProcessingMixin
 from .image_transforms import center_crop, normalize, rescale
-from .image_utils import ChannelDimension, get_image_size
+from .image_utils import ChannelDimension, ImageInput, get_image_size
+from .processing_utils import ImagesKwargs, Unpack
 from .utils import logging
 from .utils.import_utils import requires
 
@@ -36,12 +37,21 @@ INIT_SERVICE_KWARGS = [
 
 @requires(backends=("vision",))
 class BaseImageProcessor(ImageProcessingMixin):
+    valid_kwargs = ImagesKwargs
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-    def __call__(self, images, **kwargs) -> BatchFeature:
+    @property
+    def is_fast(self) -> bool:
+        """
+        `bool`: Whether or not this image processor is a fast processor (backed by PyTorch and TorchVision).
+        """
+        return False
+
+    def __call__(self, images: ImageInput, *args, **kwargs: Unpack[ImagesKwargs]) -> BatchFeature:
         """Preprocess an image or a batch of images."""
-        return self.preprocess(images, **kwargs)
+        return self.preprocess(images, *args, **kwargs)
 
     def preprocess(self, images, **kwargs) -> BatchFeature:
         raise NotImplementedError("Each image processor must implement its own preprocess method")
@@ -130,7 +140,7 @@ class BaseImageProcessor(ImageProcessingMixin):
         Args:
             image (`np.ndarray`):
                 Image to center crop.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Size of the output image.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format for the output image. If unset, the channel dimension format of the input
@@ -209,7 +219,7 @@ def convert_to_size_dict(
 
 
 def get_size_dict(
-    size: Union[int, Iterable[int], dict[str, int]] = None,
+    size: Optional[Union[int, Iterable[int], dict[str, int]]] = None,
     max_size: Optional[int] = None,
     height_width_order: bool = True,
     default_to_square: bool = True,
@@ -227,7 +237,7 @@ def get_size_dict(
       is set, it is added to the dict as `{"longest_edge": max_size}`.
 
     Args:
-        size (`Union[int, Iterable[int], Dict[str, int]]`, *optional*):
+        size (`Union[int, Iterable[int], dict[str, int]]`, *optional*):
             The `size` parameter to be cast into a size dictionary.
         max_size (`Optional[int]`, *optional*):
             The `max_size` parameter to be cast into a size dictionary.

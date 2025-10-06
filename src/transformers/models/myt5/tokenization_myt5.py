@@ -18,7 +18,7 @@ import json
 import os
 import warnings
 from collections import defaultdict
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
@@ -36,19 +36,19 @@ class ByteRewriter:
     This class is used to rewrite bytes using a hash tree. The hash tree is constructed from a set of rewriting rules.
 
     Args:
-        rewriting_rules (`str` or `Dict[str, str]`):
+        rewriting_rules (`str` or `dict[str, str]`):
             A path to a json file containing the rewriting rules or a dictionary containing the rewriting rules.
 
     """
 
     LEAF = "[LEAF]"
 
-    def __init__(self, rewriting_rules: Union[str, Dict[str, str]]):
+    def __init__(self, rewriting_rules: Union[str, dict[str, str]]):
         if isinstance(rewriting_rules, str):
             with open(rewriting_rules, "r") as f:
                 rewriting_rules = json.load(f)
         elif not isinstance(rewriting_rules, dict):
-            raise ValueError(
+            raise TypeError(
                 f"rewriting_rules should be either a path to json file or a dict, got {type(rewriting_rules)}"
             )
 
@@ -56,7 +56,7 @@ class ByteRewriter:
         reverse_rewriting_rules = {v: k for k, v in rewriting_rules.items()}
         self.reverse_hash_tree = self.construct_hash_tree(reverse_rewriting_rules)
 
-    def add_leaf(self, hash_tree: Dict[str, Union[dict, List[str]]], byte_in_sequence: str, byte_out_sequence: str):
+    def add_leaf(self, hash_tree: dict[str, Union[dict, list[str]]], byte_in_sequence: str, byte_out_sequence: str):
         """
         Add a leaf with the output byte sequence to the hash tree.
         """
@@ -71,7 +71,7 @@ class ByteRewriter:
 
         tree_pointer[self.LEAF] = byte_out_list
 
-    def construct_hash_tree(self, rewriting_rules: Dict[str, str]) -> Dict[str, Union[dict, List[str]]]:
+    def construct_hash_tree(self, rewriting_rules: dict[str, str]) -> dict[str, Union[dict, list[str]]]:
         """
         Construct a hash tree for rewritten byte sequences.
         """
@@ -84,7 +84,7 @@ class ByteRewriter:
 
         return hash_tree
 
-    def search_hash_tree(self, byte_sequence: List[str]) -> Union[None, List[str]]:
+    def search_hash_tree(self, byte_sequence: list[str]) -> Union[None, list[str]]:
         """
         Search the hash tree and return the rewritten byte sequence if found.
         """
@@ -97,15 +97,15 @@ class ByteRewriter:
 
         return tree_pointer[self.LEAF]
 
-    def rewrite_bytes(self, in_bytes: List[str], reverse=False) -> List[str]:
+    def rewrite_bytes(self, in_bytes: list[str], reverse=False) -> list[str]:
         """
         Rewrite a sequence of bytes using the hash tree.
 
         Args:
-            in_bytes (`List[str]`): A list of bytes to be rewritten.
+            in_bytes (`list[str]`): A list of bytes to be rewritten.
             reverse (`bool`): If True, decoding is performed with the reverse hash tree.
         Returns:
-            `List[str]`: The rewritten byte sequence.
+            `list[str]`: The rewritten byte sequence.
         """
         out_bytes = []
         b_start = 0
@@ -155,7 +155,7 @@ class MyT5Tokenizer(PreTrainedTokenizer):
             indexed from the end of the vocabulary up to beginning ("<extra_id_0>" is the last token in the vocabulary
             like in ByT5 preprocessing see
             [here](https://github.com/google-research/text-to-text-transfer-transformer/blob/9fd7b14a769417be33bc6c850f9598764913c833/t5/data/preprocessors.py#L2117)).
-        additional_special_tokens (`List[str]`, *optional*):
+        additional_special_tokens (`list[str]`, *optional*):
             Additional special tokens used by the tokenizer.
     """
 
@@ -220,22 +220,22 @@ class MyT5Tokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.byt5.tokenization_byt5.ByT5Tokenizer.get_special_tokens_mask
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+    ) -> list[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer `prepare_for_model` method.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
             already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
-            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+            `list[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
         if already_has_special_tokens:
             return super().get_special_tokens_mask(
@@ -247,7 +247,7 @@ class MyT5Tokenizer(PreTrainedTokenizer):
             return ([0] * len(token_ids_0)) + [1]
         return ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
 
-    def _add_eos_if_not_present(self, token_ids: List[int]) -> List[int]:
+    def _add_eos_if_not_present(self, token_ids: list[int]) -> list[int]:
         """Do not add eos again if user already added it."""
         if len(token_ids) > 0 and token_ids[-1] == self.eos_token_id:
             warnings.warn(
@@ -259,20 +259,20 @@ class MyT5Tokenizer(PreTrainedTokenizer):
             return token_ids + [self.eos_token_id]
 
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. MyT5 does not
         make use of token type ids, therefore a list of zeros is returned.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of zeros.
+            `list[int]`: List of zeros.
         """
         eos = [self.eos_token_id]
 
@@ -282,8 +282,8 @@ class MyT5Tokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.byt5.tokenization_byt5.ByT5Tokenizer.build_inputs_with_special_tokens
     def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A sequence has the following format:
@@ -292,13 +292,13 @@ class MyT5Tokenizer(PreTrainedTokenizer):
         - pair of sequences: `A </s> B </s>`
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs to which the special tokens will be added.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+            `list[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
         token_ids_0 = self._add_eos_if_not_present(token_ids_0)
         if token_ids_1 is None:
@@ -307,7 +307,7 @@ class MyT5Tokenizer(PreTrainedTokenizer):
             token_ids_1 = self._add_eos_if_not_present(token_ids_1)
             return token_ids_0 + token_ids_1
 
-    def _tokenize(self, text: str, **kwargs) -> List[str]:
+    def _tokenize(self, text: str, **kwargs) -> list[str]:
         """Take as input a string and return a list of strings (tokens) for words/sub-words.
         Represents tokens in two character hex format"""
 
@@ -330,13 +330,13 @@ class MyT5Tokenizer(PreTrainedTokenizer):
         token = f"{index - self.offset:02x}"
         return token
 
-    def morphological_encode(self, indices: List[str]) -> List[str]:
+    def morphological_encode(self, indices: list[str]) -> list[str]:
         # Decompose and merge morphological sequences
         indices = self.decompose_rewriter.rewrite_bytes(indices, reverse=False)
         indices = self.merge_rewriter.rewrite_bytes(indices, reverse=False)
         return indices
 
-    def morphological_decode(self, indices: List[str]) -> List[str]:
+    def morphological_decode(self, indices: list[str]) -> list[str]:
         # Demerge and compose morphological sequences
         indices = self.merge_rewriter.rewrite_bytes(indices, reverse=True)
         indices = self.decompose_rewriter.rewrite_bytes(indices, reverse=True)
@@ -365,7 +365,7 @@ class MyT5Tokenizer(PreTrainedTokenizer):
         string = bstring.decode("utf-8", errors="ignore")
         return string
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if os.path.isdir(save_directory):
             vocab_file = os.path.join(
                 save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]

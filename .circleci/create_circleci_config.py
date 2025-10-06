@@ -16,10 +16,9 @@
 import argparse
 import copy
 import os
-import random
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
-import glob
+from typing import Any, Optional
+
 import yaml
 
 
@@ -28,6 +27,9 @@ COMMON_ENV_VARIABLES = {
     "TRANSFORMERS_IS_CI": True,
     "PYTEST_TIMEOUT": 120,
     "RUN_PIPELINE_TESTS": False,
+    # will be adjust in `CircleCIJob.to_dict`.
+    "RUN_FLAKY": True,
+    "DISABLE_SAFETENSORS_CONVERSION": True,
 }
 # Disable the use of {"s": None} as the output is way too long, causing the navigation on CircleCI impractical
 COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "vvv": None, "rsfE":None}
@@ -80,15 +82,15 @@ class EmptyJob:
 @dataclass
 class CircleCIJob:
     name: str
-    additional_env: Dict[str, Any] = None
-    docker_image: List[Dict[str, str]] = None
-    install_steps: List[str] = None
+    additional_env: dict[str, Any] = None
+    docker_image: list[dict[str, str]] = None
+    install_steps: list[str] = None
     marker: Optional[str] = None
     parallelism: Optional[int] = 0
     pytest_num_workers: int = 8
-    pytest_options: Dict[str, Any] = None
+    pytest_options: dict[str, Any] = None
     resource_class: Optional[str] = "xlarge"
-    tests_to_run: Optional[List[str]] = None
+    tests_to_run: Optional[list[str]] = None
     num_test_files_per_worker: Optional[int] = 10
     # This should be only used for doctest job!
     command_timeout: Optional[int] = None
@@ -107,7 +109,9 @@ class CircleCIJob:
                 self.docker_image[0]["image"] = f"{self.docker_image[0]['image']}:dev"
             print(f"Using {self.docker_image} docker image")
         if self.install_steps is None:
-            self.install_steps = ["uv venv && uv pip install ."]
+            self.install_steps = ["uv pip install ."]
+        # Use a custom patched pytest to force exit the process at the end, to avoid `Too long with no output (exceeded 10m0s): context deadline exceeded`
+        self.install_steps.append("uv pip install git+https://github.com/ydshieh/pytest.git@8.4.1-ydshieh")
         if self.pytest_options is None:
             self.pytest_options = {}
         if isinstance(self.tests_to_run, str):
@@ -126,6 +130,14 @@ class CircleCIJob:
 
     def to_dict(self):
         env = COMMON_ENV_VARIABLES.copy()
+        if self.job_name != "tests_hub":
+            # fmt: off
+            # not critical
+            env.update({"HF_TOKEN": "".join(["h", "f", "_", "H", "o", "d", "V", "u", "M", "q", "b", "R", "m", "t", "b", "z", "F", "Q", "O", "Q", "A", "J", "G", "D", "l", "V", "Q", "r", "R", "N", "w", "D", "M", "V", "C", "s", "d"])})
+            # fmt: on
+
+        # Do not run tests decorated by @is_flaky on pull requests
+        env['RUN_FLAKY'] = os.environ.get("CIRCLE_PULL_REQUEST", "") == ""
         env.update(self.additional_env)
 
         job = {
@@ -143,7 +155,7 @@ class CircleCIJob:
                 # Examples special case: we need to download NLTK files in advance to avoid cuncurrency issues
         timeout_cmd = f"timeout {self.command_timeout} " if self.command_timeout else ""
         marker_cmd = f"-m '{self.marker}'" if self.marker is not None else ""
-        junit_flags = f" -p no:warning -o junit_family=xunit1 --junitxml=test-results/junit.xml"
+        junit_flags = " -p no:warning -o junit_family=xunit1 --junitxml=test-results/junit.xml"
         joined_flaky_patterns = "|".join(FLAKY_TEST_FAILURE_PATTERNS)
         repeat_on_failure_flags = f"--reruns 5 --reruns-delay 2 --only-rerun '({joined_flaky_patterns})'"
         parallel = f' << pipeline.parameters.{self.job_name}_parallelism >> '
@@ -171,14 +183,33 @@ class CircleCIJob:
                     "command": f"TESTS=$(circleci tests split  --split-by=timings {self.job_name}_test_list.txt) && echo $TESTS > splitted_tests.txt && echo $TESTS | tr ' ' '\n'" if self.parallelism else f"awk '{{printf \"%s \", $0}}' {self.job_name}_test_list.txt > splitted_tests.txt"
                     }
             },
-            {"run": {"name": "fetch hub objects before pytest", "command": "python3 utils/fetch_hub_objects_for_ci.py"}},
+            # During the CircleCI docker images build time, we might already (or not) download the data.
+            # If it's done already, the files are inside the directory `/test_data/`.
+            {"run": {"name": "fetch hub objects before pytest", "command": "cp -r /test_data/* . 2>/dev/null || true; python3 utils/fetch_hub_objects_for_ci.py"}},
+            {"run": {"name": "download and unzip hub cache", "command": 'curl -L -o huggingface-cache.tar.gz https://huggingface.co/datasets/hf-internal-testing/hf_hub_cache/resolve/main/huggingface-cache.tar.gz && apt-get install pigz && tar --use-compress-program="pigz -d -p 8" -xf huggingface-cache.tar.gz && mv -n hub/* /root/.cache/huggingface/hub/ && ls -la /root/.cache/huggingface/hub/'}},
             {"run": {
                 "name": "Run tests",
                 "command": f"({timeout_cmd} python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {junit_flags} {repeat_on_failure_flags} {' '.join(pytest_flags)} $(cat splitted_tests.txt) | tee tests_output.txt)"}
             },
-            {"run": {"name": "Expand to show skipped tests", "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --skip"}},
-            {"run": {"name": "Failed tests: show reasons",   "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --fail"}},
-            {"run": {"name": "Errors",                       "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --errors"}},
+            {"run":
+                {
+                    "name": "Check for test crashes",
+                    "when": "always",
+                    "command": """if [ ! -f tests_output.txt ]; then
+                            echo "ERROR: tests_output.txt does not exist - tests may not have run properly"
+                            exit 1
+                        elif grep -q "crashed and worker restarting disabled" tests_output.txt; then
+                            echo "ERROR: Worker crash detected in test output"
+                            echo "Found: crashed and worker restarting disabled"
+                            exit 1
+                        else
+                            echo "Tests output file exists and no worker crashes detected"
+                        fi"""
+                },
+            },
+            {"run": {"name": "Expand to show skipped tests", "when": "always", "command": "python3 .circleci/parse_test_outputs.py --file tests_output.txt --skip"}},
+            {"run": {"name": "Failed tests: show reasons",   "when": "always", "command": "python3 .circleci/parse_test_outputs.py --file tests_output.txt --fail"}},
+            {"run": {"name": "Errors",                       "when": "always", "command": "python3 .circleci/parse_test_outputs.py --file tests_output.txt --errors"}},
             {"store_test_results": {"path": "test-results"}},
             {"store_artifacts": {"path": "test-results/junit.xml"}},
             {"store_artifacts": {"path": "reports"}},
@@ -209,7 +240,7 @@ generate_job = CircleCIJob(
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
     # networkx==3.3 (after #36957) cause some issues
     # TODO: remove this once it works directly
-    install_steps=["uv venv && uv pip install . && uv pip install networkx==3.2.1"],
+    install_steps=["uv pip install ."],
     marker="generate",
     parallelism=6,
 )
@@ -226,22 +257,6 @@ processor_job = CircleCIJob(
     parallelism=8,
 )
 
-tf_job = CircleCIJob(
-    "tf",
-    docker_image=[{"image":"huggingface/transformers-tf-light"}],
-    parallelism=6,
-)
-
-
-flax_job = CircleCIJob(
-    "flax",
-    docker_image=[{"image":"huggingface/transformers-jax-light"}],
-    parallelism=6,
-    pytest_num_workers=16,
-    resource_class="2xlarge",
-)
-
-
 pipelines_torch_job = CircleCIJob(
     "pipelines_torch",
     additional_env={"RUN_PIPELINE_TESTS": True},
@@ -250,47 +265,27 @@ pipelines_torch_job = CircleCIJob(
     parallelism=4,
 )
 
-
-pipelines_tf_job = CircleCIJob(
-    "pipelines_tf",
-    additional_env={"RUN_PIPELINE_TESTS": True},
-    docker_image=[{"image":"huggingface/transformers-tf-light"}],
-    marker="is_pipeline_test",
-    parallelism=4,
-)
-
-
 custom_tokenizers_job = CircleCIJob(
     "custom_tokenizers",
     additional_env={"RUN_CUSTOM_TOKENIZERS": True},
     docker_image=[{"image": "huggingface/transformers-custom-tokenizers"}],
 )
 
-
 examples_torch_job = CircleCIJob(
     "examples_torch",
     additional_env={"OMP_NUM_THREADS": 8},
     docker_image=[{"image":"huggingface/transformers-examples-torch"}],
     # TODO @ArthurZucker remove this once docker is easier to build
-    install_steps=["uv venv && uv pip install . && uv pip install -r examples/pytorch/_tests_requirements.txt"],
+    install_steps=["uv pip install . && uv pip install -r examples/pytorch/_tests_requirements.txt"],
     pytest_num_workers=4,
 )
-
-
-examples_tensorflow_job = CircleCIJob(
-    "examples_tensorflow",
-    additional_env={"OMP_NUM_THREADS": 8},
-    docker_image=[{"image":"huggingface/transformers-examples-tf"}],
-    pytest_num_workers=2,
-)
-
 
 hub_job = CircleCIJob(
     "hub",
     additional_env={"HUGGINGFACE_CO_STAGING": True},
     docker_image=[{"image":"huggingface/transformers-torch-light"}],
     install_steps=[
-        'uv venv && uv pip install .',
+        'uv pip install .',
         'git config --global user.email "ci@dummy.com"',
         'git config --global user.name "ci"',
     ],
@@ -299,27 +294,12 @@ hub_job = CircleCIJob(
     resource_class="medium",
 )
 
-
-onnx_job = CircleCIJob(
-    "onnx",
-    docker_image=[{"image":"huggingface/transformers-torch-tf-light"}],
-    install_steps=[
-        "uv venv",
-        "uv pip install .[torch,tf,testing,sentencepiece,onnxruntime,vision,rjieba]",
-    ],
-    pytest_options={"k onnx": None},
-    pytest_num_workers=1,
-    resource_class="small",
-)
-
-
 exotic_models_job = CircleCIJob(
     "exotic_models",
     docker_image=[{"image":"huggingface/transformers-exotic-models"}],
     parallelism=4,
     pytest_options={"durations": 100},
 )
-
 
 repo_utils_job = CircleCIJob(
     "repo_utils",
@@ -328,13 +308,12 @@ repo_utils_job = CircleCIJob(
     resource_class="large",
 )
 
-
 non_model_job = CircleCIJob(
     "non_model",
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
     # networkx==3.3 (after #36957) cause some issues
     # TODO: remove this once it works directly
-    install_steps=["uv venv && uv pip install . && uv pip install networkx==3.2.1"],
+    install_steps=["uv pip install .[serving]"],
     marker="not generate",
     parallelism=6,
 )
@@ -352,7 +331,7 @@ doc_test_job = CircleCIJob(
     additional_env={"TRANSFORMERS_VERBOSITY": "error", "DATASETS_VERBOSITY": "error", "SKIP_CUDA_DOCTEST": "1"},
     install_steps=[
         # Add an empty file to keep the test step running correctly even no file is selected to be tested.
-        "uv venv && pip install .",
+        "uv pip install .",
         "touch dummy.py",
         command,
         "cat pr_documentation_tests_temp.txt",
@@ -364,7 +343,7 @@ doc_test_job = CircleCIJob(
     pytest_num_workers=1,
 )
 
-REGULAR_TESTS = [torch_job, flax_job, hub_job, onnx_job, tokenization_job, processor_job, generate_job, non_model_job] # fmt: skip
+REGULAR_TESTS = [torch_job, hub_job, tokenization_job, processor_job, generate_job, non_model_job] # fmt: skip
 EXAMPLES_TESTS = [examples_torch_job]
 PIPELINE_TESTS = [pipelines_torch_job]
 REPO_UTIL_TESTS = [repo_utils_job]
@@ -393,7 +372,12 @@ def create_circleci_config(folder=None):
         "parameters": {
             # Only used to accept the parameters from the trigger
             "nightly": {"type": "boolean", "default": False},
-            "tests_to_run": {"type": "string", "default": ''},
+            # Only used to accept the parameters from GitHub Actions trigger
+            "GHA_Actor": {"type": "string", "default": ""},
+            "GHA_Action": {"type": "string", "default": ""},
+            "GHA_Event": {"type": "string", "default": ""},
+            "GHA_Meta": {"type": "string", "default": ""},
+            "tests_to_run": {"type": "string", "default": ""},
             **{j.job_name + "_test_list":{"type":"string", "default":''} for j in jobs},
             **{j.job_name + "_parallelism":{"type":"integer", "default":1} for j in jobs},
         },

@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-10-07 and added to Hugging Face Transformers on 2024-08-12.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -39,9 +40,9 @@ import torch
 from transformers import pipeline
 
 pipeline = pipeline(
-    "text-generation", 
+    "text-generation",
     model="tiiuae/falcon-mamba-7b-instruct",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device=0
 )
 pipeline(
@@ -62,21 +63,21 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 tokenizer = AutoTokenizer.from_pretrained("tiiuae/falcon-mamba-7b-instruct")
 model = AutoModelForCausalLM.from_pretrained(
     "tiiuae/falcon-mamba-7b-instruct",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto"
 )
 
-input_ids = tokenizer("Explain the difference between transformers and SSMs", return_tensors="pt").to("cuda")
+input_ids = tokenizer("Explain the difference between transformers and SSMs", return_tensors="pt").to(model.device)
 
 output = model.generate(**input_ids, max_new_tokens=100, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
 </hfoption>
-<hfoption id="transformers-cli">
+<hfoption id="transformers CLI">
 
 ```bash
-transformers-cli chat --model_name_or_path tiiuae/falcon-mamba-7b-instruct --torch_dtype auto --device 0
+transformers chat tiiuae/falcon-mamba-7b-instruct --dtype auto --device 0
 ```
 
 </hfoption>
@@ -100,15 +101,22 @@ quantization_config = BitsAndBytesConfig(
 tokenizer = AutoTokenizer.from_pretrained("tiiuae/falcon-mamba-7b")
 model = FalconMambaForCausalLM.from_pretrained(
     "tiiuae/falcon-mamba-7b",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config,
 )
 
-inputs = tokenizer("Explain the concept of state space models in simple terms", return_tensors="pt").to("cuda")
+inputs = tokenizer("Explain the concept of state space models in simple terms", return_tensors="pt").to(model.device)
 outputs = model.generate(**inputs, max_new_tokens=100)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
+
+## FalconMambaCache
+
+[[autodoc]] FalconMambaCache
+    - update_conv_state
+    - update_ssm_state
+    - reset
 
 ## FalconMambaConfig
 

@@ -105,7 +105,7 @@ def rename_key(old_name, num_meta4D_last_stage):
 
 
 def convert_torch_checkpoint(checkpoint, num_meta4D_last_stage):
-    for key in checkpoint.copy().keys():
+    for key in checkpoint.copy():
         val = checkpoint.pop(key)
         checkpoint[rename_key(key, num_meta4D_last_stage)] = val
 
@@ -194,9 +194,9 @@ def convert_efficientformer_checkpoint(
     # Save Checkpoints
     Path(pytorch_dump_path).mkdir(exist_ok=True)
     model.save_pretrained(pytorch_dump_path)
-    print(f"Checkpoint successfuly converted. Model saved at {pytorch_dump_path}")
+    print(f"Checkpoint successfully converted. Model saved at {pytorch_dump_path}")
     processor.save_pretrained(pytorch_dump_path)
-    print(f"Processor successfuly saved at {pytorch_dump_path}")
+    print(f"Processor successfully saved at {pytorch_dump_path}")
 
     if push_to_hub:
         print("Pushing model to the hub...")

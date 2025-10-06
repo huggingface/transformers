@@ -147,7 +147,6 @@ class Pix2StructVisionModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = Pix2StructVisionModelTester(self)
@@ -315,7 +314,6 @@ class Pix2StructTextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Pix2StructTextModel,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = Pix2StructTextModelTester(self)
@@ -383,7 +381,11 @@ class Pix2StructModelTester:
         return config, input_ids, attention_mask, flattened_patches
 
     def get_config(self, text_config, vision_config):
-        return Pix2StructConfig.from_text_vision_configs(text_config, vision_config, projection_dim=64)
+        return Pix2StructConfig(
+            text_config=self.text_model_tester.get_config().to_dict(),
+            vision_config=self.vision_model_tester.get_config().to_dict(),
+            projection_dim=64,
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -410,7 +412,6 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         else {}
     )
     fx_compatible = False
-    test_head_masking = False
     test_pruning = False
     test_resize_embeddings = True
     test_attention_outputs = False
@@ -474,9 +475,6 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                 "attention_mask",
                 "decoder_input_ids",
                 "decoder_attention_mask",
-                "head_mask",
-                "decoder_head_mask",
-                "cross_attn_head_mask",
                 "encoder_outputs",
                 "past_key_values",
                 "labels",
@@ -525,30 +523,6 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
             loss = model(**inputs).loss
             loss.backward()
-
-    # override as the `logit_scale` parameter initilization is different for Pix2Struct
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    # check if `logit_scale` is initilized as per the original implementation
-                    if name == "logit_scale":
-                        self.assertAlmostEqual(
-                            param.data.item(),
-                            np.log(1 / 0.07),
-                            delta=1e-3,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
 
     # overwrite because `vocab_size` is not an attribute of `Pix2StructConfig` but rather `Pix2StructTextConfig`
     def test_resize_tokens_embeddings(self):
@@ -612,6 +586,7 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
             model = model_class(config).to(torch_device)
+            model.eval()
 
             # if no output embeddings -> leave test
             if model.get_output_embeddings() is None:
@@ -644,10 +619,6 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                 inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
-
-    @unittest.skip(reason="Pix2Struct doesn't use tied weights")
-    def test_tied_model_weights_key_ignore(self):
-        pass
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
@@ -691,8 +662,8 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             loaded_model_state_dict = loaded_model.state_dict()
 
             non_persistent_buffers = {}
-            for key in loaded_model_state_dict.keys():
-                if key not in model_state_dict.keys():
+            for key in loaded_model_state_dict:
+                if key not in model_state_dict:
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {
@@ -837,9 +808,7 @@ class Pix2StructIntegrationTest(unittest.TestCase):
         image_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo.jpg"
         image = Image.open(requests.get(image_url, stream=True).raw)
 
-        model = Pix2StructForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(
-            torch_device
-        )
+        model = Pix2StructForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16).to(torch_device)
         processor = Pix2StructProcessor.from_pretrained(model_id)
 
         # image only
@@ -865,9 +834,7 @@ class Pix2StructIntegrationTest(unittest.TestCase):
             "What is the producer in the diagram? (1) Phytoplankton (2) Zooplankton (3) Large fish (4) Small fish",
         ]
 
-        model = Pix2StructForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(
-            torch_device
-        )
+        model = Pix2StructForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16).to(torch_device)
         processor = Pix2StructProcessor.from_pretrained(model_id)
 
         inputs = processor(images=images, return_tensors="pt", text=texts).to(torch_device, torch.bfloat16)

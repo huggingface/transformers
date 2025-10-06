@@ -13,10 +13,10 @@
 # limitations under the License.
 
 import unittest
+from unittest.mock import patch
 
 from transformers import (
     MODEL_FOR_CAUSAL_LM_MAPPING,
-    TF_MODEL_FOR_CAUSAL_LM_MAPPING,
     TextGenerationPipeline,
     logging,
     pipeline,
@@ -25,10 +25,8 @@ from transformers.testing_utils import (
     CaptureLogger,
     is_pipeline_test,
     require_accelerate,
-    require_tf,
     require_torch,
     require_torch_accelerator,
-    require_torch_or_tf,
     torch_device,
 )
 
@@ -36,48 +34,27 @@ from .test_pipelines_common import ANY
 
 
 @is_pipeline_test
-@require_torch_or_tf
+@require_torch
 class TextGenerationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_CAUSAL_LM_MAPPING
-    tf_model_mapping = TF_MODEL_FOR_CAUSAL_LM_MAPPING
 
     @require_torch
     def test_small_model_pt(self):
-        text_generator = pipeline(task="text-generation", model="sshleifer/tiny-ctrl", framework="pt")
+        text_generator = pipeline(
+            task="text-generation",
+            model="hf-internal-testing/tiny-random-LlamaForCausalLM",
+            max_new_tokens=10,
+        )
         # Using `do_sample=False` to force deterministic output
         outputs = text_generator("This is a test", do_sample=False)
-        self.assertEqual(
-            outputs,
-            [
-                {
-                    "generated_text": (
-                        "This is a test ☃ ☃ segmental segmental segmental 议议eski eski flutter flutter Lacy oscope."
-                        " oscope. FiliFili@@"
-                    )
-                }
-            ],
-        )
+        self.assertEqual(outputs, [{"generated_text": "This is a testкт MéxicoWSAnimImportдели pip letscosatur"}])
 
-        outputs = text_generator(["This is a test", "This is a second test"])
+        outputs = text_generator(["This is a test", "This is a second test"], do_sample=False)
         self.assertEqual(
             outputs,
             [
-                [
-                    {
-                        "generated_text": (
-                            "This is a test ☃ ☃ segmental segmental segmental 议议eski eski flutter flutter Lacy oscope."
-                            " oscope. FiliFili@@"
-                        )
-                    }
-                ],
-                [
-                    {
-                        "generated_text": (
-                            "This is a second test ☃ segmental segmental segmental 议议eski eski flutter flutter Lacy"
-                            " oscope. oscope. FiliFili@@"
-                        )
-                    }
-                ],
+                [{"generated_text": "This is a testкт MéxicoWSAnimImportдели pip letscosatur"}],
+                [{"generated_text": "This is a second testкт MéxicoWSAnimImportдели Düsseld bootstrap learn user"}],
             ],
         )
 
@@ -90,64 +67,11 @@ class TextGenerationPipelineTests(unittest.TestCase):
             ],
         )
 
-        ## -- test tokenizer_kwargs
-        test_str = "testing tokenizer kwargs. using truncation must result in a different generation."
-        input_len = len(text_generator.tokenizer(test_str)["input_ids"])
-        output_str, output_str_with_truncation = (
-            text_generator(test_str, do_sample=False, return_full_text=False, min_new_tokens=1)[0]["generated_text"],
-            text_generator(
-                test_str,
-                do_sample=False,
-                return_full_text=False,
-                min_new_tokens=1,
-                truncation=True,
-                max_length=input_len + 1,
-            )[0]["generated_text"],
-        )
-        assert output_str != output_str_with_truncation  # results must be different because one had truncation
-
-        ## -- test kwargs for preprocess_params
-        outputs = text_generator("This is a test", do_sample=False, add_special_tokens=False, padding=False)
-        self.assertEqual(
-            outputs,
-            [
-                {
-                    "generated_text": (
-                        "This is a test ☃ ☃ segmental segmental segmental 议议eski eski flutter flutter Lacy oscope."
-                        " oscope. FiliFili@@"
-                    )
-                }
-            ],
-        )
-
-        # -- what is the point of this test? padding is hardcoded False in the pipeline anyway
-        text_generator.tokenizer.pad_token_id = text_generator.model.config.eos_token_id
-        text_generator.tokenizer.pad_token = "<pad>"
-        outputs = text_generator(
-            ["This is a test", "This is a second test"],
-            do_sample=True,
-            num_return_sequences=2,
-            batch_size=2,
-            return_tensors=True,
-        )
-        self.assertEqual(
-            outputs,
-            [
-                [
-                    {"generated_token_ids": ANY(list)},
-                    {"generated_token_ids": ANY(list)},
-                ],
-                [
-                    {"generated_token_ids": ANY(list)},
-                    {"generated_token_ids": ANY(list)},
-                ],
-            ],
-        )
-
     @require_torch
     def test_small_chat_model_pt(self):
         text_generator = pipeline(
-            task="text-generation", model="hf-internal-testing/tiny-gpt2-with-chatml-template", framework="pt"
+            task="text-generation",
+            model="hf-internal-testing/tiny-gpt2-with-chatml-template",
         )
         # Using `do_sample=False` to force deterministic output
         chat1 = [
@@ -193,7 +117,8 @@ class TextGenerationPipelineTests(unittest.TestCase):
         # Here we check that passing a chat that ends in an assistant message is handled correctly
         # by continuing the final message rather than starting a new one
         text_generator = pipeline(
-            task="text-generation", model="hf-internal-testing/tiny-gpt2-with-chatml-template", framework="pt"
+            task="text-generation",
+            model="hf-internal-testing/tiny-gpt2-with-chatml-template",
         )
         # Using `do_sample=False` to force deterministic output
         chat1 = [
@@ -225,7 +150,8 @@ class TextGenerationPipelineTests(unittest.TestCase):
         # Here we check that passing a chat that ends in an assistant message is handled correctly
         # by continuing the final message rather than starting a new one
         text_generator = pipeline(
-            task="text-generation", model="hf-internal-testing/tiny-gpt2-with-chatml-template", framework="pt"
+            task="text-generation",
+            model="hf-internal-testing/tiny-gpt2-with-chatml-template",
         )
         # Using `do_sample=False` to force deterministic output
         chat1 = [
@@ -271,7 +197,8 @@ class TextGenerationPipelineTests(unittest.TestCase):
                 return {"text": self.data[i]}
 
         text_generator = pipeline(
-            task="text-generation", model="hf-internal-testing/tiny-gpt2-with-chatml-template", framework="pt"
+            task="text-generation",
+            model="hf-internal-testing/tiny-gpt2-with-chatml-template",
         )
 
         dataset = MyDataset()
@@ -296,7 +223,8 @@ class TextGenerationPipelineTests(unittest.TestCase):
         from transformers.pipelines.pt_utils import PipelineIterator
 
         text_generator = pipeline(
-            task="text-generation", model="hf-internal-testing/tiny-gpt2-with-chatml-template", framework="pt"
+            task="text-generation",
+            model="hf-internal-testing/tiny-gpt2-with-chatml-template",
         )
 
         # Using `do_sample=False` to force deterministic output
@@ -335,91 +263,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
             ],
         )
 
-    @require_tf
-    def test_small_model_tf(self):
-        text_generator = pipeline(task="text-generation", model="sshleifer/tiny-ctrl", framework="tf")
-
-        # Using `do_sample=False` to force deterministic output
-        outputs = text_generator("This is a test", do_sample=False)
-        self.assertEqual(
-            outputs,
-            [
-                {
-                    "generated_text": (
-                        "This is a test FeyFeyFey(Croatis.), s.), Cannes Cannes Cannes 閲閲Cannes Cannes Cannes 攵"
-                        " please,"
-                    )
-                }
-            ],
-        )
-
-        outputs = text_generator(["This is a test", "This is a second test"], do_sample=False)
-        self.assertEqual(
-            outputs,
-            [
-                [
-                    {
-                        "generated_text": (
-                            "This is a test FeyFeyFey(Croatis.), s.), Cannes Cannes Cannes 閲閲Cannes Cannes Cannes 攵"
-                            " please,"
-                        )
-                    }
-                ],
-                [
-                    {
-                        "generated_text": (
-                            "This is a second test Chieftain Chieftain prefecture prefecture prefecture Cannes Cannes"
-                            " Cannes 閲閲Cannes Cannes Cannes 攵 please,"
-                        )
-                    }
-                ],
-            ],
-        )
-
-    @require_tf
-    def test_small_chat_model_tf(self):
-        text_generator = pipeline(
-            task="text-generation", model="hf-internal-testing/tiny-gpt2-with-chatml-template", framework="tf"
-        )
-        # Using `do_sample=False` to force deterministic output
-        chat1 = [
-            {"role": "system", "content": "This is a system message."},
-            {"role": "user", "content": "This is a test"},
-        ]
-        chat2 = [
-            {"role": "system", "content": "This is a system message."},
-            {"role": "user", "content": "This is a second test"},
-        ]
-        outputs = text_generator(chat1, do_sample=False, max_new_tokens=10)
-        expected_chat1 = chat1 + [
-            {
-                "role": "assistant",
-                "content": " factors factors factors factors factors factors factors factors factors factors",
-            }
-        ]
-        self.assertEqual(
-            outputs,
-            [
-                {"generated_text": expected_chat1},
-            ],
-        )
-
-        outputs = text_generator([chat1, chat2], do_sample=False, max_new_tokens=10)
-        expected_chat2 = chat2 + [
-            {
-                "role": "assistant",
-                "content": " stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs",
-            }
-        ]
-
-        self.assertEqual(
-            outputs,
-            [
-                [{"generated_text": expected_chat1}],
-                [{"generated_text": expected_chat2}],
-            ],
-        )
-
     def get_test_pipeline(
         self,
         model,
@@ -427,7 +270,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        torch_dtype="float32",
+        dtype="float32",
     ):
         text_generator = TextGenerationPipeline(
             model=model,
@@ -435,17 +278,20 @@ class TextGenerationPipelineTests(unittest.TestCase):
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             processor=processor,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
+            max_new_tokens=5,
         )
         return text_generator, ["This is a test", "Another test"]
 
     def test_stop_sequence_stopping_criteria(self):
         prompt = """Hello I believe in"""
-        text_generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-gpt2")
+        text_generator = pipeline(
+            "text-generation", model="hf-internal-testing/tiny-random-gpt2", max_new_tokens=5, do_sample=False
+        )
         output = text_generator(prompt)
         self.assertEqual(
             output,
-            [{"generated_text": "Hello I believe in fe fe fe fe fe fe fe fe fe fe fe fe"}],
+            [{"generated_text": "Hello I believe in fe fe fe fe fe"}],
         )
 
         output = text_generator(prompt, stop_sequence=" fe")
@@ -463,7 +309,9 @@ class TextGenerationPipelineTests(unittest.TestCase):
         self.assertEqual(outputs, [{"generated_text": ANY(str)}])
         self.assertNotIn("This is a test", outputs[0]["generated_text"])
 
-        text_generator = pipeline(task="text-generation", model=model, tokenizer=tokenizer, return_full_text=False)
+        text_generator = pipeline(
+            task="text-generation", model=model, tokenizer=tokenizer, return_full_text=False, max_new_tokens=5
+        )
         outputs = text_generator("This is a test")
         self.assertEqual(outputs, [{"generated_text": ANY(str)}])
         self.assertNotIn("This is a test", outputs[0]["generated_text"])
@@ -515,11 +363,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
             with self.assertRaises((ValueError, AssertionError)):
                 outputs = text_generator("", add_special_tokens=False)
 
-        if text_generator.framework == "tf":
-            # TF generation does not support max_new_tokens, and it's impossible
-            # to control long generation with only max_length without
-            # fancy calculation, dismissing tests for now.
-            self.skipTest(reason="TF generation does not support max_new_tokens")
         # We don't care about infinite range models.
         # They already work.
         # Skip this test for XGLM, since it uses sinusoidal positional embeddings which are resized on-the-fly.
@@ -538,9 +381,9 @@ class TextGenerationPipelineTests(unittest.TestCase):
             # Handling of large generations
             if str(text_generator.device) == "cpu":
                 with self.assertRaises((RuntimeError, IndexError, ValueError, AssertionError)):
-                    text_generator("This is a test" * 500, max_new_tokens=20)
+                    text_generator("This is a test" * 500, max_new_tokens=5)
 
-            outputs = text_generator("This is a test" * 500, handle_long_generation="hole", max_new_tokens=20)
+            outputs = text_generator("This is a test" * 500, handle_long_generation="hole", max_new_tokens=5)
             # Hole strategy cannot work
             if str(text_generator.device) == "cpu":
                 with self.assertRaises(ValueError):
@@ -559,52 +402,41 @@ class TextGenerationPipelineTests(unittest.TestCase):
         # Classic `model_kwargs`
         pipe = pipeline(
             model="hf-internal-testing/tiny-random-bloom",
-            model_kwargs={"device_map": "auto", "torch_dtype": torch.bfloat16},
+            model_kwargs={"device_map": "auto", "dtype": torch.bfloat16},
+            max_new_tokens=5,
+            do_sample=False,
         )
         self.assertEqual(pipe.model.lm_head.weight.dtype, torch.bfloat16)
         out = pipe("This is a test")
         self.assertEqual(
             out,
-            [
-                {
-                    "generated_text": (
-                        "This is a test test test test test test test test test test test test test test test test"
-                        " test"
-                    )
-                }
-            ],
+            [{"generated_text": ("This is a test test test test test test")}],
         )
 
         # Upgraded those two to real pipeline arguments (they just get sent for the model as they're unlikely to mean anything else.)
-        pipe = pipeline(model="hf-internal-testing/tiny-random-bloom", device_map="auto", torch_dtype=torch.bfloat16)
+        pipe = pipeline(
+            model="hf-internal-testing/tiny-random-bloom",
+            device_map="auto",
+            dtype=torch.bfloat16,
+            max_new_tokens=5,
+            do_sample=False,
+        )
         self.assertEqual(pipe.model.lm_head.weight.dtype, torch.bfloat16)
         out = pipe("This is a test")
         self.assertEqual(
             out,
-            [
-                {
-                    "generated_text": (
-                        "This is a test test test test test test test test test test test test test test test test"
-                        " test"
-                    )
-                }
-            ],
+            [{"generated_text": ("This is a test test test test test test")}],
         )
 
-        # torch_dtype will be automatically set to float32 if not provided - check: https://github.com/huggingface/transformers/pull/20602
-        pipe = pipeline(model="hf-internal-testing/tiny-random-bloom", device_map="auto")
-        self.assertEqual(pipe.model.lm_head.weight.dtype, torch.float32)
+        # dtype will be automatically set to torch.bfloat16 if not provided - check: https://github.com/huggingface/transformers/pull/38882
+        pipe = pipeline(
+            model="hf-internal-testing/tiny-random-bloom", device_map="auto", max_new_tokens=5, do_sample=False
+        )
+        self.assertEqual(pipe.model.lm_head.weight.dtype, torch.bfloat16)
         out = pipe("This is a test")
         self.assertEqual(
             out,
-            [
-                {
-                    "generated_text": (
-                        "This is a test test test test test test test test test test test test test test test test"
-                        " test"
-                    )
-                }
-            ],
+            [{"generated_text": ("This is a test test test test test test")}],
         )
 
     @require_torch
@@ -615,7 +447,8 @@ class TextGenerationPipelineTests(unittest.TestCase):
         pipe = pipeline(
             model="hf-internal-testing/tiny-random-bloom",
             device=torch_device,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
+            max_new_tokens=3,
         )
         pipe("This is a test")
 
@@ -626,17 +459,17 @@ class TextGenerationPipelineTests(unittest.TestCase):
         import torch
 
         pipe = pipeline(
-            model="hf-internal-testing/tiny-random-bloom", device_map=torch_device, torch_dtype=torch.float16
+            model="hf-internal-testing/tiny-random-bloom",
+            device_map=torch_device,
+            dtype=torch.float16,
+            max_new_tokens=3,
         )
         pipe("This is a test", do_sample=True, top_p=0.5)
 
     def test_pipeline_length_setting_warning(self):
         prompt = """Hello world"""
-        text_generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-gpt2")
-        if text_generator.model.framework == "tf":
-            logger = logging.get_logger("transformers.generation.tf_utils")
-        else:
-            logger = logging.get_logger("transformers.generation.utils")
+        text_generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-gpt2", max_new_tokens=5)
+        logger = logging.get_logger("transformers.generation.utils")
         logger_msg = "Both `max_new_tokens`"  # The beginning of the message to be checked in this test
 
         # Both are set by the user -> log warning
@@ -650,11 +483,11 @@ class TextGenerationPipelineTests(unittest.TestCase):
         self.assertNotIn(logger_msg, cl.out)
 
         with CaptureLogger(logger) as cl:
-            _ = text_generator(prompt, max_length=10)
+            _ = text_generator(prompt, max_length=10, max_new_tokens=None)
         self.assertNotIn(logger_msg, cl.out)
 
     def test_return_dict_in_generate(self):
-        text_generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-gpt2", max_new_tokens=16)
+        text_generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-gpt2", max_new_tokens=2)
         out = text_generator(
             ["This is great !", "Something else"], return_dict_in_generate=True, output_logits=True, output_scores=True
         )
@@ -682,7 +515,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
     def test_pipeline_assisted_generation(self):
         """Tests that we can run assisted generation in the pipeline"""
         model = "hf-internal-testing/tiny-random-MistralForCausalLM"
-        pipe = pipeline("text-generation", model=model, assistant_model=model)
+        pipe = pipeline("text-generation", model=model, assistant_model=model, max_new_tokens=2)
 
         # We can run the pipeline
         prompt = "Hello world"
@@ -691,3 +524,35 @@ class TextGenerationPipelineTests(unittest.TestCase):
         # It is running assisted generation under the hood (e.g. flags incompatible with assisted gen will crash)
         with self.assertRaises(ValueError):
             _ = pipe(prompt, generate_kwargs={"num_beams": 2})
+
+    @require_torch
+    def test_pipeline_skip_special_tokens(self):
+        """Tests that we can use `skip_special_tokens=False` to get the special tokens in the output"""
+        model_id = "google/gemma-3-270m-it"
+        chat = [{"role": "user", "content": "What's your name?"}]
+        generator = pipeline("text-generation", model=model_id)
+
+        # normal pipeline use
+        output = generator(chat, max_new_tokens=20, do_sample=False)
+        self.assertNotIn("<end_of_turn>", str(output[0]["generated_text"]))
+
+        # forcing special tokens to be included in the output
+        output = generator(chat, max_new_tokens=1000, do_sample=False, skip_special_tokens=False)
+        self.assertIn("<end_of_turn>", str(output[0]["generated_text"]))
+
+    @require_torch
+    def test_forward_tokenizer_kwargs(self):
+        chat = [
+            {"role": "system", "content": "This is a system message."},
+            {"role": "user", "content": "This is a test"},
+        ]
+        model = "hf-internal-testing/tiny-gpt2-with-chatml-template"
+        text_generator = pipeline("text-generation", model, max_new_tokens=5)
+        tokenizer = text_generator.tokenizer
+
+        with patch.object(tokenizer, "apply_chat_template", wraps=tokenizer.apply_chat_template) as mock:
+            text_generator(chat, tokenizer_encode_kwargs={"enable_thinking": True})
+            self.assertGreater(mock.call_count, 0)
+            kw_call_args = mock.call_args[1]
+            self.assertIn("enable_thinking", kw_call_args)
+            self.assertEqual(kw_call_args["enable_thinking"], True)

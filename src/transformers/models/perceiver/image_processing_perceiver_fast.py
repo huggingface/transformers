@@ -16,32 +16,19 @@
 
 from typing import Optional, Union
 
-from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast, BatchFeature
+import torch
+from torchvision.transforms.v2 import functional as F
+
+from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling, SizeDict
 from ...utils import (
     TensorType,
-    add_start_docstrings,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
+    auto_docstring,
 )
 
 
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
-
-
-@add_start_docstrings(
-    "Constructs a fast Perceiver image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-)
+@auto_docstring
 class PerceiverImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
     image_mean = IMAGENET_DEFAULT_MEAN
@@ -70,9 +57,9 @@ class PerceiverImageProcessorFast(BaseImageProcessorFast):
         Args:
             image (`"torch.Tensor"`):
                 Image to center crop.
-            crop_size (`Dict[str, int]`):
+            crop_size (`dict[str, int]`):
                 Desired output size after applying the center crop.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Size of the output image.
 
         Returns:
@@ -84,7 +71,7 @@ class PerceiverImageProcessorFast(BaseImageProcessorFast):
         min_dim = min(height, width)
         cropped_height = int((size.height / crop_size.height) * min_dim)
         cropped_width = int((size.width / crop_size.width) * min_dim)
-        return F.center_crop(image, (cropped_height, cropped_width))
+        return super().center_crop(image, SizeDict(height=cropped_height, width=cropped_width))
 
     def _preprocess(
         self,
@@ -99,11 +86,12 @@ class PerceiverImageProcessorFast(BaseImageProcessorFast):
         do_normalize: bool,
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
+        disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_center_crop:
@@ -115,7 +103,7 @@ class PerceiverImageProcessorFast(BaseImageProcessorFast):
 
         # Group images by size for further processing
         # Needed in case do_resize is False, or resize returns images with different sizes
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images)
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             # Fused rescale and normalize

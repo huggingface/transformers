@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Optional, Union
 
 
 if TYPE_CHECKING:
-    from ..configuration_utils import PretrainedConfig
+    from ..configuration_utils import PreTrainedConfig
 
 
 class BackboneType(enum.Enum):
@@ -76,7 +76,7 @@ def verify_out_features_out_indices(
 
 def _align_output_features_output_indices(
     out_features: Optional[list[str]],
-    out_indices: Optional[Union[list[int], tuple[int]]],
+    out_indices: Optional[Union[list[int], tuple[int, ...]]],
     stage_names: list[str],
 ):
     """
@@ -91,9 +91,9 @@ def _align_output_features_output_indices(
         - `out_indices` and `out_features` set: input `out_indices` and `out_features` are returned.
 
     Args:
-        out_features (`List[str]`): The names of the features for the backbone to output.
-        out_indices (`List[int]` or `Tuple[int]`): The indices of the features for the backbone to output.
-        stage_names (`List[str]`): The names of the stages of the backbone.
+        out_features (`list[str]`): The names of the features for the backbone to output.
+        out_indices (`list[int]` or `tuple[int]`): The indices of the features for the backbone to output.
+        stage_names (`list[str]`): The names of the stages of the backbone.
     """
     if out_indices is None and out_features is None:
         out_indices = [len(stage_names) - 1]
@@ -122,9 +122,9 @@ def get_aligned_output_features_output_indices(
         - `out_indices` and `out_features` set: they are verified to be aligned.
 
     Args:
-        out_features (`List[str]`): The names of the features for the backbone to output.
-        out_indices (`List[int]` or `Tuple[int]`): The indices of the features for the backbone to output.
-        stage_names (`List[str]`): The names of the stages of the backbone.
+        out_features (`list[str]`): The names of the features for the backbone to output.
+        out_indices (`list[int]` or `tuple[int]`): The indices of the features for the backbone to output.
+        stage_names (`list[str]`): The names of the stages of the backbone.
     """
     out_indices = list(out_indices) if out_indices is not None else None
     # First verify that the out_features and out_indices are valid
@@ -139,6 +139,10 @@ def get_aligned_output_features_output_indices(
 
 class BackboneMixin:
     backbone_type: Optional[BackboneType] = None
+
+    # Attribute to indicate if the backbone has attention and can return attention outputs.
+    # Should be set to `False` for conv-based models to be able to run `forward_with_filtered_kwargs`
+    has_attentions: bool = True
 
     def _init_timm_backbone(self, config) -> None:
         """
@@ -230,9 +234,12 @@ class BackboneMixin:
         return [self.out_feature_channels[name] for name in self.out_features]
 
     def forward_with_filtered_kwargs(self, *args, **kwargs):
-        signature = dict(inspect.signature(self.forward).parameters)
-        filtered_kwargs = {k: v for k, v in kwargs.items() if k in signature}
-        return self(*args, **filtered_kwargs)
+        if not self.has_attentions:
+            kwargs.pop("output_attentions", None)
+        if self.backbone_type == BackboneType.TIMM:
+            signature = dict(inspect.signature(self.forward).parameters)
+            kwargs = {k: v for k, v in kwargs.items() if k in signature}
+        return self(*args, **kwargs)
 
     def forward(
         self,
@@ -245,7 +252,7 @@ class BackboneMixin:
 
     def to_dict(self):
         """
-        Serializes this instance to a Python dictionary. Override the default `to_dict()` from `PretrainedConfig` to
+        Serializes this instance to a Python dictionary. Override the default `to_dict()` from `PreTrainedConfig` to
         include the `out_features` and `out_indices` attributes.
         """
         output = super().to_dict()
@@ -277,7 +284,7 @@ class BackboneConfigMixin:
         return self._out_indices
 
     @out_indices.setter
-    def out_indices(self, out_indices: Union[tuple[int], list[int]]):
+    def out_indices(self, out_indices: Union[tuple[int, ...], list[int]]):
         """
         Set the out_indices attribute. This will also update the out_features attribute to match the new out_indices.
         """
@@ -287,7 +294,7 @@ class BackboneConfigMixin:
 
     def to_dict(self):
         """
-        Serializes this instance to a Python dictionary. Override the default `to_dict()` from `PretrainedConfig` to
+        Serializes this instance to a Python dictionary. Override the default `to_dict()` from `PreTrainedConfig` to
         include the `out_features` and `out_indices` attributes.
         """
         output = super().to_dict()
@@ -323,13 +330,8 @@ def load_backbone(config):
     if backbone_config is not None and backbone_checkpoint is not None and use_pretrained_backbone is not None:
         raise ValueError("Cannot specify both config.backbone_config and config.backbone")
 
-    # If any of thhe following are set, then the config passed in is from a model which contains a backbone.
-    if (
-        backbone_config is None
-        and use_timm_backbone is None
-        and backbone_checkpoint is None
-        and backbone_checkpoint is None
-    ):
+    # If any of the following are set, then the config passed in is from a model which contains a backbone.
+    if backbone_config is None and use_timm_backbone is None and backbone_checkpoint is None:
         return AutoBackbone.from_config(config=config, **backbone_kwargs)
 
     # config from the parent model that has a backbone
@@ -361,7 +363,7 @@ def verify_backbone_config_arguments(
     use_timm_backbone: bool,
     use_pretrained_backbone: bool,
     backbone: Optional[str],
-    backbone_config: Optional[Union[dict, "PretrainedConfig"]],
+    backbone_config: Optional[Union[dict, "PreTrainedConfig"]],
     backbone_kwargs: Optional[dict],
 ):
     """

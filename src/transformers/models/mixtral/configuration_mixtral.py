@@ -14,14 +14,14 @@
 # limitations under the License.
 """Mixtral model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class MixtralConfig(PretrainedConfig):
+class MixtralConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MixtralModel`]. It is used to instantiate an
     Mixtral model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -30,8 +30,8 @@ class MixtralConfig(PretrainedConfig):
     [mixtralai/Mixtral-8x7B](https://huggingface.co/mixtralai/Mixtral-8x7B)
     [mixtralai/Mixtral-7B-Instruct-v0.1](https://huggingface.co/mixtralai/Mixtral-7B-Instruct-v0.1)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -51,8 +51,8 @@ class MixtralConfig(PretrainedConfig):
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `8`.
+            by meanpooling all the original heads within that group. For more details, check out [this
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `8`.
         head_dim (`int`, *optional*, defaults to `hidden_size // num_attention_heads`):
             The attention head dimension.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
@@ -87,7 +87,7 @@ class MixtralConfig(PretrainedConfig):
         num_local_experts (`int`, *optional*, defaults to 8):
             Number of experts per Sparse MLP layer.
         output_router_logits (`bool`, *optional*, defaults to `False`):
-            Whether or not the router logits should be returned by the model. Enabeling this will also
+            Whether or not the router logits should be returned by the model. Enabling this will also
             allow the model to output the auxiliary loss. See [here]() for more details
         router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
             The aux loss factor for the total loss.
@@ -123,6 +123,9 @@ class MixtralConfig(PretrainedConfig):
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
+    }
+    attribute_map = {
+        "num_experts": "num_local_experts",
     }
 
     def __init__(

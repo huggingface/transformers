@@ -19,7 +19,7 @@ import json
 import os
 import shutil
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import torch
 import yaml
@@ -110,7 +110,7 @@ def write_model(
     loaded = torch.load(os.path.join(input_base_path, "model.pt"), map_location="cpu", weights_only=True)
 
     param_count = 0
-    index_dict: Dict[str, Any] = {"weight_map": {}}
+    index_dict: dict[str, Any] = {"weight_map": {}}
     for layer_i in range(n_layers):
         filename = f"pytorch_model-{layer_i + 1}-of-{n_layers + 1}.bin"
         # Unsharded
@@ -205,7 +205,7 @@ def write_model(
         _write_tokenizer(model_path, config, input_base_path, tokenizer_path)
 
     print("Loading the checkpoint in a OLMo2 model.")
-    model = Olmo2ForCausalLM.from_pretrained(tmp_model_path, torch_dtype=torch.float32, low_cpu_mem_usage=True)
+    model = Olmo2ForCausalLM.from_pretrained(tmp_model_path, dtype=torch.float32)
     # Avoid saving this as part of the config.
     del model.config._name_or_path
     print("Saving in the Transformers format.")

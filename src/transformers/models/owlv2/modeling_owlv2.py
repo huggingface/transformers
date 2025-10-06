@@ -16,23 +16,22 @@
 
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepare_4d_attention_mask
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
+    auto_docstring,
+    filter_out_non_signature_kwargs,
     is_vision_available,
     logging,
-    replace_return_docstrings,
     torch_int,
 )
 from .configuration_owlv2 import Owlv2Config, Owlv2TextConfig, Owlv2VisionConfig
@@ -44,7 +43,6 @@ if is_vision_available():
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "google/owlv2-base-patch16-ensemble"
 
 # See all Owlv2 models at https://huggingface.co/models?filter=owlv2
 
@@ -62,26 +60,26 @@ def owlv2_loss(similarity: torch.Tensor) -> torch.Tensor:
 
 
 @dataclass
+@auto_docstring
 class Owlv2Output(ModelOutput):
-    """
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
-            Contrastive loss for image-text similarity.
-        logits_per_image (`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
-            The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
-            similarity scores.
-        logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
-            The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
-            similarity scores.
-        text_embeds (`torch.FloatTensor` of shape `(batch_size * num_max_text_queries, output_dim`):
-            The text embeddings obtained by applying the projection layer to the pooled output of [`Owlv2TextModel`].
-        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The image embeddings obtained by applying the projection layer to the pooled output of
-            [`Owlv2VisionModel`].
-        text_model_output (Tuple[`BaseModelOutputWithPooling`]):
-            The output of the [`Owlv2TextModel`].
-        vision_model_output (`BaseModelOutputWithPooling`):
-            The output of the [`Owlv2VisionModel`].
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+        Contrastive loss for image-text similarity.
+    logits_per_image (`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
+        The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
+        similarity scores.
+    logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
+        The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
+        similarity scores.
+    text_embeds (`torch.FloatTensor` of shape `(batch_size * num_max_text_queries, output_dim`):
+        The text embeddings obtained by applying the projection layer to the pooled output of [`Owlv2TextModel`].
+    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        The image embeddings obtained by applying the projection layer to the pooled output of
+        [`Owlv2VisionModel`].
+    text_model_output (tuple[`BaseModelOutputWithPooling`]):
+        The output of the [`Owlv2TextModel`].
+    vision_model_output (`BaseModelOutputWithPooling`):
+        The output of the [`Owlv2VisionModel`].
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -92,7 +90,7 @@ class Owlv2Output(ModelOutput):
     text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPooling = None
 
-    def to_tuple(self) -> Tuple[Any]:
+    def to_tuple(self) -> tuple[Any]:
         return tuple(
             self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
             for k in self.keys()
@@ -168,43 +166,45 @@ def generalized_box_iou(boxes1, boxes2):
 
 
 @dataclass
-class Owlv2ObjectDetectionOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Output type of [`Owlv2ForObjectDetection`].
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
-            Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a
-            bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
-            scale-invariant IoU loss.
-        loss_dict (`Dict`, *optional*):
-            A dictionary containing the individual losses. Useful for logging.
-        logits (`torch.FloatTensor` of shape `(batch_size, num_patches, num_queries)`):
-            Classification logits (including no-object) for all queries.
-        objectness_logits (`torch.FloatTensor` of shape `(batch_size, num_patches, 1)`):
-            The objectness logits of all image patches. OWL-ViT represents images as a set of image patches where the
-            total number of patches is (image_size / patch_size)**2.
-        pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_patches, 4)`):
-            Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
-            values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~Owlv2ImageProcessor.post_process_object_detection`] to retrieve the
-            unnormalized bounding boxes.
-        text_embeds (`torch.FloatTensor` of shape `(batch_size, num_max_text_queries, output_dim`):
-            The text embeddings obtained by applying the projection layer to the pooled output of [`Owlv2TextModel`].
-        image_embeds (`torch.FloatTensor` of shape `(batch_size, patch_size, patch_size, output_dim`):
-            Pooled output of [`Owlv2VisionModel`]. OWLv2 represents images as a set of image patches and computes image
-            embeddings for each patch.
-        class_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`):
-            Class embeddings of all image patches. OWLv2 represents images as a set of image patches where the total
-            number of patches is (image_size / patch_size)**2.
-        text_model_output (Tuple[`BaseModelOutputWithPooling`]):
-            The output of the [`Owlv2TextModel`].
-        vision_model_output (`BaseModelOutputWithPooling`):
-            The output of the [`Owlv2VisionModel`].
+    """
+)
+class Owlv2ObjectDetectionOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
+        Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a
+        bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
+        scale-invariant IoU loss.
+    loss_dict (`Dict`, *optional*):
+        A dictionary containing the individual losses. Useful for logging.
+    logits (`torch.FloatTensor` of shape `(batch_size, num_patches, num_queries)`):
+        Classification logits (including no-object) for all queries.
+    objectness_logits (`torch.FloatTensor` of shape `(batch_size, num_patches, 1)`):
+        The objectness logits of all image patches. OWL-ViT represents images as a set of image patches where the
+        total number of patches is (image_size / patch_size)**2.
+    pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_patches, 4)`):
+        Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
+        values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
+        possible padding). You can use [`~Owlv2ImageProcessor.post_process_object_detection`] to retrieve the
+        unnormalized bounding boxes.
+    text_embeds (`torch.FloatTensor` of shape `(batch_size, num_max_text_queries, output_dim`):
+        The text embeddings obtained by applying the projection layer to the pooled output of [`Owlv2TextModel`].
+    image_embeds (`torch.FloatTensor` of shape `(batch_size, patch_size, patch_size, output_dim`):
+        Pooled output of [`Owlv2VisionModel`]. OWLv2 represents images as a set of image patches and computes image
+        embeddings for each patch.
+    class_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`):
+        Class embeddings of all image patches. OWLv2 represents images as a set of image patches where the total
+        number of patches is (image_size / patch_size)**2.
+    text_model_output (tuple[`BaseModelOutputWithPooling`]):
+        The output of the [`Owlv2TextModel`].
+    vision_model_output (`BaseModelOutputWithPooling`):
+        The output of the [`Owlv2VisionModel`].
     """
 
     loss: Optional[torch.FloatTensor] = None
-    loss_dict: Optional[Dict] = None
+    loss_dict: Optional[dict] = None
     logits: Optional[torch.FloatTensor] = None
     objectness_logits: Optional[torch.FloatTensor] = None
     pred_boxes: Optional[torch.FloatTensor] = None
@@ -214,7 +214,7 @@ class Owlv2ObjectDetectionOutput(ModelOutput):
     text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPooling = None
 
-    def to_tuple(self) -> Tuple[Any]:
+    def to_tuple(self) -> tuple[Any]:
         return tuple(
             self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
             for k in self.keys()
@@ -222,37 +222,39 @@ class Owlv2ObjectDetectionOutput(ModelOutput):
 
 
 @dataclass
+@auto_docstring(
+    custom_intro="""
+    Output type of [`Owlv2ForObjectDetection.image_guided_detection`].
+    """
+)
 # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTImageGuidedObjectDetectionOutput with OwlViT->Owlv2,OWL-ViT->OWLv2
 class Owlv2ImageGuidedObjectDetectionOutput(ModelOutput):
-    """
-    Output type of [`Owlv2ForObjectDetection.image_guided_detection`].
-
-    Args:
-        logits (`torch.FloatTensor` of shape `(batch_size, num_patches, num_queries)`):
-            Classification logits (including no-object) for all queries.
-        target_pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_patches, 4)`):
-            Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
-            values are normalized in [0, 1], relative to the size of each individual target image in the batch
-            (disregarding possible padding). You can use [`~Owlv2ImageProcessor.post_process_object_detection`] to
-            retrieve the unnormalized bounding boxes.
-        query_pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_patches, 4)`):
-            Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
-            values are normalized in [0, 1], relative to the size of each individual query image in the batch
-            (disregarding possible padding). You can use [`~Owlv2ImageProcessor.post_process_object_detection`] to
-            retrieve the unnormalized bounding boxes.
-        image_embeds (`torch.FloatTensor` of shape `(batch_size, patch_size, patch_size, output_dim`):
-            Pooled output of [`Owlv2VisionModel`]. OWLv2 represents images as a set of image patches and computes
-            image embeddings for each patch.
-        query_image_embeds (`torch.FloatTensor` of shape `(batch_size, patch_size, patch_size, output_dim`):
-            Pooled output of [`Owlv2VisionModel`]. OWLv2 represents images as a set of image patches and computes
-            image embeddings for each patch.
-        class_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`):
-            Class embeddings of all image patches. OWLv2 represents images as a set of image patches where the total
-            number of patches is (image_size / patch_size)**2.
-        text_model_output (Tuple[`BaseModelOutputWithPooling`]):
-            The output of the [`Owlv2TextModel`].
-        vision_model_output (`BaseModelOutputWithPooling`):
-            The output of the [`Owlv2VisionModel`].
+    r"""
+    logits (`torch.FloatTensor` of shape `(batch_size, num_patches, num_queries)`):
+        Classification logits (including no-object) for all queries.
+    image_embeds (`torch.FloatTensor` of shape `(batch_size, patch_size, patch_size, output_dim`):
+        Pooled output of [`Owlv2VisionModel`]. OWLv2 represents images as a set of image patches and computes
+        image embeddings for each patch.
+    query_image_embeds (`torch.FloatTensor` of shape `(batch_size, patch_size, patch_size, output_dim`):
+        Pooled output of [`Owlv2VisionModel`]. OWLv2 represents images as a set of image patches and computes
+        image embeddings for each patch.
+    target_pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_patches, 4)`):
+        Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
+        values are normalized in [0, 1], relative to the size of each individual target image in the batch
+        (disregarding possible padding). You can use [`~Owlv2ImageProcessor.post_process_object_detection`] to
+        retrieve the unnormalized bounding boxes.
+    query_pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_patches, 4)`):
+        Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
+        values are normalized in [0, 1], relative to the size of each individual query image in the batch
+        (disregarding possible padding). You can use [`~Owlv2ImageProcessor.post_process_object_detection`] to
+        retrieve the unnormalized bounding boxes.
+    class_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`):
+        Class embeddings of all image patches. OWLv2 represents images as a set of image patches where the total
+        number of patches is (image_size / patch_size)**2.
+    text_model_output (tuple[`BaseModelOutputWithPooling`]):
+        The output of the [`Owlv2TextModel`].
+    vision_model_output (`BaseModelOutputWithPooling`):
+        The output of the [`Owlv2VisionModel`].
     """
 
     logits: Optional[torch.FloatTensor] = None
@@ -264,7 +266,7 @@ class Owlv2ImageGuidedObjectDetectionOutput(ModelOutput):
     text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPooling = None
 
-    def to_tuple(self) -> Tuple[Any]:
+    def to_tuple(self) -> tuple[Any]:
         return tuple(
             self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
             for k in self.keys()
@@ -413,7 +415,7 @@ class Owlv2Attention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         causal_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
         bsz, tgt_len, embed_dim = hidden_states.size()
@@ -458,7 +460,7 @@ class Owlv2Attention(nn.Module):
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
         if output_attentions:
-            # this operation is a bit akward, but it's required to
+            # this operation is a bit awkward, but it's required to
             # make sure that attn_weights keeps its gradient.
             # In order to do so, attn_weights have to reshaped
             # twice and have to be reused in the following
@@ -506,7 +508,7 @@ class Owlv2MLP(nn.Module):
 
 
 # Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoderLayer with AltCLIP->Owlv2
-class Owlv2EncoderLayer(nn.Module):
+class Owlv2EncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Owlv2Config):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -521,7 +523,7 @@ class Owlv2EncoderLayer(nn.Module):
         attention_mask: torch.Tensor,
         causal_attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.FloatTensor]:
+    ) -> tuple[torch.FloatTensor]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -556,31 +558,25 @@ class Owlv2EncoderLayer(nn.Module):
         return outputs
 
 
+@auto_docstring
 # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTPreTrainedModel with OwlViT->Owlv2,owlvit->owlv2
 class Owlv2PreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = Owlv2Config
+    config: Owlv2Config
     base_model_prefix = "owlv2"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Owlv2EncoderLayer"]
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         factor = self.config.initializer_factor
         if isinstance(module, Owlv2TextEmbeddings):
             module.token_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
             module.position_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
         elif isinstance(module, Owlv2VisionEmbeddings):
-            factor = self.config.initializer_factor
             nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
             nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
             nn.init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
         elif isinstance(module, Owlv2Attention):
-            factor = self.config.initializer_factor
             in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             out_proj_std = (module.embed_dim**-0.5) * factor
             nn.init.normal_(module.q_proj.weight, std=in_proj_std)
@@ -588,7 +584,6 @@ class Owlv2PreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.v_proj.weight, std=in_proj_std)
             nn.init.normal_(module.out_proj.weight, std=out_proj_std)
         elif isinstance(module, Owlv2MLP):
-            factor = self.config.initializer_factor
             in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
             nn.init.normal_(module.fc1.weight, std=fc_std)
@@ -596,140 +591,20 @@ class Owlv2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, Owlv2Model):
             nn.init.normal_(
                 module.text_projection.weight,
-                std=module.text_embed_dim**-0.5 * self.config.initializer_factor,
+                std=module.text_embed_dim**-0.5 * factor,
             )
             nn.init.normal_(
                 module.visual_projection.weight,
-                std=module.vision_embed_dim**-0.5 * self.config.initializer_factor,
+                std=module.vision_embed_dim**-0.5 * factor,
             )
+            module.logit_scale.data.fill_(self.config.logit_scale_init_value)
         if isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        if isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.data.zero_()
-
-
-OWLV2_START_DOCSTRING = r"""
-
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`Owvl2Config`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-OWLV2_TEXT_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
-            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
-            IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, num_max_text_queries, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-            [What are attention masks?](../glossary#attention-mask)
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-OWLV2_VISION_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        interpolate_pos_encoding (`bool`, *optional*, defaults `False`):
-            Whether to interpolate the pre-trained position encodings.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-OWLV2_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
-            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
-            IDs?](../glossary#input-ids)
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values.
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-            [What are attention masks?](../glossary#attention-mask)
-        return_loss (`bool`, *optional*):
-            Whether or not to return the contrastive loss.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        interpolate_pos_encoding (`bool`, *optional*, defaults `False`):
-            Whether to interpolate the pre-trained position encodings.
-        return_base_image_embeds (`bool`, *optional*):
-            Whether or not to return the base image embeddings.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-OWLV2_OBJECT_DETECTION_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values.
-        input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`, *optional*):
-            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
-            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
-            IDs?](../glossary#input-ids).
-        attention_mask (`torch.Tensor` of shape `(batch_size, num_max_text_queries, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-            [What are attention masks?](../glossary#attention-mask)
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the last hidden state. See `text_model_last_hidden_state` and
-            `vision_model_last_hidden_state` under returned tensors for more detail.
-        interpolate_pos_encoding (`bool`, *optional*, defaults `False`):
-            Whether to interpolate the pre-trained position encodings.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-OWLV2_IMAGE_GUIDED_OBJECT_DETECTION_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values.
-        query_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values of query image(s) to be detected. Pass in one query image per target image.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        interpolate_pos_encoding (`bool`, *optional*, defaults `False`):
-            Whether to interpolate the pre-trained position encodings.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=factor)
+            if module.bias is not None:
+                module.bias.data.zero_()
 
 
 # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTEncoder with OwlViT->Owlv2
@@ -755,7 +630,7 @@ class Owlv2Encoder(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutput]:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`).
@@ -791,21 +666,12 @@ class Owlv2Encoder(nn.Module):
         for encoder_layer in self.layers:
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    encoder_layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                    causal_attention_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = encoder_layer(
-                    hidden_states,
-                    attention_mask,
-                    causal_attention_mask,
-                    output_attentions=output_attentions,
-                )
+            layer_outputs = encoder_layer(
+                hidden_states,
+                attention_mask,
+                causal_attention_mask,
+                output_attentions=output_attentions,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -832,8 +698,7 @@ class Owlv2TextTransformer(nn.Module):
         self.encoder = Owlv2Encoder(config)
         self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
-    @add_start_docstrings_to_model_forward(OWLV2_TEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=Owlv2TextConfig)
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.Tensor,
@@ -842,9 +707,12 @@ class Owlv2TextTransformer(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
-        Returns:
+        input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
+            IDs?](../glossary#input-ids)
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -899,7 +767,7 @@ class Owlv2TextTransformer(nn.Module):
 
 # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTTextModel with google/owlvit-base-patch32->google/owlv2-base-patch16, OWLVIT->OWLV2,OwlViT->Owlv2
 class Owlv2TextModel(Owlv2PreTrainedModel):
-    config_class = Owlv2TextConfig
+    config: Owlv2TextConfig
 
     def __init__(self, config: Owlv2TextConfig):
         super().__init__(config)
@@ -913,8 +781,7 @@ class Owlv2TextModel(Owlv2PreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.embeddings.token_embedding = value
 
-    @add_start_docstrings_to_model_forward(OWLV2_TEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=Owlv2TextConfig)
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.Tensor,
@@ -922,9 +789,12 @@ class Owlv2TextModel(Owlv2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
-        Returns:
+        input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
+            IDs?](../glossary#input-ids)
 
         Examples:
         ```python
@@ -961,8 +831,7 @@ class Owlv2VisionTransformer(nn.Module):
         self.encoder = Owlv2Encoder(config)
         self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    @add_start_docstrings_to_model_forward(OWLV2_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=Owlv2VisionConfig)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -970,10 +839,7 @@ class Owlv2VisionTransformer(nn.Module):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = False,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
-        r"""
-        Returns:
-        """
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1012,7 +878,7 @@ class Owlv2VisionTransformer(nn.Module):
 
 # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTVisionModel with OWLVIT->OWLV2,OwlViT->Owlv2,google/owlvit-base-patch32->google/owlv2-base-patch16
 class Owlv2VisionModel(Owlv2PreTrainedModel):
-    config_class = Owlv2VisionConfig
+    config: Owlv2VisionConfig
     main_input_name = "pixel_values"
 
     def __init__(self, config: Owlv2VisionConfig):
@@ -1024,8 +890,7 @@ class Owlv2VisionModel(Owlv2PreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.patch_embedding
 
-    @add_start_docstrings_to_model_forward(OWLV2_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=Owlv2VisionConfig)
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1033,10 +898,8 @@ class Owlv2VisionModel(Owlv2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
-        Returns:
-
         Examples:
         ```python
         >>> from PIL import Image
@@ -1063,10 +926,10 @@ class Owlv2VisionModel(Owlv2PreTrainedModel):
         )
 
 
-@add_start_docstrings(OWLV2_START_DOCSTRING)
+@auto_docstring
 # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTModel with google/owlvit-base-patch32->google/owlv2-base-patch16-ensemble, OWLVIT->OWLV2,OwlViT->Owlv2,owlvit->owlv2,OWL-ViT->OWLv2
 class Owlv2Model(Owlv2PreTrainedModel):
-    config_class = Owlv2Config
+    config: Owlv2Config
 
     def __init__(self, config: Owlv2Config):
         super().__init__(config)
@@ -1100,22 +963,26 @@ class Owlv2Model(Owlv2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(OWLV2_TEXT_INPUTS_DOCSTRING)
+    @filter_out_non_signature_kwargs()
+    @auto_docstring
     def get_text_features(
         self,
-        input_ids: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
+            IDs?](../glossary#input-ids)
+
         Returns:
             text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
             applying the projection layer to the pooled output of [`Owlv2TextModel`].
 
         Examples:
         ```python
+        >>> import torch
         >>> from transformers import AutoProcessor, Owlv2Model
 
         >>> model = Owlv2Model.from_pretrained("google/owlv2-base-patch16-ensemble")
@@ -1123,26 +990,21 @@ class Owlv2Model(Owlv2PreTrainedModel):
         >>> inputs = processor(
         ...     text=[["a photo of a cat", "a photo of a dog"], ["photo of a astranaut"]], return_tensors="pt"
         ... )
-        >>> text_features = model.get_text_features(**inputs)
+        >>> with torch.inference_mode():
+        ...     text_features = model.get_text_features(**inputs)
         ```"""
-        # Use OWLv2 model's config for some fields (if specified) instead of those of vision & text components.
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         # Get embeddings for all text queries in all batch samples
-        text_output = self.text_model(input_ids=input_ids, attention_mask=attention_mask, return_dict=return_dict)
-        pooled_output = text_output[1]
-        text_features = self.text_projection(pooled_output)
+        text_outputs: BaseModelOutputWithPooling = self.text_model(input_ids=input_ids, attention_mask=attention_mask)
+        text_features = self.text_projection(text_outputs.pooler_output)
 
         return text_features
 
-    @add_start_docstrings_to_model_forward(OWLV2_VISION_INPUTS_DOCSTRING)
+    @filter_out_non_signature_kwargs()
+    @auto_docstring
     def get_image_features(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        pixel_values: torch.Tensor,
         interpolate_pos_encoding: bool = False,
-        return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
         Returns:
@@ -1151,39 +1013,29 @@ class Owlv2Model(Owlv2PreTrainedModel):
 
         Examples:
         ```python
-        >>> from PIL import Image
-        >>> import requests
+        >>> import torch
+        >>> from transformers.image_utils import load_image
         >>> from transformers import AutoProcessor, Owlv2Model
 
         >>> model = Owlv2Model.from_pretrained("google/owlv2-base-patch16-ensemble")
         >>> processor = AutoProcessor.from_pretrained("google/owlv2-base-patch16-ensemble")
+
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> image = load_image(url)
+
         >>> inputs = processor(images=image, return_tensors="pt")
-        >>> image_features = model.get_image_features(**inputs)
+        >>> with torch.inference_mode():
+        ...     image_features = model.get_image_features(**inputs)
         ```"""
-        # Use OWLv2 model's config for some fields (if specified) instead of those of vision & text components.
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        vision_outputs = self.vision_model(
+        vision_outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=return_dict,
         )
-
-        pooled_output = vision_outputs[1]
-        image_features = self.visual_projection(pooled_output)
+        image_features = self.visual_projection(vision_outputs.pooler_output)
 
         return image_features
 
-    @add_start_docstrings_to_model_forward(OWLV2_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Owlv2Output, config_class=Owlv2Config)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1195,9 +1047,12 @@ class Owlv2Model(Owlv2PreTrainedModel):
         interpolate_pos_encoding: bool = False,
         return_base_image_embeds: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, Owlv2Output]:
+    ) -> Union[tuple, Owlv2Output]:
         r"""
-        Returns:
+        return_loss (`bool`, *optional*):
+            Whether or not to return the contrastive loss.
+        return_base_image_embeds (`bool`, *optional*):
+            Whether or not to return the base image embeddings.
 
         Examples:
         ```python
@@ -1312,7 +1167,7 @@ class Owlv2ClassPredictionHead(nn.Module):
         image_embeds: torch.FloatTensor,
         query_embeds: Optional[torch.FloatTensor],
         query_mask: Optional[torch.Tensor],
-    ) -> Tuple[torch.FloatTensor]:
+    ) -> tuple[torch.FloatTensor]:
         image_class_embeds = self.dense0(image_embeds)
         if query_embeds is None:
             device = image_class_embeds.device
@@ -1344,7 +1199,7 @@ class Owlv2ClassPredictionHead(nn.Module):
 
 
 class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
-    config_class = Owlv2Config
+    config: Owlv2Config
 
     def __init__(self, config: Owlv2Config):
         super().__init__(config)
@@ -1360,6 +1215,9 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         self.num_patches_height = self.config.vision_config.image_size // self.config.vision_config.patch_size
         self.num_patches_width = self.config.vision_config.image_size // self.config.vision_config.patch_size
         self.box_bias = self.compute_box_bias(self.num_patches_height, self.num_patches_width)
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @staticmethod
     # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTForObjectDetection.normalize_grid_corner_coordinates
@@ -1457,7 +1315,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         image_feats: torch.FloatTensor,
         query_embeds: Optional[torch.FloatTensor] = None,
         query_mask: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.FloatTensor]:
+    ) -> tuple[torch.FloatTensor]:
         """
         Args:
             image_feats:
@@ -1480,7 +1338,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
-    ) -> Tuple[torch.FloatTensor]:
+    ) -> tuple[torch.FloatTensor]:
         # Encode text and image
         outputs = self.owlv2(
             pixel_values=pixel_values,
@@ -1530,7 +1388,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
-    ) -> Tuple[torch.FloatTensor]:
+    ) -> tuple[torch.FloatTensor]:
         # Get Owlv2Model vision embeddings (same as CLIP)
         vision_outputs = self.owlv2.vision_model(
             pixel_values=pixel_values, interpolate_pos_encoding=interpolate_pos_encoding, return_dict=True
@@ -1611,8 +1469,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
 
         return query_embeds, box_indices, pred_boxes
 
-    @add_start_docstrings_to_model_forward(OWLV2_IMAGE_GUIDED_OBJECT_DETECTION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Owlv2ImageGuidedObjectDetectionOutput, config_class=Owlv2Config)
+    @auto_docstring
     def image_guided_detection(
         self,
         pixel_values: torch.FloatTensor,
@@ -1623,7 +1480,8 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Owlv2ImageGuidedObjectDetectionOutput:
         r"""
-        Returns:
+        query_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values of query image(s) to be detected. Pass in one query image per target image.
 
         Examples:
         ```python
@@ -1729,8 +1587,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
             vision_model_output=vision_outputs,
         )
 
-    @add_start_docstrings_to_model_forward(OWLV2_OBJECT_DETECTION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Owlv2ObjectDetectionOutput, config_class=Owlv2Config)
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.Tensor,
@@ -1742,7 +1599,13 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Owlv2ObjectDetectionOutput:
         r"""
-        Returns:
+        input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`, *optional*):
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
+            IDs?](../glossary#input-ids).
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the last hidden state. See `text_model_last_hidden_state` and
+            `vision_model_last_hidden_state` under returned tensors for more detail.
 
         Examples:
         ```python

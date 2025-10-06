@@ -14,19 +14,18 @@
 
 import tempfile
 import unittest
-from functools import lru_cache
 from pathlib import Path
 from shutil import copyfile
 
 from transformers import BatchEncoding, MarianTokenizer
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, slow
-from transformers.utils import is_sentencepiece_available, is_tf_available, is_torch_available
+from transformers.utils import is_sentencepiece_available
 
 
 if is_sentencepiece_available():
     from transformers.models.marian.tokenization_marian import VOCAB_FILES_NAMES, save_json
 
-from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 SAMPLE_SP = get_tests_dir("fixtures/test_sentencepiece.model")
@@ -34,13 +33,6 @@ SAMPLE_SP = get_tests_dir("fixtures/test_sentencepiece.model")
 mock_tokenizer_config = {"target_lang": "fi", "source_lang": "en"}
 zh_code = ">>zh<<"
 ORG_NAME = "Helsinki-NLP/"
-
-if is_torch_available():
-    FRAMEWORK = "pt"
-elif is_tf_available():
-    FRAMEWORK = "tf"
-else:
-    FRAMEWORK = "jax"
 
 
 @require_sentencepiece
@@ -67,8 +59,6 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer.save_pretrained(cls.tmpdirname)
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_tokenizer(cls, pretrained_name=None, **kwargs) -> MarianTokenizer:
         pretrained_name = pretrained_name or cls.tmpdirname
         return MarianTokenizer.from_pretrained(pretrained_name, **kwargs)
@@ -115,14 +105,14 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tok = self.get_tokenizer()
 
         batch = tok(
-            ["I am a small frog" * 1000, "I am a small frog"], padding=True, truncation=True, return_tensors=FRAMEWORK
+            ["I am a small frog" * 1000, "I am a small frog"], padding=True, truncation=True, return_tensors="pt"
         )
         self.assertIsInstance(batch, BatchEncoding)
         self.assertEqual(batch.input_ids.shape, (2, 512))
 
     def test_outputs_can_be_shorter(self):
         tok = self.get_tokenizer()
-        batch_smaller = tok(["I am a tiny frog", "I am a small frog"], padding=True, return_tensors=FRAMEWORK)
+        batch_smaller = tok(["I am a tiny frog", "I am a small frog"], padding=True, return_tensors="pt")
         self.assertIsInstance(batch_smaller, BatchEncoding)
         self.assertEqual(batch_smaller.input_ids.shape, (2, 10))
 
@@ -136,7 +126,7 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             decode_kwargs={"use_source_tokenizer": True},
         )
 
-    def test_tokenizer_integration_seperate_vocabs(self):
+    def test_tokenizer_integration_separate_vocabs(self):
         tokenizer = MarianTokenizer.from_pretrained("hf-internal-testing/test-marian-two-vocabs")
 
         source_text = "Tämä on testi"

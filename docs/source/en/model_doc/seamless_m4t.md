@@ -9,6 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
+*This model was released on 2023-08-22 and added to Hugging Face Transformers on 2023-10-23.*
 
 # SeamlessM4T
 
@@ -18,7 +19,7 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The SeamlessM4T model was proposed in [SeamlessM4T — Massively Multilingual & Multimodal Machine Translation](https://dl.fbaipublicfiles.com/seamless/seamless_m4t_paper.pdf) by the Seamless Communication team from Meta AI.
+The SeamlessM4T model was proposed in [SeamlessM4T — Massively Multilingual & Multimodal Machine Translation](https://huggingface.co/papers/2308.11596) by the Seamless Communication team from Meta AI.
 
 This is the **version 1** release of the model. For the updated **version 2** release, refer to the [Seamless M4T v2 docs](https://huggingface.co/docs/transformers/main/model_doc/seamless_m4t_v2).
 
@@ -56,7 +57,7 @@ Here is how to use the processor to process text and audio:
 ```python
 >>> # let's load an audio sample from an Arabic speech corpus
 >>> from datasets import load_dataset
->>> dataset = load_dataset("arabic_speech_corpus", split="test", streaming=True, trust_remote_code=True)
+>>> dataset = load_dataset("halabi2016/arabic_speech_corpus", split="test", streaming=True)
 >>> audio_sample = next(iter(dataset))["audio"]
 
 >>> # now, process it
@@ -65,7 +66,6 @@ Here is how to use the processor to process text and audio:
 >>> # now, process some English test as well
 >>> text_inputs = processor(text = "Hello, my dog is cute", src_lang="eng", return_tensors="pt")
 ```
-
 
 ### Speech
 
@@ -83,7 +83,7 @@ With basically the same code, I've translated English text and Arabic speech to 
 Similarly, you can generate translated text from audio files or from text with the same model. You only have to pass `generate_speech=False` to [`SeamlessM4TModel.generate`].
 This time, let's translate to French.
 
-```python 
+```python
 >>> # from audio
 >>> output_tokens = model.generate(**audio_inputs, tgt_lang="fra", generate_speech=False)
 >>> translated_text_from_audio = processor.decode(output_tokens[0].tolist()[0], skip_special_tokens=True)
@@ -95,11 +95,10 @@ This time, let's translate to French.
 
 ### Tips
 
-
 #### 1. Use dedicated models
 
 [`SeamlessM4TModel`] is transformers top level model to generate speech and text, but you can also use dedicated models that perform the task without additional components, thus reducing the memory footprint.
-For example, you can replace the audio-to-audio generation snippet with the model dedicated to the S2ST task, the rest is exactly the same code: 
+For example, you can replace the audio-to-audio generation snippet with the model dedicated to the S2ST task, the rest is exactly the same code:
 
 ```python
 >>> from transformers import SeamlessM4TForSpeechToSpeech
@@ -129,10 +128,9 @@ Use `return_intermediate_token_ids=True` with [`SeamlessM4TModel`] to return bot
 
 ## Model architecture
 
-
 SeamlessM4T features a versatile architecture that smoothly handles the sequential generation of text and speech. This setup comprises two sequence-to-sequence (seq2seq) models. The first model translates the input modality into translated text, while the second model generates speech tokens, known as "unit tokens," from the translated text.
 
-Each modality has its own dedicated encoder with a unique architecture. Additionally, for speech output, a vocoder inspired by the [HiFi-GAN](https://arxiv.org/abs/2010.05646) architecture is placed on top of the second seq2seq model.
+Each modality has its own dedicated encoder with a unique architecture. Additionally, for speech output, a vocoder inspired by the [HiFi-GAN](https://huggingface.co/papers/2010.05646) architecture is placed on top of the second seq2seq model.
 
 Here's how the generation process works:
 
@@ -141,7 +139,6 @@ Here's how the generation process works:
 - If speech generation is required, the second seq2seq model, following a standard encoder-decoder structure, generates unit tokens.
 - These unit tokens are then passed through the final vocoder to produce the actual speech.
 
-
 This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The original code can be found [here](https://github.com/facebookresearch/seamless_communication).
 
 ## SeamlessM4TModel
@@ -149,18 +146,15 @@ This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The o
 [[autodoc]] SeamlessM4TModel
     - generate
 
-
 ## SeamlessM4TForTextToSpeech
 
 [[autodoc]] SeamlessM4TForTextToSpeech
     - generate
 
-
 ## SeamlessM4TForSpeechToSpeech
 
 [[autodoc]] SeamlessM4TForSpeechToSpeech
     - generate
-
 
 ## SeamlessM4TForTextToText
 
@@ -178,7 +172,6 @@ This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The o
 
 [[autodoc]] SeamlessM4TConfig
 
-
 ## SeamlessM4TTokenizer
 
 [[autodoc]] SeamlessM4TTokenizer
@@ -187,7 +180,6 @@ This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The o
     - get_special_tokens_mask
     - create_token_type_ids_from_sequences
     - save_vocabulary
-
 
 ## SeamlessM4TTokenizerFast
 
@@ -208,7 +200,6 @@ This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The o
 
 [[autodoc]] SeamlessM4TCodeHifiGan
 
-
 ## SeamlessM4THifiGan
 
 [[autodoc]] SeamlessM4THifiGan
@@ -220,5 +211,3 @@ This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The o
 ## SeamlessM4TTextToUnitForConditionalGeneration
 
 [[autodoc]] SeamlessM4TTextToUnitForConditionalGeneration
-
-

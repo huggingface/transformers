@@ -306,78 +306,48 @@ pip install galore-torch
 ثم أضف ببساطة أحد `["galore_adamw"، "galore_adafactor"، "galore_adamw_8bit"]` في `optim` جنبًا إلى جنب مع `optim_target_modules`، والتي يمكن أن تكون قائمة من السلاسل أو التعبيرات النمطية regex أو المسار الكامل المطابق لأسماء الوحدات المستهدفة التي تريد تكييفها. فيما يلي مثال على النص البرمجي كامل(تأكد من `pip install trl datasets`):
 
 ```python
-import torch
 import datasets
-import trl
-
-from transformers import TrainingArguments, AutoConfig, AutoTokenizer, AutoModelForCausalLM
+from trl import SFTConfig, SFTTrainer
 
 train_dataset = datasets.load_dataset('imdb', split='train')
-
-args = TrainingArguments(
-    output_dir="./test-galore"،
+args = SFTConfig(
+    output_dir="./test-galore",
     max_steps=100,
-    per_device_train_batch_size=2,
-    optim="galore_adamw"،
-    optim_target_modules=[r".*.attn.*"، r".*.mlp.*"]
+    optim="galore_adamw",
+    optim_target_modules=[r".*.attn.*", r".*.mlp.*"],
+    gradient_checkpointing=True,
 )
-
-model_id = "google/gemma-2b"
-
-config = AutoConfig.from_pretrained(model_id)
-
-tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_config(config).to(0)
-
-trainer = trl.SFTTrainer(
-    model=model, 
+trainer = SFTTrainer(
+    model="google/gemma-2b",
     args=args,
     train_dataset=train_dataset,
-    dataset_text_field='text',
-    max_seq_length=512,
 )
-
 trainer.train()
 ```
 
 لتمرير معامﻻت إضافية يدعمها  GaLore، يجب عليك تمرير `optim_args` بشكل صحيح، على سبيل المثال:
 
 ```python
-import torch
 import datasets
-import trl
-
-from transformers import TrainingArguments, AutoConfig, AutoTokenizer, AutoModelForCausalLM
+from trl import SFTConfig, SFTTrainer
 
 train_dataset = datasets.load_dataset('imdb', split='train')
-
-args = TrainingArguments(
+args = SFTConfig(
     output_dir="./test-galore",
     max_steps=100,
-    per_device_train_batch_size=2,
     optim="galore_adamw",
     optim_target_modules=[r".*.attn.*", r".*.mlp.*"],
     optim_args="rank=64, update_proj_gap=100, scale=0.10",
+    gradient_checkpointing=True,
 )
-
-model_id = "google/gemma-2b"
-
-config = AutoConfig.from_pretrained(model_id)
-
-tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_config(config).to(0)
-
-trainer = trl.SFTTrainer(
-    model=model, 
+trainer = SFTTrainer(
+    model="google/gemma-2b",
     args=args,
     train_dataset=train_dataset,
-    dataset_text_field='text',
-    max_seq_length=512,
 )
-
 trainer.train()
 ```
-يمكنك قراءة المزيد حول الطريقة في [المستودع الأصلي](https://github.com/jiaweizzhao/GaLore) أو [الورقة البحثية](https://arxiv.org/abs/2403.03507).
+يمكنك قراءة المزيد حول الطريقة في [المستودع الأصلي](https://github.com/jiaweizzhao/GaLore) أو [الورقة البحثية](https://huggingface.co/papers/2403.03507).
 
 حاليًا، يمكنك فقط تدريب الطبقات الخطية التي تعتبر طبقات GaLore وستستخدم التحلل  ذو الرتبة المنخفضة للتدريب بينما سيتم تحسين الطبقات المتبقية بالطريقة التقليدية.
 
@@ -386,37 +356,22 @@ trainer.train()
 يمكنك أيضًا إجراء تحسين طبقة تلو الأخرى عن طريق إضافة `layerwise` إلى اسم المُحسِّن كما هو موضح أدناه:
 
 ```python
-import torch
 import datasets
-import trl
+from trl import SFTConfig, SFTTrainer
 
-from transformers import TrainingArguments، AutoConfig، AutoTokenizer، AutoModelForCausalLM
-
-train_dataset = datasets.load_dataset('imdb'، split='train')
-
-args = TrainingArguments(
-    output_dir="./test-galore"،
-    max_steps=100،
-    per_device_train_batch_size=2،
-    optim="galore_adamw_layerwise"،
-    optim_target_modules=[r".*.attn.*"، r".*.mlp.*"]
+train_dataset = datasets.load_dataset('imdb', split='train')
+args = SFTConfig(
+    output_dir="./test-galore",
+    max_steps=100,
+    optim="galore_adamw_layerwise",
+    optim_target_modules=[r".*.attn.*", r".*.mlp.*"],
+    gradient_checkpointing=True,
 )
-
-model_id = "google/gemma-2b"
-
-config = AutoConfig.from_pretrained(model_id)
-
-tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_config(config).to(0)
-
-trainer = trl.SFTTrainer(
-    model=model،
-    args=args،
-    train_dataset=train_dataset،
-    dataset_text_field='text'،
-    max_seq_length=512،
+trainer = SFTTrainer(
+    model="google/gemma-2b",
+    args=args,
+    train_dataset=train_dataset,
 )
-
 trainer.train()
 ```
 
@@ -436,39 +391,21 @@ trainer.train()
 فيما يلي نص برمجي بسيط يوضح كيفية ضبط نموذج [google/gemma-2b](https://huggingface.co/google/gemma-2b) على مجموعة بيانات IMDB في الدقة الكاملة:
 
 ```python
-import torch
 import datasets
-from transformers import TrainingArguments، AutoTokenizer، AutoModelForCausalLM
-import trl
+from trl import SFTConfig, SFTTrainer
 
-train_dataset = datasets.load_dataset('imdb'، split='train')
-
-args = TrainingArguments(
-    output_dir="./test-lomo"،
-    max_steps=100،
-    per_device_train_batch_size=4،
-    optim="adalomo"،
-    gradient_checkpointing=True،
-    logging_strategy="steps"،
-    logging_steps=1،
-    learning_rate=2e-6،
-    save_strategy="no"،
-    run_name="lomo-imdb"،
+train_dataset = datasets.load_dataset('imdb', split='train')
+args = SFTConfig(
+    output_dir="./test-lomo",
+    max_steps=100,
+    optim="adalomo",
+    gradient_checkpointing=True,
 )
-
-model_id = "google/gemma-2b"
-
-tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_pretrained(model_id، low_cpu_mem_usage=True).to(0)
-
-trainer = trl.SFTTrainer(
-    model=model،
-    args=args،
-    train_dataset=train_dataset،
-    dataset_text_field='text'،
-    max_seq_length=1024،
+trainer = SFTTrainer(
+    model="google/gemma-2b",
+    args=args,
+    train_dataset=train_dataset,
 )
-
 trainer.train()
 ```
 
@@ -503,7 +440,7 @@ args = TrainingArguments(
 # تحميل النموذج والمجزىء اللغوي
 model_id = "google/gemma-2b"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True).to(0)
+model = AutoModelForCausalLM.from_pretrained(model_id).to(0)
 
 # تهيئة المدرب
 trainer = Trainer(
@@ -524,39 +461,21 @@ trainer.train()
 
 فيما يلي نص برمجى بسيط لشرح كيفية ضبط [google/gemma-2b](https://huggingface.co/google/gemma-2b) بدقة على مجموعة بيانات IMDB بدقة كاملة:
 ```python
-import torch
 import datasets
-from transformers import TrainingArguments, AutoTokenizer, AutoModelForCausalLM
-import trl
+from trl import SFTConfig, SFTTrainer
 
 train_dataset = datasets.load_dataset('imdb', split='train')
-
-args = TrainingArguments(
-    output_dir="./test-schedulefree",
-    max_steps=1000,
-    per_device_train_batch_size=4,
+args = SFTConfig(
+    output_dir="./test-galore",
+    max_steps=100,
     optim="schedule_free_adamw",
     gradient_checkpointing=True,
-    logging_strategy="steps",
-    logging_steps=1,
-    learning_rate=2e-6,
-    save_strategy="no",
-    run_name="sfo-imdb",
 )
-
-model_id = "google/gemma-2b"
-
-tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True).to(0)
-
-trainer = trl.SFTTrainer(
-    model=model, 
+trainer = SFTTrainer(
+    model="google/gemma-2b",
     args=args,
     train_dataset=train_dataset,
-    dataset_text_field='text',
-    max_seq_length=1024,
 )
-
 trainer.train()
 ```
 ## تسريع ومدرب

@@ -30,13 +30,13 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
-    require_torch_multi_gpu,
-    require_torch_sdpa,
+    require_torch_multi_accelerator,
     slow,
     torch_device,
 )
@@ -86,7 +86,7 @@ class Idefics2VisionText2TextModelTester:
             "vocab_size": 100,
             "hidden_size": 64,
             "intermediate_size": 56,
-            "num_hidden_layers": 3,
+            "num_hidden_layers": 2,
             "num_attention_heads": 2,
             "num_key_value_heads": 2,
             "hidden_act": "silu",
@@ -107,6 +107,7 @@ class Idefics2VisionText2TextModelTester:
         image_token_id=99,
     ):
         self.parent = parent
+        self.pad_token_id = text_config["pad_token_id"]
         self.is_training = is_training
         self.batch_size = batch_size
         self.num_images = num_images
@@ -157,6 +158,7 @@ class Idefics2VisionText2TextModelTester:
 
         # For simplicity just set the last n tokens to the image token
         n_image_tokens_per_batch = self.num_images * self.perceiver_config["resampler_n_latents"]
+        input_ids[input_ids == self.image_token_id] = self.pad_token_id
         input_ids[:, -n_image_tokens_per_batch:] = self.image_token_id
         attention_mask = input_ids.ne(1).to(torch_device)
         inputs_dict = {
@@ -178,7 +180,6 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
     test_torchscript = False
     test_pruning = False
     test_resize_embeddings = True
-    test_head_masking = False
     _is_composite = True
 
     def setUp(self):
@@ -295,6 +296,7 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
             model = model_class(config).to(torch_device)
+            model.eval()
 
             # if no output embeddings -> leave test
             if model.get_output_embeddings() is None:
@@ -332,7 +334,6 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
 
-    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -370,7 +371,6 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True
-    test_head_masking = False
     test_torchscript = False
 
     def setUp(self):
@@ -389,30 +389,7 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
     def test_flash_attn_2_inference_padding_right(self):
         pass
 
-    @unittest.skip(reason="Contrastive search is not implemented for VLMs that do cross-attn")
-    def test_contrastive_generate(self):
-        pass
-
-    @unittest.skip(reason="Contrastive search is not implemented for VLMs that do cross-attn")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip(reason="Contrastive search is not implemented for VLMs that do cross-attn")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
-    @unittest.skip(
-        reason="Prompt lookup decoding needs a way to indicate `bad_word_ids` that should not be suggested as candidates"
-    )
-    def test_prompt_lookup_decoding_matches_greedy_search(self):
-        pass
-
-    @unittest.skip(reason=" FlashAttention only support fp16 and bf16 data type")
-    def test_flash_attn_2_fp32_ln(self):
-        pass
-
     @pytest.mark.generate
-    @require_torch_sdpa
     @slow
     @unittest.skip(
         reason="Idefics2 doesn't support SDPA for all backbones, vision backbones has only eager/FA2 attention"
@@ -502,6 +479,7 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
             model = model_class(config).to(torch_device)
+            model.eval()
 
             # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
             model_vocab_size = config.text_config.vocab_size
@@ -587,11 +565,11 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     @slow
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_integration_test(self):
         model = Idefics2ForConditionalGeneration.from_pretrained(
             "HuggingFaceM4/idefics2-8b-base",
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             device_map="auto",
         )
 
@@ -625,8 +603,15 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**inputs, max_new_tokens=10)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        expected_generated_text = "In this image, we see the Statue of Liberty, the Hudson River,"
-        self.assertEqual(generated_texts[0], expected_generated_text)
+        expected_generated_texts = Expectations(
+            {
+                ("xpu", 3): "In this image, we see the Statue of Liberty, the Hudson River,",
+                ("cuda", None): "In this image, we see the Statue of Liberty, the Hudson River,",
+                ("rocm", (9, 5)): "In this image, we see the Statue of Liberty, the New York City",
+            }
+        )
+        EXPECTED_GENERATED_TEXT = expected_generated_texts.get_expectation()
+        self.assertEqual(generated_texts[0], EXPECTED_GENERATED_TEXT)
 
     @slow
     @require_bitsandbytes

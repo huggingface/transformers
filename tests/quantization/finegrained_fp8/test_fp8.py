@@ -18,11 +18,14 @@ import unittest
 
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, FineGrainedFP8Config, OPTForCausalLM
 from transformers.testing_utils import (
+    backend_empty_cache,
+    get_device_properties,
     require_accelerate,
     require_read_token,
-    require_torch_gpu,
-    require_torch_multi_gpu,
+    require_torch_accelerator,
+    require_torch_multi_accelerator,
     slow,
+    torch_device,
 )
 from transformers.utils import is_accelerate_available, is_torch_available
 
@@ -34,7 +37,7 @@ if is_accelerate_available():
     from accelerate import init_empty_weights
 
 
-@require_torch_gpu
+@require_torch_accelerator
 class FineGrainedFP8ConfigTest(unittest.TestCase):
     def test_to_dict(self):
         """
@@ -60,13 +63,13 @@ class FineGrainedFP8ConfigTest(unittest.TestCase):
 @slow
 @require_accelerate
 @require_read_token
-@require_torch_gpu
+@require_torch_accelerator
 class FP8QuantizerTest(unittest.TestCase):
     model_name = "meta-llama/Llama-3.2-1B"
     input_text = "Once upon a time"
     max_new_tokens = 10
     EXPECTED_OUTPUT = "Once upon a time, there was a man who was very rich."
-    device_map = "cuda"
+    device_map = torch_device
     offload_device_map = {
         "model.embed_tokens": 0,
         "model.layers.0": 0,
@@ -103,7 +106,7 @@ class FP8QuantizerTest(unittest.TestCase):
 
     def tearDown(self):
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
         gc.collect()
 
     def test_quantized_model_conversion(self):
@@ -151,7 +154,8 @@ class FP8QuantizerTest(unittest.TestCase):
         input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(self.device_map)
 
         output = self.quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
-        self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+        output_tokens = self.tokenizer.decode(output[0], skip_special_tokens=True)
+        self.assertEqual(output_tokens, self.EXPECTED_OUTPUT)
 
     def test_save_pretrained(self):
         """
@@ -188,11 +192,12 @@ class FP8QuantizerTest(unittest.TestCase):
         )
         self.assertEqual(quantized_model.config.quantization_config.weight_block_size, (32, 32))
 
-    @require_torch_multi_gpu
-    def test_quantized_model_multi_gpu(self):
+    @require_torch_multi_accelerator
+    def test_quantized_model_multi_accelerator(self):
         """
-        Simple test that checks if the quantized model is working properly with multiple GPUs
-        set CUDA_VISIBLE_DEVICES=0,1 if you have more than 2 GPUs
+        Simple test that checks if the quantized model is working properly with multiple accelerators
+        set CUDA_VISIBLE_DEVICES=0,1 if you have more than 2 GPUs; or set ZE_AFFINITY_MASK=0,1 if you
+        have more than 2 XPUs.
         """
         input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(self.device_map)
         quantization_config = FineGrainedFP8Config()
@@ -204,8 +209,8 @@ class FP8QuantizerTest(unittest.TestCase):
         output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
         self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
-    @require_torch_multi_gpu
-    def test_save_pretrained_multi_gpu(self):
+    @require_torch_multi_accelerator
+    def test_save_pretrained_multi_accelerators(self):
         """
         Simple test that checks if the quantized model is working properly after being saved and loaded
         """
@@ -245,12 +250,12 @@ class FP8QuantizerTest(unittest.TestCase):
             self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
 
-@require_torch_gpu
+@require_torch_accelerator
 class FP8LinearTest(unittest.TestCase):
-    device = "cuda"
+    device = torch_device
 
     @unittest.skipIf(
-        torch.cuda.is_available() and torch.cuda.get_device_capability()[0] < 9,
+        get_device_properties()[0] == "cuda" and get_device_properties()[1] < 9,
         "Skipping FP8LinearTest because it is not supported on GPU with capability < 9.0",
     )
     def test_linear_preserves_shape(self):
@@ -266,7 +271,7 @@ class FP8LinearTest(unittest.TestCase):
         self.assertEqual(x_.shape, x.shape)
 
     @unittest.skipIf(
-        torch.cuda.is_available() and torch.cuda.get_device_capability()[0] < 9,
+        get_device_properties()[0] == "cuda" and get_device_properties()[1] < 9,
         "Skipping FP8LinearTest because it is not supported on GPU with capability < 9.0",
     )
     def test_linear_with_diff_feature_size_preserves_shape(self):

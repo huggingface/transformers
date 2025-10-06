@@ -12,6 +12,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+# /// script
+# dependencies = [
+#     "transformers @ git+https://github.com/huggingface/transformers.git",
+#     "albumentations >= 1.4.16",
+#     "accelerate >= 0.12.0",
+#     "torch >= 1.3",
+#     "datasets >= 2.14.0",
+#     "sentencepiece != 0.1.92",
+#     "protobuf",
+#     "evaluate",
+#     "scikit-learn",
+# ]
+# ///
+
 """
 Fine-tuning the library models for causal language modeling (GPT, GPT-2, CTRL, ...) on a text file or a dataset.
 
@@ -31,7 +46,7 @@ from typing import Optional
 import datasets
 import evaluate
 import torch
-from datasets import load_dataset
+from datasets import IterableDataset, IterableDatasetDict, load_dataset
 
 import transformers
 from transformers import (
@@ -49,12 +64,12 @@ from transformers import (
 )
 from transformers.testing_utils import CaptureLogger
 from transformers.trainer_utils import get_last_checkpoint
-from transformers.utils import check_min_version, send_example_telemetry
+from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.52.0.dev0")
+check_min_version("4.57.0.dev0")
 
 require_version("datasets>=2.14.0", "To fix: pip install -r examples/pytorch/language-modeling/requirements.txt")
 
@@ -115,7 +130,7 @@ class ModelArguments:
         metadata={
             "help": (
                 "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
-                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+                "generated when running `hf auth login` (stored in `~/.huggingface`)."
             )
         },
     )
@@ -129,7 +144,7 @@ class ModelArguments:
             )
         },
     )
-    torch_dtype: Optional[str] = field(
+    dtype: Optional[str] = field(
         default=None,
         metadata={
             "help": (
@@ -137,15 +152,6 @@ class ModelArguments:
                 "dtype will be automatically derived from the model's weights."
             ),
             "choices": ["auto", "bfloat16", "float16", "float32"],
-        },
-    )
-    low_cpu_mem_usage: bool = field(
-        default=False,
-        metadata={
-            "help": (
-                "It is an option to create the model as an empty shell, then only materialize its parameters when the pretrained weights are loaded. "
-                "set True will benefit LLM loading time and RAM consumption."
-            )
         },
     )
 
@@ -234,6 +240,45 @@ class DataTrainingArguments:
                 assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, a json or a txt file."
 
 
+def split_streaming_dataset(
+    full_streaming_dataset,
+    validation_percentage: int = 5,
+) -> IterableDatasetDict:
+    """
+    Splits a streaming dataset into
+    training and validation IterableDatasets, and supports methods like .map(), .filter(),
+    .take() and properties like .features on the resulting streams.
+
+    Args:
+        full_streaming_dataset (Dataset): The name of the dataset to load (e.g., "HuggingFaceFW/fineweb").
+        validation_percentage (int): The proportion of the dataset to be used for validation split.
+
+    Returns:
+        IterableDatasetDict: An IterableDatasetDict containing two IterableDataset objects: (train_stream, validation_stream).
+    """
+    if not (0 < validation_percentage < 100):
+        raise ValueError(
+            f"validation_percentage must be between 0 and 100 (exclusive). Passed: {validation_percentage}"
+        )
+
+    def split_generator(is_train: bool):
+        for i, example in enumerate(full_streaming_dataset):
+            if is_train:
+                if i % 100 > validation_percentage:
+                    yield example
+            else:
+                if i % 100 < validation_percentage:
+                    yield example
+
+    features = full_streaming_dataset.features
+    train_stream = IterableDataset.from_generator(split_generator, gen_kwargs={"is_train": True}, features=features)
+    validation_stream = IterableDataset.from_generator(
+        split_generator, gen_kwargs={"is_train": False}, features=features
+    )
+
+    return IterableDatasetDict({"train": train_stream, "validation": validation_stream})
+
+
 def main():
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
@@ -246,10 +291,6 @@ def main():
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
-
-    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
-    # information sent is the one passed as arguments along with your Python/PyTorch versions.
-    send_example_telemetry("run_clm", model_args, data_args)
 
     # Setup logging
     logging.basicConfig(
@@ -313,25 +354,37 @@ def main():
             streaming=data_args.streaming,
             trust_remote_code=model_args.trust_remote_code,
         )
-        if "validation" not in raw_datasets.keys():
-            raw_datasets["validation"] = load_dataset(
-                data_args.dataset_name,
-                data_args.dataset_config_name,
-                split=f"train[:{data_args.validation_split_percentage}%]",
-                cache_dir=model_args.cache_dir,
-                token=model_args.token,
-                streaming=data_args.streaming,
-                trust_remote_code=model_args.trust_remote_code,
-            )
-            raw_datasets["train"] = load_dataset(
-                data_args.dataset_name,
-                data_args.dataset_config_name,
-                split=f"train[{data_args.validation_split_percentage}%:]",
-                cache_dir=model_args.cache_dir,
-                token=model_args.token,
-                streaming=data_args.streaming,
-                trust_remote_code=model_args.trust_remote_code,
-            )
+        if "validation" not in raw_datasets:
+            if data_args.streaming:
+                dataset_stream = load_dataset(
+                    data_args.dataset_name,
+                    data_args.dataset_config_name,
+                    split="train",
+                    cache_dir=model_args.cache_dir,
+                    token=model_args.token,
+                    streaming=data_args.streaming,
+                    trust_remote_code=model_args.trust_remote_code,
+                )
+                raw_datasets = split_streaming_dataset(dataset_stream, data_args.validation_split_percentage)
+            else:
+                raw_datasets["validation"] = load_dataset(
+                    data_args.dataset_name,
+                    data_args.dataset_config_name,
+                    split=f"train[:{data_args.validation_split_percentage}%]",
+                    cache_dir=model_args.cache_dir,
+                    token=model_args.token,
+                    streaming=data_args.streaming,
+                    trust_remote_code=model_args.trust_remote_code,
+                )
+                raw_datasets["train"] = load_dataset(
+                    data_args.dataset_name,
+                    data_args.dataset_config_name,
+                    split=f"train[{data_args.validation_split_percentage}%:]",
+                    cache_dir=model_args.cache_dir,
+                    token=model_args.token,
+                    streaming=data_args.streaming,
+                    trust_remote_code=model_args.trust_remote_code,
+                )
     else:
         data_files = {}
         dataset_args = {}
@@ -355,23 +408,35 @@ def main():
             **dataset_args,
         )
         # If no validation data is there, validation_split_percentage will be used to divide the dataset.
-        if "validation" not in raw_datasets.keys():
-            raw_datasets["validation"] = load_dataset(
-                extension,
-                data_files=data_files,
-                split=f"train[:{data_args.validation_split_percentage}%]",
-                cache_dir=model_args.cache_dir,
-                token=model_args.token,
-                **dataset_args,
-            )
-            raw_datasets["train"] = load_dataset(
-                extension,
-                data_files=data_files,
-                split=f"train[{data_args.validation_split_percentage}%:]",
-                cache_dir=model_args.cache_dir,
-                token=model_args.token,
-                **dataset_args,
-            )
+        if "validation" not in raw_datasets:
+            if data_args.streaming:
+                dataset_stream = load_dataset(
+                    extension,
+                    data_files=data_files,
+                    split="train",
+                    cache_dir=model_args.cache_dir,
+                    token=model_args.token,
+                    **dataset_args,
+                )
+                raw_datasets = split_streaming_dataset(dataset_stream, data_args.validation_split_percentage)
+            else:
+                raw_datasets["validation"] = load_dataset(
+                    extension,
+                    data_files=data_files,
+                    split=f"train[:{data_args.validation_split_percentage}%]",
+                    cache_dir=model_args.cache_dir,
+                    token=model_args.token,
+                    **dataset_args,
+                )
+
+                raw_datasets["train"] = load_dataset(
+                    extension,
+                    data_files=data_files,
+                    split=f"train[{data_args.validation_split_percentage}%:]",
+                    cache_dir=model_args.cache_dir,
+                    token=model_args.token,
+                    **dataset_args,
+                )
 
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.
@@ -418,11 +483,7 @@ def main():
         )
 
     if model_args.model_name_or_path:
-        torch_dtype = (
-            model_args.torch_dtype
-            if model_args.torch_dtype in ["auto", None]
-            else getattr(torch, model_args.torch_dtype)
-        )
+        dtype = model_args.dtype if model_args.dtype in ["auto", None] else getattr(torch, model_args.dtype)
         model = AutoModelForCausalLM.from_pretrained(
             model_args.model_name_or_path,
             from_tf=bool(".ckpt" in model_args.model_name_or_path),
@@ -431,8 +492,7 @@ def main():
             revision=model_args.model_revision,
             token=model_args.token,
             trust_remote_code=model_args.trust_remote_code,
-            torch_dtype=torch_dtype,
-            low_cpu_mem_usage=model_args.low_cpu_mem_usage,
+            dtype=dtype,
         )
     else:
         model = AutoModelForCausalLM.from_config(config, trust_remote_code=model_args.trust_remote_code)
@@ -511,7 +571,7 @@ def main():
     # Main data processing function that will concatenate all texts from our dataset and generate chunks of block_size.
     def group_texts(examples):
         # Concatenate all texts.
-        concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
+        concatenated_examples = {k: list(chain(*examples[k])) for k in examples}
         total_length = len(concatenated_examples[list(examples.keys())[0]])
         # We drop the small remainder, and if the total_length < block_size  we exclude this batch and return an empty dict.
         # We could add padding if the model supported it instead of this drop, you can customize this part to your needs.
@@ -551,16 +611,22 @@ def main():
             raise ValueError("--do_train requires a train dataset")
         train_dataset = lm_datasets["train"]
         if data_args.max_train_samples is not None:
-            max_train_samples = min(len(train_dataset), data_args.max_train_samples)
-            train_dataset = train_dataset.select(range(max_train_samples))
+            if data_args.streaming:
+                train_dataset = train_dataset.take(data_args.max_train_samples)
+            else:
+                max_train_samples = min(len(train_dataset), data_args.max_train_samples)
+                train_dataset = train_dataset.select(range(max_train_samples))
 
     if training_args.do_eval:
         if "validation" not in tokenized_datasets:
             raise ValueError("--do_eval requires a validation dataset")
         eval_dataset = lm_datasets["validation"]
         if data_args.max_eval_samples is not None:
-            max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
-            eval_dataset = eval_dataset.select(range(max_eval_samples))
+            if data_args.streaming:
+                eval_dataset = eval_dataset.take(data_args.max_eval_samples)
+            else:
+                max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
+                eval_dataset = eval_dataset.select(range(max_eval_samples))
 
         def preprocess_logits_for_metrics(logits, labels):
             if isinstance(logits, tuple):
@@ -609,7 +675,10 @@ def main():
         max_train_samples = (
             data_args.max_train_samples if data_args.max_train_samples is not None else len(train_dataset)
         )
-        metrics["train_samples"] = min(max_train_samples, len(train_dataset))
+        if data_args.streaming:
+            metrics["train_samples"] = max_train_samples
+        else:
+            metrics["train_samples"] = min(max_train_samples, len(train_dataset))
 
         trainer.log_metrics("train", metrics)
         trainer.save_metrics("train", metrics)
@@ -622,7 +691,11 @@ def main():
         metrics = trainer.evaluate()
 
         max_eval_samples = data_args.max_eval_samples if data_args.max_eval_samples is not None else len(eval_dataset)
-        metrics["eval_samples"] = min(max_eval_samples, len(eval_dataset))
+        if data_args.streaming:
+            metrics["eval_samples"] = max_eval_samples
+        else:
+            metrics["eval_samples"] = min(max_eval_samples, len(eval_dataset))
+
         try:
             perplexity = math.exp(metrics["eval_loss"])
         except OverflowError:

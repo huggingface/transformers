@@ -14,14 +14,13 @@
 import json
 import os
 import unittest
-from functools import lru_cache
+from functools import cached_property
 
 from transformers import BatchEncoding, MvpTokenizer, MvpTokenizerFast
 from transformers.models.roberta.tokenization_roberta import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_tokenizers, require_torch
-from transformers.utils import cached_property
 
-from ...test_tokenization_common import TokenizerTesterMixin, filter_roberta_detectors, use_cache_if_possible
+from ...test_tokenization_common import TokenizerTesterMixin, filter_roberta_detectors
 
 
 @require_tokenizers
@@ -71,16 +70,12 @@ class TestTokenizationMvp(TokenizerTesterMixin, unittest.TestCase):
             fp.write("\n".join(merges))
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_tokenizer(cls, pretrained_name=None, **kwargs):
         kwargs.update(cls.special_tokens_map)
         pretrained_name = pretrained_name or cls.tmpdirname
         return cls.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_rust_tokenizer(cls, pretrained_name=None, **kwargs):
         kwargs.update(cls.special_tokens_map)
         pretrained_name = pretrained_name or cls.tmpdirname
@@ -161,7 +156,7 @@ class TestTokenizationMvp(TokenizerTesterMixin, unittest.TestCase):
     def test_pretokenized_inputs(self):
         pass
 
-    def test_embeded_special_tokens(self):
+    def test_embedded_special_tokens(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
@@ -182,7 +177,7 @@ class TestTokenizationMvp(TokenizerTesterMixin, unittest.TestCase):
                 tokens_r_str = tokenizer_r.convert_ids_to_tokens(tokens_r["input_ids"])
                 tokens_p_str = tokenizer_p.convert_ids_to_tokens(tokens_p["input_ids"])
 
-                # Rust correctly handles the space before the mask while python doesnt
+                # Rust correctly handles the space before the mask while python doesn't
                 self.assertSequenceEqual(tokens_p["input_ids"], [0, 250, 6, 50264, 3823, 487, 21992, 3645, 4, 2])
                 self.assertSequenceEqual(tokens_r["input_ids"], [0, 250, 6, 50264, 3823, 487, 21992, 3645, 4, 2])
 

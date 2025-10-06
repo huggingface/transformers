@@ -15,14 +15,14 @@
 """CLIP model configuration"""
 
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, Mapping, Optional
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any
 
 
 if TYPE_CHECKING:
     from ...processing_utils import ProcessorMixin
-    from ...utils import TensorType
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
 
@@ -30,15 +30,15 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class CLIPTextConfig(PretrainedConfig):
+class CLIPTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`CLIPTextModel`]. It is used to instantiate a CLIP
     text encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the text encoder of the CLIP
     [openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 49408):
@@ -131,15 +131,15 @@ class CLIPTextConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
 
 
-class CLIPVisionConfig(PretrainedConfig):
+class CLIPVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`CLIPVisionModel`]. It is used to instantiate a
     CLIP vision encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the vision encoder of the CLIP
     [openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -223,15 +223,15 @@ class CLIPVisionConfig(PretrainedConfig):
         self.hidden_act = hidden_act
 
 
-class CLIPConfig(PretrainedConfig):
+class CLIPConfig(PreTrainedConfig):
     r"""
     [`CLIPConfig`] is the configuration class to store the configuration of a [`CLIPModel`]. It is used to instantiate
     a CLIP model according to the specified arguments, defining the text model and vision model configs. Instantiating
     a configuration with the defaults will yield a similar configuration to that of the CLIP
     [openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`dict`, *optional*):
@@ -295,7 +295,7 @@ class CLIPConfig(PretrainedConfig):
 
             # Give a warning if the values exist in both `_text_config_dict` and `text_config` but being different.
             for key, value in _text_config_dict.items():
-                if key in text_config and value != text_config[key] and key not in ["transformers_version"]:
+                if key in text_config and value != text_config[key] and key != "transformers_version":
                     # If specified in `text_config_dict`
                     if key in text_config_dict:
                         message = (
@@ -327,7 +327,7 @@ class CLIPConfig(PretrainedConfig):
 
             # Give a warning if the values exist in both `_vision_config_dict` and `vision_config` but being different.
             for key, value in _vision_config_dict.items():
-                if key in vision_config and value != vision_config[key] and key not in ["transformers_version"]:
+                if key in vision_config and value != vision_config[key] and key != "transformers_version":
                     # If specified in `vision_config_dict`
                     if key in vision_config_dict:
                         message = (
@@ -359,18 +359,6 @@ class CLIPConfig(PretrainedConfig):
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
         self.initializer_factor = 1.0
-
-    @classmethod
-    def from_text_vision_configs(cls, text_config: CLIPTextConfig, vision_config: CLIPVisionConfig, **kwargs):
-        r"""
-        Instantiate a [`CLIPConfig`] (or a derived class) from clip text model configuration and clip vision model
-        configuration.
-
-        Returns:
-            [`CLIPConfig`]: An instance of a configuration object
-        """
-
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
 
 
 class CLIPOnnxConfig(OnnxConfig):
@@ -404,13 +392,15 @@ class CLIPOnnxConfig(OnnxConfig):
         processor: "ProcessorMixin",
         batch_size: int = -1,
         seq_length: int = -1,
-        framework: Optional["TensorType"] = None,
     ) -> Mapping[str, Any]:
         text_input_dict = super().generate_dummy_inputs(
-            processor.tokenizer, batch_size=batch_size, seq_length=seq_length, framework=framework
+            processor.tokenizer,
+            batch_size=batch_size,
+            seq_length=seq_length,
         )
         image_input_dict = super().generate_dummy_inputs(
-            processor.image_processor, batch_size=batch_size, framework=framework
+            processor.image_processor,
+            batch_size=batch_size,
         )
         return {**text_input_dict, **image_input_dict}
 

@@ -17,7 +17,6 @@ from transformers import HfArgumentParser
 from transformers.commands.add_fast_image_processor import AddFastImageProcessorCommand
 from transformers.commands.add_new_model_like import AddNewModelLikeCommand
 from transformers.commands.chat import ChatCommand
-from transformers.commands.convert import ConvertCommand
 from transformers.commands.download import DownloadCommand
 from transformers.commands.env import EnvironmentCommand
 from transformers.commands.run import RunCommand
@@ -25,12 +24,11 @@ from transformers.commands.serving import ServeCommand
 
 
 def main():
-    parser = HfArgumentParser(prog="Transformers CLI tool", usage="transformers-cli <command> [<args>]")
-    commands_parser = parser.add_subparsers(help="transformers-cli command helpers")
+    parser = HfArgumentParser(prog="Transformers CLI tool", usage="transformers <command> [<args>]")
+    commands_parser = parser.add_subparsers(help="transformers command helpers")
 
     # Register commands
     ChatCommand.register_subcommand(commands_parser)
-    ConvertCommand.register_subcommand(commands_parser)
     DownloadCommand.register_subcommand(commands_parser)
     EnvironmentCommand.register_subcommand(commands_parser)
     RunCommand.register_subcommand(commands_parser)

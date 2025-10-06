@@ -1,5 +1,4 @@
-name: Self-hosted runner (scheduled)
-
+name: Nvidia CI
 
 on:
   repository_dispatch:
@@ -7,18 +6,55 @@ on:
     - cron: "17 2 * * *"
   push:
     branches:
-      - run_scheduled_ci*
+      - run_nvidia_ci*
+  workflow_dispatch:
+    inputs:
+      prev_workflow_run_id:
+        description: 'previous workflow run id to compare'
+        type: string
+        required: false
+        default: ""
+      other_workflow_run_id:
+        description: 'other workflow run id to compare'
+        type: string
+        required: false
+        default: ""
+
+
+# Used for `push` to easily modify the target workflow runs to compare against
+env:
+    prev_workflow_run_id: ""
+    other_workflow_run_id: ""
+
 
 jobs:
+  setup:
+    name: Setup
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Setup
+        run: |
+          mkdir "setup_values"
+          echo "${{ inputs.prev_workflow_run_id || env.prev_workflow_run_id }}" > "setup_values/prev_workflow_run_id.txt"
+          echo "${{ inputs.other_workflow_run_id || env.other_workflow_run_id }}" > "setup_values/other_workflow_run_id.txt"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: setup_values
+          path: setup_values
+
   model-ci:
     name: Model CI
     uses: ./.github/workflows/self-scheduled.yml
     with:
       job: run_models_gpu
       slack_report_channel: "#transformers-ci-daily-models"
-      runner: daily-ci
       docker: huggingface/transformers-all-latest-gpu
       ci_event: Daily CI
+      runner_type: "a10"
+      report_repo_id: hf-internal-testing/transformers_daily_ci
+      commit_sha: ${{ github.sha }}
     secrets: inherit
 
   torch-pipeline:
@@ -27,20 +63,10 @@ jobs:
     with:
       job: run_pipelines_torch_gpu
       slack_report_channel: "#transformers-ci-daily-pipeline-torch"
-      runner: daily-ci
       docker: huggingface/transformers-pytorch-gpu
       ci_event: Daily CI
-    secrets: inherit
-
-  tf-pipeline:
-    name: TF pipeline CI
-    uses: ./.github/workflows/self-scheduled.yml
-    with:
-      job: run_pipelines_tf_gpu
-      slack_report_channel: "#transformers-ci-daily-pipeline-tf"
-      runner: daily-ci
-      docker: huggingface/transformers-tensorflow-gpu
-      ci_event: Daily CI
+      report_repo_id: hf-internal-testing/transformers_daily_ci
+      commit_sha: ${{ github.sha }}
     secrets: inherit
 
   example-ci:
@@ -49,9 +75,10 @@ jobs:
     with:
       job: run_examples_gpu
       slack_report_channel: "#transformers-ci-daily-examples"
-      runner: daily-ci
       docker: huggingface/transformers-all-latest-gpu
       ci_event: Daily CI
+      report_repo_id: hf-internal-testing/transformers_daily_ci
+      commit_sha: ${{ github.sha }}
     secrets: inherit
 
   trainer-fsdp-ci:
@@ -60,9 +87,11 @@ jobs:
     with:
       job: run_trainer_and_fsdp_gpu
       slack_report_channel: "#transformers-ci-daily-training"
-      runner: daily-ci
       docker: huggingface/transformers-all-latest-gpu
+      runner_type: "a10"
       ci_event: Daily CI
+      report_repo_id: hf-internal-testing/transformers_daily_ci
+      commit_sha: ${{ github.sha }}
     secrets: inherit
 
   deepspeed-ci:
@@ -71,10 +100,11 @@ jobs:
     with:
       job: run_torch_cuda_extensions_gpu
       slack_report_channel: "#transformers-ci-daily-training"
-      runner: daily-ci
       docker: huggingface/transformers-pytorch-deepspeed-latest-gpu
       ci_event: Daily CI
       working-directory-prefix: /workspace
+      report_repo_id: hf-internal-testing/transformers_daily_ci
+      commit_sha: ${{ github.sha }}
     secrets: inherit
 
   quantization-ci:
@@ -83,7 +113,8 @@ jobs:
     with:
       job: run_quantization_torch_gpu
       slack_report_channel: "#transformers-ci-daily-quantization"
-      runner: daily-ci
       docker: huggingface/transformers-quantization-latest-gpu
       ci_event: Daily CI
+      report_repo_id: hf-internal-testing/transformers_daily_ci
+      commit_sha: ${{ github.sha }}
     secrets: inherit

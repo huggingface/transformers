@@ -17,14 +17,28 @@ import json
 import re
 import types
 from contextlib import contextmanager
+from copy import deepcopy
 from datetime import datetime
 from functools import lru_cache
-from typing import Any, Callable, Optional, Union, get_args, get_origin, get_type_hints
+from inspect import isfunction
+from typing import (
+    Any,
+    Callable,
+    Literal,
+    Optional,
+    Union,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
 
 from packaging import version
 
+from . import logging
 from .import_utils import is_jinja_available, is_torch_available, is_vision_available
 
+
+logger = logging.get_logger(__name__)
 
 if is_jinja_available():
     import jinja2
@@ -71,7 +85,7 @@ class DocstringParsingException(Exception):
     pass
 
 
-def _get_json_schema_type(param_type: str) -> dict[str, str]:
+def _get_json_schema_type(param_type: type) -> dict[str, str]:
     type_mapping = {
         int: {"type": "integer"},
         float: {"type": "number"},
@@ -115,6 +129,20 @@ def _parse_type_hint(hint: str) -> dict:
             return_dict["nullable"] = True
         return return_dict
 
+    elif origin is Literal and len(args) > 0:
+        LITERAL_TYPES = (int, float, str, bool, type(None))
+        args_types = []
+        for arg in args:
+            if type(arg) not in LITERAL_TYPES:
+                raise TypeHintParsingException("Only the valid python literals can be listed in typing.Literal.")
+            arg_type = _get_json_schema_type(type(arg)).get("type")
+            if arg_type is not None and arg_type not in args_types:
+                args_types.append(arg_type)
+        return {
+            "type": args_types.pop() if len(args_types) == 1 else list(args_types),
+            "enum": list(args),
+        }
+
     elif origin is list:
         if not args:
             return {"type": "array"}
@@ -130,13 +158,13 @@ def _parse_type_hint(hint: str) -> dict:
                 f"The type hint {str(hint).replace('typing.', '')} is a Tuple with a single element, which "
                 "we do not automatically convert to JSON schema as it is rarely necessary. If this input can contain "
                 "more than one element, we recommend "
-                "using a List[] type instead, or if it really is a single element, remove the Tuple[] wrapper and just "
+                "using a list[] type instead, or if it really is a single element, remove the tuple[] wrapper and just "
                 "pass the element directly."
             )
         if ... in args:
             raise TypeHintParsingException(
                 "Conversion of '...' is not supported in Tuple type hints. "
-                "Use List[] types for variable-length"
+                "Use list[] types for variable-length"
                 " inputs instead."
             )
         return {"type": "array", "prefixItems": [_parse_type_hint(t) for t in args]}
@@ -433,3 +461,105 @@ def _compile_jinja_template(chat_template):
     jinja_env.globals["raise_exception"] = raise_exception
     jinja_env.globals["strftime_now"] = strftime_now
     return jinja_env.from_string(chat_template)
+
+
+def render_jinja_template(
+    conversations: list[list[dict[str, str]]],
+    tools: Optional[list[Union[dict, Callable]]] = None,
+    documents: Optional[list[dict[str, str]]] = None,
+    chat_template: Optional[str] = None,
+    return_assistant_tokens_mask: bool = False,
+    continue_final_message: bool = False,
+    add_generation_prompt: bool = False,
+    **kwargs,
+) -> str:
+    if return_assistant_tokens_mask and not re.search(r"\{\%-?\s*generation\s*-?\%\}", chat_template):
+        logger.warning_once(
+            "return_assistant_tokens_mask==True but chat template does not contain `{% generation %}` keyword."
+        )
+
+    # Compilation function uses a cache to avoid recompiling the same template
+    compiled_template = _compile_jinja_template(chat_template)
+
+    # We accept either JSON schemas or functions for tools. If we get functions, we convert them to schemas
+    if tools is not None:
+        tool_schemas = []
+        for tool in tools:
+            if isinstance(tool, dict):
+                tool_schemas.append(tool)
+            elif isfunction(tool):
+                tool_schemas.append(get_json_schema(tool))
+            else:
+                raise ValueError(
+                    "Tools should either be a JSON schema, or a callable function with type hints "
+                    "and a docstring suitable for auto-conversion to a schema."
+                )
+    else:
+        tool_schemas = None
+
+    if documents is not None:
+        for document in documents:
+            if not isinstance(document, dict):
+                raise TypeError("Documents should be a list of dicts with 'title' and 'text' keys!")
+
+    rendered = []
+    all_generation_indices = []
+    continue_final_message_tag = "CONTINUE_FINAL_MESSAGE_TAG "
+    for chat in conversations:
+        if hasattr(chat, "messages"):
+            # Indicates it's a Conversation object
+            chat = chat.messages
+        if continue_final_message:
+            chat = deepcopy(chat)
+            final_message = chat[-1]["content"]
+            if isinstance(final_message, (list, tuple)):
+                for content_block in reversed(final_message):
+                    if "text" in content_block:
+                        # Pick the last text block in the message (the first one we hit while iterating in reverse)
+                        final_message = content_block["text"]
+                        content_block["text"] = content_block["text"] + continue_final_message_tag
+                        break
+                else:
+                    raise ValueError(
+                        "continue_final_message is set but we could not find any text to continue in the final message!"
+                    )
+            else:
+                chat[-1]["content"] = chat[-1]["content"] + continue_final_message_tag
+        if return_assistant_tokens_mask:
+            rendered_chat, generation_indices = _render_with_assistant_indices(
+                compiled_template=compiled_template,
+                messages=chat,
+                tools=tool_schemas,
+                documents=documents,
+                add_generation_prompt=add_generation_prompt,
+                **kwargs,
+            )
+            all_generation_indices.append(generation_indices)
+        else:
+            rendered_chat = compiled_template.render(
+                messages=chat,
+                tools=tool_schemas,
+                documents=documents,
+                add_generation_prompt=add_generation_prompt,
+                **kwargs,
+            )
+        if continue_final_message:
+            if (final_message.strip() not in rendered_chat) or (
+                continue_final_message_tag.strip() not in rendered_chat
+            ):
+                raise ValueError(
+                    "continue_final_message is set but the final message does not appear in the chat after "
+                    "applying the chat template! This can happen if the chat template deletes portions of "
+                    "the final message. Please verify the chat template and final message in your chat to "
+                    "ensure they are compatible."
+                )
+            tag_loc = rendered_chat.rindex(continue_final_message_tag.strip())
+            if rendered_chat[tag_loc : tag_loc + len(continue_final_message_tag)] == continue_final_message_tag:
+                # The template preserves spacing, so things are simple
+                rendered_chat = rendered_chat[:tag_loc]
+            else:
+                # The message has trailing spacing that was trimmed, so we must be more cautious
+                rendered_chat = rendered_chat[:tag_loc].rstrip()
+        rendered.append(rendered_chat)
+
+    return rendered, all_generation_indices

@@ -14,27 +14,22 @@
 # limitations under the License.
 """Fast Image processor class for DepthPro."""
 
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Union
+
+import torch
 
 from ...image_processing_base import BatchFeature
-from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    BaseImageProcessorFast,
-    group_images_by_shape,
-    reorder_images,
-)
+from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
     PILImageResampling,
     SizeDict,
+    pil_torch_interpolation_mapping,
 )
 from ...utils import (
     TensorType,
-    add_start_docstrings,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
+    auto_docstring,
     logging,
     requires_backends,
 )
@@ -44,26 +39,14 @@ from ...utils.import_utils import requires
 if TYPE_CHECKING:
     from .modeling_depth_pro import DepthProDepthEstimatorOutput
 
+
+from torchvision.transforms.v2 import functional as F
+
+
 logger = logging.get_logger(__name__)
 
 
-if is_torch_available():
-    import torch
-
-
-if is_torchvision_available():
-    from ...image_utils import pil_torch_interpolation_mapping
-
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
-
-
-@add_start_docstrings(
-    "Constructs a fast DepthPro image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-)
+@auto_docstring
 @requires(backends=("torchvision", "torch"))
 class DepthProImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
@@ -78,7 +61,7 @@ class DepthProImageProcessorFast(BaseImageProcessorFast):
     # which makes it different from BaseImageProcessorFast._preprocess
     def _preprocess(
         self,
-        images: List["torch.Tensor"],
+        images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
         interpolation: Optional["F.InterpolationMode"],
@@ -87,12 +70,14 @@ class DepthProImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, List[float]]],
-        image_std: Optional[Union[float, List[float]]],
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
+        disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
+        **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched scaling
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             # Fused rescale and normalize
@@ -117,8 +102,8 @@ class DepthProImageProcessorFast(BaseImageProcessorFast):
     def post_process_depth_estimation(
         self,
         outputs: "DepthProDepthEstimatorOutput",
-        target_sizes: Optional[Union[TensorType, List[Tuple[int, int]], None]] = None,
-    ) -> Dict[str, List[TensorType]]:
+        target_sizes: Optional[Union[TensorType, list[tuple[int, int]], None]] = None,
+    ) -> list[dict[str, TensorType]]:
         """
         Post-processes the raw depth predictions from the model to generate
         final depth predictions which is caliberated using the field of view if provided
@@ -127,13 +112,13 @@ class DepthProImageProcessorFast(BaseImageProcessorFast):
         Args:
             outputs ([`DepthProDepthEstimatorOutput`]):
                 Raw outputs of the model.
-            target_sizes (`Optional[Union[TensorType, List[Tuple[int, int]], None]]`, *optional*, defaults to `None`):
+            target_sizes (`Optional[Union[TensorType, list[tuple[int, int]], None]]`, *optional*, defaults to `None`):
                 Target sizes to resize the depth predictions. Can be a tensor of shape `(batch_size, 2)`
                 or a list of tuples `(height, width)` for each image in the batch. If `None`, no resizing
                 is performed.
 
         Returns:
-            `List[Dict[str, TensorType]]`: A list of dictionaries of tensors representing the processed depth
+            `list[dict[str, TensorType]]`: A list of dictionaries of tensors representing the processed depth
             predictions, and field of view (degrees) and focal length (pixels) if `field_of_view` is given in `outputs`.
 
         Raises:

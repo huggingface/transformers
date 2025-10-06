@@ -109,30 +109,16 @@ class UMT5ModelTester:
         decoder_input_ids,
         attention_mask=None,
         decoder_attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
     ):
         if attention_mask is None:
             attention_mask = input_ids.ne(config.pad_token_id)
         if decoder_attention_mask is None:
             decoder_attention_mask = decoder_input_ids.ne(config.pad_token_id)
-        if head_mask is None:
-            head_mask = torch.ones(config.num_hidden_layers, config.num_attention_heads, device=torch_device)
-        if decoder_head_mask is None:
-            decoder_head_mask = torch.ones(config.num_decoder_layers, config.num_attention_heads, device=torch_device)
-        if cross_attn_head_mask is None:
-            cross_attn_head_mask = torch.ones(
-                config.num_decoder_layers, config.num_attention_heads, device=torch_device
-            )
         return {
             "input_ids": input_ids,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
             "decoder_attention_mask": decoder_attention_mask,
-            "head_mask": head_mask,
-            "decoder_head_mask": decoder_head_mask,
-            "cross_attn_head_mask": cross_attn_head_mask,
         }
 
     def prepare_config_and_inputs(self):
@@ -144,7 +130,7 @@ class UMT5ModelTester:
         # all pad tokens have pos id = 2 and rest are between 2..seq_length
         # and the seq_length here is seq_length - num_pad_tokens
         # but when using past, there is no way of knowing if the past input ids had
-        # pad tokens in them, which results in incorrect seq_lenth and which in turn results in
+        # pad tokens in them, which results in incorrect seq_length and which in turn results in
         # position_ids being off by num_pad_tokens in past input
         input_ids = input_ids.clamp(self.pad_token_id + 2)
         input_ids[:, -1] = self.eos_token_id  # Eos Token
@@ -484,43 +470,10 @@ class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_with_sequence_classification_head(*config_and_inputs)
 
-    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
+    @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
     def test_model_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
-
-    def test_generate_with_head_masking(self):
-        attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        config = config_and_inputs[0]
-        model = UMT5ForConditionalGeneration(config).eval()
-        model.to(torch_device)
-
-        head_masking = {
-            "head_mask": torch.zeros(config.num_layers, config.num_heads, device=torch_device),
-            "decoder_head_mask": torch.zeros(config.num_decoder_layers, config.num_heads, device=torch_device),
-            "cross_attn_head_mask": torch.zeros(config.num_decoder_layers, config.num_heads, device=torch_device),
-        }
-
-        for attn_name, (name, mask) in zip(attention_names, head_masking.items()):
-            head_masks = {name: mask}
-            # Explicitly pass decoder_head_mask as it is required from T5 model when head_mask specified
-            if name == "head_mask":
-                head_masks["decoder_head_mask"] = torch.ones(
-                    config.num_decoder_layers, config.num_heads, device=torch_device
-                )
-
-            out = model.generate(
-                config_and_inputs[1]["input_ids"],
-                num_beams=1,
-                max_length=3,
-                output_attentions=True,
-                return_dict_in_generate=True,
-                **head_masks,
-            )
-            # We check the state of decoder_attentions and cross_attentions just from the last step
-            attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
-            self.assertEqual(sum([w.sum().item() for w in attn_weights]), 0.0)
 
     @unittest.skip(
         reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
@@ -680,7 +633,6 @@ class UMT5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
     all_model_classes = (UMT5EncoderModel, UMT5ForTokenClassification) if is_torch_available() else ()
     test_pruning = False
     test_resize_embeddings = False
-    test_model_parallel = True
     pipeline_model_mapping = (
         {
             "token-classification": UMT5ForTokenClassification,
@@ -688,7 +640,6 @@ class UMT5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         if is_torch_available()
         else {}
     )
-    all_parallelizable_model_classes = (UMT5EncoderModel,) if is_torch_available() else ()
 
     def setUp(self):
         self.model_tester = UMT5EncoderOnlyModelTester(self)
@@ -701,7 +652,7 @@ class UMT5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
+    @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
     def test_model_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
@@ -741,7 +692,7 @@ class Umt5IntegrationTest(unittest.TestCase):
     )
     def test_small_integration_test(self):
         """
-        For comparison run the kaggle notbook available here : https://www.kaggle.com/arthurzucker/umt5-inference
+        For comparison run the kaggle notebook available here : https://www.kaggle.com/arthurzucker/umt5-inference
         """
 
         model = UMT5ForConditionalGeneration.from_pretrained("google/umt5-small", return_dict=True).to(torch_device)

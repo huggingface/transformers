@@ -23,10 +23,9 @@ if TYPE_CHECKING:
     from .feature_extraction_auto import *
     from .image_processing_auto import *
     from .modeling_auto import *
-    from .modeling_flax_auto import *
-    from .modeling_tf_auto import *
     from .processing_auto import *
     from .tokenization_auto import *
+    from .video_processing_auto import *
 else:
     import sys
 

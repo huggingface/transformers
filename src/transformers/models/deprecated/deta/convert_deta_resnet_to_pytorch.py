@@ -238,7 +238,7 @@ def convert_deta_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     read_in_decoder_q_k_v(state_dict, config)
 
     # fix some prefixes
-    for key in state_dict.copy().keys():
+    for key in state_dict.copy():
         if "transformer.decoder.class_embed" in key or "transformer.decoder.bbox_embed" in key:
             val = state_dict.pop(key)
             state_dict[key.replace("transformer.decoder", "model.decoder")] = val

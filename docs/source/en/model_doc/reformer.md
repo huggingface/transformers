@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-01-13 and added to Hugging Face Transformers on 2020-11-16.*
 
 # Reformer
 
@@ -22,7 +23,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The Reformer model was proposed in the paper [Reformer: The Efficient Transformer](https://arxiv.org/abs/2001.04451.pdf) by Nikita Kitaev, Łukasz Kaiser, Anselm Levskaya.
+The Reformer model was proposed in the paper [Reformer: The Efficient Transformer](https://huggingface.co/papers/2001.04451) by Nikita Kitaev, Łukasz Kaiser, Anselm Levskaya.
 
 The abstract from the paper is the following:
 
@@ -40,8 +41,8 @@ found [here](https://github.com/google/trax/tree/master/trax/models/reformer).
 ## Usage tips
 
 - Reformer does **not** work with *torch.nn.DataParallel* due to a bug in PyTorch, see [issue #36035](https://github.com/pytorch/pytorch/issues/36035).
-- Use Axial position encoding (see below for more details). It’s a mechanism to avoid having a huge positional encoding matrix (when the sequence length is very big) by factorizing it into smaller matrices.
-- Replace traditional attention by LSH (local-sensitive hashing) attention (see below for more details). It’s a technique to avoid computing the full product query-key in the attention layers.
+- Use Axial position encoding (see below for more details). It's a mechanism to avoid having a huge positional encoding matrix (when the sequence length is very big) by factorizing it into smaller matrices.
+- Replace traditional attention by LSH (local-sensitive hashing) attention (see below for more details). It's a technique to avoid computing the full product query-key in the attention layers.
 - Avoid storing the intermediate results of each layer by using reversible transformer layers to obtain them during the backward pass (subtracting the residuals from the input of the next layer gives them back) or recomputing them for results inside a given layer (less efficient than storing them but saves memory).
 - Compute the feedforward operations by chunks and not on the whole batch.
 
@@ -88,12 +89,11 @@ equal to `config.hidden_size` and `config.axial_pos_shape` is set to a tuple \\(
 product has to be equal to `config.max_embedding_size`, which during training has to be equal to the *sequence
 length* of the `input_ids`.
 
-
 ### LSH Self Attention
 
 In Locality sensitive hashing (LSH) self attention the key and query projection weights are tied. Therefore, the key
 query embedding vectors are also tied. LSH self attention uses the locality sensitive hashing mechanism proposed in
-[Practical and Optimal LSH for Angular Distance](https://arxiv.org/abs/1509.02897) to assign each of the tied key
+[Practical and Optimal LSH for Angular Distance](https://huggingface.co/papers/1509.02897) to assign each of the tied key
 query embedding vectors to one of `config.num_buckets` possible buckets. The premise is that the more "similar"
 key query embedding vectors (in terms of *cosine similarity*) are to each other, the more likely they are assigned to
 the same bucket.
@@ -105,7 +105,7 @@ each of length `config.lsh_chunk_length`. For each chunk, the query embedding ve
 (which are tied to themselves) and to the key embedding vectors of `config.lsh_num_chunks_before` previous
 neighboring chunks and `config.lsh_num_chunks_after` following neighboring chunks.
 
-For more information, see the [original Paper](https://arxiv.org/abs/2001.04451) or this great [blog post](https://www.pragmatic.ml/reformer-deep-dive/).
+For more information, see the [original Paper](https://huggingface.co/papers/2001.04451) or this great [blog post](https://www.pragmatic.ml/reformer-deep-dive/).
 
 Note that `config.num_buckets` can also be factorized into a list \\((n_{\text{buckets}}^1,
 n_{\text{buckets}}^2)\\). This way instead of assigning the query key embedding vectors to one of \\((1,\ldots,
@@ -121,7 +121,6 @@ Using LSH self attention, the memory and time complexity of the query-key matmul
 \\(\mathcal{O}(n_s \times n_s)\\) to \\(\mathcal{O}(n_s \times \log(n_s))\\), which usually represents the memory
 and time bottleneck in a transformer model, with \\(n_s\\) being the sequence length.
 
-
 ### Local Self Attention
 
 Local self attention is essentially a "normal" self attention layer with key, query and value projections, but is
@@ -132,7 +131,6 @@ previous neighboring chunks and `config.local_num_chunks_after` following neighb
 Using Local self attention, the memory and time complexity of the query-key matmul operation can be reduced from
 \\(\mathcal{O}(n_s \times n_s)\\) to \\(\mathcal{O}(n_s \times \log(n_s))\\), which usually represents the memory
 and time bottleneck in a transformer model, with \\(n_s\\) being the sequence length.
-
 
 ### Training
 

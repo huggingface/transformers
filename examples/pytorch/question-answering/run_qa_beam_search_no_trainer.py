@@ -49,12 +49,12 @@ from transformers import (
     default_data_collator,
     get_scheduler,
 )
-from transformers.utils import check_min_version, send_example_telemetry
+from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.52.0.dev0")
+check_min_version("4.57.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/question-answering/requirements.txt")
 
@@ -298,10 +298,6 @@ def parse_args():
 
 def main():
     args = parse_args()
-
-    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
-    # information sent is the one passed as arguments along with your Python/PyTorch versions.
-    send_example_telemetry("run_qa_beam_search_no_trainer", args)
 
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
     # If we're using tracking, we also need to initialize it here and it will pick up all supported trackers
@@ -937,7 +933,7 @@ def main():
             all_end_top_index.append(accelerator.gather_for_metrics(end_top_index).cpu().numpy())
             all_cls_logits.append(accelerator.gather_for_metrics(cls_logits).cpu().numpy())
 
-    max_len = max([x.shape[1] for x in all_end_top_log_probs])  # Get the max_length of the tensor
+    max_len = max(x.shape[1] for x in all_end_top_log_probs)  # Get the max_length of the tensor
 
     # concatenate all numpy arrays collected above
     start_top_log_probs_concat = create_and_fill_np_array(all_start_top_log_probs, eval_dataset, max_len)
@@ -997,7 +993,7 @@ def main():
                 all_end_top_index.append(accelerator.gather_for_metrics(end_top_index).cpu().numpy())
                 all_cls_logits.append(accelerator.gather_for_metrics(cls_logits).cpu().numpy())
 
-        max_len = max([x.shape[1] for x in all_end_top_log_probs])  # Get the max_length of the tensor
+        max_len = max(x.shape[1] for x in all_end_top_log_probs)  # Get the max_length of the tensor
 
         # concatenate all numpy arrays collected above
         start_top_log_probs_concat = create_and_fill_np_array(all_start_top_log_probs, predict_dataset, max_len)

@@ -22,7 +22,7 @@ import sys
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -41,11 +41,11 @@ logger = logging.get_logger(__name__)
 @dataclass
 class Tracker:
     module: nn.Module
-    traced: List[nn.Module] = field(default_factory=list)
+    traced: list[nn.Module] = field(default_factory=list)
     handles: list = field(default_factory=list)
 
     def _forward_hook(self, m, inputs: Tensor, outputs: Tensor):
-        has_not_submodules = len(list(m.modules())) == 1 or isinstance(m, nn.Conv2d) or isinstance(m, nn.BatchNorm2d)
+        has_not_submodules = len(list(m.modules())) == 1 or isinstance(m, (nn.Conv2d, nn.BatchNorm2d))
         if has_not_submodules:
             if not isinstance(m, VanLayerScaling):
                 self.traced.append(m)
@@ -68,8 +68,8 @@ class ModuleTransfer:
     src: nn.Module
     dest: nn.Module
     verbose: int = 0
-    src_skip: List = field(default_factory=list)
-    dest_skip: List = field(default_factory=list)
+    src_skip: list = field(default_factory=list)
+    dest_skip: list = field(default_factory=list)
 
     def __call__(self, x: Tensor):
         """
@@ -91,7 +91,7 @@ class ModuleTransfer:
         for dest_m, src_m in zip(dest_traced, src_traced):
             dest_m.load_state_dict(src_m.state_dict())
             if self.verbose == 1:
-                print(f"Transfered from={src_m} to={dest_m}")
+                print(f"Transferred from={src_m} to={dest_m}")
 
 
 def copy_parameters(from_model: nn.Module, our_model: nn.Module) -> nn.Module:
@@ -168,11 +168,9 @@ def convert_weights_and_push(save_directory: Path, model_name: Optional[str] = N
     num_labels = 1000
 
     repo_id = "huggingface/label-files"
-    num_labels = num_labels
     id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
 
-    id2label = id2label
     label2id = {v: k for k, v in id2label.items()}
 
     ImageNetPreTrainedConfig = partial(VanConfig, num_labels=num_labels, id2label=id2label, label2id=label2id)

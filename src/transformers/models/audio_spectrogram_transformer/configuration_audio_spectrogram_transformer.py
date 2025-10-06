@@ -14,16 +14,16 @@
 # limitations under the License.
 """Audio Spectogram Transformer (AST) model configuration"""
 
-from typing import Any, Dict
+from typing import Any
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class ASTConfig(PretrainedConfig):
+class ASTConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ASTModel`]. It is used to instantiate an AST
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -31,8 +31,8 @@ class ASTConfig(PretrainedConfig):
     [MIT/ast-finetuned-audioset-10-10-0.4593](https://huggingface.co/MIT/ast-finetuned-audioset-10-10-0.4593)
     architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -124,7 +124,7 @@ class ASTConfig(PretrainedConfig):
     # Overwritten from the parent class: AST is not compatible with `generate`, but has a config parameter sharing the
     # same name (`max_length`). Sharing the same name triggers checks regarding the config -> generation_config
     # generative parameters deprecation cycle, overwriting this function prevents this from happening.
-    def _get_non_default_generation_parameters(self) -> Dict[str, Any]:
+    def _get_non_default_generation_parameters(self) -> dict[str, Any]:
         return {}
 
 

@@ -15,28 +15,28 @@
 # limitations under the License.
 """Transformer XL configuration"""
 
-from ....configuration_utils import PretrainedConfig
+from ....configuration_utils import PreTrainedConfig
 from ....utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class TransfoXLConfig(PretrainedConfig):
+class TransfoXLConfig(PreTrainedConfig):
     """
     This is the configuration class to store the configuration of a [`TransfoXLModel`] or a [`TFTransfoXLModel`]. It is
     used to instantiate a Transformer-XL model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the TransfoXL
     [transfo-xl/transfo-xl-wt103](https://huggingface.co/transfo-xl/transfo-xl-wt103) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 267735):
             Vocabulary size of the BERT model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`TransfoXLModel`] or [`TFTransfoXLModel`].
-        cutoffs (`List[int]`, *optional*, defaults to `[20000, 40000, 200000]`):
+        cutoffs (`list[int]`, *optional*, defaults to `[20000, 40000, 200000]`):
             Cutoffs for the adaptive softmax.
         d_model (`int`, *optional*, defaults to 1024):
             Dimensionality of the model's hidden states.
@@ -49,7 +49,7 @@ class TransfoXLConfig(PretrainedConfig):
         d_inner (`int`, *optional*, defaults to 4096):
             Inner dimension in FF
         div_val (`int`, *optional*, defaults to 4):
-            Divident value for adapative input and softmax
+            Divident value for adaptive input and softmax
         pre_lnorm (`boolean`, *optional*, defaults to `False`):
             Whether or not to apply LayerNorm to the input instead of the output in the blocks.
         n_layer (`int`, *optional*, defaults to 18):

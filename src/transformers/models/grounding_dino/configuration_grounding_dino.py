@@ -14,7 +14,7 @@
 # limitations under the License.
 """Grounding DINO model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto import CONFIG_MAPPING
@@ -23,18 +23,18 @@ from ..auto import CONFIG_MAPPING
 logger = logging.get_logger(__name__)
 
 
-class GroundingDinoConfig(PretrainedConfig):
+class GroundingDinoConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GroundingDinoModel`]. It is used to instantiate a
     Grounding DINO model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Grounding DINO
     [IDEA-Research/grounding-dino-tiny](https://huggingface.co/IDEA-Research/grounding-dino-tiny) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        backbone_config (`PretrainedConfig` or `dict`, *optional*, defaults to `ResNetConfig()`):
+        backbone_config (`PreTrainedConfig` or `dict`, *optional*, defaults to `ResNetConfig()`):
             The configuration of the backbone model.
         backbone (`str`, *optional*):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
@@ -261,7 +261,7 @@ class GroundingDinoConfig(PretrainedConfig):
         self.disable_custom_kernels = disable_custom_kernels
         # Text backbone
         if isinstance(text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "bert"
+            text_config["model_type"] = text_config.get("model_type", "bert")
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             text_config = CONFIG_MAPPING["bert"]()
@@ -293,6 +293,17 @@ class GroundingDinoConfig(PretrainedConfig):
     @property
     def hidden_size(self) -> int:
         return self.d_model
+
+    @property
+    def sub_configs(self):
+        sub_configs = {}
+        backbone_config = getattr(self, "backbone_config", None)
+        text_config = getattr(self, "text_config", None)
+        if isinstance(backbone_config, PreTrainedConfig):
+            sub_configs["backbone_config"] = type(backbone_config)
+        if isinstance(text_config, PreTrainedConfig):
+            sub_configs["text_config"] = type(self.text_config)
+        return sub_configs
 
 
 __all__ = ["GroundingDinoConfig"]

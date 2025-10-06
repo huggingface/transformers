@@ -27,12 +27,12 @@ from transformers import (
 from transformers.testing_utils import (
     cleanup,
     require_torch,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
 from transformers.utils import (
     is_datasets_available,
+    is_peft_available,
     is_torch_available,
 )
 
@@ -40,7 +40,6 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
-    _config_zero_init,
     floats_tensor,
     ids_tensor,
 )
@@ -108,7 +107,6 @@ class GraniteSpeechForConditionalGenerationModelTester:
             "model_type": "blip_2_qformer",
             "num_attention_heads": 4,
             "num_hidden_layers": 2,
-            "position_embedding_type": "absolute",
             "use_qformer_text_input": False,
             "vocab_size": 30522,
         },
@@ -127,7 +125,7 @@ class GraniteSpeechForConditionalGenerationModelTester:
         self.audio_token_index = audio_token_index
         self.tie_word_embeddings = tie_word_embeddings
         self.initializer_range = initializer_range
-        self.has_lora_adapater = has_lora_adapter
+        self.has_lora_adapter = has_lora_adapter
         self.downsample_rate = downsample_rate
         self.window_size = window_size
         self.is_training = is_training
@@ -152,7 +150,7 @@ class GraniteSpeechForConditionalGenerationModelTester:
             audio_token_index=self.audio_token_index,
             tie_word_embeddings=self.tie_word_embeddings,
             initializer_range=self.initializer_range,
-            has_lora_adapter=self.has_lora_adapater,
+            has_lora_adapter=self.has_lora_adapter,
         )
 
     def prepare_config_and_inputs(self):
@@ -198,7 +196,7 @@ class GraniteSpeechForConditionalGenerationModelTester:
         input_features,
         attention_mask,
     ):
-        config.torch_dtype = torch.float16
+        config.dtype = torch.float16
         model = GraniteSpeechForConditionalGeneration(config=config)
         model.to(torch_device)
         model.eval()
@@ -220,7 +218,6 @@ class GraniteSpeechForConditionalGenerationModelTest(ModelTesterMixin, Generatio
 
     all_model_classes = (GraniteSpeechForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False
-    test_head_masking = False
     _is_composite = True
 
     def setUp(self):
@@ -252,23 +249,6 @@ class GraniteSpeechForConditionalGenerationModelTest(ModelTesterMixin, Generatio
             with torch.no_grad():
                 model(**inputs)
 
-    def test_initialization(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if name == "projector.query":
-                    continue
-                elif param.requires_grad:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
-
-    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         # overwrite because Granite Speech is audio+text model (not vision+text)
         if not self.has_attentions:
@@ -306,11 +286,16 @@ class GraniteSpeechForConditionalGenerationModelTest(ModelTesterMixin, Generatio
                     if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
                         raise ValueError("The eager model should not have SDPA attention layers")
 
+    @pytest.mark.generate
+    @slow
+    @unittest.skip(reason="Granite Speech doesn't support SDPA for all backbones")
+    def test_eager_matches_sdpa_generate(self):
+        pass
+
 
 class GraniteSpeechForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        # TODO - use the actual model path on HF hub after release.
-        self.model_path = "ibm-granite/granite-speech"
+        self.model_path = "ibm-granite/granite-speech-3.3-2b"
         self.processor = AutoProcessor.from_pretrained(self.model_path)
         self.prompt = self._get_prompt(self.processor.tokenizer)
 
@@ -333,12 +318,12 @@ class GraniteSpeechForConditionalGenerationIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
-        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+        speech_samples = ds.sort("id")[:num_samples]["audio"]
 
         return [x["array"] for x in speech_samples]
 
     @slow
-    @pytest.mark.skip("Public models not yet available")
+    @pytest.mark.skipif(not is_peft_available(), reason="Outputs diverge without lora")
     def test_small_model_integration_test_single(self):
         model = GraniteSpeechForConditionalGeneration.from_pretrained(self.model_path).to(torch_device)
         input_speech = self._load_datasamples(1)
@@ -364,9 +349,9 @@ class GraniteSpeechForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     @slow
-    @pytest.mark.skip("Public models not yet available")
+    @pytest.mark.skipif(not is_peft_available(), reason="Outputs diverge without lora")
     def test_small_model_integration_test_batch(self):
-        model = GraniteSpeechForConditionalGeneration.from_pretrained(self.model_path)
+        model = GraniteSpeechForConditionalGeneration.from_pretrained(self.model_path).to(torch_device)
         input_speech = self._load_datasamples(2)
         prompts = [self.prompt, self.prompt]
 

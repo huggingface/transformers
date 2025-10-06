@@ -134,6 +134,9 @@ class VisionTextDualEncoderMixin:
     def check_vision_text_output_attention(
         self, text_config, input_ids, attention_mask, vision_config, pixel_values=None, **kwargs
     ):
+        # The backbones don't support dynamic attention setting, so we manually change it. FIXME; when bert is refactored
+        text_config._attn_implementation = "eager"
+        vision_config._attn_implementation = "eager"
         vision_model, text_model = self.get_vision_text_model(vision_config, text_config)
         model = VisionTextDualEncoderModel(vision_model=vision_model, text_model=text_model)
         model.to(torch_device)
@@ -160,10 +163,6 @@ class VisionTextDualEncoderMixin:
             text_attentions[0].shape[-3:],
             (text_config.num_attention_heads, input_ids.shape[-1], input_ids.shape[-1]),
         )
-
-    def assert_almost_equals(self, a: np.ndarray, b: np.ndarray, tol: float):
-        diff = np.abs(a - b).max()
-        self.assertLessEqual(diff, tol, f"Difference between torch and flax is {diff} (>= {tol}).")
 
     def test_vision_text_dual_encoder_model(self):
         inputs_dict = self.prepare_config_and_inputs()
@@ -286,6 +285,9 @@ class DeiTRobertaModelTest(VisionTextDualEncoderMixin, unittest.TestCase):
     def check_vision_text_output_attention(
         self, text_config, input_ids, attention_mask, vision_config, pixel_values=None, **kwargs
     ):
+        # The backbones don't support dynamic attention setting, so we manually change it. FIXME; when bert is refactored
+        text_config._attn_implementation = "eager"
+        vision_config._attn_implementation = "eager"
         vision_model, text_model = self.get_vision_text_model(vision_config, text_config)
         model = VisionTextDualEncoderModel(vision_model=vision_model, text_model=text_model)
         model.to(torch_device)

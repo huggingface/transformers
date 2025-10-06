@@ -14,7 +14,7 @@
 # limitations under the License.
 """Tokenization classes for Qwen2."""
 
-from typing import Optional, Tuple
+from typing import Optional
 
 from ...tokenization_utils import AddedToken
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
@@ -129,7 +129,7 @@ class Qwen2TokenizerFast(PreTrainedTokenizerFast):
         )
 
     # Copied from transformers.models.gpt2.tokenization_gpt2_fast.GPT2TokenizerFast.save_vocabulary
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
 

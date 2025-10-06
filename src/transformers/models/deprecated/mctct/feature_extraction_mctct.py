@@ -16,7 +16,7 @@
 Feature extractor class for M-CTC-T
 """
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -104,7 +104,7 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
         self.n_fft = optimal_fft_length(self.sample_size)
         self.n_freqs = (self.n_fft // 2) + 1
 
-    def _extract_mfsc_features(self, one_waveform: np.array) -> np.ndarray:
+    def _extract_mfsc_features(self, one_waveform: np.ndarray) -> np.ndarray:
         """
         Extracts MFSC Features for one waveform vector (unbatched). Adapted from Flashlight's C++ MFSC code.
         """
@@ -153,14 +153,14 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
         return x
 
     def normalize(
-        self, input_features: List[np.ndarray], attention_mask: Optional[np.ndarray] = None
-    ) -> List[np.ndarray]:
+        self, input_features: list[np.ndarray], attention_mask: Optional[np.ndarray] = None
+    ) -> list[np.ndarray]:
         lengths = attention_mask.sum(-1) if attention_mask is not None else [x.shape[0] for x in input_features]
         return [self._normalize_one(x, n, self.padding_value) for x, n in zip(input_features, lengths)]
 
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
+        raw_speech: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
         padding: Union[bool, str, PaddingStrategy] = False,
         max_length: Optional[int] = None,
         truncation: bool = False,
@@ -175,7 +175,7 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
         log-mel spectrogram of the input audio, as implemented in the original Flashlight MFSC feature extraction code.
 
         Args:
-            raw_speech (`torch.Tensor`, `np.ndarray`, `List[float]`, `List[torch.Tensor]`, `List[np.ndarray]`, `List[List[float]]`):
+            raw_speech (`torch.Tensor`, `np.ndarray`, `list[float]`, `list[torch.Tensor]`, `list[np.ndarray]`, `list[list[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a tensor, a numpy array, a list
                 of float values, a list of tensors, a list of numpy arrays or a list of list of float values. Must be
                 mono channel audio, not stereo, i.e. single float per timestep.
@@ -207,7 +207,6 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
             return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
             sampling_rate (`int`, *optional*):

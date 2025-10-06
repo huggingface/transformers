@@ -18,7 +18,7 @@ import unittest
 import numpy as np
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -30,6 +30,9 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import Swin2SRImageProcessor
+
+    if is_torchvision_available():
+        from transformers import Swin2SRImageProcessorFast
     from transformers.image_transforms import get_image_size
 
 
@@ -45,7 +48,7 @@ class Swin2SRImageProcessingTester:
         do_rescale=True,
         rescale_factor=1 / 255,
         do_pad=True,
-        pad_size=8,
+        size_divisor=8,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -56,14 +59,14 @@ class Swin2SRImageProcessingTester:
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_pad = do_pad
-        self.pad_size = pad_size
+        self.size_divisor = size_divisor
 
     def prepare_image_processor_dict(self):
         return {
             "do_rescale": self.do_rescale,
             "rescale_factor": self.rescale_factor,
             "do_pad": self.do_pad,
-            "pad_size": self.pad_size,
+            "size_divisor": self.size_divisor,
         }
 
     def expected_output_image_shape(self, images):
@@ -76,8 +79,8 @@ class Swin2SRImageProcessingTester:
         else:
             input_height, input_width = img.shape[-2:]
 
-        pad_height = (input_height // self.pad_size + 1) * self.pad_size - input_height
-        pad_width = (input_width // self.pad_size + 1) * self.pad_size - input_width
+        pad_height = (input_height // self.size_divisor + 1) * self.size_divisor - input_height
+        pad_width = (input_width // self.size_divisor + 1) * self.size_divisor - input_width
 
         return self.num_channels, input_height + pad_height, input_width + pad_width
 
@@ -97,6 +100,7 @@ class Swin2SRImageProcessingTester:
 @require_vision
 class Swin2SRImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = Swin2SRImageProcessor if is_vision_available() else None
+    fast_image_processing_class = Swin2SRImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
@@ -107,15 +111,17 @@ class Swin2SRImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        image_processor = self.image_processing_class(**self.image_processor_dict)
-        self.assertTrue(hasattr(image_processor, "do_rescale"))
-        self.assertTrue(hasattr(image_processor, "rescale_factor"))
-        self.assertTrue(hasattr(image_processor, "do_pad"))
-        self.assertTrue(hasattr(image_processor, "pad_size"))
+        for image_processing_class in self.image_processor_list:
+            image_processing = image_processing_class(**self.image_processor_dict)
+            self.assertTrue(hasattr(image_processing, "do_rescale"))
+            self.assertTrue(hasattr(image_processing, "rescale_factor"))
+            self.assertTrue(hasattr(image_processing, "do_pad"))
+            self.assertTrue(hasattr(image_processing, "size_divisor"))
+            self.assertTrue(hasattr(image_processing, "pad_size"))  # deprecated but should be available
 
     def calculate_expected_size(self, image):
         old_height, old_width = get_image_size(image)
-        size = self.image_processor_tester.pad_size
+        size = self.image_processor_tester.size_divisor
 
         pad_height = (old_height // size + 1) * size - old_height
         pad_width = (old_width // size + 1) * size - old_width
@@ -181,3 +187,14 @@ class Swin2SRImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
         expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
         self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
+
+    def test_slow_fast_equivalence_batched(self):
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
+
+        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
+        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+
+        encoded_slow = image_processor_slow(image_inputs, return_tensors="pt")
+        encoded_fast = image_processor_fast(image_inputs, return_tensors="pt")
+
+        self._assert_slow_fast_tensors_equivalence(encoded_slow.pixel_values, encoded_fast.pixel_values)

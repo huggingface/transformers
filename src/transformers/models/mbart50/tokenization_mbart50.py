@@ -15,7 +15,7 @@
 
 import os
 from shutil import copyfile
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 
 import sentencepiece as spm
 
@@ -97,8 +97,8 @@ class MBart50Tokenizer(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
 
-    prefix_tokens: List[int] = []
-    suffix_tokens: List[int] = []
+    prefix_tokens: list[int] = []
+    suffix_tokens: list[int] = []
 
     def __init__(
         self,
@@ -111,7 +111,7 @@ class MBart50Tokenizer(PreTrainedTokenizer):
         unk_token="<unk>",
         pad_token="<pad>",
         mask_token="<mask>",
-        sp_model_kwargs: Optional[Dict[str, Any]] = None,
+        sp_model_kwargs: Optional[dict[str, Any]] = None,
         **kwargs,
     ) -> None:
         # Mask token behave like a normal word, i.e. include the space before it
@@ -181,12 +181,12 @@ class MBart50Tokenizer(PreTrainedTokenizer):
         self._src_lang = new_src_lang
         self.set_src_lang_special_tokens(self._src_lang)
 
-    def __getstate__(self) -> Dict:
+    def __getstate__(self) -> dict:
         state = self.__dict__.copy()
         state["sp_model"] = None
         return state
 
-    def __setstate__(self, d: Dict) -> None:
+    def __setstate__(self, d: dict) -> None:
         self.__dict__ = d
 
         # for backward compatibility
@@ -196,12 +196,12 @@ class MBart50Tokenizer(PreTrainedTokenizer):
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(self.vocab_file)
 
-    def get_vocab(self) -> Dict:
+    def get_vocab(self) -> dict:
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
         vocab.update(self.added_tokens_encoder)
         return vocab
 
-    def _tokenize(self, text: str) -> List[str]:
+    def _tokenize(self, text: str) -> list[str]:
         return self.sp_model.encode(text, out_type=str)
 
     def _convert_token_to_id(self, token: str) -> int:
@@ -239,7 +239,7 @@ class MBart50Tokenizer(PreTrainedTokenizer):
         out_string += self.sp_model.decode(current_sub_tokens)
         return out_string.strip()
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
@@ -257,22 +257,22 @@ class MBart50Tokenizer(PreTrainedTokenizer):
         return (out_vocab_file,)
 
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+    ) -> list[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer `prepare_for_model` method.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
             already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
-            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+            `list[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
 
         if already_has_special_tokens:
@@ -287,8 +287,8 @@ class MBart50Tokenizer(PreTrainedTokenizer):
         return prefix_ones + ([0] * len(token_ids_0)) + ([0] * len(token_ids_1)) + suffix_ones
 
     def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. An MBART-50 sequence has the following format, where `X` represents the sequence:
@@ -300,13 +300,13 @@ class MBart50Tokenizer(PreTrainedTokenizer):
         separator.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs to which the special tokens will be added.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+            `list[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
         if token_ids_1 is None:
             return self.prefix_tokens + token_ids_0 + self.suffix_tokens
@@ -327,9 +327,9 @@ class MBart50Tokenizer(PreTrainedTokenizer):
 
     def prepare_seq2seq_batch(
         self,
-        src_texts: List[str],
+        src_texts: list[str],
         src_lang: str = "en_XX",
-        tgt_texts: Optional[List[str]] = None,
+        tgt_texts: Optional[list[str]] = None,
         tgt_lang: str = "ro_RO",
         **kwargs,
     ) -> BatchEncoding:

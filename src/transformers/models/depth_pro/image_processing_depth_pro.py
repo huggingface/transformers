@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for DepthPro."""
 
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
 
@@ -35,21 +35,18 @@ from ...image_utils import (
     infer_channel_dimension_format,
     is_scaled_image,
     is_torch_available,
-    make_list_of_images,
-    pil_torch_interpolation_mapping,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
 )
-from ...utils import (
-    TensorType,
-    filter_out_non_signature_kwargs,
-    logging,
-    requires_backends,
-)
+from ...utils import TensorType, filter_out_non_signature_kwargs, is_torchvision_available, logging, requires_backends
 
 
 if is_torch_available():
     import torch
+
+if is_torchvision_available():
+    from ...image_utils import pil_torch_interpolation_mapping
 
 
 logger = logging.get_logger(__name__)
@@ -79,10 +76,10 @@ class DepthProImageProcessor(BaseImageProcessor):
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
+        image_mean (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
+        image_std (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
     """
@@ -92,13 +89,13 @@ class DepthProImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -116,7 +113,7 @@ class DepthProImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
+        size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -128,7 +125,7 @@ class DepthProImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
                 `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BILINEAR`.
@@ -173,13 +170,13 @@ class DepthProImageProcessor(BaseImageProcessor):
     def _validate_input_arguments(
         self,
         do_resize: bool,
-        size: Dict[str, int],
+        size: dict[str, int],
         resample: PILImageResampling,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Union[float, List[float]],
-        image_std: Union[float, List[float]],
+        image_mean: Union[float, list[float]],
+        image_std: Union[float, list[float]],
         data_format: Union[str, ChannelDimension],
     ):
         if do_resize and None in (size, resample):
@@ -196,13 +193,13 @@ class DepthProImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: Optional[PILImageResampling] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -216,7 +213,7 @@ class DepthProImageProcessor(BaseImageProcessor):
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`dict[str, int]`, *optional*, defaults to `self.size`):
                 Dictionary in the format `{"height": h, "width": w}` specifying the size of the output image after
                 resizing.
             resample (`PILImageResampling` filter, *optional*, defaults to `self.resample`):
@@ -228,17 +225,15 @@ class DepthProImageProcessor(BaseImageProcessor):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
                 Image mean to use if `do_normalize` is set to `True`.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation to use if `do_normalize` is set to `True`.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
-                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                 - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                 - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -261,13 +256,10 @@ class DepthProImageProcessor(BaseImageProcessor):
 
         size = size if size is not None else self.size
 
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
         self._validate_input_arguments(
             do_resize=do_resize,
             size=size,
@@ -320,8 +312,8 @@ class DepthProImageProcessor(BaseImageProcessor):
     def post_process_depth_estimation(
         self,
         outputs: "DepthProDepthEstimatorOutput",
-        target_sizes: Optional[Union[TensorType, List[Tuple[int, int]], None]] = None,
-    ) -> Dict[str, List[TensorType]]:
+        target_sizes: Optional[Union[TensorType, list[tuple[int, int]], None]] = None,
+    ) -> list[dict[str, TensorType]]:
         """
         Post-processes the raw depth predictions from the model to generate
         final depth predictions which is caliberated using the field of view if provided
@@ -330,13 +322,13 @@ class DepthProImageProcessor(BaseImageProcessor):
         Args:
             outputs ([`DepthProDepthEstimatorOutput`]):
                 Raw outputs of the model.
-            target_sizes (`Optional[Union[TensorType, List[Tuple[int, int]], None]]`, *optional*, defaults to `None`):
+            target_sizes (`Optional[Union[TensorType, list[tuple[int, int]], None]]`, *optional*, defaults to `None`):
                 Target sizes to resize the depth predictions. Can be a tensor of shape `(batch_size, 2)`
                 or a list of tuples `(height, width)` for each image in the batch. If `None`, no resizing
                 is performed.
 
         Returns:
-            `List[Dict[str, TensorType]]`: A list of dictionaries of tensors representing the processed depth
+            `list[dict[str, TensorType]]`: A list of dictionaries of tensors representing the processed depth
             predictions, and field of view (degrees) and focal length (pixels) if `field_of_view` is given in `outputs`.
 
         Raises:

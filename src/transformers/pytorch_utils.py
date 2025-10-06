@@ -21,19 +21,26 @@ import torch
 from safetensors.torch import storage_ptr, storage_size
 from torch import nn
 
-from .utils import is_torch_greater_or_equal, is_torch_xla_available, is_torchdynamo_compiling, logging
+from .utils import (
+    is_torch_greater_or_equal,
+    is_torch_xla_available,
+    is_torch_xpu_available,
+    is_torchdynamo_compiling,
+    logging,
+)
 
 
 ALL_LAYERNORM_LAYERS = [nn.LayerNorm]
 
 logger = logging.get_logger(__name__)
 
+is_torch_greater_or_equal_than_2_8 = is_torch_greater_or_equal("2.8", accept_dev=True)
 is_torch_greater_or_equal_than_2_6 = is_torch_greater_or_equal("2.6", accept_dev=True)
 is_torch_greater_or_equal_than_2_4 = is_torch_greater_or_equal("2.4", accept_dev=True)
 is_torch_greater_or_equal_than_2_3 = is_torch_greater_or_equal("2.3", accept_dev=True)
-is_torch_greater_or_equal_than_2_2 = is_torch_greater_or_equal("2.2", accept_dev=True)
 
 # For backwards compatibility (e.g. some remote codes on Hub using those variables).
+is_torch_greater_or_equal_than_2_2 = is_torch_greater_or_equal("2.2", accept_dev=True)
 is_torch_greater_or_equal_than_2_1 = is_torch_greater_or_equal("2.1", accept_dev=True)
 is_torch_greater_or_equal_than_2_0 = is_torch_greater_or_equal("2.0", accept_dev=True)
 is_torch_greater_or_equal_than_1_13 = is_torch_greater_or_equal("1.13", accept_dev=True)
@@ -42,11 +49,8 @@ is_torch_greater_or_equal_than_1_12 = is_torch_greater_or_equal("1.12", accept_d
 # Cache this result has it's a C FFI call which can be pretty time-consuming
 _torch_distributed_available = torch.distributed.is_available()
 
-if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
-    pass
 
-
-def softmax_backward_data(parent, grad_output, output, dim, self):
+def softmax_backward_data(parent, grad_output, output):
     """
     A function that calls the internal `_softmax_backward_data` PyTorch method and that adjusts the arguments according
     to the torch version detected.
@@ -54,7 +58,7 @@ def softmax_backward_data(parent, grad_output, output, dim, self):
 
     from torch import _softmax_backward_data
 
-    return _softmax_backward_data(grad_output, output, parent.dim, self.dtype)
+    return _softmax_backward_data(grad_output, output, parent.dim, output.dtype)
 
 
 def prune_linear_layer(layer: nn.Linear, index: torch.LongTensor, dim: int = 0) -> nn.Linear:
@@ -195,7 +199,7 @@ def apply_chunking_to_forward(
             The chunk size of a chunked tensor: `num_chunks = len(input_tensors[0]) / chunk_size`.
         chunk_dim (`int`):
             The dimension over which the `input_tensors` should be chunked.
-        input_tensors (`Tuple[torch.Tensor]`):
+        input_tensors (`tuple[torch.Tensor]`):
             The input tensors of `forward_fn` which will be chunked
 
     Returns:
@@ -260,13 +264,13 @@ def find_pruneable_heads_and_indices(
     Finds the heads and their indices taking `already_pruned_heads` into account.
 
     Args:
-        heads (`List[int]`): List of the indices of heads to prune.
+        heads (`list[int]`): List of the indices of heads to prune.
         n_heads (`int`): The number of heads in the model.
         head_size (`int`): The size of each head.
         already_pruned_heads (`Set[int]`): A set of already pruned heads.
 
     Returns:
-        `Tuple[Set[int], torch.LongTensor]`: A tuple with the indices of heads to prune taking `already_pruned_heads`
+        `tuple[Set[int], torch.LongTensor]`: A tuple with the indices of heads to prune taking `already_pruned_heads`
         into account and the indices of rows/columns to keep in the layer weight.
     """
     mask = torch.ones(n_heads, head_size)
@@ -296,6 +300,13 @@ def id_tensor_storage(tensor: torch.Tensor) -> tuple[torch.device, int, int]:
     guaranteed to be unique and constant for this tensor's storage during its lifetime. Two tensor storages with
     non-overlapping lifetimes may have the same id.
     """
+    if _torch_distributed_available and is_torch_greater_or_equal("2.5"):
+        from torch.distributed.tensor import DTensor
+
+        if isinstance(tensor, DTensor):
+            local_tensor = tensor.to_local()
+            return tensor.device, local_tensor.storage().data_ptr(), tensor.nbytes
+
     if tensor.device.type == "xla" and is_torch_xla_available():
         # NOTE: xla tensors dont have storage
         # use some other unique id to distinguish.
@@ -334,6 +345,7 @@ def isin_mps_friendly(elements: torch.Tensor, test_elements: torch.Tensor | int)
         return torch.isin(elements, test_elements)
 
 
+@wraps(lru_cache)
 def compile_compatible_method_lru_cache(*lru_args, **lru_kwargs):
     """
     LRU cache decorator from standard functools library, but with a workaround to disable
@@ -341,20 +353,28 @@ def compile_compatible_method_lru_cache(*lru_args, **lru_kwargs):
     """
 
     def decorator(func):
+        func_with_cache = lru_cache(*lru_args, **lru_kwargs)(func)
+
         @wraps(func)
-        def wrapper(self, *args, **kwargs):
-            if not is_torchdynamo_compiling():
-                # Cache the function only if the model is not being compiled
-                # check if the function is already cached, otherwise create it
-                if not hasattr(self, f"_cached_{func.__name__}"):
-                    self.__setattr__(
-                        f"_cached_{func.__name__}", lru_cache(*lru_args, **lru_kwargs)(func.__get__(self))
-                    )
-                return self.__getattribute__(f"_cached_{func.__name__}")(*args, **kwargs)
+        def wrapper(*args, **kwargs):
+            if is_torchdynamo_compiling():
+                return func(*args, **kwargs)
             else:
-                # Otherwise, just call the original function
-                return func(self, *args, **kwargs)
+                return func_with_cache(*args, **kwargs)
 
         return wrapper
 
     return decorator
+
+
+def infer_device():
+    """
+    Infers available device.
+    """
+    torch_device = "cpu"
+    if torch.cuda.is_available():
+        torch_device = "cuda"
+    elif is_torch_xpu_available():
+        torch_device = "xpu"
+
+    return torch_device

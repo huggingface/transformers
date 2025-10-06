@@ -16,14 +16,14 @@
 
 from typing import Callable, Optional, Union
 
-from ....configuration_utils import PretrainedConfig
+from ....configuration_utils import PreTrainedConfig
 from ....utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class XLMProphetNetConfig(PretrainedConfig):
+class XLMProphetNetConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`XLMProphetNetModel`]. It is used to instantiate a
     XLMProphetNet model according to the specified arguments, defining the model architecture. Instantiating a
@@ -31,8 +31,8 @@ class XLMProphetNetConfig(PretrainedConfig):
     [microsoft/xprophetnet-large-wiki100-cased](https://huggingface.co/microsoft/xprophetnet-large-wiki100-cased)
     architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         activation_dropout (`float`, *optional*, defaults to 0.1):
@@ -81,10 +81,10 @@ class XLMProphetNetConfig(PretrainedConfig):
             token.
         num_buckets (`int`, *optional*, defaults to 32)
             The number of buckets to use for each attention layer. This is for relative position calculation. See the
-            [T5 paper](see https://arxiv.org/abs/1910.10683) for more details.
+            [T5 paper](see https://huggingface.co/papers/1910.10683) for more details.
         relative_max_distance (`int`, *optional*, defaults to 128)
             Relative distances greater than this number will be put into the last same bucket. This is for relative
-            position calculation. See the [T5 paper](see https://arxiv.org/abs/1910.10683) for more details.
+            position calculation. See the [T5 paper](see https://huggingface.co/papers/1910.10683) for more details.
         disable_ngram_loss (`bool`, *optional*, defaults to `False`):
             Whether be trained predicting only the next first token.
         eps (`float`, *optional*, defaults to 0.0):

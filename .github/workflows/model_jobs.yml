@@ -12,15 +12,21 @@ on:
       slice_id:
         required: true
         type: number
-      runner:
-        required: true
-        type: string
       docker:
         required: true
+        type: string
+      commit_sha:
+        required: false
         type: string
       report_name_prefix:
         required: false
         default: run_models_gpu
+        type: string
+      runner_type:
+        required: false
+        type: string
+      report_repo_id:
+        required: false
         type: string
 
 env:
@@ -49,6 +55,8 @@ jobs:
     container:
       image: ${{ inputs.docker }}
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    outputs:
+      machine_type: ${{ steps.set_machine_type.outputs.machine_type }}
     steps:
       - name: Echo input and matrix info
         shell: bash
@@ -70,7 +78,7 @@ jobs:
 
       - name: Update clone
         working-directory: /transformers
-        run: git fetch && git checkout ${{ github.sha }}
+        run: git fetch && git checkout ${{ inputs.commit_sha || github.sha }}
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
@@ -102,14 +110,15 @@ jobs:
         run: pip freeze
 
       - name: Set `machine_type` for report and artifact names
+        id: set_machine_type
         working-directory: /transformers
         shell: bash
         run: |
           echo "${{ inputs.machine_type }}"
 
-          if [ "${{ inputs.machine_type }}" = "aws-g4dn-2xlarge-cache" ]; then
+          if [ "${{ inputs.machine_type }}" = "aws-g5-4xlarge-cache" ]; then
             machine_type=single-gpu
-          elif [ "${{ inputs.machine_type }}" = "aws-g4dn-12xlarge-cache" ]; then
+          elif [ "${{ inputs.machine_type }}" = "aws-g5-12xlarge-cache" ]; then
             machine_type=multi-gpu
           else
             machine_type=${{ inputs.machine_type }}
@@ -117,26 +126,58 @@ jobs:
 
           echo "$machine_type"
           echo "machine_type=$machine_type" >> $GITHUB_ENV
+          echo "machine_type=$machine_type" >> $GITHUB_OUTPUT
+
+      - name: Create report directory if it doesn't exist
+        shell: bash
+        run: |
+          mkdir -p /transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports
+          echo "dummy" > /transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports/dummy.txt
+          ls -la /transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports
 
       - name: Run all tests on GPU
         working-directory: /transformers
-        run: python3 -m pytest -rsfE -v --make-reports=${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ matrix.folders }}_test_reports tests/${{ matrix.folders }}
+        run: |
+          script -q -c "PATCH_TESTING_METHODS_TO_COLLECT_OUTPUTS=yes _PATCHED_TESTING_METHODS_OUTPUT_DIR=/transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports python3 -m pytest -rsfE -v --make-reports=${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports tests/${{ matrix.folders }}" test_outputs.txt
+          ls -la
+          # Extract the exit code from the output file
+          EXIT_CODE=$(tail -1 test_outputs.txt | grep -o 'COMMAND_EXIT_CODE="[0-9]*"' | cut -d'"' -f2)
+          exit ${EXIT_CODE:-1}
 
       - name: Failure short reports
         if: ${{ failure() }}
+        # This step is only to show information on Github Actions log.
+        # Always mark this step as successful, even if the report directory or the file `failures_short.txt` in it doesn't exist
         continue-on-error: true
-        run: cat /transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ matrix.folders }}_test_reports/failures_short.txt
+        run: cat /transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports/failures_short.txt
 
-      - name: Run test
-        shell: bash
+      - name: Captured information
+        if: ${{ failure() }}
+        continue-on-error: true
         run: |
-          mkdir -p /transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ matrix.folders }}_test_reports
-          echo "hello" > /transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ matrix.folders }}_test_reports/hello.txt
-          echo "${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ matrix.folders }}_test_reports"
+          cat /transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports/captured_info.txt
+
+      - name: Copy test_outputs.txt
+        if: ${{ always() }}
+        continue-on-error: true
+        run: |
+          cp /transformers/test_outputs.txt /transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports
 
       - name: "Test suite reports artifacts: ${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports"
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports
-          path: /transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ matrix.folders }}_test_reports
+          path: /transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports
+
+  collated_reports:
+    name: Collated Reports
+    if: ${{ always() }}
+    needs: run_models_gpu
+    uses: huggingface/transformers/.github/workflows/collated-reports.yml@main
+    with:
+      job: run_models_gpu
+      report_repo_id: ${{ inputs.report_repo_id }}
+      gpu_name: ${{ inputs.runner_type }}
+      machine_type: ${{ needs.run_models_gpu.outputs.machine_type }}
+    secrets: inherit

@@ -14,14 +14,14 @@
 # limitations under the License.
 """Bamba model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class BambaConfig(PretrainedConfig):
+class BambaConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BambaModel`]. It is used to instantiate a
     BambaModel model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -30,8 +30,8 @@ class BambaConfig(PretrainedConfig):
     The BambaModel is a hybrid [mamba2](https://github.com/state-spaces/mamba) architecture with SwiGLU.
     The checkpoints are  jointly trained by IBM, Princeton, and UIUC.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 128000):
@@ -53,8 +53,8 @@ class BambaConfig(PretrainedConfig):
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `8`.
+            by meanpooling all the original heads within that group. For more details, check out [this
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `8`.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -100,6 +100,8 @@ class BambaConfig(PretrainedConfig):
             Flag indicating whether or not to use bias in the convolution layer of the mamba mixer block.
         mamba_proj_bias (`bool`, *optional*, defaults to `False`):
             Flag indicating whether or not to use bias in the input and output projections (["in_proj", "out_proj"]) of the mamba mixer block
+        z_loss_coefficient (`float`, *optional*, defaults to 0.0):
+            Coefficient for auxiliary z-loss used to control logit growth during training
 
     """
 
@@ -135,6 +137,7 @@ class BambaConfig(PretrainedConfig):
         mamba_chunk_size=256,
         mamba_conv_bias=True,
         mamba_proj_bias=False,
+        z_loss_coefficient=0.0,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -186,6 +189,7 @@ class BambaConfig(PretrainedConfig):
         self.mamba_chunk_size = mamba_chunk_size
         self.mamba_conv_bias = mamba_conv_bias
         self.mamba_proj_bias = mamba_proj_bias
+        self.z_loss_coefficient = z_loss_coefficient
 
         super().__init__(
             pad_token_id=pad_token_id,

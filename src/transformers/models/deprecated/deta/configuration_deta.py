@@ -14,7 +14,7 @@
 # limitations under the License.
 """DETA model configuration"""
 
-from ....configuration_utils import PretrainedConfig
+from ....configuration_utils import PreTrainedConfig
 from ....utils import logging
 from ...auto import CONFIG_MAPPING
 
@@ -22,18 +22,18 @@ from ...auto import CONFIG_MAPPING
 logger = logging.get_logger(__name__)
 
 
-class DetaConfig(PretrainedConfig):
+class DetaConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DetaModel`]. It is used to instantiate a DETA
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the DETA
     [SenseTime/deformable-detr](https://huggingface.co/SenseTime/deformable-detr) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        backbone_config (`PretrainedConfig` or `dict`, *optional*, defaults to `ResNetConfig()`):
+        backbone_config (`PreTrainedConfig` or `dict`, *optional*, defaults to `ResNetConfig()`):
             The configuration of the backbone model.
         backbone (`str`, *optional*):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
@@ -78,7 +78,7 @@ class DetaConfig(PretrainedConfig):
         init_xavier_std (`float`, *optional*, defaults to 1):
             The scaling factor used for the Xavier initialization gain in the HM Attention map module.
         encoder_layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
             for more details.
         auxiliary_loss (`bool`, *optional*, defaults to `False`):
             Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
@@ -265,6 +265,14 @@ class DetaConfig(PretrainedConfig):
     @property
     def hidden_size(self) -> int:
         return self.d_model
+
+    @property
+    def sub_configs(self):
+        return (
+            {"backbone_config": type(self.backbone_config)}
+            if getattr(self, "backbone_config", None) is not None
+            else {}
+        )
 
 
 __all__ = ["DetaConfig"]

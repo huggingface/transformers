@@ -9,13 +9,6 @@ class Cache(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class CacheConfig(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class DynamicCache(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -44,13 +37,6 @@ class HybridCache(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class MambaCache(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class OffloadedCache(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -72,21 +58,7 @@ class QuantizedCache(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class QuantizedCacheConfig(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class QuantoQuantizedCache(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class SinkCache(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -198,13 +170,6 @@ class BeamScorer(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class BeamSearchScorer(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class ClassifierFreeGuidanceLogitsProcessor(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -297,13 +262,6 @@ class ForcedEOSTokenLogitsProcessor(metaclass=DummyObject):
 
 
 class GenerationMixin(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class HammingDiversityLogitsProcessor(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -538,12 +496,22 @@ def convert_and_export_with_cache(*args, **kwargs):
     requires_backends(convert_and_export_with_cache, ["torch"])
 
 
-def model_addition_debugger(*args, **kwargs):
-    requires_backends(model_addition_debugger, ["torch"])
+class AttentionMaskInterface(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 
 def model_addition_debugger_context(*args, **kwargs):
     requires_backends(model_addition_debugger_context, ["torch"])
+
+
+class GradientCheckpointingLayer(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 
 ROPE_INIT_FUNCTIONS = None

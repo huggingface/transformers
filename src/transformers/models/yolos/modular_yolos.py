@@ -1,30 +1,27 @@
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
+
+import torch
 
 from transformers.models.detr.image_processing_detr_fast import DetrImageProcessorFast
 
 from ...image_transforms import center_to_corners_format
 from ...utils import (
     TensorType,
-    is_torch_available,
     logging,
 )
-
-
-if is_torch_available():
-    import torch
 
 
 logger = logging.get_logger(__name__)
 
 
 def get_size_with_aspect_ratio(
-    image_size: Tuple[int, int], size: int, max_size: Optional[int] = None, mod_size: int = 16
-) -> Tuple[int, int]:
+    image_size: tuple[int, int], size: int, max_size: Optional[int] = None, mod_size: int = 16
+) -> tuple[int, int]:
     """
     Computes the output image size given the input image size and the desired output size with multiple of divisible_size.
 
     Args:
-        image_size (`Tuple[int, int]`):
+        image_size (`tuple[int, int]`):
             The input image size.
         size (`int`):
             The desired output size.
@@ -80,7 +77,7 @@ class YolosImageProcessorFast(DetrImageProcessorFast):
                 original image size (before any data augmentation). For visualization, this should be the image size
                 after data augment, but before padding.
         Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
+            `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
         logger.warning_once(
@@ -113,7 +110,7 @@ class YolosImageProcessorFast(DetrImageProcessorFast):
         return results
 
     def post_process_object_detection(
-        self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, List[Tuple]] = None, top_k: int = 100
+        self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, list[tuple]] = None, top_k: int = 100
     ):
         """
         Converts the raw output of [`YolosForObjectDetection`] into final bounding boxes in (top_left_x,
@@ -124,14 +121,14 @@ class YolosImageProcessorFast(DetrImageProcessorFast):
                 Raw outputs of the model.
             threshold (`float`, *optional*):
                 Score threshold to keep object detection predictions.
-            target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
-                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
+            target_sizes (`torch.Tensor` or `list[tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
                 (height, width) of each image in the batch. If left to None, predictions will not be resized.
             top_k (`int`, *optional*, defaults to 100):
                 Keep only top k bounding boxes before filtering by thresholding.
 
         Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
+            `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
@@ -154,7 +151,7 @@ class YolosImageProcessorFast(DetrImageProcessorFast):
 
         # and from relative [0, 1] to absolute [0, height] coordinates
         if target_sizes is not None:
-            if isinstance(target_sizes, List):
+            if isinstance(target_sizes, list):
                 img_h = torch.Tensor([i[0] for i in target_sizes])
                 img_w = torch.Tensor([i[1] for i in target_sizes])
             else:
@@ -171,22 +168,22 @@ class YolosImageProcessorFast(DetrImageProcessorFast):
 
         return results
 
-    def post_process_segmentation():
+    def post_process_segmentation(self):
         raise NotImplementedError("Segmentation post-processing is not implemented for Deformable DETR yet.")
 
-    def post_process_instance():
+    def post_process_instance(self):
         raise NotImplementedError("Instance post-processing is not implemented for Deformable DETR yet.")
 
-    def post_process_panoptic():
+    def post_process_panoptic(self):
         raise NotImplementedError("Panoptic post-processing is not implemented for Deformable DETR yet.")
 
-    def post_process_instance_segmentation():
+    def post_process_instance_segmentation(self):
         raise NotImplementedError("Segmentation post-processing is not implemented for Deformable DETR yet.")
 
-    def post_process_semantic_segmentation():
+    def post_process_semantic_segmentation(self):
         raise NotImplementedError("Semantic segmentation post-processing is not implemented for Deformable DETR yet.")
 
-    def post_process_panoptic_segmentation():
+    def post_process_panoptic_segmentation(self):
         raise NotImplementedError("Panoptic segmentation post-processing is not implemented for Deformable DETR yet.")
 
 

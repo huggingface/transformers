@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-08-22 and added to Hugging Face Transformers on 2024-09-25.*
 
 # Idefics3
 
@@ -44,6 +45,7 @@ If `do_resize` is set to `True`, the model resizes images so that the longest ed
 The default resizing behavior can be customized by passing a dictionary to the `size` parameter. For example, `{"longest_edge": 4 * 364}` is the default, but you can change it to a different value if needed.
 
 Here’s how to control resizing and set a custom size:
+
 ```python
 image_processor = Idefics3ImageProcessor(do_resize=True, size={"longest_edge": 2 * 364}, max_image_size=364)
 ```
@@ -51,7 +53,6 @@ image_processor = Idefics3ImageProcessor(do_resize=True, size={"longest_edge": 2
 Additionally, the `max_image_size` parameter, which controls the size of each square patch the image is decomposed into, is set to 364 by default but can be adjusted as needed. After resizing (if applicable), the image processor decomposes the images into square patches based on the `max_image_size` parameter.
 
 This model was contributed by [amyeroberts](https://huggingface.co/amyeroberts) and [andimarafioti](https://huggingface.co/andito).
-
 
 ## Idefics3Config
 
@@ -75,11 +76,13 @@ This model was contributed by [amyeroberts](https://huggingface.co/amyeroberts) 
 [[autodoc]] Idefics3ForConditionalGeneration
     - forward
 
-
 ## Idefics3ImageProcessor
 [[autodoc]] Idefics3ImageProcessor
     - preprocess
 
+## Idefics3ImageProcessorFast
+[[autodoc]] Idefics3ImageProcessorFast
+    - preprocess
 
 ## Idefics3Processor
 [[autodoc]] Idefics3Processor

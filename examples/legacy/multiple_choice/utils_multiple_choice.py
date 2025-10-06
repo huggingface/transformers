@@ -26,7 +26,7 @@ from typing import Optional
 import tqdm
 from filelock import FileLock
 
-from transformers import PreTrainedTokenizer, is_tf_available, is_torch_available
+from transformers import PreTrainedTokenizer, is_torch_available
 
 
 logger = logging.getLogger(__name__)
@@ -78,11 +78,6 @@ if is_torch_available():
     from torch.utils.data import Dataset
 
     class MultipleChoiceDataset(Dataset):
-        """
-        This will be superseded by a framework-agnostic approach
-        soon.
-        """
-
         features: list[InputFeatures]
 
         def __init__(
@@ -131,94 +126,6 @@ if is_torch_available():
                     )
                     logger.info("Saving features into cached file %s", cached_features_file)
                     torch.save(self.features, cached_features_file)
-
-        def __len__(self):
-            return len(self.features)
-
-        def __getitem__(self, i) -> InputFeatures:
-            return self.features[i]
-
-
-if is_tf_available():
-    import tensorflow as tf
-
-    class TFMultipleChoiceDataset:
-        """
-        This will be superseded by a framework-agnostic approach
-        soon.
-        """
-
-        features: list[InputFeatures]
-
-        def __init__(
-            self,
-            data_dir: str,
-            tokenizer: PreTrainedTokenizer,
-            task: str,
-            max_seq_length: Optional[int] = 128,
-            overwrite_cache=False,
-            mode: Split = Split.train,
-        ):
-            processor = processors[task]()
-
-            logger.info(f"Creating features from dataset file at {data_dir}")
-            label_list = processor.get_labels()
-            if mode == Split.dev:
-                examples = processor.get_dev_examples(data_dir)
-            elif mode == Split.test:
-                examples = processor.get_test_examples(data_dir)
-            else:
-                examples = processor.get_train_examples(data_dir)
-            logger.info("Training examples: %s", len(examples))
-
-            self.features = convert_examples_to_features(
-                examples,
-                label_list,
-                max_seq_length,
-                tokenizer,
-            )
-
-            def gen():
-                for ex_index, ex in tqdm.tqdm(enumerate(self.features), desc="convert examples to features"):
-                    if ex_index % 10000 == 0:
-                        logger.info("Writing example %d of %d" % (ex_index, len(examples)))
-
-                    yield (
-                        {
-                            "example_id": 0,
-                            "input_ids": ex.input_ids,
-                            "attention_mask": ex.attention_mask,
-                            "token_type_ids": ex.token_type_ids,
-                        },
-                        ex.label,
-                    )
-
-            self.dataset = tf.data.Dataset.from_generator(
-                gen,
-                (
-                    {
-                        "example_id": tf.int32,
-                        "input_ids": tf.int32,
-                        "attention_mask": tf.int32,
-                        "token_type_ids": tf.int32,
-                    },
-                    tf.int64,
-                ),
-                (
-                    {
-                        "example_id": tf.TensorShape([]),
-                        "input_ids": tf.TensorShape([None, None]),
-                        "attention_mask": tf.TensorShape([None, None]),
-                        "token_type_ids": tf.TensorShape([None, None]),
-                    },
-                    tf.TensorShape([]),
-                ),
-            )
-
-        def get_dataset(self):
-            self.dataset = self.dataset.apply(tf.data.experimental.assert_cardinality(len(self.features)))
-
-            return self.dataset
 
         def __len__(self):
             return len(self.features)
@@ -539,7 +446,7 @@ def convert_examples_to_features(
             if "num_truncated_tokens" in inputs and inputs["num_truncated_tokens"] > 0:
                 logger.info(
                     "Attention! you are cropping tokens (swag task is ok). "
-                    "If you are training ARC and RACE and you are poping question + options, "
+                    "If you are training ARC and RACE and you are popping question + options, "
                     "you need to try to use a bigger max seq length!"
                 )
 

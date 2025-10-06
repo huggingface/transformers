@@ -14,17 +14,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 
 
-class HeliumConfig(PretrainedConfig):
+class HeliumConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`HeliumModel`]. It is used to instantiate an Helium
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Helium 2b model.
     e.g. [kyutai/helium-2b](https://huggingface.co/kyutai/helium-2b)
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+
     Args:
         vocab_size (`int`, *optional*, defaults to 48000):
             Vocabulary size of the Helium model. Defines the number of different tokens that can be represented by the
@@ -42,8 +43,8 @@ class HeliumConfig(PretrainedConfig):
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
+            by meanpooling all the original heads within that group. For more details, check out [this
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
             `num_attention_heads`.
         head_dim (`int`, *optional*, defaults to 128):
             The attention head dimension.
@@ -74,6 +75,7 @@ class HeliumConfig(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         mlp_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
+
     ```python
     >>> from transformers import HeliumModel, HeliumConfig
     >>> # Initializing a Helium 2b style configuration

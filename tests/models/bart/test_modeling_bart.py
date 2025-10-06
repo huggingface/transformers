@@ -16,6 +16,7 @@
 import copy
 import tempfile
 import unittest
+from functools import cached_property
 
 import timeout_decorator  # noqa
 
@@ -28,7 +29,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -58,28 +58,16 @@ def prepare_bart_inputs_dict(
     decoder_input_ids=None,
     attention_mask=None,
     decoder_attention_mask=None,
-    head_mask=None,
-    decoder_head_mask=None,
-    cross_attn_head_mask=None,
 ):
     if attention_mask is None:
         attention_mask = input_ids.ne(config.pad_token_id)
     if decoder_attention_mask is None:
         decoder_attention_mask = decoder_input_ids.ne(config.pad_token_id)
-    if head_mask is None:
-        head_mask = torch.ones(config.encoder_layers, config.encoder_attention_heads, device=torch_device)
-    if decoder_head_mask is None:
-        decoder_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
-    if cross_attn_head_mask is None:
-        cross_attn_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
     return {
         "input_ids": input_ids,
         "decoder_input_ids": decoder_input_ids,
         "attention_mask": attention_mask,
         "decoder_attention_mask": attention_mask,
-        "head_mask": head_mask,
-        "decoder_head_mask": decoder_head_mask,
-        "cross_attn_head_mask": cross_attn_head_mask,
     }
 
 
@@ -99,7 +87,7 @@ class BartModelTester:
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=20,
+        max_position_embeddings=50,
         eos_token_id=2,
         pad_token_id=1,
         bos_token_id=0,
@@ -167,10 +155,9 @@ class BartModelTester:
         model = BartModel(config=config).get_decoder().to(torch_device).eval()
         input_ids = inputs_dict["input_ids"]
         attention_mask = inputs_dict["attention_mask"]
-        head_mask = inputs_dict["head_mask"]
 
         # first forward pass
-        outputs = model(input_ids, attention_mask=attention_mask, head_mask=head_mask, use_cache=True)
+        outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
 
         output, past_key_values = outputs.to_tuple()
 
@@ -1177,8 +1164,7 @@ class BartModelIntegrationTests(unittest.TestCase):
             [FRANCE_ARTICLE, SHORTER_ARTICLE, IRAN_ARTICLE, ARTICLE_SUBWAY],
             max_length=1024,
             padding="max_length",
-            truncation_strategy="only_first",
-            truncation=True,
+            truncation="only_first",
             return_tensors="pt",
         )
 
@@ -1219,6 +1205,7 @@ class BartModelIntegrationTests(unittest.TestCase):
         generated_summaries = tok.batch_decode(hypotheses_batch.tolist())
         assert generated_summaries == EXPECTED
 
+    # TODO joao, manuel: remove this in v4.62.0
     @slow
     def test_contrastive_search_bart(self):
         article = (
@@ -1252,7 +1239,15 @@ class BartModelIntegrationTests(unittest.TestCase):
             article, add_special_tokens=False, truncation=True, max_length=512, return_tensors="pt"
         ).input_ids.to(torch_device)
 
-        outputs = bart_model.generate(input_ids, penalty_alpha=0.5, top_k=5, max_length=64, num_beams=1)
+        outputs = bart_model.generate(
+            input_ids,
+            penalty_alpha=0.5,
+            top_k=5,
+            max_length=64,
+            num_beams=1,
+            trust_remote_code=True,
+            custom_generate="transformers-community/contrastive-search",
+        )
         generated_text = bart_tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
         self.assertListEqual(
@@ -1314,7 +1309,7 @@ class BartStandaloneDecoderModelTester:
         decoder_layers=2,
         encoder_attention_heads=4,
         decoder_attention_heads=4,
-        max_position_embeddings=30,
+        max_position_embeddings=50,
         is_encoder_decoder=False,
         pad_token_id=0,
         bos_token_id=1,
@@ -1378,6 +1373,7 @@ class BartStandaloneDecoderModelTester:
             decoder_start_token_id=self.decoder_start_token_id,
             max_position_embeddings=self.max_position_embeddings,
             is_encoder_decoder=self.is_encoder_decoder,
+            forced_eos_token_id=None,
         )
 
         return (
@@ -1478,9 +1474,9 @@ class BartStandaloneDecoderModelTester:
 
         # get two different outputs
         output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=attn_mask, past_key_values=past_key_values)[
-            "last_hidden_state"
-        ]
+        output_from_past = model(
+            next_tokens, attention_mask=attn_mask, past_key_values=past_key_values, use_cache=True
+        )["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -1533,4 +1529,8 @@ class BartStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, un
 
     @unittest.skip(reason="Decoder cannot keep gradients")
     def test_retain_grad_hidden_states_attentions(self):
+        return
+
+    @unittest.skip(reason="Decoder cannot keep gradients")
+    def test_flex_attention_with_grads():
         return

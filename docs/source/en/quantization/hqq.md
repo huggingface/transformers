@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 HQQ further supports fine-tuning with [PEFT](https://huggingface.co/docs/peft) and is fully compatible with [torch.compile](https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html) for even faster inference and training.
 
-Install HQQ with the following command to get the latest version and to build its corresponding CUDA kernels.
+Install HQQ with the following command to get the latest version and to build its corresponding CUDA kernels if you are using a cuda device. It also support Intel XPU with pure pytorch implementation.
 
 ```bash
 pip install hqq
@@ -34,13 +34,14 @@ You can choose to either replace all the linear layers in a model with the same 
 Quantize a model by creating a [`HqqConfig`] and specifying the `nbits` and `group_size` to replace for all the linear layers ([torch.nn.Linear](https://pytorch.org/docs/stable/generated/torch.nn.Linear.html)) of the model.
 
 ``` py
+import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, HqqConfig
 
 quant_config = HqqConfig(nbits=8, group_size=64)
 model = transformers.AutoModelForCausalLM.from_pretrained(
     "meta-llama/Llama-3.1-8B", 
-    torch_dtype=torch.float16, 
-    device_map="cuda", 
+    dtype=torch.float16, 
+    device_map="auto", 
     quantization_config=quant_config
 )
 ```
@@ -66,8 +67,8 @@ quant_config  = HqqConfig(dynamic_config={
 
 model = transformers.AutoModelForCausalLM.from_pretrained(
     "meta-llama/Llama-3.1-8B", 
-    torch_dtype=torch.float16, 
-    device_map="cuda", 
+    dtype=torch.float16, 
+    device_map="auto", 
     quantization_config=quant_config
 )
 ```

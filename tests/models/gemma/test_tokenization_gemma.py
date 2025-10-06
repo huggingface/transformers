@@ -79,7 +79,6 @@ class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     batch = tokenizer(
                         text=text,
                         max_length=3,
-                        max_target_length=10,
                         return_tensors="pt",
                     )
                 except NotImplementedError:
@@ -89,7 +88,7 @@ class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 batch = tokenizer(text, max_length=3, return_tensors="pt")
                 self.assertEqual(batch.input_ids.shape[1], 3)
 
-                batch_encoder_only = tokenizer(text=text, max_length=3, max_target_length=10, return_tensors="pt")
+                batch_encoder_only = tokenizer(text=text, max_length=3, return_tensors="pt")
                 self.assertEqual(batch_encoder_only.input_ids.shape[1], 3)
                 self.assertEqual(batch_encoder_only.attention_mask.shape[1], 3)
                 self.assertNotIn("decoder_input_ids", batch_encoder_only)

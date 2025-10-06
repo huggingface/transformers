@@ -19,18 +19,16 @@ import unittest
 from io import BytesIO
 from typing import Optional
 
+import httpx
 import numpy as np
 import pytest
-import requests
 from huggingface_hub.file_download import hf_hub_url, http_get
-from requests import ConnectTimeout, ReadTimeout
 
 from tests.pipelines.test_pipelines_document_question_answering import INVOICE_URL
 from transformers import is_torch_available, is_vision_available
 from transformers.image_utils import (
     ChannelDimension,
     get_channel_dimension_axis,
-    make_batched_videos,
     make_flat_list_of_images,
     make_list_of_images,
     make_nested_list_of_images,
@@ -50,7 +48,7 @@ if is_vision_available():
 
 def get_image_from_hub_dataset(dataset_id: str, filename: str, revision: Optional[str] = None) -> "PIL.Image.Image":
     url = hf_hub_url(dataset_id, filename, repo_type="dataset", revision=revision)
-    return PIL.Image.open(BytesIO(requests.get(url).content))
+    return PIL.Image.open(BytesIO(httpx.get(url, follow_redirects=True).content))
 
 
 def get_random_image(height, width):
@@ -396,133 +394,6 @@ class ImageFeatureExtractionTester(unittest.TestCase):
         self.assertEqual(len(images_list[0]), 4)
         self.assertTrue(np.array_equal(images_list[0][0], images[0][0]))
 
-    def test_make_batched_videos_pil(self):
-        # Test a single image is converted to a list of 1 video with 1 frame
-        pil_image = get_random_image(16, 32)
-        videos_list = make_batched_videos(pil_image)
-        self.assertIsInstance(videos_list[0], list)
-        self.assertEqual(len(videos_list[0]), 1)
-        self.assertIsInstance(videos_list[0][0], PIL.Image.Image)
-
-        # Test a list of images is converted to a list of 1 video
-        images = [get_random_image(16, 32) for _ in range(4)]
-        videos_list = make_batched_videos(images)
-        self.assertIsInstance(videos_list[0], list)
-        self.assertEqual(len(videos_list), 1)
-        self.assertEqual(len(videos_list[0]), 4)
-        self.assertIsInstance(videos_list[0][0], PIL.Image.Image)
-
-        # Test a nested list of images is not modified
-        images = [[get_random_image(16, 32) for _ in range(2)] for _ in range(2)]
-        videos_list = make_nested_list_of_images(images)
-        self.assertIsInstance(videos_list[0], list)
-        self.assertEqual(len(videos_list), 2)
-        self.assertEqual(len(videos_list[0]), 2)
-        self.assertIsInstance(videos_list[0][0], PIL.Image.Image)
-
-    def test_make_batched_videos_numpy(self):
-        # Test a single image is converted to a list of 1 video with 1 frame
-        images = np.random.randint(0, 256, (16, 32, 3))
-        videos_list = make_batched_videos(images)
-        self.assertIsInstance(videos_list[0], list)
-        self.assertEqual(len(videos_list), 1)
-        self.assertTrue(np.array_equal(videos_list[0][0], images))
-
-        # Test a 4d array of images is converted to a list of 1 video
-        images = np.random.randint(0, 256, (4, 16, 32, 3))
-        videos_list = make_batched_videos(images)
-        self.assertIsInstance(videos_list[0], list)
-        self.assertIsInstance(videos_list[0][0], np.ndarray)
-        self.assertEqual(len(videos_list), 1)
-        self.assertEqual(len(videos_list[0]), 4)
-        self.assertTrue(np.array_equal(videos_list[0][0], images[0]))
-
-        # Test a list of images is converted to a list of videos
-        images = [np.random.randint(0, 256, (16, 32, 3)) for _ in range(4)]
-        videos_list = make_batched_videos(images)
-        self.assertIsInstance(videos_list[0], list)
-        self.assertEqual(len(videos_list), 1)
-        self.assertEqual(len(videos_list[0]), 4)
-        self.assertTrue(np.array_equal(videos_list[0][0], images[0]))
-
-        # Test a nested list of images is left unchanged
-        images = [[np.random.randint(0, 256, (16, 32, 3)) for _ in range(2)] for _ in range(2)]
-        videos_list = make_batched_videos(images)
-        self.assertIsInstance(videos_list[0], list)
-        self.assertEqual(len(videos_list), 2)
-        self.assertEqual(len(videos_list[0]), 2)
-        self.assertTrue(np.array_equal(videos_list[0][0], images[0][0]))
-
-        # Test a list of 4d array images is converted to a list of videos
-        images = [np.random.randint(0, 256, (4, 16, 32, 3)) for _ in range(2)]
-        videos_list = make_batched_videos(images)
-        self.assertIsInstance(videos_list[0], list)
-        self.assertIsInstance(videos_list[0][0], np.ndarray)
-        self.assertEqual(len(videos_list), 2)
-        self.assertEqual(len(videos_list[0]), 4)
-        self.assertTrue(np.array_equal(videos_list[0][0], images[0][0]))
-
-        # Test a batch of list of 4d array images is converted to a list of videos
-        images = [[np.random.randint(0, 256, (4, 16, 32, 3)) for _ in range(2)] for _ in range(2)]
-        videos_list = make_batched_videos(images)
-        self.assertIsInstance(videos_list[0], list)
-        self.assertIsInstance(videos_list[0][0], np.ndarray)
-        self.assertEqual(len(videos_list), 2)
-        self.assertEqual(len(videos_list[0]), 8)
-        self.assertTrue(np.array_equal(videos_list[0][0], images[0][0][0]))
-
-    @require_torch
-    def test_make_batched_videos_torch(self):
-        # Test a single image is converted to a list of 1 video with 1 frame
-        images = torch.randint(0, 256, (16, 32, 3))
-        videos_list = make_batched_videos(images)
-        self.assertIsInstance(videos_list[0], list)
-        self.assertEqual(len(videos_list[0]), 1)
-        self.assertTrue(np.array_equal(videos_list[0][0], images))
-
-        # Test a 4d tensor of images is converted to a list of 1 video
-        images = torch.randint(0, 256, (4, 16, 32, 3))
-        videos_list = make_batched_videos(images)
-        self.assertIsInstance(videos_list[0], list)
-        self.assertIsInstance(videos_list[0][0], torch.Tensor)
-        self.assertEqual(len(videos_list), 1)
-        self.assertEqual(len(videos_list[0]), 4)
-        self.assertTrue(np.array_equal(videos_list[0][0], images[0]))
-
-        # Test a list of images is converted to a list of videos
-        images = [torch.randint(0, 256, (16, 32, 3)) for _ in range(4)]
-        videos_list = make_batched_videos(images)
-        self.assertIsInstance(videos_list[0], list)
-        self.assertEqual(len(videos_list), 1)
-        self.assertEqual(len(videos_list[0]), 4)
-        self.assertTrue(np.array_equal(videos_list[0][0], images[0]))
-
-        # Test a nested list of images is left unchanged
-        images = [[torch.randint(0, 256, (16, 32, 3)) for _ in range(2)] for _ in range(2)]
-        videos_list = make_batched_videos(images)
-        self.assertIsInstance(videos_list[0], list)
-        self.assertEqual(len(videos_list), 2)
-        self.assertEqual(len(videos_list[0]), 2)
-        self.assertTrue(np.array_equal(videos_list[0][0], images[0][0]))
-
-        # Test a list of 4d tensor images is converted to a list of videos
-        images = [torch.randint(0, 256, (4, 16, 32, 3)) for _ in range(2)]
-        videos_list = make_batched_videos(images)
-        self.assertIsInstance(videos_list[0], list)
-        self.assertIsInstance(videos_list[0][0], torch.Tensor)
-        self.assertEqual(len(videos_list), 2)
-        self.assertEqual(len(videos_list[0]), 4)
-        self.assertTrue(np.array_equal(videos_list[0][0], images[0][0]))
-
-        # Test a batch of list of 4d tensor images is converted to a list of videos
-        images = [[torch.randint(0, 256, (4, 16, 32, 3)) for _ in range(2)] for _ in range(2)]
-        videos_list = make_batched_videos(images)
-        self.assertIsInstance(videos_list[0], list)
-        self.assertIsInstance(videos_list[0][0], torch.Tensor)
-        self.assertEqual(len(videos_list), 2)
-        self.assertEqual(len(videos_list[0]), 8)
-        self.assertTrue(np.array_equal(videos_list[0][0], images[0][0][0]))
-
     @require_torch
     def test_conversion_torch_to_array(self):
         feature_extractor = ImageFeatureExtractionMixin()
@@ -855,7 +726,7 @@ class LoadImageTester(unittest.TestCase):
 
     @is_flaky()
     def test_load_img_url_timeout(self):
-        with self.assertRaises((ReadTimeout, ConnectTimeout)):
+        with self.assertRaises(httpx.ConnectTimeout):
             load_image(INVOICE_URL, timeout=0.001)
 
     def test_load_img_local(self):

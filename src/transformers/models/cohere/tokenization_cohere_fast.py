@@ -16,7 +16,7 @@
 # This file is based on the tokenization_llama_fast.py file in transformers
 
 import pickle
-from typing import Dict, List, Literal, Union
+from typing import Literal, Union
 
 from tokenizers import processors
 
@@ -227,10 +227,10 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
 
     def apply_tool_use_template(
         self,
-        conversation: Union[List[Dict[str, str]]],
-        tools: List[Dict],
+        conversation: list[dict[str, str]],
+        tools: list[dict],
         **kwargs,
-    ) -> Union[str, List[int]]:
+    ) -> Union[str, list[int]]:
         """Create a Command-R tool-use prompt.
 
         Once rendered, the prompt instructs the model to generate a list of actions to perform on a set of user supplied tools
@@ -244,16 +244,16 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         You can override the default template using the `tool_use_template` kwarg but the quality of your results may decrease.
 
         Args:
-            conversation (Union[List[Dict[str, str]]]): A list of dicts
+            conversation (list[dict[str, str]]): A list of dicts
                 with "role" and "content" keys, representing the chat history so far.
-            tools (List[Dict]): a list of tools to render into the prompt for the model to choose from.
+            tools (list[Dict]): a list of tools to render into the prompt for the model to choose from.
                 See an example at the bottom of the docstring.
                 The format should be:
                    * name (str): The name of the tool to be called. Valid names contain only the characters a-z,
                         A-Z, 0-9, _ and must not begin with a digit.
                    * description (str): The description of what the tool does, the model uses the description to
                         choose when and how to call the function.
-                   * parameter_definitions (List[Dict]): The input parameters of the tool. Accepts a dictionary
+                   * parameter_definitions (list[Dict]): The input parameters of the tool. Accepts a dictionary
                         where the key is the name of the parameter and the value is the parameter spec.
                         Valid parameter names contain only the characters a-z, A-Z, 0-9, _ and must not begin with a digit.
                         Parameter specs are as follows:
@@ -276,10 +276,8 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Has no effect if tokenize is `False`. Acceptable
                 values are:
-                - `'tf'`: Return TensorFlow `tf.Tensor` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
             return_dict (`bool`, *optional*, defaults to `False`):
                 Whether to return a dictionary with named outputs. Has no effect if tokenize is `False`.
             **tokenizer_kwargs: Additional kwargs to pass to the tokenizer.
@@ -287,7 +285,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         Returns:
             `str`: A rendered prompt string.
             or if tokenize=True:
-            `List[int]`: A list of token ids representing the tokenized chat so far, including control tokens. This
+            `list[int]`: A list of token ids representing the tokenized chat so far, including control tokens. This
             output is ready to pass to the model, either directly or via methods like `generate()`.
 
         Examples:
@@ -336,7 +334,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         Here is a list of tools that you have available to you:
 
         \\`\\`\\`python
-        def internet_search(query: str) -> List[Dict]:
+        def internet_search(query: str) -> list[Dict]:
             \"\"\"Returns a list of relevant document snippets for a textual query retrieved from the internet
 
             Args:
@@ -346,7 +344,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         \\`\\`\\`
 
         \\`\\`\\`python
-        def directly_answer() -> List[Dict]:
+        def directly_answer() -> list[Dict]:
             \"\"\"Calls a standard (un-augmented) AI chatbot to generate a response given the conversation history
             \"\"\"
             pass
@@ -382,11 +380,11 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
 
     def apply_grounded_generation_template(
         self,
-        conversation: Union[List[Dict[str, str]]],
-        documents: List[Dict],
+        conversation: list[dict[str, str]],
+        documents: list[dict],
         citation_mode: Literal["fast", "accurate"] = "accurate",
         **kwargs,
-    ) -> Union[str, List[int]]:
+    ) -> Union[str, list[int]]:
         """Create a Command-R grounded generation (aka RAG) prompt.
 
         Once rendered, the prompt instructs the model to generate a response with citations in, based on supplied documents.
@@ -400,9 +398,9 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         You can override the default template using the `grounded_generation_template` kwarg but the quality of your results may decrease.
 
         Args:
-            conversation (Union[List[Dict[str, str]]]): A list of dicts
+            conversation (list[dict[str, str]]): A list of dicts
                 with "role" and "content" keys, representing the chat history so far.
-            documents (List[Dict[str, str]): A list of dicts, representing documents or tool outputs to ground your
+            documents (list[dict[str, str]): A list of dicts, representing documents or tool outputs to ground your
                 generation on. A document is a semistructured dict, with a string to string mapping. Common fields are
                 `url`, `title`, `snippet` etc but should be descriptive of the key. They will get rendered into the prompt.
             citation_mode: either "accurate" (prompt the model to generate an answer first, then rewrite it with citation
@@ -424,10 +422,8 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Has no effect if tokenize is `False`. Acceptable
                 values are:
-                - `'tf'`: Return TensorFlow `tf.Tensor` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
             return_dict (`bool`, *optional*, defaults to `False`):
                 Whether to return a dictionary with named outputs. Has no effect if tokenize is `False`.
             **tokenizer_kwargs: Additional kwargs to pass to the tokenizer.
@@ -435,7 +431,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         Returns:
             `str`: A rendered prompt string.
             or if tokenize=True:
-            `List[int]`: A list of token ids representing the tokenized chat so far, including control tokens. This
+            `list[int]`: A list of token ids representing the tokenized chat so far, including control tokens. This
             output is ready to pass to the model, either directly or via methods like `generate()`.
 
         Examples:
