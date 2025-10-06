@@ -19,7 +19,7 @@ from typing import Optional
 
 import numpy as np
 
-from ...audio_utils import make_list_of_audio
+from ...audio_utils import AudioInput, make_list_of_audio
 from ...processing_utils import AudioKwargs, BatchFeature, ProcessingKwargs, ProcessorMixin, Unpack
 from ...utils import is_torch_available
 
@@ -67,7 +67,7 @@ class VocosProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        audio=None,
+        audio: Optional[AudioInput] = None,
         codes=None,
         bandwidth: Optional[float] = None,
         return_tensors: str = "pt",
@@ -131,7 +131,7 @@ class VocosProcessor(ProcessorMixin):
                     codes = self.audio_tokenizer.quantizer.encode(encoded_frames, bandwidth=bandwidth)
             else:
                 if isinstance(audio, torch.Tensor):
-                    audio = audio.numpy()
+                    audio = audio.cpu().numpy()
                 features = self.feature_extractor(audio, **audio_kwargs).input_features
 
         if codes is not None:

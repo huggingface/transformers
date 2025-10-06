@@ -96,15 +96,9 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
         if padding not in ["center", "same"]:
             raise ValueError("Padding must be either `center` or `same`.")
         self.padding = padding
-        self.window = window_function(
-            self.n_fft,
-            name="hann",
-            center=(self.padding == "center"),
-            frame_length=self.n_fft,
-            periodic=True,
-        )
 
         if is_torchaudio_available():
+            self.window = None  # window function is passed instead
             self.mel_filters = torchaudio.transforms.MelSpectrogram(
                 sample_rate=self.sampling_rate,
                 n_mels=self.num_mel_bins,
@@ -112,9 +106,17 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
                 hop_length=self.hop_length,
                 center=(self.padding == "center"),
                 power=1,
+                window_fn=torch.hann_window,
             )
 
         else:
+            self.window = window_function(
+                self.n_fft,
+                name="hann",
+                center=(self.padding == "center"),
+                frame_length=self.n_fft,
+                periodic=True,
+            )
             self.mel_filters = mel_filter_bank(
                 num_frequency_bins=(n_fft // 2) + 1,
                 num_mel_filters=self.num_mel_bins,
