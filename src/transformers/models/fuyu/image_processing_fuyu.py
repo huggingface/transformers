@@ -135,7 +135,7 @@ class FuyuBatchFeature(BatchFeature):
             [`BatchFeature`]: The same instance after modification.
         """
         requires_backends(self, ["torch"])
-        import torch  # noqa
+        import torch
 
         new_data = {}
         device = kwargs.get("device")

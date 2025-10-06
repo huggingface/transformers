@@ -108,6 +108,8 @@ if TYPE_CHECKING:
     from .dots1 import *
     from .dpr import *
     from .dpt import *
+    from .edgetam import *
+    from .edgetam_video import *
     from .efficientloftr import *
     from .efficientnet import *
     from .electra import *

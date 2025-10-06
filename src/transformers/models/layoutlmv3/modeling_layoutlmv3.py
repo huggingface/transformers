@@ -258,7 +258,6 @@ class LayoutLMv3SelfAttention(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        head_mask=None,
         output_attentions=False,
         rel_pos=None,
         rel_2d_pos=None,
@@ -302,10 +301,6 @@ class LayoutLMv3SelfAttention(nn.Module):
         # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
 
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
-
         context_layer = torch.matmul(attention_probs, value_layer)
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
@@ -343,7 +338,6 @@ class LayoutLMv3Attention(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        head_mask=None,
         output_attentions=False,
         rel_pos=None,
         rel_2d_pos=None,
@@ -351,7 +345,6 @@ class LayoutLMv3Attention(nn.Module):
         self_outputs = self.self(
             hidden_states,
             attention_mask,
-            head_mask,
             output_attentions,
             rel_pos=rel_pos,
             rel_2d_pos=rel_2d_pos,
@@ -375,7 +368,6 @@ class LayoutLMv3Layer(GradientCheckpointingLayer):
         self,
         hidden_states,
         attention_mask=None,
-        head_mask=None,
         output_attentions=False,
         rel_pos=None,
         rel_2d_pos=None,
@@ -383,7 +375,6 @@ class LayoutLMv3Layer(GradientCheckpointingLayer):
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask,
-            head_mask,
             output_attentions=output_attentions,
             rel_pos=rel_pos,
             rel_2d_pos=rel_2d_pos,
@@ -498,7 +489,6 @@ class LayoutLMv3Encoder(nn.Module):
         hidden_states,
         bbox=None,
         attention_mask=None,
-        head_mask=None,
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
@@ -516,12 +506,9 @@ class LayoutLMv3Encoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-
             layer_outputs = layer_module(
                 hidden_states,
                 attention_mask,
-                layer_head_mask,
                 output_attentions,
                 rel_pos=rel_pos,
                 rel_2d_pos=rel_2d_pos,
@@ -680,7 +667,6 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
@@ -839,19 +825,11 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
             attention_mask, None, device, dtype=embedding_output.dtype
         )
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
         encoder_outputs = self.encoder(
             embedding_output,
             bbox=final_bbox,
             position_ids=final_position_ids,
             attention_mask=extended_attention_mask,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -928,7 +906,6 @@ class LayoutLMv3ForTokenClassification(LayoutLMv3PreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
@@ -975,7 +952,6 @@ class LayoutLMv3ForTokenClassification(LayoutLMv3PreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1028,7 +1004,6 @@ class LayoutLMv3ForQuestionAnswering(LayoutLMv3PreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         start_positions: Optional[torch.LongTensor] = None,
         end_positions: Optional[torch.LongTensor] = None,
@@ -1079,7 +1054,6 @@ class LayoutLMv3ForQuestionAnswering(LayoutLMv3PreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1149,7 +1123,6 @@ class LayoutLMv3ForSequenceClassification(LayoutLMv3PreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
@@ -1195,7 +1168,6 @@ class LayoutLMv3ForSequenceClassification(LayoutLMv3PreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,

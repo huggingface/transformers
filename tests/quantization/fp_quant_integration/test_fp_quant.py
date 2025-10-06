@@ -55,9 +55,8 @@ class FPQuantConfigTest(unittest.TestCase):
 @slow
 @require_torch_gpu
 @require_fp_quant
-@require_qutlass
 @require_accelerate
-class FPQuantTest(unittest.TestCase):
+class FPQuantBaseTest(unittest.TestCase):
     model_name = "unsloth/Llama-3.2-1B"
 
     input_text = "1 2 3 4"
@@ -67,13 +66,18 @@ class FPQuantTest(unittest.TestCase):
 
     device_map = "cuda"
 
+    @classmethod
+    def getQuantizationConfig(cls):
+        unittest.skip("Subclass must implement this method")
+
     # called only once for all test in this class
     @classmethod
     def setUpClass(cls):
         """
         Setup quantized model
         """
-        quantization_config = FPQuantConfig(pseudoquantization=False)
+
+        quantization_config = cls.getQuantizationConfig()
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.model_name, device_map=cls.device_map, quantization_config=quantization_config
@@ -140,88 +144,34 @@ class FPQuantTest(unittest.TestCase):
             self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
 
-@slow
-@require_torch_gpu
-@require_fp_quant
-@require_accelerate
-class FPQuantPseudoquantTest(unittest.TestCase):
-    model_name = "unsloth/Llama-3.2-1B"
-
-    input_text = "1 2 3 4"
-    max_new_tokens = 4
-
-    EXPECTED_OUTPUT = "1 2 3 4 5 6"
-
-    device_map = "cuda"
-
-    # called only once for all test in this class
+class FPQuantMXFP4PseudoquantTest(FPQuantBaseTest):
     @classmethod
-    def setUpClass(cls):
-        """
-        Setup quantized model
-        """
-        quantization_config = FPQuantConfig(pseudoquantization=True)
-        cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
-        cls.quantized_model = AutoModelForCausalLM.from_pretrained(
-            cls.model_name, device_map=cls.device_map, quantization_config=quantization_config
-        )
+    def getQuantizationConfig(cls):
+        return FPQuantConfig(forward_dtype="mxfp4", pseudoquantization=True)
 
-    def tearDown(self):
-        gc.collect()
-        backend_empty_cache(torch_device)
-        gc.collect()
 
-    def test_quantized_model(self):
-        """
-        Simple test that checks if the quantized model is working properly
-        """
-        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+class FPQuantNVFP4PseudoquantTest(FPQuantBaseTest):
+    @classmethod
+    def getQuantizationConfig(cls):
+        return FPQuantConfig(forward_dtype="nvfp4", pseudoquantization=True)
 
-        output = self.quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
-        self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
-    def test_save_pretrained(self):
-        """
-        Simple test that checks if the quantized model is working properly after being saved and loaded
-        """
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            self.quantized_model.save_pretrained(tmpdirname)
+@require_qutlass
+class FPQuantMXFP4Test(FPQuantBaseTest):
+    @classmethod
+    def getQuantizationConfig(cls):
+        return FPQuantConfig(forward_dtype="nvfp4", pseudoquantization=False)
 
-            model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=self.device_map)
 
-            input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+@require_qutlass
+class FPQuantMXFP4GS128Test(FPQuantBaseTest):
+    @classmethod
+    def getQuantizationConfig(cls):
+        return FPQuantConfig(forward_dtype="nvfp4", pseudoquantization=False, hadamard_group_size=128)
 
-            output = model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
-            self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
-    @require_torch_multi_gpu
-    def test_quantized_model_multi_gpu(self):
-        """
-        Simple test that checks if the quantized model is working properly with multiple GPUs
-        set CUDA_VISIBLE_DEVICES=0,1 if you have more than 2 GPUs
-        """
-        input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
-        quantization_config = FPQuantConfig(pseudoquantization=True)
-        quantized_model = AutoModelForCausalLM.from_pretrained(
-            self.model_name, device_map="auto", quantization_config=quantization_config
-        )
-        self.assertTrue(set(quantized_model.hf_device_map.values()) == {0, 1})
-
-        output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
-        self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
-
-    @require_torch_multi_gpu
-    def test_save_pretrained_multi_gpu(self):
-        """
-        Simple test that checks if the quantized model is working properly after being saved and loaded
-        """
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            self.quantized_model.save_pretrained(tmpdirname)
-
-            model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map="auto")
-            self.assertTrue(set(model.hf_device_map.values()) == {0, 1})
-
-            input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
-
-            output = model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
-            self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+@require_qutlass
+class FPQuantNVFP4GS128Test(FPQuantBaseTest):
+    @classmethod
+    def getQuantizationConfig(cls):
+        return FPQuantConfig(forward_dtype="nvfp4", pseudoquantization=False, hadamard_group_size=128)

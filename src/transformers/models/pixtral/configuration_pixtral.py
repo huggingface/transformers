@@ -13,14 +13,14 @@
 # limitations under the License.
 """Pixtral model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class PixtralVisionConfig(PretrainedConfig):
+class PixtralVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PixtralVisionModel`]. It is used to instantiate an
     Pixtral vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -28,8 +28,8 @@ class PixtralVisionConfig(PretrainedConfig):
 
     e.g. [pixtral-hf/pixtral-9b](https://huggingface.co/pixtral-hf/pixtral-9b)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 1024):

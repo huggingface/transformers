@@ -53,7 +53,7 @@ from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
     DataCollatorWithPadding,
-    PretrainedConfig,
+    PreTrainedConfig,
     SchedulerType,
     default_data_collator,
     get_scheduler,
@@ -367,7 +367,7 @@ def main():
     # Some models have set the order of the labels to use, so let's make sure we do use it.
     label_to_id = None
     if (
-        model.config.label2id != PretrainedConfig(num_labels=num_labels).label2id
+        model.config.label2id != PreTrainedConfig(num_labels=num_labels).label2id
         and args.task_name is not None
         and not is_regression
     ):

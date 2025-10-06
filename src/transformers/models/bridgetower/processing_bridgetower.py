@@ -16,17 +16,10 @@
 Processor class for BridgeTower.
 """
 
-from typing import Optional
-
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin
-
-
-class BridgeTowerImagesKwargs(ImagesKwargs):
-    size_divisor: Optional[int]
+from ...processing_utils import ProcessingKwargs, ProcessorMixin
 
 
 class BridgeTowerProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: BridgeTowerImagesKwargs
     _defaults = {
         "text_kwargs": {
             "add_special_tokens": True,

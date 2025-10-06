@@ -649,8 +649,6 @@ class Qwen2_5OmniAudioEncoderLayer(GradientCheckpointingLayer):
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
-                `(encoder_attention_heads,)`.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -3770,7 +3768,6 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
             cache_dir=kwargs.pop("cache_dir", None),
             force_download=kwargs.pop("force_download", False),
             proxies=kwargs.pop("proxies", None),
-            resume_download=kwargs.pop("resume_download", None),
             local_files_only=kwargs.pop("local_files_only", False),
             token=kwargs.pop("use_auth_token", None),
             revision=kwargs.pop("revision", None),

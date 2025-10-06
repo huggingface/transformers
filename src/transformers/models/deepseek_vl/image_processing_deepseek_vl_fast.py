@@ -24,25 +24,11 @@ import torch
 import torch.nn.functional as F
 
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
-    group_images_by_shape,
-    reorder_images,
-)
+from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring
-
-
-class DeepseekVLFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    r"""
-    min_size (`int`, *optional*, defaults to 14):
-        The minimum allowed size for the resized image. Ensures that neither the height nor width
-        falls below this value after resizing.
-    """
-
-    min_size: int
+from .image_processing_deepseek_vl import DeepseekVLImageProcessorKwargs
 
 
 @auto_docstring
@@ -56,9 +42,9 @@ class DeepseekVLImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     do_pad = True
-    valid_kwargs = DeepseekVLFastImageProcessorKwargs
+    valid_kwargs = DeepseekVLImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[DeepseekVLFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[DeepseekVLImageProcessorKwargs]):
         super().__init__(**kwargs)
         if kwargs.get("image_mean") is None:
             background_color = (127, 127, 127)

@@ -459,7 +459,6 @@ class JanusAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
@@ -523,7 +522,6 @@ class JanusEncoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
         residual = hidden_states
@@ -531,7 +529,6 @@ class JanusEncoderLayer(GradientCheckpointingLayer):
         hidden_states = self.layer_norm1(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
-            head_mask=attention_mask,
             **kwargs,
         )
         hidden_states = hidden_states + residual
@@ -564,7 +561,7 @@ class JanusVisionModel(JanusPreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,

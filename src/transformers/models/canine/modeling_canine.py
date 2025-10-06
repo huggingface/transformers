@@ -106,7 +106,6 @@ class CanineEmbeddings(nn.Module):
         self.register_buffer(
             "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
         )
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
 
     def _hash_bucket_tensors(self, input_ids, num_hashes: int, num_buckets: int):
         """
@@ -171,12 +170,11 @@ class CanineEmbeddings(nn.Module):
             )
 
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
-
         embeddings = inputs_embeds + token_type_embeddings
 
-        if self.position_embedding_type == "absolute":
-            position_embeddings = self.char_position_embeddings(position_ids)
-            embeddings += position_embeddings
+        position_embeddings = self.char_position_embeddings(position_ids)
+        embeddings += position_embeddings
+
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
@@ -300,17 +298,12 @@ class CanineSelfAttention(nn.Module):
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            self.max_position_embeddings = config.max_position_embeddings
-            self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
 
     def forward(
         self,
         from_tensor: torch.Tensor,
         to_tensor: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         batch_size, seq_length, _ = from_tensor.shape
@@ -338,22 +331,6 @@ class CanineSelfAttention(nn.Module):
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
-        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            seq_length = from_tensor.size()[1]
-            position_ids_l = torch.arange(seq_length, dtype=torch.long, device=from_tensor.device).view(-1, 1)
-            position_ids_r = torch.arange(seq_length, dtype=torch.long, device=from_tensor.device).view(1, -1)
-            distance = position_ids_l - position_ids_r
-            positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
-            positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
-
-            if self.position_embedding_type == "relative_key":
-                relative_position_scores = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
-                attention_scores = attention_scores + relative_position_scores
-            elif self.position_embedding_type == "relative_key_query":
-                relative_position_scores_query = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
-                relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
-                attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
-
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
             if attention_mask.ndim == 3:
@@ -372,10 +349,6 @@ class CanineSelfAttention(nn.Module):
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
 
         context_layer = torch.matmul(attention_probs, value_layer)
 
@@ -476,11 +449,10 @@ class CanineAttention(nn.Module):
         self,
         hidden_states: tuple[torch.FloatTensor],
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
         if not self.local:
-            self_outputs = self.self(hidden_states, hidden_states, attention_mask, head_mask, output_attentions)
+            self_outputs = self.self(hidden_states, hidden_states, attention_mask, output_attentions)
             attention_output = self_outputs[0]
         else:
             from_seq_length = to_seq_length = hidden_states.shape[1]
@@ -530,7 +502,7 @@ class CanineAttention(nn.Module):
                     to_tensor_chunk = torch.cat([cls_position, to_tensor_chunk], dim=1)
 
                 attention_outputs_chunk = self.self(
-                    from_tensor_chunk, to_tensor_chunk, attention_mask_chunk, head_mask, output_attentions
+                    from_tensor_chunk, to_tensor_chunk, attention_mask_chunk, output_attentions
                 )
                 attention_output_chunks.append(attention_outputs_chunk[0])
                 if output_attentions:
@@ -608,13 +580,11 @@ class CanineLayer(GradientCheckpointingLayer):
         self,
         hidden_states: tuple[torch.FloatTensor],
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask,
-            head_mask,
             output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
@@ -669,7 +639,6 @@ class CanineEncoder(nn.Module):
         self,
         hidden_states: tuple[torch.FloatTensor],
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
@@ -681,9 +650,7 @@ class CanineEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-
-            layer_outputs = layer_module(hidden_states, attention_mask, layer_head_mask, output_attentions)
+            layer_outputs = layer_module(hidden_states, attention_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
             if output_attentions:
@@ -907,7 +874,6 @@ class CanineModel(CaninePreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -948,13 +914,6 @@ class CanineModel(CaninePreTrainedModel):
         extended_molecule_attention_mask: torch.Tensor = self.get_extended_attention_mask(
             molecule_attention_mask, (batch_size, molecule_attention_mask.shape[-1])
         )
-
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         # `input_char_embeddings`: shape (batch_size, char_seq, char_dim)
         input_char_embeddings = self.char_embeddings(
@@ -999,7 +958,6 @@ class CanineModel(CaninePreTrainedModel):
         encoder_outputs = self.encoder(
             init_molecule_encoding,
             attention_mask=extended_molecule_attention_mask,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1085,7 +1043,6 @@ class CanineForSequenceClassification(CaninePreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
@@ -1105,7 +1062,6 @@ class CanineForSequenceClassification(CaninePreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1170,7 +1126,6 @@ class CanineForMultipleChoice(CaninePreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
@@ -1225,7 +1180,6 @@ class CanineForMultipleChoice(CaninePreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1275,7 +1229,6 @@ class CanineForTokenClassification(CaninePreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
@@ -1323,7 +1276,6 @@ class CanineForTokenClassification(CaninePreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1371,7 +1323,6 @@ class CanineForQuestionAnswering(CaninePreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         start_positions: Optional[torch.LongTensor] = None,
         end_positions: Optional[torch.LongTensor] = None,
@@ -1386,7 +1337,6 @@ class CanineForQuestionAnswering(CaninePreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
