@@ -19,7 +19,7 @@ from threading import Thread
 from unittest.mock import patch
 
 import aiohttp.client_exceptions
-import requests
+import httpx
 from huggingface_hub import AsyncInferenceClient, ChatCompletionStreamOutput
 from parameterized import parameterized
 
@@ -509,17 +509,18 @@ def _call_healthcheck(base_url: str):
     retries = 10
     while retries > 0:
         try:
-            response = requests.get(f"{base_url}/health")
+            response = httpx.get(f"{base_url}/health")
             break
-        except requests.exceptions.ConnectionError:
+        except httpx.NetworkError:
             time.sleep(0.1)
             retries -= 1
     return response
 
 
 def _open_stream_and_cancel(base_url: str, request_id: str):
-    with requests.Session() as s:
-        with s.post(
+    with httpx.Client() as s:
+        with s.stream(
+            "POST",
             f"{base_url}/v1/chat/completions",
             headers={"X-Request-ID": request_id},
             json={
@@ -527,13 +528,12 @@ def _open_stream_and_cancel(base_url: str, request_id: str):
                 "stream": True,
                 "messages": [{"role": "user", "content": "Count slowly so I can cancel you."}],
             },
-            stream=True,
             timeout=30,
         ) as resp:
             assert resp.status_code == 200
 
             wait_for_n_chunks = 3
-            for i, _ in enumerate(resp.iter_content(chunk_size=None)):
+            for i, _ in enumerate(resp.iter_bytes(chunk_size=None)):
                 if i >= wait_for_n_chunks:
                     resp.close()
                     break

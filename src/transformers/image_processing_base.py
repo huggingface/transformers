@@ -34,7 +34,7 @@ from .utils import (
     is_remote_url,
     logging,
 )
-from .utils.hub import cached_files
+from .utils.hub import cached_file
 
 
 ImageProcessorType = TypeVar("ImageProcessorType", bound="ImageProcessingMixin")
@@ -55,7 +55,7 @@ class BatchFeature(BaseBatchFeature):
         data (`dict`):
             Dictionary of lists/arrays/tensors returned by the __call__ method ('pixel_values', etc.).
         tensor_type (`Union[None, str, TensorType]`, *optional*):
-            You can give a tensor_type here to convert the lists of integers in PyTorch/TensorFlow/Numpy Tensors at
+            You can give a tensor_type here to convert the lists of integers in PyTorch/Numpy Tensors at
             initialization.
     """
 
@@ -119,9 +119,6 @@ class ImageProcessingMixin(PushToHubMixin):
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force to (re-)download the image processor files and override the cached versions if
                 they exist.
-            resume_download:
-                Deprecated and ignored. All downloads are now resumed by default when possible.
-                Will be removed in v5 of Transformers.
             proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -285,7 +282,6 @@ class ImageProcessingMixin(PushToHubMixin):
         """
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
-        resume_download = kwargs.pop("resume_download", None)
         proxies = kwargs.pop("proxies", None)
         token = kwargs.pop("token", None)
         use_auth_token = kwargs.pop("use_auth_token", None)
@@ -330,20 +326,26 @@ class ImageProcessingMixin(PushToHubMixin):
             image_processor_file = image_processor_filename
             try:
                 # Load from local folder or from cache or download from model Hub and cache
-                resolved_image_processor_files = cached_files(
-                    pretrained_model_name_or_path,
-                    filenames=[image_processor_file, PROCESSOR_NAME],
-                    cache_dir=cache_dir,
-                    force_download=force_download,
-                    proxies=proxies,
-                    resume_download=resume_download,
-                    local_files_only=local_files_only,
-                    token=token,
-                    user_agent=user_agent,
-                    revision=revision,
-                    subfolder=subfolder,
-                    _raise_exceptions_for_missing_entries=False,
-                )
+                resolved_image_processor_files = [
+                    resolved_file
+                    for filename in [image_processor_file, PROCESSOR_NAME]
+                    if (
+                        resolved_file := cached_file(
+                            pretrained_model_name_or_path,
+                            filename=filename,
+                            cache_dir=cache_dir,
+                            force_download=force_download,
+                            proxies=proxies,
+                            local_files_only=local_files_only,
+                            token=token,
+                            user_agent=user_agent,
+                            revision=revision,
+                            subfolder=subfolder,
+                            _raise_exceptions_for_missing_entries=False,
+                        )
+                    )
+                    is not None
+                ]
                 resolved_image_processor_file = resolved_image_processor_files[0]
             except OSError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to

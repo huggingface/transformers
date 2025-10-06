@@ -36,6 +36,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -53,9 +54,24 @@ if is_torch_available():
     import torch.nn.functional as F
 
 
+class EomtImageProcessorKwargs(ImagesKwargs):
+    """
+    do_split_image (`bool`, *optional*, defaults to `False`):
+        Whether to split the input images into overlapping patches for semantic segmentation. If set to `True`, the
+        input images will be split into patches of size `size["shortest_edge"]` with an overlap between patches.
+        Otherwise, the input images will be padded to the target size.
+    ignore_index (`int`, *optional*):
+        Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels
+        denoted with 0 (background) will be replaced with `ignore_index`.
+    """
+
+    do_split_image: bool
+    ignore_index: Optional[int] = None
+
+
 # Adapted from transformers.models.maskformer.image_processing_maskformer.convert_segmentation_map_to_binary_masks
 def convert_segmentation_map_to_binary_masks(
-    segmentation_map: "np.ndarray",
+    segmentation_map: np.ndarray,
     instance_id_to_semantic_id: Optional[dict[int, int]] = None,
     ignore_index: Optional[int] = None,
 ):
@@ -557,7 +573,7 @@ class EomtImageProcessor(BaseImageProcessor):
                 Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels
                 denoted with 0 (background) will be replaced with `ignore_index`.
             return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be `"pt"`, `"tf"`, `"np"`, or `"jax"`.
+                The type of tensors to return. Can be `"pt"` or `"np"`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 Channel format of the output image. Either `"channels_first"` or `"channels_last"`.
             input_data_format (`ChannelDimension` or `str`, *optional*):
@@ -581,10 +597,7 @@ class EomtImageProcessor(BaseImageProcessor):
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         validate_preprocess_arguments(
             do_rescale=do_rescale,

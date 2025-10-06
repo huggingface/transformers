@@ -144,7 +144,6 @@ class CpmAntModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_missing_keys = False
     test_mismatched_shapes = False
-    test_head_masking = False
     test_resize_embeddings = False
 
     def setUp(self):

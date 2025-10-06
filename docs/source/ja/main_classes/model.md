@@ -124,22 +124,6 @@ Pytorch の設計により、この機能は浮動小数点 dtype でのみ使�
 
 [[autodoc]] modeling_utils.ModuleUtilsMixin
 
-## TFPreTrainedModel
-
-[[autodoc]] TFPreTrainedModel
-    - push_to_hub
-    - all
-
-## TFModelUtilsMixin
-
-[[autodoc]] modeling_tf_utils.TFModelUtilsMixin
-
-## FlaxPreTrainedModel
-
-[[autodoc]] FlaxPreTrainedModel
-    - push_to_hub
-    - all
-
 ## Pushing to the Hub
 
 [[autodoc]] utils.PushToHubMixin

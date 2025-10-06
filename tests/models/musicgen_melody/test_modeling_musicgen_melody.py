@@ -594,7 +594,6 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     # Addition keys that are required for forward. MusicGen isn't encoder-decoder in config so we have to pass decoder ids as additional
     additional_model_inputs = ["decoder_input_ids"]
     test_pruning = False  # training is not supported yet for MusicGen
-    test_headmasking = False
     test_resize_embeddings = False
     # not to test torchscript as the model tester doesn't prepare `input_features` and `padding_mask`
     # (and `torchscript` hates `None` values).
@@ -760,8 +759,6 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 "decoder_input_ids",
                 "decoder_attention_mask",
             ]
-            if "head_mask" and "decoder_head_mask" in arg_names:
-                expected_arg_names.extend(["head_mask", "decoder_head_mask"])
 
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
@@ -880,29 +877,6 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    # override since the conv layers and lstm's in encodec are exceptions
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                uniform_init_parms = ["conv"]
-                ignore_init = ["lstm"]
-                if param.requires_grad:
-                    if any(x in name for x in uniform_init_parms):
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    elif not any(x in name for x in ignore_init):
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-
     # override since we have embeddings / LM heads over multiple codebooks
     def test_model_get_set_embeddings(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -971,7 +945,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 self.skipTest(
                     reason="Llava-like models currently (transformers==4.39.1) requires an attention_mask input"
                 )
-            if config.model_type in ["paligemma"]:
+            if config.model_type == "paligemma":
                 self.skipTest(
                     "PaliGemma-like models currently (transformers==4.41.0) requires an attention_mask input"
                 )

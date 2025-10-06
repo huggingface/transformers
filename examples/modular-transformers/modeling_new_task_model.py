@@ -10,7 +10,7 @@ from typing import ClassVar, Optional, Union
 import torch
 from torch import nn
 
-from ...cache_utils import Cache, HybridCache, StaticCache
+from ...cache_utils import Cache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast
@@ -93,7 +93,7 @@ class NewTaskModelPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["NewTaskModelMultiModalProjector"]
     _skip_keys_device_placement = "past_key_values"
 
-    _can_compile_fullgraph = True
+    _can_compile_fullgraph = False
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -165,8 +165,6 @@ class NewTaskModelModel(NewTaskModelPreTrainedModel):
 
         inputs_lead_dim, sequence_length = input_tensor.shape[:2]
         if using_static_cache:
-            target_length = past_key_values.get_max_cache_shape()
-        elif isinstance(past_key_values, HybridCache):
             target_length = past_key_values.get_max_cache_shape()
         else:
             target_length = (
@@ -256,8 +254,8 @@ class NewTaskModelModel(NewTaskModelPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None,
@@ -505,7 +503,8 @@ class NewTaskModelForNewTask(NewTaskModelPreTrainedModel, GenerationMixin):
         if cache_position[0] == 0:
             model_inputs["pixel_values"] = pixel_values
         is_training = token_type_ids is not None and labels is not None
-        if cache_position[0] == 0 and isinstance(past_key_values, HybridCache):
+        is_static_hybrid_cache = isinstance(past_key_values, StaticCache) and any(past_key_values.is_sliding)
+        if cache_position[0] == 0 and is_static_hybrid_cache:
             input_tensor = inputs_embeds if inputs_embeds is not None else input_ids
             causal_mask = self.model._update_causal_mask(
                 attention_mask, token_type_ids, past_key_values, cache_position, input_tensor, is_training

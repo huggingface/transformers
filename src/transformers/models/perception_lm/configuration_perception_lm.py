@@ -68,7 +68,7 @@ class PerceptionLMConfig(PretrainedConfig):
         if isinstance(vision_config, dict):
             vision_config = TimmWrapperConfig(**vision_config)
         elif isinstance(vision_config, TimmWrapperConfig):
-            vision_config = vision_config
+            pass
         elif vision_config is None:
             vision_config = TimmWrapperConfig()
         self.vision_config = vision_config

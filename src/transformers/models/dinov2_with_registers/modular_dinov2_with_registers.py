@@ -17,7 +17,6 @@
 from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ....transformers.models.dinov2.modeling_dinov2 import (
@@ -318,7 +317,6 @@ class Dinov2WithRegistersForImageClassification(Dinov2ForImageClassification):
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ImageClassifierOutput:
@@ -329,7 +327,7 @@ class Dinov2WithRegistersForImageClassification(Dinov2ForImageClassification):
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
-        outputs: BaseModelOutputWithPooling = self.dinov2_with_registers(pixel_values, head_mask=head_mask, **kwargs)
+        outputs: BaseModelOutputWithPooling = self.dinov2_with_registers(pixel_values, **kwargs)
         sequence_output = outputs.last_hidden_state  # batch_size, sequence_length, hidden_size
 
         cls_token = sequence_output[:, 0]

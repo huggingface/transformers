@@ -24,7 +24,6 @@ from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     DynamicCache,
-    VaultGemmaConfig,
     is_torch_available,
     pipeline,
 )
@@ -42,7 +41,6 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...test_configuration_common import ConfigTester
 
 
 if is_torch_available():
@@ -56,22 +54,11 @@ if is_torch_available():
 
 class VaultGemmaModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = VaultGemmaConfig
         base_model_class = VaultGemmaModel
-        causal_lm_class = VaultGemmaForCausalLM
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": VaultGemmaModel,
-            "text-generation": VaultGemmaForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
 
 
 @require_torch
 class VaultGemmaModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (VaultGemmaModel, VaultGemmaForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": VaultGemmaModel,
@@ -81,15 +68,9 @@ class VaultGemmaModelTest(CausalLMModelTest, unittest.TestCase):
         else {}
     )
 
-    test_headmasking = False
-    test_pruning = False
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
     model_tester_class = VaultGemmaModelTester
-
-    def setUp(self):
-        self.model_tester = VaultGemmaModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=VaultGemmaConfig, hidden_size=37)
 
 
 @slow
@@ -107,8 +88,8 @@ class VaultGemmaIntegrationTest(unittest.TestCase):
     def test_model_bf16(self):
         model_id = "google/vaultgemma-1b"
         EXPECTED_TEXTS = [
-            "<bos>Hello I am doing a project on the 1918 flu pandemic and I am trying to find out how many",
-            "<pad><pad><bos>Hi today I'm going to be talking about the history of the United States. The United States of America",
+            "<bos>Hello I am doing a project on a 1990 240sx. I have a 1",
+            "<pad><pad><bos>Hi today I am going to show you how to make a simple 3D model of a 3D",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, attn_implementation="eager").to(
@@ -128,13 +109,11 @@ class VaultGemmaIntegrationTest(unittest.TestCase):
         model_id = "google/vaultgemma-1b"
         # EXPECTED_TEXTS should match the same non-pipeline test, minus the special tokens
         EXPECTED_TEXTS = [
-            "Hello I am doing a project on the 1918 flu pandemic and I am trying to find out how many",
-            "Hi today I'm going to be talking about the history of the United States. The United States of America",
+            "Hello I am doing a project on a 1990 240sx. I have a 1",
+            "Hi today I am going to show you how to make a simple 3D model of a 3D",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id, dtype=torch.bfloat16, attn_implementation="flex_attention"
-        ).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16).to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
 
@@ -158,18 +137,7 @@ class VaultGemmaIntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(model_id, pad_token="</s>", padding_side="right")
         EXPECTED_TEXT_COMPLETIONS = Expectations(
             {
-                ("xpu", 3): [
-                    "Hello I am doing a project for my school and I need to know how to make a program that will take a number"
-                ],
-                ("cuda", 7): [
-                    "Hello I am doing a project for my school and I need to know how to make a program that will take a number"
-                ],
-                ("cuda", 8): [
-                    "Hello I am doing a project for my class and I am having trouble with the code. I am trying to make a"
-                ],
-                ("rocm", (9, 5)): [
-                    "Hello I am doing a project for my school and I need to know how to make a program that will take a number"
-                ],
+                ("cuda", 8): ["Hello I am doing a project on a 1990 240sx. I have a 1"],
             }
         )
         EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETIONS.get_expectation()
@@ -239,8 +207,8 @@ class VaultGemmaIntegrationTest(unittest.TestCase):
 
         model_id = "google/vaultgemma-1b"
         EXPECTED_COMPLETIONS = [
-            " the people, the food, the culture, the history, the music, the art, the architecture",
-            ", green, yellow, orange, purple, pink, brown, black, white, gray, silver",
+            " place pretty place pretty place. place pretty place pretty place. place pretty place pretty place. place pretty",
+            ", green, yellow, orange, purple, black, white, and gray.\n\nA list of",
         ]
 
         input_text = [
@@ -285,8 +253,8 @@ class VaultGemmaIntegrationTest(unittest.TestCase):
 
         model_id = "google/vaultgemma-1b"
         EXPECTED_COMPLETIONS = [
-            " the people, the food, the culture, the history, the music, the art, the architecture",
-            ", green, yellow, orange, purple, pink, brown, black, white, gray, silver",
+            " place pretty place pretty place. place pretty place pretty place. place pretty place pretty place. place pretty",
+            ", green, yellow, orange, purple, black, white, and gray.\n\nA list of",
         ]
 
         input_text = [

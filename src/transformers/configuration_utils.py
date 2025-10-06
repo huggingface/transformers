@@ -100,9 +100,8 @@ class PretrainedConfig(PushToHubMixin):
 
     Arg:
         name_or_path (`str`, *optional*, defaults to `""`):
-            Store the string that was passed to [`PreTrainedModel.from_pretrained`] or
-            [`TFPreTrainedModel.from_pretrained`] as `pretrained_model_name_or_path` if the configuration was created
-            with such a method.
+            Store the string that was passed to [`PreTrainedModel.from_pretrained`] as `pretrained_model_name_or_path`
+            if the configuration was created with such a method.
         output_hidden_states (`bool`, *optional*, defaults to `False`):
             Whether or not the model should return all hidden-states.
         output_attentions (`bool`, *optional*, defaults to `False`):
@@ -140,8 +139,7 @@ class PretrainedConfig(PushToHubMixin):
         architectures (`list[str]`, *optional*):
             Model architectures that can be used with the model pretrained weights.
         finetuning_task (`str`, *optional*):
-            Name of the task used to fine-tune the model. This can be used when converting from an original (TensorFlow
-            or PyTorch) checkpoint.
+            Name of the task used to fine-tune the model.
         id2label (`dict[int, str]`, *optional*):
             A map from index (for instance prediction index, or target index) to label.
         label2id (`dict[str, int]`, *optional*):
@@ -345,10 +343,6 @@ class PretrainedConfig(PushToHubMixin):
             except AttributeError as err:
                 logger.error(f"Can't set {key} with value {value} for {self}")
                 raise err
-
-        # TODO: remove later, deprecated arguments for TF models
-        self.tf_legacy_loss = kwargs.pop("tf_legacy_loss", False)
-        self.use_bfloat16 = kwargs.pop("use_bfloat16", False)
 
     def _create_id_label_maps(self, num_labels: int):
         self.id2label = {i: f"LABEL_{i}" for i in range(num_labels)}
@@ -555,9 +549,6 @@ class PretrainedConfig(PushToHubMixin):
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force to (re-)download the configuration files and override the cached versions if
                 they exist.
-            resume_download:
-                Deprecated and ignored. All downloads are now resumed by default when possible.
-                Will be removed in v5 of Transformers.
             proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -680,7 +671,6 @@ class PretrainedConfig(PushToHubMixin):
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
-        resume_download = kwargs.pop("resume_download", None)
         proxies = kwargs.pop("proxies", None)
         token = kwargs.pop("token", None)
         local_files_only = kwargs.pop("local_files_only", False)
@@ -724,7 +714,6 @@ class PretrainedConfig(PushToHubMixin):
                     cache_dir=cache_dir,
                     force_download=force_download,
                     proxies=proxies,
-                    resume_download=resume_download,
                     local_files_only=local_files_only,
                     token=token,
                     user_agent=user_agent,
@@ -1369,7 +1358,12 @@ ALLOWED_LAYER_TYPES = (
 )
 
 
-def layer_type_validation(layer_types: list[str]):
-    """Check that each entry in `layer_types` are allowed."""
+def layer_type_validation(layer_types: list[str], num_hidden_layers: Optional[int] = None):
+    """Check that `layer_types` is correctly defined."""
     if not all(layer_type in ALLOWED_LAYER_TYPES for layer_type in layer_types):
         raise ValueError(f"The `layer_types` entries must be in {ALLOWED_LAYER_TYPES}")
+    if num_hidden_layers is not None and num_hidden_layers != len(layer_types):
+        raise ValueError(
+            f"`num_hidden_layers` ({num_hidden_layers}) must be equal to the number of layer types "
+            f"({len(layer_types)})"
+        )

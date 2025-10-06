@@ -35,7 +35,6 @@ The abstract from the paper is the following:
 ### Usage tips
 The hyperparameters of this model is the same as Llama model.
 
-
 ## DiffLlamaConfig
 
 [[autodoc]] DiffLlamaConfig

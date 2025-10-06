@@ -141,6 +141,9 @@ class MiniMaxConfig(PretrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    attribute_map = {
+        "num_experts": "num_local_experts",
+    }
 
     def __init__(
         self,
@@ -224,7 +227,7 @@ class MiniMaxConfig(PretrainedConfig):
             self.layer_types = [
                 "full_attention" if bool((i + 1) % 2) else "linear_attention" for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types)
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
 
 __all__ = ["MiniMaxConfig"]

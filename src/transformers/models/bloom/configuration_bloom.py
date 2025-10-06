@@ -22,7 +22,7 @@ from packaging import version
 
 
 if TYPE_CHECKING:
-    from ... import PreTrainedTokenizer, TensorType
+    from ... import PreTrainedTokenizer
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfigWithPast, PatchingSpec
@@ -187,10 +187,12 @@ class BloomOnnxConfig(OnnxConfigWithPast):
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
-        framework: Optional["TensorType"] = None,
     ) -> Mapping[str, Any]:
         common_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
-            tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
+            tokenizer,
+            batch_size=batch_size,
+            seq_length=seq_length,
+            is_pair=is_pair,
         )
 
         # We need to order the input in the way they appears in the forward()

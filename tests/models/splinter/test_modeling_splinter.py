@@ -347,12 +347,6 @@ class SplinterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        # some params shouldn't be scattered by nn.DataParallel
-        # so just remove them if they are present.
-        blacklist_non_batched_params = ["head_mask", "decoder_head_mask", "cross_attn_head_mask"]
-        for k in blacklist_non_batched_params:
-            inputs_dict.pop(k, None)
-
         # move input tensors to cuda:O
         for k, v in inputs_dict.items():
             if torch.is_tensor(v):

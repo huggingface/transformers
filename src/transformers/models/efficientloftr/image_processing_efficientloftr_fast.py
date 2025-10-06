@@ -17,11 +17,11 @@
 from typing import TYPE_CHECKING, Optional, Union
 
 import torch
+from PIL import Image, ImageDraw
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -38,26 +38,14 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
-    is_vision_available,
 )
+from .image_processing_efficientloftr import EfficientLoFTRImageProcessorKwargs
 
-
-if is_torch_available():
-    import torch
 
 if TYPE_CHECKING:
     from .modeling_efficientloftr import KeypointMatchingOutput
 
-if is_torchvision_v2_available():
-    import torchvision.transforms.v2.functional as F
-elif is_torchvision_available():
-    import torchvision.transforms.functional as F
-
-if is_vision_available():
-    from PIL import Image, ImageDraw
+import torchvision.transforms.v2.functional as F
 
 
 def _is_valid_image(image):
@@ -120,15 +108,6 @@ def convert_to_grayscale(
     return F.rgb_to_grayscale(image, num_output_channels=3)
 
 
-class EfficientLoFTRFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    r"""
-    do_grayscale (`bool`, *optional*, defaults to `True`):
-        Whether to convert the image to grayscale. Can be overridden by `do_grayscale` in the `preprocess` method.
-    """
-
-    do_grayscale: Optional[bool] = True
-
-
 @auto_docstring
 class EfficientLoFTRImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
@@ -138,13 +117,13 @@ class EfficientLoFTRImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     rescale_factor = 1 / 255
     do_normalize = None
-    valid_kwargs = EfficientLoFTRFastImageProcessorKwargs
+    valid_kwargs = EfficientLoFTRImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[EfficientLoFTRFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[EfficientLoFTRImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[EfficientLoFTRFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[EfficientLoFTRImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def _prepare_images_structure(

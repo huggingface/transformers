@@ -14,20 +14,12 @@
 import unittest
 
 from tests.test_tokenization_common import TokenizerTesterMixin
-from transformers import SplinterTokenizerFast, is_tf_available, is_torch_available
+from transformers import SplinterTokenizerFast
 from transformers.models.splinter import SplinterTokenizer
 from transformers.testing_utils import get_tests_dir, slow
 
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/vocab.txt")
-
-
-if is_torch_available():
-    FRAMEWORK = "pt"
-elif is_tf_available():
-    FRAMEWORK = "tf"
-else:
-    FRAMEWORK = "jax"
 
 
 class SplinterTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
@@ -128,7 +120,7 @@ class SplinterTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             max_length=max_length,
             padding="max_length",
             truncation=True,
-            return_tensors=FRAMEWORK,
+            return_tensors="pt",
         )
         self.assertEqual(len(tokenized["input_ids"]), len(texts))
         self.assertEqual(len(tokenized["input_ids"][0]), max_length)

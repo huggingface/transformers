@@ -25,7 +25,6 @@ The model is an enhancement to the original SAM model that produces significantl
 
 ![example image](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-output.png)
 
-
 SAM-HQ introduces several key improvements over the original SAM model:
 
 1. High-Quality Output Token: A learnable token injected into SAM's mask decoder for higher quality mask prediction
@@ -105,7 +104,6 @@ masks = processor.image_processor.post_process_masks(
 scores = outputs.iou_scores
 ```
 
-
 ## Resources
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with SAM-HQ:
@@ -136,7 +134,6 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 ## SamHQVisionModel
 
 [[autodoc]] SamHQVisionModel
-
 
 ## SamHQModel
 

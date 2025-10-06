@@ -123,8 +123,6 @@
     title: تشغيل التدريب على Amazon SageMaker
   - local: serialization
     title: التصدير إلى ONNX
-  - local: tflite
-    title: التصدير إلى TFLite
   - local: torchscript
     title: التصدير إلى TorchScript
   - local: notebooks
@@ -184,8 +182,6 @@
 #       title: التدريب الفعال على وحدة المعالجة المركزية (CPU)
 #     - local: perf_train_cpu_many
 #       title: التدريب الموزع لوحدة المعالجة المركزية (CPU)
-#     - local: perf_train_tpu_tf
-#       title: التدريب على (TPU) باستخدام TensorFlow
 #     - local: perf_train_special
 #       title: تدريب PyTorch على Apple silicon
 #     - local: perf_hardware
@@ -203,8 +199,6 @@
 #     title: إنشاء نموذج كبير
 #   - local: debugging
 #     title: تصحيح الأخطاء البرمجية
-#   - local: tf_xla
-#     title: تكامل XLA لنماذج TensorFlow
 #   - local: perf_torch_compile
 #     title: تحسين الاستدلال باستخدام `torch.compile()`
 #   title: الأداء وقابلية التوسع
@@ -260,8 +254,6 @@
 #       title: التكوين
 #     - local: main_classes/data_collator
 #       title: مجمع البيانات
-#     - local: main_classes/keras_callbacks
-#       title: استدعاءات Keras
 #     - local: main_classes/logging
 #       title: التسجيل
 #     - local: main_classes/model

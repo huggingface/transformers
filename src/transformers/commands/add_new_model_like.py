@@ -755,7 +755,7 @@ class AddNewModelLikeCommand(BaseTransformersCLICommand):
         )
         add_new_model_like_parser.set_defaults(func=add_new_model_like_command_factory)
 
-    def __init__(self, path_to_repo=None, *args):
+    def __init__(self, path_to_repo=None, **kwargs):
         (
             self.old_model_infos,
             self.new_lowercase_name,

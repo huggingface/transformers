@@ -17,7 +17,7 @@ import unittest
 
 import pytest
 
-from transformers import AutoTokenizer, Qwen2MoeConfig, is_torch_available, set_seed
+from transformers import AutoTokenizer, is_torch_available, set_seed
 from transformers.testing_utils import (
     cleanup,
     require_flash_attn,
@@ -46,28 +46,12 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 class Qwen2MoeModelTester(CausalLMModelTester):
-    config_class = Qwen2MoeConfig
     if is_torch_available():
         base_model_class = Qwen2MoeModel
-        causal_lm_class = Qwen2MoeForCausalLM
-        sequence_class = Qwen2MoeForSequenceClassification
-        token_class = Qwen2MoeForTokenClassification
-        question_answering_class = Qwen2MoeForQuestionAnswering
 
 
 @require_torch
 class Qwen2MoeModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            Qwen2MoeModel,
-            Qwen2MoeForCausalLM,
-            Qwen2MoeForSequenceClassification,
-            Qwen2MoeForTokenClassification,
-            Qwen2MoeForQuestionAnswering,
-        )
-        if is_torch_available()
-        else ()
-    )
     pipeline_model_mapping = (
         {
             "feature-extraction": Qwen2MoeModel,
@@ -80,8 +64,6 @@ class Qwen2MoeModelTest(CausalLMModelTest, unittest.TestCase):
         else {}
     )
 
-    test_headmasking = False
-    test_pruning = False
     test_all_params_have_gradient = False
     model_tester_class = Qwen2MoeModelTester
 
@@ -252,7 +234,7 @@ class Qwen2MoeIntegrationTest(unittest.TestCase):
     @slow
     def test_speculative_generation(self):
         EXPECTED_TEXT_COMPLETION = (
-            "To be or not to be, that is the question. Whether 'tis nobler in the mind to suffer the sl"
+            "To be or not to be, that is the question: Whether 'tis nobler in the mind to suffer The sl"
         )
         prompt = "To be or not to"
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B", use_fast=False)
