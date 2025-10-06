@@ -45,6 +45,7 @@ from ...test_modeling_common import (
     floats_tensor,
     ids_tensor,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -164,7 +165,7 @@ class Qwen2VLVisionText2TextModelTester:
 
 
 @require_torch
-class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Model tester for `Qwen2VLForConditionalGeneration`.
     """
@@ -177,7 +178,10 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         if is_torch_available()
         else ()
     )
-    pipeline_model_mapping = {"image-text-to-text": Qwen2VLForConditionalGeneration}
+    pipeline_model_mapping = {
+        "image-text-to-text": Qwen2VLForConditionalGeneration,
+        "any-to-any": Qwen2VLForConditionalGeneration,
+    }
     test_pruning = False
     _is_composite = True
 
