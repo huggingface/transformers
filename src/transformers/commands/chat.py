@@ -31,7 +31,6 @@ import yaml
 from huggingface_hub import AsyncInferenceClient, ChatCompletionStreamOutput
 
 from transformers import (
-    AutoTokenizer,
     GenerationConfig,
     PreTrainedTokenizer,
 )
@@ -53,14 +52,6 @@ if is_rich_available():
     from rich.console import Console
     from rich.live import Live
     from rich.markdown import Markdown
-
-if is_torch_available():
-    import torch
-
-    from transformers import (
-        AutoModelForCausalLM,
-        BitsAndBytesConfig,
-    )
 
 ALLOWED_KEY_CHARS = set(string.ascii_letters + string.whitespace)
 ALLOWED_VALUE_CHARS = set(
@@ -275,17 +266,10 @@ class ChatArguments:
             "which case you must install this manually by running `pip install flash-attn --no-build-isolation`."
         },
     )
-    load_in_8bit: bool = field(
-        default=False,
-        metadata={"help": "Whether to use 8 bit precision for the base model - works only with LoRA."},
+    quantization: Optional[str] = field(
+        default=None,
+        metadata={"help": "Which quantization method to use.", "choices": ["bitsandbytes-4bit", "bitsandbytes-8bit"]},
     )
-    load_in_4bit: bool = field(
-        default=False,
-        metadata={"help": "Whether to use 4 bit precision for the base model - works only with LoRA."},
-    )
-    bnb_4bit_quant_type: str = field(default="nf4", metadata={"help": "Quantization type.", "choices": ["fp4", "nf4"]})
-    use_bnb_nested_quant: bool = field(default=False, metadata={"help": "Whether to use nested quantization."})
-
     # Serving settings
     host: str = field(default="localhost", metadata={"help": "Interface the server will listen to.."})
     port: int = field(default=8000, metadata={"help": "Port the server will listen to."})
@@ -529,53 +513,6 @@ class ChatCommand(BaseTransformersCLICommand):
         return pad_token_id, all_eos_token_ids
 
     # -----------------------------------------------------------------------------------------------------------------
-    # Model loading and performance automation methods
-    @staticmethod
-    def get_quantization_config(model_args: ChatArguments) -> Optional[BitsAndBytesConfig]:
-        if model_args.load_in_4bit:
-            quantization_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                # For consistency with model weights, we use the same value as `dtype`
-                bnb_4bit_compute_dtype=model_args.dtype,
-                bnb_4bit_quant_type=model_args.bnb_4bit_quant_type,
-                bnb_4bit_use_double_quant=model_args.use_bnb_nested_quant,
-                bnb_4bit_quant_storage=model_args.dtype,
-            )
-        elif model_args.load_in_8bit:
-            quantization_config = BitsAndBytesConfig(
-                load_in_8bit=True,
-            )
-        else:
-            quantization_config = None
-
-        return quantization_config
-
-    def load_model_and_tokenizer(self, args: ChatArguments) -> tuple["AutoModelForCausalLM", AutoTokenizer]:
-        tokenizer = AutoTokenizer.from_pretrained(
-            args.model_name_or_path_positional,
-            revision=args.model_revision,
-            trust_remote_code=args.trust_remote_code,
-        )
-
-        dtype = args.dtype if args.dtype in ["auto", None] else getattr(torch, args.dtype)
-        quantization_config = self.get_quantization_config(args)
-        model_kwargs = {
-            "revision": args.model_revision,
-            "attn_implementation": args.attn_implementation,
-            "dtype": dtype,
-            "device_map": "auto",
-            "quantization_config": quantization_config,
-        }
-        model = AutoModelForCausalLM.from_pretrained(
-            args.model_name_or_path_positional, trust_remote_code=args.trust_remote_code, **model_kwargs
-        )
-
-        if getattr(model, "hf_device_map", None) is None:
-            model = model.to(args.device)
-
-        return model, tokenizer
-
-    # -----------------------------------------------------------------------------------------------------------------
     # User commands
     def handle_non_exit_user_commands(
         self,
@@ -671,10 +608,7 @@ class ChatCommand(BaseTransformersCLICommand):
                 dtype=self.args.dtype,
                 trust_remote_code=self.args.trust_remote_code,
                 attn_implementation=self.args.attn_implementation,
-                load_in_8bit=self.args.load_in_8bit,
-                load_in_4bit=self.args.load_in_4bit,
-                bnb_4bit_quant_type=self.args.bnb_4bit_quant_type,
-                use_bnb_nested_quant=self.args.use_bnb_nested_quant,
+                quantization=self.args.quantization,
                 host=self.args.host,
                 port=self.args.port,
                 log_level="error",

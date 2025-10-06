@@ -369,7 +369,7 @@ class ServeArguments:
     device: str = field(
         default="auto",
         metadata={
-            "help": "Device to use for inference; will default to `auto` and"
+            "help": "Device to use for inference; will default to `auto` and "
             "place the model on an accelerator if available."
         },
     )
@@ -398,16 +398,10 @@ class ServeArguments:
             "which case you must install this manually by running `pip install flash-attn --no-build-isolation`."
         },
     )
-    load_in_8bit: bool = field(
-        default=False,
-        metadata={"help": "Whether to use 8 bit precision for the base model - works only with LoRA."},
+    quantization: Optional[str] = field(
+        default=None,
+        metadata={"help": "Which quantization method to use.", "choices": ["bitsandbytes-4bit", "bitsandbytes-8bit"]},
     )
-    load_in_4bit: bool = field(
-        default=False,
-        metadata={"help": "Whether to use 4 bit precision for the base model - works only with LoRA."},
-    )
-    bnb_4bit_quant_type: str = field(default="nf4", metadata={"help": "Quantization type.", "choices": ["fp4", "nf4"]})
-    use_bnb_nested_quant: bool = field(default=False, metadata={"help": "Whether to use nested quantization."})
 
     # Serving settings
     host: str = field(default="localhost", metadata={"help": "Interface the server will listen to."})
@@ -1636,19 +1630,14 @@ class ServeCommand(BaseTransformersCLICommand):
         Returns:
             `Optional[BitsAndBytesConfig]`: The quantization config.
         """
-        if args.load_in_4bit:
+        if args.quantization == "bitsandbytes-4bit":
             quantization_config = BitsAndBytesConfig(
                 load_in_4bit=True,
-                # For consistency with model weights, we use the same value as `dtype`
-                bnb_4bit_compute_dtype=args.dtype,
-                bnb_4bit_quant_type=args.bnb_4bit_quant_type,
-                bnb_4bit_use_double_quant=args.use_bnb_nested_quant,
-                bnb_4bit_quant_storage=args.dtype,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_use_double_quant=True,
             )
-        elif args.load_in_8bit:
-            quantization_config = BitsAndBytesConfig(
-                load_in_8bit=True,
-            )
+        elif args.quantization == "bitsandbytes-8bit":
+            quantization_config = BitsAndBytesConfig(load_in_8bit=True)
         else:
             quantization_config = None
 
@@ -1699,7 +1688,6 @@ class ServeCommand(BaseTransformersCLICommand):
             revision=revision,
             trust_remote_code=args.trust_remote_code,
         )
-
         dtype = args.dtype if args.dtype in ["auto", None] else getattr(torch, args.dtype)
         quantization_config = self.get_quantization_config(args)
 
@@ -1707,18 +1695,14 @@ class ServeCommand(BaseTransformersCLICommand):
             "revision": revision,
             "attn_implementation": args.attn_implementation,
             "dtype": dtype,
-            "device_map": "auto",
+            "device_map": args.device,
             "trust_remote_code": args.trust_remote_code,
+            "quantization_config": quantization_config,
         }
-        if quantization_config is not None:
-            model_kwargs["quantization_config"] = quantization_config
 
         config = AutoConfig.from_pretrained(model_id, **model_kwargs)
         architecture = getattr(transformers, config.architectures[0])
         model = architecture.from_pretrained(model_id, **model_kwargs)
-
-        if getattr(model, "hf_device_map", None) is None:
-            model = model.to(args.device)
 
         has_default_max_length = (
             model.generation_config.max_new_tokens is None and model.generation_config.max_length == 20
