@@ -492,7 +492,7 @@ class EomtForUniversalSegmentation(Mask2FormerForUniversalSegmentation):
 
         return attn_mask
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
