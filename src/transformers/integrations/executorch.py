@@ -1310,7 +1310,7 @@ def sdpa_bidirectional_mask_without_vmap(
     the element should take part in the attention computation, and False that it should not.
 
     This is similar to `masking_utils.sdpa_mask` but does not use `vmap` which is incompatible with export.
-    Additionally, sorrounding logic for causal masks is omitted for simplicity.
+    Additionally, surrounding logic for causal masks is omitted for simplicity.
 
     Args:
         kv_length (`int`):
