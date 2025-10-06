@@ -25,8 +25,9 @@ import torch
 from torch import nn
 from tqdm import tqdm
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...generation.configuration_utils import GenerationConfig
+from ...integrations.hub_kernels import load_and_register_kernel
 from ...utils.logging import logging
 from ...utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
 from .cache import PagedAttentionCache
@@ -140,7 +141,7 @@ class ContinuousBatchProcessor:
     def __init__(
         self,
         cache: PagedAttentionCache,
-        config: PretrainedConfig,
+        config: PreTrainedConfig,
         generation_config: GenerationConfig,
         input_queue: queue.Queue,
         output_queue: queue.Queue,
@@ -241,7 +242,10 @@ class ContinuousBatchProcessor:
         self.reset_static_tensors(full_reset=True)
 
     def return_attention_mask(self) -> bool:
-        return self.config._attn_implementation != "paged_attention"  # we set `is_causal` to True in paged call
+        return self.config._attn_implementation in [
+            "paged|eager",
+            "paged|sdpa",
+        ]  # we set `is_causal` to True in paged call
 
     @traced
     @torch.no_grad()
@@ -604,6 +608,10 @@ class ContinuousBatchingManager:
             streaming: Whether to stream tokens as they are generated
         """
         self.model = model.eval()
+        if "paged|" not in model.config._attn_implementation:
+            attn_implementation = "paged|" + self.model.config._attn_implementation
+            load_and_register_kernel(attn_implementation)
+            model.set_attn_implementation(attn_implementation)
         generation_config = model.generation_config if generation_config is None else generation_config
         self.generation_config = generation_config
         self.input_queue = queue.Queue(maxsize=max_queue_size)
@@ -757,14 +765,6 @@ class ContinuousBatchingManager:
                 yield result
             if self.batch_processor is not None:
                 request_cancelled = self.batch_processor.scheduler.request_is_cancelled(request_id)
-
-    @staticmethod
-    def supported_attention_implementations() -> set[str]:
-        return {"eager_paged", "sdpa_paged", "flash_attention_2"}
-
-    @staticmethod
-    def default_attention_implementation() -> str:
-        return "sdpa_paged"
 
     @traced
     def warmup(self, batch_processor):

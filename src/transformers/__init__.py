@@ -59,7 +59,7 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 _import_structure = {
     "audio_utils": [],
     "commands": [],
-    "configuration_utils": ["PretrainedConfig"],
+    "configuration_utils": ["PreTrainedConfig", "PretrainedConfig"],
     "convert_slow_tokenizers_checkpoints_to_fast": [],
     "data": [
         "DataProcessor",
@@ -225,7 +225,6 @@ _import_structure = {
         "is_py3nvml_available",
         "is_pyctcdecode_available",
         "is_sacremoses_available",
-        "is_safetensors_available",
         "is_scipy_available",
         "is_sentencepiece_available",
         "is_sklearn_available",
@@ -492,6 +491,7 @@ if TYPE_CHECKING:
     from .cache_utils import StaticCache as StaticCache
     from .cache_utils import StaticLayer as StaticLayer
     from .cache_utils import StaticSlidingWindowLayer as StaticSlidingWindowLayer
+    from .configuration_utils import PreTrainedConfig as PreTrainedConfig
     from .configuration_utils import PretrainedConfig as PretrainedConfig
     from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS as SLOW_TO_FAST_CONVERTERS
     from .convert_slow_tokenizer import convert_slow_tokenizer as convert_slow_tokenizer
@@ -746,7 +746,6 @@ if TYPE_CHECKING:
     from .utils import is_py3nvml_available as is_py3nvml_available
     from .utils import is_pyctcdecode_available as is_pyctcdecode_available
     from .utils import is_sacremoses_available as is_sacremoses_available
-    from .utils import is_safetensors_available as is_safetensors_available
     from .utils import is_sklearn_available as is_sklearn_available
     from .utils import is_torch_hpu_available as is_torch_hpu_available
     from .utils import is_torch_mlu_available as is_torch_mlu_available

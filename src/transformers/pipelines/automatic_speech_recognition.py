@@ -415,7 +415,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 inputs = F.resample(
                     torch.from_numpy(inputs) if isinstance(inputs, np.ndarray) else inputs,
                     in_sampling_rate,
-                    in_sampling_rate,
                     self.feature_extractor.sampling_rate,
                 ).numpy()
                 ratio = self.feature_extractor.sampling_rate / in_sampling_rate
