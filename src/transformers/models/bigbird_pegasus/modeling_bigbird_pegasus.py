@@ -1185,7 +1185,7 @@ def eager_attention_forward(
     # Take the dot product between "query" and "key" to get the raw attention scores.
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
-    if attention_mask is not None and attention_mask.ndim == 4:
+    if attention_mask is not None:
         attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + attention_mask
 
