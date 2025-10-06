@@ -31,12 +31,13 @@ class ThreadSafe(ModuleType):
 
     def __init__(self, module: ModuleType):
         super().__init__(module.__name__)
-        self._module = module
+        # `_hf_safe_` prefix is used to avoid colliding with the wrapped object namespace.
+        self._hf_safe_module = module
         # callable execution lock
-        self._lock = threading.Lock()
+        self._hf_safe_lock = threading.Lock()
         # cache dict lock
-        self._callable_cache_lock = threading.Lock()
-        self._callable_cache: dict[str, object] = {}
+        self._hf_safe_callable_cache_lock = threading.Lock()
+        self._hf_safe_callable_cache: dict[str, object] = {}
         # Keep core module metadata available so tools relying on attributes
         # like __doc__ or __spec__ see the original values.
         metadata = {"__doc__": module.__doc__}
@@ -46,63 +47,64 @@ class ThreadSafe(ModuleType):
         self.__dict__.update(metadata)
 
     def __getattr__(self, name: str):
-        attr = getattr(self._module, name)
+        attr = getattr(self._hf_safe_module, name)
         if callable(attr):
-            with self._callable_cache_lock:
-                cached = self._callable_cache.get(name)
+            with self._hf_safe_callable_cache_lock:
+                cached = self._hf_safe_callable_cache.get(name)
                 if cached is not None and getattr(cached, "__wrapped__", None) is attr:
                     return cached
 
                 @wraps(attr)
-                def locked(*args, **kwargs):
-                    with self._lock:
+                def _hf_safe_locked(*args, **kwargs):
+                    with self._hf_safe_lock:
                         return attr(*args, **kwargs)
 
-                locked.__wrapped__ = attr
-                self._callable_cache[name] = locked
-                return locked
+                _hf_safe_locked.__wrapped__ = attr
+                self._hf_safe_callable_cache[name] = _hf_safe_locked
+                return _hf_safe_locked
         return attr
 
     def __dir__(self):
-        return sorted(set(super().__dir__()) | set(dir(self._module)))
+        return sorted(set(super().__dir__()) | set(dir(self._hf_safe_module)))
 
 
 class _ThreadSafeProxy:
     """Lightweight proxy that serializes access to an object with a shared lock."""
 
     def __init__(self, value, lock):
-        object.__setattr__(self, "_value", value)
-        object.__setattr__(self, "_lock", lock)
-        object.__setattr__(self, "_cache_lock", threading.Lock())
-        object.__setattr__(self, "_callable_cache", {})
+        # `_hf_safe_` prefix is used to avoid colliding with the wrapped object namespace.
+        object.__setattr__(self, "_hf_safe_value", value)
+        object.__setattr__(self, "_hf_safe_lock", lock)
+        object.__setattr__(self, "_hf_safe_cache_lock", threading.Lock())
+        object.__setattr__(self, "_hf_safe_callable_cache", {})
         object.__setattr__(self, "__wrapped__", value)
 
     def __getattr__(self, name: str):
-        attr = getattr(self._value, name)
+        attr = getattr(self._hf_safe_value, name)
         if callable(attr):
-            with self._cache_lock:
-                cached = self._callable_cache.get(name)
+            with self._hf_safe_cache_lock:
+                cached = self._hf_safe_callable_cache.get(name)
                 if cached is not None and getattr(cached, "__wrapped__", None) is attr:
                     return cached
 
                 @wraps(attr)
-                def locked(*args, **kwargs):
-                    with self._lock:
+                def _hf_safe_locked(*args, **kwargs):
+                    with self._hf_safe_lock:
                         return attr(*args, **kwargs)
 
-                locked.__wrapped__ = attr
-                self._callable_cache[name] = locked
-                return locked
+                _hf_safe_locked.__wrapped__ = attr
+                self._hf_safe_callable_cache[name] = _hf_safe_locked
+                return _hf_safe_locked
         return attr
 
     def __setattr__(self, name, value):
-        setattr(self._value, name, value)
+        setattr(self._hf_safe_value, name, value)
 
     def __dir__(self):
-        return dir(self._value)
+        return dir(self._hf_safe_value)
 
     def __repr__(self):
-        return repr(self._value)
+        return repr(self._hf_safe_value)
 
 
 class SafeRegex(ThreadSafe):
@@ -113,12 +115,12 @@ class SafeRegex(ThreadSafe):
     # serialized.
 
     def compile(self, *args, **kwargs):
-        pattern = self._module.compile(*args, **kwargs)
-        return _ThreadSafeProxy(pattern, self._lock)
+        pattern = self._hf_safe_module.compile(*args, **kwargs)
+        return _ThreadSafeProxy(pattern, self._hf_safe_lock)
 
     def Regex(self, *args, **kwargs):
-        pattern = self._module.Regex(*args, **kwargs)
-        return _ThreadSafeProxy(pattern, self._lock)
+        pattern = self._hf_safe_module.Regex(*args, **kwargs)
+        return _ThreadSafeProxy(pattern, self._hf_safe_lock)
 
 
 regex = SafeRegex(_regex)
