@@ -295,8 +295,8 @@ class HiggsAudioGenerationMixin(GenerationMixin):
             `return_dict_in_generate=True` or a [`~generation.GenerateEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
         """
-        if input_ids.shape[0] != 1:
-            raise ValueError("Only support batch_size=1 in _sample()")
+        # if input_ids.shape[0] != 1:
+        #     raise ValueError("Only support batch_size=1 in _sample()")
 
         audio_out_bos_token_id = generation_config.audio_out_bos_token_id
 
@@ -553,10 +553,10 @@ class HiggsAudioGenerationMixin(GenerationMixin):
             ...
 
         """
-        if input_ids.shape[0] != 1:
-            raise ValueError(
-                "Currently HiggsAudioModel.generate() only supports batch_size=1. See the implementation of "
-            )
+        # if input_ids.shape[0] != 1:
+        #     raise ValueError(
+        #         "Currently HiggsAudioModel.generate() only supports batch_size=1. See the implementation of "
+        #     )
         generation_config, kwargs = self._prepare_generation_config(kwargs.pop("generation_config", None), **kwargs)
         if audio_out_bos_token_id is not None:
             generation_config.audio_out_bos_token_id = audio_out_bos_token_id

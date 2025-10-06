@@ -17,7 +17,6 @@
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 
-
 class HiggsAudioConfig(PretrainedConfig):
     r"""
     This is the configuration class for the HiggsAudioModel. Instantiating a configuration
@@ -306,6 +305,8 @@ class HiggsAudioConfig(PretrainedConfig):
         if self.rope_scaling is not None and "type" in self.rope_scaling:
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self)
+
+        _ = kwargs.pop("text_config", None)
 
         super().__init__(
             pad_token_id=pad_token_id,
