@@ -726,7 +726,7 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
         self.gradient_checkpointing = False
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
@@ -833,7 +833,7 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
         self.post_init()
 
     @auto_docstring
-    @check_model_inputs
+    @check_model_inputs()
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
