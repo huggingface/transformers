@@ -65,7 +65,7 @@ if is_torch_available():
 
 
 if TYPE_CHECKING:
-    from transformers import PretrainedConfig, PreTrainedModel
+    from transformers import PreTrainedConfig, PreTrainedModel
 
 
 def use_cache_if_possible(func):
@@ -120,11 +120,11 @@ def filter_roberta_detectors(_, pretrained_name: str):
 
 
 def merge_model_tokenizer_mappings(
-    model_mapping: dict["PretrainedConfig", "PreTrainedModel"],
-    tokenizer_mapping: dict["PretrainedConfig", tuple["PreTrainedTokenizer", "PreTrainedTokenizerFast"]],
+    model_mapping: dict["PreTrainedConfig", "PreTrainedModel"],
+    tokenizer_mapping: dict["PreTrainedConfig", tuple["PreTrainedTokenizer", "PreTrainedTokenizerFast"]],
 ) -> dict[
     Union["PreTrainedTokenizer", "PreTrainedTokenizerFast"],
-    tuple["PretrainedConfig", "PreTrainedModel"],
+    tuple["PreTrainedConfig", "PreTrainedModel"],
 ]:
     configurations = list(model_mapping.keys())
     model_tokenizer_mapping = OrderedDict([])

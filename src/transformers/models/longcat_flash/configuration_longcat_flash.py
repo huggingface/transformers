@@ -15,18 +15,18 @@
 
 """LongCat Flash model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 
 
-class LongcatFlashConfig(PretrainedConfig):
+class LongcatFlashConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LongcatFlashModel`]. It is used to instantiate
     a LongCat Flash model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the LongCat Flash architecture.
     e.g. [meituan-longcat/LongCat-Flash-Chat](https://huggingface.co/meituan-longcat/LongCat-Flash-Chat)
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
