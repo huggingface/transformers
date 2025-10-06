@@ -27,14 +27,14 @@ __all__ = ["ThreadSafe", "SafeRegex", "regex"]
 
 
 class ThreadSafe(ModuleType):
-    """Generic proxy that exposes a module through a shared (non-reentrant) lock."""
+    """Generic proxy that exposes a module through a shared lock."""
 
     def __init__(self, module: ModuleType):
         super().__init__(module.__name__)
         # `_hf_safe_` prefix is used to avoid colliding with the wrapped object namespace.
         self._hf_safe_module = module
-        # Callable execution lock
-        self._hf_safe_lock = threading.Lock()
+        # Callable execution lock (re-entrant so wrapped code can re-enter safely)
+        self._hf_safe_lock = threading.RLock()
         # Cache dict lock
         self._hf_safe_callable_cache_lock = threading.Lock()
         self._hf_safe_callable_cache: dict[str, object] = {}
@@ -98,13 +98,24 @@ class _ThreadSafeProxy:
         return attr
 
     def __setattr__(self, name, value):
-        setattr(self._hf_safe_value, name, value)
+        with self._hf_safe_lock:
+            setattr(self._hf_safe_value, name, value)
+
+    def __delattr__(self, name):
+        with self._hf_safe_lock:
+            delattr(self._hf_safe_value, name)
 
     def __dir__(self):
-        return dir(self._hf_safe_value)
+        with self._hf_safe_lock:
+            return dir(self._hf_safe_value)
 
     def __repr__(self):
-        return repr(self._hf_safe_value)
+        with self._hf_safe_lock:
+            return repr(self._hf_safe_value)
+
+    def __call__(self, *args, **kwargs):
+        with self._hf_safe_lock:
+            return self._hf_safe_value(*args, **kwargs)
 
 
 class SafeRegex(ThreadSafe):

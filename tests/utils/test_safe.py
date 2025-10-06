@@ -95,6 +95,26 @@ def test_regex_thread_safety_direct_match_under_gil0():
     assert not errors
 
 
+def test_regex_threadsafe_allows_reentrant_calls_under_gil0():
+    pattern = regex.compile(r"(?P<prefix>test)(?P<number>\d+)")
+    completed = threading.Event()
+
+    def target():
+        def replace(match):
+            inner = regex.match(r"(?P<prefix>test)(?P<number>\d+)", match.group(0))
+            return inner.group(0)
+
+        result = pattern.sub(replace, "test123")
+        assert result == "test123"
+        completed.set()
+
+    worker = threading.Thread(target=target)
+    worker.start()
+    worker.join(timeout=2)
+
+    assert completed.is_set(), "Re-entrant call should not deadlock"
+
+
 def test_threadsafe_callable_cache_is_serialized_under_gil0():
     module = types.ModuleType("_threadsafe_test_module")
 
