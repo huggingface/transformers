@@ -337,7 +337,6 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         )  # fmt: skip
         EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
         decoded_text = processor.decode(output[0], skip_special_tokens=True)
-        print(f"{decoded_text}")
 
         self.assertEqual(
             decoded_text,
@@ -493,7 +492,6 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         EXPECTED_DECODED_TEXT = expected_decoded_texts.get_expectation()
 
         decoded_output = processor.batch_decode(output, skip_special_tokens=True)
-        print(f"{decoded_output}")
         self.assertEqual(decoded_output, EXPECTED_DECODED_TEXT)
 
     @slow
@@ -550,7 +548,6 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         generate_ids = model.generate(**inputs, max_new_tokens=20)
         outputs = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
-        print(f"{outputs}")
         self.assertEqual(outputs, EXPECTED_OUTPUT)
 
     def test_tokenizer_integration(self):
@@ -611,7 +608,6 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
 
         decoded_text = processor.batch_decode(output, skip_special_tokens=True)[0]
-        print(f"{decoded_text}")
         self.assertTrue(decoded_text == EXPECTED_DECODED_TEXT)
 
     @slow
@@ -669,7 +665,6 @@ The second image depicts a scenic mountain landscape. The mountains are rugged a
             }
         )  # fmt: skip
         EXPECTED_GENERATION = EXPECTED_GENERATIONS.get_expectation()
-        print(f"{output}")
         self.assertTrue(output in EXPECTED_GENERATION)
 
     @slow
