@@ -157,6 +157,54 @@ def validate_and_format_image_pairs(images: ImageInput):
             return [image for image_pair in images for image in image_pair]
     raise ValueError(error_message)
 
+def images_to_torch_tensor(
+        images: ImageInput,
+        data_format: ChannelDimension = ChannelDimension.LAST,
+        input_data_format: Optional[ChannelDimension] = None
+   ) -> list[torch.Tensor]:
+    """
+    Convert a list of images to a list of torch.Tensor in C,H,W format.
+
+    Args:
+        images (`List[PIL.Image.Image | np.ndarray | torch.Tensor]`):
+            Input images.
+        data_format (`str`, optional, default "channels_first"):
+            If "channels_first", output tensors will be (C,H,W). If "channels_last", (H,W,C).
+        input_data_format (ChannelDimension or None)
+            references the input images channel dimension.
+
+    Returns:
+        List[torch.Tensor]: Converted images as torch tensors.
+    """
+    output = []
+
+    for img in images:
+        if isinstance(img, Image.Image):
+            img_tensor = F.to_tensor(img)  # returns C,H,W
+        elif isinstance(img, np.ndarray):
+            img_tensor = torch.from_numpy(img)
+        elif isinstance(img, torch.Tensor):
+            img_tensor = img
+        else :
+            raise ValueError(f"Unsupported image type: {type(img)}")
+        output.append(img_tensor)
+
+    if input_data_format is None:
+        # We assume that all images have the same channel dimension format.
+        input_data_format = infer_channel_dimension_format(output[0].numpy())
+
+    if input_data_format == data_format:
+        return output
+
+    if input_data_format == ChannelDimension.LAST and data_format == ChannelDimension.FIRST:
+        # (H, W, C) -> (C, H, W)
+        return [img.permute(2, 0, 1) for img in output]
+
+    if input_data_format == ChannelDimension.FIRST and data_format == ChannelDimension.LAST:
+        # (C, H, W) -> (H, W, C)
+        return [img.permute(1, 2, 0) for img in output]
+
+    raise ValueError(f"Unsupported conversion: {input_data_format} -> {data_format}")
 
 @auto_docstring
 class SuperGlueImageProcessorFast(BaseImageProcessorFast):
@@ -198,47 +246,7 @@ class SuperGlueImageProcessorFast(BaseImageProcessorFast):
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> BatchFeature:
-        """
-        Preprocess an image or batch of images.
 
-        Args:
-            images (`ImageInput`):
-                Image pairs to preprocess. Expects either a list of 2 images or a list of list of 2 images list with
-                pixel values ranging from 0 to 255. If passing in images with pixel values between 0 and 1, set
-                `do_rescale=False`.
-            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-                Whether to resize the image.
-            size (`dict[str, int]`, *optional*, defaults to `self.size`):
-                Size of the output image after `resize` has been applied. If `size["shortest_edge"]` >= 384, the image
-                is resized to `(size["shortest_edge"], size["shortest_edge"])`. Otherwise, the smaller edge of the
-                image will be matched to `int(size["shortest_edge"]/ crop_pct)`, after which the image is cropped to
-                `(size["shortest_edge"], size["shortest_edge"])`. Only has an effect if `do_resize` is set to `True`.
-            resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
-                Resampling filter to use if resizing the image. This can be one of `PILImageResampling`, filters. Only
-                has an effect if `do_resize` is set to `True`.
-            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image values between [0 - 1].
-            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
-            do_grayscale (`bool`, *optional*, defaults to `self.do_grayscale`):
-                Whether to convert the image to grayscale.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be one of:
-                    - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                    - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - Unset: Use the channel dimension format of the input image.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-        """
         do_resize = do_resize if do_resize is not None else self.do_resize
         resample = resample if resample is not None else self.resample
         resample = pil_resampling_to_interpolation(resample)
@@ -249,6 +257,11 @@ class SuperGlueImageProcessorFast(BaseImageProcessorFast):
 
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
+
+        data_format = data_format if data_format is not None else self.data_format
+        if isinstance(input_data_format, str):
+            input_data_format = ChannelDimension(input_data_format)
+
 
         # Validate and convert the input images into a flattened list of images for all subsequent processing steps.
         images = validate_and_format_image_pairs(images)
@@ -264,32 +277,22 @@ class SuperGlueImageProcessorFast(BaseImageProcessorFast):
             rescale_factor=rescale_factor,
         )
 
-        # All transformations expect numpy arrays.
-        images = [to_numpy_array(image) for image in images]
-
-        if input_data_format is None:
-            # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images[0])
+        # All transformations expect torch tensors, using channel_first dataformat for processing.
+        images = images_to_torch_tensor(images, data_format=ChannelDimension.FIRST, input_data_format=input_data_format)
 
         all_images = []
         for image in images:
-            deep_copy = torch.from_numpy(np.ascontiguousarray(image))
             if do_resize:
-                if input_data_format == ChannelDimension.LAST:
-                    deep_copy = deep_copy.permute(2, 0, 1)
-                deep_copy = self.resize(deep_copy, size=SizeDict(**size), interpolation=pil_resampling_to_interpolation(resample) )
-                if input_data_format == ChannelDimension.LAST:
-                    deep_copy = deep_copy.permute(1, 2, 0)
-
+                image = self.resize(image, size=SizeDict(**size), interpolation=resample)
             if do_rescale:
-                deep_copy = self.rescale(deep_copy, scale=rescale_factor, input_data_format=input_data_format)
-
+                image = self.rescale(image, scale=rescale_factor)
             if do_grayscale:
-                deep_copy = convert_to_grayscale(deep_copy, input_data_format=input_data_format)
-            image = deep_copy.numpy()
+                image = convert_to_grayscale(image, input_data_format=input_data_format)
 
-            image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
-            all_images.append(image)
+            if data_format == ChannelDimension.LAST:
+                image = image.permute(1, 2, 0)
+            all_images.append(image.numpy())
+
 
         # Convert back the flattened list of images into a list of pairs of images.
         image_pairs = [all_images[i : i + 2] for i in range(0, len(all_images), 2)]
