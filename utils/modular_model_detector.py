@@ -115,6 +115,7 @@ from safetensors.numpy import load_file as safetensors_load
 from safetensors.numpy import save_file as safetensors_save
 from tqdm import tqdm
 
+import transformers
 from transformers import AutoModel, AutoTokenizer
 from transformers.utils import logging as transformers_logging
 
@@ -592,7 +593,6 @@ def build_date_data() -> dict[str, str]:
         dict[str, str]: mapping of model_id -> ISO date string (YYYY-MM-DD).
                         Files without a match are simply omitted.
     """
-    import transformers
 
     root_dir = transformers.__file__.split("src/transformers")[0]
     root = Path(root_dir).joinpath("docs/source/en/model_doc")
@@ -603,7 +603,7 @@ def build_date_data() -> dict[str, str]:
             text = md_path.read_text(encoding="utf-8", errors="ignore")
         except Exception:
             # Skip unreadable files quietly
-            continue
+            logging.info(f"Failed to read md for {md_path}")
 
         m = _RELEASE_RE.search(text)
         if m:
@@ -660,7 +660,7 @@ def _load_definition_line_map(relative_path: str) -> dict[str, int]:
     try:
         source = file_path.read_text(encoding="utf-8")
     except (FileNotFoundError, OSError):
-        return {}
+        return {}  # gracefully keep going
 
     try:
         tree = ast.parse(source)
