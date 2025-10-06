@@ -200,7 +200,6 @@ class Qwen3IntegrationTest(unittest.TestCase):
             input_ids, max_new_tokens=20, do_sample=True, temperature=0.3, assistant_model=assistant_model
         )
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        print(f"{text}")
 
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
