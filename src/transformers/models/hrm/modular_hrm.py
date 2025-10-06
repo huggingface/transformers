@@ -840,8 +840,8 @@ class HrmModel(HrmPreTrainedModel):
                 raise ValueError(
                     f"Unexpected shape mismatch: batch sequence length ({batch_val.shape[1]}) "
                     f"is greater than carry sequence length ({carry_val.shape[1]}) for key '{k}'. "
-                    "This suggests carry state is being reused incorrectly across different input sizes. "
-                    "Please initialize a new carry state for inputs with different sequence lengths."
+                    f"This suggests carry state is being reused incorrectly across different input sizes. "
+                    f"Please initialize a new carry state for inputs with different sequence lengths."
                 )
 
             # Use scatter operation to update halted sequences
