@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import builtins
 import sys
 import threading
 import types
@@ -138,3 +139,22 @@ def test_threadsafe_callable_cache_is_serialized_under_gil0():
     assert not errors
     # Each invocation should be recorded; the exact count confirms every worker executed.
     assert call_counter["count"] == num_threads * 256
+
+
+def test_threadsafe_copies_existing_module_metadata_under_gil0():
+    thread_safe_regex = ThreadSafe(regex)
+
+    for attr in ("__package__", "__file__", "__spec__"):
+        if hasattr(regex, attr):
+            assert hasattr(thread_safe_regex, attr)
+            assert getattr(thread_safe_regex, attr) == getattr(regex, attr)
+
+
+def test_threadsafe_skips_missing_module_metadata_under_gil0():
+    thread_safe_builtins = ThreadSafe(builtins)
+
+    for attr in ("__package__", "__file__", "__spec__"):
+        if hasattr(builtins, attr):
+            assert getattr(thread_safe_builtins, attr) == getattr(builtins, attr)
+        else:
+            assert not hasattr(thread_safe_builtins, attr)

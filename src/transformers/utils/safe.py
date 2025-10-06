@@ -32,24 +32,23 @@ class ThreadSafe(ModuleType):
     def __init__(self, module: ModuleType):
         super().__init__(module.__name__)
         self._module = module
+        # callable execution lock
         self._lock = threading.Lock()
-        self._cache_lock = threading.Lock()
+        # cache dict lock
+        self._callable_cache_lock = threading.Lock()
         self._callable_cache: dict[str, object] = {}
         # Keep core module metadata available so tools relying on attributes
         # like __doc__ or __spec__ see the original values.
-        self.__dict__.update(
-            {
-                "__doc__": module.__doc__,
-                "__package__": module.__package__,
-                "__file__": getattr(module, "__file__", None),
-                "__spec__": getattr(module, "__spec__", None),
-            }
-        )
+        metadata = {"__doc__": module.__doc__}
+        for attr in ("__package__", "__file__", "__spec__"):
+            if hasattr(module, attr):
+                metadata[attr] = getattr(module, attr)
+        self.__dict__.update(metadata)
 
     def __getattr__(self, name: str):
         attr = getattr(self._module, name)
         if callable(attr):
-            with self._cache_lock:
+            with self._callable_cache_lock:
                 cached = self._callable_cache.get(name)
                 if cached is not None and getattr(cached, "__wrapped__", None) is attr:
                     return cached
