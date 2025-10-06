@@ -1862,6 +1862,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     _can_record_outputs = None
 
     # Attributes used mainly in multimodal LLMs, though all models contain a valid field for these
+    # Possible values are: text, image, video, audio and time
     input_modalities: Union[str, list[str]] = "text"  # most models are text
 
     @property
