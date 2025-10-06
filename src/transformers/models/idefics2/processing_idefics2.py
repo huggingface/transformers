@@ -57,13 +57,13 @@ class Idefics2ProcessorKwargs(ProcessingKwargs, total=False):
 
 class Idefics2Processor(ProcessorMixin):
     r"""
-    Constructs a IDEFICS2 processor which wraps a LLama tokenizer and IDEFICS2 image processor into a single processor.
+    Constructs a IDEFICS2 processor which wraps a LLama tokenizer and AutoImageProcessor into a single processor.
 
     [`IdeficsProcessor`] offers all the functionalities of [`Idefics2ImageProcessor`] and [`LlamaTokenizerFast`]. See
     the docstring of [`~IdeficsProcessor.__call__`] and [`~IdeficsProcessor.decode`] for more information.
 
     Args:
-        image_processor (`Idefics2ImageProcessor`):
+        image_processor (`AutoImageProcessor`):
             An instance of [`Idefics2ImageProcessor`]. The image processor is a required input.
         tokenizer (`PreTrainedTokenizerBase`, *optional*):
             An instance of [`PreTrainedTokenizerBase`]. This should correspond with the model's text model. The tokenizer is a required input.
@@ -76,7 +76,7 @@ class Idefics2Processor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "Idefics2ImageProcessor"
+    image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
     def __init__(

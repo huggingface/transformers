@@ -337,18 +337,18 @@ class FuyuProcessor(ProcessorMixin):
     r"""
     Constructs a Fuyu processor which wraps a Fuyu image processor and a Llama tokenizer into a single processor.
 
-    [`FuyuProcessor`] offers all the functionalities of [`FuyuImageProcessor`] and [`LlamaTokenizerFast`]. See the
+    [`FuyuProcessor`] offers all the functionalities of [`AutoImageProcessor`] and [`LlamaTokenizerFast`]. See the
     [`~FuyuProcessor.__call__`] and [`~FuyuProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`FuyuImageProcessor`]):
+        image_processor ([`AutoImageProcessor`]):
             The image processor is a required input.
         tokenizer ([`LlamaTokenizerFast`]):
             The tokenizer is a required input.
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "FuyuImageProcessor"
+    image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor, tokenizer, **kwargs):

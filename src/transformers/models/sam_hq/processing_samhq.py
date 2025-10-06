@@ -55,16 +55,16 @@ class SamHQProcessor(ProcessorMixin):
     Constructs a SAM HQ processor which wraps a SAM  image processor and an 2D points & Bounding boxes processor into a
     single processor.
 
-    [`SamHQProcessor`] offers all the functionalities of [`SamImageProcessor`]. See the docstring of
-    [`~SamImageProcessor.__call__`] for more information.
+    [`SamHQProcessor`] offers all the functionalities of [`AutoImageProcessor`]. See the docstring of
+    [`~AutoImageProcessor.__call__`] for more information.
 
     Args:
-        image_processor (`SamImageProcessor`):
-            An instance of [`SamImageProcessor`]. The image processor is a required input.
+        image_processor (`AutoImageProcessor`):
+            An instance of [`AutoImageProcessor`]. The image processor is a required input.
     """
 
     attributes = ["image_processor"]
-    image_processor_class = "SamImageProcessor"
+    image_processor_class = "AutoImageProcessor"
 
     def __init__(self, image_processor):
         super().__init__(image_processor)
@@ -82,7 +82,7 @@ class SamHQProcessor(ProcessorMixin):
         **kwargs: Unpack[SamHQProcessorKwargs],
     ) -> BatchEncoding:
         """
-        This method uses [`SamImageProcessor.__call__`] method to prepare image(s) for the model. It also prepares 2D
+        This method uses [`AutoImageProcessor.__call__`] method to prepare image(s) for the model. It also prepares 2D
         points and bounding boxes for the model if they are provided.
         """
         output_kwargs = self._merge_kwargs(

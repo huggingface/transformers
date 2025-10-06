@@ -119,19 +119,19 @@ class GroundingDinoProcessor(ProcessorMixin):
     Constructs a Grounding DINO processor which wraps a Deformable DETR image processor and a BERT tokenizer into a
     single processor.
 
-    [`GroundingDinoProcessor`] offers all the functionalities of [`GroundingDinoImageProcessor`] and
+    [`GroundingDinoProcessor`] offers all the functionalities of [`AutoImageProcessor`] and
     [`AutoTokenizer`]. See the docstring of [`~GroundingDinoProcessor.__call__`] and [`~GroundingDinoProcessor.decode`]
     for more information.
 
     Args:
-        image_processor (`GroundingDinoImageProcessor`):
-            An instance of [`GroundingDinoImageProcessor`]. The image processor is a required input.
+        image_processor (`AutoImageProcessor`):
+            An instance of [`AutoImageProcessor`]. The image processor is a required input.
         tokenizer (`AutoTokenizer`):
             An instance of ['PreTrainedTokenizer`]. The tokenizer is a required input.
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "GroundingDinoImageProcessor"
+    image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
     valid_processor_kwargs = GroundingDinoProcessorKwargs
 
@@ -145,7 +145,7 @@ class GroundingDinoProcessor(ProcessorMixin):
         **kwargs: Unpack[GroundingDinoProcessorKwargs],
     ) -> BatchEncoding:
         """
-        This method uses [`GroundingDinoImageProcessor.__call__`] method to prepare image(s) for the model, and
+        This method uses [`AutoImageProcessor.__call__`] method to prepare image(s) for the model, and
         [`BertTokenizerFast.__call__`] to prepare text for the model.
 
         Args:

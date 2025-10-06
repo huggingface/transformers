@@ -31,7 +31,7 @@ class OneFormerProcessor(ProcessorMixin):
     tokenizer functionalities.
 
     Args:
-        image_processor ([`OneFormerImageProcessor`]):
+        image_processor ([`AutoImageProcessor`]):
             The image processor is a required input.
         tokenizer ([`CLIPTokenizer`, `CLIPTokenizerFast`]):
             The tokenizer is a required input.
@@ -42,7 +42,7 @@ class OneFormerProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "OneFormerImageProcessor"
+    image_processor_class = "AutoImageProcessor"
     tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
 
     def __init__(
@@ -74,7 +74,7 @@ class OneFormerProcessor(ProcessorMixin):
         Main method to prepare for the model one or several task input(s) and image(s). This method forwards the
         `task_inputs` and `kwargs` arguments to CLIPTokenizer's [`~CLIPTokenizer.__call__`] if `task_inputs` is not
         `None` to encode. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
-        OneFormerImageProcessor's [`~OneFormerImageProcessor.__call__`] if `images` is not `None`. Please refer to the
+        AutoImageProcessor's [`~AutoImageProcessor.__call__`] if `images` is not `None`. Please refer to the
         docstring of the above two methods for more information.
 
         Args:
@@ -137,7 +137,7 @@ class OneFormerProcessor(ProcessorMixin):
 
     def encode_inputs(self, images=None, task_inputs=None, segmentation_maps=None, **kwargs):
         """
-        This method forwards all its arguments to [`OneFormerImageProcessor.encode_inputs`] and then tokenizes the
+        This method forwards all its arguments to [`AutoImageProcessor.encode_inputs`] and then tokenizes the
         task_inputs. Please refer to the docstring of this method for more information.
         """
 
@@ -177,21 +177,21 @@ class OneFormerProcessor(ProcessorMixin):
 
     def post_process_semantic_segmentation(self, *args, **kwargs):
         """
-        This method forwards all its arguments to [`OneFormerImageProcessor.post_process_semantic_segmentation`].
+        This method forwards all its arguments to [`AutoImageProcessor.post_process_semantic_segmentation`].
         Please refer to the docstring of this method for more information.
         """
         return self.image_processor.post_process_semantic_segmentation(*args, **kwargs)
 
     def post_process_instance_segmentation(self, *args, **kwargs):
         """
-        This method forwards all its arguments to [`OneFormerImageProcessor.post_process_instance_segmentation`].
+        This method forwards all its arguments to [`AutoImageProcessor.post_process_instance_segmentation`].
         Please refer to the docstring of this method for more information.
         """
         return self.image_processor.post_process_instance_segmentation(*args, **kwargs)
 
     def post_process_panoptic_segmentation(self, *args, **kwargs):
         """
-        This method forwards all its arguments to [`OneFormerImageProcessor.post_process_panoptic_segmentation`].
+        This method forwards all its arguments to [`AutoImageProcessor.post_process_panoptic_segmentation`].
         Please refer to the docstring of this method for more information.
         """
         return self.image_processor.post_process_panoptic_segmentation(*args, **kwargs)
