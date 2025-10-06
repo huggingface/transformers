@@ -417,11 +417,6 @@ class TrainingArguments:
         dataloader_num_workers (`int`, *optional*, defaults to 0):
             Number of subprocesses to use for data loading (PyTorch only). 0 means that the data will be loaded in the
             main process.
-        past_index (`int`, *optional*, defaults to -1):
-            Some models like [TransformerXL](../model_doc/transformerxl) or [XLNet](../model_doc/xlnet) can make use of
-            the past hidden states for their predictions. If this argument is set to a positive int, the `Trainer` will
-            use the corresponding output (usually index 2) as the past state and feed it to the model at the next
-            training step under the keyword argument `mems`.
         run_name (`str`, *optional*, defaults to `output_dir`):
             A descriptor for the run. Typically used for [trackio](https://github.com/gradio-app/trackio),
             [wandb](https://www.wandb.com/), [mlflow](https://www.mlflow.org/), [comet](https://www.comet.com/site) and
@@ -1099,10 +1094,6 @@ class TrainingArguments:
                 "2 means there will be a total of 2 * num_workers batches prefetched across all workers. "
             )
         },
-    )
-    past_index: int = field(
-        default=-1,
-        metadata={"help": "If >=0, uses the corresponding part of the output as the past state for next step."},
     )
 
     run_name: Optional[str] = field(
