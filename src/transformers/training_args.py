@@ -1728,7 +1728,7 @@ class TrainingArguments:
             self.report_to = [self.report_to]
 
         if self.warmup_ratio is not None:
-            logger.warning("warmup_ratio is deprecated and will be removed in v5. Use `warmup_steps` instead.")
+            logger.warning("warmup_ratio is deprecated and will be removed in v5.2. Use `warmup_steps` instead.")
             self.warmup_steps = self.warmup_ratio
 
         if self.warmup_steps < 0:
