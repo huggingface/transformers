@@ -69,6 +69,7 @@ def main():
 
     logger.warning(
         f"Process rank: {training_args.local_rank}, device: {training_args.device}, "
+        f"tpu_num_cores: {training_args.tpu_num_cores}",
     )
 
     # Essentially, what we want to verify in the distributed case is

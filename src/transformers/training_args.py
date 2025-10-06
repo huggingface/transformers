@@ -407,6 +407,8 @@ class TrainingArguments:
             Rank of the process during distributed training.
         ddp_backend (`str`, *optional*):
             The backend to use for distributed training. Must be one of `"nccl"`, `"mpi"`, `"ccl"`, `"gloo"`, `"hccl"`.
+        tpu_num_cores (`int`, *optional*):
+            When training on TPU, the number of TPU cores (automatically passed by launcher script).
         dataloader_drop_last (`bool`, *optional*, defaults to `False`):
             Whether to drop the last incomplete batch (if the length of the dataset is not divisible by the batch size)
             or not.
@@ -1049,7 +1051,7 @@ class TrainingArguments:
         },
     )
     tpu_num_cores: Optional[int] = field(
-        default=None, metadata={"help": "This argument is deprecated and will be removed in v5.2. Please use `TPU_NUM_DEVICES` instead. By default, we will use all available devices. "}
+        default=None, metadata={"help": "TPU: Number of TPU cores (automatically passed by launcher script)"}
     )
     debug: Union[str, list[DebugOption]] = field(
         default="",
@@ -1904,11 +1906,7 @@ class TrainingArguments:
 
         if isinstance(self.include_num_input_tokens_seen, bool):
             self.include_num_input_tokens_seen = "all" if self.include_num_input_tokens_seen else "no"
-        
-        
-        if self.tpu_num_cores is not None:
-            logger.warning("This argument is deprecated and will be removed in v5.2. Please use `TPU_NUM_DEVICES` instead. By default, we will use all available devices.")
-            
+
     def __str__(self):
         self_as_dict = asdict(self)
 
