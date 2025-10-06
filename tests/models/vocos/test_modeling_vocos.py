@@ -23,8 +23,9 @@ from datasets import Audio, load_dataset
 from transformers.testing_utils import (
     require_torch,
     torch_device,
+    slow
 )
-from transformers.utils import is_torch_available, slow
+from transformers.utils import is_torch_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
