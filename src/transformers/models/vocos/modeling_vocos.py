@@ -293,10 +293,10 @@ class VocosModel(VocosPreTrainedModel):
     ) -> Union[VocosOutput, tuple[torch.FloatTensor]]:
         r"""
         features (`torch.FloatTensor` of shape `(batch_size, feature_dim, time)`):
-            Output of [`VocosProcessor`] is either:
-                - Mel-spectrogram features: computed directly from audio via (`processor(audio=waveform)`)
-                - EnCodec neural audio codec features: computed either from precomputed EnCodec RVQ codes via `processor(codes=codes, bandwidth=1.5)`
-                            or from raw audio via `processor(audio=waveform, bandwidth=1.5)`, you need to provide bandwidth for both.
+            Output of [`VocosProcessor`] which can be either:
+            - Mel-spectrogram features: computed directly from audio via (`processor(audio=waveform)`)
+            - EnCodec neural audio codec features: computed either from precomputed EnCodec RVQ codes via `processor(codes=codes, bandwidth=1.5)`
+                or from raw audio via `processor(audio=waveform, bandwidth=1.5)`, you need to provide bandwidth for both.
 
         bandwidth (`float`, *optional*):
             Target bandwidth for EnCodec quantizer, e.g. one of [1.5, 3, 6, 12] kbps, or `None` for Mel-spectrogram features.

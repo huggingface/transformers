@@ -18,7 +18,7 @@ from typing import Optional, Union
 
 import numpy as np
 
-from ...audio_utils import mel_filter_bank, spectrogram_batch, window_function
+from ...audio_utils import AudioInput, make_list_of_audio, mel_filter_bank, spectrogram_batch, window_function
 from ...feature_extraction_sequence_utils import BatchFeature, SequenceFeatureExtractor
 from ...utils import PaddingStrategy, TensorType, is_torch_available, is_torchaudio_available, logging
 
@@ -67,7 +67,7 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
 
     """
 
-    model_input_names = ["input_features"]
+    model_input_names = ["audio_spectrogram"]
 
     def __init__(
         self,
@@ -155,35 +155,29 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
 
         return spec_list
 
-    def _torch_extract_fbank_features(self, waveform):
+    def _torch_extract_fbank_features(self, audio):
         """
-        Extract mel-spectrogram features using torchaudio (exact match to original Vocos).
+        Extract mel-spectrogram features using torchaudio (like original Vocos).
+        https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/feature_extractors.py#L44
+
+        safe_log: https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/modules.py#L194
         """
         if self.padding == "same":
             pad = self.win_length - self.hop_length
-            waveform = F.pad(waveform, (pad // 2, pad // 2), mode="reflect")
+            audio = F.pad(audio, (pad // 2, pad // 2), mode="reflect")
 
-        if waveform.dim() == 3:
-            waveform = waveform.squeeze(-1)
+        audio_spectrogram = self.mel_filters(audio)
+        audio_spectrogram = torch.log(torch.clip(audio_spectrogram, min=1e-7))
 
-        features = self.mel_filters(waveform)
-
-        features = torch.log(torch.clip(features, min=1e-7))
-
-        if features.device.type == "cuda":
-            features = features.detach().cpu()
-
-        return features.numpy()
+        return audio_spectrogram
 
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
-        padding: Union[bool, str, PaddingStrategy] = True,
-        pad_to_multiple_of: Optional[int] = None,
+        audio: AudioInput,
+        padding: Optional[Union[bool, str, PaddingStrategy]] = True,
+        truncation: Optional[bool] = False,
         max_length: Optional[int] = None,
-        truncation: bool = False,
         sampling_rate: Optional[int] = None,
-        return_attention_mask: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ) -> BatchFeature:
@@ -191,8 +185,7 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
         Main method to featurize and prepare for the model one or several sequence(s).
 
         Args:
-            raw_speech (`np.ndarray`, `torch.Tensor`, `list[float]`, `list[np.ndarray]`, `list[torch.Tensor]`,
-            `list[list[float]]`, `list[list[list[float]]]`):
+            audio (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
                 values, a list of numpy arrays or a list of list of float values. Must be mono channel audio, not
                 stereo, i.e. single float per timestep.
@@ -216,7 +209,7 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
             truncation (`bool`):
                 Activates truncation to cut input sequences longer than *max_length* to *max_length*.
             sampling_rate (`int`, *optional*):
-                The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
+                The sampling rate at which the `audio` input was sampled. It is strongly recommended to pass
                 `sampling_rate` at the forward call to prevent silent errors.
             return_attention_mask (`bool`, *optional*):
                 Whether to return the attention mask. If left to the default, will return the attention mask according
@@ -239,7 +232,7 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
             if sampling_rate != self.sampling_rate:
                 raise ValueError(
                     f"The model corresponding to this feature extractor: {self} was trained using a sampling rate of"
-                    f" {self.sampling_rate}. Please make sure that the provided `raw_speech` input was sampled with"
+                    f" {self.sampling_rate}. Please make sure that the provided `audio` input was sampled with"
                     f" {self.sampling_rate} and not {sampling_rate}."
                 )
         else:
@@ -248,63 +241,55 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
-        is_batched_numpy = isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
-        if is_batched_numpy and len(raw_speech.shape) > 2:
-            raise ValueError(f"Only mono-channel audio is supported for input to {self}")
+        if padding and truncation:
+            raise ValueError("Both padding and truncation were set. Make sure you only set one.")
 
-        acceptable_types = (
-            (torch.Tensor, np.ndarray, tuple, list) if is_torch_available() else (np.ndarray, tuple, list)
-        )
+        # Ensure batch
+        audio = make_list_of_audio(audio)
 
-        is_batched = is_batched_numpy or (
-            isinstance(raw_speech, list | tuple) and (isinstance(raw_speech[0], acceptable_types))
-        )
-
-        if is_batched:
-            raw_speech = [np.asarray(speech, dtype=np.float32) for speech in raw_speech]
-        elif not is_batched and not isinstance(raw_speech, np.ndarray):
-            raw_speech = np.asarray(raw_speech, dtype=np.float32)
-        elif isinstance(raw_speech, np.ndarray) and raw_speech.dtype is np.dtype(np.float64):
-            raw_speech = raw_speech.astype(np.float32)
-
-        # always return batch
-        if not is_batched:
-            raw_speech = [raw_speech]
+        # Check mono input(s)
+        for _audio in audio:
+            if len(_audio.shape) > 1 and _audio.shape[0] > 1:
+                raise ValueError(f"Only mono-channel audio is supported for input to {self}, but got {_audio.shape}")
 
         if is_torchaudio_available():
-            # self.pad() requires 2d input
-            audio = [torch.from_numpy(speech).unsqueeze(-1) for speech in raw_speech]
-            batch = BatchFeature({"input_features": audio})
+            # Ensure each sample is tensor with shape [n_samples, 1]
+            if isinstance(audio[0], np.ndarray):
+                audio = [torch.from_numpy(_audio) for _audio in audio]
+            audio = [_audio.view(-1, 1) for _audio in audio]
+            batch = BatchFeature({"audio_spectrogram": audio})
+
+            # Full tensor is needed for torchaudio's Mel spectrogram method
             padded_inputs = self.pad(
                 batch,
                 padding=padding,
                 max_length=max_length,
                 truncation=truncation,
-                pad_to_multiple_of=pad_to_multiple_of,
-                return_attention_mask=return_attention_mask,
+                return_attention_mask=True,
             )
-
-            input_features = self._torch_extract_fbank_features(padded_inputs["input_features"])
-            padded_inputs["input_features"] = input_features
+            audio = padded_inputs["audio_spectrogram"].squeeze(-1)
+            audio_spectrogram = self._torch_extract_fbank_features(audio)
+            padded_inputs["audio_spectrogram"] = audio_spectrogram
 
         else:
-            input_features = self._np_extract_fbank_features(raw_speech)
+            audio_spectrogram = self._np_extract_fbank_features(audio)
 
             # spectrogram_batch returns (freq_bins, frames) but self.pad() pads axis 0,
             # so we transpose to (frames, freq_bins) before padding and back to what the model expects.
-            input_features = [features.T for features in input_features]
+            audio_spectrogram = [_spec.T for _spec in audio_spectrogram]
 
-            batch = BatchFeature({"input_features": input_features})
+            batch = BatchFeature({"audio_spectrogram": audio_spectrogram})
             padded_inputs = self.pad(
                 batch,
                 padding=padding,
                 max_length=max_length,
                 truncation=truncation,
-                pad_to_multiple_of=pad_to_multiple_of,
-                return_attention_mask=return_attention_mask,
+                return_attention_mask=True,
             )
+            padded_inputs["audio_spectrogram"] = padded_inputs["audio_spectrogram"].transpose(0, 2, 1)
 
-            padded_inputs["input_features"] = padded_inputs["input_features"].transpose(0, 2, 1)
+        if padding:
+            padded_inputs["padding_mask"] = padded_inputs.pop("attention_mask")
 
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)

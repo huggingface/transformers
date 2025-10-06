@@ -96,8 +96,8 @@ class VocosProcessorTest(unittest.TestCase):
         feature_extractor = self.get_feature_extractor()
 
         out_feature_extractor = feature_extractor(
-            raw_speech=audio, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt"
-        )["input_features"]
+            audio=audio, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt"
+        )["audio_spectrogram"]
 
         out_processor = self.processor(audio=audio, return_tensors="pt")["features"]
 

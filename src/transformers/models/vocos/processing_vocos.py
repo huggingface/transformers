@@ -111,14 +111,11 @@ class VocosProcessor(ProcessorMixin):
             if bandwidth is not None:
                 # encode audio as in:
                 # https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/feature_extractors.py#L79
-
                 if isinstance(audio, list):
-                    audio_arrays = make_list_of_audio(audio)
-                    audio_arrays = [np.asarray(a, dtype=np.float32) for a in audio_arrays]
-                    max_length = max(audio.shape[-1] for audio in audio_arrays)
-                    padded = [
-                        np.pad(audio, (0, max_length - audio.shape[-1]), mode="constant") for audio in audio_arrays
-                    ]
+                    audio = make_list_of_audio(audio)
+                    audio = [np.asarray(_audio, dtype=np.float32) for _audio in audio]
+                    max_length = max(_audio.shape[-1] for _audio in audio)
+                    padded = [np.pad(_audio, (0, max_length - _audio.shape[-1]), mode="constant") for _audio in audio]
                     audio = np.stack(padded, axis=0)
                 if isinstance(audio, np.ndarray):
                     audio = torch.from_numpy(audio)
@@ -130,9 +127,7 @@ class VocosProcessor(ProcessorMixin):
                     encoded_frames = self.audio_tokenizer.encoder(audio.to(self.audio_tokenizer.device))
                     codes = self.audio_tokenizer.quantizer.encode(encoded_frames, bandwidth=bandwidth)
             else:
-                if isinstance(audio, torch.Tensor):
-                    audio = audio.cpu().numpy()
-                features = self.feature_extractor(audio, **audio_kwargs).input_features
+                features = self.feature_extractor(audio, **audio_kwargs).audio_spectrogram
 
         if codes is not None:
             if codes.ndim not in (2, 3):

@@ -179,35 +179,39 @@ class VocosFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Te
         self.assertEqual(dict_first, dict_second)
 
     def test_call(self):
+        TOL = 1e-6
+
         # Tests that all call wrap to encode_plus and batch_encode_plus
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        sampling_rate = feature_extractor.sampling_rate
         # create three inputs of length 800, 1000, and 1200
-        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
-        np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
+        audio_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+        np_audio_inputs = [np.asarray(audio_input) for audio_input in audio_inputs]
+        torch_audio_inputs = [torch.tensor(audio_input) for audio_input in audio_inputs]
 
         # Test feature size
-        input_features = feature_extractor(np_speech_inputs, padding=True, return_tensors="np").input_features
-        self.assertTrue(input_features.ndim == 3)
-        self.assertTrue(input_features.shape[-1] == feature_extractor.feature_size)
+        audio_spectrogram = feature_extractor(np_audio_inputs, padding=True, return_tensors="np").audio_spectrogram
+        self.assertTrue(audio_spectrogram.ndim == 3)
+        self.assertTrue(audio_spectrogram.shape[-1] == feature_extractor.feature_size)
 
         # Test not batched input
-        encoded_sequences_1 = feature_extractor(speech_inputs[0], return_tensors="np").input_features
-        encoded_sequences_2 = feature_extractor(np_speech_inputs[0], return_tensors="np").input_features
-        self.assertTrue(np.allclose(encoded_sequences_1, encoded_sequences_2, atol=1e-3))
+        encoded_sequences_1 = feature_extractor(
+            torch_audio_inputs[0], sampling_rate=sampling_rate, return_tensors="np"
+        ).audio_spectrogram
+        encoded_sequences_2 = feature_extractor(
+            np_audio_inputs[0], sampling_rate=sampling_rate, return_tensors="np"
+        ).audio_spectrogram
+        self.assertTrue(np.allclose(encoded_sequences_1, encoded_sequences_2, atol=TOL))
 
         # Test batched
-        encoded_sequences_1 = feature_extractor(speech_inputs, return_tensors="np").input_features
-        encoded_sequences_2 = feature_extractor(np_speech_inputs, return_tensors="np").input_features
+        encoded_sequences_1 = feature_extractor(
+            torch_audio_inputs, sampling_rate=sampling_rate, return_tensors="np"
+        ).audio_spectrogram
+        encoded_sequences_2 = feature_extractor(
+            np_audio_inputs, sampling_rate=sampling_rate, return_tensors="np"
+        ).audio_spectrogram
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
-            self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
-
-        # Test 2-D numpy arrays are batched.
-        speech_inputs = [floats_list((1, x))[0] for x in (800, 800, 800)]
-        np_speech_inputs = np.asarray(speech_inputs)
-        encoded_sequences_1 = feature_extractor(speech_inputs, return_tensors="np").input_features
-        encoded_sequences_2 = feature_extractor(np_speech_inputs, return_tensors="np").input_features
-        for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
-            self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
+            self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=TOL))
 
     # Copied from transformers.tests.models.whisper.test_feature_extraction_whisper.WhisperFeatureExtractionTest.test_double_precision_pad
     def test_double_precision_pad(self):
@@ -218,10 +222,10 @@ class VocosFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Te
         py_speech_inputs = np_speech_inputs.tolist()
 
         for inputs in [py_speech_inputs, np_speech_inputs]:
-            np_processed = feature_extractor.pad([{"input_features": inputs}], return_tensors="np")
-            self.assertTrue(np_processed.input_features.dtype == np.float32)
-            pt_processed = feature_extractor.pad([{"input_features": inputs}], return_tensors="pt")
-            self.assertTrue(pt_processed.input_features.dtype == torch.float32)
+            np_processed = feature_extractor.pad([{"audio_spectrogram": inputs}], return_tensors="np")
+            self.assertTrue(np_processed.audio_spectrogram.dtype == np.float32)
+            pt_processed = feature_extractor.pad([{"audio_spectrogram": inputs}], return_tensors="pt")
+            self.assertTrue(pt_processed.audio_spectrogram.dtype == torch.float32)
 
     def _load_datasamples(self, num_samples):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -233,15 +237,15 @@ class VocosFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Te
     def test_integration_torch_backend(self):
         speech = self._load_datasamples(1)
         feature_extractor = VocosFeatureExtractor.from_pretrained("Manel/vocos-mel-24khz")
-        input_features = feature_extractor(speech, return_tensors="pt").input_features
-        self.assertEqual(input_features.shape, (1, 100, 549))
-        torch.testing.assert_close(input_features[0, 0, :30], self.EXPECTED_INPUT_FEATURES, rtol=1e-6, atol=1e-6)
+        audio_spectrogram = feature_extractor(speech, return_tensors="pt").audio_spectrogram
+        self.assertEqual(audio_spectrogram.shape, (1, 100, 549))
+        torch.testing.assert_close(audio_spectrogram[0, 0, :30], self.EXPECTED_INPUT_FEATURES, rtol=1e-6, atol=1e-6)
 
     @patch("transformers.models.vocos.feature_extraction_vocos.is_torch_available", return_value=False)
     def test_integration_numpy_backend(self, _mock_torch_avail):
         speech = self._load_datasamples(1)
         feature_extractor = VocosFeatureExtractor.from_pretrained("Manel/vocos-mel-24khz")
-        input_features = feature_extractor(speech, return_tensors="pt").input_features
-        self.assertEqual(input_features.shape, (1, 100, 549))
+        audio_spectrogram = feature_extractor(speech, return_tensors="pt").audio_spectrogram
+        self.assertEqual(audio_spectrogram.shape, (1, 100, 549))
 
-        torch.testing.assert_close(input_features[0, 0, :30], self.EXPECTED_INPUT_FEATURES, rtol=1e-6, atol=1e-6)
+        torch.testing.assert_close(audio_spectrogram[0, 0, :30], self.EXPECTED_INPUT_FEATURES, rtol=1e-6, atol=1e-6)
