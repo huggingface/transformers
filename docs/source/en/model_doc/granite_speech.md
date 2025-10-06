@@ -41,7 +41,59 @@ This model was contributed by [Alexander Brooks](https://huggingface.co/abrooks9
 ## Usage tips
 - This model bundles its own LoRA adapter, which will be automatically loaded and enabled/disabled as needed during inference calls. Be sure to install [PEFT](https://github.com/huggingface/peft) to ensure the LoRA is correctly applied!
 
-<!-- TODO (@alex-jw-brooks) Add an example here once the model compatible with the transformers implementation is released -->
+## Usage Example
+
+Granite Speech is a multimodal model that can process both text and audio inputs for speech-to-text transcription and audio understanding tasks. Here's how to use it:
+
+```python
+import torch
+from transformers import AutoProcessor, AutoModelForSpeechSeq2Seq
+from datasets import load_dataset
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+# Load model and processor
+model_name = "ibm-granite/granite-speech-3.3-8b"
+processor = AutoProcessor.from_pretrained(model_name)
+tokenizer = processor.tokenizer
+model = AutoModelForSpeechSeq2Seq.from_pretrained(
+    model_name, device_map=device, torch_dtype=torch.bfloat16
+)
+
+# Load audio from dummy dataset
+dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+wav = torch.tensor(dataset[0]["audio"]["array"]).unsqueeze(0)  # add batch dimension
+
+# Create chat conversation with audio
+system_prompt = "Knowledge Cutoff Date: April 2024.\nToday's Date: April 9, 2025.\nYou are Granite, developed by IBM. You are a helpful AI assistant"
+user_prompt = "<|audio|>can you transcribe the speech into a written format?"
+chat = [
+    dict(role="system", content=system_prompt),
+    dict(role="user", content=user_prompt),
+]
+prompt = tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
+
+# Process audio and text together
+model_inputs = processor(prompt, wav, device=device, return_tensors="pt").to(device)
+
+# Generate response
+model_outputs = model.generate(**model_inputs, max_new_tokens=200, do_sample=False, num_beams=1)
+
+# Extract only the new tokens (response)
+num_input_tokens = model_inputs["input_ids"].shape[-1]
+new_tokens = torch.unsqueeze(model_outputs[0, num_input_tokens:], dim=0)
+output_text = tokenizer.batch_decode(
+    new_tokens, add_special_tokens=False, skip_special_tokens=True
+)
+print(f"STT output = {output_text[0].upper()}")
+```
+
+### Key Features:
+
+- **Audio Token Placeholder**: Use `<|audio|>` in your prompt to indicate where the audio should be processed
+- **Chat Template**: The model works with conversational formats using the tokenizer's chat template
+- **Automatic LoRA**: The model automatically enables its LoRA adapter when audio features are present
+- **Audio Requirements**: Input audio should be mono (single channel) and sampled at 16kHz
 
 ## GraniteSpeechConfig
 
