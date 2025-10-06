@@ -27,6 +27,7 @@ from tqdm import tqdm
 
 from ...configuration_utils import PreTrainedConfig
 from ...generation.configuration_utils import GenerationConfig
+from ...integrations.hub_kernels import load_and_register_kernel
 from ...utils.logging import logging
 from ...utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
 from .cache import PagedAttentionCache
@@ -241,7 +242,10 @@ class ContinuousBatchProcessor:
         self.reset_static_tensors(full_reset=True)
 
     def return_attention_mask(self) -> bool:
-        return self.config._attn_implementation != "paged_attention"  # we set `is_causal` to True in paged call
+        return self.config._attn_implementation in [
+            "paged|eager",
+            "paged|sdpa",
+        ]  # we set `is_causal` to True in paged call
 
     @traced
     @torch.no_grad()
@@ -604,13 +608,9 @@ class ContinuousBatchingManager:
             streaming: Whether to stream tokens as they are generated
         """
         self.model = model.eval()
-        attn_implementation = self.model.config._attn_implementation
-        # We need to use the wrapper around `paged_attention` but the implementation set.
-        # The user could be using the flash fallback `kernels-community/flash-attn` if fa2 is not installed
-        # this does: kernel_function = partial(attention_wrapper, implementation=kernel)
-        # which passes the loaded kernel.
-        # If the user selected "flash_attention2" but does not have it -> set_xxx will replace it
-        self.model.set_attn_implementation(f"paged_attention|{attn_implementation}")
+        attn_implementation = "paged|" + self.model.config._attn_implementation
+        load_and_register_kernel(attn_implementation)
+        model.set_attn_implementation(attn_implementation)
         generation_config = model.generation_config if generation_config is None else generation_config
         self.generation_config = generation_config
         self.input_queue = queue.Queue(maxsize=max_queue_size)

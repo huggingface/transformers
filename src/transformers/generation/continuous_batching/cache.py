@@ -174,7 +174,7 @@ class PagedAttentionCache:
         # Infer number of blocks and max batch tokens
         page_size = self.head_dim * self.num_key_value_heads
 
-        if getattr(config, "attn_implementation", None) == "paged_attention":
+        if "flash" in self.config._attn_implementation:
             num_attention_masks = 0
         else:
             # TODO: when we generalize to allow for block-attn, we can use `num_attention_masks=sum(set(group_types))`
