@@ -68,9 +68,9 @@ class Glm4Config(PretrainedConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
         rope_scaling (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. If you apply new rope type
-            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
-            accordingly.
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         pad_token_id (`int`, *optional*, defaults to 151329):
             Padding token id.
         eos_token_id (`int` | `list`, *optional*, defaults to `[151329, 151336, 151338]`):

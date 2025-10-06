@@ -95,9 +95,9 @@ class MixtralConfig(PretrainedConfig):
         router_jitter_noise (`float`, *optional*, defaults to 0.0):
             Amount of noise to add to the router.
         rope_scaling (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. If you apply new rope type
-            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
-            accordingly.
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
 
     ```python
     >>> from transformers import MixtralModel, MixtralConfig

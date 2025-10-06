@@ -66,9 +66,9 @@ class OpenLlamaConfig(PretrainedConfig):
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
         rope_scaling (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. If you apply new rope type
-            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
-            accordingly.
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
 
         Example:
 

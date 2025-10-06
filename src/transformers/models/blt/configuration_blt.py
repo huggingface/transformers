@@ -222,9 +222,9 @@ class BltPatcherConfig(PretrainedConfig):
         intermediate_size (`int`, *optional*, defaults to 2048):
             Dimension of the MLP representations.
         rope_scaling (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. If you apply new rope type
-            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
-            accordingly.
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     """
@@ -322,9 +322,9 @@ class BltConfig(PretrainedConfig):
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         rope_scaling (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. If you apply new rope type
-            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
-            accordingly.
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
 
     ```python
     >>> from transformers import BltModel, BltConfig

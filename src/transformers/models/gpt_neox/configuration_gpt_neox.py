@@ -75,9 +75,9 @@ class GPTNeoXConfig(PretrainedConfig):
             Whether to use a "parallel" formulation in each Transformer layer, which can provide a slight training
             speedup at large scales (e.g. 20B).
         rope_scaling (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. If you apply new rope type
-            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
-            accordingly.
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         attention_bias (`bool`, *optional*, defaults to `True`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
 

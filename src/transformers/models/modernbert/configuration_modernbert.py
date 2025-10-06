@@ -77,9 +77,9 @@ class ModernBertConfig(PretrainedConfig):
         layer_types (`list`, *optional*):
             Attention pattern for each layer.
         rope_scaling (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. If you apply new rope type
-            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
-            accordingly.
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         local_attention (`int`, *optional*, defaults to 128):
             The window size for local attention.
         embedding_dropout (`float`, *optional*, defaults to 0.0):

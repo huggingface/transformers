@@ -72,9 +72,9 @@ class EfficientLoFTRConfig(PretrainedConfig):
             Dim factor for the RoPE embeddings, in EfficientLoFTR, frequencies should be generated for
             the whole hidden_size, so this factor is used to compensate.
         rope_scaling (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. If you apply new rope type
-            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
-            accordingly.
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         fine_matching_slice_dim (`int`, *optional*, defaults to 8):
             The size of the slice used to divide the fine features for the first and second fine matching stages.
         fine_matching_regress_temperature (`float`, *optional*, defaults to 10.0):
