@@ -419,7 +419,7 @@ class SuperGlueImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         encoding_slow = image_processor_slow(dummy_image, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
-        encoding_slow.pixel_values = encoding_slow.pixel_values.to(torch.float64)
+
         self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
 
     @require_vision
@@ -437,7 +437,6 @@ class SuperGlueImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         encoding_slow = image_processor_slow(dummy_images, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_images, return_tensors="pt")
-        encoding_slow.pixel_values = encoding_slow.pixel_values.to(torch.float64)
 
         self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
 
