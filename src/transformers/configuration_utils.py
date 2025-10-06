@@ -1350,43 +1350,8 @@ if PreTrainedConfig.push_to_hub.__doc__ is not None:
     )
 
 
-class DummyMeta(type):
-    """Dummy metaclass so that `isinstance`/`issubclass` checks against `PretrainedConfig` return True as well
-    for instance/class of `PreTrainedConfig`.
-
-    E.g., thanks to this we have the following (note that LlamaConfig only inherits from PreTrainedConfig, not PretrainedConfig):
-
-    ```python
-    from transformers import LlamaConfig, PretrainedConfig  # the old config name
-
-    isinstance(LlamaConfig(), PretrainedConfig)
-    >>> True
-    isinstance(LlamaConfig, PretrainedConfig)
-    >>> True
-    ```
-
-    This is because `isinstance(x, C)` actually maps to `C.__instancecheck__(x)`.
-    """
-
-    def __instancecheck__(cls, inst):
-        """Implement isinstance(inst, cls)."""
-        return any(cls.__subclasscheck__(c) for c in {type(inst), inst.__class__})
-
-    def __subclasscheck__(cls, sub):
-        """Implement issubclass(sub, cls)."""
-        logger.warning_once(
-            "`PretrainedConfig` is deprecated and will be removed in the future. Please use `PreTrainedConfig` instead!"
-        )
-        candidates = {cls, PreTrainedConfig}
-        return any(c in candidates for c in sub.mro())
-
-
-class PretrainedConfig(PreTrainedConfig, metaclass=DummyMeta):
-    def __init__(self, *args, **kwargs):
-        logger.warning_once(
-            "`PretrainedConfig` is deprecated and will be removed in the future. Please use `PreTrainedConfig` instead!"
-        )
-        super().__init__(*args, **kwargs)
+# The alias is only here for BC - we did not have the correct CamelCasing before
+PretrainedConfig = PreTrainedConfig
 
 
 ALLOWED_LAYER_TYPES = (
