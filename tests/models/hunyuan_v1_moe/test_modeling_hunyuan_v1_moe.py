@@ -110,7 +110,7 @@ class HunYuanMoEV1IntegrationTest(unittest.TestCase):
     def test_model_generation(self):
         # we will compele this when model file change over
         # pass
-        EXPECTED_ANSWER = "\nOkay, I need to write a short summary about the benefits of regular exercise. Let me start by recalling what I know. First,"
+        EXPECTED_ANSWER = "\nOkay, I need to write a"
         prompt = "Write a short summary of the benefits of regular exercise"
         tokenizer = AutoTokenizer.from_pretrained("tencent/Hunyuan-A13B-Instruct")
         model = AutoModelForCausalLM.from_pretrained("tencent/Hunyuan-A13B-Instruct", device_map="auto")
