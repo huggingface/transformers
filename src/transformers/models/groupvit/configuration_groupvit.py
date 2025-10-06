@@ -18,7 +18,7 @@ from collections import OrderedDict
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
 
@@ -30,15 +30,15 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-class GroupViTTextConfig(PretrainedConfig):
+class GroupViTTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GroupViTTextModel`]. It is used to instantiate an
     GroupViT model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the GroupViT
     [nvidia/groupvit-gcc-yfcc](https://huggingface.co/nvidia/groupvit-gcc-yfcc) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 49408):
@@ -122,15 +122,15 @@ class GroupViTTextConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
 
 
-class GroupViTVisionConfig(PretrainedConfig):
+class GroupViTVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GroupViTVisionModel`]. It is used to instantiate
     an GroupViT model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the GroupViT
     [nvidia/groupvit-gcc-yfcc](https://huggingface.co/nvidia/groupvit-gcc-yfcc) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 384):
@@ -230,15 +230,15 @@ class GroupViTVisionConfig(PretrainedConfig):
         self.assign_mlp_ratio = assign_mlp_ratio
 
 
-class GroupViTConfig(PretrainedConfig):
+class GroupViTConfig(PreTrainedConfig):
     r"""
     [`GroupViTConfig`] is the configuration class to store the configuration of a [`GroupViTModel`]. It is used to
     instantiate a GroupViT model according to the specified arguments, defining the text model and vision model
     configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the GroupViT
     [nvidia/groupvit-gcc-yfcc](https://huggingface.co/nvidia/groupvit-gcc-yfcc) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`dict`, *optional*):
