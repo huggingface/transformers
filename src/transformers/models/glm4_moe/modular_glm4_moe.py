@@ -19,7 +19,7 @@ from typing import Optional
 import torch
 from torch import nn
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 from ..cohere.modeling_cohere import CohereAttention
@@ -38,14 +38,14 @@ from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb  # noqa
 logger = logging.get_logger(__name__)
 
 
-class Glm4MoeConfig(PretrainedConfig):
+class Glm4MoeConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Glm4MoeModel`]. It is used to instantiate a
     Glm4Moe model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of [THUDM/GLM-4-100B-A10B](https://huggingface.co/THUDM/GLM-4-100B-A10B).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:

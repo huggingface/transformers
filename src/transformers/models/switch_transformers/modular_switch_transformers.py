@@ -445,7 +445,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
 
         self.gradient_checkpointing = False
 
-    @check_model_inputs
+    @check_model_inputs()
     def forward(
         self,
         input_ids=None,
@@ -963,7 +963,7 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
         return self.encoder
 
     @auto_docstring
-    @check_model_inputs
+    @check_model_inputs()
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

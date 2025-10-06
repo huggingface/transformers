@@ -26,7 +26,7 @@ import numpy as np
 from ....tokenization_utils import AddedToken, PreTrainedTokenizer
 from ....tokenization_utils_base import BatchEncoding
 from ....utils import TensorType, is_torch_available, logging
-from ....utils.generic import _is_numpy
+from ....utils.generic import is_numpy_array
 from ...utils.safe import regex
 
 
@@ -288,7 +288,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
             is_tensor = torch.is_tensor
         else:
             as_tensor = np.asarray
-            is_tensor = _is_numpy
+            is_tensor = is_numpy_array
 
         # Do the tensor conversion in batch
 

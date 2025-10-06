@@ -14,14 +14,14 @@
 # limitations under the License.
 """Mixtral model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class MixtralConfig(PretrainedConfig):
+class MixtralConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MixtralModel`]. It is used to instantiate an
     Mixtral model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -30,8 +30,8 @@ class MixtralConfig(PretrainedConfig):
     [mixtralai/Mixtral-8x7B](https://huggingface.co/mixtralai/Mixtral-8x7B)
     [mixtralai/Mixtral-7B-Instruct-v0.1](https://huggingface.co/mixtralai/Mixtral-7B-Instruct-v0.1)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
