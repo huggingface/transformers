@@ -36,8 +36,8 @@ from .requests import GenerationOutput, RequestState, RequestStatus, get_device_
 from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
 
 
-PADDING = False
-PAD_TO = 10000
+PADDING = True
+PAD_TO = 50000
 
 
 def build_attention_mask(
@@ -574,75 +574,74 @@ class ContinuousBatchProcessor:
         # Clear the ordering queue
         self.scheduler.waiting_requests_order.clear()
 
-    # @traced
-    # def _generation_step(self, model: nn.Module, logit_processor: LogitsProcessor, do_sample: bool) -> None:
-    #     """Perform a single generation step."""
-    #     batch_data = self.get_model_kwargs()
+    @traced
+    @torch.no_grad
+    def _generation_step(self, model: nn.Module, logit_processor: LogitsProcessor, do_sample: bool) -> None:
+        """Perform a single generation step."""
+        batch_data = self.get_model_kwargs()
 
-    #     # If we have a graph that fits, we replay it
-    #     if self.graph is not None:
-    #         self.graph.replay()
-    #         return
+        # If we have a graph that fits, we replay it
+        if self.graph is not None:
+            self.graph.replay()
+            return
 
-    #     # Otherwise, we need to create it
-    #     stream = torch.cuda.Stream(device=model.device)
-    #     stream.wait_stream(torch.cuda.current_stream())
+        # Otherwise, we need to create it
+        stream = torch.cuda.Stream(device=model.device)
+        stream.wait_stream(torch.cuda.current_stream())
+        # Warmup
+        with torch.cuda.stream(stream):
+            self._forward_process_and_sample(model, batch_data, logit_processor, do_sample)
+        torch.cuda.current_stream().wait_stream(stream)
+        # Catpure
+        self.graph = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(self.graph, stream=stream):
+            self._forward_process_and_sample(model, batch_data, logit_processor, do_sample)
 
-    #     # Warmup
-    #     with torch.cuda.stream(stream):
-    #         self._forward_process_and_sample(model, batch_data, logit_processor, do_sample)
-    #     torch.cuda.current_stream().wait_stream(stream)
+    @traced
+    def _forward_process_and_sample(
+        self, model: nn.Module, batch_data: dict, logit_processor: LogitsProcessor, do_sample: bool
+    ) -> None:
+        """This function performs the forward pass, logits processing, and sampling; which are broken down into smaller
+        function to be easier to trace with OpenTelemetry."""
+        # with torch.no_grad():
+        logits = self._model_forward(model, batch_data)
+        # if self.log_prob_generation:    batch_processor.output_probs.copy_(logits)  # TODO
+        probs = self._process_logit(batch_data, logits, logit_processor)
+        self._sample(probs, do_sample)
 
-    #     # Catpure
-    #     self.graph = torch.cuda.CUDAGraph()
-    #     with torch.cuda.graph(self.graph, stream=stream):
-    #         self._forward_process_and_sample(model, batch_data, logit_processor, do_sample)
+    @traced(span_name="model_forward")
+    def _model_forward(self, model: nn.Module, batch_data: dict) -> torch.Tensor:
+        return model(**batch_data).logits
 
-    # @traced
-    # def _forward_process_and_sample(
-    #     self, model: nn.Module, batch_data: dict, logit_processor: LogitsProcessor, do_sample: bool
-    # ) -> None:
-    #     """This function performs the forward pass, logits processing, and sampling; which are broken down into smaller
-    #     function to be easier to trace with OpenTelemetry."""
-    #     # with torch.no_grad():
-    #     logits = self._model_forward(model, batch_data)
-    #     # if self.log_prob_generation:    batch_processor.output_probs.copy_(logits)  # TODO
-    #     probs = self._process_logit(batch_data, logits, logit_processor)
-    #     self._sample(probs, do_sample)
+    @traced(span_name="logit_processing")
+    def _process_logit(self, batch_data: dict, logits: torch.Tensor, logit_processor: LogitsProcessor) -> torch.Tensor:
+        # Pass continuous batching context to logits processor if it supports it.
+        if hasattr(logit_processor, "set_continuous_batching_context"):
+            logit_processor.set_continuous_batching_context(
+                batch_data["logits_indices"], batch_data["cu_seq_lens_q"]
+            )
+        # Handle shape compatibility: logit processors expect 2D tensors [batch_size, vocab_size]
+        # but continuous batching always produces 3D tensors [batch_size, seq_len, vocab_size]
+        batch_size, seq_len, vocab_size = logits.shape
+        logits_2d = logits.view(batch_size * seq_len, vocab_size)
+        input_ids_2d = batch_data["input_ids"].view(batch_size * seq_len)
+        # Process with 2D tensors
+        processed_logits_2d = logit_processor(input_ids_2d, logits_2d)
+        # Reshape back to 3D
+        return processed_logits_2d.view(batch_size, seq_len, vocab_size)
 
-    # @traced(span_name="model_forward")
-    # def _model_forward(self, model: nn.Module, batch_data: dict) -> torch.Tensor:
-    #     return model(**batch_data).logits
-
-    # @traced(span_name="logit_processing")
-    # def _process_logit(self, batch_data: dict, logits: torch.Tensor, logit_processor: LogitsProcessor) -> torch.Tensor:
-    #     # Pass continuous batching context to logits processor if it supports it.
-    #     if hasattr(logit_processor, "set_continuous_batching_context"):
-    #         logit_processor.set_continuous_batching_context(
-    #             batch_data["logits_indices"], batch_data["cu_seq_lens_q"]
-    #         )
-    #     # Handle shape compatibility: logit processors expect 2D tensors [batch_size, vocab_size]
-    #     # but continuous batching always produces 3D tensors [batch_size, seq_len, vocab_size]
-    #     batch_size, seq_len, vocab_size = logits.shape
-    #     logits_2d = logits.view(batch_size * seq_len, vocab_size)
-    #     input_ids_2d = batch_data["input_ids"].view(batch_size * seq_len)
-    #     # Process with 2D tensors
-    #     processed_logits_2d = logit_processor(input_ids_2d, logits_2d)
-    #     # Reshape back to 3D
-    #     return processed_logits_2d.view(batch_size, seq_len, vocab_size)
-
-    # @traced(span_name="sampling")
-    # def _sample(self, probs: torch.Tensor, do_sample: bool) -> None:
-    #     if do_sample:
-    #         probs = nn.functional.softmax(probs, dim=-1)
-    #         # probs[0] has shape [seq_len, vocab_size], multinomial returns [seq_len, 1]
-    #         next_tokens = torch.multinomial(probs[0], num_samples=1).squeeze(-1)  # Now [seq_len]
-    #         # Add batch dimension back to match argmax output
-    #         next_tokens = next_tokens.unsqueeze(0)  # Now [1, seq_len]
-    #     else:
-    #         next_tokens = torch.argmax(probs, dim=-1)  # Already [1, seq_len]
-    #     tokens = next_tokens.size(1)  # Get seq_len dimension
-    #     self.output_ids[:, :tokens].copy_(next_tokens)
+    @traced(span_name="sampling")
+    def _sample(self, probs: torch.Tensor, do_sample: bool) -> None:
+        if do_sample:
+            probs = nn.functional.softmax(probs, dim=-1)
+            # probs[0] has shape [seq_len, vocab_size], multinomial returns [seq_len, 1]
+            next_tokens = torch.multinomial(probs[0], num_samples=1).squeeze(-1)  # Now [seq_len]
+            # Add batch dimension back to match argmax output
+            next_tokens = next_tokens.unsqueeze(0)  # Now [1, seq_len]
+        else:
+            next_tokens = torch.argmax(probs, dim=-1)  # Already [1, seq_len]
+        tokens = next_tokens.size(1)  # Get seq_len dimension
+        self.output_ids[:, :tokens].copy_(next_tokens)
 
 # Manager Class (User Interface)
 @attach_tracer()
@@ -862,52 +861,9 @@ class ContinuousBatchingManager:
 
     @traced
     # @torch.compile
-    def _generation_step(self, batch_processor: ContinuousBatchProcessor) -> None:
+    def _generation_step(self) -> None:
         """Perform a single generation step. This is cuda graphed"""
-        batch_data = batch_processor.get_model_kwargs()
-        with torch.no_grad():
-            logits = self._model_forward(batch_data)
-            # if self.log_prob_generation:    batch_processor.output_probs.copy_(logits)  # TODO
-            probs = self._process_logit(batch_data, logits)
-            self._sample(batch_processor, probs)
-
-    @traced(span_name="model_forward")
-    def _model_forward(self, batch_data: dict) -> torch.Tensor:
-        return self.model(**batch_data).logits
-
-    @traced(span_name="logit_processing")
-    def _process_logit(self, batch_data: dict, logits: torch.Tensor) -> torch.Tensor:
-        # Pass continuous batching context to logits processor if it supports it. TODO we should find a way to make this a little bit cleaner!
-        if hasattr(self.logit_processor, "set_continuous_batching_context"):
-            self.logit_processor.set_continuous_batching_context(
-                batch_data["logits_indices"], batch_data["cu_seq_lens_q"]
-            )
-
-        # Handle shape compatibility: logit processors expect 2D tensors [batch_size, vocab_size]
-        # but continuous batching always produces 3D tensors [batch_size, seq_len, vocab_size]
-        batch_size, seq_len, vocab_size = logits.shape
-        logits_2d = logits.view(batch_size * seq_len, vocab_size)
-        input_ids_2d = batch_data["input_ids"].view(batch_size * seq_len)
-
-        # Process with 2D tensors
-        processed_logits_2d = self.logit_processor(input_ids_2d, logits_2d)
-
-        # Reshape back to 3D
-        return processed_logits_2d.view(batch_size, seq_len, vocab_size)
-
-    @traced(span_name="sampling")
-    def _sample(self, batch_processor: ContinuousBatchProcessor, probs: torch.Tensor) -> None:
-        if self.do_sample:  # sample
-            probs = nn.functional.softmax(probs, dim=-1)
-            # probs[0] has shape [seq_len, vocab_size], multinomial returns [seq_len, 1]
-            next_tokens = torch.multinomial(probs[0], num_samples=1).squeeze(-1)  # Now [seq_len]
-            # Add batch dimension back to match argmax output
-            next_tokens = next_tokens.unsqueeze(0)  # Now [1, seq_len]
-        else:
-            next_tokens = torch.argmax(probs, dim=-1)  # Already [1, seq_len]
-
-        tokens = next_tokens.size(1)  # Get seq_len dimension
-        batch_processor.output_ids[:, :tokens].copy_(next_tokens)
+        self.batch_processor._generation_step(self.model, self.logit_processor, self.do_sample)
 
     def _run_generation_loop(self) -> None:
         """Main processing loop running in the background thread."""
@@ -972,7 +928,7 @@ class ContinuousBatchingManager:
             device, total, reserved, allocated = get_device_and_memory_breakdown()
             logger.debug(f"[Memory] Device: {device}, Total: {total}, Reserved: {reserved}, Allocated: {allocated}")
 
-        self._generation_step(batch_processor)
+        self._generation_step()
 
         if torch.cuda.is_available():
             torch.cuda.synchronize()
