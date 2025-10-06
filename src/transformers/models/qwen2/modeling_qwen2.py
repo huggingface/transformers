@@ -32,11 +32,14 @@ from .configuration_qwen2 import Qwen2Config
 
 
 class Qwen2MLP(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, layer_idx):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
+        if hasattr(config, 'layer_inter_size'):
+            self.intermediate_size = config.layer_inter_size[layer_idx]
+        else:
+            self.intermediate_size = config.intermediate_size
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
@@ -127,14 +130,18 @@ class Qwen2Attention(nn.Module):
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        if hasattr(config, 'layer_head_num'):
+            self.num_heads = config.layer_head_num[layer_idx]
+        else:
+            self.num_heads = config.num_attention_heads
+        self.num_key_value_groups = self.num_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
-        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=True)
+        self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=True)
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True)
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True)
-        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
+        self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=False)
         self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
@@ -211,7 +218,7 @@ class Qwen2DecoderLayer(GradientCheckpointingLayer):
 
         self.self_attn = Qwen2Attention(config=config, layer_idx=layer_idx)
 
-        self.mlp = Qwen2MLP(config)
+        self.mlp = Qwen2MLP(config, layer_idx)
         self.input_layernorm = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.attention_type = config.layer_types[layer_idx]
