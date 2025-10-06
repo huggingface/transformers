@@ -21,8 +21,7 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
-from ...cache_utils import Cache, DynamicCache, StaticCache
-from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...cache_utils import Cache, DynamicCache
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
@@ -34,51 +33,23 @@ from ...utils import (
     logging,
 )
 from ...utils.generic import check_model_inputs
-from ..auto import AutoConfig
+from ..csm.modeling_csm import CsmBackboneModelEmbeddings
 from ..llama.modeling_llama import (
-    LlamaAttention,
     LlamaDecoderLayer,
     LlamaMLP,
+    LlamaModel,
     LlamaRMSNorm,
-    LlamaRotaryEmbedding,
 )
 from .configuration_higgs_audio import HiggsAudioConfig
 from .generation_higgs_audio import HiggsAudioGenerationMixin
 
 
 if is_torch_flex_attn_available():
-    from torch.nn.attention.flex_attention import BlockMask
 
-    from ...integrations.flex_attention import make_flex_block_causal_mask
+    pass
 
 
 logger = logging.get_logger(__name__)
-
-
-class HiggsAudioRotaryEmbedding(LlamaRotaryEmbedding):
-    pass
-
-
-class HiggsAudioRMSNorm(LlamaRMSNorm):
-    pass
-
-
-class HiggsAudioMLP(LlamaMLP):
-    pass
-
-
-# remove
-class HiggsAudioDecoderLayer:
-    pass
-
-
-# remove
-class HiggsAudioDualFFNFastDecoderLayer:
-    pass
-
-
-class HiggsAudioAttention(LlamaAttention):
-    pass
 
 
 class HiggsAudioDecoderProjector(nn.Module):
@@ -116,117 +87,46 @@ class HiggsAudioDecoderProjector(nn.Module):
         return logits, audio_logits
 
 
-class HiggsAudioDualFFNDecoderLayer(nn.Module):
-    """We implement a dual-path FFN decoder layer where the audio tokens and text tokens go through separate FFN layers.
-
-    The audio and text tokens share the text-attention layer, but will be encoded with separate feedforward layers.
-
-    Following is an illustration:
-
-     t    t    t    a   a     a    t    t    t
-                        |
-                        | (shared attention layer)
-                        v
-    h_t  h_t  h_t  h_a  h_a  h_a  h_t  h_t  h_t
-                        |
-                        | (separate text/audio hidden states)
-                        v
-    [h_t  h_t  h_t  h_t  h_t  h_t], [h_a, h_a, h_a]
-             |                             |
-             | (separate FFNs)             |
-             v                             v
-    [o_t  o_t  o_t  o_t  o_t  o_t], [o_a, o_a, o_a]
-                        |
-                        | (reorder)
-                        v
-    o_t  o_t  o_t  o_a  o_a  o_a  o_t  o_t  o_t
-
-    This has a few advantages:
-    1) We are able to use a smaller FFN, or even bypass the FFN for audio tokens. This accelerates the inference speed.
-    2) The Audio-FFN introduces more trainable parameters to the model.
-       This should have the same effect as the mixture-of-expert layer and we may expect better performance due to parameter scaling.
-    3) We can replace the original FFN in LLMs with the dual-path FFN without changing the number of FLOPs.
+class HiggsAudioMLP(LlamaMLP):
+    pass
 
 
-    """
+class HiggsAudioRMSNorm(LlamaRMSNorm):
+    pass
 
-    def __init__(self, config: AutoConfig, layer_idx: int):
-        super().__init__()
-        self.hidden_size = config.hidden_size
-        self.layer_idx = layer_idx
-        self.self_attn = HiggsAudioAttention(config=config, layer_idx=layer_idx)
 
-        self.mlp = HiggsAudioMLP(config)
+class HiggsAudioDecoderLayer(LlamaDecoderLayer):
+    def __init__(self, config: HiggsAudioConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
 
         self.audio_mlp = HiggsAudioMLP(config)
         self.audio_input_layernorm = HiggsAudioRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.audio_post_attention_layernorm = HiggsAudioRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-        self.input_layernorm = HiggsAudioRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = HiggsAudioRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
     def forward(
         self,
         hidden_states: torch.Tensor,
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]],
         attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
         audio_out_mask: Optional[torch.BoolTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.46
         **kwargs: Unpack[TransformersKwargs],
-    ):
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`, *optional*):
-                attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
-                query_sequence_length, key_sequence_length)` if default attention is used.
-            position_ids
-                IDs of positions in the input sequence
-            audio_out_mask
-                Mask for identifying the audio tokens. Size (batch_size, sequence_length)
-                1 --> location contains audio_out
-                0 --> location does not contain audio_out
-
-                When use_cache is True and not in torch compile mode, the audio_out_mask contains audio_out masks for
-                all tokens up to the current token.  That means, it has size (batch_size, sequence_length) while
-                hidden_states will have size (batch_size, 1). In the torch compile mode, the audio_out_mask will have
-                size (batch_size, 1).
-            past_key_value (`Cache`, *optional*): cached past key and value projection states. We fetch the corresponding cached key/value via the layer_idx.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence
-            position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
-                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
-                with `head_dim` being the embedding dimension of each attention head.
-        """
+    ) -> torch.Tensor:
         residual = hidden_states
-        target_length = hidden_states.shape[1]
 
-        has_audio_out = audio_out_mask is not None and audio_out_mask.shape[0] > 0
+        hidden_states = hidden_states.masked_scatter(
+            audio_out_mask.unsqueeze(-1),
+            self.audio_input_layernorm(hidden_states[audio_out_mask])
+        )
+        hidden_states = hidden_states.masked_scatter(
+            ~audio_out_mask.unsqueeze(-1),
+            self.input_layernorm(hidden_states[~audio_out_mask])
+        )
 
-        if has_audio_out:
-            # Apply separate layernorm layers for audio tokens and text tokens
-            if use_cache:
-                hidden_states = torch.where(
-                    audio_out_mask[:, -target_length:].unsqueeze(-1),
-                    self.audio_input_layernorm(hidden_states),
-                    self.input_layernorm(hidden_states),
-                )
-            else:
-                hidden_states = torch.where(
-                    audio_out_mask.unsqueeze(-1),
-                    self.audio_input_layernorm(hidden_states),
-                    self.input_layernorm(hidden_states),
-                )
-        else:
-            hidden_states = self.input_layernorm(hidden_states)
-
-        # Attention
+        # Self Attention
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -239,181 +139,15 @@ class HiggsAudioDualFFNDecoderLayer(nn.Module):
         )
         hidden_states = residual + hidden_states
 
-        # Apply Dual-path FFN
-        residual = hidden_states
+        # Dual-path FFN
+        text_hidden_states = self.post_attention_layernorm(hidden_states[~audio_out_mask])
+        audio_hidden_states = self.audio_post_attention_layernorm(hidden_states[audio_out_mask])
 
-        if has_audio_out:
-            if use_cache:
-                real_audio_out_mask = audio_out_mask[:, -target_length:]
-            else:
-                real_audio_out_mask = audio_out_mask
+        text_hidden_states = self.mlp(text_hidden_states)
+        hidden_states[~audio_out_mask] += text_hidden_states
 
-            # Make whole graph in decode stage
-            text_hidden_states = self.post_attention_layernorm(hidden_states[~real_audio_out_mask])
-            audio_hidden_states = self.audio_post_attention_layernorm(hidden_states[real_audio_out_mask])
-
-            text_hidden_states = self.mlp(text_hidden_states)
-            residual[~real_audio_out_mask] += text_hidden_states
-
-            audio_hidden_states = self.audio_mlp(audio_hidden_states)
-            residual[real_audio_out_mask] += audio_hidden_states
-
-            hidden_states = residual
-        else:
-            hidden_states = self.post_attention_layernorm(hidden_states)
-            hidden_states = self.mlp(hidden_states)
-            hidden_states = residual + hidden_states
-
-        return hidden_states
-
-
-class HiggsAudioDualFFNSlowDecoderLayer(nn.Module):
-    """We implement a slow dual-path FFN decoder layer where the audio tokens and text tokens go through separate FFN layers.
-
-    The audio and text tokens share the text-attention layer, but will be encoded with separate feedforward layers.
-
-    Following is an illustration:
-
-     t    t    t    a   a     a    t    t    t
-                        |
-                        | (shared attention layer)
-                        v
-    h_t  h_t  h_t  h_a  h_a  h_a  h_t  h_t  h_t
-                        |
-                        | (separate text/audio hidden states)
-                        v
-    [h_t  h_t  h_t  h_t  h_t  h_t], [h_a, h_a, h_a]
-             |                             |
-             | (separate FFNs)             |
-             v                             v
-    [o_t  o_t  o_t  o_t  o_t  o_t], [o_a, o_a, o_a]
-                        |
-                        | (reorder)
-                        v
-    o_t  o_t  o_t  o_a  o_a  o_a  o_t  o_t  o_t
-
-    This has a few advantages:
-    1) We are able to use a smaller FFN, or even bypass the FFN for audio tokens. This accelerates the inference speed.
-    2) The Audio-FFN introduces more trainable parameters to the model.
-       This should have the same effect as the mixture-of-expert layer and we may expect better performance due to parameter scaling.
-    3) We can replace the original FFN in LLMs with the dual-path FFN without changing the number of FLOPs.
-
-
-    """
-
-    def __init__(self, config: AutoConfig, layer_idx: int):
-        super().__init__()
-        self.hidden_size = config.hidden_size
-        self.layer_idx = layer_idx
-        self.self_attn = HiggsAudioAttention(config=config, layer_idx=layer_idx)
-
-        self.mlp = HiggsAudioMLP(config)
-
-        self.audio_mlp = HiggsAudioMLP(config)
-        self.audio_input_layernorm = HiggsAudioRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.audio_post_attention_layernorm = HiggsAudioRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-        self.input_layernorm = HiggsAudioRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = HiggsAudioRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        audio_out_mask: Optional[torch.BoolTensor] = None,
-        past_key_value: Optional[Cache] = None,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.46
-        **kwargs: Unpack[TransformersKwargs],
-    ):
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`, *optional*):
-                attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
-                query_sequence_length, key_sequence_length)` if default attention is used.
-            position_ids
-                IDs of positions in the input sequence
-            audio_out_mask
-                Mask for identifying the audio tokens. Size (batch_size, sequence_length)
-                1 --> location contains audio_out
-                0 --> location does not contain audio_out
-
-                When use_cache is True and not in torch compile mode, the audio_out_mask contains audio_out masks for
-                all tokens up to the current token.  That means, it has size (batch_size, sequence_length) while
-                hidden_states will have size (batch_size, 1). In the torch compile mode, the audio_out_mask will have
-                size (batch_size, 1).
-            past_key_value (`Cache`, *optional*): cached past key and value projection states. We fetch the corresponding cached key/value via the layer_idx.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence
-            position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
-                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
-                with `head_dim` being the embedding dimension of each attention head.
-        """
-        residual = hidden_states
-        target_length = hidden_states.shape[1]
-
-        has_audio_out = audio_out_mask is not None and audio_out_mask.shape[0] > 0
-
-        if has_audio_out:
-            # Apply separate layernorm layers for audio tokens and text tokens
-            if use_cache:
-                hidden_states = torch.where(
-                    audio_out_mask[:, -target_length:].unsqueeze(-1),
-                    self.audio_input_layernorm(hidden_states),
-                    self.input_layernorm(hidden_states),
-                )
-            else:
-                hidden_states = torch.where(
-                    audio_out_mask.unsqueeze(-1),
-                    self.audio_input_layernorm(hidden_states),
-                    self.input_layernorm(hidden_states),
-                )
-        else:
-            hidden_states = self.input_layernorm(hidden_states)
-
-        # Attention
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_value=past_key_value,
-            use_cache=use_cache,
-            cache_position=cache_position,
-            position_embeddings=position_embeddings,
-            **kwargs,
-        )
-        hidden_states = residual + hidden_states
-
-        # Apply Dual-path FFN
-        residual = hidden_states
-
-        if has_audio_out:
-            if use_cache:
-                real_audio_out_mask = audio_out_mask[:, -target_length:]
-            else:
-                real_audio_out_mask = audio_out_mask
-
-            # Make whole graph in decode stage
-            text_hidden_states = self.post_attention_layernorm(hidden_states[~real_audio_out_mask])
-            audio_hidden_states = self.audio_post_attention_layernorm(hidden_states[real_audio_out_mask])
-
-            text_hidden_states = self.mlp(text_hidden_states)
-            residual[~real_audio_out_mask] += text_hidden_states
-
-            audio_hidden_states = self.audio_mlp(audio_hidden_states)
-            residual[real_audio_out_mask] += audio_hidden_states
-
-            hidden_states = residual
-        else:
-            hidden_states = self.post_attention_layernorm(hidden_states)
-            hidden_states = self.mlp(hidden_states)
-            hidden_states = residual + hidden_states
+        audio_hidden_states = self.audio_mlp(audio_hidden_states)
+        hidden_states[audio_out_mask] += audio_hidden_states
 
         return hidden_states
 
@@ -435,7 +169,7 @@ class HiggsAudioPreTrainedModel(PreTrainedModel):
 
     _can_record_outputs = {
         "hidden_states": Union[
-            HiggsAudioDecoderLayer, HiggsAudioDualFFNSlowDecoderLayer
+            HiggsAudioDecoderLayer, HiggsAudioDecoderLayer
         ],
         "attentions": HiggsAudioAttention,
     }
@@ -583,7 +317,10 @@ class HiggsAudioOutputWithPast(ModelOutput):
     attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
-class HiggsAudioModel(HiggsAudioPreTrainedModel):
+class HiggsAudioEmbeddings(CsmBackboneModelEmbeddings):
+    pass
+
+class HiggsAudioModel(LlamaModel):
     """Higgs-Audio is an end-to-end multimodal model with the capability to understand and generate text / audio.
 
     Consider the following example for mixed text/audio understanding / generation:
@@ -603,72 +340,7 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
 
     def __init__(self, config: HiggsAudioConfig):
         super().__init__(config)
-        self.padding_idx = config.pad_token_id
-        self.audio_in_token_idx = config.audio_in_token_idx
-        self.audio_out_token_idx = config.audio_out_token_idx
-        self.audio_out_bos_token_id = config.audio_out_bos_token_id if "audio_out_bos_token_id" in config else None
-        self.audio_eos_token_id = config.audio_eos_token_id if "audio_eos_token_id" in config else None
-        self.vocab_size = config.vocab_size
-        self.audio_num_codebooks = config.audio_num_codebooks
-        self.use_delay_pattern = config.use_delay_pattern
-        self.use_audio_out_embed_projector = config.use_audio_out_embed_projector
-
-        self.embed_tokens = nn.Embedding(self.vocab_size, config.hidden_size, self.padding_idx)
-
-        if config.audio_adapter_type == "dual_ffn_fast_forward":
-            layers = []
-            for j in range(config.num_hidden_layers):
-                if j in config.audio_dual_ffn_layers:
-                    layers.append(HiggsAudioDualFFNDecoderLayer(config, j))
-                else:
-                    layers.append(HiggsAudioDualFFNFastDecoderLayer(config, j))
-            self.layers = nn.ModuleList(layers)
-        elif config.audio_adapter_type == "stack":
-            self.layers = nn.ModuleList(
-                [HiggsAudioDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-            )
-
-        self.num_activation_checkpointing_layers = len(self.layers)
-
-        self.norm = HiggsAudioRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = HiggsAudioRotaryEmbedding(config=config)
-
-        self.audio_codebook_size = (
-            config.audio_codebook_size + 2
-        )  # We add 1 for the audio_stream_bos token and 1 for the audio_stream_eos token
-
-        if config.use_audio_out_embed_projector:
-            self.audio_out_embed_projector = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
-
-        self.audio_codebook_embeddings = nn.Embedding(
-            config.audio_num_codebooks * self.audio_codebook_size, config.hidden_size
-        )
-
-        self.gradient_checkpointing = False
-
-        self.post_init()
-
-    def get_audio_features(self, audio_ids):
-        """Embed the audio ids
-
-        Args:
-            audio_ids: torch.LongTensor of shape (num_codebooks, audio_in_total_length)
-
-        Returns:
-            audio_embed: torch.LongTensor of shape (audio_in_total_length, hidden_size)
-        """
-        codebook_shift = (
-            torch.arange(self.config.audio_num_codebooks, device=audio_ids.device) * self.audio_codebook_size
-        )
-        audio_embed = self.audio_codebook_embeddings(audio_ids + codebook_shift.unsqueeze(-1))
-        audio_embed = torch.sum(audio_embed, dim=1)
-        if self.use_audio_out_embed_projector:
-            audio_embed = self.audio_out_embed_projector(audio_embed)
-        return audio_embed
-
-    def get_audio_embeds(self, audio_input_ids):
-        # TODO: should be removed
-        return self.get_audio_features(audio_input_ids)
+        self.embed_audio_tokens = HiggsAudioEmbeddings(config)
 
     @check_model_inputs
     @auto_docstring
@@ -691,8 +363,8 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if audio_input_ids is not None:
-            audio_inputs_embeds = self.get_audio_embeds(audio_input_ids)
+        if audio_input_ids is not None and inputs_embeds is not None:
+            audio_inputs_embeds = self.embed_audio_tokens(audio_input_ids)
 
             audio_in_token_mask = input_ids == self.config.audio_in_token_idx
             audio_out_token_mask = input_ids == self.config.audio_out_token_idx
@@ -817,18 +489,19 @@ class HiggsAudioForConditionalGeneration(HiggsAudioPreTrainedModel, HiggsAudioGe
         )
 
         # Loss calculation when label_ids is not None
-        labels = outputs.expanded_labels
-        audio_in_mask = outputs.audio_in_mask
-        audio_out_mask = outputs.audio_out_mask
-        attention_mask = outputs.attention_mask
+        # labels = outputs.expanded_labels
+        # audio_in_mask = outputs.audio_in_mask
+        # audio_out_mask = outputs.audio_out_mask
+        audio_out_mask = input_ids == self.config.audio_out_token_idx
+        # attention_mask = outputs.attention_mask
         past_key_values = outputs.past_key_values
-        last_hidden_states = outputs.last_hidden_states
-        hidden_states = outputs.hidden_states
-        attentions = outputs.attentions
+        last_hidden_state = outputs.last_hidden_state
+        # hidden_states = outputs.hidden_states
+        # attentions = outputs.attentions
 
         # Apply the audio decoder projector
         logits, audio_logits = self.audio_decoder_proj(
-            last_hidden_states,
+            last_hidden_state,
             audio_out_mask,
         )
 

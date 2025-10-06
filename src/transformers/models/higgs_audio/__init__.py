@@ -21,7 +21,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_higgs_audio import *
     from .generation_higgs_audio import *
-    from .modular_higgs_audio import *
+    from .modeling_higgs_audio import *
     from .processing_higgs_audio import *
 else:
     import sys

@@ -17,6 +17,7 @@
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 
+
 class HiggsAudioConfig(PretrainedConfig):
     r"""
     This is the configuration class for the HiggsAudioModel. Instantiating a configuration
@@ -344,6 +345,10 @@ class HiggsAudioConfig(PretrainedConfig):
         self.audio_out_bos_token_id = audio_out_bos_token_id
         self.audio_eos_token_id = audio_eos_token_id
         self.pad_token_id = pad_token_id
+
+        self.num_codebooks = audio_num_codebooks
+        self.codebook_size = audio_codebook_size + 2
+
 
 
 __all__ = ["HiggsAudioConfig"]
