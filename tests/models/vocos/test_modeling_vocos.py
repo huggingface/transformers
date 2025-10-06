@@ -24,7 +24,7 @@ from transformers.testing_utils import (
     require_torch,
     torch_device,
 )
-from transformers.utils import is_torch_available
+from transformers.utils import is_torch_available, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
@@ -230,6 +230,7 @@ class VocosModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(info["missing_keys"], [])
 
 
+@slow
 @require_torch
 class VocosModelIntegrationTest(unittest.TestCase):
     """
