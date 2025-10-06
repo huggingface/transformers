@@ -25,6 +25,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
+    LlamaAttention,
     LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaModel,
@@ -182,56 +183,17 @@ class CwmConfig(LlamaConfig):
         self.layer_types = list(layer_types)
 
 
-class CwmDecoderLayer(LlamaDecoderLayer):
-    """
-    Same as LlamaDecoderLayer, but we inject an additive mask (local or causal) per layer
-    based on config.layer_types / sliding_window / global_window before calling attention
-    """
-
+class CwmAttention(LlamaAttention):
     def __init__(self, config: CwmConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.layer_idx = layer_idx
-        self.layer_type = config.layer_types[self.layer_idx]
-        self.sliding_window = int(getattr(config, "sliding_window", 0))
+        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[torch.Tensor]] = None,
-        output_attentions: bool = False,
-        use_cache: bool = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        **kwargs,
-    ):
-        residual = hidden_states
 
-        hidden_states = self.input_layernorm(hidden_states)
-        attn_outputs = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            output_attentions=output_attentions,
-            use_cache=use_cache,
-            cache_position=cache_position,
-            position_embeddings=position_embeddings,
-            sliding_window=self.sliding_window if self.layer_type == "sliding_attention" else None,
-            **kwargs,
-        )
-
-        attn_output = attn_outputs[0]
-        hidden_states = residual + attn_output
-
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-
-        return hidden_states
+class CwmDecoderLayer(LlamaDecoderLayer):
+    def __init__(self, config: CwmConfig, layer_idx: int):
+        super().__init__(config=config, layer_idx=layer_idx)
+        self.attention_type = config.layer_types[layer_idx]
+        self.self_attn = CwmAttention(config=config, layer_idx=layer_idx)
 
 
 class CwmPreTrainedModel(LlamaPreTrainedModel):
@@ -302,7 +264,7 @@ class CwmModel(LlamaModel):
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[decoder_layer.layer_type],
+                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 cache_position=cache_position,
