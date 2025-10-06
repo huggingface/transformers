@@ -15,21 +15,20 @@
 # limitations under the License.
 """GraniteMoeHybrid model configuration"""
 
-from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class GraniteMoeHybridConfig(PretrainedConfig):
+class GraniteMoeHybridConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GraniteMoeHybridConfig`]. It is used to
     instantiate an GraniteMoeHybrid model according to the specified arguments, defining the model architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -96,8 +95,6 @@ class GraniteMoeHybridConfig(PretrainedConfig):
             allow the model to output the auxiliary loss.
         router_aux_loss_coef (`float`, *optional*, defaults to 0.001): router auxiliary loss coefficient
         shared_intermediate_size (`int`, *optional*, defaults to 1024): intermediate size for shared experts.
-        position_embedding_type (`str`, *optional*): Positional embedding
-            type to be used; defaults to None. Allowed options: `[None, "rope"]`
         layer_types (`List`, *optional*): list of strings to be used as layer types.
             Allowed choices: "mamba", "attention".
         mamba_n_heads (`int`, *optional*, defaults to 128):
@@ -166,7 +163,6 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         output_router_logits=False,
         router_aux_loss_coef=0.001,
         shared_intermediate_size=1024,
-        position_embedding_type=None,
         layer_types=None,
         mamba_n_heads=128,
         mamba_n_groups=1,
@@ -208,7 +204,6 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
         self.shared_intermediate_size = shared_intermediate_size
-        self.position_embedding_type = position_embedding_type
 
         mamba_intermediate = mamba_expand * hidden_size
 
@@ -243,9 +238,6 @@ class GraniteMoeHybridConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-
-        if self.position_embedding_type == "rope":
-            rope_config_validation(self)
 
     # overwrite the function to use in `HybridMambaAttentionDynamicCache`
     @property

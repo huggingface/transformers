@@ -197,10 +197,6 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="Siglip uses a non-standard initialization scheme")
-    def test_initialization(self):
-        pass
-
     @unittest.skip(reason="Compile not yet supported because in LLava models")
     @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):

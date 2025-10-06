@@ -22,7 +22,7 @@ from transformers import DabDetrConfig, ResNetConfig, is_torch_available, is_vis
 from transformers.testing_utils import require_timm, require_torch, require_vision, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -193,7 +193,7 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
         if return_labels:
-            if model_class.__name__ in ["DabDetrForObjectDetection"]:
+            if model_class.__name__ == "DabDetrForObjectDetection":
                 labels = []
                 for i in range(self.model_tester.batch_size):
                     target = {}
@@ -699,55 +699,6 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                 self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 3)
 
             self.assertTrue(outputs)
-
-    def test_initialization(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        configs_no_init.init_xavier_std = 1e9
-        # Copied from RT-DETR
-        configs_no_init.initializer_bias_prior_prob = 0.2
-        bias_value = -1.3863  # log_e ((1 - 0.2) / 0.2)
-
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    if "bbox_attention" in name and "bias" not in name:
-                        self.assertLess(
-                            100000,
-                            abs(param.data.max().item()),
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    # Modified from RT-DETR
-                    elif "class_embed" in name and "bias" in name:
-                        bias_tensor = torch.full_like(param.data, bias_value)
-                        torch.testing.assert_close(
-                            param.data,
-                            bias_tensor,
-                            atol=1e-4,
-                            rtol=1e-4,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    elif "activation_fn" in name and config.activation_function == "prelu":
-                        self.assertTrue(
-                            param.data.mean() == 0.25,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    elif "backbone.conv_encoder.model" in name:
-                        continue
-                    elif "self_attn.in_proj_weight" in name:
-                        self.assertIn(
-                            ((param.data.mean() * 1e2).round() / 1e2).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
 
 
 TOLERANCE = 1e-4
