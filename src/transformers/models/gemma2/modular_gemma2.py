@@ -20,7 +20,7 @@ import torch.nn as nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PretrainedConfig, layer_type_validation
+from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -47,14 +47,14 @@ from ..gemma.modeling_gemma import (
 logger = logging.get_logger(__name__)
 
 
-class Gemma2Config(PretrainedConfig):
+class Gemma2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Gemma2Model`]. It is used to instantiate an Gemma2
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Gemma2-7B.
     e.g. [google/gemma2-7b](https://huggingface.co/google/gemma2-7b)
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 256000):

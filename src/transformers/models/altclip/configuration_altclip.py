@@ -14,22 +14,22 @@
 # limitations under the License.
 """AltCLIP model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class AltCLIPTextConfig(PretrainedConfig):
+class AltCLIPTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`AltCLIPTextModel`]. It is used to instantiate a
     AltCLIP text model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the AltCLIP
     [BAAI/AltCLIP](https://huggingface.co/BAAI/AltCLIP) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -139,15 +139,15 @@ class AltCLIPTextConfig(PretrainedConfig):
         self.project_dim = project_dim
 
 
-class AltCLIPVisionConfig(PretrainedConfig):
+class AltCLIPVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`AltCLIPModel`]. It is used to instantiate an
     AltCLIP model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the AltCLIP
     [BAAI/AltCLIP](https://huggingface.co/BAAI/AltCLIP) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -232,15 +232,15 @@ class AltCLIPVisionConfig(PretrainedConfig):
         self.hidden_act = hidden_act
 
 
-class AltCLIPConfig(PretrainedConfig):
+class AltCLIPConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`AltCLIPModel`]. It is used to instantiate an
     AltCLIP model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the AltCLIP
     [BAAI/AltCLIP](https://huggingface.co/BAAI/AltCLIP) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`dict`, *optional*):
@@ -303,7 +303,7 @@ class AltCLIPConfig(PretrainedConfig):
 
             # Give a warning if the values exist in both `_text_config_dict` and `text_config` but being different.
             for key, value in _text_config_dict.items():
-                if key in text_config and value != text_config[key] and key not in ["transformers_version"]:
+                if key in text_config and value != text_config[key] and key != "transformers_version":
                     # If specified in `text_config_dict`
                     if key in text_config_dict:
                         message = (
@@ -335,7 +335,7 @@ class AltCLIPConfig(PretrainedConfig):
 
             # Give a warning if the values exist in both `_vision_config_dict` and `vision_config` but being different.
             for key, value in _vision_config_dict.items():
-                if key in vision_config and value != vision_config[key] and key not in ["transformers_version"]:
+                if key in vision_config and value != vision_config[key] and key != "transformers_version":
                     # If specified in `vision_config_dict`
                     if key in vision_config_dict:
                         message = (

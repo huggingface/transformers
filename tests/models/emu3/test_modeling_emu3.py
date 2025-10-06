@@ -348,10 +348,6 @@ class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
     def test_cpu_offload(self):
         pass
 
-    @unittest.skip("VQ-VAE module doesn't initialize weights properly")
-    def test_initialization(self):
-        pass
-
     @pytest.mark.generate
     @unittest.skip("Emu3 has dynamic control flow in vision backbone")
     def test_generate_with_static_cache(self):

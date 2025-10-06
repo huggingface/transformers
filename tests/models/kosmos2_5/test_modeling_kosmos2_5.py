@@ -43,7 +43,6 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
-    _config_zero_init,
     floats_tensor,
     ids_tensor,
     random_attention_mask,
@@ -377,24 +376,6 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     )
     def test_prompt_lookup_decoding_matches_greedy_search(self):
         pass
-
-    # overwrite from common to skip `image_to_text_projection.latent_query`
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    if name == "image_to_text_projection.latent_query":
-                        # The original code use ` nn.Parameter(torch.randn(...))` for which this test won't pass.
-                        continue
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

@@ -31,7 +31,7 @@ from transformers.models.instructblip.modeling_instructblip import (
     TransformersKwargs,
 )
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from ...processing_utils import Unpack
@@ -50,7 +50,7 @@ class InstructBlipVideoQFormerConfig(InstructBlipQFormerConfig):
     pass
 
 
-class InstructBlipVideoConfig(PretrainedConfig):
+class InstructBlipVideoConfig(PreTrainedConfig):
     r"""
     [`InstructBlipVideoConfig`] is the configuration class to store the configuration of a
     [`InstructBlipVideoForConditionalGeneration`]. It is used to instantiate a Instructblipvideo model according to the specified
@@ -58,8 +58,8 @@ class InstructBlipVideoConfig(PretrainedConfig):
     the defaults will yield a similar configuration to that of the Instructblipvideo
     [Salesforce/instruct-blip-flan-t5](https://huggingface.co/Salesforce/instruct-blip-flan-t5) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vision_config (`dict`, *optional*):
@@ -67,7 +67,7 @@ class InstructBlipVideoConfig(PretrainedConfig):
         qformer_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`InstructBlipVideoQFormerConfig`].
         text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize any [`PretrainedConfig`].
+            Dictionary of configuration options used to initialize any [`PreTrainedConfig`].
         num_query_tokens (`int`, *optional*, defaults to 32):
             The number of query tokens passed through the Transformer.
 
@@ -96,7 +96,7 @@ class InstructBlipVideoConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
 
-    >>> # We can also initialize a InstructBlipVideoConfig from a InstructBlipVideoVisionConfig, InstructBlipVideoQFormerConfig and any PretrainedConfig
+    >>> # We can also initialize a InstructBlipVideoConfig from a InstructBlipVideoVisionConfig, InstructBlipVideoQFormerConfig and any PreTrainedConfig
 
     >>> # Initializing Instructblipvideo vision, Instructblipvideo Q-Former and language model configurations
     >>> vision_config = InstructBlipVideoVisionConfig()
@@ -156,7 +156,7 @@ class InstructBlipVideoConfig(PretrainedConfig):
         cls,
         vision_config: InstructBlipVideoVisionConfig,
         qformer_config: InstructBlipVideoQFormerConfig,
-        text_config: PretrainedConfig,
+        text_config: PreTrainedConfig,
         **kwargs,
     ):
         r"""

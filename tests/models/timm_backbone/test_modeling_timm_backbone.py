@@ -90,7 +90,7 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
     has_attentions = False
 
     def setUp(self):
-        # self.config_class = PretrainedConfig
+        # self.config_class = PreTrainedConfig
         self.config_class = TimmBackboneConfig
         self.model_tester = TimmBackboneModelTester(self)
         self.config_tester = ConfigTester(
@@ -137,10 +137,6 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
 
     @unittest.skip(reason="TimmBackbone initialization is managed on the timm side")
     def test_can_init_all_missing_weights(self):
-        pass
-
-    @unittest.skip(reason="TimmBackbone initialization is managed on the timm side")
-    def test_initialization(self):
         pass
 
     @unittest.skip(reason="TimmBackbone models doesn't have inputs_embeds")

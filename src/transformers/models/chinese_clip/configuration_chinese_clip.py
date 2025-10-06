@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from ...processing_utils import ProcessorMixin
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
 
@@ -30,7 +30,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class ChineseCLIPTextConfig(PretrainedConfig):
+class ChineseCLIPTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ChineseCLIPModel`]. It is used to instantiate a
     Chinese CLIP model according to the specified arguments, defining the model architecture. Instantiating a
@@ -38,8 +38,8 @@ class ChineseCLIPTextConfig(PretrainedConfig):
     [OFA-Sys/chinese-clip-vit-base-patch16](https:
         //huggingface.co/OFA-Sys/chinese-clip-vit-base-patch16) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -142,15 +142,15 @@ class ChineseCLIPTextConfig(PretrainedConfig):
         self.use_cache = use_cache
 
 
-class ChineseCLIPVisionConfig(PretrainedConfig):
+class ChineseCLIPVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ChineseCLIPModel`]. It is used to instantiate an
     ChineseCLIP model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the ChineseCLIP
     [OFA-Sys/chinese-clip-vit-base-patch16](https://huggingface.co/OFA-Sys/chinese-clip-vit-base-patch16) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -233,7 +233,7 @@ class ChineseCLIPVisionConfig(PretrainedConfig):
         self.hidden_act = hidden_act
 
 
-class ChineseCLIPConfig(PretrainedConfig):
+class ChineseCLIPConfig(PreTrainedConfig):
     r"""
     [`ChineseCLIPConfig`] is the configuration class to store the configuration of a [`ChineseCLIPModel`]. It is used
     to instantiate Chinese-CLIP model according to the specified arguments, defining the text model and vision model
@@ -241,8 +241,8 @@ class ChineseCLIPConfig(PretrainedConfig):
     Chinese-CLIP [OFA-Sys/chinese-clip-vit-base-patch16](https://huggingface.co/OFA-Sys/chinese-clip-vit-base-patch16)
     architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`dict`, *optional*):
@@ -306,7 +306,7 @@ class ChineseCLIPConfig(PretrainedConfig):
 
             # Give a warning if the values exist in both `_text_config_dict` and `text_config` but being different.
             for key, value in _text_config_dict.items():
-                if key in text_config and value != text_config[key] and key not in ["transformers_version"]:
+                if key in text_config and value != text_config[key] and key != "transformers_version":
                     # If specified in `text_config_dict`
                     if key in text_config_dict:
                         message = (
@@ -338,7 +338,7 @@ class ChineseCLIPConfig(PretrainedConfig):
 
             # Give a warning if the values exist in both `_vision_config_dict` and `vision_config` but being different.
             for key, value in _vision_config_dict.items():
-                if key in vision_config and value != vision_config[key] and key not in ["transformers_version"]:
+                if key in vision_config and value != vision_config[key] and key != "transformers_version":
                     # If specified in `vision_config_dict`
                     if key in vision_config_dict:
                         message = (

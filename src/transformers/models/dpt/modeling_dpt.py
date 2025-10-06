@@ -801,7 +801,7 @@ class DPTModel(DPTPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @check_model_inputs
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -864,7 +864,7 @@ class DPTNeck(nn.Module):
         self.config = config
 
         # postprocessing: only required in case of a non-hierarchical backbone (e.g. ViT, BEiT)
-        if config.backbone_config is not None and config.backbone_config.model_type in ["swinv2"]:
+        if config.backbone_config is not None and config.backbone_config.model_type == "swinv2":
             self.reassemble_stage = None
         else:
             self.reassemble_stage = DPTReassembleStage(config)
