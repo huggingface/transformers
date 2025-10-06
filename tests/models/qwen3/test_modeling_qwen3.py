@@ -200,6 +200,7 @@ class Qwen3IntegrationTest(unittest.TestCase):
             input_ids, max_new_tokens=20, do_sample=True, temperature=0.3, assistant_model=assistant_model
         )
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        print(f"{text}")
 
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
@@ -225,6 +226,7 @@ class Qwen3IntegrationTest(unittest.TestCase):
 
         expected_text_completions = Expectations(
             {
+                ("xpu", None): ["My favourite condiment is 100% plain, unflavoured, and unadulterated. It is"],
                 ("rocm", (9, 5)): ["My favourite condiment is 100% plain, unflavoured, and unadulterated."],
                 ("cuda", None): cuda_expectation,
             }
