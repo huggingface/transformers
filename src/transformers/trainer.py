@@ -56,7 +56,7 @@ from torch import nn
 from torch.utils.data import DataLoader, Dataset, IterableDataset, RandomSampler, SequentialSampler
 
 from . import __version__
-from .configuration_utils import PretrainedConfig
+from .configuration_utils import PreTrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugOption, DebugUnderflowOverflow
 from .feature_extraction_sequence_utils import SequenceFeatureExtractor
@@ -2812,7 +2812,7 @@ class Trainer:
         logger.info(f"Loading model from {resume_from_checkpoint}.")
 
         if os.path.isfile(config_file):
-            config = PretrainedConfig.from_json_file(config_file)
+            config = PreTrainedConfig.from_json_file(config_file)
             checkpoint_version = config.transformers_version
             if checkpoint_version is not None and checkpoint_version != __version__:
                 logger.warning(
@@ -5206,7 +5206,7 @@ class Trainer:
                     self.model.hf_quantizer.quantization_config.bnb_4bit_quant_storage, override=True
                 )
 
-    def _get_num_items_in_batch(self, batch_samples: list, device: torch.device) -> int | None:
+    def _get_num_items_in_batch(self, batch_samples: list, device: torch.device) -> Optional[Union[torch.Tensor, int]]:
         """
         Counts the number of items in the batches to properly scale the loss.
         Args:
