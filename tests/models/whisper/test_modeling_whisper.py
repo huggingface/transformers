@@ -1999,6 +1999,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             }
             for seg in generated_ids["segments"][0]
         ]
+        self.assertEqual(transcript_segments, expected_output)
 
     @slow
     def test_large_timestamp_generation(self):
