@@ -33,7 +33,7 @@ from transformers import (
 from PIL import Image
 import requests
 
-os.environ["TIMM_FUSED_ATTN"] = "0" # needed because the original implementation uses regular atteniton (to avoid logits diverging)
+os.environ["TIMM_FUSED_ATTN"] = "0" # to avoid logits diverging, needed because the original implementation uses regular (not fused) atteniton
 
 KEYS_TO_MODIFY_MAPPING = {
     "model.vision_tower.vision_tower.model": "model.vision_tower.timm_model",
@@ -176,7 +176,7 @@ def convert_fastvlm_to_hf(text_model_id, vision_model_id, output_hub_path, old_s
         }
     ]
     prompt = tokenizer.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
-    prompt = prompt.replace("assistant<", "assistant.<") # to make it aligned with the prompt from the old Apple repo
+    prompt = prompt.replace("assistant<", "assistant.<") # to make it aligned with the prompt from the old Apple remote code
 
     image_file = "http://images.cocodataset.org/val2017/000000039769.jpg"
     raw_image = Image.open(requests.get(image_file, stream=True).raw)
@@ -188,15 +188,15 @@ def convert_fastvlm_to_hf(text_model_id, vision_model_id, output_hub_path, old_s
     with torch.no_grad():
         logits = model(**inputs).logits
 
-    expected_shape = torch.Size([1, 280, 152000])
-    # in order to get the same logits as in the Apple repo, we need to replace the original LayerNorm2D with Timm2D layer norm or vice versa
+    expected_shape = torch.Size([1, 280, 152128])
+    # in order to get the same logits as in the Apple repo, we need to manually replace the original (Apple) LayerNorm2D with Timm's LayerNorm2D or vice versa
     # otherwise numerical errors accumulate
     if output_hub_path == "KamilaMila/FastVLM-0.5B":
         expected_slice = torch.tensor([ 4.1250,  9.6875, 11.1875], device="cuda")
     elif output_hub_path == "KamilaMila/FastVLM-1.5B":
         expected_slice = torch.tensor([ 3.3750, 11.5000, 11.8125], device="cuda")
     elif output_hub_path == "KamilaMila/FastVLM-7B":
-        expected_slice = torch.tensor([4.0312, 10.0000,  7.9062], device="cuda")
+        expected_slice = torch.tensor([3.8125, 9.0625, 7.9062], device="cuda")
 
     logits_slice = logits[0, -1, :3]
     assert torch.allclose(expected_slice, logits_slice, atol=1e-8)
@@ -213,7 +213,7 @@ def main():
 
     parser.add_argument(
         "--text_model_id",
-        default="Qwen/Qwen2-0.5B",
+        default="Qwen/Qwen2-7B",
         help="Hub location of the text model",
     )
     parser.add_argument(
@@ -223,12 +223,12 @@ def main():
     )
     parser.add_argument(
         "--output_hub_path",
-        default="KamilaMila/FastVLM-0.5B",
+        default="KamilaMila/FastVLM-7B",
         help="Location on the hub of the converted model",
     )
     parser.add_argument(
         "--old_state_dict_id",
-        default="apple/FastVLM-0.5B",
+        default="apple/FastVLM-7B",
         help="Location on the hub of the raw state dict of the original model.",
     )
     args = parser.parse_args()
