@@ -564,7 +564,7 @@ def _flash_attention_forward(
         attention_mask (`torch.Tensor`, *optional*):
             The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
             position of padding tokens and 1 for the position of non-padding tokens.
-        attb_implementation (`str`, *optional*):
+        attn_implementation (`str`, *optional*):
             The attention implementation to use. If None, will default to the one based on the environment.
     """
     (flash_fn, flash_varlen_fn, pad_fn, unpad_fn), process_flash_kwargs_fn = lazy_import_flash_attention(
