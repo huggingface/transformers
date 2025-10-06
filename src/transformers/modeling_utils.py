@@ -907,7 +907,7 @@ def update_key_name(keys):
                 else:
                     final_text += part + data[0]
         final_keys.add(final_text)
-    return list(final_keys)
+    return sorted(final_keys)
 
 
 def _get_resolved_checkpoint_files(
