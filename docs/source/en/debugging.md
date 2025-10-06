@@ -45,7 +45,7 @@ which nvcc
 
 You may also have more than one CUDA toolkit installed on your system.
 
-```bash
+```text
 /usr/local/cuda-10.2
 /usr/local/cuda-11.0
 ```

@@ -96,99 +96,107 @@ class Ernie4_5_MoeStatics(nn.Module):
         return hidden_states + self.e_score_correction_bias.squeeze()
 
 
-class Ernie4_5_MoeSparseMoeBlock(nn.Module):
-    """
-    This implementation is
-    strictly equivalent to standard MoE with full capacity (no
-    dropped tokens). It's faster since it formulates MoE operations
-    in terms of block-sparse operations to accommodate imbalanced
-    assignments of tokens to experts, whereas standard MoE either
-    (1) drop tokens at the cost of reduced performance or (2) set
-    capacity factor to number of experts and thus waste computation
-    and memory on padding.
+class Ernie4_5_MoeRouter(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.top_k = config.moe_k
+        self.num_experts = config.moe_num_experts
+        self.norm_min = config.moe_norm_min
+        self.gate = nn.Linear(config.hidden_size, config.moe_num_experts, bias=False, dtype=torch.float32)
+        self.moe_statics = Ernie4_5_MoeStatics(config)
 
-    Ernie 4.5 MoE's original formula is based on case (2) with
-    (optional) shared experts and a corrections bias during gating.
-    """
+    def forward(
+        self, hidden_states: torch.Tensor, device_type: str
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            router_logits = self.gate(hidden_states.float())
+            routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
+            routing_bias = self.moe_statics.e_score_correction_bias.squeeze()
+            _, selected_experts = torch.topk(routing_weights + routing_bias, self.top_k, dim=-1)
+            routing_weights = torch.gather(routing_weights, dim=-1, index=selected_experts)
+            routing_weights = routing_weights / torch.clamp(
+                routing_weights.sum(dim=-1, keepdim=True), min=self.norm_min
+            )
+        routing_weights = routing_weights.to(hidden_states.dtype)
+        return router_logits, selected_experts, routing_weights
 
+
+class Ernie4_5_MoeExperts(nn.ModuleList):
     def __init__(self, config):
         super().__init__()
         self.num_experts = config.moe_num_experts
+        for _ in range(self.num_experts):
+            self.append(Ernie4_5_MoeMLP(config))
+
+    def forward(
+        self, hidden_states: torch.Tensor, selected_experts: torch.Tensor, routing_weights: torch.Tensor
+    ) -> torch.Tensor:
+        final_hidden_states = torch.zeros_like(hidden_states)
+        expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
+
+        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+        for expert_idx in expert_hit:
+            idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
+            current_state = hidden_states[None, top_x].reshape(-1, hidden_states.shape[-1])
+            current_hidden_states = self[expert_idx](current_state) * routing_weights[top_x, idx, None]
+            final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
+        return final_hidden_states
+
+
+class Ernie4_5_MoeSparseMoeBlock(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.hidden_dim = config.hidden_size
+        self.num_experts = config.moe_num_experts
         self.top_k = config.moe_k
-
-        # correction bias (yes it seems to be a typo with statics <> statistics)
-        self.moe_statics = Ernie4_5_MoeStatics(config)
-
-        # gating
-        self.gate = nn.Linear(config.hidden_size, config.moe_num_experts, bias=False, dtype=torch.float32)
-        self.experts = nn.ModuleList(
-            [Ernie4_5_MoeMLP(config, config.moe_intermediate_size) for _ in range(config.moe_num_experts)]
-        )
         self.norm_min = config.moe_norm_min
 
-        # (optional) shared experts for all forwards
+        self.gate = nn.Linear(config.hidden_size, config.moe_num_experts, bias=False, dtype=torch.float32)
+        self.moe_statics = Ernie4_5_MoeStatics(config)
+        self.experts = Ernie4_5_MoeExperts(config)
+
         self.shared_experts = None
         if config.moe_num_shared_experts > 0:
             self.shared_experts = Ernie4_5_MoeMLP(config, config.moe_intermediate_size * config.moe_num_shared_experts)
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        batch_size, sequence_length, hidden_dim = hidden_states.shape
-        hidden_states = hidden_states.view(-1, hidden_dim)
-
-        # (Optional) shared experts
-        if self.shared_experts is not None:
-            shared_output = self.shared_experts(hidden_states)
-
+    def route_tokens_to_experts(self, hidden_states, router_logits):
         device_type = (
             hidden_states.device.type
             if isinstance(hidden_states.device.type, str) and hidden_states.device.type != "mps"
             else "cpu"
         )
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            # router_logits: (batch * sequence_length, n_experts)
-            router_logits = self.gate(hidden_states.float())
 
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
             routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
-            _, selected_experts = torch.topk(self.moe_statics(routing_weights), self.top_k, dim=-1)
+            routing_bias = self.moe_statics.e_score_correction_bias.squeeze()
+            _, selected_experts = torch.topk(routing_weights + routing_bias, self.top_k, dim=-1)
             routing_weights = torch.gather(routing_weights, dim=-1, index=selected_experts)
             routing_weights = routing_weights / torch.clamp(
                 routing_weights.sum(dim=-1, keepdim=True), min=self.norm_min
             )
-            routing_weights = routing_weights.to(hidden_states.dtype)
+        routing_weights = routing_weights.to(hidden_states.dtype)
+        return selected_experts, routing_weights
 
-        final_hidden_states = torch.zeros(
-            (batch_size * sequence_length, hidden_dim), dtype=hidden_states.dtype, device=hidden_states.device
-        )
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        batch_size, sequence_length, _ = hidden_states.shape
+        hidden_states_reshaped = hidden_states.view(-1, self.hidden_dim)
 
-        # One hot encode the selected experts to create an expert mask
-        # this will be used to easily index which expert is going to be sollicitated
-        expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
+        if self.shared_experts is not None:
+            shared_output = self.shared_experts(hidden_states_reshaped)
 
-        # Loop over all available experts in the model and perform the computation on each expert
-        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-        for expert_idx in expert_hit:
-            expert_layer = self.experts[expert_idx]
-            idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
+        router_logits = self.gate(hidden_states_reshaped.float())
+        selected_experts, routing_weights = self.route_tokens_to_experts(hidden_states_reshaped, router_logits)
 
-            # Index the correct hidden states and compute the expert hidden state for
-            # the current expert. We need to make sure to multiply the output hidden
-            # states by `routing_weights` on the corresponding tokens (top-1 and top-2)
-            current_state = hidden_states[None, top_x].reshape(-1, hidden_dim)
-            current_hidden_states = expert_layer(current_state) * routing_weights[top_x, idx, None]
+        final_hidden_states = self.experts(hidden_states_reshaped, selected_experts, routing_weights)
 
-            # However `index_add_` only support torch tensors for indexing so we'll use
-            # the `top_x` tensor here.
-            final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
-
-        # Add (optional) shared experts to the result
         if self.shared_experts is not None:
             final_hidden_states = final_hidden_states + shared_output
 
-        final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
-        return final_hidden_states, router_logits
+        final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, self.hidden_dim)
+        return final_hidden_states
 
 
 class Ernie4_5_MoeDecoderLayer(Qwen3MoeDecoderLayer):
@@ -219,7 +227,7 @@ class Ernie4_5_MoePreTrainedModel(MixtralPreTrainedModel):
     # Not supporting multi-token prediction (MTP) atm
     _keys_to_ignore_on_load_unexpected = ["mtp"]
     _can_record_outputs = {
-        "router_logits": OutputRecorder(Ernie4_5_MoeSparseMoeBlock, index=1),
+        "router_logits": OutputRecorder(nn.Linear, layer_name="mlp.gate", index=0),
         "hidden_states": Ernie4_5_MoeDecoderLayer,
         "attentions": Ernie4_5_MoeAttention,
     }

@@ -31,12 +31,7 @@ from typing import Any, Callable, Optional, TypedDict
 import numpy as np
 
 from ..utils import logging
-from .import_utils import (
-    is_mlx_available,
-    is_torch_available,
-    is_torch_fx_proxy,
-    requires,
-)
+from .import_utils import is_mlx_available, is_torch_available, is_torch_fx_proxy, requires
 
 
 _CAN_RECORD_REGISTRY = {}
@@ -44,11 +39,14 @@ _CAN_RECORD_REGISTRY = {}
 
 logger = logging.get_logger(__name__)
 
+_is_torch_available = False
 if is_torch_available():
     # required for @can_return_tuple decorator to work with torchdynamo
-    import torch  # noqa: F401
+    import torch
 
     from ..model_debugging_utils import model_addition_debugger_context
+
+    _is_torch_available = True
 
 
 # vendored from distutils.util
@@ -116,59 +114,39 @@ def is_tensor(x):
     return False
 
 
-def _is_numpy(x):
-    return isinstance(x, np.ndarray)
-
-
 def is_numpy_array(x):
     """
     Tests if `x` is a numpy array or not.
     """
-    return _is_numpy(x)
-
-
-def _is_torch(x):
-    import torch
-
-    return isinstance(x, torch.Tensor)
+    return isinstance(x, np.ndarray)
 
 
 def is_torch_tensor(x):
     """
     Tests if `x` is a torch tensor or not. Safe to call even if torch is not installed.
     """
-    return False if not is_torch_available() else _is_torch(x)
-
-
-def _is_torch_device(x):
-    import torch
-
-    return isinstance(x, torch.device)
+    return _is_torch_available and isinstance(x, torch.Tensor)
 
 
 def is_torch_device(x):
     """
     Tests if `x` is a torch device or not. Safe to call even if torch is not installed.
     """
-    return False if not is_torch_available() else _is_torch_device(x)
-
-
-def _is_torch_dtype(x):
-    import torch
-
-    if isinstance(x, str):
-        if hasattr(torch, x):
-            x = getattr(torch, x)
-        else:
-            return False
-    return isinstance(x, torch.dtype)
+    return _is_torch_available and isinstance(x, torch.device)
 
 
 def is_torch_dtype(x):
     """
     Tests if `x` is a torch dtype or not. Safe to call even if torch is not installed.
     """
-    return False if not is_torch_available() else _is_torch_dtype(x)
+    if not _is_torch_available:
+        return False
+    if isinstance(x, str):
+        if hasattr(torch, x):
+            x = getattr(torch, x)
+        else:
+            return False
+    return isinstance(x, torch.dtype)
 
 
 def _is_mlx(x):
@@ -263,7 +241,7 @@ class ModelOutput(OrderedDict):
         This is necessary to synchronize gradients when using `torch.nn.parallel.DistributedDataParallel` with
         `static_graph=True` with modules that output `ModelOutput` subclasses.
         """
-        if is_torch_available():
+        if _is_torch_available:
             from torch.utils._pytree import register_pytree_node
 
             register_pytree_node(
@@ -387,7 +365,7 @@ class ModelOutput(OrderedDict):
         return tuple(self[k] for k in self.keys())
 
 
-if is_torch_available():
+if _is_torch_available:
     import torch.utils._pytree as _torch_pytree
 
     def _model_output_flatten(output: ModelOutput) -> tuple[list[Any], "_torch_pytree.Context"]:
@@ -579,10 +557,8 @@ def torch_int(x):
     """
     Casts an input to a torch int64 tensor if we are in a tracing context, otherwise to a Python int.
     """
-    if not is_torch_available():
+    if not _is_torch_available:
         return int(x)
-
-    import torch
 
     return x.to(torch.int64) if torch.jit.is_tracing() and isinstance(x, torch.Tensor) else int(x)
 
@@ -591,10 +567,8 @@ def torch_float(x):
     """
     Casts an input to a torch float32 tensor if we are in a tracing context, otherwise to a Python float.
     """
-    if not is_torch_available():
+    if not _is_torch_available:
         return int(x)
-
-    import torch
 
     return x.to(torch.float32) if torch.jit.is_tracing() and isinstance(x, torch.Tensor) else int(x)
 
@@ -788,8 +762,6 @@ def can_return_tuple(func):
     return wrapper
 
 
-# if is_torch_available():
-# @torch._dynamo.disable
 @dataclass
 @requires(backends=("torch",))
 class OutputRecorder:
@@ -804,7 +776,7 @@ class OutputRecorder:
     """
 
     target_class: "type[torch.nn.Module]"
-    index: Optional[int] = 0
+    index: int = 0
     layer_name: Optional[str] = None
     class_name: Optional[str] = None
 

@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-12-13 and added to Hugging Face Transformers on 2025-09-19.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -28,7 +29,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The BLT model was proposed in [Byte Latent Transformer: Patches Scale Better Than Tokens](<https://arxiv.org/pdf/2412.09871>) by Artidoro Pagnoni, Ram Pasunuru, Pedro Rodriguez, John Nguyen, Benjamin Muller, Margaret Li1, Chunting Zhou, Lili Yu, Jason Weston, Luke Zettlemoyer, Gargi Ghosh, Mike Lewis, Ari Holtzman†, Srinivasan Iyer.
+The BLT model was proposed in [Byte Latent Transformer: Patches Scale Better Than Tokens](https://huggingface.co/papers/2412.09871) by Artidoro Pagnoni, Ram Pasunuru, Pedro Rodriguez, John Nguyen, Benjamin Muller, Margaret Li1, Chunting Zhou, Lili Yu, Jason Weston, Luke Zettlemoyer, Gargi Ghosh, Mike Lewis, Ari Holtzman†, Srinivasan Iyer.
 BLT is a byte-level LLM that achieves tokenization-level performance through entropy-based dynamic patching.
 
 The abstract from the paper is the following:
@@ -64,8 +65,8 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 
 tokenizer = AutoTokenizer.from_pretrained("itazap/blt-1b-hf")
 model = AutoModelForCausalLM.from_pretrained(
-    "itazap/blt-1b-hf", 
-    device_map="auto", 
+    "itazap/blt-1b-hf",
+    device_map="auto",
 )
 
 inputs = tokenizer(prompt, return_tensors="pt").to(model.device)

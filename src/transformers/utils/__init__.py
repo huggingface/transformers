@@ -16,8 +16,6 @@
 
 from functools import lru_cache
 
-from huggingface_hub import get_full_repo_name  # for backward compatibility
-from huggingface_hub.constants import HF_HUB_DISABLE_TELEMETRY as DISABLE_TELEMETRY  # for backward compatibility
 from packaging import version
 
 from .. import __version__
@@ -103,7 +101,6 @@ from .hub import (
     is_offline_mode,
     is_remote_url,
     list_repo_templates,
-    send_example_telemetry,
     try_to_load_from_cache,
 )
 from .import_utils import (
@@ -111,13 +108,11 @@ from .import_utils import (
     ENV_VARS_TRUE_AND_AUTO_VALUES,
     ENV_VARS_TRUE_VALUES,
     GGUF_MIN_VERSION,
-    TORCH_FX_REQUIRED_VERSION,
     TRITON_MIN_VERSION,
     XLA_FSDPV2_MIN_VERSION,
     DummyObject,
     OptionalDependencyNotAvailable,
     _LazyModule,
-    ccl_version,
     check_torch_load_is_safe,
     direct_transformers_import,
     get_torch_version,
@@ -202,7 +197,6 @@ from .import_utils import (
     is_rjieba_available,
     is_rocm_platform,
     is_sacremoses_available,
-    is_safetensors_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_schedulefree_available,
@@ -221,16 +215,12 @@ from .import_utils import (
     is_tokenizers_available,
     is_torch_accelerator_available,
     is_torch_available,
-    is_torch_bf16_available,
     is_torch_bf16_available_on_device,
-    is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
-    is_torch_compile_available,
     is_torch_cuda_available,
     is_torch_deterministic,
     is_torch_flex_attn_available,
     is_torch_fp16_available_on_device,
-    is_torch_fx_available,
     is_torch_fx_proxy,
     is_torch_greater_or_equal,
     is_torch_hpu_available,
@@ -240,7 +230,6 @@ from .import_utils import (
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_optimi_available,
-    is_torch_sdpa_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
     is_torch_xla_available,
@@ -249,7 +238,6 @@ from .import_utils import (
     is_torchaudio_available,
     is_torchcodec_available,
     is_torchdistx_available,
-    is_torchdynamo_available,
     is_torchdynamo_compiling,
     is_torchdynamo_exporting,
     is_torchvision_available,

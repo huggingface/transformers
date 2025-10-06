@@ -44,7 +44,7 @@ from ..gemma2.modeling_gemma2 import (
     eager_attention_forward,
 )
 from ..paligemma.modeling_paligemma import (
-    PaligemmaCausalLMOutputWithPast,
+    PaliGemmaCausalLMOutputWithPast,
     PaliGemmaForConditionalGeneration,
     PaliGemmaModel,
     PaligemmaModelOutputWithPast,
@@ -354,7 +354,7 @@ class Gemma3ModelOutputWithPast(PaligemmaModelOutputWithPast):
     pass
 
 
-class Gemma3CausalLMOutputWithPast(PaligemmaCausalLMOutputWithPast):
+class Gemma3CausalLMOutputWithPast(PaliGemmaCausalLMOutputWithPast):
     pass
 
 
@@ -1162,7 +1162,7 @@ class Gemma3TextForSequenceClassification(GenericForSequenceClassification, Gemm
 __all__ = [
     "Gemma3Config",
     "Gemma3TextConfig",
-    "Gemma3PreTrainedModel",  # noqa: F822
+    "Gemma3PreTrainedModel",
     "Gemma3TextModel",
     "Gemma3ForCausalLM",
     "Gemma3ForConditionalGeneration",

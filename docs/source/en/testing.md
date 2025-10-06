@@ -260,8 +260,7 @@ or `pytest.ini`/``tox.ini`` files:
 looponfailroots = transformers tests
 ```
 
-This would lead to only looking for file changes in the respective directories, specified relatively to the ini-file’s
-directory.
+This would lead to only looking for file changes in the respective directories, specified relatively to the ini-file's directory.
 
 [pytest-watch](https://github.com/joeyespo/pytest-watch) is an alternative implementation of this functionality.
 
@@ -846,13 +845,13 @@ commit it to the main repository we need make sure it's skipped during `make tes
 
 Methods:
 
--  A **skip** means that you expect your test to pass only if some conditions are met, otherwise pytest should skip
+- A **skip** means that you expect your test to pass only if some conditions are met, otherwise pytest should skip
   running the test altogether. Common examples are skipping windows-only tests on non-windows platforms, or skipping
   tests that depend on an external resource which is not available at the moment (for example a database).
 
--  A **xfail** means that you expect a test to fail for some reason. A common example is a test for a feature not yet
+- A **xfail** means that you expect a test to fail for some reason. A common example is a test for a feature not yet
   implemented, or a bug not yet fixed. When a test passes despite being expected to fail (marked with
-  pytest.mark.xfail), it’s an xpass and will be reported in the test summary.
+  pytest.mark.xfail), it's an xpass and will be reported in the test summary.
 
 One of the important differences between the two is that `skip` doesn't run the test, and `xfail` does. So if the
 code that's buggy causes some bad state that will affect other tests, do not use `xfail`.
@@ -909,7 +908,7 @@ def test_feature_x():
 docutils = pytest.importorskip("docutils", minversion="0.3")
 ```
 
--  Skip a test based on a condition:
+- Skip a test based on a condition:
 
 ```python no-style
 @pytest.mark.skipif(sys.version_info < (3,6), reason="requires python3.6 or higher")
@@ -1285,7 +1284,7 @@ You can vote for this feature and see where it is at these CI-specific threads:
 
 ## DeepSpeed integration
 
-For a PR that involves the DeepSpeed integration, keep in mind our CircleCI PR CI setup doesn't have GPUs. Tests requiring GPUs are run on a different CI nightly. This means if you get a passing CI report in your PR, it doesn’t mean the DeepSpeed tests pass.
+For a PR that involves the DeepSpeed integration, keep in mind our CircleCI PR CI setup doesn't have GPUs. Tests requiring GPUs are run on a different CI nightly. This means if you get a passing CI report in your PR, it doesn't mean the DeepSpeed tests pass.
 
 To run DeepSpeed tests:
 

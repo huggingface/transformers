@@ -104,7 +104,6 @@ class XLNetRelativeAttention(nn.Module):
         k_head_r,
         seg_mat=None,
         attn_mask=None,
-        head_mask=None,
         output_attentions=False,
     ):
         """Core relative positional attention operations."""
@@ -136,10 +135,6 @@ class XLNetRelativeAttention(nn.Module):
         attn_prob = nn.functional.softmax(attn_score, dim=3)
         attn_prob = self.dropout(attn_prob)
 
-        # Mask heads if we want to
-        if head_mask is not None:
-            attn_prob = attn_prob * torch.einsum("ijbn->bnij", head_mask)
-
         # attention output
         attn_vec = torch.einsum("bnij,jbnd->ibnd", attn_prob, v_head_h)
 
@@ -170,7 +165,6 @@ class XLNetRelativeAttention(nn.Module):
         seg_mat,
         mems=None,
         target_mapping=None,
-        head_mask=None,
         output_attentions=False,
     ):
         if g is not None:
@@ -202,7 +196,6 @@ class XLNetRelativeAttention(nn.Module):
                 k_head_r,
                 seg_mat=seg_mat,
                 attn_mask=attn_mask_h,
-                head_mask=head_mask,
                 output_attentions=output_attentions,
             )
 
@@ -226,7 +219,6 @@ class XLNetRelativeAttention(nn.Module):
                     k_head_r,
                     seg_mat=seg_mat,
                     attn_mask=attn_mask_g,
-                    head_mask=head_mask,
                     output_attentions=output_attentions,
                 )
 
@@ -242,7 +234,6 @@ class XLNetRelativeAttention(nn.Module):
                     k_head_r,
                     seg_mat=seg_mat,
                     attn_mask=attn_mask_g,
-                    head_mask=head_mask,
                     output_attentions=output_attentions,
                 )
 
@@ -279,7 +270,6 @@ class XLNetRelativeAttention(nn.Module):
                 k_head_r,
                 seg_mat=seg_mat,
                 attn_mask=attn_mask_h,
-                head_mask=head_mask,
                 output_attentions=output_attentions,
             )
 
@@ -338,7 +328,6 @@ class XLNetLayer(nn.Module):
         seg_mat,
         mems=None,
         target_mapping=None,
-        head_mask=None,
         output_attentions=False,
     ):
         outputs = self.rel_attn(
@@ -350,7 +339,6 @@ class XLNetLayer(nn.Module):
             seg_mat,
             mems=mems,
             target_mapping=target_mapping,
-            head_mask=head_mask,
             output_attentions=output_attentions,
         )
         output_h, output_g = outputs[:2]
@@ -1015,7 +1003,6 @@ class XLNetModel(XLNetPreTrainedModel):
         target_mapping: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         input_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         use_mems: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1182,23 +1169,6 @@ class XLNetModel(XLNetPreTrainedModel):
         pos_emb = pos_emb.to(output_h.device)
         pos_emb = self.dropout(pos_emb)
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads] (a head_mask for each layer)
-        # and head_mask is converted to shape [num_hidden_layers x qlen x klen x bsz x n_head]
-        if head_mask is not None:
-            if head_mask.dim() == 1:
-                head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(0).unsqueeze(0)
-                head_mask = head_mask.expand(self.n_layer, -1, -1, -1, -1)
-            elif head_mask.dim() == 2:
-                head_mask = head_mask.unsqueeze(1).unsqueeze(1).unsqueeze(1)
-            head_mask = head_mask.to(
-                dtype=next(self.parameters()).dtype
-            )  # switch to float if need + fp16 compatibility
-        else:
-            head_mask = [None] * self.n_layer
-
         new_mems = ()
         if mems is None:
             mems = [None] * len(self.layer)
@@ -1221,7 +1191,6 @@ class XLNetModel(XLNetPreTrainedModel):
                 seg_mat=seg_mat,
                 mems=mems[i],
                 target_mapping=target_mapping,
-                head_mask=head_mask[i],
                 output_attentions=output_attentions,
             )
             output_h, output_g = outputs[:2]
@@ -1351,7 +1320,6 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
         target_mapping: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         input_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         use_mems: Optional[bool] = None,
@@ -1468,7 +1436,6 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
             target_mapping=target_mapping,
             token_type_ids=token_type_ids,
             input_mask=input_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_mems=use_mems,
             output_attentions=output_attentions,
@@ -1536,7 +1503,6 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
         target_mapping: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         input_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         use_mems: Optional[bool] = None,
@@ -1593,7 +1559,6 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
             target_mapping=target_mapping,
             token_type_ids=token_type_ids,
             input_mask=input_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_mems=use_mems,
             output_attentions=output_attentions,
@@ -1664,7 +1629,6 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
         target_mapping: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         input_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         use_mems: Optional[bool] = None,
@@ -1722,7 +1686,6 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
             target_mapping=target_mapping,
             token_type_ids=token_type_ids,
             input_mask=input_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_mems=use_mems,
             output_attentions=output_attentions,
@@ -1774,7 +1737,6 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
         mems: Optional[torch.Tensor] = None,
         perm_mask: Optional[torch.Tensor] = None,
         target_mapping: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         use_mems: Optional[bool] = None,
@@ -1860,7 +1822,6 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
             mems=mems,
             perm_mask=perm_mask,
             target_mapping=target_mapping,
-            head_mask=head_mask,
             inputs_embeds=flat_inputs_embeds,
             use_mems=use_mems,
             output_attentions=output_attentions,
@@ -1920,7 +1881,6 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
         target_mapping: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         input_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         start_positions: Optional[torch.Tensor] = None,
         end_positions: Optional[torch.Tensor] = None,
@@ -1974,7 +1934,6 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
             target_mapping=target_mapping,
             token_type_ids=token_type_ids,
             input_mask=input_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_mems=use_mems,
             output_attentions=output_attentions,
@@ -2046,7 +2005,6 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
         target_mapping: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         input_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         start_positions: Optional[torch.Tensor] = None,
         end_positions: Optional[torch.Tensor] = None,
@@ -2129,7 +2087,6 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
             target_mapping=target_mapping,
             token_type_ids=token_type_ids,
             input_mask=input_mask,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_mems=use_mems,
             output_attentions=output_attentions,
