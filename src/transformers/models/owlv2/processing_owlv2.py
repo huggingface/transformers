@@ -84,7 +84,7 @@ class Owlv2Processor(ProcessorMixin):
         Main method to prepare for the model one or several text(s) and image(s). This method forwards the `text` and
         `kwargs` arguments to CLIPTokenizerFast's [`~CLIPTokenizerFast.__call__`] if `text` is not `None` to encode:
         the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
-        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
+        AutoImageProcessor's [`~AutoImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
         Args:
@@ -151,7 +151,6 @@ class Owlv2Processor(ProcessorMixin):
             if return_tensors == "np":
                 input_ids = np.concatenate([encoding["input_ids"] for encoding in encodings], axis=0)
                 attention_mask = np.concatenate([encoding["attention_mask"] for encoding in encodings], axis=0)
-
             elif return_tensors == "pt" and is_torch_available():
                 import torch
 

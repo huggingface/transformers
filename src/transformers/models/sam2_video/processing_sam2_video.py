@@ -40,11 +40,11 @@ class Sam2VideoProcessor(ProcessorMixin):
     single processor.
 
     [`Sam2VideoProcessor`] offers all the functionalities of [`AutoImageProcessor`] and [`Sam2VideoProcessor`]. See the docstring of
-    [`~Sam2ImageProcessorFast.__call__`] and [`~Sam2VideoProcessor.__call__`] for more information.
+    [`~AutoImageProcessor.__call__`] and [`~Sam2VideoProcessor.__call__`] for more information.
 
     Args:
         image_processor (`AutoImageProcessor`):
-            An instance of [`Sam2ImageProcessorFast`].
+            An instance of [`AutoImageProcessor`].
         video_processor (`Sam2VideoVideoProcessor`):
             An instance of [`Sam2VideoVideoProcessor`].
         target_size (`int`, *optional*):
