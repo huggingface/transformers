@@ -2509,7 +2509,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # If FA not installed, do not fail but use kernels instead
         if (
             attn_implementation is not None
-            and attn_implementation.startswith("flash_attention")
+            and "flash" in attn_implementation
             and self._supports_flash_attn
             and not (is_flash_attn_2_available() or is_flash_attn_3_available())
             and is_kernels_available()
@@ -2617,8 +2617,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             else attn_implementation.get("", self.config._attn_implementation)
         )
 
-        # At this point, the model was already instantiated, so instead of crashing on bad value, let's simply
-        # warn the user that the requested value is not working
         if requested_implementation != self.config._attn_implementation:
             # In this case, raise
             if not self._can_set_attn_implementation():
@@ -5834,10 +5832,10 @@ class AttentionInterface(GeneralInterface):
         "flash_attention_3": flash_attention_forward,
         "flash_attention_2": flash_attention_forward,
         "flex_attention": flex_attention_forward,
-        "paged_attention": paged_attention_forward,
         "sdpa": sdpa_attention_forward,
-        "sdpa_paged": sdpa_attention_paged_forward,
-        "eager_paged": eager_paged_attention_forward,
+        "paged|flash_attention_2": paged_attention_forward,
+        "paged|sdpa": sdpa_attention_paged_forward,
+        "paged|eager": eager_paged_attention_forward,
     }
 
 
