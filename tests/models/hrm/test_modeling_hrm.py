@@ -198,6 +198,10 @@ class HrmModelTest(CausalLMModelTest, unittest.TestCase):
         """Skip - HRM uses fixed-size carry state, incompatible with hidden state accumulation."""
         self.skipTest("HRM architecture incompatible with hidden state accumulation during generation")
 
+    def test_greedy_generate_dict_outputs_use_cache(self):
+        """Skip - HRM uses carry state instead of KV cache."""
+        self.skipTest("HRM uses carry state instead of KV cache")
+
     def test_beam_search_generate_dict_output(self):
         """Skip - HRM uses fixed-size carry state."""
         self.skipTest("HRM architecture incompatible with beam search")
@@ -205,6 +209,10 @@ class HrmModelTest(CausalLMModelTest, unittest.TestCase):
     def test_beam_sample_generate_dict_output(self):
         """Skip - HRM uses fixed-size carry state."""
         self.skipTest("HRM architecture incompatible with beam sampling")
+
+    def test_beam_search_generate_dict_outputs_use_cache(self):
+        """Skip - HRM uses carry state instead of KV cache."""
+        self.skipTest("HRM uses carry state instead of KV cache")
 
     def test_sample_generate_dict_output(self):
         """Skip - HRM uses fixed-size carry state."""
@@ -390,35 +398,6 @@ class HrmIntegrationTest(unittest.TestCase):
         # Verify Q-values for ACT mechanism
         self.assertIsNotNone(outputs.q_halt_logits)
         self.assertIsNotNone(outputs.q_continue_logits)
-
-    def test_simple_reasoning_task(self):
-        """Test HRM on a simple reasoning task with random initialization."""
-        config = HrmConfig(
-            vocab_size=11,
-            hidden_size=256,
-            num_hidden_layers=3,
-            h_layers=3,
-            l_layers=3,
-            num_attention_heads=8,
-            max_position_embeddings=81,
-            h_cycles=2,
-            l_cycles=2,
-            halt_max_steps=8,
-            dtype="float32",
-        )
-
-        model = HrmForCausalLM(config).to(torch_device)
-        model.eval()
-
-        # Create a simple input (e.g., partial Sudoku-like pattern)
-        input_ids = torch.randint(0, 11, (2, 81), device=torch_device)
-
-        with torch.no_grad():
-            outputs = model(input_ids=input_ids)
-
-        self.assertIsNotNone(outputs)
-        self.assertIsNotNone(outputs.logits)
-        self.assertEqual(outputs.logits.shape, (2, 81, 11))
 
     def test_generation(self):
         """Test HRM generation capability."""

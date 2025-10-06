@@ -122,7 +122,13 @@ def truncated_normal_init_(
 
 
 class HrmLinear(nn.Module):
-    """Linear layer with automatic type casting for mixed-precision training."""
+    """
+    Linear layer with automatic type casting for mixed-precision training.
+
+    Note: Cannot inherit from nn.Linear due to custom truncated normal initialization
+    that is critical to HRM's training dynamics. This custom initialization differs from
+    standard PyTorch initialization and is applied during __init__.
+    """
 
     def __init__(self, in_features: int, out_features: int, bias: bool = False):
         super().__init__()
@@ -162,7 +168,16 @@ class HrmEmbedding(nn.Embedding):
 
 
 class HrmRotaryEmbedding(nn.Module):
-    """Rotary Position Embedding (RoPE) precomputation."""
+    """
+    Rotary Position Embedding (RoPE) precomputation.
+
+    Note: Does not inherit from LlamaRotaryEmbedding because HRM uses a simpler approach.
+    HRM precomputes cos/sin for all positions at initialization and doesn't need:
+    - Dynamic rope scaling (rope_scaling config)
+    - Position-dependent forward passes (position_ids parameter)
+    - Rope type variations (default/linear/dynamic/yarn/longrope)
+    This simpler design is sufficient for HRM's fixed-length reasoning tasks.
+    """
 
     def __init__(self, dim=None, max_position_embeddings=None, base=10000.0, device=None, config=None):
         super().__init__()
@@ -184,27 +199,51 @@ class HrmRotaryEmbedding(nn.Module):
         return self.cos_cached, self.sin_cached
 
 
-def rotate_half(x: torch.Tensor) -> torch.Tensor:
-    """Rotate half the hidden dimensions for RoPE."""
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
     x2 = x[..., x.shape[-1] // 2 :]
     return torch.cat((-x2, x1), dim=-1)
 
 
-def apply_rotary_pos_emb(
-    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """Apply Rotary Position Embeddings to query and key tensors."""
-    orig_dtype = q.dtype
-    q = q.to(cos.dtype)
-    k = k.to(cos.dtype)
-    q_embed = (q * cos.unsqueeze(-2)) + (rotate_half(q) * sin.unsqueeze(-2))
-    k_embed = (k * cos.unsqueeze(-2)) + (rotate_half(k) * sin.unsqueeze(-2))
-    return q_embed.to(orig_dtype), k_embed.to(orig_dtype)
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        position_ids (`torch.Tensor`, *optional*):
+            Deprecated and unused.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
 
 
 class HrmAttention(nn.Module):
-    """Multi-head self-attention with FlashAttention and eager fallback."""
+    """
+    Multi-head self-attention with FlashAttention and eager fallback.
+
+    Note: Does not inherit from LlamaAttention due to architectural differences:
+    - Uses fused QKV projection (single linear layer) instead of separate Q, K, V projections
+    - Custom truncated normal initialization via HrmLinear
+    - Simpler interface without cache_position, past_key_values, or output_attentions
+    These differences make inheritance from LlamaAttention impractical while still reusing
+    the core rope functions (apply_rotary_pos_emb, rotate_half).
+    """
 
     def __init__(self, config: HrmConfig, causal: bool = False):
         super().__init__()
@@ -258,9 +297,10 @@ class HrmAttention(nn.Module):
         if cos_sin is not None:
             cos, sin = cos_sin
             # Slice RoPE embeddings to match actual sequence length
-            cos = cos[:seq_len, :]
-            sin = sin[:seq_len, :]
-            query, key = apply_rotary_pos_emb(query, key, cos, sin)
+            cos = cos[:seq_len, :].unsqueeze(0)  # Add batch dimension: [1, seq_len, head_dim]
+            sin = sin[:seq_len, :].unsqueeze(0)  # Add batch dimension: [1, seq_len, head_dim]
+            # HRM uses (batch, seq_len, heads, head_dim) so unsqueeze_dim=2
+            query, key = apply_rotary_pos_emb(query, key, cos, sin, unsqueeze_dim=2)
 
         # Try FlashAttention first, fall back to eager if not available
         try:
@@ -616,28 +656,50 @@ class HrmModel(HrmPreTrainedModel):
         new_inner_carry = self.inner.reset_carry(carry.halted, carry.inner_carry)
         new_steps = torch.where(carry.halted, torch.zeros_like(carry.steps), carry.steps)
 
-        # Handle size mismatch during generation - only update keys that exist in both batch and carry
+        # Handle size mismatch during generation - update carry data with batch data
+        # Use scatter operations for efficient batch-wise updates
         new_current_data = {}
-        for k in carry.current_data.keys():
-            if k in batch:
-                # Pad or truncate batch[k] to match carry size if needed
-                batch_val = batch[k]
-                carry_val = carry.current_data[k]
-                if batch_val.shape != carry_val.shape:
-                    # During generation, batch may have different seq length
-                    # Pad or truncate to match carry's sequence length
-                    if batch_val.shape[1] < carry_val.shape[1]:
-                        # Pad batch to carry size
-                        pad_size = carry_val.shape[1] - batch_val.shape[1]
-                        batch_val = F.pad(batch_val, (0, pad_size), value=0)
-                    elif batch_val.shape[1] > carry_val.shape[1]:
-                        # Truncate batch to carry size (take last tokens)
-                        batch_val = batch_val[:, -carry_val.shape[1] :]
-                new_current_data[k] = torch.where(
-                    carry.halted.view((-1,) + (1,) * (batch_val.ndim - 1)), batch_val, carry_val
+
+        # Separate keys into common and carry-only for batch processing
+        common_keys = [k for k in carry.current_data.keys() if k in batch]
+        carry_only_keys = [k for k in carry.current_data.keys() if k not in batch]
+
+        # Get halted indices once for reuse across all keys
+        halted_indices = carry.halted.nonzero(as_tuple=False).squeeze(-1)
+
+        # Process common keys using scatter operations
+        for k in common_keys:
+            batch_val = batch[k]
+            carry_val = carry.current_data[k]
+
+            # During generation, input_ids may be a single token while carry has full sequence
+            # Pad batch to match carry size in this expected case
+            if batch_val.shape[1] < carry_val.shape[1]:
+                # Pad batch to carry size (e.g., generation with single new token)
+                pad_size = carry_val.shape[1] - batch_val.shape[1]
+                batch_val = F.pad(batch_val, (0, pad_size), value=0)
+            elif batch_val.shape[1] > carry_val.shape[1]:
+                # This should not happen in normal usage - carry is initialized from batch,
+                # so they should match initially. During generation, batch gets smaller (1 token),
+                # never larger. If this occurs, it indicates incorrect carry state reuse.
+                raise ValueError(
+                    f"Unexpected shape mismatch: batch sequence length ({batch_val.shape[1]}) "
+                    f"is greater than carry sequence length ({carry_val.shape[1]}) for key '{k}'. "
+                    f"This suggests carry state is being reused incorrectly across different input sizes. "
+                    f"Please initialize a new carry state for inputs with different sequence lengths."
                 )
-            else:
-                new_current_data[k] = carry.current_data[k]
+
+            # Use scatter operation to update halted sequences
+            # Clone carry and scatter batch values at halted positions (dim 0 is batch dimension)
+            result = carry_val.clone()
+            if halted_indices.numel() > 0:
+                result.index_copy_(0, halted_indices, batch_val.index_select(0, halted_indices))
+
+            new_current_data[k] = result
+
+        # Keep existing carry data for keys not in current batch
+        for k in carry_only_keys:
+            new_current_data[k] = carry.current_data[k]
 
         # Forward inner model
         new_inner_carry, logits, (q_halt_logits, q_continue_logits) = self.inner(new_inner_carry, new_current_data)

@@ -461,8 +461,8 @@ class HrmAttention(nn.Module):
         if cos_sin is not None:
             cos, sin = cos_sin
             # Slice RoPE embeddings to match actual sequence length
-            cos = cos[:seq_len, :]
-            sin = sin[:seq_len, :]
+            cos = cos[:seq_len, :].unsqueeze(0)  # Add batch dimension: [1, seq_len, head_dim]
+            sin = sin[:seq_len, :].unsqueeze(0)  # Add batch dimension: [1, seq_len, head_dim]
             # HRM uses (batch, seq_len, heads, head_dim) so unsqueeze_dim=2
             query, key = apply_rotary_pos_emb(query, key, cos, sin, unsqueeze_dim=2)
 
@@ -828,15 +828,21 @@ class HrmModel(HrmPreTrainedModel):
             carry_val = carry.current_data[k]
 
             # During generation, input_ids may be a single token while carry has full sequence
-            # We need to align shapes: pad short sequences, keep recent context for long ones
+            # Pad batch to match carry size in this expected case
             if batch_val.shape[1] < carry_val.shape[1]:
                 # Pad batch to carry size (e.g., generation with single new token)
                 pad_size = carry_val.shape[1] - batch_val.shape[1]
                 batch_val = F.pad(batch_val, (0, pad_size), value=0)
             elif batch_val.shape[1] > carry_val.shape[1]:
-                # Truncate to carry size, keeping most recent tokens for causal LM
-                # This is expected during initial forward pass when batch > max_position_embeddings
-                batch_val = batch_val[:, -carry_val.shape[1] :]
+                # This should not happen in normal usage - carry is initialized from batch,
+                # so they should match initially. During generation, batch gets smaller (1 token),
+                # never larger. If this occurs, it indicates incorrect carry state reuse.
+                raise ValueError(
+                    f"Unexpected shape mismatch: batch sequence length ({batch_val.shape[1]}) "
+                    f"is greater than carry sequence length ({carry_val.shape[1]}) for key '{k}'. "
+                    "This suggests carry state is being reused incorrectly across different input sizes. "
+                    "Please initialize a new carry state for inputs with different sequence lengths."
+                )
 
             # Use scatter operation to update halted sequences
             # Clone carry and scatter batch values at halted positions (dim 0 is batch dimension)
