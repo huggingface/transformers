@@ -76,24 +76,6 @@ class ReformerDynamicCache:
                 self.buckets_cache.append(buckets)
                 self.states_cache.append(states)
 
-    def __getitem__(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Support for backwards-compatible `past_key_values` indexing, e.g. `past_key_values[0][0].shape[2]` to get the
-        sequence length.
-        """
-        if layer_idx < len(self):
-            return (self.buckets_cache[layer_idx], self.states_cache[layer_idx])
-        else:
-            raise KeyError(f"Cache only has {len(self)} layers, attempted to access layer with index {layer_idx}")
-
-    def __iter__(self):
-        """
-        Support for backwards-compatible `past_key_values` iteration, e.g. `for x in past_key_values:` to iterate over
-        keys and values
-        """
-        for layer_idx in range(len(self)):
-            yield (self.buckets_cache[layer_idx], self.states_cache[layer_idx])
-
     def __len__(self):
         """
         Support for backwards-compatible `past_key_values` length, e.g. `len(past_key_values)`. This value corresponds
