@@ -1986,7 +1986,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         # fmt: on
 
         expected_output = Expectations(
-                {("xpu", None): EXPECTED_XPU, ("cuda", None): EXPECTED_CUDA, ("rocm", (9, 4)): EXPECTED_ROCM}
+            {("xpu", None): EXPECTED_XPU, ("cuda", None): EXPECTED_CUDA, ("rocm", (9, 4)): EXPECTED_ROCM}
         ).get_expectation()
 
         transcript = processor.batch_decode(generated_ids["sequences"], skip_special_tokens=True, output_offsets=True)
