@@ -331,11 +331,11 @@ class ContinuousBatchingTest(unittest.TestCase):
     def test_attn_implementation(self) -> None:
         model = AutoModelForCausalLM.from_pretrained("gpt2")
         manager = model.init_continuous_batching()
-        assert "paged|sdpa" in manager.model.config._attn_implementation
+        assert "paged|sdpa" == manager.model.config._attn_implementation
 
         model = AutoModelForCausalLM.from_pretrained("gpt2", _attn_implementation="eager")
         manager = model.init_continuous_batching()
-        assert "paged|eager" in manager.model.config._attn_implementation
+        assert "paged|eager" == manager.model.config._attn_implementation
 
 
 # FIXME: the gemma test seem broken, there is a message about cuda graphs and the sdpa and flash expecteations are
