@@ -12,27 +12,32 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from .modeling_superglue import KeypointMatchingOutput
+from typing import Optional, Union
+
+import numpy as np
+import torch
+
 from ... import is_vision_available
 from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature, get_size_dict
 from ...image_utils import (
-    PILImageResampling,
     ChannelDimension,
     ImageInput,
     ImageType,
-    is_pil_image,
-    valid_images,
+    PILImageResampling,
+    SizeDict,
+    get_image_type,
     infer_channel_dimension_format,
-    validate_preprocess_arguments,
-    to_numpy_array,
+    is_pil_image,
     is_valid_image,
-    get_image_type, SizeDict, pil_torch_interpolation_mapping,
+    pil_torch_interpolation_mapping,
+    to_numpy_array,
+    valid_images,
+    validate_preprocess_arguments,
 )
+from ...utils import TensorType, auto_docstring, is_torchvision_v2_available
+from .modeling_superglue import KeypointMatchingOutput
 
-import torch
-from typing import Optional, Union
-from ...utils import auto_docstring, TensorType, is_torchvision_v2_available
-import numpy as np
+
 if is_vision_available():
     import PIL
     from PIL import Image, ImageDraw
@@ -218,15 +223,16 @@ class SuperGlueImageProcessorFast(BaseImageProcessorFast):
     ) -> BatchFeature:
 
         # Handle input
-        do_resize = do_resize if do_resize is not None else self.do_resize
-        resample = resample if resample is not None else self.resample
+        do_resize       = do_resize         if do_resize        is not None else self.do_resize
+        resample        = resample          if resample         is not None else self.resample
+        do_rescale      = do_rescale        if do_rescale       is not None else self.do_rescale
+        rescale_factor  = rescale_factor    if rescale_factor   is not None else self.rescale_factor
+        do_grayscale    = do_grayscale      if do_grayscale     is not None else self.do_grayscale
+        size            = size              if size             is not None else self.size
+        data_format     = data_format       if data_format      is not None else self.data_format
+
         resample = pil_resampling_to_interpolation(resample)
-        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
-        do_grayscale = do_grayscale if do_grayscale is not None else self.do_grayscale
-        size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
-        data_format = data_format if data_format is not None else self.data_format
         if isinstance(input_data_format, str):
             input_data_format = ChannelDimension(input_data_format)
 
@@ -243,7 +249,7 @@ class SuperGlueImageProcessorFast(BaseImageProcessorFast):
         if not valid_images(images):
             raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
-        # All transformations expect torch tensors, using channel_first dataformat for processing.
+        # All transformations expect torch tensors, using ChannelDimension.FIRST dataformat for processing.
         images = images_to_torch_tensor(images, data_format=ChannelDimension.FIRST, input_data_format=input_data_format)
 
         if do_resize:
