@@ -673,7 +673,6 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
         }).get_expectation()  # fmt: skip
 
         decoded_text = self.processor.decode(output[0], skip_special_tokens=True)
-        print(f"{decoded_text}")
         self.assertEqual(decoded_text, EXPECTED_DECODED_TEXT)
 
     @slow
@@ -716,7 +715,6 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
         ).get_expectation()  # fmt: skip
 
         decoded_texts = self.processor.batch_decode(output, skip_special_tokens=True)
-        print(f"{decoded_texts}")
         self.assertEqual(decoded_texts, EXPECTED_DECODED_TEXTS)
 
     @slow
@@ -812,7 +810,6 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
         EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
 
         decoded_text = self.processor.decode(output[0][0], skip_special_tokens=True)
-        print(f"{decoded_text}")
         self.assertEqual(
             decoded_text,
             EXPECTED_DECODED_TEXT,
