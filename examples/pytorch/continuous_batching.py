@@ -99,7 +99,6 @@ def batch_generate(
     displayed_samples: int = 0,  # -1: no display, 0: display stats, >0: display inputs and some outputs
     output_file: Optional[str] = None,
     expected_outputs: Optional[list[str]] = None,
-    slice_inputs: bool = True,
 ) -> tuple[float, float]:
     # Actual batch generation
     if displayed_samples >= 0:
@@ -108,7 +107,6 @@ def batch_generate(
     batch_outputs = model.generate_batch(
         inputs=simple_batch_inputs,
         generation_config=generation_config,
-        slice_inputs=slice_inputs,  # TODO: move this to the generation config
     )
     end_time_simple = time.time()
     if displayed_samples >= 0:
@@ -198,8 +196,6 @@ if __name__ == "__main__":
     parser.add_argument("--profile", type=str, default=None)
     args = parser.parse_args()
 
-    args.slice_inputs = not args.no_slice_inputs
-
     # If turned on, we setup metrics
     if args.metrics:
         setup_metrics()
@@ -222,9 +218,6 @@ if __name__ == "__main__":
     # If turned on, we compile the model
     if args.compile:
         model.forward = torch.compile(model.forward, mode="max-autotune-no-cudagraphs")
-    if args.slice_inputs:
-        assert not args.compile, "Slicing inputs requires is not the model to be compiled"
-        assert not args.use_cuda_graph, "Slicing inputs is not compatible with cuda graphs"
 
     # Prepare tokenizer and dataset
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, padding_side="left")
@@ -265,7 +258,6 @@ if __name__ == "__main__":
         generation_config,
         tokenizer,
         displayed_samples=-1,
-        slice_inputs=args.slice_inputs,
     )
 
     if args.profile is not None:
@@ -282,12 +274,11 @@ if __name__ == "__main__":
             displayed_samples=args.displayed,
             output_file=args.output_file,
             expected_outputs=expected_outputs,
-            slice_inputs=args.slice_inputs,
         )
     if args.profile is not None:
         filename = args.profile if args.profile.endswith(".json") else args.profile + ".json"
         prof.export_chrome_trace(filename)
 
 # Example usage:
-# python examples/pytorch/continuous_batching.py --attn sdpa_paged -mp none --slice-inputs --samples 3 --compare
+# python examples/pytorch/continuous_batching.py --attn sdpa_paged -mp none --samples 3 --compare
 # python examples/pytorch/continuous_batching.py --num-blocks 369 --max-batch-tokens 23 --attn sdpa_paged -mp none --samples 1 --displayed 0 --output-file sliced.json
