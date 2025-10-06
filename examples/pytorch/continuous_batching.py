@@ -26,6 +26,7 @@ from tqdm import tqdm
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.generation import GenerationConfig
+from transformers.generation.continuous_batching.requests import logger
 
 
 # MODEL_ID = "Qwen/Qwen3-4B-Instruct-2507"
@@ -190,11 +191,15 @@ if __name__ == "__main__":
 
     parser.add_argument("--samples", type=int, default=500)
     parser.add_argument("--displayed", type=int, default=0, help="Number of samples to display")
+    parser.add_argument("--log-level", type=str, default="INFO")
     parser.add_argument("--output-file", type=str, default=None)
     parser.add_argument("--compare", action="store_true")
     parser.add_argument("--metrics", action="store_true")
     parser.add_argument("--profile", type=str, default=None)
     args = parser.parse_args()
+
+    # Set log level
+    logger.setLevel(args.log_level)
 
     # If turned on, we setup metrics
     if args.metrics:
