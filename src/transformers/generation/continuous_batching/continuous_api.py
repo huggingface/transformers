@@ -27,12 +27,17 @@ from tqdm import tqdm
 
 from ...configuration_utils import PreTrainedConfig
 from ...generation.configuration_utils import GenerationConfig
+from ...generation.logits_process import LogitsProcessor
 from ...integrations.hub_kernels import load_and_register_attn_kernel
 from ...utils.logging import logging
 from ...utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
 from .cache import PagedAttentionCache
 from .requests import GenerationOutput, RequestState, RequestStatus, get_device_and_memory_breakdown, logger
 from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
+
+
+PADDING = False
+PAD_TO = 10000
 
 
 def build_attention_mask(
@@ -178,8 +183,10 @@ class ContinuousBatchProcessor:
 
         # Retrieve the size of the sliding window if there is one
         self.sliding_window = 1 if getattr(config, "sliding_window", None) is None else config.sliding_window
-
+        # Accumulator for batch scheduling
         self.requests_in_batch: list[RequestState] = []
+        # Cuda graph for the generation step
+        self.graph = None
 
         # Set up metrics collector
         self.max_batch_tokens = cache.max_batch_tokens
@@ -272,14 +279,14 @@ class ContinuousBatchProcessor:
 
         # Reset the attributes that are lists of tensors
         for i in range(self.cache.num_groups):
-            self.write_index_storage[i][:q_len].fill_(-1)
-            self.read_index_storage[i][: q_len + k_len].fill_(-1)
+            self.write_index_storage[i][:q_len].fill_(-2)  # -1 is used to let the cache where new states go
+            self.read_index_storage[i][: q_len + k_len].fill_(-2)  # same
 
     def get_model_kwargs(self) -> PagedAttentionArgs:
         """Get model keyword arguments for the current batch."""
         # Compute the slice to return
-        q_len = self.actual_query_length
-        b_size = self.actual_batch_size
+        q_len = self.max_batch_tokens if PADDING else self.actual_query_length
+        b_size = self.max_batch_tokens if PADDING else self.actual_batch_size
 
         # Prepare the kwargs, the attributes that are either tensors or dict of tensors are initialized to empty dicts
         kwargs = {
@@ -299,7 +306,7 @@ class ContinuousBatchProcessor:
 
         # For the attributes that are lists of tensors, we construct list of tensor references
         for i in range(self.cache.num_groups):
-            r, w = self.actual_group_indices[i]
+            r, w = (PAD_TO + self.max_batch_tokens, self.max_batch_tokens) if PADDING else self.actual_group_indices[i]
             kwargs["read_index"].append(self.read_index_storage[i][:r])
             kwargs["write_index"].append(self.write_index_storage[i][:w])
 
@@ -567,6 +574,75 @@ class ContinuousBatchProcessor:
         # Clear the ordering queue
         self.scheduler.waiting_requests_order.clear()
 
+    # @traced
+    # def _generation_step(self, model: nn.Module, logit_processor: LogitsProcessor, do_sample: bool) -> None:
+    #     """Perform a single generation step."""
+    #     batch_data = self.get_model_kwargs()
+
+    #     # If we have a graph that fits, we replay it
+    #     if self.graph is not None:
+    #         self.graph.replay()
+    #         return
+
+    #     # Otherwise, we need to create it
+    #     stream = torch.cuda.Stream(device=model.device)
+    #     stream.wait_stream(torch.cuda.current_stream())
+
+    #     # Warmup
+    #     with torch.cuda.stream(stream):
+    #         self._forward_process_and_sample(model, batch_data, logit_processor, do_sample)
+    #     torch.cuda.current_stream().wait_stream(stream)
+
+    #     # Catpure
+    #     self.graph = torch.cuda.CUDAGraph()
+    #     with torch.cuda.graph(self.graph, stream=stream):
+    #         self._forward_process_and_sample(model, batch_data, logit_processor, do_sample)
+
+    # @traced
+    # def _forward_process_and_sample(
+    #     self, model: nn.Module, batch_data: dict, logit_processor: LogitsProcessor, do_sample: bool
+    # ) -> None:
+    #     """This function performs the forward pass, logits processing, and sampling; which are broken down into smaller
+    #     function to be easier to trace with OpenTelemetry."""
+    #     # with torch.no_grad():
+    #     logits = self._model_forward(model, batch_data)
+    #     # if self.log_prob_generation:    batch_processor.output_probs.copy_(logits)  # TODO
+    #     probs = self._process_logit(batch_data, logits, logit_processor)
+    #     self._sample(probs, do_sample)
+
+    # @traced(span_name="model_forward")
+    # def _model_forward(self, model: nn.Module, batch_data: dict) -> torch.Tensor:
+    #     return model(**batch_data).logits
+
+    # @traced(span_name="logit_processing")
+    # def _process_logit(self, batch_data: dict, logits: torch.Tensor, logit_processor: LogitsProcessor) -> torch.Tensor:
+    #     # Pass continuous batching context to logits processor if it supports it.
+    #     if hasattr(logit_processor, "set_continuous_batching_context"):
+    #         logit_processor.set_continuous_batching_context(
+    #             batch_data["logits_indices"], batch_data["cu_seq_lens_q"]
+    #         )
+    #     # Handle shape compatibility: logit processors expect 2D tensors [batch_size, vocab_size]
+    #     # but continuous batching always produces 3D tensors [batch_size, seq_len, vocab_size]
+    #     batch_size, seq_len, vocab_size = logits.shape
+    #     logits_2d = logits.view(batch_size * seq_len, vocab_size)
+    #     input_ids_2d = batch_data["input_ids"].view(batch_size * seq_len)
+    #     # Process with 2D tensors
+    #     processed_logits_2d = logit_processor(input_ids_2d, logits_2d)
+    #     # Reshape back to 3D
+    #     return processed_logits_2d.view(batch_size, seq_len, vocab_size)
+
+    # @traced(span_name="sampling")
+    # def _sample(self, probs: torch.Tensor, do_sample: bool) -> None:
+    #     if do_sample:
+    #         probs = nn.functional.softmax(probs, dim=-1)
+    #         # probs[0] has shape [seq_len, vocab_size], multinomial returns [seq_len, 1]
+    #         next_tokens = torch.multinomial(probs[0], num_samples=1).squeeze(-1)  # Now [seq_len]
+    #         # Add batch dimension back to match argmax output
+    #         next_tokens = next_tokens.unsqueeze(0)  # Now [1, seq_len]
+    #     else:
+    #         next_tokens = torch.argmax(probs, dim=-1)  # Already [1, seq_len]
+    #     tokens = next_tokens.size(1)  # Get seq_len dimension
+    #     self.output_ids[:, :tokens].copy_(next_tokens)
 
 # Manager Class (User Interface)
 @attach_tracer()
@@ -708,7 +784,6 @@ class ContinuousBatchingManager:
 
         # Use block=True with timeout to handle backpressure if queue is full
         self.input_queue.put(state, block=True, timeout=10)  # XXX: pass timeout as fn arg?
-        logger.debug(f"Added request {request_id} to queue.")
         return request_id
 
     def add_requests(self, inputs: list[list[int]], max_new_tokens: Optional[int] = None) -> None:
@@ -763,6 +838,14 @@ class ContinuousBatchingManager:
                 yield result
             if self.batch_processor is not None:
                 request_cancelled = self.batch_processor.scheduler.request_is_cancelled(request_id)
+
+    @staticmethod
+    def supported_attention_implementations() -> set[str]:
+        return {"eager_paged", "sdpa_paged", "flash_attention_2"}
+
+    @staticmethod
+    def default_attention_implementation() -> str:
+        return "sdpa_paged"
 
     @traced
     def warmup(self, batch_processor: ContinuousBatchProcessor) -> None:
@@ -878,34 +961,23 @@ class ContinuousBatchingManager:
 
     @traced(span_name="generation_loop")
     def _inner_generation_loop(self, batch_processor: ContinuousBatchProcessor) -> None:
+        # Pre-loop synchronization
         if torch.cuda.is_available():
             torch.cuda.synchronize()
+        # Loop body ends if there is no requests in the batch
         if not batch_processor.prepare_next_batch():
             return
+        # Debug logging of the current memory usage
         if logger.level <= logging.DEBUG:
             device, total, reserved, allocated = get_device_and_memory_breakdown()
             logger.debug(f"[Memory] Device: {device}, Total: {total}, Reserved: {reserved}, Allocated: {allocated}")
-        if torch.cuda.is_available() and self.use_cuda_graph:
-            if self.current_batch == 0:
-                self.warmup(batch_processor)
-            elif hasattr(self, "graph"):
-                try:
-                    self._graph_replay()
-                except Exception as e:
-                    logger.error(f"Model forward pass failed: {e}", exc_info=True)
-                    batch_processor.handle_batch_error(e)
-                    return
-            else:
-                self._generation_step(batch_processor)
-        else:
-            self._generation_step(batch_processor)
+
+        self._generation_step(batch_processor)
+
         if torch.cuda.is_available():
             torch.cuda.synchronize()
+        # Processor updates the batch after generation step is truly over
         batch_processor.update_batch()
-
-    @traced(span_name="graph_replay")
-    def _graph_replay(self) -> None:
-        self.graph.replay()
 
     @traced
     def _handle_critical_error(self, error: Exception, batch_processor: Optional[ContinuousBatchProcessor]) -> None:

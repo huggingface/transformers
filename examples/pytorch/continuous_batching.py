@@ -31,7 +31,7 @@ from transformers.generation.continuous_batching.requests import logger
 
 # MODEL_ID = "Qwen/Qwen3-4B-Instruct-2507"
 SLIDING_WINDOW = 0
-MODEL_ID = "google/gemma-2-2b-it" if SLIDING_WINDOW > 0 else "Qwen/Qwen3-4B-Instruct-2507"
+MODEL_ID = "google/gemma-2-2b-it" if SLIDING_WINDOW > 0 else "Qwen/Qwen3-4B-Instruct-2507" # "meta-llama/Meta-Llama-3-8B"
 FORCE_MAX_LENGTH = False  # should be False unless you are debugging sliding window features
 
 
@@ -199,7 +199,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Set log level
-    logger.setLevel(args.log_level)
+    logger.setLevel(args.log_level.upper())
 
     # If turned on, we setup metrics
     if args.metrics:
