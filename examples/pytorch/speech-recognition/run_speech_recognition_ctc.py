@@ -429,6 +429,21 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
+    # Detecting last checkpoint.
+    last_checkpoint = None
+    if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
+        last_checkpoint = get_last_checkpoint(training_args.output_dir)
+        if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
+            raise ValueError(
+                f"Output directory ({training_args.output_dir}) already exists and is not empty. "
+                "Use --overwrite_output_dir to overcome."
+            )
+        elif last_checkpoint is not None:
+            logger.info(
+                f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
+                "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
+            )
+
     # Setup logging
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
@@ -543,7 +558,7 @@ def main():
         vocab_file = os.path.join(tokenizer_name_or_path, "vocab.json")
 
         with training_args.main_process_first():
-            if os.path.isfile(vocab_file):
+            if training_args.overwrite_output_dir and os.path.isfile(vocab_file):
                 try:
                     os.remove(vocab_file)
                 except OSError:
@@ -766,6 +781,8 @@ def main():
     # Training
     if training_args.do_train:
         # use last checkpoint if exist
+        if last_checkpoint is not None:
+            checkpoint = last_checkpoint
         elif os.path.isdir(model_args.model_name_or_path):
             checkpoint = model_args.model_name_or_path
         else:

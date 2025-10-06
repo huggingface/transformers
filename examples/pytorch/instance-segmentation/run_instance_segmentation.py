@@ -334,6 +334,18 @@ def find_last_checkpoint(training_args: TrainingArguments) -> Optional[str]:
     checkpoint = None
     if training_args.resume_from_checkpoint is not None:
         checkpoint = training_args.resume_from_checkpoint
+    elif os.path.isdir(training_args.output_dir) and not training_args.overwrite_output_dir:
+        checkpoint = get_last_checkpoint(training_args.output_dir)
+        if checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
+            raise ValueError(
+                f"Output directory ({training_args.output_dir}) already exists and is not empty. "
+                "Use --overwrite_output_dir to overcome."
+            )
+        elif checkpoint is not None and training_args.resume_from_checkpoint is None:
+            logger.info(
+                f"Checkpoint detected, resuming training at {checkpoint}. To avoid this behavior, change "
+                "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
+            )
 
     return checkpoint
 

@@ -361,7 +361,8 @@ accelerate launch \
     --per_device_train_batch_size 16 \
     --learning_rate 5e-5 \
     --num_train_epochs 3 \
-    --output_dir /tmp/$TASK_NAME/
+    --output_dir /tmp/$TASK_NAME/ \
+    --overwrite_output_dir
 ```
 
 > [!TIP]

@@ -53,6 +53,7 @@ python run_translation.py \
     --output_dir /tmp/tst-translation \
     --per_device_train_batch_size=4 \
     --per_device_eval_batch_size=4 \
+    --overwrite_output_dir \
     --predict_with_generate
 ```
 
@@ -73,6 +74,7 @@ python run_translation.py \
     --output_dir /tmp/tst-translation \
     --per_device_train_batch_size=4 \
     --per_device_eval_batch_size=4 \
+    --overwrite_output_dir \
     --predict_with_generate
 ```
 
@@ -94,6 +96,7 @@ python run_translation.py \
     --output_dir /tmp/tst-translation \
     --per_device_train_batch_size=4 \
     --per_device_eval_batch_size=4 \
+    --overwrite_output_dir \
     --predict_with_generate
  ```
 
@@ -115,6 +118,7 @@ python run_translation.py \
     --output_dir /tmp/tst-translation \
     --per_device_train_batch_size=4 \
     --per_device_eval_batch_size=4 \
+    --overwrite_output_dir \
     --predict_with_generate
 ```
 
@@ -140,6 +144,7 @@ python run_translation.py \
     --output_dir /tmp/tst-translation \
     --per_device_train_batch_size=4 \
     --per_device_eval_batch_size=4 \
+    --overwrite_output_dir \
     --predict_with_generate
  ```
 

@@ -15,7 +15,7 @@
 python finetune_trainer.py \
     --model_name_or_path=facebook/mbart-large-cc25 \
     --data_dir $ENRO_DIR \
-    --output_dir mbart_cc25_enro \
+    --output_dir mbart_cc25_enro --overwrite_output_dir \
     --learning_rate=3e-5 \
     --warmup_steps 500 \ 
     --fp16 \
