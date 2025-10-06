@@ -20,11 +20,7 @@ import unittest
 
 from datasets import Audio, load_dataset
 
-from transformers.testing_utils import (
-    require_torch,
-    torch_device,
-    slow
-)
+from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.utils import is_torch_available
 
 from ...test_configuration_common import ConfigTester
