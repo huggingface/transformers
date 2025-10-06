@@ -227,7 +227,6 @@ class VocosModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(info["missing_keys"], [])
 
 
-@slow
 @require_torch
 class VocosModelIntegrationTest(unittest.TestCase):
     """
@@ -250,6 +249,7 @@ class VocosModelIntegrationTest(unittest.TestCase):
         with open("tests/fixtures/vocos/vocos_encodec_batch_integration.json", "r") as f:
             self.encodec_batch_expected = json.load(f)
 
+    @slow
     def test_inference_mel_vocos(self):
         hf_repo_id = "bezzam/vocos-mel-24khz"
         processor = VocosProcessor.from_pretrained(hf_repo_id)
@@ -271,6 +271,7 @@ class VocosModelIntegrationTest(unittest.TestCase):
             atol=1e-5,
         )
 
+    @slow
     def test_inference_encodec_vocos(self):
         hf_repo_id = "bezzam/vocos-encodec-24khz"
         model = VocosModel.from_pretrained(hf_repo_id).to(torch_device).eval()
@@ -312,6 +313,7 @@ class VocosModelIntegrationTest(unittest.TestCase):
                 atol=1e-5,
             )
 
+    @slow
     def test_inference_batch_mel_vocos(self):
         repo_id = "bezzam/vocos-mel-24khz"
         processor = VocosProcessor.from_pretrained(repo_id)
@@ -331,6 +333,7 @@ class VocosModelIntegrationTest(unittest.TestCase):
                 atol=1e-4,
             )
 
+    @slow
     def test_batch_encodec_vocos(self):
         repo_id = "bezzam/vocos-encodec-24khz"
         processor = VocosProcessor.from_pretrained(repo_id)
