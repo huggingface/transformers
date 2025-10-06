@@ -156,7 +156,7 @@ class DistributionOutput:
     def squareplus(x: torch.Tensor) -> torch.Tensor:
         r"""
         Helper to map inputs to the positive orthant by applying the square-plus operation. Reference:
-        https://twitter.com/jon_barron/status/1387167648669048833
+        https://x.com/jon_barron/status/1387167648669048833
         """
         return (x + torch.sqrt(torch.square(x) + 4.0)) / 2.0
 
