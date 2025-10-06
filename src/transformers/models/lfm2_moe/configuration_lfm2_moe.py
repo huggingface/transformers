@@ -178,9 +178,5 @@ class Lfm2MoeConfig(PretrainedConfig):
             **kwargs,
         )
 
-    @property
-    def layers_block_type(self):
-        return ["attention" if i in self.full_attn_idxs else "conv" for i in range(self.num_hidden_layers)]
-
 
 __all__ = ["Lfm2MoeConfig"]

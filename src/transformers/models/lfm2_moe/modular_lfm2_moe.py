@@ -26,6 +26,7 @@ from ..lfm2.modeling_lfm2 import (
     Lfm2Attention,
     Lfm2DecoderLayer,
     Lfm2HybridConvCache,
+    Lfm2MLP,
     Lfm2ShortConv,
 )
 from ..llama.modeling_llama import (
@@ -35,6 +36,7 @@ from ..llama.modeling_llama import (
     LlamaRotaryEmbedding,
 )
 from ..mixtral.modeling_mixtral import MixtralModel
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts
 from .configuration_lfm2_moe import Lfm2MoeConfig
 
 
@@ -59,21 +61,22 @@ class Lfm2MoeRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
-class Lfm2MoeMLP(nn.Module):
-    def __init__(
-        self,
-        config: Lfm2MoeConfig,
-        intermediate_size: Optional[int] = None,
-    ):
-        super().__init__()
+class Lfm2MoeMLP(Lfm2MLP):
+    def __init__(self, config: Lfm2MoeConfig, intermediate_size: Optional[int] = None):
+        nn.Module.__init__(self)
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
         self.w1 = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.w3 = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.w2 = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
 
-    def forward(self, x):
-        return self.w2(F.silu(self.w1(x)) * self.w3(x))
+
+class Lfm2MoeExperts(Qwen2MoeExperts, nn.ModuleList):
+    def __init__(self, config):
+        nn.ModuleList.__init__(self)
+        self.num_experts = config.num_experts
+        for _ in range(config.num_experts):
+            self.append(Lfm2MoeMLP(config, intermediate_size=config.moe_intermediate_size))
 
 
 class Lfm2MoeSparseMoeBlock(nn.Module):
@@ -83,27 +86,15 @@ class Lfm2MoeSparseMoeBlock(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.routed_scaling_factor = config.routed_scaling_factor
         self.norm_topk_prob = config.norm_topk_prob
-
+        self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
+        self.experts = Lfm2MoeExperts(config)
         if config.use_expert_bias:
             self.register_buffer("expert_bias", torch.zeros(self.num_experts, dtype=torch.float32))
         else:
             self.register_buffer("expert_bias", None)
 
-        # gating
-        self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
-        self.experts = nn.ModuleList(
-            [Lfm2MoeMLP(config, intermediate_size=config.moe_intermediate_size) for _ in range(self.num_experts)]
-        )
-
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """ """
-        batch_size, sequence_length, hidden_dim = hidden_states.shape
-        hidden_states = hidden_states.view(-1, hidden_dim)
-
-        # router_logits: (batch * sequence_length, n_experts)
-        router_logits = self.gate(hidden_states)
+    def route_tokens_to_experts(self, router_logits):
         routing_weights = router_logits.sigmoid()
-
         if self.expert_bias is not None:
             scores_for_routing = routing_weights + self.expert_bias
             _, selected_experts = torch.topk(scores_for_routing, k=self.top_k, dim=-1)
@@ -112,41 +103,18 @@ class Lfm2MoeSparseMoeBlock(nn.Module):
             routing_weights, selected_experts = torch.topk(routing_weights, k=self.top_k, dim=-1)
 
         if self.norm_topk_prob:
-            routing_weights = routing_weights / (routing_weights.sum(dim=-1, keepdim=True) + 1e-6)
-
+            routing_weights /= routing_weights.sum(dim=-1, keepdim=True) + 1e-6
         if self.routed_scaling_factor:
             routing_weights = routing_weights * self.routed_scaling_factor
+        return selected_experts, routing_weights
 
-        # we cast back to the input dtype
-        routing_weights = routing_weights.to(hidden_states.dtype)
-
-        final_hidden_states = torch.zeros(
-            (batch_size * sequence_length, hidden_dim), dtype=hidden_states.dtype, device=hidden_states.device
-        )
-
-        # One hot encode the selected experts to create an expert mask
-        # this will be used to easily index which expert is going to be sollicitated
-        expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
-
-        # Loop over all available experts in the model and perform the computation on each expert
-        expert_hitted = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-        for expert_idx in expert_hitted:
-            expert_layer = self.experts[expert_idx]
-            idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
-
-            # Index the correct hidden states and compute the expert hidden state for
-            # the current expert. We need to make sure to multiply the output hidden
-            # states by `routing_weights` on the corresponding tokens (top-1 and top-2)
-            current_state = hidden_states[None, top_x].reshape(-1, hidden_dim)
-            current_hidden_states = expert_layer(current_state) * routing_weights[top_x, idx, None]
-
-            # However `index_add_` only support torch tensors for indexing so we'll use
-            # the `top_x` tensor here.
-            final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
-        final_hidden_states = final_hidden_states.to(hidden_states.dtype).reshape(
-            batch_size, sequence_length, hidden_dim
-        )
-        return final_hidden_states, router_logits
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        batch_size, sequence_length, hidden_dim = hidden_states.shape
+        hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
+        router_logits = self.gate(hidden_states_reshaped)
+        selected_experts, routing_weights = self.route_tokens_to_experts(router_logits)
+        final_hidden_states = self.experts(hidden_states_reshaped, selected_experts, routing_weights)
+        return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
 
 
 class Lfm2MoeHybridConvCache(Lfm2HybridConvCache):
@@ -211,23 +179,6 @@ class Lfm2MoeDecoderLayer(Lfm2DecoderLayer):
 
 class Lfm2MoePreTrainedModel(LlamaPreTrainedModel):
     _can_compile_fullgraph = False
-
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, Lfm2MoeShortConv):
-            module.conv.weight.data.normal_(mean=0.0, std=std)
-            if module.conv.bias is not None:
-                module.conv.bias.data.zero_()
-        elif isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, Lfm2MoeRMSNorm):
-            module.weight.data.fill_(1.0)
 
 
 class Lfm2MoeModel(MixtralModel):
