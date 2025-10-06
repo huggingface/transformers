@@ -184,7 +184,7 @@ def get_min_tile_covering_grid(
     for tile_grid in candidate_tile_grids:
         tile_regions = split_image_into_grid(image_height, image_width, tile_grid)
         tile_covering_ratio = (
-            sum([compute_patch_covering_area(*region, target_patch_size) for region in tile_regions]) / image_area
+            sum(compute_patch_covering_area(*region, target_patch_size) for region in tile_regions) / image_area
         )
 
         evaluated_grids.append((tile_grid, tile_covering_ratio))
