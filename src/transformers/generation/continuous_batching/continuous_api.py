@@ -186,9 +186,10 @@ class ContinuousBatchProcessor:
         self.metrics = ContinuousBatchProcessorMetrics(cache.max_batch_tokens)
 
         # Setup static tensors
-        self.total_query_length = 0
-        self.total_key_length = 0
-        self.total_batch_size = 0
+        self.actual_query_length = 0
+        self.actual_key_length = 0
+        self.actual_batch_size = 0
+        self.actual_group_indices = [(0, 0) for _ in range(cache.num_groups)]
         self.setup_static_tensors(cache.num_groups)
 
     @traced(standalone=True)
@@ -250,9 +251,9 @@ class ContinuousBatchProcessor:
         """Reset static tensors for the next batch. In between batches, reset only the parts that were used in the last
         batch, but for initialisation, we can reset everything using the (full_reset) flag."""
         # Compute the slice to reset
-        q_len = self.write_index_storage[0].size(-1) if full_reset else self.total_query_length
-        k_len = self.read_index_storage[0].size(-1) if full_reset else self.total_key_length
-        b_size = self.write_index_storage[0].size(0) if full_reset else self.total_batch_size
+        q_len = self.write_index_storage[0].size(-1) if full_reset else self.actual_query_length
+        k_len = self.read_index_storage[0].size(-1) if full_reset else self.actual_key_length
+        b_size = self.write_index_storage[0].size(0) if full_reset else self.actual_batch_size
 
         # Reset the attributes that always have the same shape
         self.input_ids[:, :q_len].zero_()
@@ -277,8 +278,8 @@ class ContinuousBatchProcessor:
     def get_model_kwargs(self) -> PagedAttentionArgs:
         """Get model keyword arguments for the current batch."""
         # Compute the slice to return
-        q_len = self.total_query_length
-        b_size = self.total_batch_size
+        q_len = self.actual_query_length
+        b_size = self.actual_batch_size
 
         # Prepare the kwargs, the attributes that are either tensors or dict of tensors are initialized to empty dicts
         kwargs = {
@@ -290,11 +291,17 @@ class ContinuousBatchProcessor:
             "cu_seq_lens_k": {},
             "max_seqlen_k": {},
             "attention_mask": {},
-            "read_index": self.read_index,  # slicing is done during building
-            "write_index": self.write_index,  # slicing is done during building
+            "read_index": [],
+            "write_index": [],
             "cache": self.cache,
             "use_cache": False,
         }
+
+        # For the attributes that are lists of tensors, we construct list of tensor references
+        for i in range(self.cache.num_groups):
+            r, w = self.actual_group_indices[i]
+            kwargs["read_index"].append(self.read_index_storage[i][:r])
+            kwargs["write_index"].append(self.write_index_storage[i][:w])
 
         # For the attributes that are dict of tensors, we replace the dict with a tensor if there is only one entry
         layer_types = list(self.cumulative_seqlens_k.keys())
@@ -379,9 +386,9 @@ class ContinuousBatchProcessor:
         self.reset_static_tensors()  # TODO: this might be unnecessary
 
         # Prepare accumulators
-        self.total_query_length = 0
-        self.total_key_length = 0
-        self.total_batch_size = 0
+        self.actual_query_length = 0
+        self.actual_key_length = 0
+        self.actual_batch_size = 0
 
         input_ids = []
         position_ids = []
@@ -404,10 +411,10 @@ class ContinuousBatchProcessor:
             seqlens_k = self.cache.get_seqlens_k(state.request_id, past_length, query_length)
 
             # Then we update the total lengths that are used for slicing
-            self.total_query_length += query_length
+            self.actual_query_length += query_length
             # total_key_length is used to slice the keys so we need to take the max of all the key lengths
-            self.total_key_length += max(seqlens_k.values())
-            self.total_batch_size += 1
+            self.actual_key_length += max(seqlens_k.values())
+            self.actual_batch_size += 1
             # And the attribute tracking the position in the request object
             state.position_offset += query_length
 
@@ -486,15 +493,9 @@ class ContinuousBatchProcessor:
         self.read_index = []
         self.write_index = []
         for i, group_read_indices, group_write_indices in zip(count(), read_index, write_index):
-            # Write in the actual tensors
             self.read_index_storage[i][: len(group_read_indices)] = to_tensor(group_read_indices)
             self.write_index_storage[i][: len(group_write_indices)] = to_tensor(group_write_indices)
-            # Slice to the right size
-            r = len(group_read_indices)
-            w = len(group_write_indices)
-            # Add to the index
-            self.read_index.append(self.read_index_storage[i][:r])
-            self.write_index.append(self.write_index_storage[i][:w])
+            self.actual_group_indices[i] = (len(group_read_indices), len(group_write_indices))
 
     @traced
     def _sync(self) -> list[int]:
