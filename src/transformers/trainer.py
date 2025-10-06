@@ -5590,7 +5590,7 @@ class Trainer:
                     self.model.hf_quantizer.quantization_config.bnb_4bit_quant_storage, override=True
                 )
 
-    def _get_num_items_in_batch(self, batch_samples: list, device: torch.device) -> int | None:
+    def _get_num_items_in_batch(self, batch_samples: list, device: torch.device) -> Optional[Union[torch.Tensor, int]]:
         """
         Counts the number of items in the batches to properly scale the loss.
         Args:
