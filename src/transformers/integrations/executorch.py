@@ -1313,7 +1313,8 @@ def sdpa_bidirectional_mask_without_vmap(
     """
     Create a 4D boolean mask of shape `(batch_size, 1, query_length, kv_length)` where a value of True indicates that
     the element should take part in the attention computation, and False that it should not.
-    This function can only be used with torch>=2.5, as the context manager is otherwise not available.
+
+    This is similar to `masking_utils.sdpa_mask` but does not use `vmap` which is incompatible with export.
 
     Args:
         batch_size (`int`):
@@ -1353,21 +1354,13 @@ def sdpa_bidirectional_mask_without_vmap(
     if allow_is_bidirectional_skip and _ignore_bidirectional_mask_sdpa(padding_mask):
         return None
 
-    # Similar to `kv_arange = torch.arange(start=kv_offset, end=kv_offset + kv_length, device=cache_position.device)`
-    # but without data-dependent slicing (i.e. torch.compile friendly)
-    kv_arange = torch.arange(kv_length, device=cache_position.device)[None, ...]
-    kv_arange += kv_offset
-
-    # Simplest and most efficient way to obtain a bidirectional mask
-    bidirectional_mask = kv_arange >= 0
-
-    bidirectional_mask = bidirectional_mask[None, None, :, :].expand(batch_size, -1, -1, -1)
+    bidirectional_mask = None
     if padding_mask is not None:
-        bidirectional_mask = bidirectional_mask * padding_mask[:, None, None, :]
+        bidirectional_mask = padding_mask[:, None, None, :]
 
     # Due to a bug in some older torch version, we need to update the mask in case a query is not attending to any
     # tokens (due to padding). See details in https://github.com/pytorch/pytorch/issues/110213
-    if not _is_torch_greater_or_equal_than_2_5 and allow_torch_fix:
+    if not _is_torch_greater_or_equal_than_2_5 and allow_torch_fix and bidirectional_mask is not None:
         bidirectional_mask |= torch.all(~bidirectional_mask, dim=-1, keepdim=True)
 
     return bidirectional_mask

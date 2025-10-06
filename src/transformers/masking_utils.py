@@ -82,7 +82,7 @@ def bidirectional_mask_function(batch_idx: int, head_idx: int, q_idx: int, kv_id
     """
     This creates a full bidirectional mask.
     """
-    return q_idx >= 0
+    return q_idx.new_ones((), dtype=torch.bool)
 
 
 def sliding_window_overlay(sliding_window: int) -> Callable:
@@ -760,7 +760,7 @@ def _preprocess_mask_arguments(
 
     # Move the mask to correct device, and potentially switch dtype for efficiency
     if attention_mask is not None and attention_mask.ndim == 2:
-        attention_mask = attention_mask.to(device=input_embeds.device, dtype=torch.bool)
+        attention_mask = attention_mask.to(device=cache_position.device, dtype=torch.bool)
 
     # If using a cache, it can give all information about mask sizes based on seen tokens
     if past_key_values is not None:
@@ -907,10 +907,14 @@ def create_bidirectional_mask(
             An optional mask function to combine with the base mask function (by doing the intersection of both). This is
             useful to easily overlay another mask on top, for example for image tokens handling.
     """
+    # Due to the logic surrounding `cache_position` in inferring query-related information, we
+    # construct a dummy tensor imitating initial positions
+    cache_position = torch.arange(input_embeds.shape[1], device=input_embeds.device, dtype=torch.long)
+
     embeds = encoder_hidden_states if encoder_hidden_states is not None else input_embeds
     # We ignore a few irrelevant arguments at the end as we do not have a (growing) cache here
     early_exit, attention_mask, _, kv_length, kv_offset = _preprocess_mask_arguments(
-        config, embeds, attention_mask, None, None, None, 0
+        config, embeds, attention_mask, cache_position, None, None, 0
     )
     if early_exit:
         return attention_mask
@@ -935,10 +939,6 @@ def create_bidirectional_mask(
             raise ValueError("Using `or_mask_function` or `and_mask_function` arguments require torch>=2.6")
         mask_factory_function = and_masks(mask_factory_function, and_mask_function)
         allow_is_bidirectional_skip = False
-
-    # Due to the logic surrounding `cache_position` in inferring query-related information, we
-    # construct a dummy tensor imitating initial positions
-    cache_position = torch.arange(input_embeds.shape[1], device=input_embeds.device, dtype=torch.long)
 
     # We now create the mask
     attention_mask = mask_interface(
