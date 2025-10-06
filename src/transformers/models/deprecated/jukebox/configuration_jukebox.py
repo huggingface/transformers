@@ -17,7 +17,7 @@
 import os
 from typing import Union
 
-from ....configuration_utils import PretrainedConfig
+from ....configuration_utils import PreTrainedConfig
 from ....utils import logging
 
 
@@ -136,7 +136,7 @@ ATTENTION_PATTERNS = {
 }
 
 
-class JukeboxPriorConfig(PretrainedConfig):
+class JukeboxPriorConfig(PreTrainedConfig):
     """
         This is the configuration class to store the configuration of a [`JukeboxPrior`]. It is used to instantiate a
         `JukeboxPrior` according to the specified arguments, defining the model architecture. Instantiating a
@@ -144,8 +144,8 @@ class JukeboxPriorConfig(PretrainedConfig):
         [openai/jukebox-1b-lyrics](https://huggingface.co/openai/jukebox
     -1b-lyrics) architecture.
 
-        Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-        documentation from [`PretrainedConfig`] for more information.
+        Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+        documentation from [`PreTrainedConfig`] for more information.
 
 
 
@@ -364,15 +364,15 @@ class JukeboxPriorConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
-class JukeboxVQVAEConfig(PretrainedConfig):
+class JukeboxVQVAEConfig(PreTrainedConfig):
     """
     This is the configuration class to store the configuration of a [`JukeboxVQVAE`]. It is used to instantiate a
     `JukeboxVQVAE` according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the VQVAE from
     [openai/jukebox-1b-lyrics](https://huggingface.co/openai/jukebox-1b-lyrics) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         act_fn (`str`, *optional*, defaults to `"relu"`):
@@ -488,12 +488,12 @@ class JukeboxVQVAEConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
-class JukeboxConfig(PretrainedConfig):
+class JukeboxConfig(PreTrainedConfig):
     """
     This is the configuration class to store the configuration of a [`JukeboxModel`].
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information. Instantiating a configuration with the defaults will
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information. Instantiating a configuration with the defaults will
     yield a similar configuration to that of
     [openai/jukebox-1b-lyrics](https://huggingface.co/openai/jukebox-1b-lyrics) architecture.
 

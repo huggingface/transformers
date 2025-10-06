@@ -17,7 +17,7 @@
 from dataclasses import asdict, dataclass
 from typing import Optional
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
@@ -26,15 +26,15 @@ logger = logging.get_logger(__name__)
 # TODO Update this
 
 
-class EsmConfig(PretrainedConfig):
+class EsmConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ESMModel`]. It is used to instantiate a ESM model
     according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the ESM
     [facebook/esm-1b](https://huggingface.co/facebook/esm-1b) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -159,7 +159,7 @@ class EsmConfig(PretrainedConfig):
 
     def to_dict(self):
         """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
+        Serializes this instance to a Python dictionary. Override the default [`~PreTrainedConfig.to_dict`].
 
         Returns:
             `dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
@@ -193,7 +193,7 @@ class EsmFoldConfig:
 
     def to_dict(self):
         """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
+        Serializes this instance to a Python dictionary. Override the default [`~PreTrainedConfig.to_dict`].
 
         Returns:
             `dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
@@ -258,7 +258,7 @@ class TrunkConfig:
 
     def to_dict(self):
         """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
+        Serializes this instance to a Python dictionary. Override the default [`~PreTrainedConfig.to_dict`].
 
         Returns:
             `dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
