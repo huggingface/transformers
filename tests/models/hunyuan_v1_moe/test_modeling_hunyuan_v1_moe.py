@@ -16,6 +16,7 @@
 import unittest
 
 import pytest
+import torch
 from parameterized import parameterized
 
 from transformers import is_torch_available
@@ -113,7 +114,9 @@ class HunYuanMoEV1IntegrationTest(unittest.TestCase):
         EXPECTED_ANSWER = "\nOkay, I need to write a"
         prompt = "Write a short summary of the benefits of regular exercise"
         tokenizer = AutoTokenizer.from_pretrained("tencent/Hunyuan-A13B-Instruct")
-        model = AutoModelForCausalLM.from_pretrained("tencent/Hunyuan-A13B-Instruct", device_map="auto")
+        model = AutoModelForCausalLM.from_pretrained(
+            "tencent/Hunyuan-A13B-Instruct", device_map="auto", dtype=torch.bfloat16
+        )
         messages = [
             {"role": "user", "content": prompt},
         ]
