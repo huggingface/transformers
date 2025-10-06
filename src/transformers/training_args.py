@@ -805,7 +805,11 @@ class TrainingArguments:
     )
     overwrite_output_dir: bool = field(
         default=False,
-        metadata={"help": ("This argument is deprecated and will be removed in v5.")},
+        metadata={
+            "help": (
+                "This argument is deprecated and will be removed in v5."
+            )
+        },
     )
 
     do_train: bool = field(default=False, metadata={"help": "Whether to run training."})

@@ -38,6 +38,7 @@ from transformers import (
     set_seed,
 )
 from transformers.trainer import Trainer
+from transformers.trainer_utils import get_last_checkpoint
 from transformers.training_args import TrainingArguments
 from transformers.utils import check_min_version
 

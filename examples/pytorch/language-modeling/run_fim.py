@@ -66,6 +66,7 @@ from transformers import (
 )
 from transformers.integrations import is_deepspeed_zero3_enabled
 from transformers.testing_utils import CaptureLogger
+from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 
