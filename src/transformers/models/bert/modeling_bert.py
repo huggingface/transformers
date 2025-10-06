@@ -1397,7 +1397,6 @@ class BertForSequenceClassification(BertPreTrainedModel):
         pooled_output = outputs[1]
 
         if logits_to_keep is not None:
-            # Get the sequence output (first element contains all hidden states)
             sequence_output = outputs[0][:, -logits_to_keep:, :]
             pooled_output = sequence_output[:, 0]
 
