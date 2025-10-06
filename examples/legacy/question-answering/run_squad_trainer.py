@@ -98,7 +98,7 @@ def main():
         training_args.local_process_index,
         training_args.device,
         training_args.n_gpu,
-        bool(training_args.parallel_mode.value == 'distributed'),
+        bool(training_args.parallel_mode.value == "distributed"),
         training_args.fp16,
     )
     # Set the verbosity to info of the Transformers logger (on main process only):
