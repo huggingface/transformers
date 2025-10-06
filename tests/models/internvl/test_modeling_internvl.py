@@ -688,7 +688,6 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         )
         expected_output = expected_outputs.get_expectation()
 
-        print(f"{decoded_output}")
         self.assertEqual(decoded_output, expected_output)
 
     def test_llama_small_model_integration_generate_chat_template(self):
@@ -947,7 +946,6 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
-        print(f"{decoded_output}")
         self.assertEqual(
             decoded_output,
             expected_output,
