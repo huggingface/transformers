@@ -321,6 +321,7 @@ class BarkBlock(GradientCheckpointingLayer):
 @auto_docstring
 class BarkPreTrainedModel(PreTrainedModel):
     config: BarkConfig
+    output_modalities = "audio"
     supports_gradient_checkpointing = False
     _supports_flash_attn = True
 

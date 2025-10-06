@@ -1343,6 +1343,7 @@ class ClapTextPooler(nn.Module):
 class ClapPreTrainedModel(PreTrainedModel):
     config: ClapConfig
     base_model_prefix = "clap"
+    input_modalities = ["audio", "text"]
     supports_gradient_checkpointing = False
 
     def _init_weights(self, module: nn.Module):
@@ -1372,6 +1373,7 @@ class ClapPreTrainedModel(PreTrainedModel):
 class ClapAudioModel(ClapPreTrainedModel):
     config: ClapAudioConfig
     main_input_name = "input_features"
+    input_modalities = "audio"
 
     def __init__(self, config: ClapAudioConfig):
         super().__init__(config)
@@ -1444,6 +1446,7 @@ class ClapAudioModel(ClapPreTrainedModel):
 )
 class ClapTextModel(ClapPreTrainedModel):
     config: ClapTextConfig
+    input_modalities = "text"
 
     def __init__(self, config, add_pooling_layer=True):
         r"""
@@ -1748,6 +1751,7 @@ class ClapModel(ClapPreTrainedModel):
 @auto_docstring
 class ClapTextModelWithProjection(ClapPreTrainedModel):
     config: ClapTextConfig
+    input_modalities = "text"
 
     def __init__(self, config: ClapTextConfig):
         super().__init__(config)
@@ -1814,6 +1818,7 @@ class ClapTextModelWithProjection(ClapPreTrainedModel):
 class ClapAudioModelWithProjection(ClapPreTrainedModel):
     config: ClapAudioConfig
     main_input_name = "input_features"
+    input_modalities = "audio"
 
     def __init__(self, config: ClapAudioConfig):
         super().__init__(config)

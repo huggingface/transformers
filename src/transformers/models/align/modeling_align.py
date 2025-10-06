@@ -839,6 +839,7 @@ class AlignTextPooler(nn.Module):
 class AlignPreTrainedModel(PreTrainedModel):
     config: AlignConfig
     base_model_prefix = "align"
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module: nn.Module):
@@ -868,6 +869,7 @@ class AlignPreTrainedModel(PreTrainedModel):
 )
 class AlignTextModel(AlignPreTrainedModel):
     config: AlignTextConfig
+    input_modalities = "text"
     _no_split_modules = ["AlignTextEmbeddings"]
 
     def __init__(self, config: AlignTextConfig, add_pooling_layer: bool = True):
@@ -988,6 +990,7 @@ class AlignTextModel(AlignPreTrainedModel):
 class AlignVisionModel(AlignPreTrainedModel):
     config: AlignVisionConfig
     main_input_name = "pixel_values"
+    input_modalities = "image"
     supports_gradient_checkpointing = False
 
     def __init__(self, config: AlignVisionConfig):

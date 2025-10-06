@@ -1128,6 +1128,9 @@ class Qwen2_5OmniPreTrainedModel(Qwen2_5_VLPreTrainedModel):
 
 
 class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedModel):
+    input_modalities = ["image", "video", "audio", "text"]
+    output_modalities = ["audio", "text"]
+
     def _prepare_4d_causal_attention_mask_with_cache_position(
         self,
         attention_mask: torch.Tensor,
@@ -1704,6 +1707,7 @@ class SinusoidsPositionEmbedding(nn.Module):
 class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
     config: Qwen2_5OmniAudioEncoderConfig
     main_input_name = "input_features"
+    input_modalities = "audio"
     _no_split_modules = ["Qwen2_5OmniAudioEncoderLayer"]
     _supports_sdpa = True
 
@@ -2524,6 +2528,9 @@ class Qwen2_5OmniTalkerCausalLMOutputWithPast(ModelOutput):
 
 class Qwen2_5OmniTalkerModel(Qwen2_5_VLTextModel):
     config: Qwen2_5OmniTalkerConfig
+    input_modalities = ["image", "video", "audio", "text"]
+    output_modalities = "audio"
+
     _no_split_modules = ["Qwen2_5OmniTalkerDecoderLayer"]
 
     def __init__(self, config: Qwen2_5OmniTalkerConfig):
@@ -3638,6 +3645,7 @@ class AMPBlock(torch.nn.Module):
 )
 class Qwen2_5OmniToken2WavBigVGANModel(Qwen2_5OmniPreTrainedModel):
     config: Qwen2_5OmniBigVGANConfig
+    input_modalities = "audio"
 
     def __init__(self, config: Qwen2_5OmniBigVGANConfig):
         super().__init__(config)
@@ -3773,6 +3781,8 @@ class RungeKutta4ODESolver:
 )
 class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
     config: Qwen2_5OmniDiTConfig
+    input_modalities = "audio"
+    output_modalities = "audio"
     _no_split_modules = ["DiTDecoderLayer"]
 
     def __init__(self, config: Qwen2_5OmniDiTConfig):
@@ -3929,6 +3939,8 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
 class Qwen2_5OmniToken2WavModel(Qwen2_5OmniPreTrainedModel):
     config: Qwen2_5OmniToken2WavConfig
     base_model_prefix = "model"
+    input_modalities = "audio"
+    output_modalities = "audio"
     _no_split_modules = ["Qwen2_5OmniToken2WavDiTModel", "Qwen2_5OmniToken2WavBigVGANModel"]
 
     def __init__(self, config: Qwen2_5OmniToken2WavConfig):

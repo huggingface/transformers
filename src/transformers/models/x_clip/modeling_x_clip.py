@@ -500,6 +500,7 @@ class XCLIPVisionEncoderLayer(GradientCheckpointingLayer):
 class XCLIPPreTrainedModel(PreTrainedModel):
     config: XCLIPConfig
     base_model_prefix = "x_clip"
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
@@ -710,6 +711,7 @@ class XCLIPTextTransformer(nn.Module):
 
 class XCLIPTextModel(XCLIPPreTrainedModel):
     config: XCLIPTextConfig
+    input_modalities = "text"
 
     def __init__(self, config: XCLIPTextConfig):
         super().__init__(config)
@@ -904,6 +906,7 @@ class XCLIPVisionTransformer(nn.Module):
 class XCLIPVisionModel(XCLIPPreTrainedModel):
     config: XCLIPVisionConfig
     main_input_name = "pixel_values"
+    input_modalities = "image"
 
     def __init__(self, config: XCLIPVisionConfig):
         super().__init__(config)

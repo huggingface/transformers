@@ -409,6 +409,7 @@ class MusicgenDecoderLayer(GradientCheckpointingLayer):
 class MusicgenPreTrainedModel(PreTrainedModel):
     config: MusicgenDecoderConfig
     base_model_prefix = "model"
+    output_modalities = "audio"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MusicgenDecoderLayer", "MusicgenAttention"]
     _supports_flash_attn = True

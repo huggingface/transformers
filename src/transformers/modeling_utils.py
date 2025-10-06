@@ -1861,6 +1861,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     _supports_attention_backend = False
     _can_record_outputs = None
 
+    # Attributes used mainly in multimodal LLMs, though all models contain a valid field for these
+    input_modalities: Union[str, list[str]] = "text"  # most models are text
+
     @property
     @torch._dynamo.allow_in_graph
     def can_record_outputs(self) -> dict[str, OutputRecorder]:
@@ -2223,6 +2226,20 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         `torch.nn.Module`: The main body of the model.
         """
         return getattr(self, self.base_model_prefix, self)
+
+    @classmethod
+    def output_modalities(cls) -> Optional[Union[str, list[str]]]:
+        """
+        Returns a list of output modalities that a model can generate. For non-generative models
+        returns a `None`. Multimodal models that can output several modalities or non-text modalities
+        should overwrite this method.
+
+        Returns:
+            `Union[str, list[str]]`: Output modalities supported for models that can call `.generate()`.
+        """
+        if cls.can_generate():
+            return "text"
+        return None
 
     @classmethod
     def can_generate(cls) -> bool:

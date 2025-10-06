@@ -805,6 +805,8 @@ class MoshiDecoderLayer(GradientCheckpointingLayer):
 class MoshiPreTrainedModel(PreTrainedModel):
     config: MoshiConfig
     base_model_prefix = "model"
+    input_modalities = ["audio", "text"]
+    output_modalities = ["audio", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = ["MoshiDecoderLayer", "MimiTransformerLayer"]
     _supports_flash_attn = True
@@ -1459,6 +1461,8 @@ class MoshiModel(MoshiPreTrainedModel):
     """
 )
 class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
+    input_modalities = "text"
+    output_modalities = "text"
     _tied_weights_keys = ["model.embed_tokens.weight", "lm_head.weight"]
 
     # Copied from transformers.models.gemma.modeling_gemma.GemmaForCausalLM.__init__ with Gemma->Moshi
