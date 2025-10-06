@@ -107,6 +107,7 @@ if is_sagemaker_mp_enabled():
 
     smp.init()
 
+
 def get_int_from_env(env_keys, default):
     """Returns the first positive env value found in the `env_keys` list or the default."""
     for e in env_keys:
@@ -905,7 +906,12 @@ class TrainingArguments:
             )
         },
     )
-    logging_dir: Optional[str] = field(default=None, metadata={"help": "This argument is deprecated and will be removed in v5.2. Set `TENSORBOARD_LOGGING_DIR` instead"})
+    logging_dir: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "This argument is deprecated and will be removed in v5.2. Set `TENSORBOARD_LOGGING_DIR` instead"
+        },
+    )
     logging_strategy: Union[IntervalStrategy, str] = field(
         default="steps",
         metadata={"help": "The logging strategy to use."},
@@ -1476,9 +1482,11 @@ class TrainingArguments:
             self.output_dir = os.path.expanduser(self.output_dir)
 
         if self.logging_dir is not None:
-            logging.warning("`logging_dir` is deprecated and will be removed in v5.2. Set `TENSORBOARD_LOGGING_DIR` instead")
+            logging.warning(
+                "`logging_dir` is deprecated and will be removed in v5.2. Set `TENSORBOARD_LOGGING_DIR` instead"
+            )
             os.environ["TENSORBOARD_LOGGING_DIR"] = self.logging_dir
-    
+
         if self.disable_tqdm is None:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
 

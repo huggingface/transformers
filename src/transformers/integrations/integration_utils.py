@@ -106,6 +106,7 @@ from ..utils import ENV_VARS_TRUE_VALUES, is_torch_xla_available  # noqa: E402
 def is_wandb_available():
     if importlib.util.find_spec("wandb") is not None:
         import wandb
+
         # wandb might still be detected by find_spec after an uninstall (leftover files or metadata), but not actually
         # import correctly. To confirm it's fully installed and usable, we check for a key attribute like "run".
         return hasattr(wandb, "run")
@@ -647,6 +648,7 @@ def rewrite_logs(d):
             new_d["train/" + k] = v
     return new_d
 
+
 def default_logdir() -> str:
     """
     Same default as PyTorch
@@ -657,6 +659,7 @@ def default_logdir() -> str:
     current_time = datetime.now().strftime("%b%d_%H-%M-%S")
     return os.path.join("runs", current_time + "_" + socket.gethostname())
 
+
 class TensorBoardCallback(TrainerCallback):
     """
     A [`TrainerCallback`] that sends the logs to [TensorBoard](https://www.tensorflow.org/tensorboard).
@@ -664,7 +667,6 @@ class TensorBoardCallback(TrainerCallback):
     Args:
         tb_writer (`SummaryWriter`, *optional*):
             The writer to use. Will instantiate one if not set.
-            
     Environment:
         - **TENSORBOARD_LOGGING_DIR** (`str`, *optional*, defaults to `None`):
             The logging dir to log the results. Default value is os.path.join(args.output_dir, default_logdir())
@@ -686,7 +688,7 @@ class TensorBoardCallback(TrainerCallback):
         self.logging_dir = os.getenv("TENSORBOARD_LOGGING_DIR", None)
         if self.logging_dir is not None:
             self.logging_dir = os.path.expanduser(self.logging_dir)
- 
+
     def _init_summary_writer(self, args):
         if self._SummaryWriter is not None:
             self.tb_writer = self._SummaryWriter(log_dir=self.logging_dir)
@@ -700,7 +702,7 @@ class TensorBoardCallback(TrainerCallback):
             if trial_name is not None:
                 # overwrite logging dir for trials
                 self.logging_dir = os.path.join(args.output_dir, default_logdir(), trial_name)
-                
+
         if self.logging_dir is None:
             self.logging_dir = os.path.join(args.output_dir, default_logdir())
 
@@ -785,8 +787,9 @@ class WandbCallback(TrainerCallback):
         has_wandb = is_wandb_available()
         if not has_wandb:
             raise RuntimeError("WandbCallback requires wandb to be installed. Run `pip install wandb`.")
-        
+
         import wandb
+
         self._wandb = wandb
         self._initialized = False
         self._log_model = WandbLogModel(os.getenv("WANDB_LOG_MODEL", "false"))
