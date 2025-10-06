@@ -335,7 +335,7 @@ class Seq2SeqDataCollator:
             tgt_texts=[x["tgt_texts"] for x in batch],
             max_length=self.data_args.max_source_length,
             max_target_length=self.data_args.max_target_length,
-            padding="longest",
+            padding="longest"
             return_tensors="pt",
             **self.dataset_kwargs,
         )
