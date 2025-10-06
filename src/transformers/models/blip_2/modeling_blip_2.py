@@ -495,7 +495,7 @@ class Blip2VisionModel(Blip2PreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs(post_ln_hiddens=False)
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,

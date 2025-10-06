@@ -488,7 +488,7 @@ class Phi4MultimodalVisionModel(Phi4MultimodalVisionPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.embeddings.patch_embedding
 
-    @check_model_inputs(post_ln_hiddens=False)
+    @check_model_inputs(tie_last_hidden_states=False)
     def forward(
         self,
         pixel_values,

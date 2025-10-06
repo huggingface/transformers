@@ -809,10 +809,17 @@ class OutputRecorder:
     class_name: Optional[str] = None
 
 
-def check_model_inputs(post_ln_hiddens=True):
+def check_model_inputs(tie_last_hidden_states=True):
     """
     Decorator to intercept specific layer outputs without using hooks.
     Compatible with torch.compile (Dynamo tracing).
+
+    Args:
+        tie_last_hidden_states (`bool`, *optional*, defaults to `True`):
+            Whether to overwrite `out.hidden_states[-1]` with the `out.last_hidden_state`.
+            This is true for all language models and should be toggled off only if
+            `out.hidden_states[-1]` has to be the hidden state before last layer norm, which
+            is needed for some vision models (e.g. CLIP, SigLIP)
     """
 
     def wrapped_fn(func):
@@ -949,7 +956,7 @@ def check_model_inputs(post_ln_hiddens=True):
             # Inject collected outputs into model output
             for key in collected_outputs:
                 if key == "hidden_states":
-                    if not post_ln_hiddens:
+                    if not tie_last_hidden_states:
                         pass
                     elif hasattr(outputs, "vision_hidden_states"):
                         collected_outputs[key] = collected_outputs[key][:-1]
