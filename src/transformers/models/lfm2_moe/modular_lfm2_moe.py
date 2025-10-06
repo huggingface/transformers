@@ -31,6 +31,7 @@ from ..lfm2.modeling_lfm2 import (
     Lfm2DecoderLayer,
 )
 from ..llama.modeling_llama import (
+    LlamaForCausalLM,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
@@ -301,15 +302,8 @@ class Lfm2MoeModel(MixtralModel):
         )
 
 
-class Lfm2MoeForCausalLM(MixtralForCausalLM):
-    def __init__(self, config):
-        super().__init__(config)
-        self.model = Lfm2MoeModel(config)
-        self.vocab_size = config.vocab_size
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        self.router_aux_loss_coef = config.router_aux_loss_coef
-        self.num_experts = config.num_experts
-        self.num_experts_per_tok = config.num_experts_per_tok
+class Lfm2MoeForCausalLM(LlamaForCausalLM):
+    pass
 
 
 __all__ = ["Lfm2MoeForCausalLM", "Lfm2MoeModel", "Lfm2MoePreTrainedModel"]

@@ -86,11 +86,6 @@ class Lfm2MoeConfig(PretrainedConfig):
             Function to score the routing weights.
         norm_topk_prob (`bool`, *optional*, defaults to `True`):
             Whether to normalize the topk probabilities.
-        output_router_logits (`bool`, *optional*, defaults to `False`):
-            Whether or not the router logits should be returned by the model. Enabling this will also
-            allow the model to output the auxiliary loss, including load balancing loss and router z-loss.
-        router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
-            The aux loss factor for the total loss.
         full_attn_idxs (`Optional`, *optional*):
             Index of the layers which use attention.
         layer_types (`Optional`, *optional*):
@@ -138,8 +133,6 @@ class Lfm2MoeConfig(PretrainedConfig):
         use_expert_bias: bool = True,
         routed_scaling_factor: Optional[float] = None,
         norm_topk_prob: bool = True,
-        output_router_logits: bool = False,
-        router_aux_loss_coef: float = 0.001,
         full_attn_idxs: Optional[list[int]] = None,
         layer_types: Optional[list[str]] = None,
         **kwargs,
@@ -170,8 +163,6 @@ class Lfm2MoeConfig(PretrainedConfig):
         self.use_expert_bias = use_expert_bias
         self.routed_scaling_factor = routed_scaling_factor
         self.norm_topk_prob = norm_topk_prob
-        self.output_router_logits = output_router_logits
-        self.router_aux_loss_coef = router_aux_loss_coef
 
         self.layer_types = layer_types
         if self.layer_types is None:
