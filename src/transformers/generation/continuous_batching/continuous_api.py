@@ -193,17 +193,16 @@ class ContinuousBatchProcessor:
 
     @traced(standalone=True)
     def setup_static_tensors(self, num_groups: int) -> None:
-        T = self.max_batch_tokens
         num_pages = self.cache.num_blocks * self.cache.block_size
         self.tensor_metadata = {"dtype": torch.int32, "device": self.model_device}
 
         # Some tensors always have the same shape regardless of the model
-        self.input_ids = torch.empty((1, T), **self.tensor_metadata)
-        self.position_ids = torch.empty((1, T), **self.tensor_metadata)
-        self.cumulative_seqlens_q = torch.empty((T + 1,), **self.tensor_metadata)
+        self.input_ids = torch.empty((1, self.max_batch_tokens), **self.tensor_metadata)
+        self.position_ids = torch.empty((1, self.max_batch_tokens), **self.tensor_metadata)
+        self.cumulative_seqlens_q = torch.empty((self.max_batch_tokens + 1,), **self.tensor_metadata)
         self.max_seqlen_q = 0
-        self.logits_indices = torch.empty((T,), **self.tensor_metadata)
-        self.output_ids = torch.empty((1, T), **self.tensor_metadata)
+        self.logits_indices = torch.empty((self.max_batch_tokens,), **self.tensor_metadata)
+        self.output_ids = torch.empty((1, self.max_batch_tokens), **self.tensor_metadata)
 
         # For some kwargs, we have a dict of tensors with as many items as there are attention types
         layer_types = getattr(self.config, "layer_types", None)
@@ -213,13 +212,13 @@ class ContinuousBatchProcessor:
         layer_types = list(set(layer_types))
 
         self.cumulative_seqlens_k = {
-            layer_type: torch.empty((T + 1), **self.tensor_metadata) for layer_type in layer_types
+            l_type: torch.empty((self.max_batch_tokens + 1), **self.tensor_metadata) for l_type in layer_types
         }
         self.max_seqlen_k = dict.fromkeys(layer_types, 0)
 
         if self.return_attention_mask():
             attn_mask_kwargs = {
-                "size": (1, 1, T, num_pages + T),
+                "size": (1, 1, self.max_batch_tokens, num_pages + self.max_batch_tokens),
                 "dtype": self.model_dtype,
                 "device": self.model_device,
             }
@@ -228,8 +227,12 @@ class ContinuousBatchProcessor:
             self.attention_mask = None
 
         # For other kwargs, we need a list of tensors with as many tensors as there are groups
-        self.write_index_storage = [torch.empty((T,), **self.tensor_metadata) for _ in range(num_groups)]
-        self.read_index_storage = [torch.empty((num_pages + T), **self.tensor_metadata) for _ in range(num_groups)]
+        self.write_index_storage = [
+            torch.empty((self.max_batch_tokens,), **self.tensor_metadata) for _ in range(num_groups)
+        ]
+        self.read_index_storage = [
+            torch.empty((num_pages + self.max_batch_tokens), **self.tensor_metadata) for _ in range(num_groups)
+        ]
         # For read index, the +T is because there are -1 for seqlen_q when model uses a sliding window
 
         # After allocating empty tensors, we reset them to the right value
@@ -720,7 +723,9 @@ class ContinuousBatchingManager:
         if self.batch_processor is not None:
             self.batch_processor.scheduler.set_request_cancellation(request_id)
 
-    def get_result(self, request_id: Optional[str] = None, timeout: Optional[float] = None) -> Optional[GenerationOutput]:
+    def get_result(
+        self, request_id: Optional[str] = None, timeout: Optional[float] = None
+    ) -> Optional[GenerationOutput]:
         """Retrieve one result from the output queue.
 
         Args:
@@ -1028,6 +1033,7 @@ class ContinuousMixin:
         finally:
             manager.stop(block=True, timeout=5.0)
         return results
+
 
 """
 ROADMAP:
