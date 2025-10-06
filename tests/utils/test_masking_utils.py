@@ -67,6 +67,12 @@ EXPECTED_PACKED_MASK = torch.tensor([[[
 
 @require_torch
 class MaskTest(unittest.TestCase):
+    def setup(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
     def test_packed_sequence_mask_sdpa(self):
         config = LlamaConfig()
         config._attn_implementation = "sdpa"
@@ -277,9 +283,6 @@ class MaskTest(unittest.TestCase):
                 encoder_hidden_states=encoder_hidden_states,
             )
 
-        # We manually cleanup since most other tests don't need an accelerator
-        cleanup(torch_device, gc_collect=True)
-
         # We use llama but could be also bert/bart --> we only need the `_attn_implementation` here
         config = LlamaConfig()
         config._attn_implementation = "sdpa"
@@ -327,5 +330,3 @@ class MaskTest(unittest.TestCase):
             cross_mask=cross_mask,
             encoder_hidden_states=encoder_hidden_states,
         )
-
-        cleanup(torch_device, gc_collect=True)
