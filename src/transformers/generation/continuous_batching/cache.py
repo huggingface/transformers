@@ -290,7 +290,6 @@ class PagedAttentionCache:
         layer_idx: int,
         read_index: list[torch.Tensor],  # shape [num_layer_groups, seqlen_kv + past_length]
         write_index: list[torch.Tensor],  # shape [num_layer_groups, seqlen_q]
-        **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:  # shape [seqlen_kv + past_length, num_kv_heads, head_dim]
         """Update the cache with new key-value states for a specific layer. This method writes new KV states to the
         appropriate cache locations. The behavior differs based on the layer's attention type:

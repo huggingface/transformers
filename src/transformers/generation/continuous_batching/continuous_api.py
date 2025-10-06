@@ -512,7 +512,7 @@ class ContinuousBatchProcessor:
         return [0, 0]
 
     @traced
-    def _maybe_send_output(self, state: RequestState, token: int) -> None:
+    def _maybe_send_output(self, state: RequestState) -> None:
         """Send output to the queue based on streaming mode and request state."""
         if state.streaming:
             self.output_queue.put(state.to_generation_output())
@@ -523,9 +523,7 @@ class ContinuousBatchProcessor:
     def update_batch(self) -> None:
         """Update request states based on generated tokens."""
         out_tokens = self._sync()
-        finished_request_ids = []  # CHECK: unused variable
         for i, state in enumerate(self.requests_in_batch):
-            req_id = state.request_id  # CHECK: unused variable
             if len(state.remaining_prompt_ids) == 0:
                 self.metrics.record_ttft_metric(state.created_time, state.request_id)
                 state.status = RequestStatus.DECODING
@@ -534,8 +532,7 @@ class ContinuousBatchProcessor:
                 if state.update_with_token(token):
                     self.metrics.record_request_completion(state.created_time, state.request_id)
                     self.scheduler.finish_request(state.request_id, evict_from_cache=(not self.manual_eviction))
-                    finished_request_ids.append(req_id)
-                self._maybe_send_output(state, token)
+                self._maybe_send_output(state)
             elif state.status == RequestStatus.PREFILLING_SPLIT:
                 state.status = RequestStatus.SPLIT_PENDING_REMAINDER
         if self.cache.get_num_free_blocks() == 0:
@@ -625,13 +622,15 @@ class ContinuousBatchingManager:
         self.do_sample = getattr(generation_config, "do_sample", True)
         self.logit_processor = self.model._get_logits_processor(generation_config)
         self.use_cuda_graph = getattr(generation_config, "use_cuda_graph", False)  # TODO: same as do_sample
-        self.profile = getattr(generation_config, "profile", False)
+        self.profile = getattr(generation_config, "profile", False)  # TODO: not supported yet
         self.manual_eviction = manual_eviction
         self.batch_processor: Optional[ContinuousBatchProcessor] = None
         self.slice_inputs = slice_inputs
 
         if self.use_cuda_graph:
             raise NotImplementedError("Cuda graphs are not supported yet")
+        if self.log_prob_generation:
+            raise NotImplementedError("log_prob_generation is not supported yet")
 
     @traced
     def start(self) -> None:
@@ -719,9 +718,9 @@ class ContinuousBatchingManager:
         logger.debug(f"Added request {request_id} to queue.")
         return request_id
 
-    def add_requests(self, inputs: list[list[int]], **kwargs) -> None:
+    def add_requests(self, inputs: list[list[int]], max_new_tokens: Optional[int] = None) -> None:
         for input_ids in inputs:
-            self.add_request(input_ids, **kwargs)
+            self.add_request(input_ids, max_new_tokens=max_new_tokens)
 
     def cancel_request(self, request_id: str) -> None:
         """Cancel a request by its ID.
@@ -790,8 +789,7 @@ class ContinuousBatchingManager:
         batch_data = batch_processor.get_model_kwargs()
         with torch.no_grad():
             logits = self._model_forward(batch_data)
-            if self.log_prob_generation:
-                batch_processor.output_probs.copy_(logits)  # TODO
+            # if self.log_prob_generation:    batch_processor.output_probs.copy_(logits)  # TODO
             probs = self._process_logit(batch_data, logits)
             self._sample(batch_processor, probs)
 
@@ -1025,7 +1023,7 @@ class ContinuousMixin:
                     desc=f"Solving {num_requests} requests",
                     unit="request",
                 ) as pbar:
-                    manager.add_requests(inputs, **kwargs)
+                    manager.add_requests(inputs=inputs, max_new_tokens=kwargs.get("max_new_tokens"))
                     finished_count = 0
                     while finished_count < num_requests:
                         result = manager.get_result(timeout=1)
