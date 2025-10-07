@@ -297,8 +297,6 @@ class TorchAoHfQuantizer(HfQuantizer):
 
             # handle ModuleFqnToConfig, introduced in torchao 0.12.0+
             if self.quantization_config._get_ao_version() >= version.Version("0.12.0"):
-                import re
-
                 from torchao.quantization import ModuleFqnToConfig
 
                 config = self.quantization_config.get_apply_tensor_subclass()
@@ -306,6 +304,9 @@ class TorchAoHfQuantizer(HfQuantizer):
                     module_fqn, _ = param_name.rsplit(".", 1)
                     c = None
                     if module_fqn in config.module_fqn_to_config:
+                        assert not module_fqn.startswith("re:"), (
+                            "module fqn should not start with`re:`, which is used for specifying regex"
+                        )
                         c = config.module_fqn_to_config[module_fqn]
                     else:
                         for maybe_module_fqn_pattern in config.module_fqn_to_config:
