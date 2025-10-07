@@ -26,7 +26,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import get_activation
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_attention_mask_for_sdpa
 from ...modeling_layers import GradientCheckpointingLayer
@@ -85,7 +85,7 @@ def _create_sinusoidal_embeddings(n_pos: int, dim: int, out: torch.Tensor):
 
 
 class Embeddings(nn.Module):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PreTrainedConfig):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.dim, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.dim)
@@ -125,7 +125,7 @@ class Embeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.bart.modeling_bart.eager_attention_forward
+# Copied from transformers.models.bert.modeling_bert.eager_attention_forward
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -134,18 +134,21 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: Optional[float] = None,
     dropout: float = 0.0,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
     if scaling is None:
         scaling = query.size(-1) ** -0.5
 
+    # Take the dot product between "query" and "key" to get the raw attention scores.
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
     if attention_mask is not None:
+        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
@@ -153,7 +156,7 @@ def eager_attention_forward(
 
 
 class DistilBertSelfAttention(nn.Module):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PreTrainedConfig):
         super().__init__()
         self.config = config
 
@@ -227,7 +230,7 @@ class DistilBertSelfAttention(nn.Module):
 
 
 class FFN(nn.Module):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PreTrainedConfig):
         super().__init__()
         self.dropout = nn.Dropout(p=config.dropout)
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -248,7 +251,7 @@ class FFN(nn.Module):
 
 
 class TransformerBlock(GradientCheckpointingLayer):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PreTrainedConfig):
         super().__init__()
 
         # Have an even number of Configure multi-heads
@@ -283,7 +286,7 @@ class TransformerBlock(GradientCheckpointingLayer):
 
 
 class Transformer(nn.Module):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PreTrainedConfig):
         super().__init__()
         self.n_layers = config.n_layers
         self.layer = nn.ModuleList([TransformerBlock(config) for _ in range(config.n_layers)])
@@ -341,7 +344,7 @@ class DistilBertPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class DistilBertModel(DistilBertPreTrainedModel):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PreTrainedConfig):
         super().__init__(config)
 
         self.embeddings = Embeddings(config)  # Embeddings
@@ -412,7 +415,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.transformer.layer[layer].attention.prune_heads(heads)
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
@@ -481,7 +484,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
 class DistilBertForMaskedLM(DistilBertPreTrainedModel):
     _tied_weights_keys = ["vocab_projector.weight"]
 
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PreTrainedConfig):
         super().__init__(config)
 
         self.activation = get_activation(config.activation)
@@ -583,7 +586,7 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
     """
 )
 class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PreTrainedConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -681,7 +684,7 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
 
 @auto_docstring
 class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PreTrainedConfig):
         super().__init__(config)
 
         self.distilbert = DistilBertModel(config)
@@ -783,7 +786,7 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
 
 @auto_docstring
 class DistilBertForTokenClassification(DistilBertPreTrainedModel):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PreTrainedConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -858,7 +861,7 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
 
 @auto_docstring
 class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PreTrainedConfig):
         super().__init__(config)
 
         self.distilbert = DistilBertModel(config)

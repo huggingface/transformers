@@ -19,7 +19,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...configuration_utils import PretrainedConfig, layer_type_validation
+from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 
@@ -27,7 +27,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class Qwen3OmniMoeAudioEncoderConfig(PretrainedConfig):
+class Qwen3OmniMoeAudioEncoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3OmniMoeAudioEncoder`]. It is used to instantiate a
     Qwen2.5-Omni-Thinker audio encoder according to the specified arguments, defining the model architecture. Instantiating a
@@ -36,8 +36,8 @@ class Qwen3OmniMoeAudioEncoderConfig(PretrainedConfig):
 
     e.g. [Qwen/Qwen2.5-Omni-7B](https://huggingface.co/Qwen/Qwen2.5-Omni-7B)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         num_mel_bins (`int`, *optional*, defaults to 128):
@@ -131,7 +131,7 @@ class Qwen3OmniMoeAudioEncoderConfig(PretrainedConfig):
         self.downsample_hidden_size = downsample_hidden_size
 
 
-class Qwen3OmniMoeVisionEncoderConfig(PretrainedConfig):
+class Qwen3OmniMoeVisionEncoderConfig(PreTrainedConfig):
     model_type = "qwen3_omni_moe_vision_encoder"
     base_config_key = "vision_config"
 
@@ -169,14 +169,14 @@ class Qwen3OmniMoeVisionEncoderConfig(PretrainedConfig):
         self.deepstack_visual_indexes = deepstack_visual_indexes
 
 
-class Qwen3OmniMoeTextConfig(PretrainedConfig):
+class Qwen3OmniMoeTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3OmniMoeTextModel`]. It is used to instantiate a
     Qwen3OmniMoeText model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of [Qwen/Qwen3-15B-A2B](https://huggingface.co/Qwen/Qwen3-15B-A2B).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -381,7 +381,7 @@ class Qwen3OmniMoeTextConfig(PretrainedConfig):
         self.mlp_only_layers = [] if mlp_only_layers is None else mlp_only_layers
 
 
-class Qwen3OmniMoeThinkerConfig(PretrainedConfig):
+class Qwen3OmniMoeThinkerConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3OmniMoeThinker`]. It is used to instantiate a
     Qwen3-Omni-Thinker model according to the specified arguments, defining the model architecture. Instantiating a
@@ -390,8 +390,8 @@ class Qwen3OmniMoeThinkerConfig(PretrainedConfig):
 
     e.g. [Qwen/Qwen3-Omni-7B](https://huggingface.co/Qwen/Qwen3-Omni-7B)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         audio_config (`dict`, *optional*):
@@ -481,15 +481,15 @@ class Qwen3OmniMoeThinkerConfig(PretrainedConfig):
         self.video_token_id = video_token_id
 
 
-class Qwen3OmniMoeTalkerCodePredictorConfig(PretrainedConfig):
+class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3OmniMoeTalkerCodePredictorModel`]. It is used to instantiate a
     Qwen3OmniMoeTalkerCodePredictor model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of
     Qwen3OmniMoeTalkerCodePredictor-8B [Qwen/Qwen3OmniMoeTalkerCodePredictor-8B](https://huggingface.co/Qwen/Qwen3OmniMoeTalkerCodePredictor-8B).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -679,14 +679,14 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PretrainedConfig):
         self.num_code_groups = num_code_groups
 
 
-class Qwen3OmniMoeTalkerTextConfig(PretrainedConfig):
+class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3OmniMoeTalkerTextModel`]. It is used to instantiate a
     Qwen3OmniMoeTalkerText model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of [Qwen/Qwen3-15B-A2B](https://huggingface.co/Qwen/Qwen3-15B-A2B).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -891,7 +891,7 @@ class Qwen3OmniMoeTalkerTextConfig(PretrainedConfig):
         self.mlp_only_layers = [] if mlp_only_layers is None else mlp_only_layers
 
 
-class Qwen3OmniMoeTalkerConfig(PretrainedConfig):
+class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3OmniMoeTalker`]. It is used to instantiate a
     Qwen3-Omni multi-modal talker model capable of handling text, audio, and vision modalities in a unified architecture.
@@ -901,8 +901,8 @@ class Qwen3OmniMoeTalkerConfig(PretrainedConfig):
 
     e.g. [Qwen/Qwen3-Omni-7B](https://huggingface.co/Qwen/Qwen3-Omni-7B)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         code_predictor_config (`dict`, *optional*):
@@ -1027,7 +1027,7 @@ class Qwen3OmniMoeTalkerConfig(PretrainedConfig):
         self.speaker_id = speaker_id
 
 
-class Qwen3OmniMoeCode2WavConfig(PretrainedConfig):
+class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3OmniMoeCode2WavConfig`]. It is used to instantiate a
     Qwen3-Omni code-to-waveform decoder, responsible for converting discrete audio codes into high-fidelity waveforms.
@@ -1036,8 +1036,8 @@ class Qwen3OmniMoeCode2WavConfig(PretrainedConfig):
 
     e.g. [Qwen/Qwen3-Omni-7B](https://huggingface.co/Qwen/Qwen3-Omni-7B)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         codebook_size (`int`, *optional*, defaults to 2048):
@@ -1142,7 +1142,7 @@ class Qwen3OmniMoeCode2WavConfig(PretrainedConfig):
         return ["sliding_attention"] * self.num_hidden_layers
 
 
-class Qwen3OmniMoeConfig(PretrainedConfig):
+class Qwen3OmniMoeConfig(PreTrainedConfig):
     """
     This is the configuration class to store the configuration of a [`Qwen3OmniMoeForConditionalGeneration`]. It is used to instantiate a Qwen3Omni
     model according to the specified sub-models configurations, defining the model architecture.
@@ -1150,8 +1150,8 @@ class Qwen3OmniMoeConfig(PretrainedConfig):
     Instantiating a configuration with the defaults will yield a similar configuration to that of the
     [Qwen/Qwen2.5-Omni-7B](https://huggingface.co/Qwen/Qwen2.5-Omni-7B) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         thinker_config (`dict`, *optional*): Configuration of the underlying thinker sub-model.
@@ -1229,7 +1229,7 @@ class Qwen3OmniMoeConfig(PretrainedConfig):
         self.user_token_id = user_token_id
         self.assistant_token_id = assistant_token_id
 
-    def get_text_config(self, decoder=False) -> "PretrainedConfig":
+    def get_text_config(self, decoder=False) -> "PreTrainedConfig":
         """
         Returns the config that is meant to be used with text IO. On most models, it is the original config instance
         itself. On specific composite models, it is under a set of valid names.

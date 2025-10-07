@@ -17,10 +17,10 @@
 
 from __future__ import annotations
 
-from ....configuration_utils import PretrainedConfig
+from ....configuration_utils import PreTrainedConfig
 
 
-class ErnieMConfig(PretrainedConfig):
+class ErnieMConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ErnieMModel`]. It is used to instantiate a
     Ernie-M model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -28,8 +28,8 @@ class ErnieMConfig(PretrainedConfig):
     [susnato/ernie-m-base_pytorch](https://huggingface.co/susnato/ernie-m-base_pytorch) architecture.
 
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 250002):

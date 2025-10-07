@@ -94,7 +94,7 @@ if stale_egg_info.exists():
 # 2. once modified, run: `make deps_table_update` to update src/transformers/dependency_versions_table.py
 _deps = [
     "Pillow>=10.0.1,<=15.0",
-    "accelerate>=0.26.0",
+    "accelerate>=1.1.0",
     "av",
     "beautifulsoup4",
     "blobfile",
@@ -143,7 +143,7 @@ _deps = [
     "pytest-timeout",
     "pytest-xdist",
     "pytest-order",
-    "python>=3.9.0",
+    "python>=3.10.0",
     "ray[tune]>=2.7.0",
     "regex!=2019.12.17",
     "requests",
