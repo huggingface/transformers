@@ -21,19 +21,8 @@ from ...modeling_outputs import MoeModelOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
 from ...utils.import_utils import is_causal_conv1d_available
-from ..lfm2.modeling_lfm2 import (
-    Lfm2Attention,
-    Lfm2DecoderLayer,
-    Lfm2HybridConvCache,
-    Lfm2MLP,
-    Lfm2ShortConv,
-)
-from ..llama.modeling_llama import (
-    LlamaForCausalLM,
-    LlamaPreTrainedModel,
-    LlamaRMSNorm,
-    LlamaRotaryEmbedding,
-)
+from ..lfm2.modeling_lfm2 import Lfm2Attention, Lfm2DecoderLayer, Lfm2HybridConvCache, Lfm2MLP, Lfm2ShortConv
+from ..llama.modeling_llama import LlamaForCausalLM, LlamaPreTrainedModel, LlamaRMSNorm, LlamaRotaryEmbedding
 from ..mixtral.modeling_mixtral import MixtralModel
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts
 from .configuration_lfm2_moe import Lfm2MoeConfig
