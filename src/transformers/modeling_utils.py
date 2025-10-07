@@ -2549,10 +2549,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             and not (is_flash_attn_2_available() or is_flash_attn_3_available())
             and is_kernels_available()
         ):
+            prefix = attn_implementation.split("|")[0]
             if attn_implementation.endswith("2"):
-                applicable_attn_implementation = "kernels-community/flash-attn"
+                applicable_attn_implementation = prefix + "kernels-community/flash-attn"
             else:
-                applicable_attn_implementation = "kernels-community/vllm-flash-attn3"
+                applicable_attn_implementation = prefix + "kernels-community/vllm-flash-attn3"
 
         if is_kernel(applicable_attn_implementation) or "|" in applicable_attn_implementation:
             try:
