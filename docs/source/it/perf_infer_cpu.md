@@ -17,10 +17,6 @@ rendered properly in your Markdown viewer.
 
 Questa guida si concentra sull'inferenza di modelli di grandi dimensioni in modo efficiente sulla CPU.
 
-## `BetterTransformer` per inferenza più rapida
-
-Abbiamo integrato di recente `BetterTransformer` per fare inferenza più rapidamente con modelli per testi, immagini e audio. Visualizza la documentazione sull'integrazione [qui](https://huggingface.co/docs/optimum/bettertransformer/overview) per maggiori dettagli.
-
 ## PyTorch JIT-mode (TorchScript)
 
 TorchScript è un modo di creare modelli serializzabili e ottimizzabili da codice PyTorch. Ogni programma TorchScript può esere salvato da un processo Python  e caricato in un processo dove non ci sono dipendenze Python.

@@ -83,19 +83,19 @@ DistilBertConfig {
 }
 ```
 
-Los atributos de los modelos preentrenados pueden ser modificados con la función [`~PretrainedConfig.from_pretrained`]:
+Los atributos de los modelos preentrenados pueden ser modificados con la función [`~PreTrainedConfig.from_pretrained`]:
 
 ```py
 >>> my_config = DistilBertConfig.from_pretrained("distilbert/distilbert-base-uncased", activation="relu", attention_dropout=0.4)
 ```
 
-Cuando estés satisfecho con la configuración de tu modelo, puedes guardarlo con la función [`~PretrainedConfig.save_pretrained`]. Tu configuración se guardará en un archivo JSON dentro del directorio que le especifiques como parámetro.
+Cuando estés satisfecho con la configuración de tu modelo, puedes guardarlo con la función [`~PreTrainedConfig.save_pretrained`]. Tu configuración se guardará en un archivo JSON dentro del directorio que le especifiques como parámetro.
 
 ```py
 >>> my_config.save_pretrained(save_directory="./your_model_save_path")
 ```
 
-Para volver a usar el archivo de configuración, puedes cargarlo usando [`~PretrainedConfig.from_pretrained`]:
+Para volver a usar el archivo de configuración, puedes cargarlo usando [`~PreTrainedConfig.from_pretrained`]:
 
 ```py
 >>> my_config = DistilBertConfig.from_pretrained("./your_model_save_path/my_config.json")

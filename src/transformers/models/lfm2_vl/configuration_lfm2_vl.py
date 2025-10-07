@@ -14,7 +14,7 @@
 # limitations under the License.
 """PyTorch LFM2-VL model."""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -22,7 +22,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class Lfm2VlConfig(PretrainedConfig):
+class Lfm2VlConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Lfm2VlForConditionalGeneration`]. It is used to instantiate an
     Lfm2Vl model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -30,8 +30,8 @@ class Lfm2VlConfig(PretrainedConfig):
 
     e.g. [LiquidAI/LFM2-VL-1.6B](https://huggingface.co/LiquidAI/LFM2-VL-1.6B)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vision_config (`AutoConfig | dict`,  *optional*, defaults to `Siglip2ImageConfig`):

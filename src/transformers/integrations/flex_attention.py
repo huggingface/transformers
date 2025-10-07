@@ -32,7 +32,7 @@ import torch
 from packaging import version
 
 from ..utils import is_torch_flex_attn_available, logging
-from ..utils.import_utils import _torch_version, is_torch_less_or_equal, is_torchdynamo_compiling
+from ..utils.import_utils import get_torch_version, is_torch_less_or_equal, is_torchdynamo_compiling
 
 
 if is_torch_flex_attn_available():
@@ -70,7 +70,7 @@ class WrappedFlexAttention:
             # In PyTorch 2.6.0, there's a known issue with flex attention compilation which may
             # cause errors. The suggested fix is to compile with "max-autotune-no-cudagraphs"
             # see https://github.com/pytorch/pytorch/issues/146260 for training
-            elif version.parse(_torch_version).base_version == "2.6.0" and training:
+            elif version.parse(get_torch_version()).base_version == "2.6.0" and training:
                 self._compiled_flex_attention = torch.compile(
                     flex_attention, dynamic=False, mode="max-autotune-no-cudagraphs"
                 )
@@ -282,10 +282,10 @@ def flex_attention_forward(
     # On CPU we must skip returning LSE due to a runtime issue; elsewhere, follow PyTorch API and return it
     return_lse = query.device.type != "cpu"
 
-    # Validate that s_aux is not silently ignored
     if not return_lse and s_aux is not None:
-        logger.warning_once("s_aux provided with return_lse=False - forcing return_lse=True to avoid silent failure")
-        return_lse = True
+        raise ValueError(
+            "Attention sinks cannot be run on CPU with flex attention. Please switch to a different device, e.g. CUDA"
+        )
 
     flex_attention_output = compile_friendly_flex_attention(
         query,

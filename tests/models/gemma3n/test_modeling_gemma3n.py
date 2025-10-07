@@ -147,7 +147,6 @@ class Gemma3nAudioModelTest(ModelTesterMixin, unittest.TestCase):
     is_generative = False
     _is_stateful = True
     main_input_name = "audio_mel"
-    test_initialization = False
 
     def setUp(self):
         self.model_tester = Gemma3nAudioModelTester(self)
@@ -698,10 +697,6 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
 
     @unittest.skip(reason="SiglipVisionModel (vision backbone) does not support standalone training")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="Siglip (vision backbone) uses a non-standard initialization scheme")
-    def test_initialization(self):
         pass
 
     @unittest.skip(

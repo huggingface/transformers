@@ -21,7 +21,6 @@ import numpy as np
 
 from transformers import VJEPA2Config
 from transformers.testing_utils import (
-    is_flaky,
     require_torch,
     require_vision,
     slow,
@@ -166,10 +165,6 @@ class VJEPA2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = VJEPA2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=VJEPA2Config, has_text_modality=False, hidden_size=37)
-
-    @is_flaky(max_attempts=3, description="`torch.nn.init.trunc_normal_` is flaky.")
-    def test_initialization(self):
-        super().test_initialization()
 
     def test_config(self):
         self.config_tester.run_common_tests()

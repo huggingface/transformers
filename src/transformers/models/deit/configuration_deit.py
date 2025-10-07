@@ -19,7 +19,7 @@ from collections.abc import Mapping
 
 from packaging import version
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
 
@@ -27,7 +27,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class DeiTConfig(PretrainedConfig):
+class DeiTConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DeiTModel`]. It is used to instantiate an DeiT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -35,8 +35,8 @@ class DeiTConfig(PretrainedConfig):
     [facebook/deit-base-distilled-patch16-224](https://huggingface.co/facebook/deit-base-distilled-patch16-224)
     architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:

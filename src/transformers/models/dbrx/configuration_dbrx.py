@@ -16,21 +16,21 @@
 
 from typing import Any, Optional
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class DbrxAttentionConfig(PretrainedConfig):
+class DbrxAttentionConfig(PreTrainedConfig):
     """Configuration class for Dbrx Attention.
 
     [`DbrxAttention`] class. It is used to instantiate attention layers
     according to the specified arguments, defining the layers architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         attn_pdrop (`float`, *optional*, defaults to 0.0):
@@ -48,30 +48,22 @@ class DbrxAttentionConfig(PretrainedConfig):
         attn_pdrop: float = 0.0,
         clip_qkv: Optional[float] = None,
         kv_n_heads: int = 1,
-        rope_theta: float = 10000.0,
         **kwargs: Any,
     ):
         super().__init__(**kwargs)
         self.attn_pdrop = attn_pdrop
         self.clip_qkv = clip_qkv
         self.kv_n_heads = kv_n_heads
-        self.rope_theta = rope_theta
-
-        for k in ["model_type", "attn_implementation", "transformers_version", "_commit_hash", "torch_dtype", "dtype"]:
-            if k in kwargs:
-                kwargs.pop(k)
-        if len(kwargs) != 0:
-            raise ValueError(f"Found unknown {kwargs=}")
 
 
-class DbrxFFNConfig(PretrainedConfig):
+class DbrxFFNConfig(PreTrainedConfig):
     """Configuration class for Dbrx FFN.
 
     [`DbrxFFN`] class. It is used to instantiate feedforward layers according to
     the specified arguments, defining the layers architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         ffn_act_fn (`dict`, *optional*, defaults to `None`): A dict specifying activation function for the FFN.
@@ -89,6 +81,7 @@ class DbrxFFNConfig(PretrainedConfig):
 
     def __init__(
         self,
+        hidden_size=6144,
         ffn_act_fn: Optional[dict] = None,
         ffn_hidden_size: int = 3584,
         moe_num_experts: int = 4,
@@ -101,6 +94,7 @@ class DbrxFFNConfig(PretrainedConfig):
         super().__init__()
         if ffn_act_fn is None:
             ffn_act_fn = {"name": "silu"}
+        self.hidden_size = hidden_size
         self.ffn_act_fn = ffn_act_fn
         self.ffn_hidden_size = ffn_hidden_size
         self.moe_num_experts = moe_num_experts
@@ -116,15 +110,15 @@ class DbrxFFNConfig(PretrainedConfig):
             raise ValueError(f"Found unknown {kwargs=}")
 
 
-class DbrxConfig(PretrainedConfig):
+class DbrxConfig(PreTrainedConfig):
     r"""
 
     This is the configuration class to store the configuration of a [`DbrxModel`]. It is used to instantiate a Dbrx model according to the
     specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a different configuration to that of the [databricks/dbrx-instruct](https://huggingface.co/databricks/dbrx-instruct) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -221,7 +215,7 @@ class DbrxConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.output_router_logits = output_router_logits
         self.num_key_value_heads = self.attn_config.kv_n_heads
-
+        self.rope_theta: float = 10000.0
         tie_word_embeddings = kwargs.pop("tie_word_embeddings", False)
         if tie_word_embeddings:
             raise ValueError("tie_word_embeddings is not supported for DBRX models.")

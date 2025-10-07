@@ -20,41 +20,35 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import re
-from typing import Optional, Union
+from typing import Optional
 
 import numpy as np
 
 from ...audio_utils import AudioInput
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, VideosKwargs
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, VideosKwargs
 from ...tokenization_utils_base import TextInput
 from ...video_utils import VideoInput, make_batched_videos
 
 
+# Redefine kwargs for videos because Qwen-Omni uses some kwargs for processing omni
+# and does not use them in video processor class
 class Qwen3OmniMoeVideosKwargs(VideosKwargs):
-    fps: Optional[list[Union[int, float]]]
+    min_pixels: Optional[int]
+    max_pixels: Optional[int]
+    patch_size: Optional[int]
+    temporal_patch_size: Optional[int]
+    merge_size: Optional[int]
+    min_frames: Optional[int]
+    max_frames: Optional[int]
     use_audio_in_video: Optional[bool]
     seconds_per_chunk: Optional[float]
     position_id_per_seconds: Optional[int]
-    min_pixels: Optional[int]
-    max_pixels: Optional[int]
-    patch_size: Optional[int]
-    temporal_patch_size: Optional[int]
-    merge_size: Optional[int]
-
-
-class Qwen3OmniMoeImagesKwargs(ImagesKwargs):
-    min_pixels: Optional[int]
-    max_pixels: Optional[int]
-    patch_size: Optional[int]
-    temporal_patch_size: Optional[int]
-    merge_size: Optional[int]
 
 
 class Qwen3OmniMoeProcessorKwargs(ProcessingKwargs, total=False):
     videos_kwargs: Qwen3OmniMoeVideosKwargs
-    images_kwargs: Qwen3OmniMoeImagesKwargs
     _defaults = {
         "text_kwargs": {
             "padding": False,

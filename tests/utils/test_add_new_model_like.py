@@ -473,8 +473,8 @@ class TestAddNewModelLike(unittest.TestCase):
             )
             from ..phi4_multimodal.feature_extraction_phi4_multimodal import Phi4MultimodalFeatureExtractor
             from ..phi4_multimodal.image_processing_phi4_multimodal_fast import (
-                Phi4MultimodalFastImageProcessorKwargs,
                 Phi4MultimodalImageProcessorFast,
+                Phi4MultimodalImageProcessorKwargs,
             )
             from ..phi4_multimodal.modeling_phi4_multimodal import (
                 Phi4MultimodalAttention,
@@ -643,7 +643,7 @@ class TestAddNewModelLike(unittest.TestCase):
                 pass
 
 
-            class MyTest2FastImageProcessorKwargs(Phi4MultimodalFastImageProcessorKwargs):
+            class MyTest2ImageProcessorKwargs(Phi4MultimodalImageProcessorKwargs):
                 pass
 
 

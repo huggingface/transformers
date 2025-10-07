@@ -1789,7 +1789,7 @@ class MistralCommonTokenizer(PushToHubMixin):
                 if "tekken.json" in valid_tokenizer_files:
                     tokenizer_file = "tekken.json"
                 else:
-                    tokenizer_file = sorted(valid_tokenizer_files)[-1]
+                    tokenizer_file = max(valid_tokenizer_files)
                 logger.warning(
                     f"Multiple tokenizer files found in directory: {pretrained_model_name_or_path}. Using {tokenizer_file}."
                 )

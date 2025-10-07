@@ -46,7 +46,6 @@ if __name__ == "__main__":
         "itazap",
         "ivarflakstad",
         "molbap",
-        "muellerzr",
         "remi-or",
         "stevhliu",
         "vasqu",

@@ -47,7 +47,6 @@ class OwlViTProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {
             "padding": "max_length",
         },
-        "images_kwargs": {},
         "common_kwargs": {
             "return_tensors": "np",
         },
@@ -89,8 +88,6 @@ class OwlViTProcessor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[OwlViTProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -133,7 +130,7 @@ class OwlViTProcessor(ProcessorMixin):
             **kwargs,
         )
         query_images = output_kwargs["images_kwargs"].pop("query_images", None)
-        return_tensors = output_kwargs["common_kwargs"]["return_tensors"]
+        return_tensors = output_kwargs["text_kwargs"]["return_tensors"]
 
         if text is None and query_images is None and images is None:
             raise ValueError(
@@ -149,7 +146,7 @@ class OwlViTProcessor(ProcessorMixin):
                 encodings = []
 
                 # Maximum number of queries across batch
-                max_num_queries = max([len(text_single) for text_single in text])
+                max_num_queries = max(len(text_single) for text_single in text)
 
                 # Pad all batch samples to max number of text queries
                 for text_single in text:

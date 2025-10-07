@@ -14,14 +14,14 @@
 # limitations under the License.
 """Bamba model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class BambaConfig(PretrainedConfig):
+class BambaConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BambaModel`]. It is used to instantiate a
     BambaModel model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -30,8 +30,8 @@ class BambaConfig(PretrainedConfig):
     The BambaModel is a hybrid [mamba2](https://github.com/state-spaces/mamba) architecture with SwiGLU.
     The checkpoints are  jointly trained by IBM, Princeton, and UIUC.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 128000):

@@ -17,11 +17,11 @@
 from typing import Optional, Union
 
 import torch
+from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -30,27 +30,12 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_v2_available,
     logging,
 )
-from .image_processing_pixtral import get_resize_output_image_size
+from .image_processing_pixtral import PixtralImageProcessorKwargs, get_resize_output_image_size
 
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
 
 logger = logging.get_logger(__name__)
-
-
-class PixtralFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    patch_size (`dict[str, int]` *optional*, defaults to `{"height": 16, "width": 16}`):
-        Size of the patches in the model, used to calculate the output image size. Can be overridden by `patch_size` in the `preprocess` method.
-    """
-
-    patch_size: Optional[dict[str, int]]
 
 
 @auto_docstring
@@ -65,15 +50,15 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
-    valid_kwargs = PixtralFastImageProcessorKwargs
+    valid_kwargs = PixtralImageProcessorKwargs
 
     model_input_names = ["pixel_values", "image_sizes"]
 
-    def __init__(self, **kwargs: Unpack[PixtralFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[PixtralImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[PixtralFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[PixtralImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def resize(
@@ -131,7 +116,7 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
             list[`torch.Tensor`]: The padded images.
         """
 
-        max_shape = (max([size[0] for size in image_sizes]), max([size[1] for size in image_sizes]))
+        max_shape = (max(size[0] for size in image_sizes), max(size[1] for size in image_sizes))
         pixel_values = [
             torch.nn.functional.pad(image, pad=(0, max_shape[1] - size[1], 0, max_shape[0] - size[0]))
             for image, size in zip(pixel_values, image_sizes)

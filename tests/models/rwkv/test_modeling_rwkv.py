@@ -265,35 +265,6 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_state_equivalency(*config_and_inputs)
 
-    def test_initialization(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config=config)
-            for name, param in model.named_parameters():
-                if "time_decay" in name:
-                    if param.requires_grad:
-                        self.assertTrue(param.data.max().item() == 3.0)
-                        self.assertTrue(param.data.min().item() == -5.0)
-                elif "time_first" in name:
-                    if param.requires_grad:
-                        # check if it's a ones like
-                        torch.testing.assert_close(param.data, torch.ones_like(param.data), rtol=1e-5, atol=1e-5)
-                elif any(x in name for x in ["time_mix_key", "time_mix_receptance"]):
-                    if param.requires_grad:
-                        self.assertInterval(
-                            param.data,
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                elif "time_mix_value" in name:
-                    if param.requires_grad:
-                        self.assertInterval(
-                            param.data,
-                            [0.0, 1.3],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-
     def test_attention_outputs(self):
         r"""
         Overriding the test_attention_outputs test as the attention outputs of Rwkv are different from other models

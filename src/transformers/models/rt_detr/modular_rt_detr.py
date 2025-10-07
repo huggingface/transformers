@@ -4,7 +4,7 @@ from typing import Optional, Union
 import torch
 from torchvision.transforms.v2 import functional as F
 
-from transformers.models.detr.image_processing_detr_fast import DetrFastImageProcessorKwargs, DetrImageProcessorFast
+from transformers.models.detr.image_processing_detr_fast import DetrImageProcessorFast
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict, get_max_height_width
@@ -26,6 +26,7 @@ from ...utils import (
     logging,
     requires_backends,
 )
+from .image_processing_rt_detr import RTDetrImageProcessorKwargs
 
 
 logger = logging.get_logger(__name__)
@@ -92,10 +93,6 @@ def prepare_coco_detection_annotation(
     return new_target
 
 
-class RTDetrFastImageProcessorKwargs(DetrFastImageProcessorKwargs):
-    pass
-
-
 class RTDetrImageProcessorFast(DetrImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
@@ -109,9 +106,9 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast):
     size = {"height": 640, "width": 640}
     default_to_square = False
     model_input_names = ["pixel_values", "pixel_mask"]
-    valid_kwargs = RTDetrFastImageProcessorKwargs
+    valid_kwargs = RTDetrImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[RTDetrFastImageProcessorKwargs]) -> None:
+    def __init__(self, **kwargs: Unpack[RTDetrImageProcessorKwargs]) -> None:
         # Backwards compatibility
         do_convert_annotations = kwargs.get("do_convert_annotations")
         do_normalize = kwargs.get("do_normalize")
@@ -123,11 +120,9 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        annotations: Optional[Union[AnnotationType, list[AnnotationType]]] = None,
-        masks_path: Optional[Union[str, pathlib.Path]] = None,
-        **kwargs: Unpack[RTDetrFastImageProcessorKwargs],
+        **kwargs: Unpack[RTDetrImageProcessorKwargs],
     ) -> BatchFeature:
-        return BaseImageProcessorFast.preprocess(self, images, annotations, masks_path, **kwargs)
+        return BaseImageProcessorFast.preprocess(self, images, **kwargs)
 
     def prepare_annotation(
         self,

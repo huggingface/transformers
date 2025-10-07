@@ -21,7 +21,7 @@ import torch
 from torch import nn
 
 from ...cache_utils import Cache
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...masking_utils import create_masks_for_generate
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -132,7 +132,7 @@ def token_type_ids_mask_function(
 
 
 def create_causal_mask_mapping(
-    config: PretrainedConfig,
+    config: PreTrainedConfig,
     input_embeds: torch.Tensor,
     attention_mask: Optional[torch.Tensor],
     cache_position: torch.Tensor,
@@ -605,7 +605,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
 
     @staticmethod
     def create_masks_for_generate(
-        config: PretrainedConfig,
+        config: PreTrainedConfig,
         input_embeds: torch.Tensor,
         attention_mask: Optional[torch.Tensor],
         cache_position: torch.Tensor,

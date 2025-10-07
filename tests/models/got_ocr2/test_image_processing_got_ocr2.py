@@ -44,7 +44,6 @@ class GotOcr2ImageProcessingTester(unittest.TestCase):
         do_resize=True,
         size=None,
         do_normalize=True,
-        do_pad=False,
         image_mean=[0.48145466, 0.4578275, 0.40821073],
         image_std=[0.26862954, 0.26130258, 0.27577711],
         do_convert_rgb=True,
@@ -62,7 +61,6 @@ class GotOcr2ImageProcessingTester(unittest.TestCase):
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
-        self.do_pad = do_pad
         self.do_convert_rgb = do_convert_rgb
 
     def prepare_image_processor_dict(self):
@@ -73,7 +71,6 @@ class GotOcr2ImageProcessingTester(unittest.TestCase):
             "image_mean": self.image_mean,
             "image_std": self.image_std,
             "do_convert_rgb": self.do_convert_rgb,
-            "do_pad": self.do_pad,
         }
 
     def expected_output_image_shape(self, images):

@@ -5,6 +5,7 @@ on:
     branches:
       - build_ci_docker_image*
   repository_dispatch:
+  workflow_dispatch:
   workflow_call:
     inputs:
       image_postfix:
@@ -221,7 +222,7 @@ jobs:
   latest-pytorch-amd:
     name: "Latest PyTorch (AMD) [dev]"
     runs-on:
-      group: aws-general-8-plus
+      group: aws-highcpu-32-priv
     steps:
       -
         name: Set up Docker Buildx

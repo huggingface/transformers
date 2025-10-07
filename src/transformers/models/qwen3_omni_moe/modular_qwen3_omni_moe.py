@@ -28,7 +28,7 @@ from torch.nn import functional as F
 from ...activations import ACT2FN
 from ...audio_utils import AudioInput
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...generation import GenerationMixin
 from ...image_utils import ImageInput
@@ -75,6 +75,7 @@ from ..qwen3_moe.configuration_qwen3_moe import Qwen3MoeConfig
 from ..qwen3_moe.modeling_qwen3_moe import (
     Qwen3MoeAttention,
     Qwen3MoeDecoderLayer,
+    Qwen3MoeExperts,
     Qwen3MoeForCausalLM,
     Qwen3MoeMLP,
     Qwen3MoePreTrainedModel,
@@ -224,8 +225,8 @@ class Qwen3OmniMoeThinkerConfig(Qwen2_5OmniThinkerConfig):
 
     e.g. [Qwen/Qwen3-Omni-7B](https://huggingface.co/Qwen/Qwen3-Omni-7B)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         audio_config (`dict`, *optional*):
@@ -425,7 +426,7 @@ class Qwen3OmniMoeTalkerTextConfig(Qwen3MoeConfig):
         self.sliding_window = sliding_window
 
 
-class Qwen3OmniMoeTalkerConfig(PretrainedConfig):
+class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3OmniMoeTalker`]. It is used to instantiate a
     Qwen3-Omni multi-modal talker model capable of handling text, audio, and vision modalities in a unified architecture.
@@ -435,8 +436,8 @@ class Qwen3OmniMoeTalkerConfig(PretrainedConfig):
 
     e.g. [Qwen/Qwen3-Omni-7B](https://huggingface.co/Qwen/Qwen3-Omni-7B)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         code_predictor_config (`dict`, *optional*):
@@ -561,7 +562,7 @@ class Qwen3OmniMoeTalkerConfig(PretrainedConfig):
         self.speaker_id = speaker_id
 
 
-class Qwen3OmniMoeCode2WavConfig(PretrainedConfig):
+class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3OmniMoeCode2WavConfig`]. It is used to instantiate a
     Qwen3-Omni code-to-waveform decoder, responsible for converting discrete audio codes into high-fidelity waveforms.
@@ -570,8 +571,8 @@ class Qwen3OmniMoeCode2WavConfig(PretrainedConfig):
 
     e.g. [Qwen/Qwen3-Omni-7B](https://huggingface.co/Qwen/Qwen3-Omni-7B)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         codebook_size (`int`, *optional*, defaults to 2048):
@@ -676,7 +677,7 @@ class Qwen3OmniMoeCode2WavConfig(PretrainedConfig):
         return ["sliding_attention"] * self.num_hidden_layers
 
 
-class Qwen3OmniMoeConfig(PretrainedConfig):
+class Qwen3OmniMoeConfig(PreTrainedConfig):
     """
     This is the configuration class to store the configuration of a [`Qwen3OmniMoeForConditionalGeneration`]. It is used to instantiate a Qwen3Omni
     model according to the specified sub-models configurations, defining the model architecture.
@@ -684,8 +685,8 @@ class Qwen3OmniMoeConfig(PretrainedConfig):
     Instantiating a configuration with the defaults will yield a similar configuration to that of the
     [Qwen/Qwen2.5-Omni-7B](https://huggingface.co/Qwen/Qwen2.5-Omni-7B) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         thinker_config (`dict`, *optional*): Configuration of the underlying thinker sub-model.
@@ -763,7 +764,7 @@ class Qwen3OmniMoeConfig(PretrainedConfig):
         self.user_token_id = user_token_id
         self.assistant_token_id = assistant_token_id
 
-    def get_text_config(self, decoder=False) -> "PretrainedConfig":
+    def get_text_config(self, decoder=False) -> "PreTrainedConfig":
         """
         Returns the config that is meant to be used with text IO. On most models, it is the original config instance
         itself. On specific composite models, it is under a set of valid names.
@@ -1196,8 +1197,18 @@ class Qwen3OmniMoeThinkerTextRotaryEmbedding(Qwen3VLMoeTextRotaryEmbedding):
     pass
 
 
+class Qwen3OmniMoeThinkerTextExperts(Qwen3MoeExperts):
+    """
+    ModuleList of experts.
+    """
+
+    def __init__(self, config: Qwen3OmniMoeThinkerConfig):
+        super().__init__(config)
+
+
 class Qwen3OmniMoeThinkerTextSparseMoeBlock(Qwen3MoeSparseMoeBlock):
-    pass
+    def __init__(self, config: Qwen3OmniMoeThinkerConfig):
+        super().__init__(config)
 
 
 class Qwen3OmniMoeThinkerTextAttention(Qwen3MoeAttention):
@@ -1507,7 +1518,7 @@ class Qwen3OmniMoeTalkerCodePredictorModel(Qwen3Model):
     def get_input_embeddings(self):
         return self.codec_embedding
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
@@ -2414,7 +2425,7 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
                     self.config.talker_config.text_config.vocab_size - 1024,
                     self.config.talker_config.text_config.vocab_size,
                 )
-                if i not in (self.config.talker_config.codec_eos_token_id,)
+                if i != self.config.talker_config.codec_eos_token_id
             ]  # Suppress additional special tokens, should not be predicted
             talker_kwargs = {
                 "max_new_tokens": talker_max_new_tokens,

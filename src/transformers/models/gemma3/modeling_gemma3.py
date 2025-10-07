@@ -29,7 +29,7 @@ import torch.nn as nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -482,7 +482,7 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
@@ -759,7 +759,7 @@ def token_type_ids_mask_function(
 
 
 def create_causal_mask_mapping(
-    config: PretrainedConfig,
+    config: PreTrainedConfig,
     input_embeds: torch.Tensor,
     attention_mask: Optional[torch.Tensor],
     cache_position: torch.Tensor,
@@ -1214,7 +1214,7 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
 
     @staticmethod
     def create_masks_for_generate(
-        config: PretrainedConfig,
+        config: PreTrainedConfig,
         input_embeds: torch.Tensor,
         attention_mask: Optional[torch.Tensor],
         cache_position: torch.Tensor,

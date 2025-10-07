@@ -993,7 +993,7 @@ class MllamaVisionModel(MllamaPreTrainedModel):
         hidden_state = torch.cat([class_embedding, hidden_state], dim=1)
         return hidden_state
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self, pixel_values: torch.Tensor, aspect_ratio_ids: torch.Tensor, aspect_ratio_mask: torch.Tensor, **kwargs
@@ -1161,7 +1161,7 @@ class MllamaTextModel(MllamaPreTrainedModel):
         self.gradient_checkpointing = False
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs()
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1429,7 +1429,7 @@ class MllamaModel(MllamaPreTrainedModel):
     def get_decoder(self):
         return self.language_model
 
-    @check_model_inputs
+    @check_model_inputs()
     @can_return_tuple
     @auto_docstring
     def forward(

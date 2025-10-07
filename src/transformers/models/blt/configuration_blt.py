@@ -14,14 +14,14 @@
 # limitations under the License.
 """Blt model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class BltLocalEncoderConfig(PretrainedConfig):
+class BltLocalEncoderConfig(PreTrainedConfig):
     """
     Configuration class for the Blt Local Encoder component.
     """
@@ -71,7 +71,7 @@ class BltLocalEncoderConfig(PretrainedConfig):
         super().__init__(**kwargs, tie_word_embeddings=False)
 
 
-class BltLocalDecoderConfig(PretrainedConfig):
+class BltLocalDecoderConfig(PreTrainedConfig):
     """
     Configuration class for the Blt Local Decoder component.
     """
@@ -121,7 +121,7 @@ class BltLocalDecoderConfig(PretrainedConfig):
         super().__init__(**kwargs, tie_word_embeddings=False)
 
 
-class BltGlobalTransformerConfig(PretrainedConfig):
+class BltGlobalTransformerConfig(PreTrainedConfig):
     """
     Configuration class for the Blt Global Transformer component.
     """
@@ -163,7 +163,7 @@ class BltGlobalTransformerConfig(PretrainedConfig):
         super().__init__(**kwargs, tie_word_embeddings=False)
 
 
-class BltPatcherConfig(PretrainedConfig):
+class BltPatcherConfig(PreTrainedConfig):
     r"""
     Configuration class for the Blt Patcher/Entropy model component.
 
@@ -239,13 +239,13 @@ class BltPatcherConfig(PretrainedConfig):
         super().__init__(**kwargs, tie_word_embeddings=False)
 
 
-class BltConfig(PretrainedConfig):
+class BltConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BltModel`]. It is used to instantiate a
     Blt model according to the specified arguments, defining the model architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
             vocab_size (`int`, *optional*, defaults to 260):

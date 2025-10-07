@@ -91,10 +91,6 @@ class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):
     def test_assisted_decoding_sample(self):
         pass
 
-    @unittest.skip(reason="TODO @arthurzucker not super important and failing.")
-    def test_initialization(self):
-        pass
-
     @unittest.skip(reason="RecurrentGemma is unusual and fails a lot of generation tests")
     @pytest.mark.generate
     def test_beam_sample_generate_dict_output(self):

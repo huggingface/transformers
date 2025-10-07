@@ -18,22 +18,22 @@ import math
 
 import numpy as np
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class MimiConfig(PretrainedConfig):
+class MimiConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`MimiModel`]. It is used to instantiate a
     Mimi model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the
     [kyutai/mimi](https://huggingface.co/kyutai/mimi) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         sampling_rate (`int`, *optional*, defaults to 24000):

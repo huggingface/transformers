@@ -179,7 +179,7 @@ class TextGenerationPipeline(Pipeline):
             generate_kwargs["prefix_length"] = prefix_inputs["input_ids"].shape[-1]
 
         if handle_long_generation is not None:
-            if handle_long_generation not in {"hole"}:
+            if handle_long_generation != "hole":
                 raise ValueError(
                     f"{handle_long_generation} is not a valid value for `handle_long_generation` parameter expected"
                     " [None, 'hole']"
@@ -234,7 +234,7 @@ class TextGenerationPipeline(Pipeline):
         Parse arguments and tokenize
         """
         # Parse arguments
-        if self.model.__class__.__name__ in ["TransfoXLLMHeadModel"]:
+        if self.model.__class__.__name__ == "TransfoXLLMHeadModel":
             kwargs.update({"add_space_before_punct_symbol": True})
 
         return super()._parse_and_tokenize(*args, **kwargs)

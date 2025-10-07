@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch GPTSANJapanese model."""
 
 from typing import Optional, Union
 
@@ -23,86 +22,9 @@ from ....activations import ACT2FN
 from ....cache_utils import Cache
 from ....modeling_outputs import MoECausalLMOutputWithPast, MoEModelOutputWithPastAndCrossAttentions
 from ....modeling_utils import PreTrainedModel
-from ....utils import (
-    DUMMY_INPUTS,
-    DUMMY_MASK,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    is_torch_fx_proxy,
-    logging,
-)
+from ....utils import DUMMY_INPUTS, DUMMY_MASK, auto_docstring, is_torch_fx_proxy
 from ....utils.deprecation import deprecate_kwarg
 from .configuration_gptsan_japanese import GPTSanJapaneseConfig
-
-
-logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC = "GPTSanJapaneseConfig"
-_CHECKPOINT_FOR_DOC = "Tanrei/GPTSAN-japanese"
-
-####################################################
-# This dict contains ids and associated url
-# for the pretrained weights provided with the models
-####################################################
-
-
-def router_z_loss_func(router_logits: torch.Tensor) -> float:
-    r"""
-    Compute the router z-loss implemented in PyTorch.
-
-    The router z-loss was introduced in [Designing Effective Sparse Expert Models](https://huggingface.co/papers/2202.08906).
-    It encourages router logits to remain small in an effort to improve stability.
-
-    Args:
-        router_logits (`float`):
-            Input logits of shape [batch_size, sequence_length, num_experts]
-
-    Returns:
-        Scalar router z-loss.
-    """
-    num_groups, tokens_per_group, _ = router_logits.shape
-    log_z = torch.logsumexp(router_logits, dim=-1)
-    z_loss = log_z**2
-    return torch.sum(z_loss) / (num_groups * tokens_per_group)
-
-
-def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.Tensor) -> float:
-    r"""
-    Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
-
-    See Switch Transformer (https://huggingface.co/papers/2101.03961) for more details. This function implements the loss
-    function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
-    experts is too unbalanced.
-
-    Args:
-        router_probs (`torch.Tensor`):
-            Probability assigned to each expert per token. Shape: [batch_size, sequence_length, num_experts].
-        expert_indices (`torch.Tensor`):
-            Indices tensor of shape [batch_size, sequence_length] identifying the selected expert for a given token.
-
-    Returns:
-        The auxiliary loss.
-    """
-    num_experts = router_probs.shape[-1]
-
-    # cast the expert indices to int64, otherwise one-hot encoding will fail
-    if expert_indices.dtype != torch.int64:
-        expert_indices = expert_indices.to(torch.int64)
-
-    if len(expert_indices.shape) == 2:
-        expert_indices = expert_indices.unsqueeze(2)
-
-    expert_mask = torch.nn.functional.one_hot(expert_indices, num_experts)
-
-    # For a given token, determine if it was routed to a given expert.
-    expert_mask = torch.max(expert_mask, axis=-2).values
-
-    # cast to float32 otherwise mean will fail
-    expert_mask = expert_mask.to(torch.float32)
-    tokens_per_group_and_expert = torch.mean(expert_mask, axis=-2)
-
-    router_prob_per_group_and_expert = torch.mean(router_probs, axis=-2)
-    return torch.mean(tokens_per_group_and_expert * router_prob_per_group_and_expert) * (num_experts**2)
 
 
 class GPTSanJapaneseDenseActDense(nn.Module):
@@ -159,7 +81,7 @@ class GPTSanJapaneseTop1Router(nn.Module):
         self.ignore_padding_tokens = config.router_ignore_padding_tokens
         self.dtype = getattr(torch, config.router_dtype)
 
-    def _compute_router_probabilities(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         r"""
         Computes router probabilities from input hidden states.
 
@@ -179,100 +101,43 @@ class GPTSanJapaneseTop1Router(nn.Module):
         # We also store the previous dtype to cast back the output to the previous dtype
         self.input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(self.dtype)
-
         if self.training and self.jitter_noise > 0:
             # Multiply the token inputs by the uniform distribution - adding some noise
             hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.jitter_noise, 1.0 + self.jitter_noise)
-
-        # Shape: [num_groups, tokens_per_group, num_experts]
-        self._cast_classifier()
         router_logits = self.classifier(hidden_states)
 
         # Apply Softmax and cast back to the original `dtype`
-        router_probabilities = nn.functional.softmax(router_logits, dim=-1, dtype=self.dtype).to(self.input_dtype)
-        return router_probabilities, router_logits
-
-    def _cast_classifier(self):
-        r"""
-        `bitsandbytes` `Linear8bitLt` layers does not support manual casting Therefore we need to check if they are an
-        instance of the `Linear8bitLt` class by checking special attributes.
-        """
-        if not (hasattr(self.classifier, "SCB") or hasattr(self.classifier, "CB")):
-            self.classifier = self.classifier.to(self.dtype)
-
-    def forward(self, hidden_states: torch.Tensor) -> tuple:
-        r"""
-        Generic forward function for every Router class. Each Router expects to have the same input hidden states
-        (`hidden_states`) corresponding to the hidden states for each token, the `expert_capacity` corresponding to the
-        number of tokens the Router will send to each expert, some Routers can send up to few tokens to each expert.
-
-        Each Router works as the following: it expects the hidden states for each token, gets the `router_probs` and
-        `router_logits` from the `router_weights`. This will assign for each token, the raw probability to be assigned
-        to an expert. Then each Router class will have to define its own `_compute_routing_instructions`.
-
-        Args:
-            hidden_states (`torch.Tensor`) :
-                [num_groups, tokens_per_group, hidden_dim] inputs to send to experts.
-        Returns:
-            tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`] Tuple containing the expert index, the router probs
-            and the router logits. The router probabilities and logits are required to compute the loss.
-        """
-        router_probs, router_logits = self._compute_router_probabilities(hidden_states)
-
-        expert_index = torch.argmax(router_probs, dim=-1)
+        router_probs = nn.functional.softmax(router_logits, dim=-1, dtype=self.dtype).to(self.input_dtype)
+        router_logits, expert_index = torch.max(router_probs, dim=-1, keepdim=True)
         expert_index = torch.nn.functional.one_hot(expert_index, num_classes=self.num_experts)
-
-        # Mask tokens outside expert capacity. Sum over each sequence
         token_priority = torch.cumsum(expert_index, dim=-2)
         # mask if the token routed to to the expert will overflow
         expert_capacity_mask = token_priority <= self.expert_capacity
         expert_index = expert_index * expert_capacity_mask
-
         router_probs = torch.max(router_probs, dim=-1).values.unsqueeze(-1)
-        return expert_index, router_probs, router_logits
+        return router_probs, expert_index, router_logits
+
+
+class GPTSanExperts(nn.ModuleDict):
+    def __init__(self, config: GPTSanJapaneseConfig):
+        super().__init__()
+        for idx in range(config.num_experts):
+            self.add_module(f"expert_{idx}", GPTSanJapaneseDenseActDense(config))
 
 
 class GPTSanJapaneseSparseMLP(nn.Module):
-    r"""
-    Implementation of the Switch Transformers Sparse MLP module.
-    """
-
-    def __init__(self, config: GPTSanJapaneseConfig, expert_class: nn.Module = GPTSanJapaneseDenseActDense):
+    def __init__(self, config: GPTSanJapaneseConfig):
         super().__init__()
-        # Step 1: Get the correct router according to its class
         self.router = GPTSanJapaneseTop1Router(config)
+        self.experts = GPTSanExperts(config)
 
-        # Step 2: Get the experts
-        self.experts = nn.ModuleDict()
-        for idx in range(config.num_experts):
-            self.experts[f"expert_{idx}"] = expert_class(config)
-
-    def forward(self, hidden_states):
-        r"""
-        Hold on, this will be slightly tricky to understand In the correct order, a MoE layer does the following:
-
-        1- Gets the `router_mask` from the router. The shape of the mask is `(batch_size, sequence_length, num_expert)`
-        and corresponds to the argmax of the `router_probs`. The probabilities are needed in the computation of the
-        hidden states : they are broadcasted to the hidden states values (can be interpreted as a scaling factor).
-
-        2- Dispatch the tokens to its associated experts. We do a classic for loop over the experts and assign for each
-        expert the corresponding hidden states.
-
-        """
-        # Step 1: Get the router_mask from the router as well as the probabilities
-        router_mask, router_probs, router_logits = self.router(hidden_states)
-        expert_index = torch.argmax(router_mask, dim=-1)
-
-        # The routers introduced might not always map all the tokens, to a router, which means that some hidden states
-        # can be unchanged from one layer to another. That is why the hidden states are cloned before updating only the selected ones.
-
-        next_states = hidden_states.clone()
-        for idx, expert in enumerate(self.experts.values()):
-            token_indices = router_mask[:, :, idx].bool()
-            next_states[token_indices] = expert(hidden_states[token_indices]).to(next_states.dtype)
-
-        hidden_states = router_probs * next_states
-        return hidden_states, (router_logits, expert_index)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        batch_size, sequence_length, hidden_dim = hidden_states.shape
+        hidden_states = hidden_states.view(-1, hidden_dim)
+        _, selected_experts, routing_weights = self.router(hidden_states)
+        hidden_states = self.experts(hidden_states, selected_experts, routing_weights)
+        hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
+        return hidden_states
 
 
 class GPTSanJapaneseLayerSparseFF(nn.Module):
@@ -680,15 +545,22 @@ class GPTSanJapanesePreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=factor * 1.0)
         elif isinstance(module, GPTSanJapaneseModel):
+            # Mesh TensorFlow embeddings initialization
+            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
             module.embed_tokens.weight.data.normal_(mean=0.0, std=factor * 1.0)
             module.position_embeddings.weight.data.normal_(mean=0.0, std=factor * 1.0)
             if hasattr(module, "extra_position_embeddings") and module.extra_position_embeddings is not None:
                 module.extra_position_embeddings.weight.data.normal_(mean=0.0, std=factor * 1.0)
         elif isinstance(module, (GPTSanJapaneseModel, GPTSanJapaneseForConditionalGeneration)):
+            # Mesh TensorFlow embeddings initialization
+            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
             module.final_logits_bias.data.normal_(mean=0.0, std=factor * 1.0)
             if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
                 module.lm_head.weight.data.normal_(mean=0.0, std=factor * 1.0)
         elif isinstance(module, GPTSanJapaneseDenseActDense):
+            # Mesh TensorFlow FF initialization
+            # See https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/transformer_layers.py#L56
+            # and https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L89
             module.wi.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module.wi, "bias") and module.wi.bias is not None:
                 module.wi.bias.data.zero_()
@@ -705,6 +577,8 @@ class GPTSanJapanesePreTrainedModel(PreTrainedModel):
             module.q_proj.weight.data.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
             module.out_proj.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
         elif isinstance(module, GPTSanJapaneseSparseMLP):
+            # Mesh TensorFlow attention initialization to avoid scaling before softmax
+            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/attention.py#L136
             d_model = self.config.d_model
             key_value_proj_dim = self.config.d_model
             n_heads = self.config.num_heads
@@ -741,77 +615,6 @@ class GPTSanJapanesePreTrainedModel(PreTrainedModel):
         return shifted_input_ids
 
 
-GPTSAN_JAPANESE_START_DOCSTRING = r"""
-
-    The [GPTSAN-japanese](https://github.com/tanreinama/GPTSAN) model was proposed in General-purpose Swich transformer
-    based Japanese language model
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`GPTSanJapaneseConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-GPTSAN_JAPANESE_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. GPTSAN-japanese is a model that generates sentence
-            continuations or predicts tokens at mask positions. Special tokens required for inputs to the model are
-            automatically appended.
-        attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        token_type_ids (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            An input that masks the Prefix part in the Prefix-LM input. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **prefix** input,
-            - 0 for tokens that are **not-prefix** input.
-        spout (`torch.Tensor` of shape `(batch_size, config.d_spout)`):
-                This vector is transformed through an 8-layer FFN and can be used instead of `past_key_values`.
-        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
-            representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
-            input (see `past_key_values`). This is useful if you want more control over how to convert
-            `decoder_input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_logits=True` is passed or when `config.add_router_probs=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
-            Router logits of the decoder model, useful to compute the auxiliary loss for Mixture of Experts models.
-"""
-
-
-@add_start_docstrings(
-    "The bare GPTSAN-japanese Model transformer outputting raw hidden-states without any specific head on top.",
-    GPTSAN_JAPANESE_START_DOCSTRING,
-)
 class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
     def __init__(self, config: GPTSanJapaneseConfig):
         super().__init__(config)
@@ -842,7 +645,7 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.embed_tokens = new_embeddings
 
-    @add_start_docstrings_to_model_forward(GPTSAN_JAPANESE_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -971,12 +774,6 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
         # Merge prefix_lm_mask and attention_mask
         extended_attention_mask = prefix_lm_mask * attention_mask.unsqueeze(1).unsqueeze(2)
 
-        # outputs
-        present_key_value_states = () if self.config.use_cache or use_cache else None
-        all_hidden_states = () if self.config.output_hidden_states or output_hidden_states else None
-        all_attentions = () if self.config.output_attentions or output_attentions else None
-        all_router_probs = () if self.config.output_router_logits or output_router_logits else None
-
         for layer, past in enumerate(pasts_or_spout_value):
             if layer == self.config.num_switch_layers:
                 if self.config.num_ext_layers > 0:
@@ -987,68 +784,84 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
                         hidden_states[i] += torch.gather(
                             self.extra_position_embeddings.weight, dim=0, index=gather_position[i]
                         )
-
-            output_router_tuple = (
-                self.config.output_router_logits or output_router_logits
-            ) and layer < self.config.num_switch_layers
-            block_output = self.blocks[layer](
+            hidden_states = self.blocks[layer](
                 hidden_states=hidden_states,
                 past_key_values=past,
                 attention_mask=extended_attention_mask,
-                use_cache=self.config.use_cache or use_cache,
-                output_attentions=self.config.output_attentions or output_attentions,
-                output_router_tuple=output_router_tuple,
             )
-
-            outpos = 0
-            hidden_states = block_output[outpos]
-            if self.config.output_hidden_states or output_hidden_states:
-                all_hidden_states += (hidden_states,)
-            if self.config.use_cache or use_cache:
-                outpos += 1
-                present = block_output[outpos]
-                present_key_value_states += (present,)
-            if self.config.output_attentions or output_attentions:
-                outpos += 1
-                attention_probs = block_output[outpos]
-                all_attentions += (attention_probs,)
-            if output_router_tuple:
-                outpos += 1
-                router_tuple = block_output[outpos]
-                all_router_probs.append(router_tuple[0])
 
         hidden_states = self.last_project(hidden_states)
         hidden_states = self.act(hidden_states)
 
-        if self.config.output_hidden_states or output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    present_key_value_states,
-                    all_hidden_states,
-                    all_attentions,
-                    all_router_probs,
-                ]
-                if v is not None
-            )
-
-        return MoEModelOutputWithPastAndCrossAttentions(
-            last_hidden_state=hidden_states,
-            past_key_values=present_key_value_states,
-            hidden_states=all_hidden_states,
-            attentions=all_attentions,
-            router_probs=all_router_probs,
-        )
+        return MoEModelOutputWithPastAndCrossAttentions(last_hidden_state=hidden_states)
 
 
-@add_start_docstrings(
-    "The bare GPTSAN-japanese Model with a language modeling head.",
-    GPTSAN_JAPANESE_START_DOCSTRING,
-)
+####################################################
+# This dict contains ids and associated url
+# for the pretrained weights provided with the models
+####################################################
+
+
+# TODO import from switch
+def router_z_loss_func(router_logits: torch.Tensor) -> float:
+    r"""
+    Compute the router z-loss implemented in PyTorch.
+
+    The router z-loss was introduced in [Designing Effective Sparse Expert Models](https://huggingface.co/papers/2202.08906).
+    It encourages router logits to remain small in an effort to improve stability.
+
+    Args:
+        router_logits (`float`):
+            Input logits of shape [batch_size, sequence_length, num_experts]
+
+    Returns:
+        Scalar router z-loss.
+    """
+    num_groups, tokens_per_group, _ = router_logits.shape
+    log_z = torch.logsumexp(router_logits, dim=-1)
+    z_loss = log_z**2
+    return torch.sum(z_loss) / (num_groups * tokens_per_group)
+
+
+def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.Tensor) -> float:
+    r"""
+    Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
+
+    See Switch Transformer (https://huggingface.co/papers/2101.03961) for more details. This function implements the loss
+    function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
+    experts is too unbalanced.
+
+    Args:
+        router_probs (`torch.Tensor`):
+            Probability assigned to each expert per token. Shape: [batch_size, sequence_length, num_experts].
+        expert_indices (`torch.Tensor`):
+            Indices tensor of shape [batch_size, sequence_length] identifying the selected expert for a given token.
+
+    Returns:
+        The auxiliary loss.
+    """
+    num_experts = router_probs.shape[-1]
+
+    # cast the expert indices to int64, otherwise one-hot encoding will fail
+    if expert_indices.dtype != torch.int64:
+        expert_indices = expert_indices.to(torch.int64)
+
+    if len(expert_indices.shape) == 2:
+        expert_indices = expert_indices.unsqueeze(2)
+
+    expert_mask = torch.nn.functional.one_hot(expert_indices, num_experts)
+
+    # For a given token, determine if it was routed to a given expert.
+    expert_mask = torch.max(expert_mask, axis=-2).values
+
+    # cast to float32 otherwise mean will fail
+    expert_mask = expert_mask.to(torch.float32)
+    tokens_per_group_and_expert = torch.mean(expert_mask, axis=-2)
+
+    router_prob_per_group_and_expert = torch.mean(router_probs, axis=-2)
+    return torch.mean(tokens_per_group_and_expert * router_prob_per_group_and_expert) * (num_experts**2)
+
+
 class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1060,7 +873,6 @@ class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
         if not self.config.torchscript:
             self.lm_head.weight = self.model.embed_tokens.weight
 
-    @add_start_docstrings_to_model_forward(GPTSAN_JAPANESE_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1176,7 +988,7 @@ class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
         router_probs = None
         aux_loss = None
         if labels is not None:
-            # move labels to correct device
+            # move labels to correct device to enable model parallelism
             labels = labels.to(lm_logits.device)
 
             loss_fct = nn.CrossEntropyLoss(ignore_index=-100)
@@ -1189,21 +1001,6 @@ class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
                 aux_loss = load_balancing_loss_func(router_probs, expert_indexes)
 
             loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
-
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    loss,
-                    lm_logits,
-                    outputs.past_key_values,
-                    outputs.hidden_states,
-                    outputs.router_probs,
-                    z_loss,
-                    aux_loss,
-                ]
-                if v is not None
-            )
 
         return MoECausalLMOutputWithPast(
             loss=loss,

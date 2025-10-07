@@ -59,7 +59,7 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 _import_structure = {
     "audio_utils": [],
     "commands": [],
-    "configuration_utils": ["PretrainedConfig"],
+    "configuration_utils": ["PreTrainedConfig", "PretrainedConfig"],
     "convert_slow_tokenizers_checkpoints_to_fast": [],
     "data": [
         "DataProcessor",
@@ -225,7 +225,6 @@ _import_structure = {
         "is_py3nvml_available",
         "is_pyctcdecode_available",
         "is_sacremoses_available",
-        "is_safetensors_available",
         "is_scipy_available",
         "is_sentencepiece_available",
         "is_sklearn_available",
@@ -389,12 +388,7 @@ else:
             "AlternatingCodebooksLogitsProcessor",
             "BayesianDetectorConfig",
             "BayesianDetectorModel",
-            "BeamScorer",
             "ClassifierFreeGuidanceLogitsProcessor",
-            "ConstrainedBeamSearchScorer",
-            "Constraint",
-            "ConstraintListState",
-            "DisjunctiveConstraint",
             "EncoderNoRepeatNGramLogitsProcessor",
             "EncoderRepetitionPenaltyLogitsProcessor",
             "EosTokenCriteria",
@@ -415,7 +409,6 @@ else:
             "MinPLogitsWarper",
             "NoBadWordsLogitsProcessor",
             "NoRepeatNGramLogitsProcessor",
-            "PhrasalConstraint",
             "PrefixConstrainedLogitsProcessor",
             "RepetitionPenaltyLogitsProcessor",
             "SequenceBiasLogitsProcessor",
@@ -471,7 +464,6 @@ else:
         "prune_layer",
         "infer_device",
     ]
-    _import_structure["sagemaker"] = []
     _import_structure["time_series_utils"] = []
     _import_structure["trainer"] = ["Trainer"]
     _import_structure["trainer_pt_utils"] = ["torch_distributed_zero_first"]
@@ -499,6 +491,7 @@ if TYPE_CHECKING:
     from .cache_utils import StaticCache as StaticCache
     from .cache_utils import StaticLayer as StaticLayer
     from .cache_utils import StaticSlidingWindowLayer as StaticSlidingWindowLayer
+    from .configuration_utils import PreTrainedConfig as PreTrainedConfig
     from .configuration_utils import PretrainedConfig as PretrainedConfig
     from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS as SLOW_TO_FAST_CONVERTERS
     from .convert_slow_tokenizer import convert_slow_tokenizer as convert_slow_tokenizer
@@ -556,13 +549,8 @@ if TYPE_CHECKING:
     from .generation import AsyncTextIteratorStreamer as AsyncTextIteratorStreamer
     from .generation import BayesianDetectorConfig as BayesianDetectorConfig
     from .generation import BayesianDetectorModel as BayesianDetectorModel
-    from .generation import BeamScorer as BeamScorer
     from .generation import ClassifierFreeGuidanceLogitsProcessor as ClassifierFreeGuidanceLogitsProcessor
     from .generation import CompileConfig as CompileConfig
-    from .generation import ConstrainedBeamSearchScorer as ConstrainedBeamSearchScorer
-    from .generation import Constraint as Constraint
-    from .generation import ConstraintListState as ConstraintListState
-    from .generation import DisjunctiveConstraint as DisjunctiveConstraint
     from .generation import EncoderNoRepeatNGramLogitsProcessor as EncoderNoRepeatNGramLogitsProcessor
     from .generation import EncoderRepetitionPenaltyLogitsProcessor as EncoderRepetitionPenaltyLogitsProcessor
     from .generation import EosTokenCriteria as EosTokenCriteria
@@ -584,7 +572,6 @@ if TYPE_CHECKING:
     from .generation import MinPLogitsWarper as MinPLogitsWarper
     from .generation import NoBadWordsLogitsProcessor as NoBadWordsLogitsProcessor
     from .generation import NoRepeatNGramLogitsProcessor as NoRepeatNGramLogitsProcessor
-    from .generation import PhrasalConstraint as PhrasalConstraint
     from .generation import PrefixConstrainedLogitsProcessor as PrefixConstrainedLogitsProcessor
     from .generation import RepetitionPenaltyLogitsProcessor as RepetitionPenaltyLogitsProcessor
     from .generation import SequenceBiasLogitsProcessor as SequenceBiasLogitsProcessor
@@ -759,7 +746,6 @@ if TYPE_CHECKING:
     from .utils import is_py3nvml_available as is_py3nvml_available
     from .utils import is_pyctcdecode_available as is_pyctcdecode_available
     from .utils import is_sacremoses_available as is_sacremoses_available
-    from .utils import is_safetensors_available as is_safetensors_available
     from .utils import is_sklearn_available as is_sklearn_available
     from .utils import is_torch_hpu_available as is_torch_hpu_available
     from .utils import is_torch_mlu_available as is_torch_mlu_available

@@ -249,7 +249,7 @@ class StopStringCriteria(StoppingCriteria):
             token_list, token_indices, tokenizer
         )
 
-        self.maximum_token_len = max([len(stop_string) for stop_string in self.stop_strings])
+        self.maximum_token_len = max(len(stop_string) for stop_string in self.stop_strings)
         self.num_stop_strings = len(self.stop_strings)
         self.target_lens = torch.tensor([len(stop_string) for stop_string in stop_strings], dtype=torch.int32)
 

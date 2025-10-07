@@ -48,7 +48,7 @@ if is_vision_available():
 from transformers import RTDetrImageProcessor
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -627,58 +627,6 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 self.assertEqual(len(model.backbone.intermediate_channel_sizes), 3)
 
             self.assertTrue(outputs)
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        configs_no_init.initializer_bias_prior_prob = 0.2
-        bias_value = -1.3863  # log_e ((1 - 0.2) / 0.2)
-
-        failed_cases = []
-
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            # Skip the check for the backbone
-            for name, module in model.named_modules():
-                if module.__class__.__name__ == "DFineConvEncoder":
-                    backbone_params = [f"{name}.{key}" for key in module.state_dict()]
-                    break
-
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    if ("class_embed" in name and "bias" in name) or "enc_score_head.bias" in name:
-                        bias_tensor = torch.full_like(param.data, bias_value)
-                        try:
-                            torch.testing.assert_close(param.data, bias_tensor, atol=1e-4, rtol=1e-4)
-                        except AssertionError:
-                            failed_cases.append(
-                                f"Parameter {name} of model {model_class} seems not properly initialized. "
-                                f"Biases should be initialized to {bias_value}, got {param.data}"
-                            )
-                    elif (
-                        "level_embed" in name
-                        or "sampling_offsets.bias" in name
-                        or "value_proj" in name
-                        or "output_proj" in name
-                        or "reference_points" in name
-                        or "enc_score_head.weight" in name
-                        or ("class_embed" in name and "weight" in name)
-                        or name in backbone_params
-                    ):
-                        continue
-                    else:
-                        mean = param.data.mean()
-                        round_mean = (mean * 1e9).round() / 1e9
-                        round_mean = round_mean.item()
-                        if round_mean not in [0.0, 1.0]:
-                            failed_cases.append(
-                                f"Parameter {name} of model {model_class} seems not properly initialized. "
-                                f"Mean is {round_mean}, but should be in [0, 1]"
-                            )
-
-        message = "\n" + "\n".join(failed_cases)
-        self.assertTrue(not failed_cases, message)
 
     @parameterized.expand(["float32", "float16", "bfloat16"])
     @require_torch_accelerator

@@ -169,7 +169,7 @@ def pad_collate_fn(tokenizer, feature_extractor):
         # input_values, input_pixels, input_ids, ...
         padded = {}
         for key in keys:
-            if key in {"input_ids"}:
+            if key == "input_ids":
                 # ImageGPT uses a feature extractor
                 if tokenizer is None and feature_extractor is not None:
                     _padding_value = f_padding_value

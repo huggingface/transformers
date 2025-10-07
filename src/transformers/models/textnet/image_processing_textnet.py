@@ -39,6 +39,7 @@ from ...image_utils import (
     validate_kwargs,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, is_vision_available, logging
 
 
@@ -46,6 +47,10 @@ logger = logging.get_logger(__name__)
 
 if is_vision_available():
     import PIL
+
+
+class TextNetImageProcessorKwargs(ImagesKwargs):
+    size_divisor: Optional[int]
 
 
 class TextNetImageProcessor(BaseImageProcessor):
@@ -90,6 +95,7 @@ class TextNetImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
+    valid_kwargs = TextNetImageProcessorKwargs
 
     def __init__(
         self,

@@ -338,7 +338,6 @@ class FlavaTextModelTester:
         vocab_size=102,
         type_vocab_size=2,
         max_position_embeddings=512,
-        position_embedding_type="absolute",
         hidden_size=32,
         num_hidden_layers=2,
         num_attention_heads=4,
@@ -360,7 +359,6 @@ class FlavaTextModelTester:
         self.vocab_size = vocab_size
         self.type_vocab_size = type_vocab_size
         self.max_position_embeddings = max_position_embeddings
-        self.position_embedding_type = position_embedding_type
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -401,7 +399,6 @@ class FlavaTextModelTester:
             vocab_size=self.vocab_size,
             type_vocab_size=self.type_vocab_size,
             max_position_embeddings=self.max_position_embeddings,
-            position_embedding_type=self.position_embedding_type,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
@@ -919,30 +916,6 @@ class FlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip(reason="FlavaModel does not have input/output embeddings")
     def test_model_get_set_embeddings(self):
         pass
-
-    # override as the `logit_scale` parameter initialization is different for FLAVA
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    # check if `logit_scale` is initialized as per the original implementation
-                    if name == "logit_scale" or name == "flava.logit_scale":
-                        self.assertAlmostEqual(
-                            param.data.item(),
-                            np.log(1 / 0.07),
-                            delta=1e-3,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:

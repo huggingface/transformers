@@ -26,22 +26,20 @@ import numpy as np
 from datasets import load_dataset, load_metric
 
 import transformers
-from transformers import (  # Trainer,; TrainingArguments,
+from transformers import (
     AutoConfig,
     AutoModelForSequenceClassification,
     AutoTokenizer,
     DataCollatorWithPadding,
     EvalPrediction,
     HfArgumentParser,
-    PretrainedConfig,
+    PreTrainedConfig,
     default_data_collator,
     set_seed,
 )
-
-# Will import SageMaker Model parallelism specific Trainer
-from transformers.sagemaker import SageMakerTrainer as Trainer
-from transformers.sagemaker import SageMakerTrainingArguments as TrainingArguments
+from transformers.trainer import Trainer
 from transformers.trainer_utils import get_last_checkpoint
+from transformers.training_args import TrainingArguments
 from transformers.utils import check_min_version
 
 
@@ -355,7 +353,7 @@ def main():
     # Some models have set the order of the labels to use, so let's make sure we do use it.
     label_to_id = None
     if (
-        model.config.label2id != PretrainedConfig(num_labels=num_labels).label2id
+        model.config.label2id != PreTrainedConfig(num_labels=num_labels).label2id
         and data_args.task_name is not None
         and not is_regression
     ):

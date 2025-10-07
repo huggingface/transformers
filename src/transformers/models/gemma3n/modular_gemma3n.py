@@ -24,7 +24,7 @@ import torch.nn.functional as F
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PretrainedConfig, layer_type_validation
+from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast
@@ -62,7 +62,7 @@ from ..timm_wrapper.configuration_timm_wrapper import TimmWrapperConfig
 logger = logging.get_logger(__name__)
 
 
-class Gemma3nTextConfig(Gemma2Config, PretrainedConfig):
+class Gemma3nTextConfig(Gemma2Config, PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Gemma3nTextModel`]. It is used to instantiate an
     Gemma3nTextModel model according to the specified arguments, defining the model architecture. Instantiating a
@@ -244,7 +244,7 @@ class Gemma3nTextConfig(Gemma2Config, PretrainedConfig):
         activation_sparsity_pattern: Optional[Union[float, Sequence[float]]] = None,
         **kwargs,
     ):
-        PretrainedConfig.__init__(
+        PreTrainedConfig.__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
@@ -314,7 +314,7 @@ class Gemma3nTextConfig(Gemma2Config, PretrainedConfig):
         self.activation_sparsity_pattern = activation_sparsity_pattern
 
 
-class Gemma3nAudioConfig(PretrainedConfig):
+class Gemma3nAudioConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Gemma3nAudioEncoder`]. It is used to instantiate
     an `Gemma3nAudioEncoder` model according to the specified arguments, defining the model architecture. Instantiating
@@ -522,7 +522,7 @@ class Gemma3nVisionConfig(TimmWrapperConfig):
         self.rms_norm_eps = rms_norm_eps
 
 
-class Gemma3nConfig(PretrainedConfig):
+class Gemma3nConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Gemma3nForConditionalGeneration`]. It is used to
     instantiate a Gemma3nForConditionalGeneration according to the specified arguments, defining the model
@@ -531,8 +531,8 @@ class Gemma3nConfig(PretrainedConfig):
 
     e.g. [google/gemma-3n-E4B](https://huggingface.co/google/gemma-3n-E4B)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`Union[Gemma3nTextConfig, dict]`, *optional*):

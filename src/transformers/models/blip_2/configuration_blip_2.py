@@ -16,7 +16,7 @@
 
 from typing import Optional
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
@@ -25,15 +25,15 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class Blip2VisionConfig(PretrainedConfig):
+class Blip2VisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Blip2VisionModel`]. It is used to instantiate a
     BLIP-2 vision encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration defaults will yield a similar configuration to that of the BLIP-2
     [Salesforce/blip2-opt-2.7b](https://huggingface.co/Salesforce/blip2-opt-2.7b) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 1408):
@@ -107,14 +107,14 @@ class Blip2VisionConfig(PretrainedConfig):
         self.qkv_bias = qkv_bias
 
 
-class Blip2QFormerConfig(PretrainedConfig):
+class Blip2QFormerConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Blip2QFormerModel`]. It is used to instantiate a
     BLIP-2 Querying Transformer (Q-Former) model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the BLIP-2
     [Salesforce/blip2-opt-2.7b](https://huggingface.co/Salesforce/blip2-opt-2.7b) architecture. Configuration objects
-    inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the documentation from
-    [`PretrainedConfig`] for more information.
+    inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the documentation from
+    [`PreTrainedConfig`] for more information.
 
     Note that [`Blip2QFormerModel`] is very similar to [`BertLMHeadModel`] with interleaved cross-attention.
 
@@ -146,12 +146,6 @@ class Blip2QFormerConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         pad_token_id (`int`, *optional*, defaults to 0):
             Index to be used for padding token.
-        position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
-            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
-            positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
-            [Self-Attention with Relative Position Representations (Shaw et al.)](https://huggingface.co/papers/1803.02155).
-            For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
-            with Better Relative Position Embeddings (Huang et al.)](https://huggingface.co/papers/2009.13658).
         cross_attention_frequency (`int`, *optional*, defaults to 2):
             The frequency of adding cross-attention to the Transformer layers.
         encoder_hidden_size (`int`, *optional*, defaults to 1408):
@@ -190,7 +184,6 @@ class Blip2QFormerConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         pad_token_id=0,
-        position_embedding_type="absolute",
         cross_attention_frequency=2,
         encoder_hidden_size=1408,
         use_qformer_text_input=False,
@@ -209,21 +202,20 @@ class Blip2QFormerConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-        self.position_embedding_type = position_embedding_type
         self.cross_attention_frequency = cross_attention_frequency
         self.encoder_hidden_size = encoder_hidden_size
         self.use_qformer_text_input = use_qformer_text_input
 
 
-class Blip2Config(PretrainedConfig):
+class Blip2Config(PreTrainedConfig):
     r"""
     [`Blip2Config`] is the configuration class to store the configuration of a [`Blip2ForConditionalGeneration`]. It is
     used to instantiate a BLIP-2 model according to the specified arguments, defining the vision model, Q-Former model
     and language model configs. Instantiating a configuration with the defaults will yield a similar configuration to
     that of the BLIP-2 [Salesforce/blip2-opt-2.7b](https://huggingface.co/Salesforce/blip2-opt-2.7b) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vision_config (`dict`, *optional*):
@@ -231,7 +223,7 @@ class Blip2Config(PretrainedConfig):
         qformer_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`Blip2QFormerConfig`].
         text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize any [`PretrainedConfig`].
+            Dictionary of configuration options used to initialize any [`PreTrainedConfig`].
         num_query_tokens (`int`, *optional*, defaults to 32):
             The number of query tokens passed through the Transformer.
         image_text_hidden_size (`int`, *optional*, defaults to 256):
@@ -262,7 +254,7 @@ class Blip2Config(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
 
-    >>> # We can also initialize a Blip2Config from a Blip2VisionConfig, Blip2QFormerConfig and any PretrainedConfig
+    >>> # We can also initialize a Blip2Config from a Blip2VisionConfig, Blip2QFormerConfig and any PreTrainedConfig
 
     >>> # Initializing BLIP-2 vision, BLIP-2 Q-Former and language model configurations
     >>> vision_config = Blip2VisionConfig()
@@ -321,7 +313,7 @@ class Blip2Config(PretrainedConfig):
         cls,
         vision_config: Blip2VisionConfig,
         qformer_config: Blip2QFormerConfig,
-        text_config: Optional[PretrainedConfig] = None,
+        text_config: Optional[PreTrainedConfig] = None,
         **kwargs,
     ):
         r"""
@@ -334,7 +326,7 @@ class Blip2Config(PretrainedConfig):
             qformer_config (`dict`):
                 Dictionary of configuration options used to initialize [`Blip2QFormerConfig`].
             text_config (`dict`, *optional*):
-                Dictionary of configuration options used to initialize any [`PretrainedConfig`].
+                Dictionary of configuration options used to initialize any [`PreTrainedConfig`].
 
         Returns:
             [`Blip2Config`]: An instance of a configuration object

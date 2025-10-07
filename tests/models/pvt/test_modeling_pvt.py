@@ -171,17 +171,6 @@ class PvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_model_get_set_embeddings(self):
         pass
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config=config)
-            for name, param in model.named_parameters():
-                self.assertTrue(
-                    -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                    msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                )
-
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)

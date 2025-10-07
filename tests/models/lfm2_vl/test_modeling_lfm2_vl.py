@@ -204,12 +204,6 @@ class Lfm2VlModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="Siglip2 backbone has a non-standard initialization scheme, that this test cannot handle easily"
-    )
-    def test_initialization(self):
-        pass
-
 
 @require_torch_accelerator
 @require_read_token

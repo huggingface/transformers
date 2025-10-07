@@ -19,7 +19,7 @@ import torch
 import torch.nn as nn
 
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PretrainedConfig, layer_type_validation
+from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast
@@ -44,13 +44,13 @@ from ..gemma2.modeling_gemma2 import Gemma2Model
 logger = logging.get_logger(__name__)
 
 
-class Cohere2Config(PretrainedConfig):
+class Cohere2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`CohereModel`]. It is used to instantiate an Cohere
     model according to the specified arguments, defining the model architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information. Instantiating a configuration
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the [CohereForAI/c4ai-command-r-v01](https://huggingface.co/CohereForAI/c4ai-command-r-v01) model.
 
 

@@ -16,7 +16,7 @@
 import unittest
 
 from transformers import VitDetConfig
-from transformers.testing_utils import is_flaky, require_torch, torch_device
+from transformers.testing_utils import require_torch, torch_device
 from transformers.utils import is_torch_available
 
 from ...test_backbone_common import BackboneTesterMixin
@@ -173,28 +173,24 @@ class VitDetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.model_tester = VitDetModelTester(self)
         self.config_tester = ConfigTester(self, config_class=VitDetConfig, has_text_modality=False, hidden_size=37)
 
-    @is_flaky(max_attempts=3, description="`torch.nn.init.trunc_normal_` is flaky.")
-    def test_initialization(self):
-        super().test_initialization()
-
     # TODO: Fix me (once this model gets more usage)
     @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
     def test_cpu_offload(self):
-        super().test_cpu_offload()
+        pass
 
     # TODO: Fix me (once this model gets more usage)
     @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
     def test_disk_offload_bin(self):
-        super().test_disk_offload()
+        pass
 
     @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
     def test_disk_offload_safetensors(self):
-        super().test_disk_offload()
+        pass
 
     # TODO: Fix me (once this model gets more usage)
     @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
     def test_model_parallelism(self):
-        super().test_model_parallelism()
+        pass
 
     def test_config(self):
         self.config_tester.run_common_tests()

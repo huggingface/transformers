@@ -352,7 +352,7 @@ class OmDetTurboMultiscaleDeformableAttention(nn.Module):
         batch_size, num_queries, _ = hidden_states.shape
         batch_size, sequence_length, _ = encoder_hidden_states.shape
         # Ignore copy
-        total_elements = sum([shape[0] * shape[1] for shape in spatial_shapes_list])
+        total_elements = sum(shape[0] * shape[1] for shape in spatial_shapes_list)
         if total_elements != sequence_length:
             raise ValueError(
                 "Make sure to align the spatial shapes with the sequence length of the encoder hidden states"
@@ -1086,7 +1086,7 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
                 self.language_cache_prompt.put(not_cached_tasks[idx], (emb, cur_mask))
 
         # pad before concat if needed
-        max_len = max([task.shape[0] for task in total_task_features])
+        max_len = max(task.shape[0] for task in total_task_features)
         for idx, task in enumerate(total_task_features):
             if task.shape[0] < max_len:
                 pad_size = max_len - task.shape[0]

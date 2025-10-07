@@ -298,7 +298,7 @@ class TrainingArguments:
             `max_steps` is reached.
         lr_scheduler_type (`str` or [`SchedulerType`], *optional*, defaults to `"linear"`):
             The scheduler type to use. See the documentation of [`SchedulerType`] for all possible values.
-        lr_scheduler_kwargs ('dict', *optional*, defaults to {}):
+        lr_scheduler_kwargs (`dict` or `str`, *optional*, defaults to `None`):
             The extra arguments for the lr_scheduler. See the documentation of each scheduler for possible values.
         warmup_ratio (`float`, *optional*, defaults to 0.0):
             Ratio of total training steps used for a linear warmup from 0 to `learning_rate`.
@@ -616,6 +616,14 @@ class TrainingArguments:
             `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"dvclive"`, `"flyte"`, `"mlflow"`, `"neptune"`,
             `"swanlab"`, `"tensorboard"`, `"trackio"` and `"wandb"`. Use `"all"` to report to all integrations
             installed, `"none"` for no integrations.
+        project (`str`, *optional*, defaults to `"huggingface"`):
+            The name of the project to use for logging. Currently, only used by Trackio.
+        trackio_space_id (`str` or `None`, *optional*, defaults to `"trackio"`):
+            The Hugging Face Space ID to deploy to when using Trackio. Should be a complete Space name like
+            `'username/reponame'` or `'orgname/reponame' `, or just `'reponame'` in which case the Space will be
+            created in the currently-logged-in Hugging Face user's namespace. If `None`, will log to a local directory.
+            Note that this Space will be public unless you set `hub_private_repo=True` or your organization's default
+            is to create private Spaces."
         ddp_find_unused_parameters (`bool`, *optional*):
             When using distributed training, the value of the flag `find_unused_parameters` passed to
             `DistributedDataParallel`. Will default to `False` if gradient checkpointing is used, `True` otherwise.
@@ -680,7 +688,9 @@ class TrainingArguments:
             The token to use to push the model to the Hub. Will default to the token in the cache folder obtained with
             `hf auth login`.
         hub_private_repo (`bool`, *optional*):
-            Whether to make the repo private. If `None` (default), the repo will be public unless the organization's default is private. This value is ignored if the repo already exists.
+            Whether to make the repo private. If `None` (default), the repo will be public unless the organization's
+            default is private. This value is ignored if the repo already exists. If reporting to Trackio with
+            deployment to Hugging Face Spaces enabled, the same logic determines whether the Space is private.
         hub_always_push (`bool`, *optional*, defaults to `False`):
             Unless this is `True`, the `Trainer` will skip pushing a checkpoint when the previous push is not finished.
         hub_revision (`str`, *optional*):
@@ -870,8 +880,8 @@ class TrainingArguments:
         default="linear",
         metadata={"help": "The scheduler type to use."},
     )
-    lr_scheduler_kwargs: Union[dict[str, Any], str] = field(
-        default_factory=dict,
+    lr_scheduler_kwargs: Optional[Union[dict, str]] = field(
+        default=None,
         metadata={
             "help": (
                 "Extra parameters for the lr_scheduler such as {'num_cycles': 1} for the cosine with hard restarts."
@@ -1206,6 +1216,20 @@ class TrainingArguments:
     report_to: Union[None, str, list[str]] = field(
         default=None, metadata={"help": "The list of integrations to report the results and logs to."}
     )
+    project: str = field(
+        default="huggingface",
+        metadata={"help": "The name of the project to use for logging. Currenly, only used by Trackio."},
+    )
+    trackio_space_id: Optional[str] = field(
+        default="trackio",
+        metadata={
+            "help": "The Hugging Face Space ID to deploy to when using Trackio. Should be a complete Space name like "
+            "'username/reponame' or 'orgname/reponame', or just 'reponame' in which case the Space will be created in "
+            "the currently-logged-in Hugging Face user's namespace. If `None`, will log to a local directory. Note "
+            "that this Space will be public unless you set `hub_private_repo=True` or your organization's "
+            "default is to create private Spaces."
+        },
+    )
     ddp_find_unused_parameters: Optional[bool] = field(
         default=None,
         metadata={
@@ -1263,7 +1287,10 @@ class TrainingArguments:
     hub_private_repo: Optional[bool] = field(
         default=None,
         metadata={
-            "help": "Whether to make the repo private. If `None` (default), the repo will be public unless the organization's default is private. This value is ignored if the repo already exists."
+            "help": "Whether to make the repo private. If `None` (default), the repo will be public unless the "
+            "organization's default is private. This value is ignored if the repo already exists. If reporting to "
+            "Trackio with deployment to Hugging Face Spaces enabled, the same logic determines whether the Space is "
+            "private."
         },
     )
     hub_always_push: bool = field(

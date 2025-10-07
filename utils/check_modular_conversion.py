@@ -30,8 +30,8 @@ def process_file(
     file_type="modeling_",
     show_diff=True,
 ):
-    file_name_prefix = file_type.split("*")[0]
-    file_name_suffix = file_type.split("*")[-1] if "*" in file_type else ""
+    file_name_prefix = file_type.split(".*")[0]
+    file_name_suffix = file_type.split(".*")[-1] if ".*" in file_type else ""
     file_path = modular_file_path.replace("modular_", f"{file_name_prefix}_").replace(".py", f"{file_name_suffix}.py")
     # Read the actual modeling file
     with open(file_path, "r", encoding="utf-8") as modeling_file:
@@ -179,7 +179,7 @@ if __name__ == "__main__":
     # we start applying modular conversion to each list in parallel, starting from the first list
 
     console.print(f"[bold yellow]Number of dependency levels: {len(ordered_files)}[/bold yellow]")
-    console.print(f"[bold yellow]Files per level: {tuple([len(x) for x in ordered_files])}[/bold yellow]")
+    console.print(f"[bold yellow]Files per level: {tuple(len(x) for x in ordered_files)}[/bold yellow]")
 
     try:
         for dependency_level_files in ordered_files:
@@ -197,10 +197,25 @@ if __name__ == "__main__":
             # Process files with diff
             num_workers = min(args.num_workers, len(files_to_check))
             with multiprocessing.Pool(num_workers) as p:
-                is_changed_flags = p.map(
-                    partial(compare_files, show_diff=not args.fix_and_overwrite),
-                    files_to_check,
-                )
+                try:
+                    is_changed_flags = p.map(
+                        partial(compare_files, show_diff=not args.fix_and_overwrite),
+                        files_to_check,
+                    )
+                except Exception as e:
+                    console.print(
+                        f"[bold red]Failed to convert one or more files in batch: {files_to_check}[/bold red]"
+                    )
+                    console.print(f"[bold red]Error: {e}[/bold red]")
+                    # Try to process files individually to identify which one failed
+                    is_changed_flags = []
+                    for file_path in files_to_check:
+                        try:
+                            result = compare_files(file_path, show_diff=not args.fix_and_overwrite)
+                            is_changed_flags.append(result)
+                        except Exception as individual_error:
+                            console.print(f"[bold red]Failed to convert {file_path}: {individual_error}[/bold red]")
+                            is_changed_flags.append(0)  # Mark as no change to continue processing
 
             # Collect changed files and their original paths
             for is_changed, file_path in zip(is_changed_flags, files_to_check):

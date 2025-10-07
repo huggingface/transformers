@@ -36,7 +36,6 @@ class BlipProcessorKwargs(ProcessingKwargs, total=False):
             "return_length": False,
             "verbose": True,
         },
-        "images_kwargs": {},
     }
 
 
@@ -67,8 +66,6 @@ class BlipProcessor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[BlipProcessorKwargs],
     ) -> BatchEncoding:
         """

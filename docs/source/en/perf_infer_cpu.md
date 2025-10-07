@@ -39,25 +39,6 @@ pred = onnx_qa(question, context)
 > [!TIP]
 > Optimum includes an [Intel](https://hf.co/docs/optimum/intel/index) extension that provides additional optimizations such as quantization, pruning, and knowledge distillation for Intel CPUs. This extension also includes tools to convert models to [OpenVINO](https://hf.co/docs/optimum/intel/inference), a toolkit for optimizing and deploying models, for even faster inference.
 
-### BetterTransformer
-
-[BetterTransformer](https://pytorch.org/blog/a-better-transformer-for-fast-transformer-encoder-inference/) is a *fastpath* execution of specialized Transformers functions directly on the hardware level such as a CPU. There are two main components of the fastpath execution.
-
-- fusing multiple operations into a single kernel for faster and more efficient execution
-- skipping unnecessary computation of padding tokens with nested tensors
-
-> [!WARNING]
-> BetterTransformer isn't supported for all models. Check this [list](https://hf.co/docs/optimum/bettertransformer/overview#supported-models) to see whether a model supports BetterTransformer.
-
-BetterTransformer is available through Optimum with [`~PreTrainedModel.to_bettertransformer`].
-
-```py
-from transformers import AutoModelForCausalLM
-
-model = AutoModelForCausalLM.from_pretrained("bigscience/bloom")
-model = model.to_bettertransformer()
-```
-
 ## TorchScript
 
 [TorchScript](https://pytorch.org/docs/stable/jit.html) is an intermediate PyTorch model format that can be run in non-Python environments, like C++, where performance is critical. Train a PyTorch model and convert it to a TorchScript function or module with [torch.jit.trace](https://pytorch.org/docs/stable/generated/torch.jit.trace.html). This function optimizes the model with just-in-time (JIT) compilation, and compared to the default eager mode, JIT-compiled models offer better inference performance.

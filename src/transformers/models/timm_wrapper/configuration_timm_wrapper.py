@@ -17,7 +17,7 @@
 
 from typing import Any, Optional
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import is_timm_available, logging, requires_backends
 
 
@@ -28,14 +28,14 @@ if is_timm_available():
 logger = logging.get_logger(__name__)
 
 
-class TimmWrapperConfig(PretrainedConfig):
+class TimmWrapperConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration for a timm backbone [`TimmWrapper`].
 
     It is used to instantiate a timm model according to the specified arguments, defining the model.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Config loads imagenet label descriptions and stores them in `id2label` attribute, `label2id` attribute for default
     imagenet models is set to `None` due to occlusions in the label descriptions.

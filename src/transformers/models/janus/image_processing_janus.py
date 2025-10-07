@@ -40,6 +40,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
 
 
@@ -48,6 +49,16 @@ if is_vision_available():
 
 
 logger = logging.get_logger(__name__)
+
+
+class JanusImageProcessorKwargs(ImagesKwargs):
+    r"""
+    min_size (`int`, *optional*, defaults to 14):
+        The minimum allowed size for the resized image. Ensures that neither the height nor width
+        falls below this value after resizing.
+    """
+
+    min_size: int
 
 
 class JanusImageProcessor(BaseImageProcessor):
@@ -91,6 +102,8 @@ class JanusImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
+
+    valid_kwargs = JanusImageProcessorKwargs
 
     def __init__(
         self,

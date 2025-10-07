@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Optional, Union
 
 
 if TYPE_CHECKING:
-    from ..configuration_utils import PretrainedConfig
+    from ..configuration_utils import PreTrainedConfig
 
 
 class BackboneType(enum.Enum):
@@ -252,7 +252,7 @@ class BackboneMixin:
 
     def to_dict(self):
         """
-        Serializes this instance to a Python dictionary. Override the default `to_dict()` from `PretrainedConfig` to
+        Serializes this instance to a Python dictionary. Override the default `to_dict()` from `PreTrainedConfig` to
         include the `out_features` and `out_indices` attributes.
         """
         output = super().to_dict()
@@ -294,7 +294,7 @@ class BackboneConfigMixin:
 
     def to_dict(self):
         """
-        Serializes this instance to a Python dictionary. Override the default `to_dict()` from `PretrainedConfig` to
+        Serializes this instance to a Python dictionary. Override the default `to_dict()` from `PreTrainedConfig` to
         include the `out_features` and `out_indices` attributes.
         """
         output = super().to_dict()
@@ -363,7 +363,7 @@ def verify_backbone_config_arguments(
     use_timm_backbone: bool,
     use_pretrained_backbone: bool,
     backbone: Optional[str],
-    backbone_config: Optional[Union[dict, "PretrainedConfig"]],
+    backbone_config: Optional[Union[dict, "PreTrainedConfig"]],
     backbone_kwargs: Optional[dict],
 ):
     """

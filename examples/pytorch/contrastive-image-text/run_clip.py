@@ -387,7 +387,7 @@ def main():
         return
 
     # 6. Get the column names for input/target.
-    dataset_columns = dataset_name_mapping.get(data_args.dataset_name, None)
+    dataset_columns = dataset_name_mapping.get(data_args.dataset_name)
     if data_args.image_column is None:
         image_column = dataset_columns[0] if dataset_columns is not None else column_names[0]
     else:

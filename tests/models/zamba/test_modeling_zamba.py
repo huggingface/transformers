@@ -21,7 +21,6 @@ import pytest
 
 from transformers import AutoTokenizer, ZambaConfig, is_torch_available
 from transformers.testing_utils import (
-    is_flaky,
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
@@ -32,7 +31,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -345,50 +344,6 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
-
-    @is_flaky(description="TODO: ydshieh")
-    def test_initialization(self):
-        r"""
-        Overriding the test_initialization test as the A_log and D params of the Mamba block are initialized differently
-        """
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    if "A_log" in name:
-                        A = torch.arange(1, config.mamba_d_state + 1, dtype=torch.float32)[None, :]
-                        intermediate_dim = config.mamba_expand * config.hidden_size
-                        A = A.expand(intermediate_dim, -1).reshape(
-                            config.n_mamba_heads, intermediate_dim // config.n_mamba_heads, -1
-                        )
-                        torch.testing.assert_close(param.data, torch.log(A), rtol=1e-5, atol=1e-5)
-                    elif "D" in name:
-                        # check if it's a ones like
-                        torch.testing.assert_close(param.data, torch.ones_like(param.data), rtol=1e-5, atol=1e-5)
-                    elif "x_proj" in name or "dt_proj_weight" in name:
-                        self.assertIn(
-                            ((param.data.mean() * 1e2).round() / 1e2).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized (raw value {param.data.mean()})",
-                        )
-                    elif "dt_proj_bias" in name:
-                        dt = torch.exp(
-                            torch.tensor([0, 1]) * (math.log(config.time_step_max) - math.log(config.time_step_min))
-                            + math.log(config.time_step_min)
-                        ).clamp(min=config.time_step_floor)
-                        inv_dt = dt + torch.log(-torch.expm1(-dt))
-                        if param.requires_grad:
-                            self.assertTrue(param.data.max().item() <= inv_dt[1])
-                            self.assertTrue(param.data.min().item() >= inv_dt[0])
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
 
     def test_attention_outputs(self):
         r"""

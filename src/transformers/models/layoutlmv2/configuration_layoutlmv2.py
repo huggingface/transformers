@@ -14,7 +14,7 @@
 # limitations under the License.
 """LayoutLMv2 model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import is_detectron2_available, logging
 
 
@@ -26,15 +26,15 @@ if is_detectron2_available():
     import detectron2
 
 
-class LayoutLMv2Config(PretrainedConfig):
+class LayoutLMv2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LayoutLMv2Model`]. It is used to instantiate an
     LayoutLMv2 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the LayoutLMv2
     [microsoft/layoutlmv2-base-uncased](https://huggingface.co/microsoft/layoutlmv2-base-uncased) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):

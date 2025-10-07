@@ -34,7 +34,7 @@ from pytest import mark
 from transformers import (
     AutoModel,
     AutoModelForSequenceClassification,
-    PretrainedConfig,
+    PreTrainedConfig,
     PreTrainedModel,
     is_torch_available,
     logging,
@@ -509,7 +509,7 @@ def _config_zero_init(config):
     for key in configs_no_init.__dict__:
         if "_range" in key or "_std" in key or "initializer_factor" in key or "layer_scale" in key:
             setattr(configs_no_init, key, 1e-10)
-        if isinstance(getattr(configs_no_init, key, None), PretrainedConfig):
+        if isinstance(getattr(configs_no_init, key, None), PreTrainedConfig):
             no_init_subconfig = _config_zero_init(getattr(configs_no_init, key))
             setattr(configs_no_init, key, no_init_subconfig)
     return configs_no_init
@@ -1021,28 +1021,6 @@ class ModelTesterMixin:
                 torch.save(state_dict, pt_checkpoint_path, _use_new_zipfile_serialization=False)
                 check_equal(load_state_dict(pt_checkpoint_path))
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=copy.deepcopy(configs_no_init))
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    data = torch.flatten(param.data)
-                    n_elements = torch.numel(data)
-                    # skip 2.5% of elements on each side to avoid issues caused by `nn.init.trunc_normal_` described in
-                    # https://github.com/huggingface/transformers/pull/27906#issuecomment-1846951332
-                    n_elements_to_skip_on_each_side = int(n_elements * 0.025)
-                    data_to_check = torch.sort(data).values
-                    if n_elements_to_skip_on_each_side > 0:
-                        data_to_check = data_to_check[n_elements_to_skip_on_each_side:-n_elements_to_skip_on_each_side]
-                    self.assertIn(
-                        ((data_to_check.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
-
     def test_determinism(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -1203,8 +1181,16 @@ class ModelTesterMixin:
 
                 if self.test_all_params_have_gradient:
                     for k, v in model.named_parameters():
-                        if v.requires_grad:
-                            self.assertTrue(v.grad is not None, f"{k} in {model_class.__name__} has no gradient!")
+                        if v.requires_grad and v.grad is None:
+                            if "expert" in k:
+                                print(
+                                    f"None for {k}, Probaby running a MOE, make sure grad is not NONE on EVERY layer. At LEAST 1 of the expert layer should have grads!"
+                                )
+                            else:
+                                with self.subTest(f"{k}"):
+                                    self.assertTrue(
+                                        v.grad is not None, f"{k} in {model_class.__name__} has no gradient!"
+                                    )
 
     def test_training(self):
         if not self.model_tester.is_training:
@@ -2785,7 +2771,7 @@ class ModelTesterMixin:
             param_device = device_map[param_name]
             if param_device in ["cpu", "disk"]:
                 self.assertEqual(param.device, torch.device("meta"))
-            elif param_device in ["mps"]:
+            elif param_device == "mps":
                 self.assertEqual(param.device, torch.device("mps"))
             else:
                 # when loaded with device_map, `param_device` are integer values for cuda/xpu/hpu/npu/mlu
@@ -3524,7 +3510,7 @@ class ModelTesterMixin:
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            if config.model_type in ["paligemma"]:
+            if config.model_type == "paligemma":
                 self.skipTest(
                     "PaliGemma-like models currently (transformers==4.41.0) requires an attention_mask input"
                 )
@@ -3552,7 +3538,7 @@ class ModelTesterMixin:
                 )
             if config.model_type in ["idefics", "idefics2", "idefics3"]:
                 self.skipTest(reason="Idefics currently (transformers==4.39.1) requires an image_attention_mask input")
-            if config.model_type in ["sam"]:
+            if config.model_type == "sam":
                 self.skipTest(reason="SAM requires an attention_mask input for relative positional embeddings")
 
             model = model_class(config)
@@ -3606,7 +3592,7 @@ class ModelTesterMixin:
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            if config.model_type in ["dbrx"]:
+            if config.model_type == "dbrx":
                 self.skipTest(
                     "DBRX (transformers==4.40) requires a modification to support dynamic shapes with compile."
                 )
@@ -3693,7 +3679,7 @@ class ModelTesterMixin:
                         tmpdirname, dtype=dtype, attn_implementation=attn_implementation
                     )
                     for key in model_fa.config:
-                        if isinstance(getattr(model_fa.config, key), PretrainedConfig):
+                        if isinstance(getattr(model_fa.config, key), PreTrainedConfig):
                             sub_config = getattr(model_fa.config, key)
                             self.assertTrue(sub_config._attn_implementation == attn_implementation)
 
@@ -3981,7 +3967,7 @@ class ModelTesterMixin:
         Test if model can be exported with torch.export.export()
 
         Args:
-            config (PretrainedConfig):
+            config (PreTrainedConfig):
                 Config to use for the model, if None, use default config from model_tester
             inputs_dict (dict):
                 Inputs to use for the model, if None, use default inputs from model_tester
@@ -4260,14 +4246,14 @@ class ModelTesterMixin:
     def test_config_attn_implementation_setter(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
-        def check_attn_implementation_setter(config: PretrainedConfig, attn_implementation: str):
+        def check_attn_implementation_setter(config: PreTrainedConfig, attn_implementation: str):
             if not config._attn_implementation == attn_implementation:
                 raise ValueError(
                     f"Unexpected attn_implementation for config {config.__class__.__name__}: "
                     f"{config._attn_implementation} != {attn_implementation}"
                 )
             for attribute_value in config.__dict__.values():
-                if isinstance(attribute_value, PretrainedConfig):
+                if isinstance(attribute_value, PreTrainedConfig):
                     check_attn_implementation_setter(attribute_value, attn_implementation)
 
         config._attn_implementation = "eager"

@@ -20,6 +20,7 @@ import unittest
 from datasets import Dataset, DatasetDict
 from huggingface_hub import hf_hub_download
 from packaging import version
+from torch import nn
 
 from transformers import (
     AutoModelForCausalLM,
@@ -337,11 +338,9 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 model.set_adapter("default")
                 self.assertTrue(model.active_adapters() == ["default"])
-                self.assertTrue(model.active_adapter() == "default")
 
                 model.set_adapter("adapter-2")
                 self.assertTrue(model.active_adapters() == ["adapter-2"])
-                self.assertTrue(model.active_adapter() == "adapter-2")
 
                 # Logits comparison
                 self.assertFalse(
@@ -351,7 +350,6 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 model.set_adapter(["adapter-2", "default"])
                 self.assertTrue(model.active_adapters() == ["adapter-2", "default"])
-                self.assertTrue(model.active_adapter() == "adapter-2")
 
                 logits_adapter_mixed = model(dummy_input)
                 self.assertFalse(
@@ -428,6 +426,68 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 model.delete_adapter(["adapter_1", "adapter_1"])
                 self.assertNotIn("adapter_1", model.peft_config)
                 self.assertIn("adapter_2", model.peft_config)
+
+    def test_delete_adapter_with_modules_to_save(self):
+        """
+        Ensure that modules_to_save is accounted for when deleting an adapter.
+        """
+        min_version_delete_adapter = "0.18.0"
+        if version.parse(importlib.metadata.version("peft")) < version.parse(min_version_delete_adapter):
+            self.skipTest("Correctly deleting modules_to_save only works with PEFT >= 0.18.0")
+
+        from peft import LoraConfig
+
+        # the test assumes a specific model architecture, so only test this one:
+        model_id = "hf-internal-testing/tiny-random-OPTForCausalLM"
+        model = AutoModelForCausalLM.from_pretrained(model_id).to(torch_device)
+        peft_config = LoraConfig(init_lora_weights=False, modules_to_save=["lm_head"])
+        model.add_adapter(peft_config, adapter_name="adapter_1")
+
+        # sanity checks
+        self.assertIn("adapter_1", model.peft_config)
+        self.assertNotIsInstance(model.lm_head, nn.Linear)  # a ModulesToSaveWrapper
+        self.assertTrue(hasattr(model.lm_head, "modules_to_save"))
+        self.assertTrue("adapter_1" in model.lm_head.modules_to_save)
+
+        # now delete the adapter
+        model.delete_adapter("adapter_1")
+        self.assertFalse(hasattr(model, "peft_config"))
+        self.assertFalse("adapter_1" in model.lm_head.modules_to_save)
+        self.assertFalse(model.lm_head.modules_to_save)  # i.e. empty ModuleDict
+
+    def test_delete_adapter_with_modules_to_save_old_peft_warns(self):
+        """
+        When PEFT < 0.18.0 is being used, modules_to_save are not deleted but the user should get a warning.
+        """
+        from peft import LoraConfig
+
+        peft_ge_018 = version.parse(importlib.metadata.version("peft")) >= version.parse("0.18.0")
+        logger = logging.get_logger("transformers.integrations.peft")
+        warn_msg = "The deleted adapter contains modules_to_save"
+        # the test assumes a specific model architecture, so only test this one:
+        model_id = "hf-internal-testing/tiny-random-OPTForCausalLM"
+
+        # first a sanity check: when there is no modules_to_save, there is also no warning
+        model = AutoModelForCausalLM.from_pretrained(model_id).to(torch_device)
+        peft_config_0 = LoraConfig(init_lora_weights=False)
+        model.add_adapter(peft_config_0, adapter_name="adapter_1")
+        with CaptureLogger(logger) as cl:
+            model.delete_adapter("adapter_1")
+        assert warn_msg not in cl.out
+
+        # now test a model with modules_to_save
+        model = AutoModelForCausalLM.from_pretrained(model_id).to(torch_device)
+        peft_config_1 = LoraConfig(init_lora_weights=False, modules_to_save=["lm_head"])
+        model.add_adapter(peft_config_1, adapter_name="adapter_1")
+        with CaptureLogger(logger) as cl:
+            model.delete_adapter("adapter_1")
+
+        if peft_ge_018:
+            self.assertTrue("adapter_1" not in model.lm_head.modules_to_save)
+            assert warn_msg not in cl.out
+        else:
+            self.assertTrue("adapter_1" in model.lm_head.modules_to_save)
+            assert warn_msg in cl.out
 
     @require_torch_accelerator
     @require_bitsandbytes

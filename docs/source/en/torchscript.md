@@ -21,7 +21,7 @@ rendered properly in your Markdown viewer.
 Transformers can export a model to TorchScript by:
 
 1. creating dummy inputs to create a *trace* of the model to serialize to TorchScript
-2. enabling the `torchscript` parameter in either [`~PretrainedConfig.torchscript`] for a randomly initialized model or [`~PreTrainedModel.from_pretrained`] for a pretrained model
+2. enabling the `torchscript` parameter in either [`~PreTrainedConfig.torchscript`] for a randomly initialized model or [`~PreTrainedModel.from_pretrained`] for a pretrained model
 
 ## Dummy inputs
 

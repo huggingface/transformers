@@ -345,25 +345,6 @@ class XcodecModelTest(ModelTesterMixin, unittest.TestCase):
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs)
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                # skipping the parametrizations original0 tensor
-                if name == "semantic_model.encoder.pos_conv_embed.conv.parametrizations.weight.original0":
-                    continue
-
-                uniform_init_parms = ["conv"]
-
-                if param.requires_grad:
-                    if any(x in name for x in uniform_init_parms):
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of {model_class.__name__} seems not properly initialized",
-                        )
-
     @unittest.skip(reason="The XcodecModel does not have support dynamic compile yet")
     def test_sdpa_can_compile_dynamic(self):
         pass

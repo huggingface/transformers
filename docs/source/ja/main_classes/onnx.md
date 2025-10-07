@@ -48,8 +48,3 @@ rendered properly in your Markdown viewer.
 
 各 ONNX 構成は、次のことを可能にする一連の _機能_ に関連付けられています。
 さまざまなタイプのトポロジまたはタスクのモデルをエクスポートします。
-
-### FeaturesManager
-
-[[autodoc]] onnx.features.FeaturesManager
-
