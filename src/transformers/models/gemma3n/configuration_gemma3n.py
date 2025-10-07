@@ -225,6 +225,7 @@ class Gemma3nTextConfig(PreTrainedConfig):
         self.sliding_window = sliding_window
         self.final_logit_softcapping = final_logit_softcapping
         self.layer_types = layer_types
+        self.rope_parameters = rope_parameters
 
         if layer_types is None:
             self.layer_types = [

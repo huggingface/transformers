@@ -30,11 +30,7 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
-from ...modeling_rope_utils import (
-    ROPE_INIT_FUNCTIONS,
-    dynamic_rope_update,
-    standardize_rope_params,
-)
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update, standardize_rope_params
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
@@ -43,7 +39,6 @@ from ...utils.generic import check_model_inputs
 from .configuration_dbrx import DbrxConfig
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Dbrx
 class DbrxRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
@@ -230,9 +225,9 @@ class DbrxAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
+        position_embeddings: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -407,10 +402,10 @@ class DbrxNormAttentionNorm(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        position_embeddings: torch.LongTensor,
         attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[torch.Tensor] = None,
         **kwargs: Any,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         residual_states = hidden_states
@@ -419,9 +414,9 @@ class DbrxNormAttentionNorm(nn.Module):
         hidden_states, _ = self.attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
+            position_embeddings=position_embeddings,
             past_key_values=past_key_values,
             cache_position=cache_position,
-            position_embeddings=position_embeddings,
             **kwargs,
         )
 
@@ -451,17 +446,17 @@ class DbrxBlock(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
+        position_embeddings: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[torch.Tensor] = None,
         **kwargs: Any,
     ):
         resid_states, hidden_states = self.norm_attn_norm(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
+            position_embeddings=position_embeddings,
             past_key_values=past_key_values,
             cache_position=cache_position,
-            position_embeddings=position_embeddings,
             **kwargs,
         )
 
@@ -526,7 +521,6 @@ class DbrxModel(DbrxPreTrainedModel):
         self.wte = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
         self.blocks = nn.ModuleList([DbrxBlock(config, layer_idx) for layer_idx in range(config.n_layers)])
         self.norm_f = nn.LayerNorm(config.d_model, bias=False)
-        self.rotary_emb = DbrxRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -578,7 +572,6 @@ class DbrxModel(DbrxPreTrainedModel):
         )
 
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
@@ -586,12 +579,12 @@ class DbrxModel(DbrxPreTrainedModel):
         for decoder_layer in self.blocks[: self.config.num_hidden_layers]:
             hidden_states = decoder_layer(
                 hidden_states,
+                position_embeddings=position_embeddings,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
-                position_embeddings=position_embeddings,
                 **kwargs,
             )
 

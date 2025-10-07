@@ -392,7 +392,7 @@ class PhimoeForCausalLM(MixtralForCausalLM):
         # It will cause downside of slower at this single token position, however, better than current failure.
         if (
             past_key_values
-            and self.config.rope_parameters["rope_type"] != "default"
+            and hasattr(self.config, "original_max_position_embeddings")
             and input_ids.shape[1] >= self.config.original_max_position_embeddings + 1
         ):
             past_length = cache_position[0]
