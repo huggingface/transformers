@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import re
-from functools import partial
 from typing import Optional, Union
 
 from ..modeling_flash_attention_utils import lazy_import_flash_attention
