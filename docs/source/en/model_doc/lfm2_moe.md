@@ -38,8 +38,7 @@ model_id = "LiquidAI/LFM2-8B-A1B"
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
     device_map="auto",
-    torch_dtype="bfloat16",
-    trust_remote_code=True,
+    dtype="bfloat16",
 #    attn_implementation="flash_attention_2" <- uncomment on compatible GPU
 )
 tokenizer = AutoTokenizer.from_pretrained(model_id)
