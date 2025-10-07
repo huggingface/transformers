@@ -194,10 +194,8 @@ class VAEBottleneck(torch.nn.Module):
         self.out_proj = torch.nn.Conv1d(bottleneck_dim, input_dim, kernel_size=1)
 
     def forward(self, z: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        mean, scale = self.in_proj(z).chunk(2, dim=1)
-        stdev = torch.nn.functional.softplus(scale) + 1e-4
-        latents = torch.randn_like(mean) * stdev + mean
-        return latents
+        mean, _ = self.in_proj(z).chunk(2, dim=1)
+        return mean
 
 
 class DACVAEEncoder(DacEncoder): ...
