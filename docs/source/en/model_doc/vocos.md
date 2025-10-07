@@ -37,7 +37,12 @@ The abstract of the paper states the following:
 
 Demos can be found in this [post](https://gemelo-ai.github.io/vocos/).
 
-This model was contributed by [Manal El Aidouni](https://huggingface.co/Manel). The original code can be found [here](https://github.com/gemelo-ai/vocos) and original checkpoints [here](https://huggingface.co/charactr/vocos-mel-24khz) and [here](https://huggingface.co/charactr/vocos-encodec-24khz).
+This model was contributed by [Manal El Aidouni](https://huggingface.co/Manel) and [Eric Bezzam](https://huggingface.co/bezzam). The Transformers-compatible checkpoints can be found below:
+- Mel-spectrogram variant: https://huggingface.co/hf-audio/vocos-mel-24khz
+- EnCodec variant: https://huggingface.co/hf-audio/vocos-encodec-24khz
+
+
+The original code can be found [here](https://github.com/gemelo-ai/vocos) and original checkpoints [here](https://huggingface.co/charactr/vocos-mel-24khz) and [here](https://huggingface.co/charactr/vocos-encodec-24khz).
 
 ## Usage
 
@@ -45,41 +50,43 @@ There are two Vocos variants that can be used with the `VocosModel`.
 
 ### Mel-spectrogram variant 
 
-You can use `VocosProcessor`  to turn a raw waveform into mel-spectrogram features and feed them into `VocosModel` to generate high quality audio. You can also plug `VocosModel` in as a standalone vocoder component within a larger audio generation pipeline (for example the [YuE](https://github.com/multimodal-art-projection/YuE) model). To use the mel-spectrogram pathway, pass audio without specifying the bandwidth:
+You can use `VocosProcessor`  to turn a raw waveform into mel-spectrogram features and feed them into `VocosModel` to generate high quality audio. You can also plug `VocosModel` in as a standalone vocoder component within a larger audio generation pipeline (for example the [YuE](https://github.com/multimodal-art-projection/YuE) model).
+
+To use the mel-spectrogram pathway, pass audio to the processor without specifying the bandwidth:
 
 ```python 
 from datasets import load_dataset, Audio
 from transformers import VocosModel, VocosProcessor
+from scipy.io.wavfile import write as write_wav
     
 # load model and processor
-model_id = "Manel/vocos-mel-24khz"
+model_id = "hf-audio/vocos-mel-24khz"
 processor = VocosProcessor.from_pretrained(model_id)
-model = VocosModel.from_pretrained(model_id)
+model = VocosModel.from_pretrained(model_id, device_map="auto")
+sampling_rate = processor.feature_extractor.sampling_rate
     
 # load audio sample
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
-audio_sample= ds[0]["audio"]["array"]
+ds = ds.cast_column("audio", Audio(sampling_rate=sampling_rate))
+audio = ds[0]["audio"]["array"]
 
-inputs = processor(audio=audio)
-# -- `inputs.features` shape (batch, mel, frame): [1, 100, 550]
+inputs = processor(audio=audio, sampling_rate=sampling_rate).to(model.device)
+print(inputs.audio_spectrogram.shape)
+# -- (batch, mel, frame): [1, 100, 549]
 outputs = model(**inputs)
 audio = outputs.audio
-# -- `audio` shape (batch, time): [1, 140544]
+print(audio.shape)
+# --  (batch, time): [1, 140288]
+
+# save audio to file
+write_wav("vocos.wav", sampling_rate, audio[0].detach().cpu().numpy())
 ```
 
-To save audio to file:
-```python
-from scipy.io.wavfile import write as write_wav
-
-write_wav("vocos.wav", processor.feature_extractor.sampling_rate, audio[0].detach().cpu().numpy())
-```
-
-Or to listen (from an IPython notebook):
+To listen from an IPython notebook:
 ```python
 from IPython.display import Audio
 
-Audio(audio.detach().numpy(), rate=processor.feature_extractor.sampling_rate)
+Audio(audio.detach().numpy(), rate=sampling_rate)
 ```
 
 ### Neural audio codec variant (with EnCodec)
@@ -88,69 +95,59 @@ Instead of reconstructing audio from mel spectrograms, recent research has start
 
 The EnCodec neural audio codec encodes the input audio into discrete tokens with Encodec’s Residual Vector Quantization (RVQ). These codes are then converted into embedding that serve as input to `VocosModel`.
 
-A desired target `bandwidth` value is required for EnCodec. The supported bandwidths are  [1.5, 3, 6, 12] kbps.  The selected bandwidth determines the number of quantizers/codebooks used by the RVQ of Encodec, namely [2, 4, 6, 8] quantizers respectively.
+A desired target `bandwidth` value is required for EnCodec. The supported bandwidths are [1.5, 3, 6, 12] kbps.  The selected bandwidth determines the number of quantizers/codebooks used by the RVQ of Encodec, namely [2, 4, 6, 8] quantizers respectively.
 
 ```python 
 from datasets import load_dataset, Audio
 from transformers import VocosModel, VocosProcessor
+from scipy.io.wavfile import write as write_wav
+    
+# can be chosen from [1.5, 3, 6, 12]
+bandwidth = 6.0
 
 # load model and processor
-model_id = "Manel/vocos-encodec-24khz"
+model_id = "hf-audio/vocos-encodec-24khz"
 processor = VocosProcessor.from_pretrained(model_id)
-model = VocosModel.from_pretrained(model_id)
-
+model = VocosModel.from_pretrained(model_id, device_map="auto")
+sampling_rate = processor.feature_extractor.sampling_rate
+    
 # load audio sample
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))  
-audio_sample = ds[0]["audio"]["array"]
+ds = ds.cast_column("audio", Audio(sampling_rate=sampling_rate))
+audio = ds[0]["audio"]["array"]
 
-inputs = processor(audio=audio_sample, bandwidth=6.0)
-# -- `inputs.features` shape (batch, channels, frame): [1, 128, 440]
+inputs = processor(audio=audio, bandwidth=bandwidth, sampling_rate=sampling_rate).to(model.device)
+print(inputs.input_features.shape)
+# -- (batch, codes, frame): [1, 128, 440]
 outputs = model(**inputs)
-audio = outputs.audio 
-# -- `audio` shape (batch, time): [1, 140800]
-```
+audio = outputs.audio
+print(audio.shape)
+# --  (batch, time): [1, 140800]
 
-The EnCodec variant can also process precomputed RVQ codes directly. You provide quantized audio codes as input to the processor, which converts them into embeddings for the VocosModel.
-
-```python
-from transformers import VocosModel, VocosProcessor
-import torch
-
-# load model and processor
-model_id = "Manel/vocos-encodec-24khz"
-model = VocosModel.from_pretrained(model_id)
-processor = VocosProcessor.from_pretrained(model_id)
-
-# Generate random codes for 6 kbps (8 codebooks, 200 frames)
-audio_codes = torch.randint(low=0, high=1024, size=(8, 200))  
-inputs = processor(codes=audio_codes, bandwidth=6.0)
-# -- `inputs.features` shape (batch, channels, frame): [1, 128, 200]
-outputs = model(**inputs)
-audio = outputs.audio 
-# -- `audio` shape (batch, time): [1, 64000]
+# save audio to file
+write_wav("vocos_encodec.wav", sampling_rate, audio[0].detach().cpu().numpy())
 ```
 
 ### Reconstructing audio from Bark tokens
 
+The EnCodec variant can also process precomputed RVQ codes directly. You provide quantized audio codes as input to the processor, which converts them into embeddings for the Vocos model.
+
 Bark is a text-to-speech model that encodes input text into discrete EnCodec RVQ codes, then uses EnCodec to convert those codes into an audio waveform. The Vocos vocoder is often integrated with Bark instead of relying only on the EnCodec's decoder for better audio quality.
 
-Below is an example using the Transformers implementation of  [Bark](./bark) to generate quantized codes from text, then decoding them with `VocosProcessor` and `VocosModel` :
+Below is an example using the Transformers implementation of  [Bark](./bark) to generate quantized codes from text, then decoding them with `VocosProcessor` and `VocosModel`:
 
 ```python 
-import torch
 from transformers import VocosModel, VocosProcessor, BarkProcessor, BarkModel
 from transformers.models.bark.generation_configuration_bark import BarkSemanticGenerationConfig, BarkCoarseGenerationConfig, BarkFineGenerationConfig
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+from scipy.io.wavfile import write as write_wav
 
 # load the Bark model and processor
 bark_id = "suno/bark-small"
 bark_processor = BarkProcessor.from_pretrained(bark_id)
-bark = BarkModel.from_pretrained(bark_id).to(device)
+bark = BarkModel.from_pretrained(bark_id, device_map="auto")
 
-text_prompt = "So, you've heard about neural vocoding? [laughs] We've been messing around with this new model called Vocos."
-bark_inputs = bark_processor(text_prompt, return_tensors="pt").to(device)
+text_prompt = "We've been messing around with this new model called Vocos."
+bark_inputs = bark_processor(text_prompt, return_tensors="pt").to(bark.device)
 
 # building generation configs for each stage
 semantic_generation_config = BarkSemanticGenerationConfig(**bark.generation_config.semantic_config)
@@ -178,15 +175,17 @@ codes = fine_tokens.squeeze(0)
 # -- `codes` shape (8 codebooks, * frames)
 
 # Reconstruct audio with Vocos from codes
-vocos_id = "Manel/vocos-encodec-24khz"
+vocos_id = "hf-audio/vocos-encodec-24khz"
 processor = VocosProcessor.from_pretrained(vocos_id)
-vocos_model = VocosModel.from_pretrained(vocos_id).to(device)
+vocos_model = VocosModel.from_pretrained(vocos_id, device_map="auto")
+sampling_rate = processor.feature_extractor.sampling_rate
 
-inputs = processor(codes=codes.to("cpu"), bandwidth=6.0)   
-# -- `inputs.features` shape (batch, channels, frame): [1, 128, *]
-outputs = vocos_model(**inputs)
-audio = outputs.audio 
-# -- `audio` shape (batch, time): [1, *]
+# generate audio
+inputs = processor(codes=codes.to("cpu"), bandwidth=6.0).to(vocos_model.device)   
+audio = vocos_model(**inputs).audio
+
+# save audio to file
+write_wav("vocos_bark.wav", sampling_rate, audio[0].detach().cpu().numpy())
 ```
 
 ## VocosConfig
