@@ -428,7 +428,7 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
 
         return torch.cat(outputs, dim=0)
 
-    @check_model_inputs
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,

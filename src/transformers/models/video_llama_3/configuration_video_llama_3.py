@@ -17,11 +17,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-class VideoLlama3VisionConfig(PretrainedConfig):
+class VideoLlama3VisionConfig(PreTrainedConfig):
     """
     This is the configuration class to store the configuration of a [`VideoLlama3VisionModel`]. It is used to instantiate a
     VideoLLaMA3 vision encoder model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -84,7 +84,7 @@ class VideoLlama3VisionConfig(PretrainedConfig):
         self.initializer_range = initializer_range
 
 
-class VideoLlama3Config(PretrainedConfig):
+class VideoLlama3Config(PreTrainedConfig):
     """
     This is the configuration class to store the configuration of a [`VideoLlama3Model`]. It is used to instantiate a
     VideoLLaMA3 model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -116,23 +116,23 @@ class VideoLlama3Config(PretrainedConfig):
     ):
         if isinstance(vision_config, dict):
             self.vision_config = self.sub_configs["vision_config"](**vision_config)
-        elif isinstance(vision_config, PretrainedConfig):
+        elif isinstance(vision_config, PreTrainedConfig):
             self.vision_config = vision_config
         elif vision_config is None:
             self.vision_config = self.sub_configs["vision_config"]()
         else:
             raise ValueError(
-                f"vision_config must be of type `dict` or `PretrainedConfig`, but got {type(vision_config)}."
+                f"vision_config must be of type `dict` or `PreTrainedConfig`, but got {type(vision_config)}."
             )
 
         if isinstance(text_config, dict):
             self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-        elif isinstance(text_config, PretrainedConfig):
+        elif isinstance(text_config, PreTrainedConfig):
             self.text_config = text_config
         elif text_config is None:
             self.text_config = CONFIG_MAPPING["qwen2"]()
         else:
-            raise ValueError(f"text_config must be of type `dict` or `PretrainedConfig`, but got {type(text_config)}.")
+            raise ValueError(f"text_config must be of type `dict` or `PreTrainedConfig`, but got {type(text_config)}.")
 
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id

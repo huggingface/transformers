@@ -24,12 +24,7 @@ import torch
 import torch.nn.functional as F
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
-    group_images_by_shape,
-    reorder_images,
-)
+from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -41,30 +36,10 @@ from ...image_utils import (
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, logging
 from ...video_utils import VideoInput, make_batched_videos
+from .image_processing_video_llama_3 import VideoLlama3ImageProcessorKwargs
 
 
 logger = logging.get_logger(__name__)
-
-
-class VideoLlama3FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    min_pixels (`int`, *optional*, defaults to `56 * 56`):
-        The min pixels of the image to resize the image.
-    max_pixels (`int`, *optional*, defaults to `28 * 28 * 1280`):
-        The max pixels of the image to resize the image.
-    patch_size (`int`, *optional*, defaults to 14):
-        The spatial patch size of the vision encoder.
-    temporal_patch_size (`int`, *optional*, defaults to 2):
-        The temporal patch size of the vision encoder.
-    merge_size (`int`, *optional*, defaults to 2):
-        The merge size of the vision encoder to llm encoder.
-    """
-
-    min_pixels: Optional[int]
-    max_pixels: Optional[int]
-    patch_size: Optional[int]
-    temporal_patch_size: Optional[int]
-    merge_size: Optional[int]
 
 
 def smart_resize(
@@ -111,7 +86,7 @@ class VideoLlama3ImageProcessorFast(BaseImageProcessorFast):
     merge_size = 1
     min_pixels = None
     max_pixels = None
-    valid_kwargs = VideoLlama3FastImageProcessorKwargs
+    valid_kwargs = VideoLlama3ImageProcessorKwargs
     model_input_names = [
         "pixel_values",
         "image_grid_thw",
@@ -121,7 +96,7 @@ class VideoLlama3ImageProcessorFast(BaseImageProcessorFast):
         "video_merge_sizes",
     ]
 
-    def __init__(self, **kwargs: Unpack[VideoLlama3FastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[VideoLlama3ImageProcessorKwargs]):
         size = kwargs.pop("size", None)
         min_pixels = kwargs.pop("min_pixels", None)
         max_pixels = kwargs.pop("max_pixels", None)
@@ -166,7 +141,7 @@ class VideoLlama3ImageProcessorFast(BaseImageProcessorFast):
         self,
         images: ImageInput,
         videos: Optional[VideoInput] = None,
-        **kwargs: Unpack[VideoLlama3FastImageProcessorKwargs],
+        **kwargs: Unpack[VideoLlama3ImageProcessorKwargs],
     ) -> BatchFeature:
         return super().preprocess(images, videos, **kwargs)
 
@@ -177,7 +152,7 @@ class VideoLlama3ImageProcessorFast(BaseImageProcessorFast):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         device: Optional[Union[str, "torch.device"]] = None,
-        **kwargs: Unpack[DefaultFastImageProcessorKwargs],
+        **kwargs: Unpack[VideoLlama3ImageProcessorKwargs],
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.

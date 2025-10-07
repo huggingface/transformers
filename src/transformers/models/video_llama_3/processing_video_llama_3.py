@@ -17,13 +17,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional, Union
+from typing import Union
 
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
 from ...video_utils import VideoInput
@@ -32,16 +32,7 @@ from ...video_utils import VideoInput
 logger = logging.get_logger(__name__)
 
 
-class VideoLlama3ImagesKwargs(ImagesKwargs):
-    min_pixels: Optional[int]
-    max_pixels: Optional[int]
-    patch_size: Optional[int]
-    temporal_patch_size: Optional[int]
-    merge_size: Optional[int]
-
-
 class VideoLlama3ProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: VideoLlama3ImagesKwargs
     _defaults = {
         "text_kwargs": {
             "padding": False,
@@ -49,7 +40,6 @@ class VideoLlama3ProcessorKwargs(ProcessingKwargs, total=False):
         },
         "videos_kwargs": {"return_metadata": True},
     }
-    image_kwargs: VideoLlama3ImagesKwargs
 
 
 class VideoLlama3Processor(ProcessorMixin):
