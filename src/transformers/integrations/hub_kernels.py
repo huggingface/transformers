@@ -176,7 +176,7 @@ def load_and_register_kernel(attn_implementation: str, use_paged=False) -> None:
     attention_wrapper = None
     # FIXME: @ArthurZucker this is dirty, did not want to do a lof of extra work
     actual_attn_name = attn_implementation
-    if use_paged in attn_implementation:
+    if use_paged:
         attention_wrapper = f"paged|{attn_implementation}"
         # `transformers` has wrapper for sdpa, paged, flash, flex etc.
         attention_wrapper = ALL_ATTENTION_FUNCTIONS.get(attention_wrapper)

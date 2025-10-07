@@ -242,8 +242,8 @@ class ContinuousBatchProcessor:
 
     def return_attention_mask(self) -> bool:
         return self.config._attn_implementation in [
-            "paged|eager",
-            "paged|sdpa",
+            "eager",
+            "sdpa",
         ]  # we set `is_causal` to True in paged call
 
     @traced
@@ -598,7 +598,8 @@ class ContinuousBatchingManager:
         streaming: bool = True,
         slice_inputs: bool = True,
     ):
-        """Initialize the continuous batching manager.
+        """
+        Initialize the continuous batching manager.
 
         Args:
             model: The language model for generation
