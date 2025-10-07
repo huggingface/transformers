@@ -36,6 +36,7 @@ from ..llama.modeling_llama import (
     LlamaRotaryEmbedding,
     eager_attention_forward,
 )
+from ..qwen2.modeling_qwen2 import Qwen2MoeExperts
 
 
 logger = logging.get_logger(__name__)

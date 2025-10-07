@@ -189,6 +189,7 @@ class OlmoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+
 @require_torch
 class OlmoIntegrationTest(unittest.TestCase):
     @slow

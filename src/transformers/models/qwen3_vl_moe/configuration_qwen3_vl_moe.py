@@ -182,8 +182,6 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
         self.moe_intermediate_size = moe_intermediate_size
         self.num_experts_per_tok = num_experts_per_tok
         self.num_experts = num_experts
-        self.norm_topk_prob = norm_topk_prob
-        self.router_aux_loss_coef = router_aux_loss_coef
         self.mlp_only_layers = [] if mlp_only_layers is None else mlp_only_layers
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)

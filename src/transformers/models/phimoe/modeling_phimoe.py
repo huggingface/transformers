@@ -20,7 +20,6 @@
 # limitations under the License.
 
 
-import math
 from typing import Callable, Optional, Union
 
 import torch
@@ -98,22 +97,24 @@ class PhimoeRotaryEmbedding(nn.Module):
         )
         return inv_freq, attention_factor
 
-    def forward(self, x, seq_len=None, layer_type=None):
+    def forward(self, x, position_ids=None, layer_type=None):
         if layer_type is not None:
             raise ValueError(
                 f"{self.__class__.__name__} does not support layer types, but got `layer_type={layer_type}`"
             )
 
         mscale = None
-        if self.short_mscale is not None and self.long_mscale is not None and seq_len:
+        seq_len = torch.max(position_ids) + 1
+        if self.config.rope_scaling and seq_len:
             mscale = (
                 self.long_mscale
-                if seq_len > self.config.rope_parameters["original_max_position_embeddings"]
+                if seq_len > self.config.rope_scaling["original_max_position_embeddings"]
                 else self.short_mscale
             )
-        mscale = self.attention_scaling if mscale is None else mscale
-        t = torch.arange(seq_len, device=x.device, dtype=torch.float32)
-        freqs = torch.outer(t, self.inv_freq)
+        inv_freq, attention_scaling = self.rope_init_fn(self.config, x.device, seq_len)
+        mscale = attention_scaling if mscale is None else mscale
+        inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
