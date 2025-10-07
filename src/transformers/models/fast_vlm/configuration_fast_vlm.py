@@ -4,23 +4,22 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_fast_vlm.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-
 from ...configuration_utils import PretrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 class FastVlmConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`FastVlmForConditionalGeneration`]. It is used to instantiate an
-    FastVlm model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the FastVlm-9B.
+    This is the configuration class to store the configuration of a [`FastVLMForConditionalGeneration`]. It is used to instantiate a
+    FastVLM model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the FastVLM-7B.
 
-    e.g. [fast_vlm-hf/fast_vlm-9b](https://huggingface.co/fast_vlm-hf/fast_vlm-9b)
+    e.g. [KamilaMila/FastVLM-7B](https://huggingface.co/KamilaMila/FastVLM-7B)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
-    Args:
+    Args:  TODO !!!!!!!!!!!
         vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `CLIPVisionConfig`):
             The config object or dictionary of the vision backbone.
         text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `LlamaConfig`):
@@ -44,7 +43,7 @@ class FastVlmConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import FastVlmForConditionalGeneration, FastVlmConfig, CLIPVisionConfig, LlamaConfig
+    >>> from transformers import LlavaForConditionalGeneration, LlavaConfig, CLIPVisionConfig, LlamaConfig
 
     >>> # Initializing a CLIP-vision config
     >>> vision_config = CLIPVisionConfig()
@@ -52,11 +51,11 @@ class FastVlmConfig(PretrainedConfig):
     >>> # Initializing a Llama config
     >>> text_config = LlamaConfig()
 
-    >>> # Initializing a FastVlm fast_vlm-1.5-7b style configuration
-    >>> configuration = FastVlmConfig(vision_config, text_config)
+    >>> # Initializing a Llava llava-1.5-7b style configuration
+    >>> configuration = LlavaConfig(vision_config, text_config)
 
-    >>> # Initializing a model from the fast_vlm-1.5-7b style configuration
-    >>> model = FastVlmForConditionalGeneration(configuration)
+    >>> # Initializing a model from the llava-1.5-7b style configuration
+    >>> model = LlavaForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -72,11 +71,11 @@ class FastVlmConfig(PretrainedConfig):
         self,
         vision_config=None,
         text_config=None,
-        image_token_index=32000,
+        image_token_index=151646,
         projector_hidden_act="gelu",
-        vision_feature_select_strategy="default",
-        vision_feature_layer=-2,
-        image_seq_length=576,
+        vision_feature_select_strategy="full",
+        vision_feature_layer=-1,
+        image_seq_length=256,
         multimodal_projector_bias=True,
         **kwargs,
     ):
@@ -84,9 +83,9 @@ class FastVlmConfig(PretrainedConfig):
         self.projector_hidden_act = projector_hidden_act
         self.image_seq_length = image_seq_length
 
-        if vision_feature_select_strategy not in ["default", "full"]:
+        if vision_feature_select_strategy != "full":
             raise ValueError(
-                "vision_feature_select_strategy should be one of 'default', 'full'."
+                "Only vision_feature_select_strategy='full' supported in FastVLM!"
                 f"Got: {vision_feature_select_strategy}"
             )
 
@@ -94,27 +93,25 @@ class FastVlmConfig(PretrainedConfig):
         self.vision_feature_layer = vision_feature_layer
 
         if isinstance(vision_config, dict):
-            vision_config["model_type"] = vision_config.get("model_type", "clip_vision_model")
+            vision_config["model_type"] = vision_config.get("model_type", "timm_wrapper")
             vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
         elif vision_config is None:
-            vision_config = CONFIG_MAPPING["clip_vision_model"](
-                intermediate_size=4096,
-                hidden_size=1024,
-                patch_size=14,
-                image_size=336,
-                num_hidden_layers=24,
-                num_attention_heads=16,
-                vocab_size=32000,
-                projection_dim=768,
+            vision_config = CONFIG_MAPPING["timm_wrapper"](
+                architecture="fastvit_mci3",
+                do_pooling=True,
+                global_pool="avg",
+                hidden_size=3072,
+                initializer_range=0.02,
+                model_args={"inference_mode": True},
             )
 
         self.vision_config = vision_config
 
         if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "llama")
+            text_config["model_type"] = text_config.get("model_type", "qwen2")
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
-            text_config = CONFIG_MAPPING["llama"]()
+            text_config = CONFIG_MAPPING["qwen2"]()
 
         self.text_config = text_config
         self.multimodal_projector_bias = multimodal_projector_bias
