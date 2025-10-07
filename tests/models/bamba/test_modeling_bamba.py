@@ -316,7 +316,7 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             [expected_shape] * len(decoder_past_key_values.value_cache),
         )
 
-    def _check_caches_are_similar(
+    def _check_caches_are_equal(
         self, cache1: HybridMambaAttentionDynamicCache, cache2: HybridMambaAttentionDynamicCache
     ):
         if not isinstance(cache1, HybridMambaAttentionDynamicCache) or not isinstance(

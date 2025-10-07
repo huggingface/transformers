@@ -690,7 +690,7 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
 
             # The two sets of generated text and past kv should be equal to each other
             self.assertListEqual(outputs.sequences.tolist(), outputs_cached.sequences.tolist())
-            self._check_caches_are_similar(outputs.past_key_values, outputs_cached.past_key_values)
+            self._check_caches_are_equal(outputs.past_key_values, outputs_cached.past_key_values)
 
     @pytest.mark.generate
     def test_generate_without_input_ids(self):
@@ -767,7 +767,7 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
             # Verify that the combined outputs match the full generation.
             combined_output_sequences = torch.concat([initial_output.sequences, cached_output.sequences], axis=1)
             self.assertListEqual(outputs.sequences.tolist(), combined_output_sequences.tolist())
-            self._check_caches_are_similar(outputs.past_key_values, cached_output.past_key_values)
+            self._check_caches_are_equal(outputs.past_key_values, cached_output.past_key_values)
 
     def _check_attentions_for_generate(
         self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values

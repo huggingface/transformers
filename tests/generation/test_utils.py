@@ -1416,7 +1416,7 @@ class GenerationTesterMixin:
 
             # The two sets of generated text and past kv should be equal to each other
             self.assertTrue(has_similar_generate_outputs(outputs, outputs_cached))
-            self._check_caches_are_similar(outputs.past_key_values, outputs_cached.past_key_values)
+            self._check_caches_are_equal(outputs.past_key_values, outputs_cached.past_key_values)
 
     @pytest.mark.generate
     def test_generate_continue_from_inputs_embeds(self):
@@ -1479,7 +1479,7 @@ class GenerationTesterMixin:
             combined_output_sequences = torch.concat([initial_output.sequences, cached_output.sequences], axis=1)
             self.assertListEqual(outputs.sequences.tolist(), combined_output_sequences.tolist())
             # The two sets of past kv should be equal to each other
-            self._check_caches_are_similar(outputs.past_key_values, cached_output.past_key_values)
+            self._check_caches_are_equal(outputs.past_key_values, cached_output.past_key_values)
 
     @pytest.mark.generate
     def test_generate_with_static_cache(self):
@@ -2548,14 +2548,14 @@ class GenerationTesterMixin:
 
         self.assertTrue(flag)
 
-    def _check_caches_are_similar(self, cache1: Cache, cache2: Cache):
+    def _check_caches_are_equal(self, cache1: Cache, cache2: Cache):
         if not isinstance(cache1, Cache) or not isinstance(cache2, Cache):
-            raise ValueError("The cache is not standard! Please overwrite `_check_caches_are_similar`")
+            raise ValueError("The cache is not standard! Please overwrite `_check_caches_are_equal`")
 
         # In this case, we simply call recursively the function on both internal caches
         if isinstance(cache1, EncoderDecoderCache):
-            self._check_caches_are_similar(cache1.self_attention_cache, cache2.self_attention_cache)
-            self._check_caches_are_similar(cache1.cross_attention_cache, cache2.cross_attention_cache)
+            self._check_caches_are_equal(cache1.self_attention_cache, cache2.self_attention_cache)
+            self._check_caches_are_equal(cache1.cross_attention_cache, cache2.cross_attention_cache)
             return
 
         if not len(cache1) == len(cache2):

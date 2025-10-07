@@ -506,7 +506,7 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
             # The two sets of generated text and past kv should be equal to each other
             self.assertTrue(has_similar_generate_outputs(outputs, outputs_cached))
-            self._check_caches_are_similar(outputs.past_key_values, outputs_cached.past_key_values)
+            self._check_caches_are_equal(outputs.past_key_values, outputs_cached.past_key_values)
 
     @pytest.mark.generate
     def test_prepare_inputs_for_generation_kwargs_forwards(self):

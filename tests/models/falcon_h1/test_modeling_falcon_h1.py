@@ -290,7 +290,7 @@ class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             [expected_shape] * len(decoder_past_key_values.value_cache),
         )
 
-    def _check_caches_are_similar(self, cache1, cache2):
+    def _check_caches_are_equal(self, cache1, cache2):
         if not isinstance(cache1, FalconHybridMambaAttentionDynamicCache) or not isinstance(
             cache2, FalconHybridMambaAttentionDynamicCache
         ):

@@ -90,7 +90,7 @@ class Lfm2MoeModelTest(CausalLMModelTest, unittest.TestCase):
             else:
                 self.assertEqual(decoder_past_key_values.conv_cache[i], conv_shape)
 
-    def _check_caches_are_similar(self, cache1: Lfm2MoeHybridConvCache, cache2: Lfm2MoeHybridConvCache):
+    def _check_caches_are_equal(self, cache1: Lfm2MoeHybridConvCache, cache2: Lfm2MoeHybridConvCache):
         if not isinstance(cache1, Lfm2MoeHybridConvCache) or not isinstance(cache2, Lfm2MoeHybridConvCache):
             raise ValueError("The wrong cache is being used!")
 

@@ -1084,7 +1084,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
             # The two sets of generated text and past kv should be equal to each other
             self.assertTrue(has_similar_generate_outputs(outputs, outputs_cached))
-            self._check_caches_are_similar(outputs.past_key_values, outputs_cached.past_key_values)
+            self._check_caches_are_equal(outputs.past_key_values, outputs_cached.past_key_values)
 
     # Based on tests.test_modeling_common.ModelTesterMixin.test_inputs_embeds_matches_input_ids
     # Update encoder and decoder embeddings

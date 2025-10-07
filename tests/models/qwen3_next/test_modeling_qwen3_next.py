@@ -95,7 +95,7 @@ class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
             [expected_shape] * len(attention_layer_indices),
         )
 
-    def _check_caches_are_similar(self, cache1: Cache, cache2: Cache):
+    def _check_caches_are_equal(self, cache1: Cache, cache2: Cache):
         "Qwen3-Next has a special Cache as it alternates with gated deltanet layers"
         if not len(cache1) == len(cache2):
             raise ValueError("Both caches do not have the same number of layers.")

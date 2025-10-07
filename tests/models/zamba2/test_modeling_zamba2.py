@@ -334,7 +334,7 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             [expected_shape] * len(decoder_past_key_values.value_cache),
         )
 
-    def _check_caches_are_similar(self, cache1: Zamba2HybridDynamicCache, cache2: Zamba2HybridDynamicCache):
+    def _check_caches_are_equal(self, cache1: Zamba2HybridDynamicCache, cache2: Zamba2HybridDynamicCache):
         if not isinstance(cache1, Zamba2HybridDynamicCache) or not isinstance(cache2, Zamba2HybridDynamicCache):
             raise ValueError("The wrong cache is being used!")
 
