@@ -823,9 +823,6 @@ class LukeModel(LukePreTrainedModel):
     def set_entity_embeddings(self, value):
         self.entity_embeddings.entity_embeddings = value
 
-    def _prune_heads(self, heads_to_prune):
-        raise NotImplementedError("LUKE does not support the pruning of attention heads")
-
     @auto_docstring
     def forward(
         self,

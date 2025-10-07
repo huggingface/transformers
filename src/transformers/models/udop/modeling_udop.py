@@ -1855,14 +1855,6 @@ class UdopEncoderModel(UdopPreTrainedModel):
     def get_encoder(self):
         return self.encoder
 
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.block[layer].layer[0].SelfAttention.prune_heads(heads)
-
     @auto_docstring
     def forward(
         self,

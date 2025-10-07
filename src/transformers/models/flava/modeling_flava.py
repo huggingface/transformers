@@ -741,14 +741,6 @@ class FlavaImageModel(FlavaPreTrainedModel):
     def set_input_embeddings(self, value: nn.Module):
         self.embeddings.patch_embeddings = value
 
-    def _prune_heads(self, heads_to_prune: dict[int, list[int]]) -> None:
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
-
     @auto_docstring
     def forward(
         self,
@@ -826,14 +818,6 @@ class FlavaTextModel(FlavaPreTrainedModel):
 
     def set_input_embeddings(self, value: nn.Module):
         self.embeddings.word_embeddings = value
-
-    def _prune_heads(self, heads_to_prune: dict[int, list[int]]) -> None:
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
 
     @auto_docstring
     def forward(
@@ -928,14 +912,6 @@ class FlavaMultimodalModel(FlavaPreTrainedModel):
         self.pooler = FlavaPooler(config) if add_pooling_layer else None
 
         self.post_init()
-
-    def _prune_heads(self, heads_to_prune: dict[int, list[int]]) -> None:
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
 
     @auto_docstring
     def forward(

@@ -892,9 +892,6 @@ class XLNetModel(XLNetPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.word_embedding = new_embeddings
 
-    def _prune_heads(self, heads_to_prune):
-        raise NotImplementedError
-
     def create_mask(self, qlen, mlen):
         """
         Creates causal attention mask. Float mask where 1.0 indicates masked, 0.0 indicates not-masked.

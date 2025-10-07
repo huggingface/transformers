@@ -790,14 +790,6 @@ class CanineModel(CaninePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
-
     def _create_3d_attention_mask_from_input_mask(self, from_tensor, to_mask):
         """
         Create 3D attention mask from a 2D tensor mask.

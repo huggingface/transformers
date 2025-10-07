@@ -437,14 +437,6 @@ class GLPNModel(GLPNPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
-
     @auto_docstring
     # Copied from transformers.models.segformer.modeling_segformer.SegformerModel.forward
     def forward(

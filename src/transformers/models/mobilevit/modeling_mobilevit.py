@@ -670,16 +670,6 @@ class MobileViTModel(MobileViTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def _prune_heads(self, heads_to_prune):
-        """Prunes heads of the model.
-        heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base class PreTrainedModel
-        """
-        for layer_index, heads in heads_to_prune.items():
-            mobilevit_layer = self.encoder.layer[layer_index]
-            if isinstance(mobilevit_layer, MobileViTLayer):
-                for transformer_layer in mobilevit_layer.transformer.layer:
-                    transformer_layer.attention.prune_heads(heads)
-
     @auto_docstring
     def forward(
         self,

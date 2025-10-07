@@ -407,14 +407,6 @@ class DistilBertModel(DistilBertPreTrainedModel):
     def set_input_embeddings(self, new_embeddings: nn.Embedding):
         self.embeddings.word_embeddings = new_embeddings
 
-    def _prune_heads(self, heads_to_prune: dict[int, list[list[int]]]):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.transformer.layer[layer].attention.prune_heads(heads)
-
     @check_model_inputs()
     @auto_docstring
     def forward(
