@@ -128,6 +128,20 @@ class MixtralConfig(PreTrainedConfig):
         "num_experts": "num_local_experts",
     }
 
+    # specify the cat dim if not 0
+    # ex: merge gate_up_proj, you need to interleave them?
+    # How de we handle sharding on top of it? (update the tp plan as well)
+    # and quantization, without materializing the weights
+    dynamic_weight_conversion = {
+        "layers.*.block_sparse_moe.experts.*.w1": "layers*.block_sparse_moe.experts.gate_up",
+        "layers.*.block_sparse_moe.experts.*.w2": "layers*.block_sparse_moe.experts.gate_up",
+        "layers.*.block_sparse_moe.experts.*.w3": "layers*.block_sparse_moe.experts.down_proj",
+        "layers.*.self_attn.q_proj": "layers.*.self_attn.qkv_proj",
+        "layers.*.self_attn.k_proj": "layers.*.self_attn.qkv_proj",
+        "layers.*.self_attn.v_proj": "layers.*.self_attn.qkv_proj",
+        "layers.*.layer_norm": "layers.*.self_attn.layer_norm",
+    }
+
     def __init__(
         self,
         vocab_size=32000,

@@ -412,6 +412,7 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
     shard_files = list(set(index["weight_map"].values()))
 
     # If strict=True, error before loading any of the state dicts.
+    # TODO: Here, update the weigth map with the config.dynamic_weight_conversion
     loaded_keys = index["weight_map"].keys()
     model_keys = model.state_dict().keys()
     missing_keys = [key for key in model_keys if key not in loaded_keys]
@@ -4897,6 +4898,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if use_kernels:
             model.use_kernels = True
 
+        # TODO: put this in a separate self.load_generation_config
         # If it is a model with generation capabilities, attempt to load generation files (generation config,
         # custom generate function)
         if model.can_generate() and generation_config is not None:
@@ -4936,8 +4938,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 except OSError:  # there is no custom generate function
                     pass
 
-        # Dispatch model with hooks on all devices if necessary (not needed with a tp_plan, so we skip it as it slightly
-        # harm performances)
+        # for device_map="auto" : dispatch model with hooks on all devices if necessary (not needed with a tp_plan, so we skip it as it slightly
+        # harm performances). TODO: split this in a separate function
         if device_map is not None and device_mesh is None:
             device_map_kwargs = {
                 "device_map": device_map,
@@ -4971,6 +4973,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if _adapter_model_path is not None:
             adapter_kwargs["key_mapping"] = key_mapping
+            # TODO: Arthur, handle this with the dynamic weigth loader
             model.load_adapter(
                 _adapter_model_path,
                 adapter_name=adapter_name,
@@ -5198,7 +5201,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # This offload index if for params explicitly on the "disk" in the device_map
         disk_offload_index = None
         disk_only_shard_files = []
-        # Prepare parameters offloading if needed
+        # Prepare parameters offloading if needed TODO: split this in a separate function
         if device_map is not None and "disk" in device_map.values():
             if disk_offload_folder is not None:
                 os.makedirs(disk_offload_folder, exist_ok=True)
@@ -5334,6 +5337,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             missing_keys, unexpected_keys, loading_task_model_from_base_state_dict
         )
 
+        # TODO: separate this in another function: it's not core....
         # All potential warnings/infos
         if len(error_msgs) > 0:
             error_msg = "\n\t".join(error_msgs)
