@@ -2520,7 +2520,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         return True
 
     def _check_and_adjust_attn_implementation(
-        self, attn_implementation: Optional[str], is_init_check: bool = False
+        self, attn_implementation: Optional[str], is_init_check: bool = False, use_paged=False
     ) -> str:
         """
         Check that the `attn_implementation` exists and is supported by the models, and try to get the kernel from hub if
@@ -2556,7 +2556,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if is_kernel(applicable_attn_implementation):
             try:
-                load_and_register_kernel(applicable_attn_implementation, getattr(self.config, "use_paged", False))
+                load_and_register_kernel(applicable_attn_implementation, use_paged)
                 # log that we used kernel fallback if successful
                 if attn_implementation.startswith("flash_attention"):
                     logger.warning_once(
@@ -2636,7 +2636,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # If no attention layer, assume `True`. Most probably a multimodal model or inherits from existing models
             return True
 
-    def set_attn_implementation(self, attn_implementation: Union[str, dict]):
+    def set_attn_implementation(self, attn_implementation: Union[str, dict], use_paged=False):
         """
         Set the requested `attn_implementation` for this model.
 
@@ -2662,7 +2662,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 )
             else:
                 requested_implementation = self._check_and_adjust_attn_implementation(
-                    requested_implementation, is_init_check=False
+                    requested_implementation, is_init_check=False, use_paged=use_paged
                 )
                 # Apply the change (on the internal attr, to avoid setting it recursively)
                 self.config._attn_implementation_internal = requested_implementation
