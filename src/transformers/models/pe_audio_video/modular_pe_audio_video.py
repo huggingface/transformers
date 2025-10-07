@@ -567,10 +567,14 @@ class PEAudioVideoWithTextModel(PEAudioVideoPretrainedModel):
                 video_embeds = self.video_head(video_outputs.pooler_output)
                 if text_outputs is not None:
                     video_text_embeds = self.video_text_head(text_outputs.pooler_output)
-            if input_values is not None:
+            elif input_values is not None:
                 audio_outputs = self.audio_video_model.audio_model(input_values, padding_mask=padding_mask)
+                audio_embeds = self.audio_head(audio_outputs.pooler_output)
                 if text_outputs is not None:
                     audio_text_embeds = self.audio_text_head(text_outputs.pooler_output)
+            elif text_outputs is not None:
+                # If text is supplied, but no audio or video, use audio_video_text as the default embedding
+                audio_video_text_embeds = self.audio_video_text_head(text_outputs.pooler_output)
 
         return PEAudioVideoTextOutput(
             audio_video_loss=self._maybe_compute_loss(audio_embeds, video_embeds, return_loss),
