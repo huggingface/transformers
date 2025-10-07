@@ -52,11 +52,11 @@ if is_vision_available():
 
 class PixtralImageProcessorKwargs(ImagesKwargs):
     """
-    patch_size (`dict[str, int]` *optional*, defaults to `{"height": 16, "width": 16}`):
+    patch_size (`Union[dict[str, int], int]` *optional*, defaults to `{"height": 16, "width": 16}`):
         Size of the patches in the model, used to calculate the output image size. Can be overridden by `patch_size` in the `preprocess` method.
     """
 
-    patch_size: Optional[dict[str, int]]
+    patch_size: Optional[Union[dict[str, int], int]]
 
 
 # Adapted from function in image_transforms.py to ensure any transparent pixels are converted to white.

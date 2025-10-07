@@ -42,7 +42,7 @@ class Qwen2_5_OmniVideosKwargs(VideosKwargs):
     max_frames: Optional[int]
     use_audio_in_video: Optional[bool]
     seconds_per_chunk: Optional[float]
-    position_id_per_seconds: Optional[int]
+    position_id_per_seconds: Optional[Union[int, float]]
 
 
 class Qwen2_5OmniProcessorKwargs(ProcessingKwargs, total=False):

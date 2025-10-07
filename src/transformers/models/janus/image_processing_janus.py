@@ -58,7 +58,7 @@ class JanusImageProcessorKwargs(ImagesKwargs):
         falls below this value after resizing.
     """
 
-    min_size: int
+    min_size: Optional[int]
 
 
 class JanusImageProcessor(BaseImageProcessor):

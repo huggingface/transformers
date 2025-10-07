@@ -20,7 +20,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import re
-from typing import Optional
+from typing import Optional, Union
 
 import numpy as np
 
@@ -44,7 +44,7 @@ class Qwen3OmniMoeVideosKwargs(VideosKwargs):
     max_frames: Optional[int]
     use_audio_in_video: Optional[bool]
     seconds_per_chunk: Optional[float]
-    position_id_per_seconds: Optional[int]
+    position_id_per_seconds: Optional[Union[int, float]]
 
 
 class Qwen3OmniMoeProcessorKwargs(ProcessingKwargs, total=False):

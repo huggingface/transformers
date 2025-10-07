@@ -1389,8 +1389,16 @@ class ProcessorMixin(PushToHubMixin):
             for kwarg in output_kwargs.values():
                 kwarg.update(common_kwargs)
 
-        # Finally perform type validation on collected kwargs
         for key, typed_dict_obj in ModelProcessorKwargs.__annotations__.items():
+            if key in map_preprocessor_kwargs:
+                preprocessor = getattr(self, map_preprocessor_kwargs[key], None)
+                if preprocessor is None or getattr(preprocessor, "valid_kwargs", None) is None:
+                    continue
+                preprocessor_typed_dict_obj = getattr(preprocessor, "valid_kwargs")
+                typed_dict_obj = TypedDict(
+                    "merged_typed_dict",
+                    {**preprocessor_typed_dict_obj.__annotations__, **typed_dict_obj.__annotations__},
+                )
             type_validator = TypedDictAdapter(typed_dict_obj)
             type_validator.validate_fields(**output_kwargs[key])
         return output_kwargs

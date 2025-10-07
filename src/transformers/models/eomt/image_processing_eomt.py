@@ -66,8 +66,8 @@ class EomtImageProcessorKwargs(ImagesKwargs):
         denoted with 0 (background) will be replaced with `ignore_index`.
     """
 
-    do_split_image: bool
-    ignore_index: Optional[int] = None
+    do_split_image: Optional[bool]
+    ignore_index: Optional[int]
 
 
 # Adapted from transformers.models.maskformer.image_processing_maskformer.convert_segmentation_map_to_binary_masks
