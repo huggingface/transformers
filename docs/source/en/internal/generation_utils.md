@@ -255,6 +255,20 @@ A [`StoppingCriteria`] can be used to change when to stop generation (other than
 
 [[autodoc]] EncoderDecoderCache
 
+[[autodoc]] QuantoQuantizedCache
+
+[[autodoc]] HQQQuantizedCache
+
+[[autodoc]] OffloadedCache
+
+[[autodoc]] OffloadedStaticCache
+
+[[autodoc]] HybridCache
+
+[[autodoc]] HybridChunkedCache
+
+[[autodoc]] SlidingWindowCache
+
 ## Watermark Utils
 
 [[autodoc]] WatermarkingConfig
