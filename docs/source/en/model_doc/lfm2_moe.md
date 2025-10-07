@@ -22,23 +22,48 @@ limitations under the License.
 
 ## Overview
 
-The Lfm2Moe model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+LFM2-MoE is a Mixture-of-Experts (MoE) variant of [LFM2](https://huggingface.co/collections/LiquidAI/lfm2-686d721927015b2ad73eaa38). The LFM2 family is optimized for on-device inference by combining short‑range, input‑aware gated convolutions with grouped‑query attention (GQA) in a layout tuned to maximize quality under strict speed and memory constraints.
 
-The abstract from the paper is the following:
+LFM2‑MoE keeps this fast backbone and introduces sparse MoE feed‑forward networks to add representational capacity without significantly increasing the active compute path. The first LFM2-MoE release is LFM2-8B-A1B, with 8.3B total parameters and 1.5B active parameters. The model excels in quality (comparable to 3-4B dense models) and speed (faster than other 1.5B class models). 
 
-<INSERT PAPER ABSTRACT HERE>
+## Example
 
-Tips:
+The following example shows how to generate an answer using the `AutoModelForCausalLM` class.
 
-<INSERT TIPS ABOUT MODEL HERE>
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+# Load model and tokenizer
+model_id = "LiquidAI/LFM2-8B-A1B"
+model = AutoModelForCausalLM.from_pretrained(
+    model_id,
+    device_map="auto",
+    torch_dtype="bfloat16",
+    trust_remote_code=True,
+#    attn_implementation="flash_attention_2" <- uncomment on compatible GPU
+)
+tokenizer = AutoTokenizer.from_pretrained(model_id)
 
-## Usage examples
+# Generate answer
+prompt = "What is C. elegans?"
+input_ids = tokenizer.apply_chat_template(
+    [{"role": "user", "content": prompt}],
+    add_generation_prompt=True,
+    return_tensors="pt",
+    tokenize=True,
+).to(model.device)
 
-<INSERT SOME NICE EXAMPLES HERE>
+output = model.generate(
+    input_ids,
+    do_sample=True,
+    temperature=0.3,
+    min_p=0.15,
+    repetition_penalty=1.05,
+    max_new_tokens=512,
+)
+
+print(tokenizer.decode(output[0], skip_special_tokens=False))
+```
 
 ## Lfm2MoeConfig
 
