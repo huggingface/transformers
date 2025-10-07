@@ -1019,12 +1019,7 @@ class TrainingArguments:
         default=False,
         metadata={"help": "Whether to use fp16 (mixed) precision instead of 32-bit"},
     )
-    half_precision_backend: Optional[str] = field(
-        default=None,
-        metadata={
-            "help": "The backend to be used for half precision. This argument is deprecated. We will always use CPU/CUDA AMP from torch",
-        },
-    )
+
     bf16_full_eval: bool = field(
         default=False,
         metadata={
@@ -1386,14 +1381,6 @@ class TrainingArguments:
             "help": "Which mode to use with `torch.compile`, passing one will trigger a model compilation.",
         },
     )
-
-    include_tokens_per_second: Optional[bool] = field(
-        default=None,
-        metadata={
-            "help": "This arg is deprecated and will be removed in v5 , use `include_num_input_tokens_seen` instead."
-        },
-    )
-
     include_num_input_tokens_seen: Union[str, bool] = field(
         default="no",
         metadata={
@@ -1594,11 +1581,6 @@ class TrainingArguments:
                             error_message += " You need Ampere+ GPU with cuda>=11.0"
                         # gpu
                         raise ValueError(error_message)
-
-        if self.half_precision_backend is not None:
-            raise ValueError(
-                "half_precision_backend is deprecated. For mixed precision, we will always use CPU/CUDA AMP from torch"
-            )
 
         if self.fp16 and self.bf16:
             raise ValueError("At most one of fp16 and bf16 can be True, but not both")
@@ -1906,12 +1888,6 @@ class TrainingArguments:
                     "data_seed requires Accelerate version `accelerate` >= 1.1.0. "
                     "This is not supported and we recommend you to update your version."
                 )
-
-        if self.include_tokens_per_second is not None:
-            logger.warning(
-                "include_tokens_per_second is deprecated and will be removed in v5. Use `include_num_input_tokens_seen` instead. "
-            )
-            self.include_num_input_tokens_seen = self.include_tokens_per_second
 
         if isinstance(self.include_num_input_tokens_seen, bool):
             self.include_num_input_tokens_seen = "all" if self.include_num_input_tokens_seen else "no"
