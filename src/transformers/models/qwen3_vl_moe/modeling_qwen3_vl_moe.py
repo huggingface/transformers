@@ -821,45 +821,24 @@ class Qwen3VLMoeTextRotaryEmbedding(nn.Module):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
-        self.config = standardize_rope_params(config)
 
-        # We get one layer type per model if:
-        #   1) Model is used as backbone with several other models. E.g. Gemma which has sliding
-        #      layers with Paligemma and has only one layer type as a standalone model
-        #   2) Tiny models used for testing do not have enough layers to reach the next layer type
-        self.layer_types = list(set(config.layer_types)) if hasattr(config, "layer_types") else None
-        if self.layer_types is not None and len(self.layer_types) > 1:
-            self.rope_type = {}
-            for layer_type in self.layer_types:
-                rope_type, curr_inv_freq, curr_attention_scaling = self.get_rope_frequencies(device, layer_type)
-                self.rope_type[layer_type] = rope_type
-                self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
-                setattr(self, f"{layer_type}_original_inv_freq", curr_inv_freq)
-                setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
-        else:
-            layer_type = None if self.layer_types is None else self.layer_types[0]
-            self.rope_type, inv_freq, self.attention_scaling = self.get_rope_frequencies(device, layer_type=layer_type)
-            self.register_buffer("inv_freq", inv_freq, persistent=False)
-            self.original_inv_freq = inv_freq
+        standardize_rope_params(config)
+        self.config = config
+
+        self.rope_type = self.config.rope_scaling["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = inv_freq
 
         self.mrope_section = config.rope_scaling.get("mrope_section", [24, 20, 20])
 
-    def get_rope_frequencies(self, device, layer_type=None):
-        # Some layer types have no RoPE, e.g. conv or mamba layers. Skip them
-        rope_params = self.config.rope_scaling[layer_type] if layer_type is not None else self.config.rope_scaling
-        if rope_params is None:
-            return None, None, None
-
-        rope_type = rope_params["rope_type"]
-        rope_init_fn: Callable = self.compute_default_rope_parameters
-        if rope_type != "default":
-            rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
-        inv_freq, attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
-        return rope_type, inv_freq, attention_scaling
-
     @staticmethod
     def compute_default_rope_parameters(
-        config: Optional[Qwen3VLMoeConfig] = None,
+        config: Optional[Qwen3VLMoeTextConfig] = None,
         device: Optional["torch.device"] = None,
         seq_len: Optional[int] = None,
         layer_type: Optional[str] = None,
@@ -873,15 +852,21 @@ class Qwen3VLMoeTextRotaryEmbedding(nn.Module):
                 The device to use for initialization of the inverse frequencies.
             seq_len (`int`, *optional*):
                 The current sequence length. Unused for this type of RoPE.
+            layer_type (`str`, *optional*):
+                The current layer type if the model has different RoPE parameters per type.
+                Should not be used unless `config.layer_types is not None`
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         # For backward compatibility standardize the `rope_scaling_dict` if it uses old format
-        config = standardize_rope_params(config)
-        rope_scaling_dict = config.rope_scaling[layer_type] if layer_type is not None else config.rope_scaling
+        standardize_rope_params(config)
 
-        base = rope_scaling_dict["rope_theta"]
+        base = (
+            config.rope_scaling[layer_type]["rope_theta"]
+            if layer_type is not None
+            else config.rope_scaling["rope_theta"]
+        )
         partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
         head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         dim = int(head_dim * partial_rotary_factor)
@@ -894,19 +879,14 @@ class Qwen3VLMoeTextRotaryEmbedding(nn.Module):
         )
         return inv_freq, attention_factor
 
-    # Ignore copy
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids, layer_type=None):
-        prefix = "" if layer_type is None or len(self.layer_types) == 1 else f"{layer_type}_"
-        inv_freq = getattr(self, f"{prefix}inv_freq")
-        attention_scaling = getattr(self, f"{prefix}attention_scaling")
-
         # In contrast to other models, Qwen3VLMoe has different position ids for the grids
         # So we expand the inv_freq to shape (3, ...)
         if position_ids.ndim == 2:
             position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
-        inv_freq_expanded = inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
+        inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
         position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
@@ -914,8 +894,8 @@ class Qwen3VLMoeTextRotaryEmbedding(nn.Module):
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
             freqs = self.apply_interleaved_mrope(freqs, self.mrope_section)
             emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * attention_scaling
-            sin = emb.sin() * attention_scaling
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 

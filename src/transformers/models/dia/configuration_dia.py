@@ -17,7 +17,7 @@
 from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 from ...utils import logging
 
 
@@ -77,7 +77,7 @@ class DiaEncoderConfig(PretrainedConfig):
         norm_eps: float = 1e-5,
         vocab_size: int = 256,
         hidden_act: str = "silu",
-        rope_scaling: Optional[dict] = None,
+        rope_scaling: Optional[RopeParameters] = None,
         initializer_range: float = 0.02,
         **kwargs,
     ):
@@ -92,16 +92,11 @@ class DiaEncoderConfig(PretrainedConfig):
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
+        self.rope_scaling = rope_scaling
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)
-        if rope_scaling is None:
-            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
-        else:
-            # BC: if there is a 'type' field, copy it it to 'rope_type'.
-            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
-            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
-        self.rope_scaling = rope_scaling
+        standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
         super().__init__(**kwargs)
 
@@ -178,7 +173,7 @@ class DiaDecoderConfig(PretrainedConfig):
         vocab_size: int = 1028,
         hidden_act: str = "silu",
         num_channels: int = 9,
-        rope_scaling: Optional[dict] = None,
+        rope_scaling: Optional[RopeParameters] = None,
         initializer_range: float = 0.02,
         use_cache: bool = True,
         is_encoder_decoder: bool = True,
@@ -201,16 +196,11 @@ class DiaDecoderConfig(PretrainedConfig):
         self.num_channels = num_channels
         self.initializer_range = initializer_range
         self.use_cache = use_cache
+        self.rope_scaling = rope_scaling
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)
-        if rope_scaling is None:
-            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
-        else:
-            # BC: if there is a 'type' field, copy it it to 'rope_type'.
-            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
-            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
-        self.rope_scaling = rope_scaling
+        standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 

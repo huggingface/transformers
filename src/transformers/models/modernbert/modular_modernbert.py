@@ -38,7 +38,7 @@ from ...modeling_rope_utils import RopeParameters, rope_config_validation, stand
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, is_flash_attn_2_available, logging
 from ...utils.import_utils import is_triton_available
-from ..gemma.modeling_gemma import GemmaRotaryEmbedding, apply_rotary_pos_emb
+from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding, apply_rotary_pos_emb
 
 
 if is_flash_attn_2_available():
@@ -233,6 +233,7 @@ class ModernBertConfig(PretrainedConfig):
         self.sparse_pred_ignore_index = sparse_pred_ignore_index
         self.reference_compile = reference_compile
         self.repad_logits_with_grad = repad_logits_with_grad
+        self.rope_scaling = rope_scaling
 
         if self.classifier_pooling not in ["cls", "mean"]:
             raise ValueError(
@@ -252,20 +253,11 @@ class ModernBertConfig(PretrainedConfig):
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         # Validate the correctness of rotary position embeddings parameters
-        # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type
         rope_theta = getattr(self, "global_rope_theta", 160_000.0)
         rope_local_base_freq = getattr(self, "local_rope_theta", 10000.0)
-        sliding_attention_rope = {"rope_type": "default", "rope_theta": rope_local_base_freq}
-        full_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
-        if rope_scaling is not None:
-            if "full_attention" in rope_scaling or "sliding_attention" in rope_scaling:
-                full_attention_rope.update(**rope_scaling.get("full_attention", {}))
-                sliding_attention_rope.update(**rope_scaling.get("sliding_attention", {}))
-            else:
-                full_attention_rope.update(**rope_scaling)
-
-        rope_scaling = {"full_attention": full_attention_rope, "sliding_attention": sliding_attention_rope}
-        self.rope_scaling = {k: v for k, v in rope_scaling.items() if k in self.layer_types}
+        standardize_rope_params(
+            self, rope_theta={"full_attention": rope_theta, "sliding_attention": rope_local_base_freq}
+        )
         rope_config_validation(self)
 
     def to_dict(self):
@@ -530,7 +522,7 @@ class ModernBertMLP(nn.Module):
         return self.Wo(self.drop(self.act(input) * gate))
 
 
-class ModernBertRotaryEmbedding(GemmaRotaryEmbedding):
+class ModernBertRotaryEmbedding(Gemma2RotaryEmbedding):
     pass
 
 

@@ -35,7 +35,7 @@ from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, standardize_rope_params
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update, standardize_rope_params
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling
@@ -72,39 +72,18 @@ class Glm4vMoeTextRotaryEmbedding(nn.Module):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
-        self.config = standardize_rope_params(config)
 
-        # We get one layer type per model if:
-        #   1) Model is used as backbone with several other models. E.g. Gemma which has sliding
-        #      layers with Paligemma and has only one layer type as a standalone model
-        #   2) Tiny models used for testing do not have enough layers to reach the next layer type
-        self.layer_types = list(set(config.layer_types)) if hasattr(config, "layer_types") else None
-        if self.layer_types is not None and len(self.layer_types) > 1:
-            self.rope_type = {}
-            for layer_type in self.layer_types:
-                rope_type, curr_inv_freq, curr_attention_scaling = self.get_rope_frequencies(device, layer_type)
-                self.rope_type[layer_type] = rope_type
-                self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
-                setattr(self, f"{layer_type}_original_inv_freq", curr_inv_freq)
-                setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
-        else:
-            layer_type = None if self.layer_types is None else self.layer_types[0]
-            self.rope_type, inv_freq, self.attention_scaling = self.get_rope_frequencies(device, layer_type=layer_type)
-            self.register_buffer("inv_freq", inv_freq, persistent=False)
-            self.original_inv_freq = inv_freq
+        standardize_rope_params(config)
+        self.config = config
 
-    def get_rope_frequencies(self, device, layer_type=None):
-        # Some layer types have no RoPE, e.g. conv or mamba layers. Skip them
-        rope_params = self.config.rope_scaling[layer_type] if layer_type is not None else self.config.rope_scaling
-        if rope_params is None:
-            return None, None, None
-
-        rope_type = rope_params["rope_type"]
+        self.rope_type = self.config.rope_scaling["rope_type"]
         rope_init_fn: Callable = self.compute_default_rope_parameters
-        if rope_type != "default":
-            rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
-        inv_freq, attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
-        return rope_type, inv_freq, attention_scaling
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = inv_freq
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -122,15 +101,21 @@ class Glm4vMoeTextRotaryEmbedding(nn.Module):
                 The device to use for initialization of the inverse frequencies.
             seq_len (`int`, *optional*):
                 The current sequence length. Unused for this type of RoPE.
+            layer_type (`str`, *optional*):
+                The current layer type if the model has different RoPE parameters per type.
+                Should not be used unless `config.layer_types is not None`
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         # For backward compatibility standardize the `rope_scaling_dict` if it uses old format
-        config = standardize_rope_params(config)
-        rope_scaling_dict = config.rope_scaling[layer_type] if layer_type is not None else config.rope_scaling
+        standardize_rope_params(config)
 
-        base = rope_scaling_dict["rope_theta"]
+        base = (
+            config.rope_scaling[layer_type]["rope_theta"]
+            if layer_type is not None
+            else config.rope_scaling["rope_theta"]
+        )
         partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
         head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         dim = int(head_dim * partial_rotary_factor)
@@ -143,23 +128,18 @@ class Glm4vMoeTextRotaryEmbedding(nn.Module):
         )
         return inv_freq, attention_factor
 
-    # Ignore copy
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids, layer_type=None):
-        prefix = "" if layer_type is None or len(self.layer_types) == 1 else f"{layer_type}_"
-        inv_freq = getattr(self, f"{prefix}inv_freq")
-        attention_scaling = getattr(self, f"{prefix}attention_scaling")
-
-        # In contrast to other models, Glm4vMoeText has different position ids for the grids
-        # So we expand the inv_freq to shape (3, ...)
-        inv_freq_expanded = inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
-        position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * attention_scaling
-            sin = emb.sin() * attention_scaling
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -962,105 +942,6 @@ class Glm4vMoeVisionModel(Glm4vMoePreTrainedModel):
         return hidden_states
 
 
-class Glm4vMoeRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, config: Glm4vMoeConfig, device=None):
-        super().__init__()
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-        self.config = standardize_rope_params(config)
-
-        # We get one layer type per model if:
-        #   1) Model is used as backbone with several other models. E.g. Gemma which has sliding
-        #      layers with Paligemma and has only one layer type as a standalone model
-        #   2) Tiny models used for testing do not have enough layers to reach the next layer type
-        self.layer_types = list(set(config.layer_types)) if hasattr(config, "layer_types") else None
-        if self.layer_types is not None and len(self.layer_types) > 1:
-            self.rope_type = {}
-            for layer_type in self.layer_types:
-                rope_type, curr_inv_freq, curr_attention_scaling = self.get_rope_frequencies(device, layer_type)
-                self.rope_type[layer_type] = rope_type
-                self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
-                setattr(self, f"{layer_type}_original_inv_freq", curr_inv_freq)
-                setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
-        else:
-            layer_type = None if self.layer_types is None else self.layer_types[0]
-            self.rope_type, inv_freq, self.attention_scaling = self.get_rope_frequencies(device, layer_type=layer_type)
-            self.register_buffer("inv_freq", inv_freq, persistent=False)
-            self.original_inv_freq = inv_freq
-
-    def get_rope_frequencies(self, device, layer_type=None):
-        # Some layer types have no RoPE, e.g. conv or mamba layers. Skip them
-        rope_params = self.config.rope_scaling[layer_type] if layer_type is not None else self.config.rope_scaling
-        if rope_params is None:
-            return None, None, None
-
-        rope_type = rope_params["rope_type"]
-        rope_init_fn: Callable = self.compute_default_rope_parameters
-        if rope_type != "default":
-            rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
-        inv_freq, attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
-        return rope_type, inv_freq, attention_scaling
-
-    @staticmethod
-    def compute_default_rope_parameters(
-        config: Optional[Glm4vMoeConfig] = None,
-        device: Optional["torch.device"] = None,
-        seq_len: Optional[int] = None,
-        layer_type: Optional[str] = None,
-    ) -> tuple["torch.Tensor", float]:
-        """
-        Computes the inverse frequencies according to the original RoPE implementation
-        Args:
-            config ([`~transformers.PretrainedConfig`]):
-                The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
-        Returns:
-            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
-            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
-        """
-        # For backward compatibility standardize the `rope_scaling_dict` if it uses old format
-        config = standardize_rope_params(config)
-        rope_scaling_dict = config.rope_scaling[layer_type] if layer_type is not None else config.rope_scaling
-
-        base = rope_scaling_dict["rope_theta"]
-        partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
-        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-        dim = int(head_dim * partial_rotary_factor)
-
-        attention_factor = 1.0  # Unused in this type of RoPE
-
-        # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
-
-    # Ignore copy
-    def forward(self, x, position_ids, layer_type=None):
-        prefix = "" if layer_type is None or len(self.layer_types) == 1 else f"{layer_type}_"
-        inv_freq = getattr(self, f"{prefix}inv_freq")
-        attention_scaling = getattr(self, f"{prefix}attention_scaling")
-
-        # In contrast to other models, Glm4vMoe has different position ids for the grids
-        # So we expand the inv_freq to shape (3, ...)
-        inv_freq_expanded = inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
-        position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * attention_scaling
-            sin = emb.sin() * attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
-
 @auto_docstring
 class Glm4vMoeTextModel(Glm4vMoePreTrainedModel):
     config: Glm4vMoeTextConfig
@@ -1075,7 +956,7 @@ class Glm4vMoeTextModel(Glm4vMoePreTrainedModel):
             [Glm4vMoeTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = Glm4vMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = Glm4vMoeRotaryEmbedding(config=config)
+        self.rotary_emb = Glm4vMoeTextRotaryEmbedding(config=config)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing

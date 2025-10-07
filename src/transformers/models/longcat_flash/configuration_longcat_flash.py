@@ -18,7 +18,7 @@
 from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 
 
 class LongcatFlashConfig(PretrainedConfig):
@@ -210,21 +210,15 @@ class LongcatFlashConfig(PretrainedConfig):
         self.zero_expert_num = zero_expert_num
         self.expert_ffn_hidden_size = expert_ffn_hidden_size
         self.routed_scaling_factor = routed_scaling_factor
+        self.rope_scaling = rope_scaling
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000000.0)
-        if rope_scaling is None:
-            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
-        else:
-            # BC: if there is a 'type' field, copy it it to 'rope_type'.
-            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
-            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
-        self.rope_scaling = rope_scaling
+        standardize_rope_params(self, rope_theta=rope_theta)
 
-        if self.rope_scaling is not None:
-            for key in ["beta_fast", "beta_slow", "factor"]:
-                if key in self.rope_scaling:
-                    self.rope_scaling[key] = float(self.rope_scaling[key])
+        for key in ["beta_fast", "beta_slow", "factor"]:
+            if key in self.rope_scaling:
+                self.rope_scaling[key] = float(self.rope_scaling[key])
 
         rope_config_validation(self)
 

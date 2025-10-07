@@ -12,10 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import math
 from functools import wraps
-from typing import Optional, TypedDict
+from typing import Optional, TypedDict, Union
 
 from .configuration_utils import PretrainedConfig
 from .utils import is_torch_available, logging
@@ -28,40 +27,61 @@ if is_torch_available():
     import torch
 
 
-def standardize_rope_params(config):
+def standardize_rope_params(config, rope_theta: Optional[Union[float, dict[str, float]]] = None):
     """
     Helper to standardize the config's rope params field by ensuring the params are defined for each
     later type. For old model the fn will duplicate a single rope param in each layer type (backward compatibility)
     """
+    rope_scaling = getattr(config, "rope_scaling", None)
+    layer_types = getattr(config, "layer_types", None)
+    if rope_theta is None:
+        rope_theta = getattr(config, "rope_theta", None)
 
-    # The RoPE scaling dict might be serialized differently if they were saved before/after RoPE refactor:
-    # Case 1: `config.rope_scaling` is a simple dict with values to configure RoPE type. Used when the model
-    #   has a single attention type, i.e. `config.layer_types = None` and in old-style configs
-    # Case 2: `config.rope_scaling` is a dict where keys define different RoPE configurations used by the model.
-    #   For example `rope_scaling={"full_attention": {}, "sliding_attentionn": {}}` to alternate between global
-    #   and local attention layers. This is the how models are serialized now
-    config = copy.deepcopy(config)  # don't change config in-place
-    rope_scaling_dict = getattr(config, "rope_scaling", None)
-
-    # Standardize rope for cases when config has layer types by duplicating rope for each type
-    if getattr(config, "layer_types", None) is not None:
-        if rope_scaling_dict is None:
-            default_rope_params = {"rope_type": "default", "rope_theta": config.rope_theta}
-            rope_scaling_dict = dict.fromkeys(config.layer_types, default_rope_params)
-        elif set(config.layer_types) != set(rope_scaling_dict.keys()):
-            rope_scaling_dict = dict.fromkeys(config.layer_types, rope_scaling_dict)
-
-    # If config has no layer types, simply check correctness of rope param keys
-    else:
-        if rope_scaling_dict is None:
-            rope_scaling_dict = {"rope_type": "default", "rope_theta": config.rope_theta}
+    # Case 1: one RoPE dict per model without nesting
+    if layer_types is None:
+        if rope_scaling is None:
+            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
         else:
-            rope_type = rope_scaling_dict.get("rope_type", rope_scaling_dict.get("type", "default"))
-            rope_theta = config.rope_theta if hasattr(config, "rope_theta") else rope_scaling_dict["rope_theta"]
-            rope_scaling_dict.update({"rope_type": rope_type, "rope_theta": rope_theta})
+            # BC: if there is a 'type' field, copy it it to 'rope_type'.
+            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type", "default"))
+            rope_theta = rope_scaling.get("rope_theta") or rope_theta
+            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
+        config.rope_scaling = rope_scaling
 
-    config.rope_scaling = rope_scaling_dict
-    return config
+    # Case 2: different RoPE for each layer type as nested dict
+    else:
+        rope_scaling_per_layer_type = {}
+        for layer_type in layer_types:
+            if rope_scaling is None:
+                if rope_theta[layer_type] is not None:
+                    rope_scaling_per_layer_type[layer_type] = {
+                        "rope_type": "default",
+                        "rope_theta": rope_theta[layer_type],
+                    }
+                else:
+                    rope_scaling_per_layer_type[layer_type] = None
+            else:
+                is_field_in_new_format = any(layer_type in rope_scaling for layer_type in layer_types)
+                if not is_field_in_new_format:
+                    curr_rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
+                    curr_rope_theta = rope_scaling.get("rope_theta") or rope_theta[layer_type]
+                    rope_scaling_per_layer_type[layer_type] = {
+                        **rope_scaling,
+                        "rope_type": curr_rope_type,
+                        "rope_theta": curr_rope_theta,
+                    }
+                # Do not do anything if rope scaling is in new format and the rope params are set to `None` by users
+                elif rope_scaling[layer_type] is not None:
+                    curr_rope_theta = rope_scaling[layer_type].get("rope_theta") or rope_theta[layer_type]
+                    curr_rope_type = rope_scaling[layer_type].get("rope_type", rope_scaling[layer_type].get("type"))
+                    rope_scaling_per_layer_type[layer_type] = {
+                        **rope_scaling[layer_type],
+                        "rope_type": curr_rope_type,
+                        "rope_theta": curr_rope_theta,
+                    }
+                else:
+                    rope_scaling_per_layer_type[layer_type] = None
+            config.rope_scaling = rope_scaling_per_layer_type
 
 
 def dynamic_rope_update(rope_forward):
@@ -193,7 +213,7 @@ def _compute_linear_scaling_rope_parameters(
         post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
     """
     # For backward compatibility standardize the `rope_scaling_dict` if it uses old format
-    config = standardize_rope_params(config)
+    standardize_rope_params(config)
     rope_scaling_dict = config.rope_scaling[layer_type] if layer_type is not None else config.rope_scaling
     factor = rope_scaling_dict["factor"]
 
@@ -258,7 +278,7 @@ def _compute_dynamic_ntk_parameters(
     """
     # TODO (joao): use the new `original_max_position_embeddings` from rope_scaling
     # For backward compatibility standardize the `rope_scaling_dict` if it uses old format
-    config = standardize_rope_params(config)
+    standardize_rope_params(config)
     rope_scaling_dict = config.rope_scaling[layer_type] if layer_type is not None else config.rope_scaling
 
     base = rope_scaling_dict["rope_theta"]
@@ -345,7 +365,7 @@ def _compute_yarn_parameters(
         post-processing scaling factor applied to the computed cos/sin.
     """
     # For backward compatibility standardize the `rope_scaling_dict` if it uses old format
-    config = standardize_rope_params(config)
+    standardize_rope_params(config)
     rope_scaling_dict = config.rope_scaling[layer_type] if layer_type is not None else config.rope_scaling
 
     base = rope_scaling_dict["rope_theta"]
@@ -475,7 +495,7 @@ def _compute_longrope_parameters(
     """
     # TODO (joao): use the new `original_max_position_embeddings` from rope_scaling
     # For backward compatibility standardize the `rope_scaling_dict` if it uses old format
-    config = standardize_rope_params(config)
+    standardize_rope_params(config)
     rope_scaling_dict = config.rope_scaling[layer_type] if layer_type is not None else config.rope_scaling
 
     base = rope_scaling_dict["rope_theta"]
@@ -559,7 +579,7 @@ def _compute_llama3_parameters(
         post-processing scaling factor applied to the computed cos/sin.
     """
     # For backward compatibility standardize the `rope_scaling_dict` if it uses old format
-    config = standardize_rope_params(config)
+    standardize_rope_params(config)
     rope_scaling_dict = config.rope_scaling[layer_type] if layer_type is not None else config.rope_scaling
 
     # Gets the default RoPE parameters

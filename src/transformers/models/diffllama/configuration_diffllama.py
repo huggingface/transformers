@@ -20,7 +20,7 @@
 from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 
 
 class DiffLlamaConfig(PretrainedConfig):
@@ -145,16 +145,11 @@ class DiffLlamaConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.lambda_std_dev = lambda_std_dev
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
+        self.rope_scaling = rope_scaling
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)
-        if rope_scaling is None:
-            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
-        else:
-            # BC: if there is a 'type' field, copy it it to 'rope_type'.
-            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
-            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
-        self.rope_scaling = rope_scaling
+        standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
 
         super().__init__(

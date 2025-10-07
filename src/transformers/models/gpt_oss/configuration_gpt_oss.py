@@ -14,8 +14,10 @@
 # limitations under the License.
 """openai model configuration"""
 
+from typing import Optional
+
 from ...configuration_utils import PretrainedConfig, layer_type_validation
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 
 
 class GptOssConfig(PretrainedConfig):
@@ -47,21 +49,21 @@ class GptOssConfig(PretrainedConfig):
 
     def __init__(
         self,
-        num_hidden_layers: int = 36,
-        num_local_experts: int = 128,
-        vocab_size: int = 201088,
-        hidden_size: int = 2880,
-        intermediate_size: int = 2880,
-        head_dim: int = 64,
-        num_attention_heads: int = 64,
-        num_key_value_heads: int = 8,
-        sliding_window: int = 128,
-        tie_word_embeddings=False,
-        hidden_act: str = "silu",
-        initializer_range: float = 0.02,
-        max_position_embeddings=131072,
-        rms_norm_eps: float = 1e-5,
-        rope_scaling={
+        num_hidden_layers: Optional[int] = 36,
+        num_local_experts: Optional[int] = 128,
+        vocab_size: Optional[int] = 201088,
+        hidden_size: Optional[int] = 2880,
+        intermediate_size: Optional[int] = 2880,
+        head_dim: Optional[int] = 64,
+        num_attention_heads: Optional[int] = 64,
+        num_key_value_heads: Optional[int] = 8,
+        sliding_window: Optional[int] = 128,
+        tie_word_embeddings: Optional[bool] = False,
+        hidden_act: Optional[str] = "silu",
+        initializer_range: Optional[float] = 0.02,
+        max_position_embeddings: Optional[int] = 131072,
+        rms_norm_eps: Optional[float] = 1e-5,
+        rope_scaling: Optional[RopeParameters] = {
             "rope_type": "yarn",
             "factor": 32.0,
             "beta_fast": 32.0,
@@ -69,12 +71,12 @@ class GptOssConfig(PretrainedConfig):
             "truncate": False,
             "original_max_position_embeddings": 4096,
         },
-        attention_dropout: float = 0.0,
-        num_experts_per_tok=4,
-        router_aux_loss_coef: float = 0.9,
-        output_router_logits=False,
-        use_cache=True,
-        layer_types=None,
+        attention_dropout: Optional[float] = 0.0,
+        num_experts_per_tok: Optional[int] = 4,
+        router_aux_loss_coef: Optional[float] = 0.9,
+        output_router_logits: Optional[bool] = False,
+        use_cache: Optional[bool] = True,
+        layer_types: Optional[list[str]] = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -107,21 +109,12 @@ class GptOssConfig(PretrainedConfig):
         self.router_aux_loss_coef = router_aux_loss_coef
         self.output_router_logits = output_router_logits
         self.use_cache = use_cache
+        self.rope_scaling = rope_scaling
 
         # Validate the correctness of rotary position embeddings parameters
         # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type
         rope_theta = kwargs.get("rope_theta", 150000.0)
-        sliding_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
-        full_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
-        if rope_scaling is not None:
-            if "full_attention" in rope_scaling or "sliding_attention" in rope_scaling:
-                full_attention_rope.update(**rope_scaling.get("full_attention", {}))
-                sliding_attention_rope.update(**rope_scaling.get("sliding_attention", {}))
-            else:
-                full_attention_rope.update(**rope_scaling)
-
-        rope_scaling = {"full_attention": full_attention_rope, "sliding_attention": sliding_attention_rope}
-        self.rope_scaling = {k: v for k, v in rope_scaling.items() if k in self.layer_types}
+        standardize_rope_params(self, rope_theta={"full_attention": rope_theta, "sliding_attention": rope_theta})
         rope_config_validation(self)
 
         super().__init__(

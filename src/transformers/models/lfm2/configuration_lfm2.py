@@ -14,7 +14,7 @@
 from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 
 
 class Lfm2Config(PretrainedConfig):
@@ -148,6 +148,7 @@ class Lfm2Config(PretrainedConfig):
         self.block_multiple_of = block_multiple_of
         self.block_ffn_dim_multiplier = block_ffn_dim_multiplier
         self.block_auto_adjust_ff_dim = block_auto_adjust_ff_dim
+        self.rope_scaling = rope_scaling
 
         self.layer_types = layer_types
         if self.layer_types is None:
@@ -157,15 +158,7 @@ class Lfm2Config(PretrainedConfig):
         # Validate the correctness of rotary position embeddings parameters
         # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type
         rope_theta = kwargs.get("theta", kwargs.get("rope_theta", 1000000.0))
-        full_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
-        if rope_scaling is not None:
-            if "full_attention" in rope_scaling:
-                full_attention_rope.update(**rope_scaling.get("full_attention", {}))
-            else:
-                full_attention_rope.update(**rope_scaling)
-
-        rope_scaling = {"full_attention": full_attention_rope, "conv": None}
-        self.rope_scaling = {k: v for k, v in rope_scaling.items() if k in self.layer_types}
+        standardize_rope_params(self, rope_theta={"full_attention": rope_theta, "conv": None})
         rope_config_validation(self)
 
         tie_word_embeddings = kwargs.get("tie_embedding", tie_word_embeddings)  # to fit original config keys

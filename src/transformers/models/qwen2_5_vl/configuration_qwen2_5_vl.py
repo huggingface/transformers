@@ -27,7 +27,7 @@
 from typing import Optional
 
 from ...configuration_utils import PretrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 
 
 class Qwen2_5_VLVisionConfig(PretrainedConfig):
@@ -208,6 +208,7 @@ class Qwen2_5_VLTextConfig(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.attention_dropout = attention_dropout
+        self.rope_scaling = rope_scaling
 
         self.layer_types = layer_types
         if self.layer_types is None:
@@ -221,17 +222,7 @@ class Qwen2_5_VLTextConfig(PretrainedConfig):
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 1000000.0)
-        sliding_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
-        full_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
-        if rope_scaling is not None:
-            if "full_attention" in rope_scaling or "sliding_attention" in rope_scaling:
-                full_attention_rope.update(**rope_scaling.get("full_attention", {}))
-                sliding_attention_rope.update(**rope_scaling.get("sliding_attention", {}))
-            else:
-                full_attention_rope.update(**rope_scaling)
-
-        rope_scaling = {"full_attention": full_attention_rope, "sliding_attention": sliding_attention_rope}
-        self.rope_scaling = {k: v for k, v in rope_scaling.items() if k in self.layer_types}
+        standardize_rope_params(self, rope_theta={"full_attention": rope_theta, "sliding_attention": rope_theta})
         rope_config_validation(self, ignore_keys={"mrope_section"})
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id

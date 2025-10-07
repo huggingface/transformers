@@ -22,7 +22,7 @@
 from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 
 
 class ModernBertDecoderConfig(PretrainedConfig):
@@ -187,6 +187,7 @@ class ModernBertDecoderConfig(PretrainedConfig):
         self.classifier_activation = classifier_activation
         self.use_cache = use_cache
         self.global_attn_every_n_layers = global_attn_every_n_layers
+        self.rope_scaling = rope_scaling
         # for consistency with ModernBert
         self.reference_compile = False
 
@@ -205,17 +206,9 @@ class ModernBertDecoderConfig(PretrainedConfig):
         # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type
         rope_theta = getattr(self, "global_rope_theta", 160_000.0)
         rope_local_base_freq = getattr(self, "local_rope_theta", 10000.0)
-        sliding_attention_rope = {"rope_type": "default", "rope_theta": rope_local_base_freq}
-        full_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
-        if rope_scaling is not None:
-            if "full_attention" in rope_scaling or "sliding_attention" in rope_scaling:
-                full_attention_rope.update(**rope_scaling.get("full_attention", {}))
-                sliding_attention_rope.update(**rope_scaling.get("sliding_attention", {}))
-            else:
-                full_attention_rope.update(**rope_scaling)
-
-        rope_scaling = {"full_attention": full_attention_rope, "sliding_attention": sliding_attention_rope}
-        self.rope_scaling = {k: v for k, v in rope_scaling.items() if k in self.layer_types}
+        standardize_rope_params(
+            self, rope_theta={"full_attention": rope_theta, "sliding_attention": rope_local_base_freq}
+        )
         rope_config_validation(self)
 
         # NOTE: sliding window numbers matches ModernBERT but is only half of it

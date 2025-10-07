@@ -22,7 +22,7 @@
 from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 
 
 class DeepseekV2Config(PretrainedConfig):
@@ -210,16 +210,11 @@ class DeepseekV2Config(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
         self.head_dim = qk_rope_head_dim
+        self.rope_scaling = rope_scaling
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)
-        if rope_scaling is None:
-            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
-        else:
-            # BC: if there is a 'type' field, copy it it to 'rope_type'.
-            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
-            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
-        self.rope_scaling = rope_scaling
+        standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
         self.aux_loss_alpha = aux_loss_alpha
         self.first_k_dense_replace = first_k_dense_replace

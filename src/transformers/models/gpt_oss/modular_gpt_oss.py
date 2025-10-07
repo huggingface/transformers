@@ -38,7 +38,6 @@ from ..llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
-    LlamaRotaryEmbedding,
     repeat_kv,
 )
 from ..mixtral.modeling_mixtral import (
@@ -47,7 +46,7 @@ from ..mixtral.modeling_mixtral import (
     MixtralForTokenClassification,
     MixtralModel,
 )
-from ..qwen2.modeling_qwen2 import Qwen2Attention
+from ..qwen2.modeling_qwen2 import Qwen2Attention, Qwen2RotaryEmbedding
 from .configuration_gpt_oss import GptOssConfig
 
 
@@ -170,13 +169,14 @@ class GptOssMLP(nn.Module):
         return routed_out, router_scores
 
 
-class GptOssRotaryEmbedding(LlamaRotaryEmbedding):
+class GptOssRotaryEmbedding(Qwen2RotaryEmbedding):
+    pass
+
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids, layer_type=None):
-        prefix = "" if layer_type is None or len(self.layer_types) == 1 else f"{layer_type}_"
-        inv_freq = getattr(self, f"{prefix}inv_freq")
-        attention_scaling = getattr(self, f"{prefix}attention_scaling")
+    def forward(self, x, position_ids, layer_type):
+        inv_freq = getattr(self, f"{layer_type}_inv_freq")
+        attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
 
         inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()

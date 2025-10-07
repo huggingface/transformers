@@ -364,8 +364,7 @@ class T5GemmaMLP(Gemma2MLP):
 
 
 class T5GemmaRotaryEmbedding(Gemma2RotaryEmbedding):
-    def __init__(self, config, device=None, layer_type=None):
-        super().__init__(config, device, layer_type)
+    pass
 
 
 class T5GemmaSelfAttention(Gemma2Attention):

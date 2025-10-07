@@ -41,7 +41,7 @@ from ...modeling_outputs import (
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
 )
-from ...modeling_rope_utils import RopeParameters, rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 from ...processing_utils import ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
@@ -215,13 +215,7 @@ class Qwen3OmniMoeTextConfig(Qwen3MoeConfig):
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 1000000.0)
-        if rope_scaling is None:
-            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
-        else:
-            # BC: if there is a 'type' field, copy it it to 'rope_type'.
-            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
-            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
-        self.rope_scaling = rope_scaling
+        standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
 
 
@@ -1485,6 +1479,10 @@ class Qwen3OmniMoeTalkerCodePredictorDecoderLayer(Qwen3DecoderLayer):
         self.self_attn = Qwen3OmniMoeTalkerCodePredictorAttention(config=config, layer_idx=layer_idx)
 
 
+class Qwen3OmniMoeRotaryEmbedding(Qwen3RotaryEmbedding):
+    pass
+
+
 class Qwen3OmniMoeTalkerCodePredictorModel(Qwen3Model):
     config_class = Qwen3OmniMoeTalkerCodePredictorConfig
     base_model_prefix = "talker.code_predictor.model"
@@ -1555,8 +1553,10 @@ class Qwen3OmniMoeTalkerCodePredictorModel(Qwen3Model):
 
         hidden_states = inputs_embeds
 
-        # create position embeddings to be shared across the decoder layers
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        hidden_states = inputs_embeds
+        position_embeddings = {}
+        for layer_type in self.config.layer_types:
+            position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = decoder_layer(
@@ -1566,7 +1566,7 @@ class Qwen3OmniMoeTalkerCodePredictorModel(Qwen3Model):
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
-                position_embeddings=position_embeddings,
+                position_embeddings=position_embeddings[decoder_layer.attention_type],
                 **kwargs,
             )
 
@@ -1666,7 +1666,7 @@ class Qwen3OmniMoeTalkerOutputWithPast(MoeCausalLMOutputWithPast):
     generation_step: Optional[int] = None
 
 
-class Qwen3OmniMoeTalkerRotaryEmbedding(Qwen3OmniMoeThinkerTextRotaryEmbedding):
+class Qwen3OmniMoeTalkerRotaryEmbedding(Qwen3RotaryEmbedding):
     pass
 
 
@@ -2030,10 +2030,6 @@ class Qwen3OmniMoeConvNeXtBlock(nn.Module):
         hidden_states = input + hidden_states
 
         return hidden_states
-
-
-class Qwen3OmniMoeCode2WavRotatoryEmbedding(Qwen3RotaryEmbedding):
-    pass
 
 
 class Qwen3OmniMoeCode2WavAttention(Qwen3Attention):

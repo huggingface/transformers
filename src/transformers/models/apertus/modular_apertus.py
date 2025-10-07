@@ -19,7 +19,7 @@ import torch
 from torch import nn
 
 from ...cache_utils import Cache
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
@@ -127,22 +127,22 @@ class ApertusConfig(LlamaConfig):
 
     def __init__(
         self,
-        vocab_size=131072,
-        hidden_size=4096,
-        intermediate_size=14336,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        num_key_value_heads=None,
-        hidden_act="xielu",
-        max_position_embeddings=65536,
-        initializer_range=0.02,
-        rms_norm_eps=1e-5,
-        use_cache=True,
-        pad_token_id=3,
-        bos_token_id=1,
-        eos_token_id=2,
-        tie_word_embeddings=False,
-        rope_scaling={
+        vocab_size: Optional[int] = 131072,
+        hidden_size: Optional[int] = 4096,
+        intermediate_size: Optional[int] = 14336,
+        num_hidden_layers: Optional[int] = 32,
+        num_attention_heads: Optional[int] = 32,
+        num_key_value_heads: Optional[int] = None,
+        hidden_act: Optional[str] = "xielu",
+        max_position_embeddings: Optional[int] = 65536,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[float] = 1e-5,
+        use_cache: Optional[bool] = True,
+        pad_token_id: Optional[int] = 3,
+        bos_token_id: Optional[int] = 1,
+        eos_token_id: Optional[int] = 2,
+        tie_word_embeddings: Optional[bool] = False,
+        rope_scaling: Optional[RopeParameters] = {
             "rope_type": "llama3",
             "rope_theta": 12000000.0,
             "factor": 8.0,
@@ -150,8 +150,8 @@ class ApertusConfig(LlamaConfig):
             "low_freq_factor": 1.0,
             "high_freq_factor": 4.0,
         },
-        attention_bias=False,
-        attention_dropout=0.0,
+        attention_bias: Optional[bool] = False,
+        attention_dropout: Optional[float] = 0.0,
         **kwargs,
     ):
         super().__init__(
@@ -181,13 +181,7 @@ class ApertusConfig(LlamaConfig):
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 12000000.0)
-        if rope_scaling is None:
-            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
-        else:
-            # BC: if there is a 'type' field, copy it it to 'rope_type'.
-            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
-            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
-        self.rope_scaling = rope_scaling
+        standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
 
 

@@ -24,9 +24,10 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
-from ...modeling_rope_utils import RopeParameters, rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
+from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..olmo2.modeling_olmo2 import (
     Olmo2Attention,
     Olmo2DecoderLayer,
@@ -34,7 +35,6 @@ from ..olmo2.modeling_olmo2 import (
     Olmo2Model,
     Olmo2PreTrainedModel,
     Olmo2RMSNorm,
-    Olmo2RotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -183,6 +183,7 @@ class Olmo3Config(PretrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.rms_norm_eps = rms_norm_eps
+        self.rope_scaling = rope_scaling
 
         self.sliding_window = sliding_window
         self.layer_types = layer_types
@@ -194,17 +195,7 @@ class Olmo3Config(PretrainedConfig):
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = getattr(self, "rope_theta", 10000.0)
-        sliding_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
-        full_attention_rope = {"rope_type": "default", "rope_theta": rope_theta}
-        if rope_scaling is not None:
-            if "full_attention" in rope_scaling or "sliding_attention" in rope_scaling:
-                full_attention_rope.update(**rope_scaling.get("full_attention", {}))
-                sliding_attention_rope.update(**rope_scaling.get("sliding_attention", {}))
-            else:
-                full_attention_rope.update(**rope_scaling)
-
-        rope_scaling = {"full_attention": full_attention_rope, "sliding_attention": sliding_attention_rope}
-        self.rope_scaling = {k: v for k, v in rope_scaling.items() if k in self.layer_types}
+        standardize_rope_params(self, rope_theta={"full_attention": rope_theta, "sliding_attention": rope_theta})
         rope_config_validation(self)
 
 
@@ -274,7 +265,7 @@ class Olmo3DecoderLayer(Olmo2DecoderLayer):
     pass
 
 
-class Olmo3RotaryEmbedding(Olmo2RotaryEmbedding):
+class Olmo3RotaryEmbedding(Gemma2RotaryEmbedding):
     pass
 
 

@@ -61,7 +61,8 @@ class PixtralRotaryEmbedding(nn.Module):
 
     def __init__(self, config: PixtralVisionConfig, device=None, layer_type=None):
         super().__init__()
-        self.config = standardize_rope_params(config)
+        standardize_rope_params(config)
+        self.config = config
 
         self.rope_type = self.config.rope_scaling["rope_type"]
         rope_init_fn: Callable = self.compute_default_rope_parameters
@@ -95,7 +96,7 @@ class PixtralRotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         # For backward compatibility standardize the `rope_scaling_dict` if it uses old format
-        config = standardize_rope_params(config)
+        standardize_rope_params(config)
 
         base = config.rope_scaling["rope_theta"]
         partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)

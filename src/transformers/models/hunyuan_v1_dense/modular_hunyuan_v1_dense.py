@@ -24,7 +24,7 @@ from transformers.utils import (
     logging,
 )
 
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, standardize_rope_params
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs
@@ -132,26 +132,31 @@ class HunYuanDenseV1PreTrainedModel(LlamaPreTrainedModel):
 
 
 class HunYuanDenseV1RotaryEmbedding(LlamaRotaryEmbedding):
-    def get_rope_frequencies(self, device, layer_type=None):
-        # Some layer types have no RoPE, e.g. conv or mamba layers. Skip them
-        rope_params = self.config.rope_scaling[layer_type] if layer_type is not None else self.config.rope_scaling
-        if rope_params is None:
-            return None, None, None
+    def __init__(self, config: HunYuanDenseV1Config, device=None):
+        super().__init__()
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
 
-        rope_type = rope_params["rope_type"]
+        standardize_rope_params(config)
+        self.config = config
+
+        self.rope_type = self.config.rope_scaling["rope_type"]
+
         # Diff from Llama - DynamicNTKAlphaRotary
-        if rope_type == "dynamic" and rope_params["alpha"]:
-            base = rope_params["rope_theta"] * rope_params["alpha"] ** (
+        if self.rope_type == "dynamic" and self.config.rope_scaling["alpha"]:
+            base = self.config.rope_scaling["rope_theta"] * self.config.rope_scaling["alpha"] ** (
                 self.config.head_dim / (self.config.head_dim - 2)
             )
             inv_freq = 1.0 / (base ** (torch.arange(0, self.dim, 2).float().to(device) / self.config.head_dim))
-            attention_scaling = 1.0
+            self.attention_scaling = 1.0
         else:
             rope_init_fn: Callable = self.compute_default_rope_parameters
-            if rope_type != "default":
-                rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
-            inv_freq, attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
-        return rope_type, inv_freq, attention_scaling
+            if self.rope_type != "default":
+                rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+            inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = inv_freq
 
 
 class HunYuanDenseV1Model(LlamaModel):

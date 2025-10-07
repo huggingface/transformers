@@ -18,7 +18,7 @@
 from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 from ...utils import logging
 
 
@@ -167,18 +167,13 @@ class PhimoeConfig(PretrainedConfig):
         self.router_aux_loss_coef = router_aux_loss_coef
         self.router_jitter_noise = router_jitter_noise
         self.input_jitter_noise = input_jitter_noise
+        self.rope_scaling = rope_scaling
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 1000000.0)
-        if rope_scaling is None:
-            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
-        else:
-            # BC: if there is a 'type' field, copy it it to 'rope_type'.
-            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
-            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
-        self.rope_scaling = rope_scaling
+        standardize_rope_params(self, rope_theta=rope_theta)
 
-        if self.rope_scaling.get("rope_type", "default") != "default":
+        if self.rope_scaling["rope_type"] != "default":
             if "original_max_position_embeddings" in self.rope_scaling:
                 self.original_max_position_embeddings = self.rope_scaling["original_max_position_embeddings"]
             rope_scaling_short_mscale = self.rope_scaling.get("short_mscale", None)

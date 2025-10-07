@@ -17,7 +17,7 @@
 from typing import Any, Optional
 
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 from ...utils import logging
 
 
@@ -228,9 +228,11 @@ class DbrxConfig(PretrainedConfig):
         if tie_word_embeddings:
             raise ValueError("tie_word_embeddings is not supported for DBRX models.")
 
-        if rope_scaling is None:
-            rope_scaling = {"rope_type": "default", "rope_theta": self.attn_config.rope_theta}
         self.rope_scaling = rope_scaling
+
+        # Validate the correctness of rotary position embeddings parameters
+        standardize_rope_params(self, rope_theta=self.attn_config.rope_theta)
+        rope_config_validation(self)
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 

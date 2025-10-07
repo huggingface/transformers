@@ -17,7 +17,7 @@
 from typing import Optional, Union
 
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 
 
 class Emu3VQVAEConfig(PretrainedConfig):
@@ -205,7 +205,7 @@ class Emu3TextConfig(PretrainedConfig):
         bos_token_id: int = 151849,
         eos_token_id: int = 151850,
         tie_word_embeddings: bool = False,
-        rope_scaling: Optional = None,
+        rope_scaling: Optional[RopeParameters] = None,
         mlp_bias=False,
         attention_bias=False,
         attention_dropout: float = 0.1,
@@ -226,16 +226,11 @@ class Emu3TextConfig(PretrainedConfig):
         self.attention_bias = attention_bias
         self.initializer_range = initializer_range
         self.attention_dropout = attention_dropout
+        self.rope_scaling = rope_scaling
 
         # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 1000000.0)
-        if rope_scaling is None:
-            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
-        else:
-            # BC: if there is a 'type' field, copy it it to 'rope_type'.
-            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
-            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
-        self.rope_scaling = rope_scaling
+        rope_theta = kwargs.get("rope_theta", 100000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
 
         super().__init__(

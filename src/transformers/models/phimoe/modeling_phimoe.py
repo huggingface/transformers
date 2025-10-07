@@ -147,7 +147,8 @@ class PhimoeRotaryEmbedding(nn.Module):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
-        self.config = standardize_rope_params(config)
+        standardize_rope_params(config)
+        self.config = config
 
         self.rope_type = self.config.rope_scaling["rope_type"]
         rope_init_fn: Callable = self.compute_default_rope_parameters
@@ -181,7 +182,7 @@ class PhimoeRotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         # For backward compatibility standardize the `rope_scaling_dict` if it uses old format
-        config = standardize_rope_params(config)
+        standardize_rope_params(config)
         rope_scaling_dict = config.rope_scaling[layer_type] if layer_type is not None else config.rope_scaling
 
         base = rope_scaling_dict["rope_theta"]

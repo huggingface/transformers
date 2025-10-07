@@ -21,7 +21,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from ...cache_utils import Cache
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import logging
 from ...utils.deprecation import deprecate_kwarg
@@ -33,9 +33,9 @@ from ..llama.modeling_llama import (
     LlamaMLP,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
+    LlamaRotaryEmbedding,
     eager_attention_forward,
 )
-from ..llama4.modeling_llama4 import Llama4TextRotaryEmbedding
 
 
 logger = logging.get_logger(__name__)
@@ -359,22 +359,20 @@ class DeepseekV2RMSNorm(LlamaRMSNorm):
     pass
 
 
-class DeepseekV2RotaryEmbedding(Llama4TextRotaryEmbedding):
-    def __init__(self, config: DeepseekV2Config, device=None, layer_type=None):
-        super().__init__()
+class DeepseekV2RotaryEmbedding(LlamaRotaryEmbedding):
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids, layer_type):
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        position_ids_expanded = position_ids[:, None, :].float()
 
-    def compute_default_rope_parameters(
-        config: Optional[DeepseekV2Config] = None,
-        device: Optional["torch.device"] = None,
-        seq_len: Optional[int] = None,
-        layer_type: Optional[str] = None,
-    ) -> tuple["torch.Tensor", float]:
-        return super().compute_default_rope_parameters(
-            config,
-            device,
-            seq_len,
-            layer_type,
-        )
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.to(x.device) @ position_ids_expanded).transpose(1, 2)
+            freqs_cis = torch.polar(torch.ones_like(freqs), freqs)  # Convert to complex representation
+            freqs_cis = freqs_cis * self.attention_scaling
+
+        return freqs_cis
 
 
 class DeepseekV2Attention(nn.Module):

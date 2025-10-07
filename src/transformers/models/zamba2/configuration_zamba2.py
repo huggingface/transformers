@@ -23,7 +23,7 @@
 from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation
+from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 
 
 class Zamba2Config(PretrainedConfig):
@@ -195,18 +195,11 @@ class Zamba2Config(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.use_mem_rope = use_mem_rope
         self.use_long_context = use_long_context
+        self.rope_scaling = rope_scaling
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)
-        if use_mem_rope and use_long_context:
-            rope_theta = rope_theta * 8 ** (self.attention_head_dim / (self.attention_head_dim - 2))
-        if rope_scaling is None:
-            rope_scaling = {"rope_type": "default", "rope_theta": rope_theta}
-        else:
-            # BC: if there is a 'type' field, copy it it to 'rope_type'.
-            rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
-            rope_scaling.update({"rope_theta": rope_theta, "rope_type": rope_type})
-        self.rope_scaling = rope_scaling
+        standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
 
         self.mamba_d_state = mamba_d_state

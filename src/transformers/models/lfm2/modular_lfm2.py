@@ -26,13 +26,13 @@ from ...utils import TransformersKwargs, logging
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.import_utils import is_causal_conv1d_available
 from ..bamba.modeling_bamba import apply_mask_to_padding_states
+from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaForCausalLM,
     LlamaModel,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
-    LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -56,7 +56,7 @@ class Lfm2RMSNorm(LlamaRMSNorm):
     pass
 
 
-class Lfm2RotaryEmbedding(LlamaRotaryEmbedding):
+class Lfm2RotaryEmbedding(Gemma2RotaryEmbedding):
     pass
 
 

@@ -34,6 +34,7 @@ from ...utils.import_utils import (
     is_flash_linear_attention_available,
 )
 from ..bamba.modeling_bamba import apply_mask_to_padding_states, apply_rotary_pos_emb
+from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..gemma3.modeling_gemma3 import Gemma3RMSNorm
 from ..llama.modeling_llama import (
     LlamaForQuestionAnswering,
@@ -46,7 +47,6 @@ from ..qwen3_moe.modeling_qwen3_moe import (
     Qwen3MoeAttention,
     Qwen3MoeDecoderLayer,
     Qwen3MoeMLP,
-    Qwen3MoeRotaryEmbedding,
     eager_attention_forward,
 )
 from .configuration_qwen3_next import Qwen3NextConfig
@@ -183,7 +183,7 @@ class Qwen3NextDynamicCache:
         return self.conv_states[self.last_linear_layer] is not None
 
 
-class Qwen3NextRotaryEmbedding(Qwen3MoeRotaryEmbedding):
+class Qwen3NextRotaryEmbedding(Gemma2RotaryEmbedding):
     pass
 
 
