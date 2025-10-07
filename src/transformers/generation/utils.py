@@ -1998,7 +1998,7 @@ class GenerationMixin(ContinuousMixin):
 
         # TODO (joao): this logic is incomplete, e.g. `offloaded` should apply to both caches. Refactor this function
         # to correctly pass parameterization to both caches.
-        if requires_cross_attention_cache and not isinstance(model_kwargs[cache_name], EncoderDecoderCache):
+        if requires_cross_attention_cache and cache_name in model_kwargs and not isinstance(model_kwargs[cache_name], EncoderDecoderCache):
             model_kwargs[cache_name] = EncoderDecoderCache(
                 model_kwargs[cache_name],  # self-attention cache
                 DynamicCache(**dynamic_cache_kwargs),  # cross-attention cache
