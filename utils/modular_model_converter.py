@@ -1702,12 +1702,12 @@ def convert_modular_file(modular_file: str) -> dict[str, str]:
                 relative_path = re.search(
                     r"(src/transformers/.*|examples/.*)", os.path.abspath(modular_file).replace("\\", "/")
                 ).group(1)
-
                 header = AUTO_GENERATED_MESSAGE.format(
                     relative_path=relative_path, short_name=os.path.basename(relative_path)
                 )
                 ruffed_code = run_ruff(header + module.code, True)
                 formatted_code = run_ruff(ruffed_code, False)
+
                 output[file] = formatted_code
         return output
     else:
