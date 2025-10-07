@@ -607,10 +607,7 @@ class ContinuousBatchingManager:
             streaming: Whether to stream tokens as they are generated
         """
         if "paged|" not in model.config._attn_implementation:
-            from ...integrations.hub_kernels import load_and_register_kernel
-
             attn_implementation = "paged|" + model.config._attn_implementation
-            load_and_register_kernel(model.config._attn_implementation)
             model.set_attn_implementation(attn_implementation)
         self.model = model.eval()
         generation_config = model.generation_config if generation_config is None else generation_config
