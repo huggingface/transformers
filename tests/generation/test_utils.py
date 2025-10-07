@@ -1416,14 +1416,7 @@ class GenerationTesterMixin:
 
             # The two sets of generated text and past kv should be equal to each other
             self.assertTrue(has_similar_generate_outputs(outputs, outputs_cached))
-            for layer_idx in range(len(outputs_cached.past_key_values)):
-                for kv_idx in range(len(outputs_cached.past_key_values[layer_idx])):
-                    self.assertTrue(
-                        torch.allclose(
-                            outputs.past_key_values[layer_idx][kv_idx],
-                            outputs_cached.past_key_values[layer_idx][kv_idx],
-                        )
-                    )
+            self._check_caches_are_similar(outputs.past_key_values, outputs_cached.past_key_values)
 
     @pytest.mark.generate
     def test_generate_continue_from_inputs_embeds(self):
@@ -1486,14 +1479,7 @@ class GenerationTesterMixin:
             combined_output_sequences = torch.concat([initial_output.sequences, cached_output.sequences], axis=1)
             self.assertListEqual(outputs.sequences.tolist(), combined_output_sequences.tolist())
             # The two sets of past kv should be equal to each other
-            for layer_idx in range(len(cached_output.past_key_values)):
-                for kv_idx in range(len(cached_output.past_key_values[layer_idx])):
-                    self.assertTrue(
-                        torch.allclose(
-                            outputs.past_key_values[layer_idx][kv_idx],
-                            cached_output.past_key_values[layer_idx][kv_idx],
-                        )
-                    )
+            self._check_caches_are_similar(outputs.past_key_values, cached_output.past_key_values)
 
     @pytest.mark.generate
     def test_generate_with_static_cache(self):
@@ -2536,22 +2522,8 @@ class GenerationTesterMixin:
                 [layer.values.shape for layer in decoder_past_key_values.layers],
                 [expected_shape] * len(decoder_past_key_values.layers),
             )
-
-        # Legacy cache format checks. This branch should be removed when all models use `Cache` by default
         else:
-            self.assertListEqual(
-                [isinstance(iter_past_key_values, tuple) for iter_past_key_values in decoder_past_key_values],
-                [True] * len(decoder_past_key_values),
-            )
-            # check shape key, value
-            self.assertListEqual(
-                [layer_past_key_values[0].shape for layer_past_key_values in decoder_past_key_values],
-                [expected_shape] * len(decoder_past_key_values),
-            )
-            self.assertListEqual(
-                [layer_past_key_values[1].shape for layer_past_key_values in decoder_past_key_values],
-                [expected_shape] * len(decoder_past_key_values),
-            )
+            raise ValueError("The cache is not standard! Please overwrite `_check_past_key_values_for_generate`")
 
     def _check_sequence_inside_sequence(self, tensor_1, tensor_2):
         # check if tensor_1 inside tensor_2 or tensor_2 inside tensor_1.
@@ -2575,6 +2547,24 @@ class GenerationTesterMixin:
                 break
 
         self.assertTrue(flag)
+
+    def _check_caches_are_similar(self, cache1: Cache, cache2: Cache):
+        if not isinstance(cache1, Cache) or not isinstance(cache2, Cache):
+            raise ValueError("The cache is not standard! Please overwrite `_check_caches_are_similar`")
+
+        # In this case, we simply call recursively the function on both internal caches
+        if isinstance(cache1, EncoderDecoderCache):
+            self._check_caches_are_similar(cache1.self_attention_cache, cache2.self_attention_cache)
+            self._check_caches_are_similar(cache1.cross_attention_cache, cache2.cross_attention_cache)
+            return
+
+        if not len(cache1) == len(cache2):
+            raise ValueError("Both caches do not have the same number of layers.")
+
+        num_layers = len(cache1)
+        for idx in range(num_layers):
+            torch.testing.assert_close(cache1[idx].keys, cache2[idx].keys)
+            torch.testing.assert_close(cache1[idx].values, cache2[idx].values)
 
 
 @require_torch
