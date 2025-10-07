@@ -19,15 +19,15 @@ from transformers.configuration_utils import PretrainedConfig
 from transformers.modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 
 
-class SeedOssConfig(PretrainedConfig):
+class SeedOssConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SeedOssModel`]. It is used to instantiate an SeedOss
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the SeedOss-36B.
     e.g. [ByteDance-Seed/SeedOss-36B](https://huggingface.co/ByteDance-Seed/SeedOss-36B)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:

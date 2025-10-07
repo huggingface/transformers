@@ -25,7 +25,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class Llama4VisionConfig(PretrainedConfig):
+class Llama4VisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Llama4VisionModel`]. It is used to instantiate a
     Llama4 vision model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -33,8 +33,8 @@ class Llama4VisionConfig(PretrainedConfig):
 
     e.g. [meta-llama/Llama-4-Scout-17B-16E](https://huggingface.co/meta-llama/Llama-4-Scout-17B-16E)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -147,7 +147,7 @@ class Llama4VisionConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
 
-class Llama4TextConfig(PretrainedConfig):
+class Llama4TextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Llama4TextModel`]. It is used to instantiate a
     Llama4 text model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -155,8 +155,8 @@ class Llama4TextConfig(PretrainedConfig):
 
     e.g. [meta-llama/Llama-4-Scout-17B-16E](https://huggingface.co/meta-llama/Llama-4-Scout-17B-16E)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 202048):
@@ -368,7 +368,7 @@ class Llama4TextConfig(PretrainedConfig):
         rope_config_validation(self)
 
 
-class Llama4Config(PretrainedConfig):
+class Llama4Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Llama4Model`]. It is used to instantiate an
     Llama4 model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -376,8 +376,8 @@ class Llama4Config(PretrainedConfig):
 
     e.g. [meta-llama/Llama-4-Scout-17B-16E](https://huggingface.co/meta-llama/Llama-4-Scout-17B-16E)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:

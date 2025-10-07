@@ -25,14 +25,14 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class NemotronConfig(PretrainedConfig):
+class NemotronConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`NemotronModel`]. It is used to instantiate an Nemotron
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Nemotron-8B.
     e.g. [nvidia/nemotron-3-8b-base-4k-hf](https://huggingface.co/nvidia/nemotron-3-8b-base-4k-hf).
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:

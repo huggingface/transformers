@@ -16,6 +16,7 @@
 from typing import Optional
 
 import torch
+from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
@@ -23,7 +24,7 @@ from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import check_model_inputs
+from ...utils.generic import OutputRecorder, check_model_inputs
 from ..mixtral.modeling_mixtral import MixtralModel, MixtralPreTrainedModel
 from ..olmo2.modeling_olmo2 import Olmo2Attention, Olmo2RMSNorm, Olmo2RotaryEmbedding
 from ..olmoe.configuration_olmoe import OlmoeConfig
@@ -41,8 +42,8 @@ class FlexOlmoConfig(OlmoeConfig):
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the [allenai/FlexOlmo-7x7B-1T](https://huggingface.co/allenai/FlexOlmo-7x7B-1T).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -258,7 +259,7 @@ class FlexOlmoDecoderLayer(OlmoeDecoderLayer):
 
         # Fully Connected
         residual = hidden_states
-        hidden_states, _ = self.mlp(hidden_states)
+        hidden_states = self.mlp(hidden_states)
         hidden_states = self.post_feedforward_layernorm(hidden_states)
         hidden_states = residual + hidden_states
         return hidden_states
@@ -267,7 +268,11 @@ class FlexOlmoDecoderLayer(OlmoeDecoderLayer):
 # FlexOlmo uses Mixtral model as its base instead of OlmoE model since Mixtral is more up-to-date with the rest
 # of the transformers library. For example, it uses the newer mechanisms of recording submodule outputs.
 class FlexOlmoPreTrainedModel(MixtralPreTrainedModel):
-    pass
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(nn.Linear, layer_name="mlp.gate", index=0),
+        "hidden_states": FlexOlmoDecoderLayer,
+        "attentions": FlexOlmoAttention,
+    }
 
 
 # FlexOlmo uses Mixtral model as its base instead of OlmoE model since Mixtral is more up-to-date with the rest
@@ -275,7 +280,7 @@ class FlexOlmoPreTrainedModel(MixtralPreTrainedModel):
 # FlexOlmo model is identical to Mixtral model except:
 # - FlexOlmo does not use sliding window attention.
 class FlexOlmoModel(MixtralModel):
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,

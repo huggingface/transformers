@@ -130,7 +130,6 @@ class Emu3Text2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
     test_pruning = False
     fx_compatible = False
 
@@ -288,7 +287,6 @@ class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
         else ()
     )
     pipeline_model_mapping = {}
-    test_headmasking = False
     test_pruning = False
     fx_compatible = False
 
@@ -315,10 +313,6 @@ class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
         "Emu3 has a VQ module that uses `weight.data` directly in forward which prevent offloding on that module"
     )
     def test_cpu_offload(self):
-        pass
-
-    @unittest.skip("VQ-VAE module doesn't initialize weights properly")
-    def test_initialization(self):
         pass
 
     @pytest.mark.generate

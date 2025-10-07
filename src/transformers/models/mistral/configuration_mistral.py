@@ -24,7 +24,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class MistralConfig(PretrainedConfig):
+class MistralConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MistralModel`]. It is used to instantiate an
     Mistral model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -33,8 +33,8 @@ class MistralConfig(PretrainedConfig):
     [mistralai/Mistral-7B-v0.1](https://huggingface.co/mistralai/Mistral-7B-v0.1)
     [mistralai/Mistral-7B-Instruct-v0.1](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.1)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:

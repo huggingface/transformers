@@ -38,14 +38,14 @@ from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb  # noqa
 logger = logging.get_logger(__name__)
 
 
-class Glm4MoeConfig(PretrainedConfig):
+class Glm4MoeConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Glm4MoeModel`]. It is used to instantiate a
     Glm4Moe model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of [THUDM/GLM-4-100B-A10B](https://huggingface.co/THUDM/GLM-4-100B-A10B).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -145,6 +145,9 @@ class Glm4MoeConfig(PretrainedConfig):
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
+    }
+    attribute_map = {
+        "num_local_experts": "n_routed_experts",
     }
 
     def __init__(

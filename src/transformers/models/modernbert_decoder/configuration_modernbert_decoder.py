@@ -25,15 +25,15 @@ from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 
 
-class ModernBertDecoderConfig(PretrainedConfig):
+class ModernBertDecoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ModernBertDecoderModel`]. It is used to instantiate a ModernBert
     decoder model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the ModernBERT-base decoder.
     e.g. [blab-jhu/test-32m-dec](https://huggingface.co/blab-jhu/test-32m-dec)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 50368):

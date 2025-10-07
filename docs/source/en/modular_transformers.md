@@ -82,7 +82,7 @@ class RobertaForMaskedLM(BertForMaskedLM):
 
 If you don't use the defined dependency, you'll receive the following error.
 
-```
+```text
 ValueError: You defined `RobertaEmbeddings` in the modular_roberta.py, it should be used when you define `BertModel`, as it is one of it's direct dependencies. Make sure you use it in the `__init__` function.
 ```
 

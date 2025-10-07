@@ -24,14 +24,14 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class Qwen2MoeConfig(PretrainedConfig):
+class Qwen2MoeConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen2MoeModel`]. It is used to instantiate a
     Qwen2MoE model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of [Qwen/Qwen1.5-MoE-A2.7B](https://huggingface.co/Qwen/Qwen1.5-MoE-A2.7B).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -102,6 +102,8 @@ class Qwen2MoeConfig(PretrainedConfig):
             If `mlp_only_layers` is empty, `decoder_sparse_step` is used to determine the sparsity.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
+        layer_types (`dict[int, str]`, *optional*): a dictionarry that explicitly maps layer index with
+            the attention type. The attention type is one of `sliding_attention`, `full_attention`.
     ```python
     >>> from transformers import Qwen2MoeModel, Qwen2MoeConfig
 
@@ -163,8 +165,10 @@ class Qwen2MoeConfig(PretrainedConfig):
         router_aux_loss_coef: Optional[float] = 0.001,
         mlp_only_layers: Optional[bool] = None,
         qkv_bias: Optional[bool] = True,
+        layer_types: Optional[list[str]] = None,
         **kwargs,
     ):
+        self.layer_types = layer_types
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -172,7 +176,7 @@ class Qwen2MoeConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.use_sliding_window = use_sliding_window
-        self.sliding_window = sliding_window if use_sliding_window else None
+        self.sliding_window = sliding_window if use_sliding_window else 0
         self.max_window_layers = max_window_layers
 
         self.num_key_value_heads = num_key_value_heads
@@ -182,11 +186,6 @@ class Qwen2MoeConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.attention_dropout = attention_dropout
         self.rope_parameters = rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
 
         # MoE arguments
         self.decoder_sparse_step = decoder_sparse_step
@@ -199,6 +198,19 @@ class Qwen2MoeConfig(PretrainedConfig):
         self.router_aux_loss_coef = router_aux_loss_coef
         self.mlp_only_layers = [] if mlp_only_layers is None else mlp_only_layers
         self.qkv_bias = qkv_bias
+        if self.layer_types is None:
+            self.layer_types = [
+                "sliding_attention"
+                if bool((i + 1) % 2) and i < self.max_window_layers and use_sliding_window
+                else "full_attention"
+                for i in range(self.num_hidden_layers)
+            ]
+        layer_type_validation(self.layer_types)
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 10000.0)
+        standardize_rope_params(self, rope_theta={"full_attention": rope_theta, "sliding_attention": rope_theta})
+        rope_config_validation(self)
 
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,

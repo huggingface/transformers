@@ -25,14 +25,14 @@ from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 
 
-class FlexOlmoConfig(PretrainedConfig):
+class FlexOlmoConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FlexOlmoModel`]. It is used to instantiate an FlexOlmo
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the [allenai/FlexOlmo-7x7B-1T](https://huggingface.co/allenai/FlexOlmo-7x7B-1T).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:

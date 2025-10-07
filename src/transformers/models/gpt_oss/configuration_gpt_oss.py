@@ -20,7 +20,7 @@ from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 
 
-class GptOssConfig(PretrainedConfig):
+class GptOssConfig(PreTrainedConfig):
     r"""
     This will yield a configuration to that of the BERT
     [google-bert/bert-base-uncased](https://huggingface.co/google-bert/bert-base-uncased) architecture.

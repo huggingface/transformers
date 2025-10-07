@@ -25,13 +25,13 @@ from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 
 
-class DeepseekV2Config(PretrainedConfig):
+class DeepseekV2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DeepseekV2Model`]. It is used to instantiate a DeepSeek
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of DeepSeek-V2-Lite" [deepseek-ai/DeepSeek-V2-Lite"](https://huggingface.co/deepseek-ai/DeepSeek-V2-Lite").
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 32000):
@@ -77,8 +77,6 @@ class DeepseekV2Config(PretrainedConfig):
             The dropout probability applied to attention weights.
         mlp_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias term in the MLP layers.
-        aux_loss_alpha (`float`, *optional*, defaults to 0.001):
-            Weight coefficient for auxiliary loss in Mixture of Experts (MoE) models.
         first_k_dense_replace (`int`, *optional*, defaults to 0):
             Number of dense layers in the shallow layers before switching to MoE layers.
         kv_lora_rank (`int`, *optional*, defaults to 512):
@@ -99,8 +97,6 @@ class DeepseekV2Config(PretrainedConfig):
             The head dimension for QK projections when using RoPE.
         routed_scaling_factor (`float`, *optional*, defaults to 1.0):
             Scaling factor for routed experts in MoE models.
-        seq_aux (`bool`, *optional*, defaults to `True`):
-            Whether to compute the auxiliary loss for each individual sequence.
         topk_group (`int`, *optional*):
             Number of selected groups per token for expert selection.
         topk_method (`str`, *optional*, defaults to `"greedy"`):
@@ -109,8 +105,6 @@ class DeepseekV2Config(PretrainedConfig):
             The dimension of value projections in the attention layers.
         num_experts_per_tok (`int`, *optional*):
             The number of experts selected per token. If `None`, the model behaves as a dense Transformer.
-        norm_topk_prob (`bool`, *optional*, defaults to `False`):
-            Whether to normalize the probability distribution over top-k selected experts.
         moe_intermediate_size (`int`, *optional*, defaults to 1407):
             Dimension of the MoE (Mixture of Experts) representations.
 
@@ -179,7 +173,6 @@ class DeepseekV2Config(PretrainedConfig):
         topk_method: Optional[str] = "greedy",
         v_head_dim: Optional[int] = 128,
         num_experts_per_tok: Optional[int] = None,
-        norm_topk_prob: Optional[bool] = False,
         moe_intermediate_size: Optional[int] = 1407,
         **kwargs,
     ):
@@ -216,7 +209,6 @@ class DeepseekV2Config(PretrainedConfig):
         rope_theta = kwargs.get("rope_theta", 10000.0)
         standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
-        self.aux_loss_alpha = aux_loss_alpha
         self.first_k_dense_replace = first_k_dense_replace
         self.kv_lora_rank = kv_lora_rank
         self.q_lora_rank = q_lora_rank
@@ -226,12 +218,10 @@ class DeepseekV2Config(PretrainedConfig):
         self.qk_nope_head_dim = qk_nope_head_dim
         self.qk_rope_head_dim = qk_rope_head_dim
         self.routed_scaling_factor = routed_scaling_factor
-        self.seq_aux = seq_aux
         self.topk_group = topk_group
         self.topk_method = topk_method
         self.v_head_dim = v_head_dim
         self.num_experts_per_tok = num_experts_per_tok
-        self.norm_topk_prob = norm_topk_prob
         self.moe_intermediate_size = moe_intermediate_size
 
 

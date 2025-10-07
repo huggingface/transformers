@@ -17,39 +17,8 @@ Image/Text processor class for FLAVA
 """
 
 import warnings
-from collections.abc import Iterable
-from typing import Optional, Union
 
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin
-
-
-class FlavaImagesKwargs(ImagesKwargs):
-    # Mask related params
-    return_image_mask: Optional[bool]
-    input_size_patches: Optional[int]
-    total_mask_patches: Optional[int]
-    mask_group_min_patches: Optional[int]
-    mask_group_max_patches: Optional[int]
-    mask_group_min_aspect_ratio: Optional[float]
-    mask_group_max_aspect_ratio: Optional[float]
-    # Codebook related params
-    return_codebook_pixels: Optional[bool]
-    codebook_do_resize: Optional[bool]
-    codebook_size: Optional[bool]
-    codebook_resample: Optional[int]
-    codebook_do_center_crop: Optional[bool]
-    codebook_crop_size: Optional[int]
-    codebook_do_rescale: Optional[bool]
-    codebook_rescale_factor: Optional[Union[int, float]]
-    codebook_do_map_pixels: Optional[bool]
-    codebook_do_normalize: Optional[bool]
-    codebook_image_mean: Optional[Union[float, Iterable[float]]]
-    codebook_image_std: Optional[Union[float, Iterable[float]]]
-
-
-class FlavaProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: FlavaImagesKwargs
-    _defaults = {}
+from ...processing_utils import ProcessorMixin
 
 
 class FlavaProcessor(ProcessorMixin):
@@ -67,7 +36,6 @@ class FlavaProcessor(ProcessorMixin):
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "FlavaImageProcessor"
     tokenizer_class = ("BertTokenizer", "BertTokenizerFast")
-    valid_processor_kwargs = FlavaProcessorKwargs
 
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         feature_extractor = None

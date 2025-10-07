@@ -398,7 +398,7 @@ def write_model(
             max_position_embeddings=max_position_embeddings,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
-            tie_word_embeddings=llama_version in ["3.2"],
+            tie_word_embeddings=llama_version == "3.2",
         )
 
         config.save_pretrained(tmp_model_path)
@@ -451,7 +451,7 @@ class Llama3Converter(TikTokenConverter):
         # Prevents a null chat_template, which triggers
         # a parsing warning in the Hub.
         additional_kwargs = {}
-        if instruct or llama_version in ["Guard-3"]:
+        if instruct or llama_version == "Guard-3":
             model_id, revision = templates_for_version.get(llama_version, (None, None))
             if model_id is not None:
                 from transformers import AutoTokenizer

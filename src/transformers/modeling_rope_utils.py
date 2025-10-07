@@ -16,7 +16,7 @@ import math
 from functools import wraps
 from typing import Optional, TypedDict, Union
 
-from .configuration_utils import PretrainedConfig
+from .configuration_utils import PreTrainedConfig
 from .utils import is_torch_available, logging
 
 
@@ -191,7 +191,7 @@ def _compute_linear_scaling_rope_parameters(
     """
     Computes the inverse frequencies with linear scaling. Credits to the Reddit user /u/kaiokendev
     Args:
-        config ([`~transformers.PretrainedConfig`]):
+        config ([`~transformers.PreTrainedConfig`]):
             The model configuration. This function assumes that the config will provide at least the following
             properties:
 
@@ -237,7 +237,7 @@ def _compute_linear_scaling_rope_parameters(
 
 
 def _compute_dynamic_ntk_parameters(
-    config: Optional[PretrainedConfig] = None,
+    config: Optional[PreTrainedConfig] = None,
     device: Optional["torch.device"] = None,
     seq_len: Optional[int] = None,
     layer_type: Optional[str] = None,
@@ -246,7 +246,7 @@ def _compute_dynamic_ntk_parameters(
     Computes the inverse frequencies with NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla
 
     Args:
-        config ([`~transformers.PretrainedConfig`]):
+        config ([`~transformers.PreTrainedConfig`]):
             The model configuration. This function assumes that the config will provide at least the following
             properties:
 
@@ -319,7 +319,7 @@ def _compute_yarn_parameters(
     [original paper](https://huggingface.co/papers/2309.00071)
 
     Args:
-        config ([`~transformers.PretrainedConfig`]):
+        config ([`~transformers.PreTrainedConfig`]):
             The model configuration. This function assumes that the config will provide at least the following
             properties:
 
@@ -457,7 +457,7 @@ def _compute_longrope_parameters(
     [original implementation](https://github.com/microsoft/LongRoPE)
 
     Args:
-        config ([`~transformers.PretrainedConfig`]):
+        config ([`~transformers.PreTrainedConfig`]):
             The model configuration. This function assumes that the config will provide at least the following
             properties:
 
@@ -546,7 +546,7 @@ def _compute_llama3_parameters(
     Computes the inverse frequencies for llama 3.1.
 
     Args:
-        config ([`~transformers.PretrainedConfig`]):
+        config ([`~transformers.PreTrainedConfig`]):
             The model configuration. This function assumes that the config will provide at least the following
             properties:
 
@@ -861,9 +861,9 @@ ROPE_VALIDATION_FUNCTIONS = {
 }
 
 
-def rope_config_validation(config: PretrainedConfig, ignore_keys: Optional[set] = None):
+def rope_config_validation(config: PreTrainedConfig, ignore_keys: Optional[set] = None):
     """
-    Validate the RoPE config arguments, given a `PretrainedConfig` object
+    Validate the RoPE config arguments, given a `PreTrainedConfig` object
     """
     rope_parameters_dict = getattr(config, "rope_parameters", None)  # not a default parameter in `PretrainedConfig`
     if rope_parameters_dict is None:

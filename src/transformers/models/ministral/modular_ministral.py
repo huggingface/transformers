@@ -4,7 +4,7 @@ import torch
 from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
@@ -27,7 +27,7 @@ from ..qwen2.modeling_qwen2 import (
 )
 
 
-class MinistralConfig(MistralConfig, PretrainedConfig):
+class MinistralConfig(MistralConfig, PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MinistralModel`]. It is used to instantiate an
     Ministral model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -36,8 +36,8 @@ class MinistralConfig(MistralConfig, PretrainedConfig):
     [mistralai/Ministral-8B-Instruct-2410](https://huggingface.co/mistralai/Ministral-8B-Instruct-2410)
     [mistralai/Ministral-8B-Instruct-2410](https://huggingface.co/mistralai/Ministral-8B-Instruct-2410)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -131,7 +131,7 @@ class MinistralConfig(MistralConfig, PretrainedConfig):
         layer_types: Optional[list[str]] = None,
         **kwargs,
     ):
-        PretrainedConfig.__init__(
+        PreTrainedConfig.__init__(
             self,
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
@@ -206,7 +206,7 @@ class MinistralModel(Qwen2Model):
         super().__init__(config)
         del self.has_sliding_layers
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,

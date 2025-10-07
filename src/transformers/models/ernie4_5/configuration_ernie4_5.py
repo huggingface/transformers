@@ -19,15 +19,15 @@ from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 
 
-class Ernie4_5Config(PretrainedConfig):
+class Ernie4_5Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Ernie4_5Model`]. It is used to instantiate an Ernie 4.5
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Ernie 4.5 0.3B.
     e.g. [baidu/ERNIE-4.5-0.3B-PT](https://huggingface.co/baidu/ERNIE-4.5-0.3B-PT)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:

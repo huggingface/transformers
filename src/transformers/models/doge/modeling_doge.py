@@ -229,7 +229,6 @@ def flex_attention_forward(
     attention_mask: Union[torch.Tensor, "BlockMask"],
     scaling: Optional[float] = None,
     softcap: Optional[float] = None,
-    head_mask: Optional[torch.Tensor] = None,
     **kwargs,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     block_mask = None
@@ -247,8 +246,6 @@ def flex_attention_forward(
             score = softcap * torch.tanh(score / softcap)
         if causal_mask is not None:
             score = score + causal_mask[batch_idx][head_idx][q_idx][kv_idx]
-        if head_mask is not None:
-            score = score + head_mask[batch_idx][head_idx][0][0]
         return score
 
     attn_output, attention_weights = compile_friendly_flex_attention(
@@ -574,7 +571,7 @@ class DogeModel(DogePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,

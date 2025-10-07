@@ -26,7 +26,7 @@ from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 
 
-class MiniMaxConfig(PretrainedConfig):
+class MiniMaxConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MiniMaxModel`]. It is used to instantiate an
     MiniMax model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -34,8 +34,8 @@ class MiniMaxConfig(PretrainedConfig):
 
     [MiniMaxAI/MiniMax-Text-01-hf](https://huggingface.co/MiniMaxAI/MiniMax-Text-01-hf)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -146,6 +146,9 @@ class MiniMaxConfig(PretrainedConfig):
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
+    }
+    attribute_map = {
+        "num_experts": "num_local_experts",
     }
 
     def __init__(

@@ -14,7 +14,7 @@
 # limitations under the License.
 """Musicgen Melody model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 
@@ -22,15 +22,15 @@ from ..auto.configuration_auto import AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class MusicgenMelodyDecoderConfig(PretrainedConfig):
+class MusicgenMelodyDecoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`MusicgenMelodyDecoder`]. It is used to instantiate a
     Musicgen Melody decoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Musicgen Melody
     [facebook/musicgen-melody](https://huggingface.co/facebook/musicgen-melody) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -134,15 +134,15 @@ class MusicgenMelodyDecoderConfig(PretrainedConfig):
         )
 
 
-class MusicgenMelodyConfig(PretrainedConfig):
+class MusicgenMelodyConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MusicgenMelodyModel`]. It is used to instantiate a
     Musicgen Melody model according to the specified arguments, defining the text encoder, audio encoder and Musicgen Melody decoder
     configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the Musicgen Melody
     [facebook/musicgen-melody](https://huggingface.co/facebook/musicgen-melody) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         num_chroma (`int`, *optional*, defaults to 12): Number of chroma bins to use.
@@ -151,11 +151,11 @@ class MusicgenMelodyConfig(PretrainedConfig):
         kwargs (*optional*):
             Dictionary of keyword arguments. Notably:
 
-                - **text_encoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
+                - **text_encoder** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that
                   defines the text encoder config.
-                - **audio_encoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
+                - **audio_encoder** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that
                   defines the audio encoder config.
-                - **decoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that defines
+                - **decoder** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that defines
                   the decoder config.
 
     Example:
@@ -232,8 +232,8 @@ class MusicgenMelodyConfig(PretrainedConfig):
     @classmethod
     def from_sub_models_config(
         cls,
-        text_encoder_config: PretrainedConfig,
-        audio_encoder_config: PretrainedConfig,
+        text_encoder_config: PreTrainedConfig,
+        audio_encoder_config: PreTrainedConfig,
         decoder_config: MusicgenMelodyDecoderConfig,
         **kwargs,
     ):

@@ -14,8 +14,8 @@
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any, Optional, Union
 
+import httpx
 import numpy as np
-import requests
 
 from ..generation import GenerationConfig
 from ..tokenization_utils import PreTrainedTokenizer
@@ -355,7 +355,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             if inputs.startswith("http://") or inputs.startswith("https://"):
                 # We need to actually check for a real protocol, otherwise it's impossible to use a local file
                 # like http_huggingface_co.png
-                inputs = requests.get(inputs).content
+                inputs = httpx.get(inputs, follow_redirects=True).content
             else:
                 with open(inputs, "rb") as f:
                     inputs = f.read()
@@ -414,7 +414,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
                 inputs = F.resample(
                     torch.from_numpy(inputs) if isinstance(inputs, np.ndarray) else inputs,
-                    in_sampling_rate,
                     in_sampling_rate,
                     self.feature_extractor.sampling_rate,
                 ).numpy()

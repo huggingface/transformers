@@ -24,7 +24,7 @@ from ..auto.configuration_auto import AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class CsmDepthDecoderConfig(PretrainedConfig):
+class CsmDepthDecoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`CsmDepthDecoderModel`]. It is used to instantiate an CSM depth decoder
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the defaults will yield
@@ -32,8 +32,8 @@ class CsmDepthDecoderConfig(PretrainedConfig):
 
     e.g. [sesame/csm-1b](https://huggingface.co/sesame/csm-1b)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -169,7 +169,7 @@ class CsmDepthDecoderConfig(PretrainedConfig):
         rope_config_validation(self)
 
 
-class CsmConfig(PretrainedConfig):
+class CsmConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`CsmForConditionalGeneration`]. It is used to instantiate an CSM
     model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -177,8 +177,8 @@ class CsmConfig(PretrainedConfig):
 
     e.g. [sesame/csm-1b](https://huggingface.co/sesame/csm-1b)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         num_codebooks (`int`, *optional*, defaults to 32):
@@ -243,7 +243,7 @@ class CsmConfig(PretrainedConfig):
             Whether to tie the codebook tokens embeddings of the backbone model to the codebook tokens embeddings of the depth decoder.
         depth_decoder_config (`CsmDepthDecoderConfig`, *optional*):
             Configuration for the depth decoder.
-        codec_config (`PretrainedConfig`, *optional*):
+        codec_config (`PreTrainedConfig`, *optional*):
             Configuration for the codec.
 
     ```python
@@ -323,7 +323,7 @@ class CsmConfig(PretrainedConfig):
             logger.info("codec_config is None, using default audio encoder config.")
         elif isinstance(codec_config, dict):
             self.codec_config = AutoConfig.for_model(**codec_config)
-        elif isinstance(codec_config, PretrainedConfig):
+        elif isinstance(codec_config, PreTrainedConfig):
             self.codec_config = codec_config
 
         self.text_vocab_size = text_vocab_size

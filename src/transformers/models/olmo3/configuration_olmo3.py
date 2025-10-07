@@ -25,14 +25,14 @@ from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 
 
-class Olmo3Config(PretrainedConfig):
+class Olmo3Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Olmo3Model`]. It is used to instantiate an OLMo3
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the [allenai/OLMo-3-0725-1B](https://huggingface.co/allenai/OLMo-3-0725-1B).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:

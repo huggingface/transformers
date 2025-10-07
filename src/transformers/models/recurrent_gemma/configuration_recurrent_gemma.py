@@ -24,7 +24,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class RecurrentGemmaConfig(PretrainedConfig):
+class RecurrentGemmaConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`RecurrentGemmaModel`]. It is used to instantiate a RecurrentGemma
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -32,8 +32,8 @@ class RecurrentGemmaConfig(PretrainedConfig):
 
     e.g. [google/recurrentgemma-2b](https://huggingface.co/google/recurrentgemma-2b)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:

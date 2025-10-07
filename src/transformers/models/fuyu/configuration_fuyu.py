@@ -25,15 +25,15 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class FuyuConfig(PretrainedConfig):
+class FuyuConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FuyuForCausalLM`]. It is used to instantiate an
     Fuyu model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the
     [adept/fuyu-8b](https://huggingface.co/adept/fuyu-8b).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:

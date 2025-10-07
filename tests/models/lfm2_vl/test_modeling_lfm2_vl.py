@@ -160,7 +160,6 @@ class Lfm2VlModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
     test_pruning = False
     fx_compatible = False
     model_tester_class = Lfm2VlModelTester
@@ -203,12 +202,6 @@ class Lfm2VlModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
 
     @unittest.skip(reason="Backbone Siglip2VisionModel does not support standalone training")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(
-        reason="Siglip2 backbone has a non-standard initialization scheme, that this test cannot handle easily"
-    )
-    def test_initialization(self):
         pass
 
 

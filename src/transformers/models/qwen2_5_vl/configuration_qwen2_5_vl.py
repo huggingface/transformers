@@ -30,7 +30,7 @@ from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 
 
-class Qwen2_5_VLVisionConfig(PretrainedConfig):
+class Qwen2_5_VLVisionConfig(PreTrainedConfig):
     model_type = "qwen2_5_vl"
     base_config_key = "vision_config"
 
@@ -70,15 +70,15 @@ class Qwen2_5_VLVisionConfig(PretrainedConfig):
         self.initializer_range = initializer_range
 
 
-class Qwen2_5_VLTextConfig(PretrainedConfig):
+class Qwen2_5_VLTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen2_5_VLTextModel`]. It is used to instantiate a
     Qwen2-VL model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of
     Qwen2-VL-7B-Instruct [Qwen/Qwen2-VL-7B-Instruct](https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 152064):
@@ -127,10 +127,6 @@ class Qwen2_5_VLTextConfig(PretrainedConfig):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
-        image_token_id (`int`, *optional*):
-            Token index used as placeholder for image embeddings.
-        video_token_id (`int`, *optional*):
-            Token index used as placeholder for video embeddings.
 
     ```python
     >>> from transformers import Qwen2_5_VLTextModel, Qwen2_5_VLConfig
@@ -184,8 +180,6 @@ class Qwen2_5_VLTextConfig(PretrainedConfig):
         layer_types: Optional[list[str]] = None,
         attention_dropout: Optional[float] = 0.0,
         rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
-        image_token_id: Optional[int] = None,
-        video_token_id: Optional[int] = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -227,21 +221,18 @@ class Qwen2_5_VLTextConfig(PretrainedConfig):
             if self.rope_parameters[key]["rope_type"] == "mrope":
                 self.rope_parameters[key]["rope_type"] = "default"
         rope_config_validation(self, ignore_keys={"mrope_section"})
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
-
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 
-class Qwen2_5_VLConfig(PretrainedConfig):
+class Qwen2_5_VLConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen2_5_VLModel`]. It is used to instantiate a
     Qwen2-VL model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of
     Qwen2-VL-7B-Instruct [Qwen/Qwen2-VL-7B-Instruct](https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -253,6 +244,10 @@ class Qwen2_5_VLConfig(PretrainedConfig):
             The image token index to encode the image prompt.
         video_token_id (`int`, *optional*, defaults to 151656):
             The video token index to encode the image prompt.
+        vision_start_token_id (`int`, *optional*, defaults to 151652):
+            The token index to denote start of vision input.
+        vision_end_token_id (`int`, *optional*, defaults to 151653):
+            The token index to denote end of vision input.
 
     ```python
     >>> from transformers import Qwen2_5_VLForConditionalGeneration, Qwen2_5_VLConfig
@@ -277,8 +272,15 @@ class Qwen2_5_VLConfig(PretrainedConfig):
         vision_config=None,
         image_token_id=151655,
         video_token_id=151656,
+        vision_start_token_id=151652,
+        vision_end_token_id=151653,
         **kwargs,
     ):
+        # We need to init super() here so that it does not reset values
+        # that are in text config to the BaseClass defaults. The Base
+        # config has many text related defaults and not all defaults are same as for `Qwen2_5_VLTextConfig`
+        super().__init__(**kwargs)
+
         if isinstance(vision_config, dict):
             self.vision_config = self.sub_configs["vision_config"](**vision_config)
         elif vision_config is None:
@@ -292,8 +294,32 @@ class Qwen2_5_VLConfig(PretrainedConfig):
 
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id
+        self.vision_start_token_id = vision_start_token_id
+        self.vision_end_token_id = vision_end_token_id
 
-        super().__init__(**kwargs)
+        # Attention implementation to use. It sets it recursively on sub-configs so we call it again in the end
+        self._attn_implementation = kwargs.pop("attn_implementation", None)
+
+    def __setattr__(self, key, value):
+        if (
+            (text_config := super().__getattribute__("__dict__").get("text_config")) is not None
+            and key not in ["dtype", "_attn_implementation_internal"]
+            and key in text_config.__dict__
+        ):
+            setattr(text_config, key, value)
+        else:
+            super().__setattr__(key, value)
+
+    def __getattribute__(self, key):
+        if "text_config" in super().__getattribute__("__dict__") and key not in [
+            "dtype",
+            "_attn_implementation_internal",
+        ]:
+            text_config = super().__getattribute__("text_config")
+            if key in text_config.__dict__:
+                return getattr(text_config, key)
+
+        return super().__getattribute__(key)
 
 
 __all__ = ["Qwen2_5_VLConfig", "Qwen2_5_VLTextConfig"]

@@ -264,7 +264,6 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
     all_model_classes = (Qwen3OmniMoeThinkerForConditionalGeneration,) if is_torch_available() else ()
     all_generative_model_classes = (Qwen3OmniMoeThinkerForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False
-    test_head_masking = False
     _is_composite = True
     model_split_percents = [0.5, 0.9]
 

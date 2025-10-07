@@ -10,7 +10,7 @@ from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 
 
-class MinistralConfig(PretrainedConfig):
+class MinistralConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MinistralModel`]. It is used to instantiate an
     Ministral model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -19,8 +19,8 @@ class MinistralConfig(PretrainedConfig):
     [mistralai/Ministral-8B-Instruct-2410](https://huggingface.co/mistralai/Ministral-8B-Instruct-2410)
     [mistralai/Ministral-8B-Instruct-2410](https://huggingface.co/mistralai/Ministral-8B-Instruct-2410)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:

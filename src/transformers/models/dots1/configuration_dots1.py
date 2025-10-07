@@ -22,15 +22,15 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class Dots1Config(PretrainedConfig):
+class Dots1Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Dots1Model`]. It is used to instantiate a
     `dots.llm1` model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of
     [rednote-hilab/dots.llm1.base](https://huggingface.co/rednote-hilab/dots.llm1.base).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 152064):
@@ -132,6 +132,9 @@ class Dots1Config(PretrainedConfig):
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
+    }
+    attribute_map = {
+        "num_local_experts": "n_routed_experts",
     }
 
     def __init__(

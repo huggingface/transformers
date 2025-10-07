@@ -25,13 +25,13 @@ from ..auto.configuration_auto import AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class MoshiDepthConfig(PretrainedConfig):
+class MoshiDepthConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MoshiDepthDecoder`]. It is used to instantiate a
     Moshi depth decoder model according to the specified arguments, defining the Moshi depth decoder config.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 32000):
@@ -81,7 +81,7 @@ class MoshiDepthConfig(PretrainedConfig):
             Whether to tie weight embeddings
         kwargs (*optional*):
             Dictionary of keyword arguments. Notably:
-                - **audio_encoder_config** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
+                - **audio_encoder_config** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that
                   defines the audio encoder config.
 
     Example:
@@ -149,15 +149,15 @@ class MoshiDepthConfig(PretrainedConfig):
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 
-class MoshiConfig(PretrainedConfig):
+class MoshiConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MoshiModel`]. It is used to instantiate a
     Moshi model according to the specified arguments, defining the audio encoder, Moshi depth decoder and Moshi decoder
     configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the Moshiko model,
     e.g. [kmhf/hf-moshiko](https://huggingface.co/kmhf/hf-moshiko)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 32000):
@@ -209,9 +209,9 @@ class MoshiConfig(PretrainedConfig):
             Whether to tie weight embeddings
         kwargs (*optional*):
             Dictionary of keyword arguments. Notably:
-                - **audio_encoder_config** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
+                - **audio_encoder_config** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that
                   defines the audio encoder config.
-                - **depth__config** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
+                - **depth__config** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that
                   defines the depth decoder config.
 
 
@@ -324,7 +324,7 @@ class MoshiConfig(PretrainedConfig):
     @classmethod
     def from_audio_encoder_config(
         cls,
-        audio_encoder_config: PretrainedConfig,
+        audio_encoder_config: PreTrainedConfig,
         **kwargs,
     ):
         r"""

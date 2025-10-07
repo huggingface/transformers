@@ -29,14 +29,14 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class GraniteMoeConfig(PretrainedConfig):
+class GraniteMoeConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GraniteMoeModel`]. It is used to instantiate an GraniteMoe
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the GraniteMoe-3B.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -159,8 +159,6 @@ class GraniteMoeConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        # this model has rope embedding type, hardcoded for BC
-        self.position_embedding_type = "rope"
         self.rope_parameters = rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters

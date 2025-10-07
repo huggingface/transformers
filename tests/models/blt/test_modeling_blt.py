@@ -45,9 +45,7 @@ from transformers.models.blt.modeling_blt import BltRotaryEmbedding
 
 class BltModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = BltConfig
         base_model_class = BltModel
-        causal_lm_class = BltForCausalLM
 
     def __init__(
         self,
@@ -187,7 +185,6 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
     test_pruning = False
     fx_compatible = False
     model_tester_class = BltModelTester
@@ -243,10 +240,6 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
         _test_eager_matches_sdpa_inference(
             self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels, atols=atols
         )
-
-    @unittest.skip(reason="Decoder cannot keep gradients")
-    def test_flex_attention_with_grads():
-        pass
 
 
 @require_torch_accelerator
