@@ -299,6 +299,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("owlv2", "Owlv2Config"),
         ("owlvit", "OwlViTConfig"),
         ("paligemma", "PaliGemmaConfig"),
+        ("parakeet", "ParakeetCTCConfig"),
         ("parakeet_ctc", "ParakeetCTCConfig"),
         ("parakeet_encoder", "ParakeetEncoderConfig"),
         ("patchtsmixer", "PatchTSMixerConfig"),
