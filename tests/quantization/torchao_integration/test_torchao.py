@@ -279,7 +279,6 @@ class TorchAoTest(unittest.TestCase):
         ]
         self.assertTrue(tokenizer.decode(output[0], skip_special_tokens=True) in EXPECTED_OUTPUT)
 
-
     @require_torchao_version_greater_or_equal("0.13.0")
     def test_module_fqn_to_config_regex_basic(self):
         linear_config = Int8WeightOnlyConfig()
@@ -311,7 +310,12 @@ class TorchAoTest(unittest.TestCase):
         linear1_config = Int8WeightOnlyConfig()
         linear2_config = Float8WeightOnlyConfig()
         # intentially removing `j` after `q_proj` so it's not a full match
-        config = ModuleFqnToConfig({r"re:model\.layers\.+\.self_attn\.q_pro": linear1_config, "model.layers.3.self_attn.q_proj": linear2_config})
+        config = ModuleFqnToConfig(
+            {
+                r"re:model\.layers\.+\.self_attn\.q_pro": linear1_config,
+                "model.layers.3.self_attn.q_proj": linear2_config,
+            }
+        )
         quant_config = TorchAoConfig(quant_type=config)
         quantized_model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
@@ -338,7 +342,13 @@ class TorchAoTest(unittest.TestCase):
     def test_module_fqn_to_config_regex_precedence(self):
         linear1_config = Int8WeightOnlyConfig()
         linear2_config = Float8WeightOnlyConfig()
-        config = ModuleFqnToConfig({r"re:model\.layers\..+\.self_attn\.q_proj": None, "model.layers.3.self_attn.q_proj": linear2_config, "_default": linear1_config})
+        config = ModuleFqnToConfig(
+            {
+                r"re:model\.layers\..+\.self_attn\.q_proj": None,
+                "model.layers.3.self_attn.q_proj": linear2_config,
+                "_default": linear1_config,
+            }
+        )
         quant_config = TorchAoConfig(quant_type=config)
         quantized_model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
