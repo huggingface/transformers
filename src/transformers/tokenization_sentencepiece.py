@@ -324,7 +324,8 @@ class PreTrainedSentencePieceTokenizer(PreTrainedTokenizerBase):
 
         # 5. Load the SentencePiece model
         tokenizer = spm.SentencePieceProcessor()
-        self.sp_model = tokenizer.Load(self.vocab_file)
+        tokenizer.Load(self.vocab_file)
+        self.sp_model = tokenizer
 
         # 6. If some of the special tokens are not part of the vocab, we add them, at the end.
         # the order of addition is the same as self.SPECIAL_TOKENS_ATTRIBUTES following `tokenizers`
@@ -701,7 +702,60 @@ class PreTrainedSentencePieceTokenizer(PreTrainedTokenizerBase):
                 "More information on available tokenizers at "
                 "https://github.com/huggingface/transformers/pull/2674"
             )
+        # Detect batched inputs (list of sequences) when not explicitly word-split
+        is_batched = (
+            isinstance(text, (list, tuple))
+            and not is_split_into_words
+            and (len(text) == 0 or isinstance(text[0], (str, list, tuple, int)))
+        )
 
+        if is_batched:
+            if text_pair is not None:
+                if not isinstance(text_pair, (list, tuple)):
+                    raise ValueError("If `text` is a batch, `text_pair` must also be a batch of the same length.")
+                if len(text_pair) != len(text):
+                    raise ValueError("`text` and `text_pair` batch inputs must have the same length.")
+                pairs = text_pair
+            else:
+                pairs = [None] * len(text)
+
+            batch_outputs = {}
+            for current_text, current_pair in zip(text, pairs):
+                ids = get_input_ids(current_text)
+                pair_ids = get_input_ids(current_pair) if current_pair is not None else None
+                outputs = self.prepare_for_model(
+                    ids,
+                    pair_ids=pair_ids,
+                    add_special_tokens=add_special_tokens,
+                    padding=PaddingStrategy.DO_NOT_PAD.value,
+                    truncation=truncation_strategy.value,
+                    max_length=max_length,
+                    stride=stride,
+                    pad_to_multiple_of=None,
+                    padding_side=None,
+                    return_tensors=None,
+                    prepend_batch_axis=False,
+                    return_attention_mask=False,
+                    return_token_type_ids=return_token_type_ids,
+                    return_overflowing_tokens=return_overflowing_tokens,
+                    return_special_tokens_mask=return_special_tokens_mask,
+                    return_length=return_length,
+                    verbose=verbose,
+                )
+                for key, value in outputs.items():
+                    batch_outputs.setdefault(key, []).append(value)
+
+            batch_outputs = self.pad(
+                batch_outputs,
+                padding=padding_strategy.value,
+                max_length=max_length,
+                pad_to_multiple_of=pad_to_multiple_of,
+                padding_side=padding_side,
+                return_attention_mask=return_attention_mask,
+            )
+            return BatchEncoding(batch_outputs, tensor_type=return_tensors)
+
+        # Single example path
         first_ids = get_input_ids(text)
         second_ids = get_input_ids(text_pair) if text_pair is not None else None
 
@@ -725,166 +779,8 @@ class PreTrainedSentencePieceTokenizer(PreTrainedTokenizerBase):
             verbose=verbose,
         )
 
-    def _batch_encode_plus(
-        self,
-        batch_text_or_text_pairs: Union[
-            list[TextInput],
-            list[TextInputPair],
-            list[PreTokenizedInput],
-            list[PreTokenizedInputPair],
-            list[EncodedInput],
-            list[EncodedInputPair],
-        ],
-        add_special_tokens: bool = True,
-        padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
-        truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
-        max_length: Optional[int] = None,
-        stride: int = 0,
-        is_split_into_words: bool = False,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
-        return_overflowing_tokens: bool = False,
-        return_special_tokens_mask: bool = False,
-        return_offsets_mapping: bool = False,
-        return_length: bool = False,
-        verbose: bool = True,
-        split_special_tokens: bool = False,
-        **kwargs,
-    ) -> BatchEncoding:
-        def get_input_ids(text):
-            if isinstance(text, str):
-                tokens = self.tokenize(text, **kwargs)
-                return self.convert_tokens_to_ids(tokens)
-            elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], str):
-                if is_split_into_words:
-                    tokens = list(
-                        itertools.chain(*(self.tokenize(t, is_split_into_words=True, **kwargs) for t in text))
-                    )
-                    return self.convert_tokens_to_ids(tokens)
-                else:
-                    return self.convert_tokens_to_ids(text)
-            elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], int):
-                return text
-            else:
-                raise ValueError(
-                    "Input is not valid. Should be a string, a list/tuple of strings or a list/tuple of integers."
-                )
-
-        if return_offsets_mapping:
-            raise NotImplementedError(
-                "return_offset_mapping is not available when using Python tokenizers. "
-                "To use this feature, change your tokenizer to one deriving from "
-                "transformers.PreTrainedTokenizerFast."
-            )
-
-        input_ids = []
-        for ids_or_pair_ids in batch_text_or_text_pairs:
-            if (
-                not isinstance(ids_or_pair_ids, (list, tuple))
-                or is_split_into_words
-                and not isinstance(ids_or_pair_ids[0], (list, tuple))
-            ):
-                ids, pair_ids = ids_or_pair_ids, None
-            else:
-                ids, pair_ids = ids_or_pair_ids
-
-            first_ids = get_input_ids(ids)
-            second_ids = get_input_ids(pair_ids) if pair_ids is not None else None
-            input_ids.append((first_ids, second_ids))
-
-        batch_outputs = self._batch_prepare_for_model(
-            input_ids,
-            add_special_tokens=add_special_tokens,
-            padding_strategy=padding_strategy,
-            truncation_strategy=truncation_strategy,
-            max_length=max_length,
-            stride=stride,
-            pad_to_multiple_of=pad_to_multiple_of,
-            padding_side=padding_side,
-            return_attention_mask=return_attention_mask,
-            return_token_type_ids=return_token_type_ids,
-            return_overflowing_tokens=return_overflowing_tokens,
-            return_special_tokens_mask=return_special_tokens_mask,
-            return_length=return_length,
-            return_tensors=return_tensors,
-            verbose=verbose,
-            split_special_tokens=split_special_tokens,
-        )
-
-        return BatchEncoding(batch_outputs)
-
-    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
-    def _batch_prepare_for_model(
-        self,
-        batch_ids_pairs: list[Union[PreTokenizedInputPair, tuple[list[int], None]]],
-        add_special_tokens: bool = True,
-        padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
-        truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
-        max_length: Optional[int] = None,
-        stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[str] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
-        return_overflowing_tokens: bool = False,
-        return_special_tokens_mask: bool = False,
-        return_length: bool = False,
-        verbose: bool = True,
-        split_special_tokens: bool = False,
-    ) -> BatchEncoding:
-        """
-        Prepares a sequence of input id, or a pair of sequences of inputs ids so that it can be used by the model. It
-        adds special tokens, truncates sequences if overflowing while taking into account the special tokens and
-        manages a moving window (with user defined stride) for overflowing tokens
-
-        Args:
-            batch_ids_pairs: list of tokenized input ids or input ids pairs
-        """
-
-        batch_outputs = {}
-        for first_ids, second_ids in batch_ids_pairs:
-            outputs = self.prepare_for_model(
-                first_ids,
-                second_ids,
-                add_special_tokens=add_special_tokens,
-                padding=PaddingStrategy.DO_NOT_PAD.value,  # we pad in batch afterward
-                truncation=truncation_strategy.value,
-                max_length=max_length,
-                stride=stride,
-                pad_to_multiple_of=None,  # we pad in batch afterward
-                padding_side=None,  # we pad in batch afterward
-                return_attention_mask=False,  # we pad in batch afterward
-                return_token_type_ids=return_token_type_ids,
-                return_overflowing_tokens=return_overflowing_tokens,
-                return_special_tokens_mask=return_special_tokens_mask,
-                return_length=return_length,
-                return_tensors=None,  # We convert the whole batch to tensors at the end
-                prepend_batch_axis=False,
-                verbose=verbose,
-                split_special_tokens=split_special_tokens,
-            )
-
-            for key, value in outputs.items():
-                if key not in batch_outputs:
-                    batch_outputs[key] = []
-                batch_outputs[key].append(value)
-
-        batch_outputs = self.pad(
-            batch_outputs,
-            padding=padding_strategy.value,
-            max_length=max_length,
-            pad_to_multiple_of=pad_to_multiple_of,
-            padding_side=padding_side,
-            return_attention_mask=return_attention_mask,
-        )
-
-        batch_outputs = BatchEncoding(batch_outputs, tensor_type=return_tensors)
-
-        return batch_outputs
+    def _batch_encode_plus(self, *args, **kwargs):
+        raise NotImplementedError("Batch encoding is handled directly in _encode_plus for this tokenizer backend.")
 
     def prepare_for_tokenization(
         self, text: str, is_split_into_words: bool = False, **kwargs
