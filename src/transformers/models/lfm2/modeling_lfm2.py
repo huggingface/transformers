@@ -649,6 +649,7 @@ class Lfm2Model(Lfm2PreTrainedModel):
         )
         self.gradient_checkpointing = False
         self.embedding_norm = Lfm2RMSNorm(config.hidden_size, eps=config.norm_eps)
+        self.rotary_emb = Lfm2RotaryEmbedding(config=config)
 
         # Initialize weights and apply final processing
         self.post_init()

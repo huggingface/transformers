@@ -21,13 +21,13 @@ from torch import nn
 from ...cache_utils import Cache
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, MoeModelOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update, standardize_rope_params
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import check_model_inputs
 from ..bamba.configuration_bamba import BambaConfig
 from ..bamba.modeling_bamba import BambaMixer, BambaRMSNormGated, HybridMambaAttentionDynamicCache
+from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..granitemoeshared.modeling_granitemoeshared import (
     GraniteFlashAttentionKwargs,
     GraniteMoeSharedAttention,
@@ -102,47 +102,8 @@ class GraniteMoeHybridMLP(GraniteMoeSharedMLP):
         super().__init__(config)
 
 
-class GraniteMoeHybridRotaryEmbedding:
-    def __init__(self, config: GraniteMoeHybridConfig, device=None):
-        super().__init__()
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-        standardize_rope_params(config)
-        self.config = config
-
-        self.layer_types = list(set(config.layer_types))
-        self.rope_type = {}
-        for layer_type in self.layer_types:
-            rope_params = self.config.rope_parameters[layer_type]
-            if rope_params is None:
-                continue
-
-            self.rope_type[layer_type] = rope_params["rope_type"]
-            rope_init_fn: Callable = self.compute_default_rope_parameters
-            if self.rope_type[layer_type] != "default":
-                rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
-            self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
-            setattr(self, f"{layer_type}_original_inv_freq", curr_inv_freq)
-            setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
-
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids, layer_type):
-        inv_freq = getattr(self, f"{layer_type}_inv_freq")
-        attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
-
-        inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * attention_scaling
-            sin = emb.sin() * attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+class GraniteMoeHybridRotaryEmbedding(Gemma2RotaryEmbedding):
+    pass
 
 
 class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):

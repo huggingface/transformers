@@ -39,7 +39,8 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import OutputRecorder, check_model_inputs
 from ..gemma.modeling_gemma import GemmaMLP
-from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaRMSNorm, LlamaRotaryEmbedding
+from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
+from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaRMSNorm
 from ..mixtral.modeling_mixtral import (
     MixtralExperts,
     MixtralForCausalLM,
@@ -53,7 +54,7 @@ class Qwen2MoeRMSNorm(LlamaRMSNorm):
     pass
 
 
-class Qwen2MoeRotaryEmbedding(LlamaRotaryEmbedding):
+class Qwen2MoeRotaryEmbedding(Gemma2RotaryEmbedding):
     pass
 
 
@@ -207,9 +208,9 @@ class Qwen2MoeModel(MixtralModel):
             }
 
         hidden_states = inputs_embeds
-
-        # create position embeddings to be shared across the decoder layers
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        position_embeddings = {}
+        for layer_type in self.config.layer_types:
+            position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type=layer_type)
 
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = decoder_layer(
@@ -219,7 +220,7 @@ class Qwen2MoeModel(MixtralModel):
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
-                position_embeddings=position_embeddings,
+                position_embeddings=position_embeddings[self.config.layer_types[i]],
                 **kwargs,
             )
 

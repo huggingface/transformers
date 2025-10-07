@@ -38,8 +38,8 @@ class DbrxAttentionConfig(PreTrainedConfig):
             The dropout probability for the attention layers.
         clip_qkv (`float`, *optional*):
             If set, clip the queries, keys, and values in the attention layer to this value.
-        kv_n_heads (`int`, *optional*, defaults to 1): For grouped_query_attention only, allow user to specify number of kv heads.
-        rope_theta (`float`, *optional*, defaults to 10000.0): The base frequency for rope.
+        kv_n_heads (`int`, *optional*, defaults to 1):
+            For grouped_query_attention only, allow user to specify number of kv heads.
     """
 
     base_config_key = "attn_config"
@@ -217,7 +217,6 @@ class DbrxConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.output_router_logits = output_router_logits
         self.num_key_value_heads = self.attn_config.kv_n_heads
-        self.rope_theta: float = 10000.0
         tie_word_embeddings = kwargs.pop("tie_word_embeddings", False)
         if tie_word_embeddings:
             raise ValueError("tie_word_embeddings is not supported for DBRX models.")
@@ -225,7 +224,7 @@ class DbrxConfig(PreTrainedConfig):
         self.rope_parameters = rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
-        standardize_rope_params(self, rope_theta=self.attn_config.rope_theta)
+        standardize_rope_params(self, rope_theta=10000.0)
         rope_config_validation(self)
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
