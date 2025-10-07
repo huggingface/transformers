@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING, Any, Optional, Union
 from parameterized import parameterized
 
 from transformers import (
+    AutoTokenizer,
     AlbertTokenizer,
     AlbertTokenizerFast,
     BertTokenizer,
@@ -2888,8 +2889,5 @@ class SentencePieceBackendCommonTest(unittest.TestCase, SentencePieceBackendTest
     Uses T5Tokenizer as a representative SentencePiece tokenizer.
     """
 
-    tokenizer_class = AlbertTokenizer
-    rust_tokenizer_class = AlbertTokenizerFast
-    from_pretrained_id = "albert/albert-base-v1"
+    tokenizer = AutoTokenizer.from_pretrained("huggyllama/llama-7b", use_fast=False)
     from_pretrained_kwargs = {}
-    test_sentencepiece = True

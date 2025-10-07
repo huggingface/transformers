@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from typing import TYPE_CHECKING
 
-from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
+from transformers import AutoTokenizer, PreTrainedTokenizer, PreTrainedTokenizerFast
 from transformers.testing_utils import require_tokenizers
 from transformers.tokenization_utils import AddedToken
 
@@ -24,9 +24,9 @@ class SentencePieceBackendTesterMixin:
     test_sentencepiece = True
     test_sentencepiece_ignore_case = False
     test_slow_tokenizer = True
-    test_rust_tokenizer = True
-    from_pretrained_id = None
-    from_pretrained_kwargs = None
+    test_rust_tokenizer = False
+    from_pretrained_id = "huggyllama/llama-7b"
+    from_pretrained_kwargs = {"use_fast": False}
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -38,7 +38,11 @@ class SentencePieceBackendTesterMixin:
 
     @classmethod
     def get_tokenizer(cls, **kwargs) -> PreTrainedTokenizer:
-        return cls.tokenizer_class.from_pretrained(cls.from_pretrained_id, **kwargs)
+        merged_kwargs = {}
+        if cls.from_pretrained_kwargs is not None:
+            merged_kwargs.update(cls.from_pretrained_kwargs)
+        merged_kwargs.update(kwargs)
+        return AutoTokenizer.from_pretrained(cls.from_pretrained_id, **merged_kwargs)
 
     @classmethod
     def get_rust_tokenizer(cls, **kwargs) -> PreTrainedTokenizerFast:
@@ -105,10 +109,6 @@ class SentencePieceBackendTesterMixin:
             self.assertEqual(slow_decoded, fast_decoded)
 
     def test_save_sentencepiece_tokenizer(self) -> None:
-        if not self.test_sentencepiece or not self.test_slow_tokenizer:
-            self.skipTest(reason="test_sentencepiece or test_slow_tokenizer is set to False")
-        # We want to verify that we will be able to save the tokenizer even if the original files that were used to
-        # build the tokenizer have been deleted in the meantime.
         text = "This is text to test the tokenizer."
 
         tokenizer_slow_1 = self.get_tokenizer()
@@ -348,3 +348,63 @@ class SentencePieceBackendTesterMixin:
                 replace_additional_special_tokens=False,
             )
             self.assertEqual(tokenizer_2.additional_special_tokens, ["<other>", "<another>", "<tok>"])
+
+    def test_alignment_methods(self):
+        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+
+                words = ["Wonderful", "no", "inspiration", "example", "with", "subtoken"]
+                text = " ".join(words)
+                batch_size = 3
+
+                encoding = tokenizer_r.encode_plus(text, add_special_tokens=False)
+
+                batch_encoding = tokenizer_r([text] * batch_size, add_special_tokens=False)
+                num_tokens = len(encoding["input_ids"])
+
+                last_word_index = len(words) - 1
+                last_token_index = num_tokens - 1
+                last_batch_index = batch_size - 1
+                last_char_index = len(text) - 1
+
+                # words, tokens
+                self.assertEqual(len(encoding.words(0)), num_tokens)
+                self.assertEqual(max(encoding.words(0)), last_word_index)
+                self.assertEqual(min(encoding.words(0)), 0)
+                self.assertEqual(len(batch_encoding.words(last_batch_index)), num_tokens)
+                self.assertEqual(max(batch_encoding.words(last_batch_index)), last_word_index)
+                self.assertEqual(min(batch_encoding.words(last_batch_index)), 0)
+                self.assertEqual(len(encoding.tokens(0)), num_tokens)
+
+                # Assert token_to_word
+                self.assertEqual(encoding.token_to_word(0), 0)
+                self.assertEqual(encoding.token_to_word(0, 0), 0)
+                self.assertEqual(encoding.token_to_word(last_token_index), last_word_index)
+                self.assertEqual(encoding.token_to_word(0, last_token_index), last_word_index)
+                self.assertEqual(batch_encoding.token_to_word(1, 0), 0)
+                self.assertEqual(batch_encoding.token_to_word(0, last_token_index), last_word_index)
+                self.assertEqual(batch_encoding.token_to_word(last_batch_index, last_token_index), last_word_index)
+
+                # Assert word_to_tokens
+                self.assertEqual(encoding.word_to_tokens(0).start, 0)
+                self.assertEqual(encoding.word_to_tokens(0, 0).start, 0)
+                self.assertEqual(encoding.word_to_tokens(last_word_index).end, last_token_index + 1)
+                self.assertEqual(encoding.word_to_tokens(0, last_word_index).end, last_token_index + 1)
+                self.assertEqual(batch_encoding.word_to_tokens(1, 0).start, 0)
+                self.assertEqual(batch_encoding.word_to_tokens(0, last_word_index).end, last_token_index + 1)
+                self.assertEqual(
+                    batch_encoding.word_to_tokens(last_batch_index, last_word_index).end, last_token_index + 1
+                )
+
+                # Assert token_to_chars
+                self.assertEqual(encoding.token_to_chars(0).start, 0)
+                self.assertEqual(encoding.token_to_chars(0, 0).start, 0)
+                self.assertEqual(encoding.token_to_chars(last_token_index).end, last_char_index + 1)
+                self.assertEqual(encoding.token_to_chars(0, last_token_index).end, last_char_index + 1)
+                self.assertEqual(batch_encoding.token_to_chars(1, 0).start, 0)
+                self.assertEqual(batch_encoding.token_to_chars(0, last_token_index).end, last_char_index + 1)
+                self.assertEqual(
+                    batch_encoding.token_to_chars(last_batch_index, last_token_index).end, last_char_index + 1
+                )
+    
