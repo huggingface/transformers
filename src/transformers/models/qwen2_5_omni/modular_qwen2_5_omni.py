@@ -748,7 +748,6 @@ class Qwen2_5OmniTalkerConfig(PretrainedConfig):
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         # Validate the correctness of rotary position embeddings parameters
-        # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type
         rope_theta = kwargs.get("rope_theta", 1000000.0)
         standardize_rope_params(self, rope_theta={"full_attention": rope_theta, "sliding_attention": rope_theta})
         rope_config_validation(self)

@@ -156,7 +156,6 @@ class Lfm2Config(PretrainedConfig):
             self.layer_types = ["full_attention" if i in full_attn_idxs else "conv" for i in range(num_hidden_layers)]
 
         # Validate the correctness of rotary position embeddings parameters
-        # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type
         rope_theta = kwargs.get("theta", kwargs.get("rope_theta", 1000000.0))
         standardize_rope_params(self, rope_theta={"full_attention": rope_theta, "conv": None})
         rope_config_validation(self)

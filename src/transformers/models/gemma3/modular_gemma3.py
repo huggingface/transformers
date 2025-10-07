@@ -212,7 +212,6 @@ class Gemma3TextConfig(Gemma2Config, PretrainedConfig):
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         # Validate the correctness of rotary position embeddings parameters
-        # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type
         rope_theta = getattr(self, "rope_theta", 1_000_000.0)
         rope_local_base_freq = getattr(self, "rope_local_base_freq", 10000.0)
         standardize_rope_params(

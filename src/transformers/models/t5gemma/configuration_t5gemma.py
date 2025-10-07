@@ -176,6 +176,7 @@ class T5GemmaModuleConfig(PretrainedConfig):
         self.final_logit_softcapping = final_logit_softcapping
         self.attn_logit_softcapping = attn_logit_softcapping
         self.layer_types = layer_types
+        self.rope_scaling = rope_scaling
 
         if self.layer_types is None:
             self.layer_types = [
@@ -184,7 +185,6 @@ class T5GemmaModuleConfig(PretrainedConfig):
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         # Validate the correctness of rotary position embeddings parameters
-        # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type
         rope_theta = kwargs.get("rope_theta", 10000.0)
         standardize_rope_params(self, rope_theta={"full_attention": rope_theta, "sliding_attention": rope_theta})
         rope_config_validation(self)

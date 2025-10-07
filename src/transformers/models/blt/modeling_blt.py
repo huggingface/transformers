@@ -92,19 +92,11 @@ class BltRotaryEmbedding(nn.Module):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
-
         standardize_rope_params(config)
         self.config = config
-        self.rope_type = {}
-        rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "default":
-            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
-
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
 
         self.layer_types = list(set(config.layer_types))
+        self.rope_type = {}
         for layer_type in self.layer_types:
             rope_params = self.config.rope_scaling[layer_type]
             if rope_params is None:

@@ -203,7 +203,6 @@ class ModernBertDecoderConfig(PretrainedConfig):
                     self.layer_types.append("full_attention")
 
         # Validate the correctness of rotary position embeddings parameters
-        # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type
         rope_theta = getattr(self, "global_rope_theta", 160_000.0)
         rope_local_base_freq = getattr(self, "local_rope_theta", 10000.0)
         standardize_rope_params(

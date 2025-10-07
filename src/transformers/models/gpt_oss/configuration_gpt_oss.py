@@ -112,7 +112,6 @@ class GptOssConfig(PretrainedConfig):
         self.rope_scaling = rope_scaling
 
         # Validate the correctness of rotary position embeddings parameters
-        # The config was saved with a simple rope scaling dict, we need to convert to nested structure per RoPE type
         rope_theta = kwargs.get("rope_theta", 150000.0)
         standardize_rope_params(self, rope_theta={"full_attention": rope_theta, "sliding_attention": rope_theta})
         rope_config_validation(self)
