@@ -2143,7 +2143,9 @@ class Trainer:
         """
         if resume_from_checkpoint is False:
             resume_from_checkpoint = None
-
+            if hasattr(self, "_local_start_time"):
+                del self._local_start_time
+        
         # memory metrics - must set up as early as possible
         self._memory_tracker.start()
 
@@ -3061,8 +3063,12 @@ class Trainer:
             self._globalstep_last_logged = self.state.global_step
             self.store_flos()
 
-            self.log(logs, start_time)
+            if self.state.global_step == 0 or not hasattr(self, "_local_start_time"):
+                self._local_start_time = start_time
 
+            self.log(logs, self._local_start_time)
+            
+                
         metrics = None
         if self.control.should_evaluate:
             metrics = self._evaluate(trial, ignore_keys_for_eval)
