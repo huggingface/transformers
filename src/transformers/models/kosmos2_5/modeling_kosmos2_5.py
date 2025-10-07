@@ -321,7 +321,7 @@ class Kosmos2_5ForConditionalGenerationModelOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None
+    past_key_values: Optional[Cache] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
     width: Optional[torch.FloatTensor] = None
@@ -1343,7 +1343,7 @@ class Kosmos2_5TextModel(Kosmos2_5PreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         image_embeds: Optional[torch.Tensor] = None,
         image_embeds_position_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
@@ -1408,7 +1408,7 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
         height: Optional[torch.Tensor] = None,
         image_embeds_position_mask: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         image_embeds: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
@@ -1539,7 +1539,7 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel):
         image_embeds: Optional[torch.Tensor] = None,
         image_embeds_position_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -1702,7 +1702,7 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
         height: Optional[torch.Tensor] = None,
         image_embeds_position_mask: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         image_embeds: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
