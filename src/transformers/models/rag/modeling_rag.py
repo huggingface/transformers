@@ -1184,7 +1184,7 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
             return result
 
         reordered_past = ()
-        for idx in len(past_key_values):
+        for idx in range(len(past_key_values)):
             if isinstance(past_key_values, EncoderDecoderCache):
                 layer_past = (
                     past_key_values.self_attention_cache.layers[idx].keys,
