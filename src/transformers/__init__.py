@@ -269,6 +269,8 @@ _import_structure = {
     "quantizers.quantizer_finegrained_fp8": [
         "FineGrainedFP8HfQuantizer",
     ],
+
+    "utils.kernel_config": ["KernelConfig"],
 }
 
 # tokenizers-backed objects
@@ -758,6 +760,7 @@ if TYPE_CHECKING:
     from .utils import is_torch_npu_available as is_torch_npu_available
     from .utils import is_torch_xla_available as is_torch_xla_available
     from .utils import is_torch_xpu_available as is_torch_xpu_available
+    from .utils.kernel_config import KernelConfig as KernelConfig
 
     # bitsandbytes config
     from .utils.quantization_config import AqlmConfig as AqlmConfig
