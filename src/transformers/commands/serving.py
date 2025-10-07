@@ -1186,7 +1186,7 @@ class ServeCommand(BaseTransformersCLICommand):
             inputs = [{"role": "system", "content": req["instructions"]}] if "instructions" in req else []
             inputs.append(req["input"])
         else:
-            raise ValueError("inputs should be a list, dict, or str")
+            raise TypeError("inputs should be a list, dict, or str")
 
         inputs = processor.apply_chat_template(inputs, add_generation_prompt=True, return_tensors="pt")
         inputs = inputs.to(model.device)
