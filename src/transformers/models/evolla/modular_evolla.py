@@ -36,7 +36,6 @@ from ...utils import (
     is_torch_flex_attn_available,
     logging,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import OutputRecorder, check_model_inputs
 from ..esm.modeling_esm import (
     EsmAttention,
@@ -602,7 +601,6 @@ class EvollaSequenceAlignerCrossAttention(nn.Module):
 
         return context_layer
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         query_states,
@@ -702,7 +700,6 @@ class EvollaDecoderLayer(LlamaDecoderLayer):
                 protein_encoder_dim=config.hidden_size,
             )
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
