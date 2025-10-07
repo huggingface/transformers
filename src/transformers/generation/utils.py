@@ -2084,16 +2084,34 @@ class GenerationMixin(ContinuousMixin):
             raise ValueError(
                 "`decoder_start_token_id` or `bos_token_id` has to be defined for encoder-decoder generation."
             )
-        if (
-            eos_token_tensor is not None
-            and isin_mps_friendly(elements=eos_token_tensor, test_elements=pad_token_tensor).any()
-        ):
-            if kwargs_has_attention_mask is not None and not kwargs_has_attention_mask:
-                logger.warning_once(
-                    "The attention mask is not set and cannot be inferred from input because pad token is same as "
-                    "eos token. As a consequence, you may observe unexpected behavior. Please pass your input's "
-                    "`attention_mask` to obtain reliable results."
-                )
+		if (
+		    eos_token_tensor is not None
+		    and isin_mps_friendly(elements=eos_token_tensor, test_elements=pad_token_tensor).any()
+		):
+		    if kwargs_has_attention_mask is not None and not kwargs_has_attention_mask:
+		        # Instead of warning, automatically create an attention mask
+		        logger.info_once(
+		            "Automatically inferring attention mask: treating the first EOS token as end-of-sequence "
+		            "and subsequent EOS tokens as padding (since pad_token == eos_token)."
+		        )
+		
+		        # Infer the attention mask from the input_ids
+		        input_ids = kwargs.get("input_ids", None)
+		        if input_ids is not None:
+		            # Create attention mask where tokens before the first eos are 1, after that 0
+		            eos_token_id = eos_token_tensor[0].item()
+		            attention_mask = torch.ones_like(input_ids)
+		            for i, seq in enumerate(input_ids):
+		                eos_positions = (seq == eos_token_id).nonzero(as_tuple=True)[0]
+		                if len(eos_positions) > 0:
+		                    first_eos = eos_positions[0]
+		                    attention_mask[i, first_eos + 1:] = 0  # pad after first eos
+		            kwargs["attention_mask"] = attention_mask
+		        else:
+		            logger.warning_once(
+		                "Cannot automatically infer attention mask: `input_ids` not found in kwargs."
+		            )
+
         if eos_token_tensor is not None and (
             torch.is_floating_point(eos_token_tensor) or (eos_token_tensor < 0).any()
         ):
