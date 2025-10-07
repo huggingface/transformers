@@ -39,12 +39,12 @@ class Sam2VideoProcessor(ProcessorMixin):
     Constructs a SAM2 processor which wraps a SAM2 image processor and an 2D points & Bounding boxes processor into a
     single processor.
 
-    [`Sam2VideoProcessor`] offers all the functionalities of [`Sam2ImageProcessorFast`] and [`Sam2VideoProcessor`]. See the docstring of
-    [`~Sam2ImageProcessorFast.__call__`] and [`~Sam2VideoProcessor.__call__`] for more information.
+    [`Sam2VideoProcessor`] offers all the functionalities of [`AutoImageProcessor`] and [`Sam2VideoProcessor`]. See the docstring of
+    [`~AutoImageProcessor.__call__`] and [`~Sam2VideoProcessor.__call__`] for more information.
 
     Args:
-        image_processor (`Sam2ImageProcessorFast`):
-            An instance of [`Sam2ImageProcessorFast`].
+        image_processor (`AutoImageProcessor`):
+            An instance of [`AutoImageProcessor`].
         video_processor (`Sam2VideoVideoProcessor`):
             An instance of [`Sam2VideoVideoProcessor`].
         target_size (`int`, *optional*):
@@ -54,7 +54,7 @@ class Sam2VideoProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "video_processor"]
-    image_processor_class = "Sam2ImageProcessorFast"
+    image_processor_class = "AutoImageProcessor"
     video_processor_class = "Sam2VideoVideoProcessor"
 
     def __init__(
@@ -76,7 +76,7 @@ class Sam2VideoProcessor(ProcessorMixin):
         **kwargs,
     ) -> BatchEncoding:
         r"""
-        This method uses [`Sam2VideoImageProcessorFast.__call__`] method to prepare image(s) for the model. It also prepares 2D
+        This method uses [`AutoImageProcessor.__call__`] method to prepare image(s) for the model. It also prepares 2D
         points and bounding boxes for the model if they are provided.
 
         Args:

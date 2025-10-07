@@ -67,14 +67,14 @@ class UdopProcessor(ProcessorMixin):
     prepare labels for language modeling tasks.
 
     Args:
-        image_processor (`LayoutLMv3ImageProcessor`):
+        image_processor (`AutoImageProcessor`):
             An instance of [`LayoutLMv3ImageProcessor`]. The image processor is a required input.
         tokenizer (`UdopTokenizer` or `UdopTokenizerFast`):
             An instance of [`UdopTokenizer`] or [`UdopTokenizerFast`]. The tokenizer is a required input.
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "LayoutLMv3ImageProcessor"
+    image_processor_class = "AutoImageProcessor"
     tokenizer_class = ("UdopTokenizer", "UdopTokenizerFast")
 
     def __init__(self, image_processor, tokenizer):
@@ -88,9 +88,9 @@ class UdopProcessor(ProcessorMixin):
     ) -> BatchFeature:
         """
         This method first forwards the `images` argument to [`~UdopImageProcessor.__call__`]. In case
-        [`UdopImageProcessor`] was initialized with `apply_ocr` set to `True`, it passes the obtained words and
+        [`AutoImageProcessor`] was initialized with `apply_ocr` set to `True`, it passes the obtained words and
         bounding boxes along with the additional arguments to [`~UdopTokenizer.__call__`] and returns the output,
-        together with the prepared `pixel_values`. In case [`UdopImageProcessor`] was initialized with `apply_ocr` set
+        together with the prepared `pixel_values`. In case [`AutoImageProcessor`] was initialized with `apply_ocr` set
         to `False`, it passes the words (`text`/``text_pair`) and `boxes` specified by the user along with the
         additional arguments to [`~UdopTokenizer.__call__`] and returns the output, together with the prepared
         `pixel_values`.

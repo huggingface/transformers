@@ -52,7 +52,7 @@ class AlignProcessor(ProcessorMixin):
         ```
 
     Args:
-        image_processor ([`EfficientNetImageProcessor`]):
+        image_processor ([`AutoImageProcessor`]):
             The image processor is a required input.
         tokenizer ([`BertTokenizer`, `BertTokenizerFast`]):
             The tokenizer is a required input.
@@ -60,7 +60,7 @@ class AlignProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "EfficientNetImageProcessor"
+    image_processor_class = "AutoImageProcessor"
     tokenizer_class = ("BertTokenizer", "BertTokenizerFast")
     valid_processor_kwargs = AlignProcessorKwargs
 

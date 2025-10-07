@@ -32,13 +32,13 @@ logger = logging.get_logger(__name__)
 
 class VideoLlavaProcessor(ProcessorMixin):
     r"""
-    Constructs a VideoLlava processor which wraps a VideoLlava image processor and a Llava tokenizer into a single processor.
+    Constructs a VideoLlava processor which wraps a AutoImageProcessor and a Llava tokenizer into a single processor.
 
     [`VideoLlavaProcessor`] offers all the functionalities of [`VideoLlavaImageProcessor`] and [`LlamaTokenizerFast`]. See the
     [`~VideoLlavaProcessor.__call__`] and [`~VideoLlavaProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`VideoLlavaImageProcessor`], *optional*):
+        image_processor ([`AutoImageProcessor`], *optional*):
             The image processor is a required input.
         video_processor ([`VideoLlavaVideoProcessor`], *optional*):
             The video processor is a required input.
@@ -61,7 +61,7 @@ class VideoLlavaProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "video_processor", "tokenizer"]
-    image_processor_class = "VideoLlavaImageProcessor"
+    image_processor_class = "AutoImageProcessor"
     video_processor_class = "AutoVideoProcessor"
     tokenizer_class = "AutoTokenizer"
 

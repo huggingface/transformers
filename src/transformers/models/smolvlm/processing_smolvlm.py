@@ -127,7 +127,7 @@ class SmolVLMProcessor(ProcessorMixin):
     the docstring of [`~IdeficsProcessor.__call__`] and [`~IdeficsProcessor.decode`] for more information.
 
     Args:
-        image_processor (`SmolVLMImageProcessor`):
+        image_processor (`AutoImageProcessor`):
             An instance of [`SmolVLMImageProcessor`]. The image processor is a required input.
         tokenizer (`PreTrainedTokenizerBase`):
             An instance of [`PreTrainedTokenizerBase`]. This should correspond with the model's text model. The tokenizer is a required input.
@@ -142,7 +142,7 @@ class SmolVLMProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer", "video_processor"]
-    image_processor_class = "SmolVLMImageProcessor"
+    image_processor_class = "AutoImageProcessor"
     video_processor_class = "SmolVLMVideoProcessor"  # NOTE: uses different interpolation than slow processors
     tokenizer_class = "AutoTokenizer"
 

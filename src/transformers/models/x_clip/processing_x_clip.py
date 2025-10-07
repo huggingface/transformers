@@ -21,20 +21,20 @@ from ...processing_utils import ProcessorMixin
 
 class XCLIPProcessor(ProcessorMixin):
     r"""
-    Constructs an X-CLIP processor which wraps a VideoMAE image processor and a CLIP tokenizer into a single processor.
+    Constructs an X-CLIP processor which wraps a AutoImageProcessor and a CLIP tokenizer into a single processor.
 
-    [`XCLIPProcessor`] offers all the functionalities of [`VideoMAEImageProcessor`] and [`CLIPTokenizerFast`]. See the
+    [`XCLIPProcessor`] offers all the functionalities of [`AutoImageProcessor`] and [`CLIPTokenizerFast`]. See the
     [`~XCLIPProcessor.__call__`] and [`~XCLIPProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`VideoMAEImageProcessor`], *optional*):
+        image_processor ([`AutoImageProcessor`], *optional*):
             The image processor is a required input.
         tokenizer ([`CLIPTokenizerFast`], *optional*):
             The tokenizer is a required input.
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "VideoMAEImageProcessor"
+    image_processor_class = "AutoImageProcessor"
     tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
 
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):

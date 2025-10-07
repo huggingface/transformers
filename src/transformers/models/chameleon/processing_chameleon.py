@@ -55,11 +55,11 @@ class ChameleonProcessor(ProcessorMixin):
     Constructs a Chameleon processor which wraps a Chameleon image processor and a Chameleon tokenizer into a single
     processor.
 
-    [`ChameleonProcessor`] offers all the functionalities of [`ChameleonImageProcessor`] and [`LlamaTokenizerFast`].
+    [`ChameleonProcessor`] offers all the functionalities of [`AutoImageProcessor`] and [`LlamaTokenizerFast`].
     See the [`~ChameleonProcessor.__call__`] and [`~ChameleonProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`ChameleonImageProcessor`]):
+        image_processor ([`AutoImageProcessor`]):
             The image processor is a required input.
         tokenizer ([`LlamaTokenizerFast`]):
             The tokenizer is a required input.
@@ -71,7 +71,7 @@ class ChameleonProcessor(ProcessorMixin):
 
     attributes = ["image_processor", "tokenizer"]
     tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
-    image_processor_class = "ChameleonImageProcessor"
+    image_processor_class = "AutoImageProcessor"
 
     def __init__(self, image_processor, tokenizer, image_seq_length: int = 1024, image_token: str = "<image>"):
         self.image_seq_length = image_seq_length

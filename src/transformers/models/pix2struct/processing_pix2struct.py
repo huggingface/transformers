@@ -55,14 +55,14 @@ class Pix2StructProcessor(ProcessorMixin):
     the docstring of [`~Pix2StructProcessor.__call__`] and [`~Pix2StructProcessor.decode`] for more information.
 
     Args:
-        image_processor (`Pix2StructImageProcessor`):
+        image_processor (`AutoImageProcessor`):
             An instance of [`Pix2StructImageProcessor`]. The image processor is a required input.
         tokenizer (Union[`T5TokenizerFast`, `T5Tokenizer`]):
             An instance of ['T5TokenizerFast`] or ['T5Tokenizer`]. The tokenizer is a required input.
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "Pix2StructImageProcessor"
+    image_processor_class = "AutoImageProcessor"
     tokenizer_class = ("T5Tokenizer", "T5TokenizerFast")
 
     def __init__(self, image_processor, tokenizer):
@@ -76,7 +76,7 @@ class Pix2StructProcessor(ProcessorMixin):
         **kwargs: Unpack[Pix2StructProcessorKwargs],
     ) -> Union[BatchEncoding, BatchFeature]:
         """
-        This method uses [`Pix2StructImageProcessor.preprocess`] method to prepare image(s) for the model, and
+        This method uses [`AutoImageProcessor.preprocess`] method to prepare image(s) for the model, and
         [`T5TokenizerFast.__call__`] to prepare text for the model.
 
         Please refer to the docstring of the above two methods for more information.

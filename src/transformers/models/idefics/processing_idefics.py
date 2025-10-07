@@ -137,13 +137,13 @@ def is_url(string):
 
 class IdeficsProcessor(ProcessorMixin):
     r"""
-    Constructs a IDEFICS processor which wraps a LLama tokenizer and IDEFICS image processor into a single processor.
+    Constructs a IDEFICS processor which wraps a LLama tokenizer and AutoImageProcessor into a single processor.
 
     [`IdeficsProcessor`] offers all the functionalities of [`IdeficsImageProcessor`] and [`LlamaTokenizerFast`]. See
     the docstring of [`~IdeficsProcessor.__call__`] and [`~IdeficsProcessor.decode`] for more information.
 
     Args:
-        image_processor (`IdeficsImageProcessor`):
+        image_processor (`AutoImageProcessor`):
             An instance of [`IdeficsImageProcessor`]. The image processor is a required input.
         tokenizer (`LlamaTokenizerFast`):
             An instance of [`LlamaTokenizerFast`]. The tokenizer is a required input.
@@ -154,7 +154,7 @@ class IdeficsProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "IdeficsImageProcessor"
+    image_processor_class = "AutoImageProcessor"
     tokenizer_class = "LlamaTokenizerFast"
 
     def __init__(self, image_processor, tokenizer=None, image_size=224, add_end_of_utterance_token=None, **kwargs):

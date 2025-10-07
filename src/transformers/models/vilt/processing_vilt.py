@@ -36,20 +36,20 @@ class ViltProcessorKwargs(ProcessingKwargs, total=False):
 
 class ViltProcessor(ProcessorMixin):
     r"""
-    Constructs a ViLT processor which wraps a BERT tokenizer and ViLT image processor into a single processor.
+    Constructs a ViLT processor which wraps a BERT tokenizer and AutoImageProcessor into a single processor.
 
     [`ViltProcessor`] offers all the functionalities of [`ViltImageProcessor`] and [`BertTokenizerFast`]. See the
     docstring of [`~ViltProcessor.__call__`] and [`~ViltProcessor.decode`] for more information.
 
     Args:
-        image_processor (`ViltImageProcessor`, *optional*):
-            An instance of [`ViltImageProcessor`]. The image processor is a required input.
+        image_processor (`AutoImageProcessor`, *optional*):
+            An instance of [`AutoImageProcessor`]. The image processor is a required input.
         tokenizer (`BertTokenizerFast`, *optional*):
             An instance of ['BertTokenizerFast`]. The tokenizer is a required input.
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "ViltImageProcessor"
+    image_processor_class = "AutoImageProcessor"
     tokenizer_class = ("BertTokenizer", "BertTokenizerFast")
     valid_processor_kwargs = ViltProcessorKwargs
 
