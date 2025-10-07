@@ -398,7 +398,7 @@ class BlipTextEncoder(nn.Module):
         if use_cache:
             # The model acts as encoder decoder but is not an encoder decoder. So we cast all cache objects to
             # `EncoderDecoderCache` type assuming that the incoming cache is from `self_attention`
-            elif isinstance(past_key_values, DynamicCache):
+            if isinstance(past_key_values, DynamicCache):
                 past_key_values = EncoderDecoderCache(past_key_values, DynamicCache(config=self.config))
             elif past_key_values is None:
                 past_key_values = EncoderDecoderCache(

@@ -32,7 +32,6 @@ from ...utils import (
     auto_docstring,
     can_return_tuple,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
 from ..clip.modeling_clip import CLIPModel, CLIPTextEmbeddings, _get_vector_norm
 from ..llama.modeling_llama import LlamaMLP, LlamaRMSNorm

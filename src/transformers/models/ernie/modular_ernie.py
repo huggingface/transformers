@@ -21,7 +21,7 @@ import torch
 import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ...cache_utils import Cache, EncoderDecoderCache
+from ...cache_utils import Cache
 from ...masking_utils import create_causal_mask
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_attention_mask_for_sdpa
 from ...modeling_outputs import (
@@ -214,7 +214,7 @@ class ErnieModel(BertModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
