@@ -1218,7 +1218,7 @@ class ModularFileMapper(ModuleMapper):
             return
         if m.matches(node.module, m.Attribute()):
             for imported_ in node.names:
-                if any(external_file.name in import_statement for external_file in self.excluded_external_files):
+                if any(external_file["name"] in import_statement for external_file in self.excluded_external_files):
                     _import = None
                 else:
                     _import = re.search(
@@ -1270,7 +1270,7 @@ class ModularFileMapper(ModuleMapper):
                 import_module = self.python_module.code_for_node(node.body[0].module)
                 import_statement = "." * len(node.body[0].relative) + import_module
                 if any(
-                    external_file.name in import_statement for external_file in self.excluded_external_files
+                    external_file["name"] in import_statement for external_file in self.excluded_external_files
                 ) or not (
                     re.search(rf"(?:transformers\.models\.)|(?:\.\.)\w+\.({self.match_patterns})_.*", import_statement)
                     and not any(import_to_skip in import_statement for import_to_skip in IMPORTS_TO_SKIP_IN_MODULAR)
@@ -1335,12 +1335,15 @@ class ModularFileMapper(ModuleMapper):
         # Note that we may visit several of the same file types, thus we save them per file type, not file
         self.imported_objects_per_file = defaultdict(set)
         for file, mapper in self.visited_modules.items():
+            file_type = re.search(rf"^.*transformers\.models\.\w+\.({self.match_patterns})_.*", file).group(1)
+
+            # If there are excluded external files, override the file type if there is a match
             if self.excluded_external_files:
                 for excluded_file in self.excluded_external_files:
-                    if file.split(".")[-1] == excluded_file.name:
-                        file_type = excluded_file.type
-            else:
-                file_type = re.search(rf"^.*transformers\.models\.\w+\.({self.match_patterns})_.*", file).group(1)
+                    if file.split(".")[-1] == excluded_file["name"]:
+                        file_type = excluded_file["type"]
+                        break
+
             self.imported_objects_per_file[file_type].update(mapper.objects_imported_from_modeling)
 
     def merge_model_specific_imports(self, visited_modules):
@@ -1917,7 +1920,7 @@ def convert_modular_file(modular_file: str, source_library: Optional[str] = "tra
             module = module.visit(AbsoluteImportTransformer())
 
         wrapper = MetadataWrapper(module)
-        cst_transformers = ModularFileMapper(module, model_name)
+        cst_transformers = ModularFileMapper(module, model_name, source_library)
         wrapper.visit(cst_transformers)
         for file, module in create_modules(
             cst_transformers, file_path=relative_path, package_name=source_library
