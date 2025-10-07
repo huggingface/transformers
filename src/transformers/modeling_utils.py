@@ -2554,7 +2554,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             else:
                 applicable_attn_implementation = "kernels-community/vllm-flash-attn3"
 
-        if is_kernel(applicable_attn_implementation):
+        if is_kernel(applicable_attn_implementation) or "|" in applicable_attn_implementation:
             try:
                 load_and_register_kernel(applicable_attn_implementation)
                 # log that we used kernel fallback if successful
