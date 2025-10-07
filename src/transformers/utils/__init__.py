@@ -252,6 +252,7 @@ from .import_utils import (
     requires_backends,
     torch_only_method,
 )
+from .kernel_config import KernelConfig
 from .peft_utils import (
     ADAPTER_CONFIG_NAME,
     ADAPTER_SAFE_WEIGHTS_NAME,
