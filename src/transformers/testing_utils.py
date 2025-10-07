@@ -3553,9 +3553,9 @@ def _patched_tearDown(self, *args, **kwargs):
     regular_failures_info = []
 
     errors = None
-    if hasattr(self._outcome, 'errors'):
+    if hasattr(self._outcome, "errors"):
         errors = self._outcome.errors
-    elif hasattr(self._outcome, 'result') and hasattr(self._outcome.result, 'errors'):
+    elif hasattr(self._outcome, "result") and hasattr(self._outcome.result, "errors"):
         errors = self._outcome.result.errors
 
     if hasattr(self, "_outcome") and errors:
@@ -3572,9 +3572,9 @@ def _patched_tearDown(self, *args, **kwargs):
             )
 
         # Clear the regular failure (i.e. that is not from any of our patched assertion methods) from pytest's records.
-        if hasattr(self._outcome, 'errors'):
+        if hasattr(self._outcome, "errors"):
             self._outcome.errors.clear()
-        elif hasattr(self._outcome, 'result') and hasattr(self._outcome.result, 'errors'):
+        elif hasattr(self._outcome, "result") and hasattr(self._outcome.result, "errors"):
             self._outcome.result.errors.clear()
 
     # reset back to the original tearDown method, so `_patched_tearDown` won't be run by the subsequent tests if they
