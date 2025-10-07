@@ -55,7 +55,7 @@ class DiaEncoderConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"swish"` and `"gelu_new"` are supported.
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
@@ -77,7 +77,7 @@ class DiaEncoderConfig(PretrainedConfig):
         norm_eps: float = 1e-5,
         vocab_size: int = 256,
         hidden_act: str = "silu",
-        rope_scaling: Optional[RopeParameters] = None,
+        rope_parameters: Optional[RopeParameters] = None,
         initializer_range: float = 0.02,
         **kwargs,
     ):
@@ -92,7 +92,7 @@ class DiaEncoderConfig(PretrainedConfig):
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)
@@ -142,7 +142,7 @@ class DiaDecoderConfig(PretrainedConfig):
             `"swish"` and `"gelu_new"` are supported.
         num_channels (`int`, *optional*, defaults to 9):
             Number of channels for the Dia decoder.
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
@@ -173,7 +173,7 @@ class DiaDecoderConfig(PretrainedConfig):
         vocab_size: int = 1028,
         hidden_act: str = "silu",
         num_channels: int = 9,
-        rope_scaling: Optional[RopeParameters] = None,
+        rope_parameters: Optional[RopeParameters] = None,
         initializer_range: float = 0.02,
         use_cache: bool = True,
         is_encoder_decoder: bool = True,
@@ -196,7 +196,7 @@ class DiaDecoderConfig(PretrainedConfig):
         self.num_channels = num_channels
         self.initializer_range = initializer_range
         self.use_cache = use_cache
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)

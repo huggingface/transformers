@@ -84,7 +84,7 @@ class FlexOlmoConfig(OlmoeConfig):
             End of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
@@ -151,7 +151,7 @@ class FlexOlmoConfig(OlmoeConfig):
         bos_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = 100257,
         tie_word_embeddings: Optional[bool] = False,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
         num_experts_per_tok: Optional[int] = 5,
@@ -173,7 +173,7 @@ class FlexOlmoConfig(OlmoeConfig):
             initializer_range=initializer_range,
             rms_norm_eps=rms_norm_eps,
             use_cache=use_cache,
-            rope_scaling=rope_scaling,
+            rope_parameters=rope_parameters,
             attention_bias=attention_bias,
             attention_dropout=attention_dropout,
             num_experts_per_tok=num_experts_per_tok,

@@ -238,15 +238,15 @@ class OpenLlamaAttention(nn.Module):
         self._init_rope()
 
     def _init_rope(self):
-        if self.config.rope_scaling is None:
+        if self.config.rope_parameters is None:
             self.rotary_emb = OpenLlamaRotaryEmbedding(
                 self.head_dim,
                 max_position_embeddings=self.max_position_embeddings,
                 base=self.rope_theta,
             )
         else:
-            scaling_type = self.config.rope_scaling["type"]
-            scaling_factor = self.config.rope_scaling["factor"]
+            scaling_type = self.config.rope_parameters["type"]
+            scaling_factor = self.config.rope_parameters["factor"]
             if scaling_type == "linear":
                 self.rotary_emb = OpenLlamaLinearScalingRotaryEmbedding(
                     self.head_dim,

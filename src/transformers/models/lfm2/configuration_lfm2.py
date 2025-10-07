@@ -66,7 +66,7 @@ class Lfm2Config(PretrainedConfig):
             End of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
@@ -117,7 +117,7 @@ class Lfm2Config(PretrainedConfig):
         bos_token_id: Optional[int] = 1,
         eos_token_id: Optional[int] = 2,
         tie_word_embeddings: Optional[bool] = True,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         conv_bias: Optional[bool] = False,
         conv_L_cache: Optional[int] = 3,
         block_multiple_of: Optional[int] = 256,
@@ -148,7 +148,7 @@ class Lfm2Config(PretrainedConfig):
         self.block_multiple_of = block_multiple_of
         self.block_ffn_dim_multiplier = block_ffn_dim_multiplier
         self.block_auto_adjust_ff_dim = block_auto_adjust_ff_dim
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         self.layer_types = layer_types
         if self.layer_types is None:

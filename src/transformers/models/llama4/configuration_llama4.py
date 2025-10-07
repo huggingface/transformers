@@ -68,7 +68,7 @@ class Llama4VisionConfig(PretrainedConfig):
         multi_modal_projector_bias (`int`, *optional*, defaults to `False`): TODO
         projector_dropout (`int`, *optional*, defaults to 0.0): TODO
         attention_dropout (`int`, *optional*, defaults to 0.0): TODO
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             RoPE Parameters
     """
 
@@ -104,7 +104,7 @@ class Llama4VisionConfig(PretrainedConfig):
         multi_modal_projector_bias: Optional[bool] = False,
         projector_dropout: Optional[float] = 0.0,
         attention_dropout: Optional[float] = 0.0,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         **kwargs,
     ):
         self.hidden_size = hidden_size
@@ -125,7 +125,7 @@ class Llama4VisionConfig(PretrainedConfig):
         self.projector_dropout = projector_dropout
         self.attention_dropout = attention_dropout
         self.vision_feature_select_strategy = vision_feature_select_strategy
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)
@@ -202,7 +202,7 @@ class Llama4TextConfig(PretrainedConfig):
         output_router_logits (`int`, *optional*, defaults to `False`): TODO
         router_aux_loss_coef (`int`, *optional*, defaults to 0.001): TODO
         router_jitter_noise (`int`, *optional*, defaults to 0.0): TODO
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
@@ -288,7 +288,7 @@ class Llama4TextConfig(PretrainedConfig):
         output_router_logits=False,
         router_aux_loss_coef=0.001,
         router_jitter_noise=0.0,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         no_rope_layers=None,
         no_rope_layer_interval=4,
         attention_chunk_size=8192,
@@ -328,7 +328,7 @@ class Llama4TextConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
         self.use_qk_norm = use_qk_norm
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         self.num_experts_per_tok = num_experts_per_tok
         self.num_local_experts = num_local_experts

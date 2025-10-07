@@ -73,7 +73,7 @@ class GraniteMoeHybridConfig(PretrainedConfig):
             End of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
@@ -149,7 +149,7 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         bos_token_id: Optional[int] = 1,
         eos_token_id: Optional[int] = 2,
         tie_word_embeddings: Optional[bool] = False,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
         embedding_multiplier: Optional[float] = 1.0,
@@ -202,7 +202,7 @@ class GraniteMoeHybridConfig(PretrainedConfig):
         self.router_aux_loss_coef = router_aux_loss_coef
         self.shared_intermediate_size = shared_intermediate_size
         self.position_embedding_type = position_embedding_type
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)

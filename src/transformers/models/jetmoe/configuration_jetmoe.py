@@ -73,7 +73,7 @@ class JetMoeConfig(PretrainedConfig):
             The id of the "end-of-sequence" token.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether the model's input and output word embeddings should be tied.
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
@@ -119,7 +119,7 @@ class JetMoeConfig(PretrainedConfig):
         bos_token_id: Optional[int] = 1,
         eos_token_id: Optional[int] = 2,
         tie_word_embeddings: Optional[bool] = True,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         rms_norm_eps: Optional[int] = 1e-6,
         initializer_range: Optional[float] = 0.01,
         attention_dropout: Optional[float] = 0.0,
@@ -147,7 +147,7 @@ class JetMoeConfig(PretrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.rms_norm_eps = rms_norm_eps
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)

@@ -74,7 +74,7 @@ class BltModelTester(CausalLMModelTester):
         self.max_position_embeddings = 32
         self.vocab_size = 32
         self.rope_theta = 500000.0
-        self.rope_scaling = {"rope_type": "default"}
+        self.rope_parameters = {"rope_type": "default"}
         self.rms_norm_eps = 1e-5
         self.dropout = 0.0
         self.encoder_hash_byte_group_size = [2, 3]
@@ -89,7 +89,7 @@ class BltModelTester(CausalLMModelTester):
             "intermediate_size": self.intermediate_size,
             "max_position_embeddings": self.max_position_embeddings,
             "rope_theta": self.rope_theta,
-            "rope_scaling": self.rope_scaling,
+            "rope_parameters": self.rope_parameters,
             "hidden_act": self.hidden_act,
             "rms_norm_eps": self.rms_norm_eps,
             "dropout": self.dropout,
@@ -103,7 +103,7 @@ class BltModelTester(CausalLMModelTester):
             "intermediate_size": self.intermediate_size,
             "max_position_embeddings": self.max_position_embeddings,
             "rope_theta": self.rope_theta,
-            "rope_scaling": self.rope_scaling,
+            "rope_parameters": self.rope_parameters,
             "hidden_act": self.hidden_act,
             "rms_norm_eps": self.rms_norm_eps,
             "dropout": self.dropout,
@@ -119,7 +119,7 @@ class BltModelTester(CausalLMModelTester):
             "intermediate_size": self.intermediate_size,
             "max_position_embeddings": self.max_position_embeddings,
             "rope_theta": self.rope_theta,
-            "rope_scaling": self.rope_scaling,
+            "rope_parameters": self.rope_parameters,
             "hidden_act": self.hidden_act,
             "rms_norm_eps": self.rms_norm_eps,
             "dropout": self.dropout,
@@ -133,7 +133,7 @@ class BltModelTester(CausalLMModelTester):
             "intermediate_size": self.intermediate_size,
             "max_position_embeddings": self.max_position_embeddings,
             "rope_theta": self.rope_theta,
-            "rope_scaling": self.rope_scaling,
+            "rope_parameters": self.rope_parameters,
             "hidden_act": self.hidden_act,
             "rms_norm_eps": self.rms_norm_eps,
             "dropout": self.dropout,
@@ -159,7 +159,7 @@ class BltModelTester(CausalLMModelTester):
             encoder_config=self.encoder_config,
             decoder_config=self.decoder_config,
             global_config=self.global_config,
-            rope_scaling=self.rope_scaling,
+            rope_parameters=self.rope_parameters,
             tie_word_embeddings=False,
         )
 
@@ -246,7 +246,7 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
         )
 
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
-    def test_model_rope_scaling_from_config(self, scaling_type):
+    def test_model_rope_parameters_from_config(self, scaling_type):
         """Override rope scaling from config test to handle Blt's sub-config structure."""
         if self.rotary_embedding_layer is None:
             self.skipTest("Rotary embedding layer not set")
@@ -262,12 +262,12 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
         original_long_output = original_model(long_input).last_hidden_state
 
         set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        config.rope_scaling = {"rope_type": scaling_type, "factor": 10.0}
-        # Propagate rope_scaling to sub-configs for Blt
-        config.encoder_config.rope_scaling = config.rope_scaling
-        config.decoder_config.rope_scaling = config.rope_scaling
-        config.global_config.rope_scaling = config.rope_scaling
-        config.patcher_config.rope_scaling = config.rope_scaling
+        config.rope_parameters = {"rope_type": scaling_type, "factor": 10.0}
+        # Propagate rope_parameters to sub-configs for Blt
+        config.encoder_config.rope_parameters = config.rope_parameters
+        config.decoder_config.rope_parameters = config.rope_parameters
+        config.global_config.rope_parameters = config.rope_parameters
+        config.patcher_config.rope_parameters = config.rope_parameters
 
         scaled_model = self.model_tester_class.base_model_class(config)
         scaled_model.to(torch_device)

@@ -101,7 +101,7 @@ class Cohere2Config(PretrainedConfig):
             End of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
@@ -163,7 +163,7 @@ class Cohere2Config(PretrainedConfig):
         bos_token_id: Optional[int] = 5,
         eos_token_id: Optional[int] = 255001,
         tie_word_embeddings: Optional[bool] = True,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
         sliding_window: Optional[int] = 4096,
@@ -187,12 +187,11 @@ class Cohere2Config(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
-        self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.sliding_window = sliding_window
         self.layer_types = layer_types
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
         # Need to specify head_dim in the config so it can be used in the attention forward functions
         self.head_dim = hidden_size // num_attention_heads
 
@@ -233,7 +232,7 @@ class Cohere2RotaryEmbedding(CohereRotaryEmbedding):
         self.layer_types = list(set(config.layer_types))
         self.rope_type = {}
         for layer_type in self.layer_types:
-            rope_params = self.config.rope_scaling[layer_type]
+            rope_params = self.config.rope_parameters[layer_type]
             if rope_params is None:
                 continue
 

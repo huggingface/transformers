@@ -115,7 +115,7 @@ class MimiConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         use_streaming (`bool`, *optional*, defaults to `False`):
             Whether to use streaming mode. If `True`, the model encode method will return the padding cache that can be used in a subsequent call to the encode method.
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
@@ -179,7 +179,7 @@ class MimiConfig(PretrainedConfig):
         norm_eps: Optional[int] = 1e-5,
         use_cache: Optional[bool] = False,
         use_streaming: Optional[bool] = False,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         sliding_window: Optional[int] = 250,
         attention_dropout: Optional[float] = 0.0,
         layer_scale_initial_scale: Optional[float] = 0.01,
@@ -221,7 +221,7 @@ class MimiConfig(PretrainedConfig):
         self.head_dim = head_dim or hidden_size // num_attention_heads
         self.layer_scale_initial_scale = layer_scale_initial_scale
         self.attention_bias = attention_bias
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)

@@ -106,7 +106,7 @@ class FalconH1Config(PretrainedConfig):
             Whether to use RMSNorm instead of LayerNorm in the Mamba block
         projectors_bias (`bool`, *optional*, defaults to `False`):
             Flag indicating whether or not to use bias in the input and output projections (["in_proj", "out_proj"]) of the attention block
-        rope_scaling (`float`, *optional*):
+        rope_parameters (`float`, *optional*):
             The scaling value used for the RoPE embeddings. If `None`, no scaling is applied.
         lm_head_multiplier (`float`, *optional*, defaults to 1.0):
             The multiplier for the LM head. This is used to scale the output of the LM head.
@@ -164,7 +164,7 @@ class FalconH1Config(PretrainedConfig):
         mamba_norm_before_gate: Optional[bool] = True,
         mamba_rms_norm: Optional[bool] = False,
         projectors_bias: Optional[bool] = False,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         lm_head_multiplier: Optional[float] = 1.0,
         embedding_multiplier: Optional[float] = 1.0,
         mlp_multipliers: Optional[int] = None,
@@ -197,7 +197,7 @@ class FalconH1Config(PretrainedConfig):
 
         self.use_cache = use_cache
         self.num_logits_to_keep = num_logits_to_keep
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)

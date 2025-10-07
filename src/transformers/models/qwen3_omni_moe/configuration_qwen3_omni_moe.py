@@ -214,7 +214,7 @@ class Qwen3OmniMoeTextConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
@@ -295,7 +295,7 @@ class Qwen3OmniMoeTextConfig(PretrainedConfig):
         rms_norm_eps: Optional[float] = 1e-6,
         use_cache: Optional[bool] = True,
         tie_word_embeddings: Optional[bool] = False,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         attention_bias: Optional[bool] = False,
         sliding_window: Optional[int] = None,
         attention_dropout: Optional[int] = 0,
@@ -328,7 +328,7 @@ class Qwen3OmniMoeTextConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 1000000.0)
@@ -494,7 +494,7 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
@@ -559,7 +559,7 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PretrainedConfig):
         rms_norm_eps: Optional[float] = 0.000001,
         use_cache: Optional[bool] = True,
         tie_word_embeddings: Optional[bool] = False,
-        rope_scaling: Optional[int] = None,
+        rope_parameters: Optional[int] = None,
         attention_bias: Optional[bool] = False,
         sliding_window: Optional[int] = None,
         layer_types: Optional[list[str]] = None,
@@ -591,7 +591,7 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         self.layer_types = layer_types
         if self.layer_types is None:
@@ -653,7 +653,7 @@ class Qwen3OmniMoeTalkerTextConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
@@ -734,7 +734,7 @@ class Qwen3OmniMoeTalkerTextConfig(PretrainedConfig):
         rms_norm_eps: Optional[float] = 0.000001,
         use_cache: Optional[int] = True,
         tie_word_embeddings: Optional[bool] = False,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         attention_bias: Optional[bool] = False,
         sliding_window: Optional[int] = None,
         attention_dropout: Optional[int] = 0,
@@ -767,7 +767,7 @@ class Qwen3OmniMoeTalkerTextConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)

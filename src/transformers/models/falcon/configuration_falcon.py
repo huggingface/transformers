@@ -77,7 +77,7 @@ class FalconConfig(PretrainedConfig):
         max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with, when `alibi` is `False`. Pretrained
             Falcon models with RoPE support up to 2048 tokens.
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
@@ -128,7 +128,7 @@ class FalconConfig(PretrainedConfig):
         parallel_attn: Optional[bool] = True,
         bias: Optional[bool] = False,
         max_position_embeddings: Optional[int] = 2048,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         bos_token_id: Optional[int] = 11,
         eos_token_id: Optional[int] = 11,
         ffn_hidden_size: Optional[int] = None,
@@ -162,7 +162,7 @@ class FalconConfig(PretrainedConfig):
         else:
             self.ffn_hidden_size = ffn_hidden_size
 
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)

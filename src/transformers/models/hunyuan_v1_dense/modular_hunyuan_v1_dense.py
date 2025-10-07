@@ -140,11 +140,11 @@ class HunYuanDenseV1RotaryEmbedding(LlamaRotaryEmbedding):
         standardize_rope_params(config)
         self.config = config
 
-        self.rope_type = self.config.rope_scaling["rope_type"]
+        self.rope_type = self.config.rope_parameters["rope_type"]
 
         # Diff from Llama - DynamicNTKAlphaRotary
-        if self.rope_type == "dynamic" and self.config.rope_scaling["alpha"]:
-            base = self.config.rope_scaling["rope_theta"] * self.config.rope_scaling["alpha"] ** (
+        if self.rope_type == "dynamic" and self.config.rope_parameters["alpha"]:
+            base = self.config.rope_parameters["rope_theta"] * self.config.rope_parameters["alpha"] ** (
                 self.config.head_dim / (self.config.head_dim - 2)
             )
             inv_freq = 1.0 / (base ** (torch.arange(0, self.dim, 2).float().to(device) / self.config.head_dim))

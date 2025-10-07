@@ -116,7 +116,7 @@ class Gemma3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
         config.layer_types = ["full_attention", "sliding_attention"]
         config.sliding_window = 8
         config.max_position_embeddings = 128
-        config.rope_scaling = {
+        config.rope_parameters = {
             "full_attention": {"rope_type": "default", "rope_theta": 1000000},
             "sliding_attention": {"rope_type": "default", "rope_theta": 10000},
         }

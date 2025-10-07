@@ -246,9 +246,9 @@ class DeepseekV3Attention(nn.Module):
         )
 
         self.scaling = self.qk_head_dim ** (-0.5)
-        if self.config.rope_scaling.get("rope_type", "default") != "default":
-            mscale_all_dim = self.config.rope_scaling.get("mscale_all_dim", 0)
-            scaling_factor = self.config.rope_scaling["factor"]
+        if self.config.rope_parameters.get("rope_type", "default") != "default":
+            mscale_all_dim = self.config.rope_parameters.get("mscale_all_dim", 0)
+            scaling_factor = self.config.rope_parameters["factor"]
             if mscale_all_dim:
                 mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
                 self.scaling = self.scaling * mscale * mscale

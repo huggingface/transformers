@@ -74,7 +74,7 @@ class GPTNeoXConfig(PretrainedConfig):
         use_parallel_residual (`bool`, *optional*, defaults to `True`):
             Whether to use a "parallel" formulation in each Transformer layer, which can provide a slight training
             speedup at large scales (e.g. 20B).
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
@@ -131,7 +131,7 @@ class GPTNeoXConfig(PretrainedConfig):
         eos_token_id: Optional[int] = 2,
         tie_word_embeddings: Optional[bool] = False,
         use_parallel_residual: Optional[bool] = True,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         attention_bias: Optional[bool] = True,
         **kwargs,
     ):
@@ -153,9 +153,9 @@ class GPTNeoXConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.tie_word_embeddings = tie_word_embeddings
         self.use_parallel_residual = use_parallel_residual
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
         self.attention_bias = attention_bias
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rotary_emb_base", 10000.0)

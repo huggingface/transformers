@@ -134,7 +134,7 @@ class EvollaConfig(PretrainedConfig):
             just in case (e.g., 512 or 1024 or 2048).
         rms_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon value for the RMS-norm layer in the llama model.
-        rope_scaling (`float`, *optional*):
+        rope_parameters (`float`, *optional*):
             The scaling factor for the RoPE layer in the llama model.
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use bias in the attention layer.
@@ -203,7 +203,7 @@ class EvollaConfig(PretrainedConfig):
         hidden_act: Optional[str] = "silu",  # llama activation function
         max_position_embeddings: Optional[int] = 8192,  # llama rope max length
         rms_norm_eps: Optional[int] = 1e-05,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
         mlp_bias: Optional[bool] = False,
@@ -249,7 +249,7 @@ class EvollaConfig(PretrainedConfig):
         self.resampler_heads = resampler_heads
         self.resampler_num_latents = resampler_num_latents
         self.resampler_ff_mult = resampler_ff_mult
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 500000.0)

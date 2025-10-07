@@ -327,7 +327,7 @@ class Phi4MultimodalConfig(Phi3Config):
             relevant if `config.is_decoder=True`. Whether to tie weight embeddings or not.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
@@ -387,7 +387,7 @@ class Phi4MultimodalConfig(Phi3Config):
         rms_norm_eps: Optional[int] = 1e-5,
         use_cache: Optional[bool] = True,
         tie_word_embeddings: Optional[bool] = False,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         partial_rotary_factor: Optional[int] = 1,
         bos_token_id: Optional[int] = 199999,
         eos_token_id: Optional[list[int]] = [199999, 200020],
@@ -414,7 +414,7 @@ class Phi4MultimodalConfig(Phi3Config):
             rms_norm_eps=rms_norm_eps,
             use_cache=use_cache,
             tie_word_embeddings=tie_word_embeddings,
-            rope_scaling=rope_scaling,
+            rope_parameters=rope_parameters,
             partial_rotary_factor=partial_rotary_factor,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
@@ -1690,7 +1690,7 @@ class Phi4MultimodalForCausalLM(Phi3ForCausalLM):
         # It will cause downside of slower at this single token position, however, better than current failure.
         if (
             past_key_values
-            and self.config.rope_scaling
+            and self.config.rope_parameters
             and input_ids.shape[1] >= self.config.original_max_position_embeddings + 1
         ):
             past_length = cache_position[0]

@@ -293,7 +293,7 @@ class Qwen2_5OmniTextConfig(PretrainedConfig):
             Attention pattern for each layer.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
@@ -354,7 +354,7 @@ class Qwen2_5OmniTextConfig(PretrainedConfig):
         rms_norm_eps: Optional[int] = 1e-6,
         use_cache: Optional[bool] = True,
         tie_word_embeddings: Optional[bool] = False,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         use_sliding_window: Optional[bool] = False,
         sliding_window: Optional[int] = 32768,
         max_window_layers: Optional[int] = 28,
@@ -386,7 +386,7 @@ class Qwen2_5OmniTextConfig(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.attention_dropout = attention_dropout
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         self.layer_types = layer_types
         if self.layer_types is None:
@@ -602,7 +602,7 @@ class Qwen2_5OmniTalkerConfig(PretrainedConfig):
             additional layer afterwards will use SWA (Sliding Window Attention).
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
@@ -680,7 +680,7 @@ class Qwen2_5OmniTalkerConfig(PretrainedConfig):
         sliding_window=32768,
         max_window_layers=28,
         attention_dropout=0.0,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         position_id_per_seconds=25,
         seconds_per_chunk=2,
         audio_start_token_id=151647,
@@ -727,7 +727,7 @@ class Qwen2_5OmniTalkerConfig(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.attention_dropout = attention_dropout
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
         self.position_id_per_seconds = position_id_per_seconds  # zf
         self.seconds_per_chunk = seconds_per_chunk  # zf
         self.audio_start_token_id = audio_start_token_id  # zf
@@ -735,7 +735,7 @@ class Qwen2_5OmniTalkerConfig(PretrainedConfig):
 
         self.initializer_range = initializer_range
         self.spatial_merge_size = spatial_merge_size
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         self.layer_types = layer_types
         if self.layer_types is None:
@@ -810,7 +810,7 @@ class Qwen2_5OmniDiTConfig(PretrainedConfig):
         ff_mult=2,
         emb_dim=512,
         head_dim=64,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         max_position_embeddings=32768,
         block_size=24,
         look_ahead_layers=[10],
@@ -851,7 +851,7 @@ class Qwen2_5OmniDiTConfig(PretrainedConfig):
         self.enc_attention_channels = enc_attention_channels
         self.enc_res2net_scale = enc_res2net_scale
         self.enc_se_channels = enc_se_channels
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)
@@ -2015,7 +2015,7 @@ class Qwen2_5OmniAttention(Qwen2_5_VLAttention):
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.is_causal = True
         self.attention_dropout = config.attention_dropout
-        self.rope_scaling = config.rope_scaling
+        self.rope_parameters = config.rope_parameters
         self.scaling = self.head_dim**-0.5
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=True)

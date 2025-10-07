@@ -340,13 +340,13 @@ class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
         return config
 
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
-    def test_model_rope_scaling_from_config(self, scaling_type):
+    def test_model_rope_parameters_from_config(self, scaling_type):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         short_input = ids_tensor([1, 10], config.vocab_size)
         long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
 
         set_seed(42)
-        config.rope_scaling = {"rope_type": "default", "rope_theta": 10_000.0}
+        config.rope_parameters = {"rope_type": "default", "rope_theta": 10_000.0}
         original_model = self.model_tester_class.base_model_class(config)
         original_model.to(torch_device)
         original_model.eval()
@@ -354,7 +354,7 @@ class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
         original_long_output = original_model(long_input).last_hidden_state
 
         set_seed(42)
-        config.rope_scaling = {"rope_type": scaling_type, "factor": 10.0, "rope_theta": 10_000.0}
+        config.rope_parameters = {"rope_type": scaling_type, "factor": 10.0, "rope_theta": 10_000.0}
         scaled_model = self.model_tester_class.base_model_class(config)
         scaled_model.to(torch_device)
         scaled_model.eval()

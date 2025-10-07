@@ -93,7 +93,7 @@ class Olmo2Config(OlmoConfig):
             End of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
@@ -150,7 +150,7 @@ class Olmo2Config(OlmoConfig):
         bos_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = 50279,
         tie_word_embeddings: Optional[bool] = False,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
         rms_norm_eps: Optional[int] = 1e-5,
@@ -171,7 +171,7 @@ class Olmo2Config(OlmoConfig):
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             tie_word_embeddings=tie_word_embeddings,
-            rope_scaling=rope_scaling,
+            rope_parameters=rope_parameters,
             attention_bias=attention_bias,
             attention_dropout=attention_dropout,
             **kwargs,

@@ -99,12 +99,12 @@ class NemotronModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
     @unittest.skip("Nemotron has a hardcoded `rope_type`, so we can't apply RoPE scaling")
-    def test_model_rope_scaling_frequencies(self):
+    def test_model_rope_parameters_frequencies(self):
         pass
 
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     @unittest.skip("Nemotron has a hardcoded `rope_type`, so we can't apply RoPE scaling")
-    def test_model_rope_scaling_from_config(self, scaling_type):
+    def test_model_rope_parameters_from_config(self, scaling_type):
         pass
 
 

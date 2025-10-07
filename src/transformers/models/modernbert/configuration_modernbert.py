@@ -76,7 +76,7 @@ class ModernBertConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         layer_types (`list`, *optional*):
             Attention pattern for each layer.
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
@@ -154,7 +154,7 @@ class ModernBertConfig(PretrainedConfig):
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
         layer_types: Optional[list[str]] = None,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         local_attention: Optional[int] = 128,
         embedding_dropout: Optional[float] = 0.0,
         mlp_bias: Optional[bool] = False,
@@ -206,7 +206,7 @@ class ModernBertConfig(PretrainedConfig):
         self.sparse_pred_ignore_index = sparse_pred_ignore_index
         self.reference_compile = reference_compile
         self.repad_logits_with_grad = repad_logits_with_grad
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         if self.classifier_pooling not in ["cls", "mean"]:
             raise ValueError(

@@ -150,14 +150,14 @@ class PhimoeRotaryEmbedding(nn.Module):
         standardize_rope_params(config)
         self.config = config
 
-        self.rope_type = self.config.rope_scaling["rope_type"]
+        self.rope_type = self.config.rope_parameters["rope_type"]
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
-        self.short_mscale = config.rope_scaling.get("short_mscale", None)  # Diff with Llama
-        self.long_mscale = config.rope_scaling.get("long_mscale", None)
+        self.short_mscale = config.rope_parameters.get("short_mscale", None)  # Diff with Llama
+        self.long_mscale = config.rope_parameters.get("long_mscale", None)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = inv_freq
 
@@ -181,11 +181,11 @@ class PhimoeRotaryEmbedding(nn.Module):
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
-        # For backward compatibility standardize the `rope_scaling_dict` if it uses old format
+        # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
         standardize_rope_params(config)
-        rope_scaling_dict = config.rope_scaling[layer_type] if layer_type is not None else config.rope_scaling
+        rope_parameters_dict = config.rope_parameters[layer_type] if layer_type is not None else config.rope_parameters
 
-        base = rope_scaling_dict["rope_theta"]
+        base = rope_parameters_dict["rope_theta"]
         partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
         head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         dim = int(head_dim * partial_rotary_factor)
@@ -208,7 +208,7 @@ class PhimoeRotaryEmbedding(nn.Module):
         if self.short_mscale is not None and self.long_mscale is not None and seq_len:
             mscale = (
                 self.long_mscale
-                if seq_len > self.config.rope_scaling["original_max_position_embeddings"]
+                if seq_len > self.config.rope_parameters["original_max_position_embeddings"]
                 else self.short_mscale
             )
         mscale = self.attention_scaling if mscale is None else mscale

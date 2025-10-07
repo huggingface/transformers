@@ -63,7 +63,7 @@ class GptOssConfig(PretrainedConfig):
         initializer_range: Optional[float] = 0.02,
         max_position_embeddings: Optional[int] = 131072,
         rms_norm_eps: Optional[float] = 1e-5,
-        rope_scaling: Optional[RopeParameters] = {
+        rope_parameters: Optional[RopeParameters] = {
             "rope_type": "yarn",
             "factor": 32.0,
             "beta_fast": 32.0,
@@ -109,7 +109,7 @@ class GptOssConfig(PretrainedConfig):
         self.router_aux_loss_coef = router_aux_loss_coef
         self.output_router_logits = output_router_logits
         self.use_cache = use_cache
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 150000.0)

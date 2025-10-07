@@ -77,7 +77,7 @@ class RecurrentGemmaConfig(PretrainedConfig):
             The hidden activation used in the recurrent block as well as the MLP layer of the decoder layers.
         partial_rotary_factor (`float`, *optional*, defaults to 0.5):
             The partial rotary factor used in the initialization of the rotary embeddings.
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
@@ -120,7 +120,7 @@ class RecurrentGemmaConfig(PretrainedConfig):
         bos_token_id: Optional[int] = 2,
         hidden_activation: Optional[str] = "gelu_pytorch_tanh",
         partial_rotary_factor: Optional[float] = 0.5,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         block_types: Optional[list[str]] = ("recurrent", "recurrent", "attention"),
         attention_dropout: Optional[float] = 0.0,
         num_key_value_heads: Optional[int] = None,
@@ -150,7 +150,7 @@ class RecurrentGemmaConfig(PretrainedConfig):
         self.attention_bias = attention_bias
         self.w_init_variance_scale = w_init_variance_scale
         self.final_w_init_variance_scale = 2.0 / self.num_hidden_layers
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)

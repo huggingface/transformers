@@ -71,7 +71,7 @@ class LongcatFlashConfig(PretrainedConfig):
             End of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie input and output embeddings.
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports two scaling
             strategies: linear and dynamic. Their scaling factor must be a float greater than 1. The expected format is
             `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
@@ -157,7 +157,7 @@ class LongcatFlashConfig(PretrainedConfig):
         bos_token_id: Optional[int] = 1,
         eos_token_id: Optional[int] = 2,
         tie_word_embeddings: Optional[bool] = False,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
         ffn_hidden_size: Optional[int] = 12288,
@@ -210,15 +210,15 @@ class LongcatFlashConfig(PretrainedConfig):
         self.zero_expert_num = zero_expert_num
         self.expert_ffn_hidden_size = expert_ffn_hidden_size
         self.routed_scaling_factor = routed_scaling_factor
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000000.0)
         standardize_rope_params(self, rope_theta=rope_theta)
 
         for key in ["beta_fast", "beta_slow", "factor"]:
-            if key in self.rope_scaling:
-                self.rope_scaling[key] = float(self.rope_scaling[key])
+            if key in self.rope_parameters:
+                self.rope_parameters[key] = float(self.rope_parameters[key])
 
         rope_config_validation(self)
 

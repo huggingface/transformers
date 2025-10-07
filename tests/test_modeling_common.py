@@ -4400,12 +4400,12 @@ class ModelTesterMixin:
             # 3d rope also depends on the head dim
             # (we assume easy shapes here where we get to the requested head dim at least)
             if (
-                getattr(config, "rope_scaling", None) is not None
-                and len(config.rope_scaling.get("mrope_section", [])) > 0
+                getattr(config, "rope_parameters", None) is not None
+                and len(config.rope_parameters.get("mrope_section", [])) > 0
             ):
-                scaling_factor = max(requested_dim // (sum(config.rope_scaling["mrope_section"]) * 2), 1)
-                config.rope_scaling["mrope_section"] = [
-                    section * scaling_factor for section in config.rope_scaling["mrope_section"]
+                scaling_factor = max(requested_dim // (sum(config.rope_parameters["mrope_section"]) * 2), 1)
+                config.rope_parameters["mrope_section"] = [
+                    section * scaling_factor for section in config.rope_parameters["mrope_section"]
                 ]
 
         # Update config values

@@ -195,7 +195,7 @@ class DbrxConfig(PretrainedConfig):
         use_cache: Optional[bool] = True,
         initializer_range: Optional[float] = 0.02,
         output_router_logits: Optional[bool] = False,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         **kwargs: Any,
     ):
         if attn_config is None:
@@ -228,7 +228,7 @@ class DbrxConfig(PretrainedConfig):
         if tie_word_embeddings:
             raise ValueError("tie_word_embeddings is not supported for DBRX models.")
 
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
         standardize_rope_params(self, rope_theta=self.attn_config.rope_theta)

@@ -94,7 +94,7 @@ class MixtralConfig(PretrainedConfig):
             The aux loss factor for the total loss.
         router_jitter_noise (`float`, *optional*, defaults to 0.0):
             Amount of noise to add to the router.
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
@@ -155,7 +155,7 @@ class MixtralConfig(PretrainedConfig):
         output_router_logits: Optional[bool] = False,
         router_aux_loss_coef: Optional[float] = 0.001,
         router_jitter_noise: Optional[float] = 0.0,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -183,7 +183,7 @@ class MixtralConfig(PretrainedConfig):
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
         self.router_jitter_noise = router_jitter_noise
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 1000000.0)

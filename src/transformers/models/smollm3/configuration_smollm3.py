@@ -71,7 +71,7 @@ class SmolLM3Config(PretrainedConfig):
             The id of the beginning of sentence token.
         eos_token_id (`int`, *optional*, defaults to 128001):
             The id of the end of sentence token.
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
@@ -140,7 +140,7 @@ class SmolLM3Config(PretrainedConfig):
         pad_token_id: Optional[int] = 128004,
         bos_token_id: Optional[int] = 128000,
         eos_token_id: Optional[int] = 128001,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         use_sliding_window: Optional[bool] = False,
         sliding_window: Optional[int] = None,
         no_rope_layers: Optional[int] = None,

@@ -184,7 +184,7 @@ class GptOssRotaryEmbedding(nn.Module):
         self.layer_types = list(set(config.layer_types))
         self.rope_type = {}
         for layer_type in self.layer_types:
-            rope_params = self.config.rope_scaling[layer_type]
+            rope_params = self.config.rope_parameters[layer_type]
             if rope_params is None:
                 continue
 
@@ -220,13 +220,13 @@ class GptOssRotaryEmbedding(nn.Module):
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
-        # For backward compatibility standardize the `rope_scaling_dict` if it uses old format
+        # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
         standardize_rope_params(config)
 
         base = (
-            config.rope_scaling[layer_type]["rope_theta"]
+            config.rope_parameters[layer_type]["rope_theta"]
             if layer_type is not None
-            else config.rope_scaling["rope_theta"]
+            else config.rope_parameters["rope_theta"]
         )
         partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
         head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads

@@ -182,7 +182,7 @@ class MoshiConfig(PretrainedConfig):
         max_position_embeddings (`int`, *optional*, defaults to 3000):
             The maximum sequence length that this model might ever be used with. Typically, set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
@@ -252,7 +252,7 @@ class MoshiConfig(PretrainedConfig):
         num_key_value_heads: Optional[int] = None,
         audio_vocab_size: Optional[int] = None,
         max_position_embeddings: Optional[int] = 3000,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         hidden_act: Optional[str] = "silu",
         head_dim: Optional[int] = None,
         initializer_range: Optional[float] = 0.02,
@@ -282,7 +282,7 @@ class MoshiConfig(PretrainedConfig):
         self.ffn_dim = ffn_dim
         self.rms_norm_eps = rms_norm_eps
         self.num_codebooks = num_codebooks
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)

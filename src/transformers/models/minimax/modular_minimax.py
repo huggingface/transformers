@@ -120,7 +120,7 @@ class MiniMaxConfig(PretrainedConfig):
             The aux loss factor for the total loss.
         router_jitter_noise (`float`, *optional*, defaults to 0.0):
             Amount of noise to add to the router.
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
@@ -198,7 +198,7 @@ class MiniMaxConfig(PretrainedConfig):
         output_router_logits: Optional[bool] = False,
         router_aux_loss_coef: Optional[float] = 0.001,
         router_jitter_noise: Optional[float] = 0.0,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         layer_types: Optional[list[str]] = None,
         block_size: Optional[int] = 256,
         full_attn_alpha_factor: Optional[int] = 1,
@@ -250,7 +250,7 @@ class MiniMaxConfig(PretrainedConfig):
         self.linear_attn_beta_factor = linear_attn_beta_factor
         self.mlp_alpha_factor = mlp_alpha_factor
         self.mlp_beta_factor = mlp_beta_factor
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         if self.layer_types is None:
             self.layer_types = [

@@ -109,7 +109,7 @@ class Qwen3OmniMoeThinkerForConditionalGenerationTester:
             "n_window_infer": 100,
         }
         self.text_config = {
-            "rope_scaling": {
+            "rope_parameters": {
                 "mrope_section": [1, 1, 2],
                 "rope_type": "default",
                 "type": "default",

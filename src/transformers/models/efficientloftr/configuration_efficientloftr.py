@@ -71,7 +71,7 @@ class EfficientLoFTRConfig(PretrainedConfig):
         partial_rotary_factor (`float`, *optional*, defaults to 4.0):
             Dim factor for the RoPE embeddings, in EfficientLoFTR, frequencies should be generated for
             the whole hidden_size, so this factor is used to compensate.
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
@@ -122,7 +122,7 @@ class EfficientLoFTRConfig(PretrainedConfig):
         fine_kernel_size: int = 8,
         batch_norm_eps: float = 1e-5,
         partial_rotary_factor: float = 4.0,
-        rope_scaling: Optional[dict] = None,
+        rope_parameters: Optional[dict] = None,
         fine_matching_slice_dim: int = 8,
         fine_matching_regress_temperature: float = 10.0,
         initializer_range: float = 0.02,
@@ -178,7 +178,7 @@ class EfficientLoFTRConfig(PretrainedConfig):
         self.num_key_value_heads = num_attention_heads
         self.partial_rotary_factor = partial_rotary_factor
         self.initializer_range = initializer_range
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)

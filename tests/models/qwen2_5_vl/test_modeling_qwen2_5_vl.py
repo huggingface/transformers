@@ -89,7 +89,7 @@ class Qwen2_5_VLVisionText2TextModelTester:
         tie_word_embeddings=True,
         is_training=True,
         vision_config=None,
-        rope_scaling=None,
+        rope_parameters=None,
     ):
         self.parent = parent
         self.ignore_index = ignore_index
@@ -134,9 +134,9 @@ class Qwen2_5_VLVisionText2TextModelTester:
             }
         self.vision_config = vision_config
         # Same goes for rope scaling
-        if rope_scaling is None:
-            rope_scaling = {"type": "mrope", "mrope_section": [2, 1, 1]}
-        self.rope_scaling = rope_scaling
+        if rope_parameters is None:
+            rope_parameters = {"type": "mrope", "mrope_section": [2, 1, 1]}
+        self.rope_parameters = rope_parameters
 
     def get_config(self):
         return Qwen2_5_VLConfig(
@@ -150,7 +150,7 @@ class Qwen2_5_VLVisionText2TextModelTester:
             vision_config=self.vision_config,
             model_type=self.model_type,
             max_window_layers=self.max_window_layers,
-            rope_scaling=self.rope_scaling,
+            rope_parameters=self.rope_parameters,
             tie_word_embeddings=self.tie_word_embeddings,
             bos_token_id=self.bos_token_id,
             eos_token_id=self.eos_token_id,

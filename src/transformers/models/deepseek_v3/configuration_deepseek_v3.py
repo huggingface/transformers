@@ -108,7 +108,7 @@ class DeepseekV3Config(PretrainedConfig):
             issue](https://github.com/pytorch/pytorch/issues/76232).
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
@@ -183,7 +183,7 @@ class DeepseekV3Config(PretrainedConfig):
         eos_token_id: Optional[int] = 1,
         pretraining_tp: Optional[int] = 1,
         tie_word_embeddings: Optional[bool] = False,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         rope_interleave: Optional[bool] = True,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
@@ -225,15 +225,15 @@ class DeepseekV3Config(PretrainedConfig):
         self.use_cache = use_cache
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)
         standardize_rope_params(self, rope_theta=rope_theta)
 
         for key in ["beta_fast", "beta_slow", "factor"]:
-            if key in self.rope_scaling:
-                self.rope_scaling[key] = float(self.rope_scaling[key])
+            if key in self.rope_parameters:
+                self.rope_parameters[key] = float(self.rope_parameters[key])
 
         rope_config_validation(self)
 

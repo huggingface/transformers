@@ -921,7 +921,7 @@ class GraniteMoeHybridRotaryEmbedding:
         self.layer_types = list(set(config.layer_types))
         self.rope_type = {}
         for layer_type in self.layer_types:
-            rope_params = self.config.rope_scaling[layer_type]
+            rope_params = self.config.rope_parameters[layer_type]
             if rope_params is None:
                 continue
 

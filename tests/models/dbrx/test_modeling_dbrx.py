@@ -125,12 +125,12 @@ class DbrxModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
     @unittest.skip("Dbrx doesn't have RoPE scaling implemented")
-    def test_model_rope_scaling_frequencies(self):
+    def test_model_rope_parameters_frequencies(self):
         pass
 
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     @unittest.skip("Dbrx doesn't have RoPE scaling implemented")
-    def test_model_rope_scaling_from_config(self, scaling_type):
+    def test_model_rope_parameters_from_config(self, scaling_type):
         pass
 
 

@@ -74,7 +74,7 @@ class Exaone4Config(PretrainedConfig):
             End of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
@@ -145,7 +145,7 @@ class Exaone4Config(PretrainedConfig):
         bos_token_id: Optional[int] = 0,
         eos_token_id: Optional[int] = 2,
         tie_word_embeddings: Optional[bool] = False,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         attention_dropout: Optional[float] = 0.0,
         sliding_window: Optional[int] = 4096,
         sliding_window_pattern: Optional[int] = 4,
@@ -166,7 +166,7 @@ class Exaone4Config(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.sliding_window = sliding_window
         self.sliding_window_pattern = sliding_window_pattern
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         self.layer_types = layer_types
         if self.sliding_window is None:

@@ -111,7 +111,7 @@ class Qwen2VLTextConfig(PretrainedConfig):
             Attention pattern for each layer.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
@@ -171,7 +171,7 @@ class Qwen2VLTextConfig(PretrainedConfig):
         max_window_layers: Optional[int] = 80,
         layer_types: Optional[list[str]] = None,
         attention_dropout: Optional[float] = 0.0,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         image_token_id: Optional[int] = None,
         video_token_id: Optional[int] = None,
         **kwargs,
@@ -196,7 +196,7 @@ class Qwen2VLTextConfig(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.attention_dropout = attention_dropout
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         self.layer_types = layer_types
         if self.layer_types is None:
@@ -211,6 +211,9 @@ class Qwen2VLTextConfig(PretrainedConfig):
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 1000000.0)
         standardize_rope_params(self, rope_theta={"full_attention": rope_theta, "sliding_attention": rope_theta})
+        for key in self.rope_parameters:
+            if self.rope_parameters[key]["rope_type"] == "mrope":
+                self.rope_parameters[key]["rope_type"] = "default"
         rope_config_validation(self, ignore_keys={"mrope_section"})
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id

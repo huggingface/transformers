@@ -75,7 +75,7 @@ class LongcatFlashRotaryEmbedding(nn.Module):
         standardize_rope_params(config)
         self.config = config
 
-        self.rope_type = self.config.rope_scaling["rope_type"]
+        self.rope_type = self.config.rope_parameters["rope_type"]
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
@@ -107,13 +107,13 @@ class LongcatFlashRotaryEmbedding(nn.Module):
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
-        # For backward compatibility standardize the `rope_scaling_dict` if it uses old format
+        # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
         standardize_rope_params(config)
 
         base = (
-            config.rope_scaling[layer_type]["rope_theta"]
+            config.rope_parameters[layer_type]["rope_theta"]
             if layer_type is not None
-            else config.rope_scaling["rope_theta"]
+            else config.rope_parameters["rope_theta"]
         )
         partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
         head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
@@ -373,9 +373,9 @@ class LongcatFlashMLA(nn.Module):
         )
 
         self.scaling = self.qk_head_dim ** (-0.5)
-        if self.config.rope_scaling.get("rope_type", "default") != "default":
-            mscale_all_dim = self.config.rope_scaling.get("mscale_all_dim", 0)
-            scaling_factor = self.config.rope_scaling["factor"]
+        if self.config.rope_parameters.get("rope_type", "default") != "default":
+            mscale_all_dim = self.config.rope_parameters.get("mscale_all_dim", 0)
+            scaling_factor = self.config.rope_parameters["factor"]
             if mscale_all_dim:
                 mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
                 self.scaling = self.scaling * mscale * mscale

@@ -60,7 +60,7 @@ class GPTNeoXJapaneseConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
@@ -100,7 +100,7 @@ class GPTNeoXJapaneseConfig(PretrainedConfig):
         use_cache: Optional[bool] = True,
         bos_token_id: Optional[int] = 31996,
         eos_token_id: Optional[int] = 31999,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         attention_dropout: Optional[float] = 0.1,
         hidden_dropout: Optional[float] = 0.0,
         **kwargs,
@@ -118,10 +118,10 @@ class GPTNeoXJapaneseConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
         self.attention_dropout = attention_dropout
         self.hidden_dropout = hidden_dropout
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rotary_emb_base", 10000.0)

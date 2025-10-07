@@ -53,7 +53,7 @@ class PixtralVisionConfig(PretrainedConfig):
             Activation function used in the hidden layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             Dropout probability for the attention layers.
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             The RopeParameters
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -86,7 +86,7 @@ class PixtralVisionConfig(PretrainedConfig):
         patch_size: Optional[int] = 16,
         hidden_act: Optional[str] = "gelu",
         attention_dropout: Optional[float] = 0.0,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         initializer_range: Optional[float] = 0.02,
         **kwargs,
     ):
@@ -103,7 +103,7 @@ class PixtralVisionConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.head_dim = hidden_size // num_attention_heads
         self.initializer_range = initializer_range
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)

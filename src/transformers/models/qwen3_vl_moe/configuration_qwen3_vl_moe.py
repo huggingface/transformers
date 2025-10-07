@@ -85,7 +85,7 @@ class Qwen3VLMoeTextConfig(PretrainedConfig):
             Indicate which layers use Qwen3VLMoeMLP rather than Qwen3VLMoeSparseMoeBlock
             The list contains layer index, from 0 to num_layers-1 if we have num_layers layers
             If `mlp_only_layers` is empty, `decoder_sparse_step` is used to determine the sparsity.
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
@@ -146,7 +146,7 @@ class Qwen3VLMoeTextConfig(PretrainedConfig):
         num_experts: Optional[int] = 60,
         norm_topk_prob: Optional[bool] = True,
         mlp_only_layers: Optional[list[int]] = None,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         head_dim: Optional[int] = None,
         **kwargs,
     ):
@@ -169,7 +169,7 @@ class Qwen3VLMoeTextConfig(PretrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.head_dim = head_dim or hidden_size // num_attention_heads
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 5000000.0)

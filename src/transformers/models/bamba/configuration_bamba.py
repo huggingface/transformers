@@ -105,7 +105,7 @@ class BambaConfig(PretrainedConfig):
             Flag indicating whether or not to use bias in the input and output projections (["in_proj", "out_proj"]) of the mamba mixer block
         z_loss_coefficient (`float`, *optional*, defaults to 0.0):
             Coefficient for auxiliary z-loss used to control logit growth during training
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
@@ -144,7 +144,7 @@ class BambaConfig(PretrainedConfig):
         mamba_conv_bias: Optional[bool] = True,
         mamba_proj_bias: Optional[bool] = False,
         z_loss_coefficient: Optional[float] = 0.0,
-        rope_scaling: Optional[RopeParameters] = None,
+        rope_parameters: Optional[RopeParameters] = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -171,7 +171,7 @@ class BambaConfig(PretrainedConfig):
         self.num_logits_to_keep = num_logits_to_keep
 
         self.attn_layer_indices = attn_layer_indices
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)

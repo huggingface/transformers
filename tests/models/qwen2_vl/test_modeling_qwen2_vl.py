@@ -95,7 +95,7 @@ class Qwen2VLVisionText2TextModelTester:
             "spatial_merge_size": 1,
             "temporal_patch_size": 2,
         },
-        rope_scaling={"type": "mrope", "mrope_section": [2, 1, 1]},
+        rope_parameters={"type": "mrope", "mrope_section": [2, 1, 1]},
     ):
         self.parent = parent
         self.ignore_index = ignore_index
@@ -117,7 +117,7 @@ class Qwen2VLVisionText2TextModelTester:
         self.rope_theta = rope_theta
         self.tie_word_embeddings = tie_word_embeddings
         self.vision_config = vision_config
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
         self.batch_size = batch_size
         self.num_channels = num_channels
         self.image_size = image_size
@@ -138,7 +138,7 @@ class Qwen2VLVisionText2TextModelTester:
             vision_config=self.vision_config,
             model_type=self.model_type,
             max_window_layers=self.max_window_layers,
-            rope_scaling=self.rope_scaling,
+            rope_parameters=self.rope_parameters,
             tie_word_embeddings=self.tie_word_embeddings,
             bos_token_id=self.bos_token_id,
             eos_token_id=self.eos_token_id,

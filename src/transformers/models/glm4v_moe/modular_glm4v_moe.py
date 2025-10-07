@@ -93,7 +93,7 @@ class Glm4vMoeTextConfig(Glm4MoeConfig):
             relevant if `config.is_decoder=True`.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
@@ -167,7 +167,7 @@ class Glm4vMoeTextConfig(Glm4MoeConfig):
         rms_norm_eps: Optional[int] = 1e-5,
         use_cache: Optional[bool] = True,
         tie_word_embeddings: Optional[bool] = False,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         attention_bias: Optional[bool] = True,
         attention_dropout: Optional[float] = 0.0,
         moe_intermediate_size: Optional[int] = 1408,
@@ -197,7 +197,7 @@ class Glm4vMoeTextConfig(Glm4MoeConfig):
         self.use_cache = use_cache
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)
@@ -346,7 +346,7 @@ class Glm4vMoeTextRotaryEmbedding(Glm4vTextRotaryEmbedding):
 class Glm4vMoeTextAttention(Glm4Attention):
     def __init__(self, config: Glm4vMoeTextConfig, layer_idx: Optional[int] = None):
         super().__init__(config, layer_idx)
-        self.rope_scaling = config.rope_scaling
+        self.rope_parameters = config.rope_parameters
 
     def forward(
         self,
@@ -370,7 +370,7 @@ class Glm4vMoeTextAttention(Glm4Attention):
 
         cos, sin = position_embeddings
         query_states, key_states = apply_multimodal_rotary_pos_emb(  # diff with Llama
-            query_states, key_states, cos, sin, self.rope_scaling["mrope_section"]
+            query_states, key_states, cos, sin, self.rope_parameters["mrope_section"]
         )
 
         if past_key_values is not None:

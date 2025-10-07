@@ -385,7 +385,7 @@ class HunYuanMoEV1RotaryEmbedding(nn.Module):
         standardize_rope_params(config)
         self.config = config
 
-        self.rope_type = self.config.rope_scaling["rope_type"]
+        self.rope_type = self.config.rope_parameters["rope_type"]
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
@@ -395,8 +395,8 @@ class HunYuanMoEV1RotaryEmbedding(nn.Module):
         self.original_inv_freq = inv_freq
 
         # Diff from Llama - DynamicNTKAlphaRotary
-        if self.rope_type == "dynamic" and self.config.rope_scaling["alpha"]:
-            base = self.config.rope_scaling["rope_theta"] * self.config.rope_scaling["alpha"] ** (
+        if self.rope_type == "dynamic" and self.config.rope_parameters["alpha"]:
+            base = self.config.rope_parameters["rope_theta"] * self.config.rope_parameters["alpha"] ** (
                 self.config.head_dim / (self.config.head_dim - 2)
             )
             inv_freq = 1.0 / (base ** (torch.arange(0, self.dim, 2).float().to(device) / self.config.head_dim))
@@ -430,13 +430,13 @@ class HunYuanMoEV1RotaryEmbedding(nn.Module):
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
-        # For backward compatibility standardize the `rope_scaling_dict` if it uses old format
+        # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
         standardize_rope_params(config)
 
         base = (
-            config.rope_scaling[layer_type]["rope_theta"]
+            config.rope_parameters[layer_type]["rope_theta"]
             if layer_type is not None
-            else config.rope_scaling["rope_theta"]
+            else config.rope_parameters["rope_theta"]
         )
         partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
         head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads

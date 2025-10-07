@@ -70,7 +70,7 @@ class Starcoder2Config(PretrainedConfig):
             The id of the "beginning-of-sequence" token.
         eos_token_id (`int`, *optional*, defaults to 50256):
             The id of the "end-of-sequence" token.
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
@@ -131,7 +131,7 @@ class Starcoder2Config(PretrainedConfig):
         use_cache: Optional[bool] = True,
         bos_token_id: Optional[int] = 50256,
         eos_token_id: Optional[int] = 50256,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         sliding_window: Optional[int] = None,
         attention_dropout: Optional[float] = 0.0,
         residual_dropout: Optional[float] = 0.0,
@@ -155,7 +155,7 @@ class Starcoder2Config(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.residual_dropout = residual_dropout
         self.embedding_dropout = embedding_dropout
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)

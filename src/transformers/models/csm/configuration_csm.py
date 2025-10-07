@@ -76,7 +76,7 @@ class CsmDepthDecoderConfig(PretrainedConfig):
             Beginning of stream token id.
         eos_token_id (`int`, *optional*):
             End of stream token id.
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
@@ -122,7 +122,7 @@ class CsmDepthDecoderConfig(PretrainedConfig):
         pad_token_id: Optional[int] = None,
         bos_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
         mlp_bias: Optional[bool] = False,
@@ -161,7 +161,7 @@ class CsmDepthDecoderConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 500000.0)
@@ -227,7 +227,7 @@ class CsmConfig(PretrainedConfig):
             Audio token id in the text input.
         audio_eos_token_id (`int`, *optional*, defaults to 128003):
             End of stream token id for audio in the text input.
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
@@ -289,7 +289,7 @@ class CsmConfig(PretrainedConfig):
         eos_token_id: Optional[int] = None,
         audio_token_id: Optional[int] = 128002,
         audio_eos_token_id: Optional[int] = 128003,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
         mlp_bias: Optional[bool] = False,
@@ -354,7 +354,7 @@ class CsmConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 500000.0)

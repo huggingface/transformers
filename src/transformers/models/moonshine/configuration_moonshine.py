@@ -83,7 +83,7 @@ class MoonshineConfig(PretrainedConfig):
             the task.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
@@ -141,7 +141,7 @@ class MoonshineConfig(PretrainedConfig):
         initializer_range: Optional[float] = 0.02,
         decoder_start_token_id: Optional[int] = 1,
         use_cache: Optional[bool] = True,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         partial_rotary_factor: Optional[float] = 0.9,
         is_encoder_decoder: Optional[bool] = True,
         attention_bias: Optional[bool] = False,
@@ -178,7 +178,7 @@ class MoonshineConfig(PretrainedConfig):
         self.is_encoder_decoder = is_encoder_decoder
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)

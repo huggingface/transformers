@@ -429,6 +429,22 @@ class PretrainedConfig(PushToHubMixin):
         logger.warning_once("`torch_dtype` is deprecated! Use `dtype` instead!")
         self.dtype = value
 
+    @property
+    def rope_scaling(self):
+        logger.warning_once(
+            "`rope_scaling` has been deprecated. Please use `rope_parameters` instead, which contains all RoPE configuration "
+            "options, including `rope_theta`. Refer to `RopeParameters` for the full list of available keys."
+        )
+        return self.rope_parameters
+
+    @rope_scaling.setter
+    def rope_scaling(self, value):
+        logger.warning_once(
+            "`rope_scaling` has been deprecated. Please use `rope_parameters` instead, which contains all RoPE configuration "
+            "options, including `rope_theta`. Refer to `RopeParameters` for the full list of available keys."
+        )
+        self.rope_parameters = value
+
     def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):
         """
         Save a configuration object to the directory `save_directory`, so that it can be re-loaded using the

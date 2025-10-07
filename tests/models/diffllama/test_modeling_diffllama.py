@@ -281,11 +281,11 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         )
 
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
-    def test_model_rope_scaling_from_config(self, scaling_type):
+    def test_model_rope_parameters_from_config(self, scaling_type):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         short_input = ids_tensor([1, 10], config.vocab_size)
         long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
-        rope_theta = config.rope_theta if hasattr(config, "rope_theta") else config.rope_scaling["rope_theta"]
+        rope_theta = config.rope_theta if hasattr(config, "rope_theta") else config.rope_parameters["rope_theta"]
 
         set_seed(42)  # Fixed seed at init time so the two models get the same random weights
         original_model = DiffLlamaModel(config)
@@ -295,7 +295,7 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         original_long_output = original_model(long_input).last_hidden_state
 
         set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        config.rope_scaling = {"type": scaling_type, "factor": 10.0, "rope_theta": rope_theta}
+        config.rope_parameters = {"type": scaling_type, "factor": 10.0, "rope_theta": rope_theta}
         scaled_model = DiffLlamaModel(config)
         scaled_model.to(torch_device)
         scaled_model.eval()
@@ -312,12 +312,12 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         # The output should be different for long inputs
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
-    def test_model_rope_scaling(self):
+    def test_model_rope_parameters(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         scaling_factor = 10
         short_input_length = 10
         long_input_length = int(config.max_position_embeddings * 1.5)
-        rope_theta = config.rope_theta if hasattr(config, "rope_theta") else config.rope_scaling["rope_theta"]
+        rope_theta = config.rope_theta if hasattr(config, "rope_theta") else config.rope_parameters["rope_theta"]
 
         # Inputs
         x = torch.randn(
@@ -337,7 +337,7 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
         # Sanity check linear RoPE scaling
         # New position "x" should match original position with index "x/scaling_factor"
-        config.rope_scaling = {"type": "linear", "factor": scaling_factor, "rope_theta": rope_theta}
+        config.rope_parameters = {"type": "linear", "factor": scaling_factor, "rope_theta": rope_theta}
         linear_scaling_rope = DiffLlamaRotaryEmbedding(config=config).to(torch_device)
         linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short)
         linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long)
@@ -351,7 +351,7 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         # Sanity check Dynamic NTK RoPE scaling
         # Scaling should only be observed after a long input is fed. We can observe that the frequencies increase
         # with scaling_factor (or that `inv_freq` decreases)
-        config.rope_scaling = {"type": "dynamic", "factor": scaling_factor, "rope_theta": rope_theta}
+        config.rope_parameters = {"type": "dynamic", "factor": scaling_factor, "rope_theta": rope_theta}
         ntk_scaling_rope = DiffLlamaRotaryEmbedding(config=config).to(torch_device)
         ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short)
         ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long)
@@ -365,7 +365,7 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
         # Sanity check Yarn RoPE scaling
         # Scaling should be over the entire input
-        config.rope_scaling = {"type": "yarn", "factor": scaling_factor, "rope_theta": rope_theta}
+        config.rope_parameters = {"type": "yarn", "factor": scaling_factor, "rope_theta": rope_theta}
         yarn_scaling_rope = DiffLlamaRotaryEmbedding(config=config).to(torch_device)
         yarn_cos_short, yarn_sin_short = yarn_scaling_rope(x, position_ids_short)
         yarn_cos_long, yarn_sin_long = yarn_scaling_rope(x, position_ids_long)
@@ -394,27 +394,27 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         original_model(**model_inputs)
 
         # from a config with the expected rope configuration -> ✅
-        config = _reinitialize_config(base_config, {"rope_scaling": {"rope_type": "linear", "factor": 10.0}})
+        config = _reinitialize_config(base_config, {"rope_parameters": {"rope_type": "linear", "factor": 10.0}})
         original_model = DiffLlamaForCausalLM(config).to(torch_device)
         original_model(**model_inputs)
 
         # from a config with the old rope configuration ('type' instead of 'rope_type')  -> ✅ we gracefully handle BC
-        config = _reinitialize_config(base_config, {"rope_scaling": {"type": "linear", "factor": 10.0}})
+        config = _reinitialize_config(base_config, {"rope_parameters": {"type": "linear", "factor": 10.0}})
         original_model = DiffLlamaForCausalLM(config).to(torch_device)
         original_model(**model_inputs)
 
         # from a config with both 'type' and 'rope_type'  -> ✅ they can coexist (and both are present in the config)
         config = _reinitialize_config(
-            base_config, {"rope_scaling": {"type": "linear", "rope_type": "linear", "factor": 10.0}}
+            base_config, {"rope_parameters": {"type": "linear", "rope_type": "linear", "factor": 10.0}}
         )
-        self.assertTrue(config.rope_scaling["type"] == "linear")
-        self.assertTrue(config.rope_scaling["rope_type"] == "linear")
+        self.assertTrue(config.rope_parameters["type"] == "linear")
+        self.assertTrue(config.rope_parameters["rope_type"] == "linear")
         original_model = DiffLlamaForCausalLM(config).to(torch_device)
         original_model(**model_inputs)
 
         # from a config with parameters in a bad range ('factor' should be >= 1.0) -> ⚠️ throws a warning
         with self.assertLogs("transformers.modeling_rope_utils", level="WARNING") as logs:
-            config = _reinitialize_config(base_config, {"rope_scaling": {"rope_type": "linear", "factor": -999.0}})
+            config = _reinitialize_config(base_config, {"rope_parameters": {"rope_type": "linear", "factor": -999.0}})
             original_model = DiffLlamaForCausalLM(config).to(torch_device)
             original_model(**model_inputs)
             self.assertEqual(len(logs.output), 1)
@@ -423,7 +423,7 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         # from a config with unknown parameters ('foo' isn't a rope option) -> ⚠️ throws a warning
         with self.assertLogs("transformers.modeling_rope_utils", level="WARNING") as logs:
             config = _reinitialize_config(
-                base_config, {"rope_scaling": {"rope_type": "linear", "factor": 10.0, "foo": "bar"}}
+                base_config, {"rope_parameters": {"rope_type": "linear", "factor": 10.0, "foo": "bar"}}
             )
             original_model = DiffLlamaForCausalLM(config).to(torch_device)
             original_model(**model_inputs)
@@ -432,7 +432,7 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
         # from a config with specific rope type but missing one of its mandatory parameters -> ❌ throws exception
         with self.assertRaises(KeyError):
-            config = _reinitialize_config(base_config, {"rope_scaling": {"rope_type": "linear"}})  # missing "factor"
+            config = _reinitialize_config(base_config, {"rope_parameters": {"rope_type": "linear"}})  # missing "factor"
 
     @require_flash_attn
     @require_torch_gpu

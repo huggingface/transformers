@@ -207,11 +207,11 @@ class GraniteMoeSharedModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
             self.model_tester.create_and_check_model(*config_and_inputs)
 
     @parameterized.expand([("linear",), ("dynamic",)])
-    def test_model_rope_scaling_from_config(self, scaling_type):
+    def test_model_rope_parameters_from_config(self, scaling_type):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         short_input = ids_tensor([1, 10], config.vocab_size)
         long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
-        rope_theta = config.rope_theta if hasattr(config, "rope_theta") else config.rope_scaling["rope_theta"]
+        rope_theta = config.rope_theta if hasattr(config, "rope_theta") else config.rope_parameters["rope_theta"]
 
         set_seed(42)  # Fixed seed at init time so the two models get the same random weights
         original_model = GraniteMoeSharedModel(config)
@@ -221,7 +221,7 @@ class GraniteMoeSharedModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
         original_long_output = original_model(long_input).last_hidden_state
 
         set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        config.rope_scaling = {"type": scaling_type, "factor": 10.0, "rope_theta": rope_theta}
+        config.rope_parameters = {"type": scaling_type, "factor": 10.0, "rope_theta": rope_theta}
         scaled_model = GraniteMoeSharedModel(config)
         scaled_model.to(torch_device)
         scaled_model.eval()
@@ -238,12 +238,12 @@ class GraniteMoeSharedModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
         # The output should be different for long inputs
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
-    def test_model_rope_scaling(self):
+    def test_model_rope_parameters(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         scaling_factor = 10
         short_input_length = 10
         long_input_length = int(config.max_position_embeddings * 1.5)
-        rope_theta = config.rope_theta if hasattr(config, "rope_theta") else config.rope_scaling["rope_theta"]
+        rope_theta = config.rope_theta if hasattr(config, "rope_theta") else config.rope_parameters["rope_theta"]
 
         # Inputs
         x = torch.randn(
@@ -263,7 +263,7 @@ class GraniteMoeSharedModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
 
         # Sanity check linear RoPE scaling
         # New position "x" should match original position with index "x/scaling_factor"
-        config.rope_scaling = {"type": "linear", "factor": scaling_factor, "rope_theta": rope_theta}
+        config.rope_parameters = {"type": "linear", "factor": scaling_factor, "rope_theta": rope_theta}
         linear_scaling_rope = GraniteMoeSharedRotaryEmbedding(config=config).to(torch_device)
         linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short)
         linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long)
@@ -277,7 +277,7 @@ class GraniteMoeSharedModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
         # Sanity check Dynamic NTK RoPE scaling
         # Scaling should only be observed after a long input is fed. We can observe that the frequencies increase
         # with scaling_factor (or that `inv_freq` decreases)
-        config.rope_scaling = {"type": "dynamic", "factor": scaling_factor, "rope_theta": rope_theta}
+        config.rope_parameters = {"type": "dynamic", "factor": scaling_factor, "rope_theta": rope_theta}
         ntk_scaling_rope = GraniteMoeSharedRotaryEmbedding(config=config).to(torch_device)
         ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short)
         ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long)
@@ -291,7 +291,7 @@ class GraniteMoeSharedModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
 
         # Sanity check Yarn RoPE scaling
         # Scaling should be over the entire input
-        config.rope_scaling = {"type": "yarn", "factor": scaling_factor, "rope_theta": rope_theta}
+        config.rope_parameters = {"type": "yarn", "factor": scaling_factor, "rope_theta": rope_theta}
         yarn_scaling_rope = GraniteMoeSharedRotaryEmbedding(config=config).to(torch_device)
         yarn_cos_short, yarn_sin_short = yarn_scaling_rope(x, position_ids_short)
         yarn_cos_long, yarn_sin_long = yarn_scaling_rope(x, position_ids_long)

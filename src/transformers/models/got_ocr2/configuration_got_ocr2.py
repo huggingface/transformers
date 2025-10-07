@@ -198,7 +198,7 @@ class GotOcr2Config(PretrainedConfig):
                 use_cache=True,
                 tie_word_embeddings=True,
                 rope_theta=1000000.0,
-                rope_scaling=None,
+                rope_parameters=None,
                 use_sliding_window=False,
                 sliding_window=4096,
                 max_window_layers=21,

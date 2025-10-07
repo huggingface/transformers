@@ -68,7 +68,7 @@ class Ernie4_5Config(PretrainedConfig):
             End of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
@@ -125,7 +125,7 @@ class Ernie4_5Config(PretrainedConfig):
         bos_token_id: Optional[int] = 1,
         eos_token_id: Optional[int] = 2,
         tie_word_embeddings: Optional[bool] = True,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         use_bias: Optional[bool] = False,
         head_dim: Optional[int] = 128,
         **kwargs,
@@ -148,7 +148,7 @@ class Ernie4_5Config(PretrainedConfig):
         self.use_cache = use_cache
         self.use_bias = use_bias
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 500000.0)

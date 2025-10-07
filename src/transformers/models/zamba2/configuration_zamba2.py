@@ -94,7 +94,7 @@ class Zamba2Config(PretrainedConfig):
             Rank of the adapter in the shared MLP and shared attention layers.
         use_mem_rope (`bool`, *optional*, defaults to `False`):
             If True, includes RoPE in the shared attention layers.
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
@@ -162,7 +162,7 @@ class Zamba2Config(PretrainedConfig):
         use_shared_attention_adapter: Optional[bool] = False,
         adapter_rank: Optional[int] = 128,
         use_mem_rope: Optional[bool] = False,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         initializer_range: Optional[float] = 0.02,
         rms_norm_eps: Optional[int] = 1e-5,
         use_cache: Optional[bool] = True,
@@ -195,7 +195,7 @@ class Zamba2Config(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.use_mem_rope = use_mem_rope
         self.use_long_context = use_long_context
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)

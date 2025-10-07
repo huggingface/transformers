@@ -120,7 +120,7 @@ class ModernBertDecoderConfig(PretrainedConfig):
         layer_types (`list[str]`, *optional*):
             List of layer types, one for each layer. If not specified, will be automatically generated based on
             `global_attn_every_n_layers`. Should contain "full_attention" or "sliding_attention".
-        rope_scaling (`RopeParameters`, *optional*):
+        rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
@@ -175,7 +175,7 @@ class ModernBertDecoderConfig(PretrainedConfig):
         local_attention: Optional[int] = 128,
         global_attn_every_n_layers: Optional[int] = 3,
         layer_types: Optional[list[str]] = None,
-        rope_scaling: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         **kwargs,
     ):
         super().__init__(
@@ -208,7 +208,7 @@ class ModernBertDecoderConfig(PretrainedConfig):
         self.classifier_activation = classifier_activation
         self.use_cache = use_cache
         self.global_attn_every_n_layers = global_attn_every_n_layers
-        self.rope_scaling = rope_scaling
+        self.rope_parameters = rope_parameters
         # for consistency with ModernBert
         self.reference_compile = False
 
