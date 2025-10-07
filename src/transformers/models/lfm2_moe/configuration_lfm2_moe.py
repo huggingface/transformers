@@ -21,7 +21,7 @@ class Lfm2MoeConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`Lfm2MoeModel`]. It is used to instantiate a LFM2 Moe
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the LFM2-8B-A1B model.
-    e.g. [LiquidAI/LFM2-8B-A1B-preview](https://huggingface.co/LiquidAI/LFM2-8B-A1B-preview)
+    e.g. [LiquidAI/LFM2-8B-A1B](https://huggingface.co/LiquidAI/LFM2-8B-A1B)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

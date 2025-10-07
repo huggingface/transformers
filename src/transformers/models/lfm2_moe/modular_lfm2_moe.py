@@ -14,7 +14,6 @@
 from typing import Optional
 
 import torch
-import torch.nn.functional as F
 from torch import nn
 
 from ...masking_utils import create_causal_mask
