@@ -121,7 +121,6 @@ class Lfm2HybridConvCache:
                 dtype=self._dtype,
                 device=device,
             )
-            torch._dynamo.mark_static_address(conv_state)
             self.conv_cache.append(conv_state)
             self.key_cache.append(torch.tensor([]))
             self.value_cache.append(torch.tensor([]))
@@ -441,7 +440,7 @@ class Lfm2Model(LlamaModel):
         self.pos_emb = Lfm2RotaryEmbedding(config)
         self.embedding_norm = Lfm2RMSNorm(config.hidden_size, eps=config.norm_eps)
         del self.norm
-        del self.rotary_emv
+        del self.rotary_emb
 
     def forward(
         self,
