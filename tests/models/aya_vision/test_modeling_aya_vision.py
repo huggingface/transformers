@@ -197,10 +197,6 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="Siglip uses a non-standard initialization scheme")
-    def test_initialization(self):
-        pass
-
     @unittest.skip(reason="Compile not yet supported because in LLava models")
     @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
@@ -397,7 +393,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest lake.",
+                ("xpu", 3): "Wooden bridge stretches\nInto still waters, mountains gleam\nPeaceful forest scene",
                 # 4-bit
                 ("cuda", 7): "Wooden bridge stretches\nMirrored lake below, mountains rise\nPeaceful, serene",
                 ("cuda", 8): 'Wooden path to water,\nMountains echo in stillness,\nPeaceful forest scene.',
@@ -416,7 +412,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
 
         expected_outputs = Expectations(
             {
-                ("xpu", 3): 'This image captures a vibrant street scene in a bustling urban area, likely in an Asian city. The focal point is a',
+                ("xpu", 3): 'This vibrant image captures a bustling street scene in a Chinese-influenced neighborhood. The focal point is a striking red stop sign',
                 # 4-bit
                 ("cuda", 7): 'This vibrant image captures a bustling street scene in a multicultural urban area, featuring a traditional Chinese gate adorned with intricate red and',
                 ("cuda", 8): 'This image captures a vibrant street scene in a bustling urban area, likely in an Asian city. The focal point is a',

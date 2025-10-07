@@ -43,7 +43,7 @@ from transformers import (
     AutoTokenizer,
     DataCollatorForLanguageModeling,
     IntervalStrategy,
-    PretrainedConfig,
+    PreTrainedConfig,
     TrainerCallback,
     TrainingArguments,
     default_data_collator,
@@ -348,7 +348,7 @@ class AlmostAccuracyBatched:
             return result
 
 
-class RegressionModelConfig(PretrainedConfig):
+class RegressionModelConfig(PreTrainedConfig):
     def __init__(self, a=0, b=0, double_output=False, random_torch=True, **kwargs):
         super().__init__(**kwargs)
         self.a = a
@@ -1761,7 +1761,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertFalse(is_any_loss_nan_or_inf(log_history_filter))
 
     def test_train_and_eval_dataloaders(self):
-        if torch_device in ["cuda"]:
+        if torch_device == "cuda":
             n_gpu = max(1, backend_device_count(torch_device))
         else:
             # DP is deprecated by PyTorch, accelerators like XPU doesn't support DP
@@ -3475,7 +3475,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             checkpoints = [d for d in os.listdir(tmp_dir) if d.startswith("checkpoint-")]
             # There should be one checkpoint per epoch.
             self.assertEqual(len(checkpoints), 3)
-            checkpoint_dir = sorted(checkpoints, key=lambda x: int(x.replace("checkpoint-", "")))[0]
+            checkpoint_dir = min(checkpoints, key=lambda x: int(x.replace("checkpoint-", "")))
 
             trainer.train(resume_from_checkpoint=os.path.join(tmp_dir, checkpoint_dir))
             (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
