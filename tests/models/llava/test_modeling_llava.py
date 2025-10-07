@@ -608,7 +608,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
 
         decoded_text = processor.batch_decode(output, skip_special_tokens=True)[0]
-        self.assertTrue(decoded_text == EXPECTED_DECODED_TEXT)
+        self.assertEqual(decoded_text, EXPECTED_DECODED_TEXT)
 
     @slow
     def test_pixtral(self):
