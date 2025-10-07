@@ -99,7 +99,7 @@ class VocosProcessorTest(unittest.TestCase):
             audio=audio, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt"
         )["audio_spectrogram"]
 
-        out_processor = self.processor(audio=audio, return_tensors="pt")["features"]
+        out_processor = self.processor(audio=audio, return_tensors="pt")["audio_spectrogram"]
 
         self.assertEqual(out_processor.shape, out_feature_extractor.shape)
         np.testing.assert_allclose(out_processor, out_feature_extractor, atol=1e-5)
@@ -109,7 +109,7 @@ class VocosProcessorTest(unittest.TestCase):
         # checking that audio to codes and direct codes input give same outputs
         audio = torch.randn(1, 1024, dtype=torch.float32)
 
-        output_processor = self.processor(audio=audio, bandwidth=bandwidth, return_tensors="pt")["features"]
+        output_processor = self.processor(audio=audio, bandwidth=bandwidth, return_tensors="pt")["input_features"]
 
         audio_tokenizer = self.processor.audio_tokenizer
 
@@ -117,7 +117,7 @@ class VocosProcessorTest(unittest.TestCase):
             encoded_frames = audio_tokenizer.encoder(audio.unsqueeze(1))
             codes = audio_tokenizer.quantizer.encode(encoded_frames, bandwidth=bandwidth)
 
-        output_codes = self.processor(codes=codes, bandwidth=bandwidth, return_tensors="pt")["features"]
+        output_codes = self.processor(codes=codes, bandwidth=bandwidth, return_tensors="pt")["input_features"]
 
         torch.testing.assert_close(output_processor, output_codes)
 
@@ -131,9 +131,9 @@ class VocosProcessorTest(unittest.TestCase):
         )
         outputs = self.processor(codes=codes, bandwidth=bandwidth, return_tensors="pt")
 
-        self.assertIn("features", outputs)
+        self.assertIn("input_features", outputs)
         self.assertIn("bandwidth", outputs)
-        self.assertEqual(outputs["features"].shape[-1], seq_len)
+        self.assertEqual(outputs["input_features"].shape[-1], seq_len)
         self.assertIsInstance(outputs["bandwidth"], (float, torch.Tensor))
 
     def test_neither_audio_nor_codes_raises(self):

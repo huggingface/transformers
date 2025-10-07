@@ -17,9 +17,7 @@
 from collections.abc import Sequence
 from typing import Optional
 
-import numpy as np
-
-from ...audio_utils import AudioInput, make_list_of_audio
+from ...audio_utils import AudioInput
 from ...processing_utils import AudioKwargs, BatchFeature, ProcessingKwargs, ProcessorMixin, Unpack
 from ...utils import is_torch_available
 
@@ -39,6 +37,7 @@ class VocosProcessorKwargs(ProcessingKwargs, total=False):
         "audio_kwargs": {
             "bandwidths": [1.5, 3.0, 6.0, 12.0],
             "sampling_rate": 24000,
+            "padding": True,
         },
         "common_kwargs": {"return_tensors": "pt"},
     }
@@ -71,6 +70,7 @@ class VocosProcessor(ProcessorMixin):
         codes=None,
         bandwidth: Optional[float] = None,
         return_tensors: str = "pt",
+        device: Optional[str] = None,
         **kwargs: Unpack[VocosProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -83,16 +83,19 @@ class VocosProcessor(ProcessorMixin):
 
         Args:
             audio (`np.ndarray`, `torch.Tensor`, *optional*):
-                Audio input to be processed of shape `(sequence_length,)` or  `(batch_size, sequence_length)`.
+                Audio input to be processed of shape `(sequence_length,)` or `(batch_size, sequence_length)`.
             codes (`torch.LongTensor`, *optional*):
                 Pre-computed EnCodec quantized codes of shape `(num_codebooks, sequence_length)` or `(num_codebooks, batch_size, sequence_length)`
             bandwidth (`float`, *optional*):
                 EnCodec bandwidth [1.5, 3.0, 6.0, 12.0] kbps, this triggers EnCodec pathway when provided.
             return_tensors (`str`, defaults to `"pt"`):
                 Only `"pt"` (PyTorch tensors) is supported.
+            device (`str`, *optional*):
+                Device on to compute mel spectrogram. If left to `None`, uses the device of the first input
+                `audio` element, or CPU if the input is a numpy array.
 
         Returns:
-            [`BatchFeature`]: Contains `features` tensor and optional `bandwidth` value.
+            [`BatchFeature`]: Contains `audio_spectrogram` or `input_features` tensor for the model input.
         """
 
         output_kwargs = self._merge_kwargs(VocosProcessorKwargs, **kwargs)
@@ -106,28 +109,26 @@ class VocosProcessor(ProcessorMixin):
         if bandwidth is not None and bandwidth not in self.bandwidths:
             raise ValueError(f"bandwidth {bandwidth} is not supported, supported bandwidths are {self.bandwidths}")
 
-        features = None
+        # Prepare model inputs
+        audio_spectrogram = None
+        input_features = None
+        padding_mask = None
         if audio is not None:
             if bandwidth is not None:
-                # encode audio as in:
+                # pad audio into batch
+                fe_outputs = self.feature_extractor(audio, return_audio_only=True, device=device, **audio_kwargs)
+                audio = fe_outputs["audio"]
+
+                # encode audio as in original:
                 # https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/feature_extractors.py#L79
-                if isinstance(audio, list):
-                    audio = make_list_of_audio(audio)
-                    audio = [np.asarray(_audio, dtype=np.float32) for _audio in audio]
-                    max_length = max(_audio.shape[-1] for _audio in audio)
-                    padded = [np.pad(_audio, (0, max_length - _audio.shape[-1]), mode="constant") for _audio in audio]
-                    audio = np.stack(padded, axis=0)
-                if isinstance(audio, np.ndarray):
-                    audio = torch.from_numpy(audio)
-                if audio.dim() == 1:
-                    audio = audio.unsqueeze(0).unsqueeze(1)
-                elif audio.dim() == 2:
-                    audio = audio.unsqueeze(1)
+                audio = audio.unsqueeze(1)
                 with torch.no_grad():
                     encoded_frames = self.audio_tokenizer.encoder(audio.to(self.audio_tokenizer.device))
                     codes = self.audio_tokenizer.quantizer.encode(encoded_frames, bandwidth=bandwidth)
             else:
-                features = self.feature_extractor(audio, **audio_kwargs).audio_spectrogram
+                fe_outputs = self.feature_extractor(audio, device=device, **audio_kwargs)
+                audio_spectrogram = fe_outputs.audio_spectrogram
+            padding_mask = fe_outputs["padding_mask"]
 
         if codes is not None:
             if codes.ndim not in (2, 3):
@@ -137,6 +138,8 @@ class VocosProcessor(ProcessorMixin):
             if codes.dim() == 2:
                 # add batch dimension
                 codes = codes.unsqueeze(1)
+            if bandwidth is None:
+                raise ValueError("When passing `codes`, `bandwidth` must be also be provided.")
 
             # Extract codebook weights: https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/feature_extractors.py#L71
             num_quantizers = self.audio_tokenizer.quantizer.get_num_quantizers_for_bandwidth(max(self.bandwidths))
@@ -147,14 +150,17 @@ class VocosProcessor(ProcessorMixin):
             # Embed with position https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/pretrained.py#L117
             offsets = torch.arange(0, num_bins * len(codes), num_bins, device=codes.device).reshape(-1, 1, 1)
             embeddings_idxs = codes + offsets
-            features = F.embedding(embeddings_idxs, codebook_weights).sum(dim=0).transpose(1, 2)
+            input_features = F.embedding(embeddings_idxs, codebook_weights).sum(dim=0).transpose(1, 2)
 
-        if features is None:
+        if input_features is not None:
+            data = {"input_features": input_features, "bandwidth": float(bandwidth)}
+        elif audio_spectrogram is not None:
+            data = {"audio_spectrogram": audio_spectrogram}
+        else:
             raise ValueError("Either 'codes' or 'audio' must be provided to compute features.")
+        if padding_mask is not None:
+            data["padding_mask"] = padding_mask
 
-        data = {"features": features}
-        if bandwidth is not None:
-            data["bandwidth"] = float(bandwidth)
         return BatchFeature(data, tensor_type=return_tensors)
 
 

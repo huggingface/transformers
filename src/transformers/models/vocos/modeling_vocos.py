@@ -93,9 +93,9 @@ class VocosConvNeXtBlock(nn.Module):
         hidden_states = self.act(hidden_states)
         hidden_states = self.pwconv2(hidden_states)
         if self.layer_scale_parameter is not None:
-            hidden_states = self.layer_scale_parameter * hidden_states
+            hidden_states = self.layer_scale_parameter.to(hidden_states.device) * hidden_states
         hidden_states = hidden_states.transpose(1, 2)
-        hidden_states = residual + hidden_states
+        hidden_states = residual.to(hidden_states.device) + hidden_states
         return hidden_states
 
 
@@ -246,7 +246,7 @@ class VocosPreTrainedModel(PreTrainedModel):
 
     config_class = VocosConfig
     base_model_prefix = "vocos"
-    main_input_name = "features"
+    main_input_name = "audio_spectrogram"
     supports_gradient_checkpointing = False
 
     def _init_weights(self, module):
@@ -276,10 +276,6 @@ class VocosPreTrainedModel(PreTrainedModel):
     """
 )
 class VocosModel(VocosPreTrainedModel):
-    config_class = VocosConfig
-    base_model_prefix = "vocos"
-    main_input_name = "features"
-
     def __init__(self, config: VocosConfig):
         super().__init__(config)
         self.backbone = VocosBackbone(config)
@@ -289,18 +285,25 @@ class VocosModel(VocosPreTrainedModel):
 
     @auto_docstring
     def forward(
-        self, features: torch.FloatTensor, bandwidth: Optional[float] = None, return_dict: Optional[bool] = None
+        self,
+        audio_spectrogram: Optional[torch.FloatTensor] = None,
+        input_features: Optional[torch.FloatTensor] = None,
+        bandwidth: Optional[float] = None,
+        padding_mask: Optional[torch.Tensor] = None,
+        return_dict: Optional[bool] = None,
     ) -> Union[VocosOutput, tuple[torch.FloatTensor]]:
         r"""
-        features (`torch.FloatTensor` of shape `(batch_size, feature_dim, time)`):
-            Output of [`VocosProcessor`] which can be either:
-            - Mel-spectrogram features: computed directly from audio via (`processor(audio=waveform)`)
-            - EnCodec neural audio codec features: computed either from precomputed EnCodec RVQ codes via `processor(codes=codes, bandwidth=1.5)`
-                or from raw audio via `processor(audio=waveform, bandwidth=1.5)`, you need to provide bandwidth for both.
-
+        audio_spectrogram (`torch.FloatTensor` of shape `(batch_size, feature_dim, time_dim)`):
+            Mel-spectrogram features: computed directly from audio via (`processor(audio=waveform)`).
+        input_features (`torch.FloatTensor` of shape `(batch_size, feature_dim, time_dim)`):
+            EnCodec neural audio codec features which can be computed either from precomputed EnCodec RVQ codes via
+            `processor(codes=codes, bandwidth=1.5)` or from raw audio via `processor(audio=waveform, bandwidth=1.5)`.
+            It must be provided with the corresponding EnCodec bandwidth.
         bandwidth (`float`, *optional*):
-            Target bandwidth for EnCodec quantizer, e.g. one of [1.5, 3, 6, 12] kbps, or `None` for Mel-spectrogram features.
-
+            Target bandwidth for EnCodec quantizer, e.g. one of [1.5, 3, 6, 12] kbps, to be provided if
+            `input_features`is not None.
+        padding_mask (`torch.BoolTensor` of shape `(batch_size, time_dim)`, *optional*):
+            Mask that indicates padded entries of audio used to prepare the model inputs (see `VocosProcessor`).
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`]
 
@@ -314,8 +317,8 @@ class VocosModel(VocosPreTrainedModel):
         >>> from datasets import load_dataset, Audio
         >>> from transformers import VocosProcessor, VocosModel
 
-        >>> processor = VocosProcessor.from_pretrained("Manel/vocos-mel-24khz")
-        >>> model = VocosModel.from_pretrained("Manel/vocos-mel-24khz")
+        >>> processor = VocosProcessor.from_pretrained("hf-audio/vocos-mel-24khz")
+        >>> model = VocosModel.from_pretrained("hf-audio/vocos-mel-24khz")
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
@@ -328,8 +331,8 @@ class VocosModel(VocosPreTrainedModel):
 
 
         >>> # Encode audio using EnCodec neural codec and reconstruct from audio from that
-        >>> processor = VocosProcessor.from_pretrained("Manel/vocos-encodec-24khz")
-        >>> model = VocosModel.from_pretrained("Manel/vocos-encodec-24khz")
+        >>> processor = VocosProcessor.from_pretrained("hf-audio/vocos-encodec-24khz")
+        >>> model = VocosModel.from_pretrained("hf-audio/vocos-encodec-24khz")
 
         >>> bandwidth = 6.0
         >>> inputs = processor(audio=audio_sample, bandwidth=bandwidth)
@@ -345,11 +348,16 @@ class VocosModel(VocosPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-        if bandwidth is not None:
+        if input_features is None and audio_spectrogram is None:
+            raise ValueError("One of `input_features` or `audio_spectrogram` should be provided.")
+
+        if input_features is not None:
+            if bandwidth is None:
+                raise ValueError("When passing `input_features`, `bandwidth` must be also be provided.")
             bandwidth_id = self._bandwidth_to_id[float(bandwidth)]
+            hidden_states = self.backbone(input_features, bandwidth_id)
         else:
-            bandwidth_id = None
-        hidden_states = self.backbone(features, bandwidth_id)
+            hidden_states = self.backbone(audio_spectrogram)
         audio = self.head(hidden_states)
 
         if not return_dict:

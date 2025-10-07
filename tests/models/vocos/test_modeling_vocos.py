@@ -79,7 +79,7 @@ class VocosModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config, features = self.prepare_config_and_inputs()
-        return config, {"features": features}
+        return config, {"audio_spectrogram": features}
 
     def create_and_check_model(self, config, features):
         model = VocosModel(config=config).to(torch_device).eval()
@@ -125,7 +125,9 @@ class VocosModelTest(ModelTesterMixin, unittest.TestCase):
         model = VocosModel(config)
         signature = inspect.signature(model.forward)
         arg_names = list(signature.parameters.keys())
-        self.assertListEqual(arg_names, ["features", "bandwidth", "return_dict"])
+        self.assertListEqual(
+            arg_names, ["audio_spectrogram", "input_features", "bandwidth", "padding_mask", "return_dict"]
+        )
 
     @unittest.skip(
         reason="The VocosModel is not transformers based, thus it does not have the usual `hidden_states` logic"
@@ -251,7 +253,7 @@ class VocosModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_mel_vocos(self):
-        hf_repo_id = "bezzam/vocos-mel-24khz"
+        hf_repo_id = "hf-audio/vocos-mel-24khz"
         processor = VocosProcessor.from_pretrained(hf_repo_id)
         model = VocosModel.from_pretrained(hf_repo_id).to(torch_device).eval()
 
@@ -273,7 +275,7 @@ class VocosModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_encodec_vocos(self):
-        hf_repo_id = "bezzam/vocos-encodec-24khz"
+        hf_repo_id = "hf-audio/vocos-encodec-24khz"
         model = VocosModel.from_pretrained(hf_repo_id).to(torch_device).eval()
         processor = VocosProcessor.from_pretrained(hf_repo_id)
 
@@ -315,7 +317,7 @@ class VocosModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_batch_mel_vocos(self):
-        repo_id = "bezzam/vocos-mel-24khz"
+        repo_id = "hf-audio/vocos-mel-24khz"
         processor = VocosProcessor.from_pretrained(repo_id)
         model = VocosModel.from_pretrained(repo_id).to(torch_device).eval()
 
@@ -335,7 +337,7 @@ class VocosModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_batch_encodec_vocos(self):
-        repo_id = "bezzam/vocos-encodec-24khz"
+        repo_id = "hf-audio/vocos-encodec-24khz"
         processor = VocosProcessor.from_pretrained(repo_id)
         model = VocosModel.from_pretrained(repo_id).to(torch_device).eval()
 
