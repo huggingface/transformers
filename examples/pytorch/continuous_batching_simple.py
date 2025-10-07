@@ -39,9 +39,10 @@ if __name__ == "__main__":
     model = AutoModelForCausalLM.from_pretrained(
         MODEL_ID,
         attn_implementation=args.attn,
+        device_map="auto",
         dtype=torch.bfloat16,
     )
-    model = model.cuda().eval()
+    model = model.eval()
 
     # Prepare tokenizer and dataset
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, padding_side="left")
