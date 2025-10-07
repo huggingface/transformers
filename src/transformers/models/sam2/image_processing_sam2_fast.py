@@ -669,7 +669,7 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
             if isinstance(masks[i], np.ndarray):
                 masks[i] = torch.from_numpy(masks[i])
             elif not isinstance(masks[i], torch.Tensor):
-                raise ValueError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
+                raise TypeError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
             interpolated_mask = F.interpolate(masks[i], original_size, mode="bilinear", align_corners=False)
             if apply_non_overlapping_constraints:
                 interpolated_mask = self._apply_non_overlapping_constraints(interpolated_mask)
