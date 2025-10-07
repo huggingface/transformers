@@ -181,7 +181,9 @@ def load_and_register_kernel(
     if "|" in attn_implementation:
         attention_wrapper, actual_attn_name = attn_implementation.split("|")
         # `transformers` has wrapper for sdpa, paged, flash, flex etc.
-        attention_wrapper = ALL_ATTENTION_FUNCTIONS.get(attention_wrapper)
+        attention_wrapper = ALL_ATTENTION_FUNCTIONS.get(
+            attention_wrapper, ALL_ATTENTION_FUNCTIONS.get("paged|flash_attention_2")
+        )
     # Extract repo_id and kernel_name from the string
     if ":" in actual_attn_name:
         repo_id, kernel_name = actual_attn_name.split(":")
