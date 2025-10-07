@@ -59,8 +59,7 @@ class BenchmarkConfig:
         # Flash attention does not support compile mode, so we turn it off # FIXME: it would be better to support it
         is_fa = self.attn_implementation == "flash_attention_2"
         is_fa |= self.attn_implementation == "sdpa" and self.sdpa_backend == "flash_attention"
-        has_cuda_graphs = self.compile_mode in [None, "max-autotune-no-cudagraphs"] # TODO: check if FA works with mancg
-        if is_fa and has_cuda_graphs:
+        if is_fa:
             logger.warning("Flash attention does not support compile mode. Turning off compile mode.")
             self.compile_mode = None
 
