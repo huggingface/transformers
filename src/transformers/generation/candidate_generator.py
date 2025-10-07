@@ -332,6 +332,108 @@ class AssistedCandidateGenerator(CandidateGenerator):
         candidate_ids = assistant_output.sequences
         return candidate_ids, candidate_logits
 
+class EagleAssistedCandidateGenerator(AssistedCandidateGenerator):
+    def __init__(
+        self,
+        input_ids: torch.LongTensor,
+        assistant_model: "PreTrainedModel",
+        generation_config: "GenerationConfig",
+        model_kwargs: dict,
+        inputs_tensor: Optional[torch.Tensor] = None,
+        logits_processor: "LogitsProcessorList" = None,
+    ):
+        model_kwargs.update({"use_model_defaults": False})
+        super().__init__(input_ids, assistant_model, generation_config, model_kwargs, inputs_tensor, logits_processor)
+        self.previous_hidden_states = None
+
+    def _prepare_generation_args(self, input_ids: torch.LongTensor, min_new_tokens: int, max_new_tokens: int) -> dict:
+        generation_args = super()._prepare_generation_args(input_ids, min_new_tokens, max_new_tokens)
+        if self.previous_hidden_states is not None:
+            seq_len = input_ids.shape[1]
+            generation_args["previous_hidden_states"] = self.previous_hidden_states[:, -seq_len:, :]
+        else:
+            generation_args["previous_hidden_states"] = None
+        generation_args["output_hidden_states"] = True
+        return generation_args
+
+    def get_candidates(self, input_ids: torch.LongTensor) -> tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
+        # Always align previous_hidden_states to input_ids length
+        if self.previous_hidden_states is not None:
+            cur_len = input_ids.shape[1]
+            prev_len = self.previous_hidden_states.shape[1]
+            if prev_len > cur_len:
+                self.previous_hidden_states = self.previous_hidden_states[:, -cur_len:, :]
+            elif prev_len < cur_len:
+                pad = cur_len - prev_len
+                pad_tensor = torch.zeros(
+                    self.previous_hidden_states.shape[0],
+                    pad,
+                    self.previous_hidden_states.shape[2],
+                    device=self.previous_hidden_states.device,
+                    dtype=self.previous_hidden_states.dtype,
+                )
+                self.previous_hidden_states = torch.cat([pad_tensor, self.previous_hidden_states], dim=1)
+        if self.previous_hidden_states is None:
+            return input_ids, None
+        return super().get_candidates(input_ids)
+
+    def update_model_inputs_for_validation_pass(self, model_inputs):
+        model_inputs["output_hidden_states"] = True
+        model_inputs["use_cache"] = True
+        return model_inputs
+
+    def update_candidate_strategy(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, num_matches: int):
+        if self.previous_hidden_states is None:
+            # First pass: we didn't really call the draft model yet, so no need to update
+            return
+        super().update_candidate_strategy(input_ids, scores, num_matches)
+
+    def update_state_after_validation(
+        self, input_ids: torch.LongTensor, num_matches: int, model_outputs: dict[str, torch.Tensor]
+    ):
+        last_hidden_states = model_outputs.hidden_states[-1]
+        if self.previous_hidden_states is None:
+            # Assistant hasn't really run yet. Prefilling with hidden_states from target model.
+            # (and yes, the first slice is duplicated for some reason)
+            self.previous_hidden_states = torch.cat(
+                (last_hidden_states[:, :1, :], last_hidden_states),
+                dim=1,
+            )
+        else:
+            # Validation sequence: last_hidden_states are for the candidate sequence, we need to keep num_matches + 1
+            self.previous_hidden_states = torch.cat(
+                (self.previous_hidden_states, last_hidden_states[:, : num_matches + 1, :]),
+                dim=1,
+            )
+
+        # Update assistant's cache to match the validated prefix length, if it exists
+        validated_prefix_len = num_matches + 1
+        past_key_values = self.assistant_kwargs.get("past_key_values", None)
+        if past_key_values is not None:
+            past_key_values.crop(validated_prefix_len)
+        # update attention mask and token type ids to match the validated prefix (might overlap with update_past?)
+        self.assistant_kwargs = _prepare_attention_mask(
+            self.assistant_kwargs, validated_prefix_len, self.assistant_model.config.is_encoder_decoder
+        )
+        self.assistant_kwargs = _prepare_token_type_ids(self.assistant_kwargs, validated_prefix_len)
+
+        cur_len = input_ids.shape[1]
+        if self.previous_hidden_states.shape[1] > cur_len:
+            self.previous_hidden_states = self.previous_hidden_states[:, -cur_len:, :]
+
+    def _update_past_and_masks(
+        self, input_ids: torch.LongTensor, remove_from_pkv: int = 0, num_added_tokens: int = 1
+    ) -> bool:
+        """Update past key values and attention masks for subsequent generation rounds."""
+        did_update = super()._update_past_and_masks(input_ids, remove_from_pkv, num_added_tokens)
+        if not did_update:
+            # Sync attention mask. No pass has been performed by the assistant yet, but the big model did generate one token
+            # (This could alternatively go in update_state_after_validation, when self.previous_hidden_states is None)
+            self.assistant_kwargs = _prepare_attention_mask(
+                self.assistant_kwargs, input_ids.shape[-1], self.assistant_model.config.is_encoder_decoder
+            )
+            self.assistant_kwargs = _prepare_token_type_ids(self.assistant_kwargs, input_ids.shape[-1])
+        return did_update
 
 class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
     """

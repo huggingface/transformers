@@ -26,6 +26,8 @@ from huggingface_hub import file_exists
 from packaging import version
 from torch import nn
 
+from transformers import generation
+
 from ..cache_utils import (
     Cache,
     DynamicCache,
@@ -55,6 +57,7 @@ from ..utils import (
 )
 from .candidate_generator import (
     AssistantVocabTranslatorCache,
+    EagleAssistedCandidateGenerator,
     AssistedCandidateGenerator,
     AssistedCandidateGeneratorDifferentTokenizers,
     CandidateGenerator,
@@ -1006,7 +1009,17 @@ class GenerationMixin(ContinuousMixin):
         """
         different_tokenizers = all(v is not None for v in (assistant_model, target_tokenizer, assistant_tokenizer))
 
-        if generation_config.assistant_early_exit is not None:
+
+        if generation_config.eagle_decoding is not None:
+            candidate_generator = AssistedCandidateGenerator(
+                input_ids=input_ids,
+                assistant_model=assistant_model,
+                generation_config=generation_config,
+                model_kwargs=model_kwargs,
+                inputs_tensor=inputs_tensor,
+                logits_processor=logits_processor,
+            )
+        elif generation_config.assistant_early_exit is not None:
             candidate_generator = EarlyExitCandidateGenerator(
                 input_ids=input_ids,
                 assistant_model=self,
