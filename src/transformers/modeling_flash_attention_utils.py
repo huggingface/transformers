@@ -49,6 +49,7 @@ def is_flash_attn_available():
 
 
 # `globals()` is not compatible with dynamo, hence we have do define them in global scope ourselves
+_loaded_implementation = None
 _flash_fn = None
 _flash_varlen_fn = None
 _pad_fn = None
@@ -124,19 +125,25 @@ def _lazy_define_process_function(flash_function):
     return partial(_process_flash_attention_kwargs, supports_mapping=supports_mapping)
 
 
-def lazy_import_flash_attention(implementation: Optional[str], force_import: Optional[bool] = False):
+def lazy_import_flash_attention(implementation, implementation_name: Optional[str] = None):
     """
     Lazily import flash attention and return the respective functions + flags.
 
     NOTE: For fullgraph, this needs to be called before compile, while no fullgraph can
     work without preloading. See `load_and_register_kernel` in `integrations.hub_kernels`.
     """
-    global _flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn
-    if force_import or any(k is None for k in [_flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn]):
-        _flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn = _lazy_imports(implementation)
+    # We allow associating names to implementations, e.g. kernel names associated with loaded kernels
+    implementation_name = implementation if implementation_name is None else implementation_name
 
-    global _process_flash_kwargs_fn
-    if force_import or _process_flash_kwargs_fn is None:
+    global _loaded_implementation
+    if implementation_name is None and _loaded_implementation is None:
+        raise ValueError("Could not find any flash attn implementation based on your environment.")
+
+    global _flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn, _process_flash_kwargs_fn
+    if implementation_name is not None and _loaded_implementation != implementation_name:
+        _loaded_implementation = implementation_name
+
+        _flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn = _lazy_imports(implementation)
         _process_flash_kwargs_fn = _lazy_define_process_function(_flash_varlen_fn)
 
     return (_flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn), _process_flash_kwargs_fn

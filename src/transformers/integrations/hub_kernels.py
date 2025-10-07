@@ -211,8 +211,8 @@ def load_and_register_kernel(attn_implementation: str) -> None:
     if hasattr(kernel, "flash_attn_varlen_func"):
         if attention_wrapper is None:
             attention_wrapper = flash_attention_forward
-        kernel_function = partial(attention_wrapper, implementation=kernel)
-        lazy_import_flash_attention(kernel, force_import=True)
+        kernel_function = attention_wrapper
+        lazy_import_flash_attention(kernel, implementation_name=attn_implementation)
     elif kernel_name is not None:
         kernel_function = getattr(kernel, kernel_name)
     # Register the kernel as a valid attention
