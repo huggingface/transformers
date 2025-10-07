@@ -137,7 +137,7 @@ class ReformerDynamicCache:
         return self.states_cache[0].shape[1]
 
     def reorder_cache(self, beam_idx):
-        for layer_idx in len(self):
+        for layer_idx in range(len(self)):
             if self.buckets_cache[layer_idx] is not None and self.buckets_cache[layer_idx].numel() > 0:
                 device = self.buckets_cache[layer_idx].device
                 self.buckets_cache[layer_idx] = self.buckets_cache[layer_idx].index_select(0, beam_idx.to(device))

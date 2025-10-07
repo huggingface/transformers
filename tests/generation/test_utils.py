@@ -1052,7 +1052,6 @@ class GenerationTesterMixin:
 
             # 2. retrieve the KV cache and compute its default expected shapes (if no custom shapes are provided)
             past_kv = outputs["past_key_values"]
-            is_legacy_cache = not isinstance(past_kv, Cache)
 
             num_decoder_layers = decoder_config.num_hidden_layers
             if custom_all_cache_shapes is None:
@@ -1090,30 +1089,19 @@ class GenerationTesterMixin:
             # 3. Check cache shapes
             # 3.1. Encoder-Decoder checks
             if config.is_encoder_decoder:
-                num_cache_decoder_layers = len(past_kv) if is_legacy_cache else len(past_kv.self_attention_cache)
+                num_cache_decoder_layers = len(past_kv)
                 self.assertEqual(num_cache_decoder_layers, num_decoder_layers)
 
                 for i in range(num_decoder_layers):
-                    if is_legacy_cache:
-                        self.assertEqual(len(past_kv[0]), 4)  # legacy check: confirm number of elements in tuple
-
                     # Self attention
-                    self_attention_layer_keys = (
-                        past_kv[i][0] if is_legacy_cache else past_kv.self_attention_cache.layers[i].keys
-                    )
-                    self_attention_layer_values = (
-                        past_kv[i][1] if is_legacy_cache else past_kv.self_attention_cache.layers[i].values
-                    )
+                    self_attention_layer_keys = past_kv.self_attention_cache.layers[i].keys
+                    self_attention_layer_values = past_kv.self_attention_cache.layers[i].values
                     self.assertEqual(self_attention_layer_keys.shape, all_cache_shapes[i][0])
                     self.assertEqual(self_attention_layer_values.shape, all_cache_shapes[i][1])
 
                     # Cross attention (ignore 3rd dim, see default shape preparation)
-                    cross_attention_layer_keys = (
-                        past_kv[i][2] if is_legacy_cache else past_kv.cross_attention_cache.layers[i].keys
-                    )
-                    cross_attention_layer_values = (
-                        past_kv[i][3] if is_legacy_cache else past_kv.cross_attention_cache.layers[i].values
-                    )
+                    cross_attention_layer_keys = past_kv.cross_attention_cache.layers[i].keys
+                    cross_attention_layer_values = past_kv.cross_attention_cache.layers[i].values
                     cross_attention_layer_keys = cross_attention_layer_keys[:, :, 0, :]
                     cross_attention_layer_values = cross_attention_layer_values[:, :, 0, :]
                     self.assertEqual(cross_attention_layer_keys.shape, all_cache_shapes[i][2])
@@ -1129,15 +1117,8 @@ class GenerationTesterMixin:
                 )
 
                 for i in range(num_cache_decoder_layers):
-                    if is_legacy_cache:
-                        self.assertEqual(len(past_kv[0]), 2)  # legacy check: confirm number of elements in tuple
-
-                    # Self attention
-                    if is_legacy_cache:
-                        self_attention_layer_keys = past_kv[i][0]
-                        self_attention_layer_values = past_kv[i][1]
-                    elif getattr(past_kv, "layers", None) is None:
-                        # Cache is lot layered (i.e, Mamba derivatives)
+                    # Cache is lot layered (i.e, Mamba derivatives)
+                    if getattr(past_kv, "layers", None) is None:
                         self_attention_layer_keys = past_kv.key_cache[i]
                         self_attention_layer_values = past_kv.value_cache[i]
                     else:
