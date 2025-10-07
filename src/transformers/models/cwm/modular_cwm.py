@@ -186,9 +186,15 @@ class CwmConfig(LlamaConfig):
 class CwmAttention(Qwen2Attention):
     def __init__(self, config: CwmConfig, layer_idx: int):
         super().__init__(config=config, layer_idx=layer_idx)
-        self.q_proj = torch.nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
-        self.k_proj = torch.nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
-        self.v_proj = torch.nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
+        self.q_proj = torch.nn.Linear(
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.k_proj = torch.nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.v_proj = torch.nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
 
 
 class CwmDecoderLayer(LlamaDecoderLayer):
