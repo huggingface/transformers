@@ -41,8 +41,8 @@ class FlexOlmoConfig(OlmoeConfig):
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the [allenai/FlexOlmo-7x7B-1T](https://huggingface.co/allenai/FlexOlmo-7x7B-1T).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -282,7 +282,7 @@ class FlexOlmoPreTrainedModel(MixtralPreTrainedModel):
 # FlexOlmo model is identical to Mixtral model except:
 # - FlexOlmo does not use sliding window attention.
 class FlexOlmoModel(MixtralModel):
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,

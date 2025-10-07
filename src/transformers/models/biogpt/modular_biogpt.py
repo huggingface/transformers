@@ -41,7 +41,6 @@ from ...utils import (
     is_torch_flex_attn_available,
     logger,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ..bart.modeling_bart import (
     BartAttention,
     BartDecoderLayer,
@@ -97,7 +96,6 @@ class BioGptDecoderLayer(BartDecoderLayer):
         del self.encoder_attn
         del self.encoder_attn_layer_norm
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

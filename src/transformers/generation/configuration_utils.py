@@ -23,7 +23,7 @@ from dataclasses import dataclass, is_dataclass
 from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
 from .. import __version__
-from ..configuration_utils import PretrainedConfig
+from ..configuration_utils import PreTrainedConfig
 from ..utils import (
     GENERATION_CONFIG_NAME,
     ExplicitEnum,
@@ -1101,13 +1101,13 @@ class GenerationConfig(PushToHubMixin):
             writer.write(self.to_json_string(use_diff=use_diff))
 
     @classmethod
-    def from_model_config(cls, model_config: PretrainedConfig) -> "GenerationConfig":
+    def from_model_config(cls, model_config: PreTrainedConfig) -> "GenerationConfig":
         """
-        Instantiates a [`GenerationConfig`] from a [`PretrainedConfig`]. This function is useful to convert legacy
-        [`PretrainedConfig`] objects, which may contain generation parameters, into a stand-alone [`GenerationConfig`].
+        Instantiates a [`GenerationConfig`] from a [`PreTrainedConfig`]. This function is useful to convert legacy
+        [`PreTrainedConfig`] objects, which may contain generation parameters, into a stand-alone [`GenerationConfig`].
 
         Args:
-            model_config (`PretrainedConfig`):
+            model_config (`PreTrainedConfig`):
                 The model config that will be used to instantiate the generation config.
 
         Returns:

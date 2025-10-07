@@ -24,7 +24,7 @@ from packaging import version
 if TYPE_CHECKING:
     from ... import PreTrainedTokenizer
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...onnx import OnnxConfigWithPast, PatchingSpec
 from ...utils import is_torch_available, logging
 
@@ -32,15 +32,15 @@ from ...utils import is_torch_available, logging
 logger = logging.get_logger(__name__)
 
 
-class BloomConfig(PretrainedConfig):
+class BloomConfig(PreTrainedConfig):
     """
     This is the configuration class to store the configuration of a [`BloomModel`]. It is used to instantiate a Bloom
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to the Bloom architecture
     [bigscience/bloom](https://huggingface.co/bigscience/bloom).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -147,7 +147,7 @@ class BloomOnnxConfig(OnnxConfigWithPast):
 
     def __init__(
         self,
-        config: PretrainedConfig,
+        config: PreTrainedConfig,
         task: str = "default",
         patching_specs: Optional[list[PatchingSpec]] = None,
         use_past: bool = False,

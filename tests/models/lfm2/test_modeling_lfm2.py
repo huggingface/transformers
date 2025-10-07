@@ -23,12 +23,15 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     slow,
+    torch_device,
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 if is_torch_available():
+    import torch
+
     from transformers import Lfm2ForCausalLM, Lfm2Model
 
 
@@ -60,22 +63,82 @@ class Lfm2ModelTest(CausalLMModelTest, unittest.TestCase):
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = Lfm2ForCausalLM if is_torch_available() else None
 
-    @unittest.skip(
-        "Lfm2 alternates between attention and conv layers, so attention are only returned for attention layers"
-    )
     def test_attention_outputs(self):
-        pass
+        """Lfm2Moe alternates between attention and short-conv layers."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
+        seq_len = getattr(self.model_tester, "seq_length", None)
 
-    @unittest.skip("Lfm2 has a special cache format as it alternates between attention and conv layers")
+        for model_class in self.all_model_classes:
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = False
+            config.return_dict = True
+            model = model_class._from_config(config, attn_implementation="eager").to(torch_device).eval()
+            config = model.config
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.attentions
+            self.assertEqual(len(attentions), sum(layer == "full_attention" for layer in config.layer_types))
+
+            # check that output_attentions also work using config
+            del inputs_dict["output_attentions"]
+            config.output_attentions = True
+            model = model_class(config).to(torch_device).eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.attentions
+            self.assertEqual(len(attentions), sum(layer == "full_attention" for layer in config.layer_types))
+            self.assertListEqual(list(attentions[0].shape[-3:]), [config.num_attention_heads, seq_len, seq_len])
+            out_len = len(outputs)
+
+            # Check attention is always last and order is fine
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = True
+            model = model_class(config).to(torch_device).eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+                self_attentions = outputs.attentions
+
+            self.assertEqual(out_len + 1, len(outputs))
+            self.assertEqual(len(self_attentions), sum(layer == "full_attention" for layer in config.layer_types))
+            self.assertListEqual(list(self_attentions[0].shape[-3:]), [config.num_attention_heads, seq_len, seq_len])
+
+    @pytest.mark.generate
     def test_past_key_values_format(self):
-        pass
+        """Lfm2Moe has a special cache format as it alternates between attention and conv layers"""
+        for model_class in self.all_generative_model_classes:
+            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
 
-    @unittest.skip(
-        "Lfm2 has a special cache format which is not compatible with compile as it has static address for conv cache"
-    )
-    @pytest.mark.torch_compile_test
-    def test_sdpa_can_compile_dynamic(self):
-        pass
+            model = model_class(config).to(torch_device).eval()
+            if "use_cache" not in inputs:
+                inputs["use_cache"] = True
+            outputs = model(**inputs)
+
+            past_kv = outputs["past_key_values"]
+
+            num_query_attention_heads = config.num_attention_heads
+            embed_dim = config.hidden_size
+            per_head_embed_dim = embed_dim // num_query_attention_heads
+            num_key_value_heads = getattr(config, "num_key_value_heads", num_query_attention_heads)
+
+            batch_size, seq_length = inputs["input_ids"].shape[:2]
+            default_self_attention_shape = (batch_size, num_key_value_heads, seq_length, per_head_embed_dim)
+            default_conv_shape = (batch_size, config.hidden_size, config.conv_L_cache)
+
+            num_cache_decoder_layers = len(past_kv)
+            self.assertEqual(num_cache_decoder_layers, config.num_hidden_layers)
+
+            for i in range(config.num_hidden_layers):
+                if config.layer_types[i] == "full_attention":
+                    self_attention_layer_keys = past_kv.key_cache[i]
+                    self_attention_layer_values = past_kv.value_cache[i]
+                    self.assertEqual(self_attention_layer_keys.shape, default_self_attention_shape)
+                    self.assertEqual(self_attention_layer_values.shape, default_self_attention_shape)
+                else:
+                    conv_layer = past_kv.conv_cache[i]
+                    self.assertEqual(conv_layer.shape, default_conv_shape)
 
 
 @require_torch_accelerator

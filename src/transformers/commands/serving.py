@@ -489,19 +489,6 @@ class ServeCommand(BaseTransformersCLICommand):
         # Store and process input arguments
         self.args = args
         self.use_continuous_batching = self.args.continuous_batching
-        if self.use_continuous_batching:
-            default_attn_impl = ContinuousBatchingManager.default_attention_implementation()
-            # checking if attn_implementation is supported by continuous batching
-            if self.args.attn_implementation is None:
-                self.args.attn_implementation = default_attn_impl  # default to sdpa_paged
-                logger.info(f"No attn_implementation passed, defaulting to {default_attn_impl}")
-            supported_attn_impl = ContinuousBatchingManager.supported_attention_implementations()
-            if self.args.attn_implementation not in supported_attn_impl:
-                raise ValueError(
-                    f"Continuous batching only supports {supported_attn_impl} as attn_implementation, got "
-                    f"{self.args.attn_implementation}"
-                    f"Try setting `--attn_implementation={default_attn_impl}`"
-                )
         self.enable_cors = self.args.enable_cors
 
         if self.args.default_seed is not None:
@@ -724,6 +711,11 @@ class ServeCommand(BaseTransformersCLICommand):
         @app.post("/v1/responses")
         def responses(request: dict):
             self.validate_response_request(request=request)
+            # Support non-streaming mode when `stream=false` is provided
+            stream = request.get("stream", True)
+            if not stream:
+                response_obj = self.generate_response_non_streaming(request)
+                return JSONResponse(response_obj)
 
             output = self.generate_response(request)
             return StreamingResponse(output, media_type="text/event-stream")
@@ -1194,7 +1186,7 @@ class ServeCommand(BaseTransformersCLICommand):
             inputs = [{"role": "system", "content": req["instructions"]}] if "instructions" in req else []
             inputs.append(req["input"])
         else:
-            raise ValueError("inputs should be a list, dict, or str")
+            raise TypeError("inputs should be a list, dict, or str")
 
         inputs = processor.apply_chat_template(inputs, add_generation_prompt=True, return_tensors="pt")
         inputs = inputs.to(model.device)
@@ -1334,19 +1326,31 @@ class ServeCommand(BaseTransformersCLICommand):
                             results = ""  # reset the results -> results will now track the final response
                             continue
                         else:
-                            continue
-
-                    response_output_text_delta = ResponseTextDeltaEvent(
-                        type="response.output_text.delta",
-                        item_id=f"msg_{request_id}",
-                        sequence_number=sequence_number,
-                        output_index=output_index,
-                        content_index=content_index,
-                        delta=result,
-                        logprobs=[{"token": "", "logprob": 99.9}],  # TODO: add actual logprobs
-                    )
-                    sequence_number += 1
-                    yield self.build_response_event(response_output_text_delta)
+                            response_output_text_delta = ResponseTextDeltaEvent(
+                                type="response.output_text.delta",
+                                item_id=f"msg_{request_id}",
+                                sequence_number=sequence_number,
+                                output_index=output_index,
+                                content_index=content_index,
+                                delta=result,
+                                logprobs=[],
+                            )
+                            sequence_number += 1
+                            yield self.build_response_event(response_output_text_delta)
+                    else:
+                        # Normal path: emit token deltas when not filtering CoT
+                        if result:
+                            response_output_text_delta = ResponseTextDeltaEvent(
+                                type="response.output_text.delta",
+                                item_id=f"msg_{request_id}",
+                                sequence_number=sequence_number,
+                                output_index=output_index,
+                                content_index=content_index,
+                                delta=result,
+                                logprobs=[],
+                            )
+                            sequence_number += 1
+                            yield self.build_response_event(response_output_text_delta)
 
                 # Signal the end of the text generation
                 response_output_text_done = ResponseTextDoneEvent(
@@ -1356,7 +1360,7 @@ class ServeCommand(BaseTransformersCLICommand):
                     output_index=output_index,
                     content_index=0,
                     text=results,
-                    logprobs=[{"token": "", "logprob": 99.9}],  # TODO: add actual logprobs
+                    logprobs=[],
                 )
                 sequence_number += 1
                 yield self.build_response_event(response_output_text_done)
@@ -1454,6 +1458,94 @@ class ServeCommand(BaseTransformersCLICommand):
                 thread.join()
 
         return stream_response(generation_streamer, request_id)
+
+    def generate_response_non_streaming(self, req: dict) -> dict:
+        """
+        Generates an OpenAI Response in non-streaming mode (single JSON payload).
+
+        Args:
+            req (`dict`): The request to generate an OpenAI Response for.
+
+        Returns:
+            `dict`: The OpenAI `Response` serialized as a dict.
+        """
+        model_id_and_revision = self.process_model_name(req["model"])
+        must_discard_cache = model_id_and_revision != self.last_model
+        self.last_model = model_id_and_revision
+        model, processor = self.load_model_and_processor(model_id_and_revision)
+
+        if isinstance(req["input"], str):
+            inputs = [{"role": "system", "content": req["instructions"]}] if "instructions" in req else []
+            inputs.append({"role": "user", "content": req["input"]})
+        elif isinstance(req["input"], list):
+            if "instructions" in req:
+                if req["input"][0]["role"] != "system":
+                    inputs = [{"role": "system", "content": req["instructions"]}, *req["input"]]
+                else:
+                    inputs = req["input"]
+                    inputs[0]["content"] = req["instructions"]
+            else:
+                inputs = req["input"]
+        elif isinstance(req["input"], dict):
+            inputs = [{"role": "system", "content": req["instructions"]}] if "instructions" in req else []
+            inputs.append(req["input"])
+        else:
+            raise ValueError("inputs should be a list, dict, or str")
+
+        inputs = processor.apply_chat_template(inputs, add_generation_prompt=True, return_tensors="pt")
+        inputs = inputs.to(model.device)
+        request_id = req.get("previous_response_id", "req_0")
+
+        # Temporary hack for GPTOSS 1: don't filter special tokens
+        skip_special_tokens = True
+        if "gptoss" in model.config.architectures[0].lower():
+            skip_special_tokens = False
+
+        generation_config = create_generation_config_from_req(req, model_generation_config=model.generation_config)
+
+        last_kv_cache = None
+        if self.is_continuation(req) and not must_discard_cache:
+            seq_len = self.last_kv_cache.get_seq_length()
+            if inputs.shape[-1] > seq_len:
+                last_kv_cache = self.last_kv_cache
+
+        generate_output = model.generate(
+            inputs=inputs,
+            attention_mask=torch.ones_like(inputs),
+            generation_config=generation_config,
+            return_dict_in_generate=True,
+            past_key_values=last_kv_cache,
+        )
+        # save KV cache
+        self.last_kv_cache = generate_output.past_key_values
+
+        # Decode full text
+        full_text = processor.batch_decode(generate_output.sequences, skip_special_tokens=skip_special_tokens)[0]
+
+        created_at = time.time()
+        response_output_item = ResponseOutputMessage(
+            id=f"msg_{request_id}",
+            type="message",
+            status="completed",
+            role="assistant",
+            content=[ResponseOutputText(type="output_text", text=full_text, annotations=[])],
+            annotations=[],
+        )
+        response_completed = Response(
+            id=f"resp_{request_id}",
+            created_at=created_at,
+            status="completed",
+            model=model_id_and_revision,
+            instructions=req.get("instructions"),
+            text={"format": {"type": "text"}},
+            output=[response_output_item],
+            object="response",
+            tools=[],
+            parallel_tool_calls=req.get("parallel_tool_calls", False),
+            tool_choice="auto",
+            metadata=req.get("metadata"),
+        )
+        return response_completed.model_dump(exclude_none=True)
 
     def generate_transcription(self, req: dict) -> Generator[str, None, None]:
         """

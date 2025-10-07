@@ -59,7 +59,7 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 _import_structure = {
     "audio_utils": [],
     "commands": [],
-    "configuration_utils": ["PretrainedConfig"],
+    "configuration_utils": ["PreTrainedConfig", "PretrainedConfig"],
     "convert_slow_tokenizers_checkpoints_to_fast": [],
     "data": [
         "DataProcessor",
@@ -225,7 +225,6 @@ _import_structure = {
         "is_py3nvml_available",
         "is_pyctcdecode_available",
         "is_sacremoses_available",
-        "is_safetensors_available",
         "is_scipy_available",
         "is_sentencepiece_available",
         "is_sklearn_available",
@@ -266,6 +265,7 @@ _import_structure = {
         "VptqConfig",
     ],
     "video_utils": [],
+    "utils.kernel_config": ["KernelConfig"],
 }
 
 # tokenizers-backed objects
@@ -492,6 +492,7 @@ if TYPE_CHECKING:
     from .cache_utils import StaticCache as StaticCache
     from .cache_utils import StaticLayer as StaticLayer
     from .cache_utils import StaticSlidingWindowLayer as StaticSlidingWindowLayer
+    from .configuration_utils import PreTrainedConfig as PreTrainedConfig
     from .configuration_utils import PretrainedConfig as PretrainedConfig
     from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS as SLOW_TO_FAST_CONVERTERS
     from .convert_slow_tokenizer import convert_slow_tokenizer as convert_slow_tokenizer
@@ -746,7 +747,6 @@ if TYPE_CHECKING:
     from .utils import is_py3nvml_available as is_py3nvml_available
     from .utils import is_pyctcdecode_available as is_pyctcdecode_available
     from .utils import is_sacremoses_available as is_sacremoses_available
-    from .utils import is_safetensors_available as is_safetensors_available
     from .utils import is_sklearn_available as is_sklearn_available
     from .utils import is_torch_hpu_available as is_torch_hpu_available
     from .utils import is_torch_mlu_available as is_torch_mlu_available
@@ -755,6 +755,7 @@ if TYPE_CHECKING:
     from .utils import is_torch_npu_available as is_torch_npu_available
     from .utils import is_torch_xla_available as is_torch_xla_available
     from .utils import is_torch_xpu_available as is_torch_xpu_available
+    from .utils.kernel_config import KernelConfig as KernelConfig
 
     # bitsandbytes config
     from .utils.quantization_config import AqlmConfig as AqlmConfig
@@ -776,10 +777,6 @@ if TYPE_CHECKING:
     from .utils.quantization_config import TorchAoConfig as TorchAoConfig
     from .utils.quantization_config import VptqConfig as VptqConfig
     from .video_processing_utils import BaseVideoProcessor as BaseVideoProcessor
-    from .models.deimv2.configuration_deimv2 import Deimv2Config
-    from .models.deimv2.image_processing_deimv2 import Deimv2ImageProcessor
-    from .models.deimv2.modeling_deimv2 import Deimv2ForObjectDetection
-
 else:
     import sys
 
