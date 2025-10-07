@@ -35,6 +35,7 @@ if is_torch_available():
     import torch
 
     from transformers import Lfm2MoeConfig, Lfm2MoeForCausalLM, Lfm2MoeModel
+    from transformers.models.lfm2_moe.modeling_lfm2_moe import Lfm2MoeHybridConvCache
 
 
 class Lfm2MoeModelTester(CausalLMModelTester):
@@ -69,6 +70,38 @@ class Lfm2MoeModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Lfm2MoeModelTester
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = Lfm2MoeForCausalLM if is_torch_available() else None
+
+    def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
+        self.assertIsInstance(decoder_past_key_values, Lfm2MoeHybridConvCache)
+
+        # (batch, head, seq_length, head_features)
+        attention_shape = (
+            batch_size,
+            config.num_key_value_heads if hasattr(config, "num_key_value_heads") else config.num_attention_heads,
+            cache_length,
+            config.hidden_size // config.num_attention_heads,
+        )
+        conv_shape = (batch_size, config.hidden_size, config.conv_L_cache)
+
+        for i in range(config.num_hidden_layers):
+            if config.layer_types[i] == "full_attention":
+                self.assertEqual(decoder_past_key_values.key_cache[i].shape, attention_shape)
+                self.assertEqual(decoder_past_key_values.value_cache[i].shape, attention_shape)
+            else:
+                self.assertEqual(decoder_past_key_values.conv_cache[i], conv_shape)
+
+    def _check_caches_are_similar(self, cache1: Lfm2MoeHybridConvCache, cache2: Lfm2MoeHybridConvCache):
+        if not isinstance(cache1, Lfm2MoeHybridConvCache) or not isinstance(cache2, Lfm2MoeHybridConvCache):
+            raise ValueError("The wrong cache is being used!")
+
+        if not len(cache1) == len(cache2):
+            raise ValueError("Both caches do not have the same number of layers.")
+
+        num_layers = len(cache1)
+        for idx in range(num_layers):
+            torch.testing.assert_close(cache1.key_cache[idx], cache2.key_cache[idx])
+            torch.testing.assert_close(cache1.value_cache[idx], cache2.value_cache[idx])
+            torch.testing.assert_close(cache1.conv_cache[idx], cache2.conv_cache[idx])
 
     def test_attention_outputs(self):
         """Lfm2Moe alternates between attention and short-conv layers."""
