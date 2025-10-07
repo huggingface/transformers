@@ -604,7 +604,7 @@ class Lfm2MoeDecoderLayer(GradientCheckpointingLayer):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[torch.Tensor]] = None,
+        past_key_values: Optional[Lfm2MoeHybridConvCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> torch.Tensor:
@@ -626,13 +626,8 @@ class Lfm2MoeDecoderLayer(GradientCheckpointingLayer):
                 cache_position=cache_position,
                 attention_mask=attention_mask,
             )
-
         hidden_states = hidden_states + residual
-        ff_out = self.feed_forward(self.ffn_norm(hidden_states))
-        if isinstance(ff_out, tuple):
-            ff_out, _ = ff_out
-
-        hidden_states = hidden_states + ff_out
+        hidden_states = hidden_states + self.feed_forward(self.ffn_norm(hidden_states))
 
         return hidden_states
 
