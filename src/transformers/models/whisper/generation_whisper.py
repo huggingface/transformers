@@ -1228,11 +1228,11 @@ class WhisperGenerationMixin(GenerationMixin):
                             torch.stack(
                                 [
                                     getattr(getattr(sub_output[key], sub_cache).layers[layer_idx], sub_key)
-                                    .squeeze(1)
-                                    .to(device)
                                     for sub_output in seek_outputs
                                 ]
                             )
+                            .squeeze(1)
+                            .to(device)
                             for sub_cache in ["self_attention_cache", "cross_attention_cache"]
                             for sub_key in ["keys", "values"]
                         )
