@@ -2563,8 +2563,8 @@ class GenerationTesterMixin:
 
         num_layers = len(cache1)
         for idx in range(num_layers):
-            torch.testing.assert_close(cache1[idx].keys, cache2[idx].keys)
-            torch.testing.assert_close(cache1[idx].values, cache2[idx].values)
+            torch.testing.assert_close(cache1.layers[idx].keys, cache2.layers[idx].keys)
+            torch.testing.assert_close(cache1.layers[idx].values, cache2.layers[idx].values)
 
 
 @require_torch
