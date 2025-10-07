@@ -123,7 +123,8 @@ def convert_fastvlm_to_hf(text_model_id, vision_model_id, output_hub_path, old_s
     vision_config = AutoConfig.from_pretrained(vision_model_id)
     vision_config.model_args = {"inference_mode": True}
     vision_config.hidden_size = vision_config.num_features
-
+    vision_config.label2id = {}
+    vision_config.id2label = {}
     config = FastVlmConfig(
         text_config=text_config,
         vision_config=vision_config,
@@ -133,7 +134,11 @@ def convert_fastvlm_to_hf(text_model_id, vision_model_id, output_hub_path, old_s
     config.image_token_index = 151646
     config.image_seq_length = 256
 
-    tokenizer = AutoTokenizer.from_pretrained(text_model_id)
+    tokenizer = AutoTokenizer.from_pretrained(
+        text_model_id,
+        chat_template="{% for message in messages %}{% if loop.first and messages[0]['role'] != 'system' %}{{ '<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n' }}{% endif %}{{'<|im_start|>' + message['role'] + '\n'}}{# Render all images first #}{% for content in message['content'] | selectattr('type', 'equalto', 'image') %}{{ '<image>' }}{% endfor %}{# Render all text next #}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{{ '\n' + content['text'] }}{% endfor %}{{'<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}"
+    )
+
     tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
     image_processor = CLIPImageProcessor(crop_size={"height": 1024,
                                                     "width": 1024},
@@ -172,11 +177,13 @@ def convert_fastvlm_to_hf(text_model_id, vision_model_id, output_hub_path, old_s
     conversation = [
         {
         "role": "user",
-        "content": "<image>\nWhat are these?"
+        "content": [
+            {"type": "text", "text": "What are these?"},
+            {"type": "image"}
+            ]
         }
     ]
     prompt = tokenizer.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
-    prompt = prompt.replace("assistant<", "assistant.<") # to make it aligned with the prompt from the old Apple remote code
 
     image_file = "http://images.cocodataset.org/val2017/000000039769.jpg"
     raw_image = Image.open(requests.get(image_file, stream=True).raw)
@@ -188,14 +195,16 @@ def convert_fastvlm_to_hf(text_model_id, vision_model_id, output_hub_path, old_s
     with torch.no_grad():
         logits = model(**inputs).logits
 
-    expected_shape = torch.Size([1, 280, 152128])
     # in order to get the same logits as in the Apple repo, we need to manually replace the original (Apple) LayerNorm2D with Timm's LayerNorm2D or vice versa
     # otherwise numerical errors accumulate
     if output_hub_path == "KamilaMila/FastVLM-0.5B":
+        expected_shape = torch.Size([1, 280, 152000])
         expected_slice = torch.tensor([ 4.1250,  9.6875, 11.1875], device="cuda")
     elif output_hub_path == "KamilaMila/FastVLM-1.5B":
+        expected_shape = torch.Size([1, 280, 152000])
         expected_slice = torch.tensor([ 3.3750, 11.5000, 11.8125], device="cuda")
     elif output_hub_path == "KamilaMila/FastVLM-7B":
+        expected_shape = torch.Size([1, 280, 152000])
         expected_slice = torch.tensor([3.8125, 9.0625, 7.9062], device="cuda")
 
     logits_slice = logits[0, -1, :3]
@@ -213,7 +222,7 @@ def main():
 
     parser.add_argument(
         "--text_model_id",
-        default="Qwen/Qwen2-7B",
+        default="Qwen/Qwen2-1.5B",
         help="Hub location of the text model",
     )
     parser.add_argument(
@@ -223,12 +232,12 @@ def main():
     )
     parser.add_argument(
         "--output_hub_path",
-        default="KamilaMila/FastVLM-7B",
+        default="KamilaMila/FastVLM-1.5B",
         help="Location on the hub of the converted model",
     )
     parser.add_argument(
         "--old_state_dict_id",
-        default="apple/FastVLM-7B",
+        default="apple/FastVLM-1.5B",
         help="Location on the hub of the raw state dict of the original model.",
     )
     args = parser.parse_args()
