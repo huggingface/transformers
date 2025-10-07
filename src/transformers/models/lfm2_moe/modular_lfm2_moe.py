@@ -70,12 +70,8 @@ class Lfm2MoeMLP(Lfm2MLP):
         self.w2 = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
 
 
-class Lfm2MoeExperts(Qwen2MoeExperts, nn.ModuleList):
-    def __init__(self, config):
-        nn.ModuleList.__init__(self)
-        self.num_experts = config.num_experts
-        for _ in range(config.num_experts):
-            self.append(Lfm2MoeMLP(config, intermediate_size=config.moe_intermediate_size))
+class Lfm2MoeExperts(Qwen2MoeExperts):
+    pass
 
 
 class Lfm2MoeSparseMoeBlock(nn.Module):
