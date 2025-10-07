@@ -153,10 +153,10 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             return True
         module, name = get_module_from_name(model, param_name)
         return isinstance(module, bnb.nn.Linear4bit) and name != "bias"
-    
+
     def update_param_name(self, param_name: str) -> str:
         """
-        Update param_name in order to get the module associated with the param. 
+        Update param_name in order to get the module associated with the param.
         This is useful for quantized stats lile absmax or quant_map as we need to update the param_name to get the module as they are stored in ...weight.absmax.
         """
         if self.pre_quantized:
