@@ -32,7 +32,7 @@ from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, standardize_rope_params
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update, standardize_rope_params
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
@@ -42,23 +42,27 @@ from .configuration_phimoe import PhimoeConfig
 
 
 class PhimoeRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: PhimoeConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
+
         standardize_rope_params(config)
         self.config = config
 
         self.rope_type = self.config.rope_parameters["rope_type"]
-        rope_init_fn: Callable = self.compute_default_rope_parameters
+        self.rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
-            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+            self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
 
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
-        self.short_mscale = config.rope_parameters.get("short_mscale", None)  # Diff with Llama
-        self.long_mscale = config.rope_parameters.get("long_mscale", None)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = inv_freq
+        self.rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -76,15 +80,21 @@ class PhimoeRotaryEmbedding(nn.Module):
                 The device to use for initialization of the inverse frequencies.
             seq_len (`int`, *optional*):
                 The current sequence length. Unused for this type of RoPE.
+            layer_type (`str`, *optional*):
+                The current layer type if the model has different RoPE parameters per type.
+                Should not be used unless `config.layer_types is not None`
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
         standardize_rope_params(config)
-        rope_parameters_dict = config.rope_parameters[layer_type] if layer_type is not None else config.rope_parameters
 
-        base = rope_parameters_dict["rope_theta"]
+        base = (
+            config.rope_parameters[layer_type]["rope_theta"]
+            if layer_type is not None
+            else config.rope_parameters["rope_theta"]
+        )
         partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
         head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         dim = int(head_dim * partial_rotary_factor)
@@ -97,6 +107,8 @@ class PhimoeRotaryEmbedding(nn.Module):
         )
         return inv_freq, attention_factor
 
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids=None, layer_type=None):
         if layer_type is not None:
             raise ValueError(
@@ -105,10 +117,10 @@ class PhimoeRotaryEmbedding(nn.Module):
 
         mscale = None
         seq_len = torch.max(position_ids) + 1
-        if self.config.rope_scaling and seq_len:
+        if self.config.rope_parameters["rope_type"] != "default" and seq_len:
             mscale = (
                 self.long_mscale
-                if seq_len > self.config.rope_scaling["original_max_position_embeddings"]
+                if seq_len > self.config.rope_parameters["original_max_position_embeddings"]
                 else self.short_mscale
             )
         inv_freq, attention_scaling = self.rope_init_fn(self.config, x.device, seq_len)
@@ -227,8 +239,8 @@ class PhimoeAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -605,7 +617,7 @@ class PhimoeDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -709,19 +721,17 @@ class PhimoeModel(PhimoePreTrainedModel):
         )
 
         hidden_states = inputs_embeds
-
-        # create position embeddings to be shared across the decoder layers
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = decoder_layer(
                 hidden_states,
-                position_embeddings=position_embeddings,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
+                position_embeddings=position_embeddings,
                 **kwargs,
             )
 
@@ -871,6 +881,7 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
+
         output_router_logits = (
             output_router_logits if output_router_logits is not None else self.config.output_router_logits
         )
@@ -938,7 +949,7 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
         # It will cause downside of slower at this single token position, however, better than current failure.
         if (
             past_key_values
-            and hasattr(self.config, "original_max_position_embeddings")
+            and self.config.rope_parameters["rope_type"] != "default"
             and input_ids.shape[1] >= self.config.original_max_position_embeddings + 1
         ):
             past_length = cache_position[0]

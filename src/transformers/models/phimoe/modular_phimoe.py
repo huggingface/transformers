@@ -15,7 +15,7 @@
 
 """PyTorch Phimoe model."""
 
-from typing import Callable, Optional
+from typing import Callable
 
 import torch
 from torch import nn
@@ -33,65 +33,28 @@ from ..mixtral.modeling_mixtral import (
     MixtralMLP,
     MixtralModel,
     MixtralPreTrainedModel,
+    MixtralRotaryEmbedding,
 )
 from .configuration_phimoe import PhimoeConfig
 
 
-class PhimoeRotaryEmbedding(nn.Module):
+class PhimoeRotaryEmbedding(MixtralRotaryEmbedding):
     def __init__(self, config: PhimoeConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
+
         standardize_rope_params(config)
         self.config = config
 
         self.rope_type = self.config.rope_parameters["rope_type"]
-        rope_init_fn: Callable = self.compute_default_rope_parameters
+        self.rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
-            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+            self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
 
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
-        self.short_mscale = config.rope_parameters.get("short_mscale", None)  # Diff with Llama
-        self.long_mscale = config.rope_parameters.get("long_mscale", None)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = inv_freq
-
-    @staticmethod
-    def compute_default_rope_parameters(
-        config: Optional[PhimoeConfig] = None,
-        device: Optional["torch.device"] = None,
-        seq_len: Optional[int] = None,
-        layer_type: Optional[str] = None,
-    ) -> tuple["torch.Tensor", float]:
-        """
-        Computes the inverse frequencies according to the original RoPE implementation
-        Args:
-            config ([`~transformers.PreTrainedConfig`]):
-                The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
-        Returns:
-            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
-            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
-        """
-        # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
-        standardize_rope_params(config)
-        rope_parameters_dict = config.rope_parameters[layer_type] if layer_type is not None else config.rope_parameters
-
-        base = rope_parameters_dict["rope_theta"]
-        partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
-        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-        dim = int(head_dim * partial_rotary_factor)
-
-        attention_factor = 1.0  # Unused in this type of RoPE
-
-        # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
 
     def forward(self, x, position_ids=None, layer_type=None):
         if layer_type is not None:
@@ -101,10 +64,10 @@ class PhimoeRotaryEmbedding(nn.Module):
 
         mscale = None
         seq_len = torch.max(position_ids) + 1
-        if self.config.rope_scaling and seq_len:
+        if self.config.rope_parameters["rope_type"] != "default" and seq_len:
             mscale = (
                 self.long_mscale
-                if seq_len > self.config.rope_scaling["original_max_position_embeddings"]
+                if seq_len > self.config.rope_parameters["original_max_position_embeddings"]
                 else self.short_mscale
             )
         inv_freq, attention_scaling = self.rope_init_fn(self.config, x.device, seq_len)
@@ -429,7 +392,7 @@ class PhimoeForCausalLM(MixtralForCausalLM):
         # It will cause downside of slower at this single token position, however, better than current failure.
         if (
             past_key_values
-            and self.config.rope_scaling
+            and self.config.rope_parameters["rope_type"] != "default"
             and input_ids.shape[1] >= self.config.original_max_position_embeddings + 1
         ):
             past_length = cache_position[0]

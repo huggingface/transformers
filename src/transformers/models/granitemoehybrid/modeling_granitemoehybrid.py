@@ -1283,6 +1283,9 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
 
+        if position_ids is None:
+            position_ids = cache_position.unsqueeze(0)
+
         causal_mask = create_causal_mask(
             self.config,
             inputs_embeds,
@@ -1294,7 +1297,7 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
 
         # embed positions
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids, layer_type="attention")
 
         for decoder_layer in self.layers:
             # Depending on the layer type we opt for 2D base attention mask (Mamba) or 4D causal mask (Attention)
