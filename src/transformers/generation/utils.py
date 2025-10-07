@@ -2000,11 +2000,11 @@ class GenerationMixin(ContinuousMixin):
         # to correctly pass parameterization to both caches.
         if (
             requires_cross_attention_cache
-            and cache_name in model_kwargs
-            and not isinstance(model_kwargs[cache_name], EncoderDecoderCache)
+            and "past_key_values" in model_kwargs
+            and not isinstance(model_kwargs["past_key_values"], EncoderDecoderCache)
         ):
-            model_kwargs[cache_name] = EncoderDecoderCache(
-                model_kwargs[cache_name],  # self-attention cache
+            model_kwargs["past_key_values"] = EncoderDecoderCache(
+                model_kwargs["past_key_values"],  # self-attention cache
                 DynamicCache(**dynamic_cache_kwargs),  # cross-attention cache
             )
 

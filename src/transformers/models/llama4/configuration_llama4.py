@@ -123,8 +123,6 @@ class Llama4VisionConfig(PreTrainedConfig):
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.rope_theta = rope_theta
 
-        self._vision_feature_layer = kwargs.get("vision_feature_layer", -1)
-
         super().__init__(**kwargs)
 
 
