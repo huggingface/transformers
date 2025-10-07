@@ -185,11 +185,10 @@ if __name__ == "__main__":
 
     parser.add_argument("--attn", type=str, default="kernels-community/flash-attn", help="Attention implementation")
     parser.add_argument("--matmul-precision", "-mp", type=str, default="high")  # set to "none" to disable
-    parser.add_argument("--no-slice-inputs", action="store_true")  # slicing is enabled by default because much faster
-    parser.add_argument("--use-cuda-graph", "-cg", action="store_true")
-    parser.add_argument("--compile", action="store_true")
+    parser.add_argument("--cuda-graph", "-cg", help="Use cuda graphs", default=None)
+    parser.add_argument("--compile", action="store_true", help="Compile the model using torch.compile")
 
-    parser.add_argument("--samples", type=int, default=500)
+    parser.add_argument("--samples", type=int, default=500, help="Number of samples to generate")
     parser.add_argument("--displayed", type=int, default=0, help="Number of samples to display")
     parser.add_argument("--log-level", type=str, default="INFO")
     parser.add_argument("--output-file", type=str, default=None)
@@ -235,7 +234,7 @@ if __name__ == "__main__":
     # Prepare generation config
     generation_config = GenerationConfig(
         max_new_tokens=512,
-        use_cuda_graph=args.use_cuda_graph,
+        use_cuda_graph=(None if args.cuda_graph is None else bool(args.cuda_graph)),
         eos_token_id=tokenizer.pad_token_id if FORCE_MAX_LENGTH else tokenizer.eos_token_id,
         pad_token_id=tokenizer.pad_token_id,
         do_sample=True,

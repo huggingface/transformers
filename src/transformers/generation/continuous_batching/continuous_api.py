@@ -50,6 +50,10 @@ def pad_by_intervals(size: int, max_value: int, intervals: int) -> int:
     return max_value
 
 
+def attn_mask_is_needed(config: PretrainedConfig) -> bool:
+    return config._attn_implementation in ["paged|eager", "paged|sdpa"]
+
+
 def build_attention_mask(
     attention_mask: torch.Tensor,
     cumulative_seqlens_q: torch.Tensor,
@@ -234,7 +238,7 @@ class ContinuousBatchProcessor:
         }
         self.max_seqlen_k = dict.fromkeys(layer_types, 0)
 
-        if self.return_attention_mask():
+        if attn_mask_is_needed(self.config):
             attn_mask_kwargs = {
                 "size": (1, 1, self.max_batch_tokens, num_pages + self.max_batch_tokens),
                 "dtype": self.model_dtype,
@@ -255,12 +259,6 @@ class ContinuousBatchProcessor:
 
         # After allocating empty tensors, we reset them to the right value
         self.reset_static_tensors(full_reset=True)
-
-    def return_attention_mask(self) -> bool:
-        return self.config._attn_implementation in [
-            "paged|eager",
-            "paged|sdpa",
-        ]  # we set `is_causal` to True in paged call
 
     @traced
     @torch.no_grad()
@@ -327,14 +325,14 @@ class ContinuousBatchProcessor:
                 kwargs["cu_seq_lens_k"][layer_type] = seqlens_k[: b_size + 1]
                 kwargs["max_seqlen_k"][layer_type] = self.max_seqlen_k[layer_type]
                 if self.attention_mask is not None:
-                    k_len = seqlens_k[b_size]
+                    k_len = read_index_padded_size + queries_size if PADDING else seqlens_k[b_size]
                     kwargs["attention_mask"][layer_type] = self.attention_mask[layer_type][..., :q_len, :k_len]
         else:
             layer_type = layer_types[0]
             kwargs["cu_seq_lens_k"] = self.cumulative_seqlens_k[layer_type][: b_size + 1]
             kwargs["max_seqlen_k"] = self.max_seqlen_k[layer_type]
             if self.attention_mask is not None:
-                k_len = self.cumulative_seqlens_k[layer_type][b_size]
+                k_len = read_index_padded_size + queries_size if PADDING else self.cumulative_seqlens_k[layer_type][b_size]
                 kwargs["attention_mask"] = self.attention_mask[layer_type][..., :q_len, :k_len]
 
         if self.attention_mask is None:
@@ -721,13 +719,18 @@ class ContinuousBatchingManager:
         self.model.generation_config.top_p = None
         self.do_sample = getattr(generation_config, "do_sample", True)
         self.logit_processor = self.model._get_logits_processor(generation_config)
-        self.use_cuda_graph = getattr(generation_config, "use_cuda_graph", False)  # TODO: same as do_sample
+        use_cuda_graph: Optional[bool] = getattr(generation_config, "use_cuda_graph", None)
         self.profile = getattr(generation_config, "profile", False)  # TODO: not supported yet
         self.manual_eviction = manual_eviction
         self.batch_processor: Optional[ContinuousBatchProcessor] = None
 
-        if self.use_cuda_graph:
-            raise NotImplementedError("Cuda graphs are not supported yet")
+        # If the use of cuda graphs is specified, we follow the user's choice, otherwise we have a default heuristic
+        if use_cuda_graph is None:
+            # Attention implementations where an attention mask is needed suffer a lot more from the padding associated
+            # with cuda graphs, so default is to turn cuda graphs off for those implementations
+            use_cuda_graph = not attn_mask_is_needed(self.model.config)
+        self.use_cuda_graph = use_cuda_graph
+
         if self.log_prob_generation:
             raise NotImplementedError("log_prob_generation is not supported yet")
 
