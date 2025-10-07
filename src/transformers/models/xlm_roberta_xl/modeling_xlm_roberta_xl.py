@@ -32,7 +32,7 @@ import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN, gelu
-from ...cache_utils import Cache, EncoderDecoderCache
+from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_attention_mask_for_sdpa
@@ -666,6 +666,14 @@ class XLMRobertaXLModel(XLMRobertaXLPreTrainedModel):
         else:
             device = inputs_embeds.device
             input_shape = inputs_embeds.shape[:-1]
+
+        # initialize `past_key_values`
+        if use_cache and past_key_values is None:
+            past_key_values = (
+                EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+                if encoder_hidden_states is not None
+                else DynamicCache(config=self.config)
+            )
 
         seq_length = input_shape[1]
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
