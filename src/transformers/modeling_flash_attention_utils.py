@@ -93,8 +93,11 @@ def _lazy_imports(implementation: Optional[str]):
             from flash_attn_interface import flash_attn_func, flash_attn_varlen_func
         # Kernels fallback
         else:
-            flash_attn_func = getattr(implementation, "flash_attn_func", None)
-            flash_attn_varlen_func = getattr(implementation, "flash_attn_varlen_func", None)
+            from .integrations.hub_kernels import load_and_register_kernel
+
+            kernel = load_and_register_kernel(implementation)
+            flash_attn_func = getattr(kernel, "flash_attn_func", None)
+            flash_attn_varlen_func = getattr(kernel, "flash_attn_varlen_func", None)
             if flash_attn_varlen_func is None or flash_attn_func is None:
                 raise ValueError(
                     f"Could not find the currently requested flash attention implementation at `{implementation}`."
@@ -125,23 +128,20 @@ def _lazy_define_process_function(flash_function):
     return partial(_process_flash_attention_kwargs, supports_mapping=supports_mapping)
 
 
-def lazy_import_flash_attention(implementation, implementation_name: Optional[str] = None):
+def lazy_import_flash_attention(implementation: Optional[str]):
     """
     Lazily import flash attention and return the respective functions + flags.
 
     NOTE: For fullgraph, this needs to be called before compile, while no fullgraph can
     work without preloading. See `load_and_register_kernel` in `integrations.hub_kernels`.
     """
-    # We allow associating names to implementations, e.g. kernel names associated with loaded kernels
-    implementation_name = implementation if implementation_name is None else implementation_name
-
     global _loaded_implementation
-    if implementation_name is None and _loaded_implementation is None:
+    if implementation is None and _loaded_implementation is None:
         raise ValueError("Could not find any flash attn implementation based on your environment.")
 
     global _flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn, _process_flash_kwargs_fn
-    if implementation_name is not None and _loaded_implementation != implementation_name:
-        _loaded_implementation = implementation_name
+    if implementation is not None and _loaded_implementation != implementation:
+        _loaded_implementation = implementation
 
         _flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn = _lazy_imports(implementation)
         _process_flash_kwargs_fn = _lazy_define_process_function(_flash_varlen_fn)

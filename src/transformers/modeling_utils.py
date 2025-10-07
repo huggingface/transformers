@@ -2576,9 +2576,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             applicable_attn_implementation = self.get_correct_attn_implementation(
                 applicable_attn_implementation, is_init_check
             )
-            # preload flash attention here to allow compile with fullgraph
-            if applicable_attn_implementation.startswith("flash_attention"):
-                lazy_import_flash_attention(applicable_attn_implementation)
+
+        # preload flash attention here to allow compile with fullgraph
+        if "flash" in applicable_attn_implementation:
+            lazy_import_flash_attention(applicable_attn_implementation)
 
         return applicable_attn_implementation
 

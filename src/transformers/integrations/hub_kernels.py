@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import re
+from types import ModuleType
 from typing import Optional, Union
 
-from ..modeling_flash_attention_utils import lazy_import_flash_attention
 from .flash_attention import flash_attention_forward
 
 
@@ -167,10 +167,10 @@ def is_kernel(attn_implementation: Optional[str]) -> bool:
     )
 
 
-def load_and_register_kernel(attn_implementation: str) -> None:
+def load_and_register_kernel(attn_implementation: str) -> ModuleType:
     """Load and register the kernel associated to `attn_implementation`."""
     if not is_kernel(attn_implementation):
-        return
+        return None
     if not _kernels_available:
         raise ImportError(
             "`kernels` is either not installed or uses an incompatible version. "
@@ -211,12 +211,14 @@ def load_and_register_kernel(attn_implementation: str) -> None:
         if attention_wrapper is None:
             attention_wrapper = flash_attention_forward
         kernel_function = attention_wrapper
-        lazy_import_flash_attention(kernel, implementation_name=attn_implementation)
     elif kernel_name is not None:
         kernel_function = getattr(kernel, kernel_name)
+
     # Register the kernel as a valid attention
     ALL_ATTENTION_FUNCTIONS.register(attn_implementation, kernel_function)
     ALL_MASK_ATTENTION_FUNCTIONS.register(attn_implementation, ALL_MASK_ATTENTION_FUNCTIONS["flash_attention_2"])
+
+    return kernel
 
 
 __all__ = [
