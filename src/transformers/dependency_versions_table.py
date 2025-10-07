@@ -3,7 +3,7 @@
 # 2. run `make deps_table_update``
 deps = {
     "Pillow": "Pillow>=10.0.1,<=15.0",
-    "accelerate": "accelerate>=0.26.0",
+    "accelerate": "accelerate>=1.1.0",
     "av": "av",
     "beautifulsoup4": "beautifulsoup4",
     "blobfile": "blobfile",
@@ -52,7 +52,7 @@ deps = {
     "pytest-timeout": "pytest-timeout",
     "pytest-xdist": "pytest-xdist",
     "pytest-order": "pytest-order",
-    "python": "python>=3.9.0",
+    "python": "python>=3.10.0",
     "ray[tune]": "ray[tune]>=2.7.0",
     "regex": "regex!=2019.12.17",
     "requests": "requests",

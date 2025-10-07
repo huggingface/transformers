@@ -14,7 +14,7 @@
 # limitations under the License.
 """ZoeDepth model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ..auto.configuration_auto import CONFIG_MAPPING
 
@@ -26,18 +26,18 @@ ZOEDEPTH_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class ZoeDepthConfig(PretrainedConfig):
+class ZoeDepthConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ZoeDepthForDepthEstimation`]. It is used to instantiate an ZoeDepth
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the ZoeDepth
     [Intel/zoedepth-nyu](https://huggingface.co/Intel/zoedepth-nyu) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        backbone_config (`Union[dict[str, Any], PretrainedConfig]`, *optional*, defaults to `BeitConfig()`):
+        backbone_config (`Union[dict[str, Any], PreTrainedConfig]`, *optional*, defaults to `BeitConfig()`):
             The configuration of the backbone model.
         backbone (`str`, *optional*):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
