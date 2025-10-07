@@ -29,6 +29,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -124,19 +125,10 @@ class CwmAttention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
-
-        self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
-        )
+        self.q_proj = torch.nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
+        self.k_proj = torch.nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
+        self.v_proj = torch.nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
         self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
@@ -147,8 +139,8 @@ class CwmAttention(nn.Module):
         attention_mask: Optional[torch.Tensor],
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -176,6 +168,7 @@ class CwmAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
+            sliding_window=self.sliding_window,  # main diff with Llama
             **kwargs,
         )
 

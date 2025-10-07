@@ -25,12 +25,12 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
-    LlamaAttention,
     LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaModel,
     LlamaPreTrainedModel,
 )
+from ..qwen2.modeling_qwen2 import Qwen2Attention
 
 
 logger = logging.get_logger(__name__)
@@ -183,10 +183,12 @@ class CwmConfig(LlamaConfig):
         self.layer_types = list(layer_types)
 
 
-class CwmAttention(LlamaAttention):
+class CwmAttention(Qwen2Attention):
     def __init__(self, config: CwmConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
-        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
+        super().__init__(config=config, layer_idx=layer_idx)
+        self.q_proj = torch.nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
+        self.k_proj = torch.nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
+        self.v_proj = torch.nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
 
 
 class CwmDecoderLayer(LlamaDecoderLayer):

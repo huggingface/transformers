@@ -232,3 +232,67 @@ class CwmIntegrationTest(unittest.TestCase):
         for i, layer in enumerate(model.model.layers):
             if model.config.layer_types[i] == "sliding_attention":
                 self.assertEqual(layer.self_attn.sliding_window, sliding_window)
+
+    @slow
+    def test_cwm_generation_20_tokens(self):
+        from transformers import AutoTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained("facebook/cwm")
+        model = CwmForCausalLM.from_pretrained("facebook/cwm", device_map="auto", dtype=torch.bfloat16)
+
+        system_prompt = "You are a helpful AI assistant. You always reason before responding, using the following format:\n\n<think>\nyour internal reasoning\n</think>\nyour external response"
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": "Write a simple Python function to add two numbers."},
+        ]
+
+        text = tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+            enable_thinking=True,
+            preserve_previous_think=True,
+        )
+        model_inputs = tokenizer([text], return_tensors="pt").to(model.device)
+
+        with torch.no_grad():
+            generated_ids = model.generate(
+                **model_inputs,
+                max_new_tokens=20,
+                do_sample=False,
+                temperature=1.0,
+                top_p=1.0,
+                pad_token_id=tokenizer.eos_token_id,
+            )
+
+        output_ids = generated_ids[0][len(model_inputs.input_ids[0]) :].tolist()
+        generated_text = tokenizer.decode(output_ids, skip_special_tokens=False)
+
+        self.assertEqual(len(output_ids), 20, "Should generate exactly 20 tokens")
+
+        expected_token_ids = [
+            33413,
+            11,
+            358,
+            1205,
+            311,
+            3350,
+            264,
+            13325,
+            734,
+            430,
+            11621,
+            1403,
+            5219,
+            13,
+            6914,
+            596,
+            1212,
+            555,
+            89746,
+            1268,
+        ]
+        expected_text = "Okay, I need to write a Python function that adds two numbers. Let's start by recalling how"
+
+        self.assertEqual(output_ids, expected_token_ids, "Generated tokens should match ground truth")
+        self.assertEqual(generated_text, expected_text, "Generated text should match ground truth")
