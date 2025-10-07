@@ -1088,7 +1088,7 @@ class MaskFormerLoss(nn.Module):
         """
         Computes the average number of target masks across the batch, for normalization purposes.
         """
-        num_masks = sum([len(classes) for classes in class_labels])
+        num_masks = sum(len(classes) for classes in class_labels)
         num_masks = torch.as_tensor(num_masks, dtype=torch.float, device=device)
         world_size = 1
         if is_accelerate_available():
@@ -1464,8 +1464,6 @@ class MaskFormerPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
         # copied from DETR
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()

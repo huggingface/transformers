@@ -284,7 +284,7 @@ class Cohere2DecoderLayer(GradientCheckpointingLayer):
             attention_mask (`torch.FloatTensor`, *optional*):
                 attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
                 query_sequence_length, key_sequence_length)` if default attention is used.
-            past_key_values (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+            past_key_values (`Cache`, *optional*): cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -351,7 +351,7 @@ class Cohere2Model(Cohere2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,

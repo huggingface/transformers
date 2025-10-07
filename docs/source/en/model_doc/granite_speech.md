@@ -32,13 +32,12 @@ The [Granite Speech](https://huggingface.co/papers/2505.08699) model ([blog post
 
 4. LoRA adapter(s): The Granite Speech model contains a modality specific LoRA, which will be enabled when audio features are provided, and disabled otherwise.
 
-
 Note that most of the aforementioned components are implemented generically to enable compatibility and potential integration with other model architectures in transformers.
-
 
 This model was contributed by [Alexander Brooks](https://huggingface.co/abrooks9944), [Avihu Dekel](https://huggingface.co/Avihu), and [George Saon](https://huggingface.co/gsaon).
 
 ## Usage tips
+
 - This model bundles its own LoRA adapter, which will be automatically loaded and enabled/disabled as needed during inference calls. Be sure to install [PEFT](https://github.com/huggingface/peft) to ensure the LoRA is correctly applied!
 
 <!-- TODO (@alex-jw-brooks) Add an example here once the model compatible with the transformers implementation is released -->
@@ -47,21 +46,17 @@ This model was contributed by [Alexander Brooks](https://huggingface.co/abrooks9
 
 [[autodoc]] GraniteSpeechConfig
 
-
 ## GraniteSpeechEncoderConfig
 
 [[autodoc]] GraniteSpeechEncoderConfig
-
 
 ## GraniteSpeechProcessor
 
 [[autodoc]] GraniteSpeechProcessor
 
-
 ## GraniteSpeechFeatureExtractor
 
 [[autodoc]] GraniteSpeechFeatureExtractor
-
 
 ## GraniteSpeechForConditionalGeneration
 

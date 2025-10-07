@@ -48,7 +48,7 @@ if is_torch_available():
         DiaForConditionalGeneration,
         DiaModel,
         DiaProcessor,
-        PretrainedConfig,
+        PreTrainedConfig,
         PreTrainedModel,
     )
     from transformers.cache_utils import (
@@ -221,7 +221,6 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     pipeline_model_mapping = {}
     # pipeline_model_mapping = {"text-to-audio": DiaForConditionalGeneration} if is_torch_available() else {}
     test_pruning = False
-    test_head_masking = False
     test_resize_embeddings = False
     is_encoder_decoder = True
     # Indicates VLMs usually but there are many audio models which are also composite
@@ -242,7 +241,6 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             "test_prompt_lookup",
             "test_model_parallel_beam_search",
             "test_generate_without_input_ids",
-            "test_generate_with_head_masking",
         ]
 
         for test in skippable_tests:
@@ -440,7 +438,7 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 else:
                     model_sdpa = model_class.from_pretrained(tmpdirname, attn_implementation="sdpa")
                     for key in model_sdpa.config:
-                        if isinstance(getattr(model_sdpa.config, key), PretrainedConfig):
+                        if isinstance(getattr(model_sdpa.config, key), PreTrainedConfig):
                             sub_config = getattr(model_sdpa.config, key)
                             self.assertTrue(sub_config._attn_implementation == "sdpa")
 
@@ -516,6 +514,10 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                             outputs_cached.past_key_values[layer_idx][kv_idx],
                         )
                     )
+
+    @pytest.mark.generate
+    def test_prepare_inputs_for_generation_kwargs_forwards(self):
+        super().test_prepare_inputs_for_generation_kwargs_forwards(encoder_outputs=torch.randn(2, 2, 32))
 
     @unittest.skip(reason="Indirectly checked in Dia through the generate methods.")
     def test_hidden_states_output(self):

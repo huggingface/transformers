@@ -28,7 +28,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
@@ -64,7 +64,7 @@ class FalconMambaCache:
     Cache for falcon_mamba model which does not have attention mechanism and key value states.
 
     Arguments:
-        config (`PretrainedConfig):
+        config (`PreTrainedConfig):
             The configuration file defining the shape-related attributes required to initialize the static cache.
         max_batch_size (`int`):
             The maximum batch size with which the model will be used. Note that a new instance must be instantiated if
@@ -98,7 +98,7 @@ class FalconMambaCache:
     # TODO (joao): add layer_device_map arg and update code in `generate` accordingly
     def __init__(
         self,
-        config: PretrainedConfig,
+        config: PreTrainedConfig,
         max_batch_size: int,
         dtype: torch.dtype = torch.float16,
         device: Union[torch.device, str, None] = None,
@@ -862,6 +862,12 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
                 "attention_mask": attention_mask,
             }
         )
+
+        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
+        for key, value in kwargs.items():
+            if key not in model_inputs:
+                model_inputs[key] = value
+
         return model_inputs
 
     @auto_docstring
@@ -907,7 +913,7 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            # move labels to correct device to enable model parallelism
+            # move labels to correct device
             labels = labels.to(logits.device)
             # Shift so that tokens < n predict n
             shift_logits = logits[..., :-1, :].contiguous()

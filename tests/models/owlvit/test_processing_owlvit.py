@@ -187,7 +187,7 @@ class OwlViTProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         seq_length = 16
         batch_size = len(input_texts)
-        num_max_text_queries = max([len(texts) for texts in input_texts])
+        num_max_text_queries = max(len(texts) for texts in input_texts)
 
         self.assertListEqual(list(inputs.keys()), ["input_ids", "attention_mask"])
         self.assertEqual(inputs["input_ids"].shape, (batch_size * num_max_text_queries, seq_length))

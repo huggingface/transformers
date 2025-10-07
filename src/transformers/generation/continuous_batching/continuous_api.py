@@ -25,8 +25,9 @@ import torch
 from torch import nn
 from tqdm import tqdm
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...generation.configuration_utils import GenerationConfig
+from ...integrations.hub_kernels import load_and_register_kernel
 from ...utils.logging import logging
 from ...utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
 from .cache import PagedAttentionCache
@@ -42,7 +43,56 @@ def build_attention_mask(
 ) -> None:
     """Builds an attention mask inplace using the cumulative seqlens of the query and key. If given a sliding window, it
     will also apply a sliding window mask on top. The attention mask is not boolean, it uses zeroes and -inf (or its
-    equivalent) so it's more of an attention score bias tensor."""
+    equivalent) so it's more of an attention score bias tensor.
+    The attention mask is a block-diagonal matrix, with each block an attention mask for a single query-key pair.
+    Each of those block is built from a causal mask and, if there is a sliding window, a sliding window mask.
+
+    An example is represented below, with seqlen_k = 8, seqlen_q = 4 and sliding_window = 6:
+
+    CAUSAL MASK:
+
+           █ █ █ █ █ ░ ░ ░
+           █ █ █ █ █ █ ░ ░
+           █ █ █ █ █ █ █ ░
+           █ █ █ █ █ █ █ █
+
+    SLIDING WINDOW MASK:
+         ┌──────────────────────── seqlen_k - seqlen_q - sliding_window = 8 - 4 - 6 = -2 offset to the right
+       <─┴─>
+     ░ █ | █ █ █ █ █ █ █ █
+     ░ ░ | █ █ █ █ █ █ █ █
+     ░ ░ | ░ █ █ █ █ █ █ █
+     ░ ░ | ░ ░ █ █ █ █ █ █
+
+    ATTENTION MASK (sum of causal and sliding window masks):
+
+           █ █ █ █ █ ░ ░ ░
+           █ █ █ █ █ █ ░ ░
+           ░ █ █ █ █ █ █ ░
+           ░ ░ █ █ █ █ █ █
+
+    Another example with seqlen_k = 5, seqlen_q = 3 and sliding_window = 2:
+
+    CAUSAL MASK:
+
+           █ █ █ ░ ░
+           █ █ █ █ ░
+           █ █ █ █ █
+
+    SLIDING WINDOW MASK:
+         ┌──────────────────────── seqlen_k - seqlen_q - sliding_window = 5 - 3 - 2 = 0 offset to the right
+        <┴>
+         | ░ █ █ █ █
+         | ░ ░ █ █ █
+         | ░ ░ ░ █ █
+
+    ATTENTION MASK (sum of causal and sliding window masks):
+
+           ░ █ █ ░ ░
+           ░ ░ █ █ ░
+           ░ ░ ░ █ █
+
+    """
     min_value = torch.finfo(attention_mask.dtype).min
     for i in range(len(cumulative_seqlens_q) - 1):
         seqlen_q = cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i]
@@ -63,8 +113,8 @@ def build_attention_mask(
         masked = torch.triu(minus_inf, diagonal=causal_diagonal)
         # Apply sliding window mask if needed
         if sliding_window > 1:
-            sliding_diagonal = seqlen_k - seqlen_q + sliding_window
-            masked = torch.tril(masked, diagonal=sliding_diagonal)
+            sliding_diagonal = seqlen_k - seqlen_q - sliding_window
+            masked += torch.tril(minus_inf, diagonal=sliding_diagonal)
         # Replace in attention mask
         attention_mask[..., query_range, key_range] = masked
 
@@ -91,7 +141,7 @@ class ContinuousBatchProcessor:
     def __init__(
         self,
         cache: PagedAttentionCache,
-        config: PretrainedConfig,
+        config: PreTrainedConfig,
         generation_config: GenerationConfig,
         input_queue: queue.Queue,
         output_queue: queue.Queue,
@@ -192,7 +242,10 @@ class ContinuousBatchProcessor:
         self.reset_static_tensors(full_reset=True)
 
     def return_attention_mask(self) -> bool:
-        return self.config._attn_implementation != "paged_attention"  # we set `is_causal` to True in paged call
+        return self.config._attn_implementation in [
+            "paged|eager",
+            "paged|sdpa",
+        ]  # we set `is_causal` to True in paged call
 
     @traced
     @torch.no_grad()
@@ -555,6 +608,10 @@ class ContinuousBatchingManager:
             streaming: Whether to stream tokens as they are generated
         """
         self.model = model.eval()
+        if "paged|" not in model.config._attn_implementation:
+            attn_implementation = "paged|" + self.model.config._attn_implementation
+            load_and_register_kernel(attn_implementation)
+            model.set_attn_implementation(attn_implementation)
         generation_config = model.generation_config if generation_config is None else generation_config
         self.generation_config = generation_config
         self.input_queue = queue.Queue(maxsize=max_queue_size)
@@ -708,14 +765,6 @@ class ContinuousBatchingManager:
                 yield result
             if self.batch_processor is not None:
                 request_cancelled = self.batch_processor.scheduler.request_is_cancelled(request_id)
-
-    @staticmethod
-    def supported_attention_implementations() -> set[str]:
-        return {"eager_paged", "sdpa_paged", "flash_attention_2"}
-
-    @staticmethod
-    def default_attention_implementation() -> str:
-        return "sdpa_paged"
 
     @traced
     def warmup(self, batch_processor):

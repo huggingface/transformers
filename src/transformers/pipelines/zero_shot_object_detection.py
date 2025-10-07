@@ -61,9 +61,6 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        if self.framework == "tf":
-            raise ValueError(f"The {self.__class__} is only available in PyTorch.")
-
         requires_backends(self, "vision")
         self.check_model_type(MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING_NAMES)
 
@@ -182,10 +179,9 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
 
         target_size = torch.tensor([[image.height, image.width]], dtype=torch.int32)
         for i, candidate_label in enumerate(candidate_labels):
-            text_inputs = self.tokenizer(candidate_label, return_tensors=self.framework)
-            image_features = self.image_processor(image, return_tensors=self.framework)
-            if self.framework == "pt":
-                image_features = image_features.to(self.dtype)
+            text_inputs = self.tokenizer(candidate_label, return_tensors="pt")
+            image_features = self.image_processor(image, return_tensors="pt")
+            image_features = image_features.to(self.dtype)
             yield {
                 "is_last": i == len(candidate_labels) - 1,
                 "target_size": target_size,
@@ -236,8 +232,6 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
         Returns:
             bbox (`dict[str, int]`): Dict containing the coordinates in corners format.
         """
-        if self.framework != "pt":
-            raise ValueError("The ZeroShotObjectDetectionPipeline is only available in PyTorch.")
         xmin, ymin, xmax, ymax = box.int().tolist()
         bbox = {
             "xmin": xmin,

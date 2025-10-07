@@ -22,7 +22,6 @@
 from typing import Callable, Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from transformers.utils.generic import check_model_inputs
@@ -151,7 +150,7 @@ class Starcoder2Model(MistralModel):
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)
         self.embedding_dropout = config.embedding_dropout
 
-    @check_model_inputs
+    @check_model_inputs()
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

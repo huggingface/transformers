@@ -19,7 +19,6 @@ from typing import Callable, Optional, Union
 
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
@@ -635,7 +634,7 @@ class MllamaSelfAttentionDecoderLayer(GradientCheckpointingLayer):
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
-            past_key_values (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+            past_key_values (`Cache`, *optional*): cached past key and value projection states
             cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
                 Indices depicting the position of the input sequence tokens in the sequence
             position_embeddings (`tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
@@ -994,7 +993,7 @@ class MllamaVisionModel(MllamaPreTrainedModel):
         hidden_state = torch.cat([class_embedding, hidden_state], dim=1)
         return hidden_state
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self, pixel_values: torch.Tensor, aspect_ratio_ids: torch.Tensor, aspect_ratio_mask: torch.Tensor, **kwargs
@@ -1162,7 +1161,7 @@ class MllamaTextModel(MllamaPreTrainedModel):
         self.gradient_checkpointing = False
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs()
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1430,7 +1429,7 @@ class MllamaModel(MllamaPreTrainedModel):
     def get_decoder(self):
         return self.language_model
 
-    @check_model_inputs
+    @check_model_inputs()
     @can_return_tuple
     @auto_docstring
     def forward(

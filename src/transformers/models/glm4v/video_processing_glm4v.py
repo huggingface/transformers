@@ -37,12 +37,11 @@ from .image_processing_glm4v import smart_resize
 
 
 class Glm4vVideoProcessorInitKwargs(VideosKwargs):
-    max_image_size: dict[str, int] = None
-    patch_size: Optional[int] = None
-    temporal_patch_size: Optional[int] = None
-    merge_size: Optional[int] = None
-    image_mean: Optional[list[float]] = None
-    image_std: Optional[list[float]] = None
+    max_image_size: Optional[dict[str, int]]
+    patch_size: Optional[int]
+    temporal_patch_size: Optional[int]
+    merge_size: Optional[int]
+    max_duration: Optional[int]
 
 
 @add_start_docstrings(

@@ -77,7 +77,7 @@ class SmolVLMVisionText2TextModelTester:
             "vocab_size": 100,
             "hidden_size": 64,
             "intermediate_size": 56,
-            "num_hidden_layers": 3,
+            "num_hidden_layers": 2,
             "num_attention_heads": 2,
             "num_key_value_heads": 2,
             "hidden_act": "silu",
@@ -171,7 +171,6 @@ class SmolVLMModelTest(ModelTesterMixin, unittest.TestCase):
     test_torchscript = False
     test_pruning = False
     test_resize_embeddings = True
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = SmolVLMVisionText2TextModelTester(self)
@@ -284,6 +283,7 @@ class SmolVLMModelTest(ModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
             model = model_class(config).to(torch_device)
+            model.eval()
 
             # if no output embeddings -> leave test
             if model.get_output_embeddings() is None:
@@ -334,7 +334,6 @@ class SmolVLMForConditionalGenerationModelTest(GenerationTesterMixin, ModelTeste
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True
-    test_head_masking = False
     test_torchscript = False
 
     def setUp(self):
@@ -475,6 +474,7 @@ class SmolVLMForConditionalGenerationModelTest(GenerationTesterMixin, ModelTeste
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
             model = model_class(config).to(torch_device)
+            model.eval()
 
             # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
             model_vocab_size = config.text_config.vocab_size

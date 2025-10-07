@@ -6,17 +6,17 @@
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 # Example where we only want to overwrite the defaults of an init
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 
 
-class NewModelConfig(PretrainedConfig):
+class NewModelConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`NewModelModel`]. It is used to instantiate an NewModel
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the NewModel-7B.
     e.g. [google/new_model-7b](https://huggingface.co/google/new_model-7b)
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
     Args:
         vocab_size (`int`, *optional*, defaults to 256000):
             Vocabulary size of the NewModel model. Defines the number of different tokens that can be represented by the

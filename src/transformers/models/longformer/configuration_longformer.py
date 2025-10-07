@@ -18,9 +18,9 @@ from collections import OrderedDict
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Optional, Union
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...onnx import OnnxConfig
-from ...utils import TensorType, logging
+from ...utils import logging
 
 
 if TYPE_CHECKING:
@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-class LongformerConfig(PretrainedConfig):
+class LongformerConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LongformerModel`] or a [`TFLongformerModel`]. It
     is used to instantiate a Longformer model according to the specified arguments, defining the model architecture.
@@ -42,8 +42,8 @@ class LongformerConfig(PretrainedConfig):
     [allenai/longformer-base-4096](https://huggingface.co/allenai/longformer-base-4096) architecture with a sequence
     length 4,096.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
@@ -141,7 +141,7 @@ class LongformerConfig(PretrainedConfig):
 
 class LongformerOnnxConfig(OnnxConfig):
     def __init__(
-        self, config: "PretrainedConfig", task: str = "default", patching_specs: "Optional[list[PatchingSpec]]" = None
+        self, config: "PreTrainedConfig", task: str = "default", patching_specs: "Optional[list[PatchingSpec]]" = None
     ):
         super().__init__(config, task, patching_specs)
         config.onnx_export = True
@@ -188,10 +188,12 @@ class LongformerOnnxConfig(OnnxConfig):
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
-        framework: Optional[TensorType] = None,
     ) -> Mapping[str, Any]:
         inputs = super().generate_dummy_inputs(
-            preprocessor=tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
+            preprocessor=tokenizer,
+            batch_size=batch_size,
+            seq_length=seq_length,
+            is_pair=is_pair,
         )
         import torch
 

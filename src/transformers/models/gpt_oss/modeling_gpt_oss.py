@@ -166,8 +166,8 @@ class GptOssMLP(nn.Module):
         self.experts = GptOssExperts(config)
 
     def forward(self, hidden_states):
-        router_scores, router_indices = self.router(hidden_states)  # (num_experts, seq_len)
-        routed_out = self.experts(hidden_states, router_indices=router_indices, routing_weights=router_scores)
+        router_scores, router_indices = self.router(hidden_states)
+        routed_out = self.experts(hidden_states, router_indices, router_scores)
         return routed_out, router_scores
 
 
@@ -456,14 +456,14 @@ class GptOssModel(GptOssPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,

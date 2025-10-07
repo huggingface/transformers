@@ -19,7 +19,6 @@ from dataclasses import dataclass
 from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss, KLDivLoss, LogSoftmax
 
@@ -48,9 +47,6 @@ class VisualBertEmbeddings(nn.Module):
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
-
-        # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
-        # any TensorFlow checkpoint file
 
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -197,7 +193,6 @@ class VisualBertSelfAttention(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        head_mask=None,
         output_attentions=False,
     ):
         batch_size, seq_length, _ = hidden_states.shape
@@ -231,10 +226,6 @@ class VisualBertSelfAttention(nn.Module):
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
 
         context_layer = torch.matmul(attention_probs, value_layer)
 
@@ -291,13 +282,11 @@ class VisualBertAttention(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        head_mask=None,
         output_attentions=False,
     ):
         self_outputs = self.self(
             hidden_states,
             attention_mask,
-            head_mask,
             output_attentions,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
@@ -349,13 +338,11 @@ class VisualBertLayer(GradientCheckpointingLayer):
         self,
         hidden_states,
         attention_mask=None,
-        head_mask=None,
         output_attentions=False,
     ):
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask,
-            head_mask,
             output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
@@ -386,7 +373,6 @@ class VisualBertEncoder(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        head_mask=None,
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
@@ -398,9 +384,7 @@ class VisualBertEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-
-            layer_outputs = layer_module(hidden_states, attention_mask, layer_head_mask, output_attentions)
+            layer_outputs = layer_module(hidden_states, attention_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
             if output_attentions:
@@ -504,8 +488,6 @@ class VisualBertPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Embedding)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if hasattr(module, "bias") and module.bias is not None:
                 module.bias.data.zero_()
@@ -591,7 +573,6 @@ class VisualBertModel(VisualBertPreTrainedModel):
         attention_mask: Optional[torch.LongTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         visual_embeds: Optional[torch.FloatTensor] = None,
         visual_attention_mask: Optional[torch.LongTensor] = None,
@@ -688,13 +669,6 @@ class VisualBertModel(VisualBertPreTrainedModel):
                 attention_mask, (batch_size, input_shape)
             )
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
         embedding_output = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
@@ -728,7 +702,6 @@ class VisualBertModel(VisualBertPreTrainedModel):
             encoder_outputs = self.encoder(
                 embedding_output,
                 attention_mask=extended_attention_mask,
-                head_mask=head_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
@@ -780,7 +753,6 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
         attention_mask: Optional[torch.LongTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         visual_embeds: Optional[torch.FloatTensor] = None,
         visual_attention_mask: Optional[torch.LongTensor] = None,
@@ -868,7 +840,6 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             visual_embeds=visual_embeds,
             visual_attention_mask=visual_attention_mask,
@@ -925,7 +896,6 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
         attention_mask: Optional[torch.LongTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         visual_embeds: Optional[torch.FloatTensor] = None,
         visual_attention_mask: Optional[torch.LongTensor] = None,
@@ -1054,7 +1024,6 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             visual_embeds=visual_embeds,
             visual_attention_mask=visual_attention_mask,
@@ -1113,7 +1082,6 @@ class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
         attention_mask: Optional[torch.LongTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         visual_embeds: Optional[torch.FloatTensor] = None,
         visual_attention_mask: Optional[torch.LongTensor] = None,
@@ -1185,7 +1153,6 @@ class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             visual_embeds=visual_embeds,
             visual_attention_mask=visual_attention_mask,
@@ -1251,7 +1218,6 @@ class VisualBertForVisualReasoning(VisualBertPreTrainedModel):
         attention_mask: Optional[torch.LongTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         visual_embeds: Optional[torch.FloatTensor] = None,
         visual_attention_mask: Optional[torch.LongTensor] = None,
@@ -1320,7 +1286,6 @@ class VisualBertForVisualReasoning(VisualBertPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             visual_embeds=visual_embeds,
             visual_attention_mask=visual_attention_mask,
@@ -1422,7 +1387,6 @@ class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
         attention_mask: Optional[torch.LongTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         visual_embeds: Optional[torch.FloatTensor] = None,
         visual_attention_mask: Optional[torch.LongTensor] = None,
@@ -1501,7 +1465,6 @@ class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             visual_embeds=visual_embeds,
             visual_attention_mask=visual_attention_mask,

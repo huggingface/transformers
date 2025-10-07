@@ -959,8 +959,6 @@ class DeformableDetrPreTrainedModel(PreTrainedModel):
             nn.init.xavier_uniform_(module.output_proj.weight.data)
             nn.init.constant_(module.output_proj.bias.data, 0.0)
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()

@@ -19,9 +19,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-
 The [GraniteMoeHybrid](https://www.ibm.com/new/announcements/ibm-granite-4-0-tiny-preview-sneak-peek) model builds on top of GraniteMoeSharedModel and Bamba. Its decoding layers consist of state space layers or MoE attention layers with shared experts. By default, the attention layers do not use positional encoding.
-
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer

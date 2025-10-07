@@ -570,11 +570,9 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
         if is_torch_available()
         else {}
     )
-    all_parallelizable_model_classes = (T5Model, T5ForConditionalGeneration) if is_torch_available() else ()
     fx_compatible = True
     test_pruning = False
     test_resize_embeddings = True
-    test_model_parallel = True
     is_encoder_decoder = True
     # The small T5 model needs higher percentages for CPU/MP tests
     model_split_percents = [0.5, 0.8, 0.9]
@@ -1014,7 +1012,6 @@ class T5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     all_model_classes = (T5EncoderModel, T5ForTokenClassification) if is_torch_available() else ()
     test_pruning = False
     test_resize_embeddings = False
-    test_model_parallel = True
     pipeline_model_mapping = (
         {
             "token-classification": T5ForTokenClassification,
@@ -1022,7 +1019,6 @@ class T5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         if is_torch_available()
         else {}
     )
-    all_parallelizable_model_classes = (T5EncoderModel,) if is_torch_available() else ()
 
     def setUp(self):
         self.model_tester = T5EncoderOnlyModelTester(self)

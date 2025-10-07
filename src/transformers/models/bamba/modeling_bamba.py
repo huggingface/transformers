@@ -140,6 +140,12 @@ class HybridMambaAttentionDynamicCache:
         self.key_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
         self.value_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
 
+    def __len__(self):
+        return len(self.key_cache)
+
+    def __getitem__(self, layer_idx):
+        return self.key_cache[layer_idx], self.value_cache[layer_idx]
+
     def update(
         self,
         key_states: torch.Tensor,
@@ -159,22 +165,30 @@ class HybridMambaAttentionDynamicCache:
 
     def reorder_cache(self, beam_idx: torch.LongTensor):
         """Reorders the cache for beam search, given the selected beam indices."""
-        for layer_idx in range(len(self.key_cache)):
-            device = self.key_cache[layer_idx].device
-            self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx.to(device))
-            device = self.value_cache[layer_idx].device
-            self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
+        if self.get_seq_length() > 0:
+            for layer_idx in range(len(self.key_cache)):
+                device = self.key_cache[layer_idx].device
+                self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx.to(device))
+                device = self.value_cache[layer_idx].device
+                self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
 
-            device = self.conv_states[layer_idx].device
-            self.conv_states[layer_idx] = self.conv_states[layer_idx].index_select(0, beam_idx.to(device))
-            device = self.ssm_states[layer_idx].device
-            self.ssm_states[layer_idx] = self.ssm_states[layer_idx].index_select(0, beam_idx.to(device))
+                device = self.conv_states[layer_idx].device
+                self.conv_states[layer_idx] = self.conv_states[layer_idx].index_select(0, beam_idx.to(device))
+                device = self.ssm_states[layer_idx].device
+                self.ssm_states[layer_idx] = self.ssm_states[layer_idx].index_select(0, beam_idx.to(device))
+
+    def get_mask_sizes(self, cache_position: torch.Tensor, layer_idx: int) -> tuple[int, int]:
+        """Return the length and offset of the cache, used to generate the mask"""
+        kv_offset = 0
+        query_length = cache_position.shape[0]
+        kv_length = self.get_seq_length(layer_idx) + query_length
+        return kv_length, kv_offset
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         # take any layer that contains cache and not empty tensor
         layer_idx = self.transformer_layers[0] if layer_idx not in self.transformer_layers else layer_idx
-        if len(self.key_cache) <= layer_idx:
+        if len(self.key_cache) <= layer_idx or self.key_cache[layer_idx].shape[-1] == 0:
             return 0
         return self.key_cache[layer_idx].shape[-2]
 
@@ -531,7 +545,7 @@ class BambaMixer(nn.Module):
 
         if not is_fast_path_available:
             logger.warning_once(
-                "The fast path is not available because on of `(selective_state_update, causal_conv1d_fn, causal_conv1d_update)`"
+                "The fast path is not available because one of `(selective_state_update, causal_conv1d_fn, causal_conv1d_update)`"
                 " is None. Falling back to the naive implementation. To install follow https://github.com/state-spaces/mamba/#installation and"
                 " https://github.com/Dao-AILab/causal-conv1d"
             )
@@ -1492,6 +1506,12 @@ class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
                 "cache_position": cache_position,
             }
         )
+
+        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
+        for key, value in kwargs.items():
+            if key not in model_inputs:
+                model_inputs[key] = value
+
         return model_inputs
 
 

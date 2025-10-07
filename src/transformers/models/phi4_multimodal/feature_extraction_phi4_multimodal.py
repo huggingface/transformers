@@ -110,7 +110,6 @@ class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
                 If set, will return tensors instead of numpy arrays. Acceptable values are:
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
             return_attention_mask (`bool`, *optional*, defaults to `True`):
                 Whether to return the extracted audio input features' attention mask.
             device (`str`, *optional*, defaults to "cpu"):

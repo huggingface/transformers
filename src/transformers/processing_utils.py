@@ -72,6 +72,8 @@ from .utils.deprecation import deprecate_kwarg
 
 
 if is_torch_available():
+    import torch
+
     from .modeling_utils import PreTrainedAudioTokenizerBase
 
 
@@ -156,6 +158,7 @@ class TextKwargs(TypedDict, total=False):
     verbose: Optional[bool]
     padding_side: Optional[str]
     return_mm_token_type_ids: Optional[bool]
+    return_tensors: Optional[Union[str, TensorType]]
 
 
 class ImagesKwargs(TypedDict, total=False):
@@ -164,12 +167,12 @@ class ImagesKwargs(TypedDict, total=False):
     class methods and docstrings.
 
     Attributes:
+        do_convert_rgb (`bool`):
+            Whether to convert the video to RGB format.
         do_resize (`bool`, *optional*):
             Whether to resize the image.
         size (`dict[str, int]`, *optional*):
             Resize the shorter side of the input to `size["shortest_edge"]`.
-        size_divisor (`int`, *optional*):
-            The size by which to make sure both the height and width can be divided.
         crop_size (`dict[str, int]`, *optional*):
             Desired output size when applying center-cropping.
         resample (`PILImageResampling`, *optional*):
@@ -185,7 +188,7 @@ class ImagesKwargs(TypedDict, total=False):
         image_std (`float` or `list[float]`, *optional*):
             Standard deviation to use if normalizing the image.
         do_pad (`bool`, *optional*):
-            Whether to pad the image to the `(max_height, max_width)` of the images in the batch.
+            Whether to pad the images in the batch.
         pad_size (`dict[str, int]`, *optional*):
             The size `{"height": int, "width" int}` to pad the images to.
         do_center_crop (`bool`, *optional*):
@@ -194,13 +197,15 @@ class ImagesKwargs(TypedDict, total=False):
             The channel dimension format for the output image.
         input_data_format (`ChannelDimension` or `str`, *optional*):
             The channel dimension format for the input image.
-        device (`str`, *optional*):
+        device (`Union[str, torch.Tensor]`, *optional*):
             The device to use for processing (e.g. "cpu", "cuda"), only relevant for fast image processing.
+        disable_grouping (`bool`, *optional*):
+            Whether to group images by shapes when processing or not, only relevant for fast image processing.
     """
 
+    do_convert_rgb: Optional[bool]
     do_resize: Optional[bool]
     size: Optional[dict[str, int]]
-    size_divisor: Optional[int]
     crop_size: Optional[dict[str, int]]
     resample: Optional[Union["PILImageResampling", int]]
     do_rescale: Optional[bool]
@@ -213,7 +218,9 @@ class ImagesKwargs(TypedDict, total=False):
     do_center_crop: Optional[bool]
     data_format: Optional[ChannelDimension]
     input_data_format: Optional[Union[str, ChannelDimension]]
-    device: Optional[str]
+    device: Optional[Union[str, "torch.device"]]
+    disable_grouping: Optional[bool]
+    return_tensors: Optional[Union[str, TensorType]]
 
 
 class VideosKwargs(TypedDict, total=False):
@@ -229,8 +236,6 @@ class VideosKwargs(TypedDict, total=False):
             Resize the shorter side of the input to `size["shortest_edge"]`.
         default_to_square (`bool`, *optional*, defaults to `self.default_to_square`):
             Whether to default to a square when resizing, if size is an int.
-        size_divisor (`int`, *optional*):
-            The size by which to make sure both the height and width can be divided.
         resample (`PILImageResampling`, *optional*):
             Resampling filter to use if resizing the video.
         do_rescale (`bool`, *optional*):
@@ -243,10 +248,10 @@ class VideosKwargs(TypedDict, total=False):
             Mean to use if normalizing the video.
         image_std (`float` or `list[float]`, *optional*):
             Standard deviation to use if normalizing the video.
-        do_pad (`bool`, *optional*):
-            Whether to pad the video to the `(max_height, max_width)` of the videos in the batch.
         do_center_crop (`bool`, *optional*):
             Whether to center crop the video.
+        do_pad (`bool`, *optional*):
+            Whether to pad the images in the batch.
         do_sample_frames (`bool`, *optional*):
             Whether to sample frames from the video before processing or to process the whole video.
         video_metadata (`Union[VideoMetadata, dict]`, *optional*):
@@ -261,6 +266,8 @@ class VideosKwargs(TypedDict, total=False):
             The channel dimension format for the output video.
         input_data_format (`ChannelDimension` or `str`, *optional*):
             The channel dimension format for the input video.
+        device (`Union[str, torch.Tensor]`, *optional*):
+            The device to use for processing (e.g. "cpu", "cuda"), only relevant for fast image processing.
         return_metadata (`ChannelDimension` or `str`, *optional*):
             Whether to return video metadata or not.
     """
@@ -268,7 +275,6 @@ class VideosKwargs(TypedDict, total=False):
     do_convert_rgb: Optional[bool]
     do_resize: Optional[bool]
     size: Optional[dict[str, int]]
-    size_divisor: Optional[int]
     default_to_square: Optional[bool]
     resample: Optional["PILImageResampling"]
     do_rescale: Optional[bool]
@@ -276,17 +282,18 @@ class VideosKwargs(TypedDict, total=False):
     do_normalize: Optional[bool]
     image_mean: Optional[Union[float, list[float]]]
     image_std: Optional[Union[float, list[float]]]
-    do_pad: Optional[bool]
     do_center_crop: Optional[bool]
+    do_pad: Optional[bool]
     crop_size: Optional[dict[str, int]]
     data_format: Optional[ChannelDimension]
     input_data_format: Optional[Union[str, ChannelDimension]]
-    device: Optional[str]
+    device: Optional[Union[str, "torch.device"]]
     do_sample_frames: Optional[bool]
     video_metadata: Optional[Union[VideoMetadata, dict]]
     fps: Optional[Union[int, float]]
     num_frames: Optional[int]
     return_metadata: Optional[bool]
+    return_tensors: Optional[Union[str, TensorType]]
 
 
 class AudioKwargs(TypedDict, total=False):
@@ -320,15 +327,12 @@ class AudioKwargs(TypedDict, total=False):
     """
 
     sampling_rate: Optional[int]
-    raw_speech: Optional[Union["np.ndarray", list[float], list["np.ndarray"], list[list[float]]]]
+    raw_speech: Optional[Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]]]
     padding: Optional[Union[bool, str, PaddingStrategy]]
     max_length: Optional[int]
     truncation: Optional[bool]
     pad_to_multiple_of: Optional[int]
     return_attention_mask: Optional[bool]
-
-
-class CommonKwargs(TypedDict, total=False):
     return_tensors: Optional[Union[str, TensorType]]
 
 
@@ -373,9 +377,6 @@ class ProcessingKwargs(TypedDict, total=False):
 
     _defaults = {}
 
-    common_kwargs: CommonKwargs = {
-        **CommonKwargs.__annotations__,
-    }
     text_kwargs: TextKwargs = {
         **TextKwargs.__annotations__,
     }
@@ -572,10 +573,8 @@ class ProcessorMixin(PushToHubMixin):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] object with processed inputs in a dict format.
@@ -655,6 +654,18 @@ class ProcessorMixin(PushToHubMixin):
         if "chat_template" in output:
             del output["chat_template"]
 
+        def cast_array_to_list(dictionary):
+            """
+            Numpy arrays are not serialiazable but can be in pre-processing dicts.
+            This function casts arrays to list, recusring through the nested configs as well.
+            """
+            for key, value in dictionary.items():
+                if isinstance(value, np.ndarray):
+                    dictionary[key] = value.tolist()
+                elif isinstance(value, dict):
+                    dictionary[key] = cast_array_to_list(value)
+            return dictionary
+
         # Serialize attributes as a dict
         output = {
             k: v.to_dict() if isinstance(v, PushToHubMixin) else v
@@ -667,6 +678,7 @@ class ProcessorMixin(PushToHubMixin):
                 )  # remove `PushToHubMixin` objects
             )
         }
+        output = cast_array_to_list(output)
 
         # Special case, add `audio_tokenizer` dict which points to model weights and path
         if not legacy_serialization and "audio_tokenizer" in output:
@@ -906,7 +918,6 @@ class ProcessorMixin(PushToHubMixin):
 
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
-        resume_download = kwargs.pop("resume_download", None)
         proxies = kwargs.pop("proxies", None)
         token = kwargs.pop("token", None)
         local_files_only = kwargs.pop("local_files_only", False)
@@ -959,6 +970,7 @@ class ProcessorMixin(PushToHubMixin):
                         local_files_only=local_files_only,
                         revision=revision,
                         cache_dir=cache_dir,
+                        token=token,
                     ):
                         additional_chat_template_files[template] = f"{CHAT_TEMPLATE_DIR}/{template}.jinja"
                 except EntryNotFoundError:
@@ -973,7 +985,6 @@ class ProcessorMixin(PushToHubMixin):
                     cache_dir=cache_dir,
                     force_download=force_download,
                     proxies=proxies,
-                    resume_download=resume_download,
                     local_files_only=local_files_only,
                     token=token,
                     user_agent=user_agent,
@@ -990,7 +1001,6 @@ class ProcessorMixin(PushToHubMixin):
                     cache_dir=cache_dir,
                     force_download=force_download,
                     proxies=proxies,
-                    resume_download=resume_download,
                     local_files_only=local_files_only,
                     token=token,
                     user_agent=user_agent,
@@ -1005,7 +1015,6 @@ class ProcessorMixin(PushToHubMixin):
                     cache_dir=cache_dir,
                     force_download=force_download,
                     proxies=proxies,
-                    resume_download=resume_download,
                     local_files_only=local_files_only,
                     token=token,
                     user_agent=user_agent,
@@ -1021,7 +1030,6 @@ class ProcessorMixin(PushToHubMixin):
                         cache_dir=cache_dir,
                         force_download=force_download,
                         proxies=proxies,
-                        resume_download=resume_download,
                         local_files_only=local_files_only,
                         token=token,
                         user_agent=user_agent,
@@ -1038,7 +1046,6 @@ class ProcessorMixin(PushToHubMixin):
                     cache_dir=cache_dir,
                     force_download=force_download,
                     proxies=proxies,
-                    resume_download=resume_download,
                     local_files_only=local_files_only,
                     token=token,
                     user_agent=user_agent,
@@ -1248,7 +1255,6 @@ class ProcessorMixin(PushToHubMixin):
             "images_kwargs": {},
             "audio_kwargs": {},
             "videos_kwargs": {},
-            "common_kwargs": {},
         }
 
         default_kwargs = {
@@ -1256,17 +1262,37 @@ class ProcessorMixin(PushToHubMixin):
             "images_kwargs": {},
             "audio_kwargs": {},
             "videos_kwargs": {},
-            "common_kwargs": {},
+        }
+
+        map_preprocessor_kwargs = {
+            "text_kwargs": "tokenizer",
+            "images_kwargs": "image_processor",
+            "audio_kwargs": "feature_extractor",
+            "videos_kwargs": "video_processor",
         }
 
         possible_modality_keywords = {"text", "audio", "videos", "images"}
         used_keys = set()
 
         # get defaults from set model processor kwargs if they exist
-        for modality in default_kwargs:  # noqa: PLC0206
+        for modality in default_kwargs:
             default_kwargs[modality] = ModelProcessorKwargs._defaults.get(modality, {}).copy()
+            # Some preprocessors define a set of accepted "valid_kwargs" (currently only vision).
+            # In those cases, we don’t declare a `ModalityKwargs` attribute in the TypedDict.
+            # Instead, we dynamically obtain the kwargs from the preprocessor and merge them
+            # with the general kwargs set. This ensures consistency between preprocessor and
+            # processor classes, and helps prevent accidental mismatches.
+            modality_valid_kwargs = set(ModelProcessorKwargs.__annotations__[modality].__annotations__)
+            if modality in map_preprocessor_kwargs:
+                preprocessor = getattr(self, map_preprocessor_kwargs[modality], None)
+                preprocessor_valid_kwargs = (
+                    getattr(preprocessor, "valid_kwargs", None) if preprocessor is not None else None
+                )
+                modality_valid_kwargs.update(
+                    set(preprocessor_valid_kwargs.__annotations__ if preprocessor_valid_kwargs is not None else [])
+                )
             # update defaults with arguments from tokenizer init
-            for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__:
+            for modality_key in modality_valid_kwargs:
                 # init with tokenizer init kwargs if necessary
                 if tokenizer_init_kwargs is not None and modality_key in tokenizer_init_kwargs:
                     value = (
@@ -1282,7 +1308,16 @@ class ProcessorMixin(PushToHubMixin):
         # update modality kwargs with passed kwargs
         non_modality_kwargs = set(kwargs) - set(output_kwargs)
         for modality, output_kwarg in output_kwargs.items():
-            for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__:
+            modality_valid_kwargs = set(ModelProcessorKwargs.__annotations__[modality].__annotations__)
+            if modality in map_preprocessor_kwargs:
+                preprocessor = getattr(self, map_preprocessor_kwargs[modality], None)
+                preprocessor_valid_kwargs = (
+                    getattr(preprocessor, "valid_kwargs", None) if preprocessor is not None else None
+                )
+                modality_valid_kwargs.update(
+                    set(preprocessor_valid_kwargs.__annotations__ if preprocessor_valid_kwargs is not None else [])
+                )
+            for modality_key in modality_valid_kwargs:
                 # check if we received a structured kwarg dict or not to handle it correctly
                 if modality in kwargs:
                     kwarg_value = kwargs[modality].pop(modality_key, "__empty__")
@@ -1314,17 +1349,18 @@ class ProcessorMixin(PushToHubMixin):
         else:
             # kwargs is a flat dictionary
             for key, kwarg in kwargs.items():
-                if key not in used_keys:
-                    if key in ModelProcessorKwargs.__annotations__["common_kwargs"].__annotations__:
-                        output_kwargs["common_kwargs"][key] = kwarg
-                    elif key not in possible_modality_keywords:
-                        logger.warning_once(
-                            f"Keyword argument `{key}` is not a valid argument for this processor and will be ignored."
-                        )
+                if key not in used_keys and key not in possible_modality_keywords:
+                    logger.warning_once(
+                        f"Keyword argument `{key}` is not a valid argument for this processor and will be ignored."
+                    )
 
-        # all modality-specific kwargs are updated with common kwargs
-        for kwarg in output_kwargs.values():
-            kwarg.update(output_kwargs["common_kwargs"])
+        # For `common_kwargs` just update all modality-specific kwargs with same key/values
+        common_kwargs = kwargs.get("common_kwargs", {})
+        common_kwargs.update(ModelProcessorKwargs._defaults.get("common_kwargs", {}))
+        if common_kwargs:
+            for kwarg in output_kwargs.values():
+                kwarg.update(common_kwargs)
+
         return output_kwargs
 
     @classmethod
