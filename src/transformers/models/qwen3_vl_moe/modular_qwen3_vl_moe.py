@@ -20,7 +20,7 @@ import torch
 import torch.nn as nn
 
 from ...activations import ACT2FN
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack

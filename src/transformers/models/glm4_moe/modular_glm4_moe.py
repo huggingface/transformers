@@ -19,7 +19,7 @@ from typing import Optional
 import torch
 from torch import nn
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
 from ...utils import logging
 from ..cohere.modeling_cohere import CohereAttention, CohereRotaryEmbedding

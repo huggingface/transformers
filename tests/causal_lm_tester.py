@@ -628,7 +628,7 @@ def _config_supports_rope_scaling(config: PreTrainedConfig) -> bool:
     return main_config_has_rope or sub_config_has_rope
 
 
-def _set_config_rope_params(config: PretrainedConfig, rope_params: dict) -> bool:
+def _set_config_rope_params(config: PreTrainedConfig, rope_params: dict) -> bool:
     """Recursively sets RoPE parameters on configs and subconfigs, by duplicating the same RoPE values."""
     config.rope_parameters = rope_params
     if hasattr(config, "layer_types"):

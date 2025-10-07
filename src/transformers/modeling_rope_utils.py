@@ -183,7 +183,7 @@ def dynamic_rope_update(rope_forward):
 
 
 def _compute_linear_scaling_rope_parameters(
-    config: Optional[PretrainedConfig] = None,
+    config: Optional[PreTrainedConfig] = None,
     device: Optional["torch.device"] = None,
     seq_len: Optional[int] = None,
     layer_type: Optional[str] = None,
@@ -309,7 +309,7 @@ def _compute_dynamic_ntk_parameters(
 
 
 def _compute_yarn_parameters(
-    config: PretrainedConfig,
+    config: PreTrainedConfig,
     device: "torch.device",
     seq_len: Optional[int] = None,
     layer_type: Optional[str] = None,
@@ -447,7 +447,7 @@ def _compute_yarn_parameters(
 
 
 def _compute_longrope_parameters(
-    config: PretrainedConfig,
+    config: PreTrainedConfig,
     device: "torch.device",
     seq_len: Optional[int] = None,
     layer_type: Optional[str] = None,
@@ -537,7 +537,7 @@ def _compute_longrope_parameters(
 
 
 def _compute_llama3_parameters(
-    config: PretrainedConfig,
+    config: PreTrainedConfig,
     device: "torch.device",
     seq_len: Optional[int] = None,
     layer_type: Optional[str] = None,
@@ -657,7 +657,7 @@ def _check_received_keys(
 
 
 def _validate_default_rope_parameters(
-    rope_parameters: dict, config: Optional[PretrainedConfig] = None, ignore_keys: Optional[set] = None
+    rope_parameters: dict, config: Optional[PreTrainedConfig] = None, ignore_keys: Optional[set] = None
 ):
     required_keys = {"rope_type", "rope_theta"}
     received_keys = set(rope_parameters.keys())
@@ -666,7 +666,7 @@ def _validate_default_rope_parameters(
 
 
 def _validate_linear_scaling_rope_parameters(
-    rope_parameters: dict, config: Optional[PretrainedConfig] = None, ignore_keys: Optional[set] = None
+    rope_parameters: dict, config: Optional[PreTrainedConfig] = None, ignore_keys: Optional[set] = None
 ):
     required_keys = {"rope_type", "factor", "rope_theta"}
     received_keys = set(rope_parameters.keys())
@@ -679,7 +679,7 @@ def _validate_linear_scaling_rope_parameters(
 
 
 def _validate_dynamic_scaling_rope_parameters(
-    rope_parameters: dict, config: Optional[PretrainedConfig] = None, ignore_keys: Optional[set] = None
+    rope_parameters: dict, config: Optional[PreTrainedConfig] = None, ignore_keys: Optional[set] = None
 ):
     # TODO (joao): update logic for the inclusion of `original_max_position_embeddings`
     optional_keys = {"original_max_position_embeddings"}
@@ -694,7 +694,7 @@ def _validate_dynamic_scaling_rope_parameters(
 
 
 def _validate_yarn_parameters(
-    rope_parameters: dict, config: Optional[PretrainedConfig] = None, ignore_keys: Optional[set] = None
+    rope_parameters: dict, config: Optional[PreTrainedConfig] = None, ignore_keys: Optional[set] = None
 ):
     required_keys = {"rope_type", "factor", "rope_theta"}
     optional_keys = {
@@ -759,7 +759,7 @@ def _validate_yarn_parameters(
         )
 
 
-def _validate_longrope_parameters(rope_parameters: dict, config: PretrainedConfig, ignore_keys: Optional[set] = None):
+def _validate_longrope_parameters(rope_parameters: dict, config: PreTrainedConfig, ignore_keys: Optional[set] = None):
     required_keys = {"rope_type", "short_factor", "long_factor", "rope_theta"}
     # TODO (joao): update logic for the inclusion of `original_max_position_embeddings`
     optional_keys = {"attention_factor", "factor", "original_max_position_embeddings"}
@@ -808,7 +808,7 @@ def _validate_longrope_parameters(rope_parameters: dict, config: PretrainedConfi
                 )
 
 
-def _validate_llama3_parameters(rope_parameters: dict, config: PretrainedConfig, ignore_keys: Optional[set] = None):
+def _validate_llama3_parameters(rope_parameters: dict, config: PreTrainedConfig, ignore_keys: Optional[set] = None):
     required_keys = {
         "rope_type",
         "factor",
@@ -865,7 +865,7 @@ def rope_config_validation(config: PreTrainedConfig, ignore_keys: Optional[set] 
     """
     Validate the RoPE config arguments, given a `PreTrainedConfig` object
     """
-    rope_parameters_dict = getattr(config, "rope_parameters", None)  # not a default parameter in `PretrainedConfig`
+    rope_parameters_dict = getattr(config, "rope_parameters", None)  # not a default parameter in `PreTrainedConfig`
     if rope_parameters_dict is None:
         return
 

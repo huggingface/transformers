@@ -1660,7 +1660,7 @@ class Gemma3nRotaryEmbedding(nn.Module):
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
-            config ([`~transformers.PretrainedConfig`]):
+            config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
             device (`torch.device`):
                 The device to use for initialization of the inverse frequencies.
