@@ -237,7 +237,7 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
             images_tokens.append(num_img_tokens)
             image_sizes.append([height, width])
             max_crops = hd_image_reshape.size(0)
-        max_crops = max([img.size(0) for img in images_transformed])
+        max_crops = max(img.size(0) for img in images_transformed)
         images_transformed = [self.pad_to_max_num_crops(im, max_crops) for im in images_transformed]
         images_transformed = torch.stack(images_transformed, dim=0)
         masks_transformed = [self.pad_mask_to_max_num_crops(mask, max_crops) for mask in masks_transformed]
