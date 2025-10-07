@@ -33,6 +33,8 @@ if __name__ == "__main__":
     parser.add_argument("--max-batch-tokens", "-b", type=int, default=None)
     parser.add_argument("--attn", type=str, default="kernels-community/flash-attn", help="Attention implementation")
     parser.add_argument("--samples", type=int, default=500)
+    parser.add_argument("--max-new-tokens", type=int, default=32)
+
     args = parser.parse_args()
 
     # Prepare model
@@ -53,7 +55,7 @@ if __name__ == "__main__":
 
     # Prepare generation config
     generation_config = GenerationConfig(
-        max_new_tokens=512,
+        max_new_tokens=args.max_new_tokens,
         use_cuda_graph=False,  # Not supported for simple version
         eos_token_id=tokenizer.eos_token_id,
         pad_token_id=tokenizer.pad_token_id,
