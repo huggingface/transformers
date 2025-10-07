@@ -17,14 +17,13 @@ import unittest
 
 import pytest
 
-from transformers import Starcoder2Config, is_torch_available
+from transformers import is_torch_available
 from transformers.testing_utils import (
     Expectations,
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -45,23 +44,12 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 class Starcoder2ModelTester(CausalLMModelTester):
-    config_class = Starcoder2Config
     if is_torch_available():
         base_model_class = Starcoder2Model
-        causal_lm_class = Starcoder2ForCausalLM
-        sequence_class = Starcoder2ForSequenceClassification
-        token_class = Starcoder2ForTokenClassification
 
 
 @require_torch
 class Starcoder2ModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (Starcoder2Model, Starcoder2ForCausalLM, Starcoder2ForSequenceClassification, Starcoder2ForTokenClassification)
-        if is_torch_available()
-        else ()
-    )
-    test_headmasking = False
-    test_pruning = False
     model_tester_class = Starcoder2ModelTester
     pipeline_model_mapping = (
         {
@@ -73,13 +61,6 @@ class Starcoder2ModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest(reason="Starcoder2 flash attention does not support right padding")
 
 
 @slow

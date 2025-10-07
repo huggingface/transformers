@@ -21,7 +21,7 @@ import torch.nn.init as init
 from torch import nn
 
 from ...activations import ACT2CLS
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...image_transforms import corners_to_center_format
 from ...utils import is_torchdynamo_compiling, logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
@@ -48,13 +48,13 @@ logger = logging.get_logger(__name__)
 
 # TODO: Attribute map assignment logic should be fixed in modular
 # as well as super() call parsing because otherwise we cannot re-write args after initialization
-class DFineConfig(PretrainedConfig):
+class DFineConfig(PreTrainedConfig):
     """
     This is the configuration class to store the configuration of a [`DFineModel`]. It is used to instantiate a D-FINE
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of D-FINE-X-COCO "[ustc-community/dfine-xlarge-coco"](https://huggingface.co/ustc-community/dfine-xlarge-coco").
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         initializer_range (`float`, *optional*, defaults to 0.01):
@@ -432,12 +432,12 @@ class DFineConfig(PretrainedConfig):
         )
 
     @classmethod
-    def from_backbone_configs(cls, backbone_config: PretrainedConfig, **kwargs):
+    def from_backbone_configs(cls, backbone_config: PreTrainedConfig, **kwargs):
         """Instantiate a [`DFineConfig`] (or a derived class) from a pre-trained backbone model configuration and DETR model
         configuration.
 
             Args:
-                backbone_config ([`PretrainedConfig`]):
+                backbone_config ([`PreTrainedConfig`]):
                     The backbone configuration.
 
             Returns:
@@ -635,6 +635,12 @@ class DFinePreTrainedModel(RTDetrPreTrainedModel):
                     nn.init.constant_(layer.layers[-1].weight, 0)
                     nn.init.constant_(layer.layers[-1].bias, 0)
 
+            if hasattr(module, "reg_scale"):
+                module.reg_scale.fill_(self.config.reg_scale)
+
+            if hasattr(module, "up"):
+                module.up.fill_(self.config.up)
+
         if isinstance(module, DFineMultiscaleDeformableAttention):
             nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
             default_dtype = torch.get_default_dtype()
@@ -671,6 +677,10 @@ class DFinePreTrainedModel(RTDetrPreTrainedModel):
         if isinstance(module, DFineLQE):
             init.constant_(module.reg_conf.layers[-1].bias, 0)
             init.constant_(module.reg_conf.layers[-1].weight, 0)
+
+        if isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
 
         if hasattr(module, "weight_embedding") and self.config.learn_initial_query:
             nn.init.xavier_uniform_(module.weight_embedding.weight)
@@ -898,7 +908,7 @@ class DFineModel(RTDetrModel):
 
 class DFineForObjectDetection(RTDetrForObjectDetection, DFinePreTrainedModel):
     def __init__(self, config: DFineConfig):
-        DFinePreTrainedModel.__init__(config)
+        DFinePreTrainedModel.__init__(self, config)
 
         # D-FINE encoder-decoder model
         self.eval_idx = config.eval_idx if config.eval_idx >= 0 else config.decoder_layers + config.eval_idx
@@ -1100,8 +1110,6 @@ class DFineCSPRepLayer(nn.Module):
         self, config: DFineConfig, in_channels: int, out_channels: int, num_blocks: int, expansion: float = 1.0
     ):
         super().__init__()
-        in_channels = in_channels
-        out_channels = out_channels
         activation = config.activation_function
 
         hidden_channels = int(out_channels * expansion)

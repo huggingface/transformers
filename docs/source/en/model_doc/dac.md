@@ -23,7 +23,6 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-
 The DAC model was proposed in [Descript Audio Codec: High-Fidelity Audio Compression with Improved RVQGAN](https://huggingface.co/papers/2306.06546) by Rithesh Kumar, Prem Seetharaman, Alejandro Luebs, Ishaan Kumar, Kundan Kumar.
 
 The Descript Audio Codec (DAC) model is a powerful tool for compressing audio data, making it highly efficient for storage and transmission. By compressing 44.1 KHz audio into tokens at just 8kbps bandwidth, the DAC model enables high-quality audio processing while significantly reducing the data footprint. This is particularly useful in scenarios where bandwidth is limited or storage space is at a premium, such as in streaming applications, remote conferencing, and archiving large audio datasets.
@@ -35,7 +34,6 @@ The abstract from the paper is the following:
 This model was contributed by [Kamil Akesbi](https://huggingface.co/kamilakesbi).
 The original code can be found [here](https://github.com/descriptinc/descript-audio-codec/tree/main?tab=readme-ov-file).
 
-
 ## Model structure
 
 The Descript Audio Codec (DAC) model is structured into three distinct stages:
@@ -44,11 +42,11 @@ The Descript Audio Codec (DAC) model is structured into three distinct stages:
 2. Residual Vector Quantizer (RVQ) Model: Working in tandem with the encoder, this model quantizes the latent codes of the audio, refining the compression and ensuring high-quality reconstruction.
 3. Decoder Model: This final stage reconstructs the audio from its compressed form, restoring it to a state that closely resembles the original input.
 
-## Usage example 
+## Usage example
 
-Here is a quick example of how to encode and decode an audio using this model: 
+Here is a quick example of how to encode and decode an audio using this model:
 
-```python 
+```python
 >>> from datasets import load_dataset, Audio
 >>> from transformers import DacModel, AutoProcessor
 >>> librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")

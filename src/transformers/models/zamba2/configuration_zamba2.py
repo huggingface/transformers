@@ -20,10 +20,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 
 
-class Zamba2Config(PretrainedConfig):
+class Zamba2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Zamba2Model`]. It is used to instantiate a
     Zamba2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -31,8 +31,8 @@ class Zamba2Config(PretrainedConfig):
 
     [Zyphra/Zamba2-2.7B](https://huggingface.co/Zyphra/Zamba2-2.7B)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
     Args:
         vocab_size (`int`, *optional*, defaults to 32000):
             Vocabulary size of the Zamba2 model. Defines the number of different tokens that can be represented by the

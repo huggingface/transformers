@@ -24,14 +24,13 @@ import random
 import re
 import threading
 import time
-from typing import Any, NamedTuple, Optional, Union
+from typing import Any, Callable, NamedTuple, Optional, Union
 
 import numpy as np
 
 from .utils import (
     ExplicitEnum,
     is_psutil_available,
-    is_tf_available,
     is_torch_available,
     is_torch_cuda_available,
     is_torch_hpu_available,
@@ -61,8 +60,7 @@ def seed_worker(worker_id: int, num_workers: int, rank: int):
 def enable_full_determinism(seed: int, warn_only: bool = False):
     """
     Helper function for reproducible behavior during distributed training. See
-    - https://pytorch.org/docs/stable/notes/randomness.html for pytorch
-    - https://www.tensorflow.org/api_docs/python/tf/config/experimental/enable_op_determinism for tensorflow
+    https://pytorch.org/docs/stable/notes/randomness.html for pytorch
     """
     # set seed first
     set_seed(seed)
@@ -84,15 +82,10 @@ def enable_full_determinism(seed: int, warn_only: bool = False):
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
 
-    if is_tf_available():
-        import tensorflow as tf
-
-        tf.config.experimental.enable_op_determinism()
-
 
 def set_seed(seed: int, deterministic: bool = False):
     """
-    Helper function for reproducible behavior to set the seed in `random`, `numpy`, `torch` and/or `tf` (if installed).
+    Helper function for reproducible behavior to set the seed in `random`, `numpy`, `torch` (if installed).
 
     Args:
         seed (`int`):
@@ -118,12 +111,6 @@ def set_seed(seed: int, deterministic: bool = False):
         torch.hpu.manual_seed_all(seed)
     if is_torch_xpu_available():
         torch.xpu.manual_seed_all(seed)
-    if is_tf_available():
-        import tensorflow as tf
-
-        tf.random.set_seed(seed)
-        if deterministic:
-            tf.config.experimental.enable_op_determinism()
 
 
 def neftune_post_forward_hook(module, input, output):
@@ -237,12 +224,6 @@ class SaveStrategy(ExplicitEnum):
     BEST = "best"
 
 
-class EvaluationStrategy(ExplicitEnum):
-    NO = "no"
-    STEPS = "steps"
-    EPOCH = "epoch"
-
-
 class HubStrategy(ExplicitEnum):
     END = "end"
     EVERY_SAVE = "every_save"
@@ -307,7 +288,7 @@ def default_hp_space_optuna(trial) -> dict[str, float]:
     }
 
 
-def default_hp_space_ray(trial) -> dict[str, float]:
+def default_hp_space_ray(trial) -> dict[str, Any]:
     from .integrations import is_ray_tune_available
 
     assert is_ray_tune_available(), "This function needs ray installed: `pip install ray[tune]`"
@@ -334,7 +315,7 @@ def default_hp_space_sigopt(trial):
     ]
 
 
-def default_hp_space_wandb(trial) -> dict[str, float]:
+def default_hp_space_wandb(trial) -> dict[str, Any]:
     from .integrations import is_wandb_available
 
     if not is_wandb_available():
@@ -421,16 +402,17 @@ class SchedulerType(ExplicitEnum):
     Scheduler names for the parameter `lr_scheduler_type` in [`TrainingArguments`].
     By default, it uses "linear". Internally, this retrieves `get_linear_schedule_with_warmup` scheduler from [`Trainer`].
     Scheduler types:
-       - "linear" = get_linear_schedule_with_warmup
-       - "cosine" = get_cosine_schedule_with_warmup
-       - "cosine_with_restarts" = get_cosine_with_hard_restarts_schedule_with_warmup
-       - "polynomial" = get_polynomial_decay_schedule_with_warmup
-       - "constant" =  get_constant_schedule
-       - "constant_with_warmup" = get_constant_schedule_with_warmup
-       - "inverse_sqrt" = get_inverse_sqrt_schedule
-       - "reduce_lr_on_plateau" = get_reduce_on_plateau_schedule
-       - "cosine_with_min_lr" = get_cosine_with_min_lr_schedule_with_warmup
-       - "warmup_stable_decay" = get_wsd_schedule
+       - "linear" = [`get_linear_schedule_with_warmup`]
+       - "cosine" = [`get_cosine_schedule_with_warmup`]
+       - "cosine_with_restarts" = [`get_cosine_with_hard_restarts_schedule_with_warmup`]
+       - "polynomial" = [`get_polynomial_decay_schedule_with_warmup`]
+       - "constant" =  [`get_constant_schedule`]
+       - "constant_with_warmup" = [`get_constant_schedule_with_warmup`]
+       - "inverse_sqrt" = [`get_inverse_sqrt_schedule`]
+       - "reduce_lr_on_plateau" = [`get_reduce_on_plateau_schedule`]
+       - "cosine_with_min_lr" = [`get_cosine_with_min_lr_schedule_with_warmup`]
+       - "cosine_warmup_with_min_lr" = [`get_cosine_with_min_lr_schedule_with_warmup_lr_rate`]
+       - "warmup_stable_decay" = [`get_wsd_schedule`]
     """
 
     LINEAR = "linear"
@@ -464,8 +446,6 @@ class TrainerMemoryTracker:
     self._memory_tracker.stop_and_update_metrics(metrics)
     ```
 
-    At the moment GPU tracking is only for `pytorch`, but can be extended to support `tensorflow`.
-
     To understand this class' intricacies please read the documentation of [`~Trainer.log_metrics`].
     """
 
@@ -488,7 +468,7 @@ class TrainerMemoryTracker:
         if self.skip_memory_metrics:
             return
 
-        import psutil  # noqa
+        import psutil
 
         if is_torch_cuda_available() or is_torch_mlu_available() or is_torch_musa_available():
             import torch
@@ -792,14 +772,14 @@ def number_of_arguments(func):
 
 
 def find_executable_batch_size(
-    function: Optional[callable] = None, starting_batch_size: int = 128, auto_find_batch_size: bool = False
+    function: Optional[Callable] = None, starting_batch_size: int = 128, auto_find_batch_size: bool = False
 ):
     """
     Args:
     A basic decorator that will try to execute `function`. If it fails from exceptions related to out-of-memory or
     CUDNN, the batch size is multiplied by 0.9 and passed to `function`. `function` must take in a `batch_size` parameter as
     its first argument.
-        function (`callable`, *optional*)
+        function (`Callable`, *optional*)
             A function to wrap
         starting_batch_size (`int`, *optional*)
             The batch size to try and fit into memory

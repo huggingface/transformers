@@ -24,6 +24,7 @@ from transformers.testing_utils import (
     DeviceProperties,
     Expectations,
     get_device_properties,
+    is_flaky,
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
@@ -34,7 +35,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -104,10 +105,10 @@ class JambaModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         attn_layer_offset=1,
         attn_layer_period=8,
-        num_attention_heads=4,
+        num_attention_heads=2,
         num_key_value_heads=2,
         intermediate_size=37,
         hidden_act="gelu",
@@ -339,7 +340,6 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
     test_pruning = False
 
     def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
@@ -373,7 +373,7 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_for_casual_lm(self):
+    def test_for_causal_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
 
@@ -385,13 +385,15 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
+    # After #40617, we still have 0.01 % of failure rate here.
+    @is_flaky(max_attempts=2)
     def test_load_balancing_loss(self):
         r"""
         Let's make sure we can actually compute the loss and do a backward on it.
         """
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
-        config.num_experts = 16
+        config.num_experts = 3
         config.output_router_logits = True
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(config.pad_token_id).to(torch_device)
@@ -401,11 +403,13 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         result = model(input_ids, attention_mask=attention_mask)
         bs, seqlen = input_ids.shape
         self.assertEqual(result.router_logits[0].shape, (bs * seqlen, config.num_experts))
+        # After #40617, we still have 0.01 % of failure rate here.
         torch.testing.assert_close(result.aux_loss.cpu(), torch.tensor(2, dtype=torch.float32), rtol=1e-2, atol=1e-2)
 
         # First, we make sure that adding padding tokens doesn't change the loss
         # loss(input_ids, attention_mask=None) == loss(input_ids + padding, attention_mask=attention_mask_with_padding)
-        pad_length = 1000
+        # (This length is selected from experiments)
+        pad_length = input_ids.shape[1] * 4
         # Add padding tokens to input_ids
         padding_block = config.pad_token_id * torch.ones(input_ids.shape[0], pad_length, dtype=torch.int32).to(
             torch_device
@@ -421,39 +425,8 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         include_padding_result = model(padded_input_ids, attention_mask=None)
 
         # This is to mimic torch.testing.assert_not_close
+        # After #40617, we still have 0.003 % of failure rate here.
         self.assertNotAlmostEqual(include_padding_result.aux_loss.item(), result.aux_loss.item())
-
-    def test_initialization(self):
-        r"""
-        Overriding the test_initialization test as the A_log and D params of the Mamba block are initialized differently
-        """
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    if "A_log" in name:
-                        A = torch.arange(1, config.mamba_d_state + 1, dtype=torch.float32)[None, :]
-                        A = A.expand(config.mamba_expand * config.hidden_size, -1).contiguous()
-                        torch.testing.assert_close(param.data, torch.log(A), rtol=1e-5, atol=1e-5)
-                    elif "D" in name:
-                        # check if it's a ones like
-                        torch.testing.assert_close(param.data, torch.ones_like(param.data), rtol=1e-5, atol=1e-5)
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-
-    def test_mismatched_shapes_have_properly_initialized_weights(self):
-        r"""
-        Overriding the test_mismatched_shapes_have_properly_initialized_weights test because A_log and D params of the
-        Mamba block are initialized differently and we tested that in test_initialization
-        """
-        self.skipTest(reason="Cumbersome and redundant for Jamba")
 
     def test_attention_outputs(self):
         r"""
@@ -560,16 +533,13 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 # with attention mask
                 _ = model(dummy_input, attention_mask=dummy_attention_mask)
 
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        r"""
-        Overriding the test_flash_attn_2_inference_padding_right test as the Jamba model, like Mixtral, doesn't support
-        right padding + use cache with FA2
-        """
-        self.skipTest(reason="Jamba flash attention does not support right padding")
+    @unittest.skip("Jamba has a non standard cache format (mamba cache)")
+    def test_past_key_values_format(self):
+        pass
+
+    @unittest.skip("Jamba has a non standard cache which is not compatible with dp/ddp")
+    def test_multi_gpu_data_parallel_forward(self):
+        pass
 
 
 @require_torch
@@ -586,6 +556,7 @@ class JambaModelIntegrationTest(unittest.TestCase):
         cls.model = JambaForCausalLM.from_pretrained(
             model_id,
             dtype=torch.bfloat16,
+            use_mamba_kernels=False,
         )
         cls.tokenizer = AutoTokenizer.from_pretrained(model_id)
         cls.device_properties = get_device_properties()
@@ -615,23 +586,6 @@ class JambaModelIntegrationTest(unittest.TestCase):
         output_sentence = self.tokenizer.decode(out[0, :])
         self.assertEqual(output_sentence, expected_sentence)
 
-        # TODO: there are significant differences in the logits across major cuda versions, which shouldn't exist
-        if self.device_properties[0] == "cuda" and self.device_properties[1] == 8:
-            with torch.no_grad():
-                logits = self.model(input_ids=input_ids).logits
-
-            EXPECTED_LOGITS_NO_GRAD = torch.tensor(
-                [
-                    -7.6875, -7.6562,  8.9375, -7.7812, -7.4062, -7.9688, -8.3125, -7.4062,
-                    -7.8125, -8.1250, -7.8125, -7.3750, -7.8438, -7.5000, -8.0625, -8.0625,
-                    -7.5938, -7.9688, -8.2500, -7.5625, -7.7500, -7.7500, -7.6562, -7.6250,
-                    -8.1250, -8.0625, -8.1250, -7.8750, -8.1875, -8.2500, -7.5938, -8.0000,
-                    -7.5000, -7.7500, -7.9375, -7.4688, -8.0625, -7.3438, -8.0000, -7.5000
-                ]
-                , dtype=torch.float32)  # fmt: skip
-
-            torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD, rtol=1e-3, atol=1e-3)
-
     @slow
     def test_simple_batched_generate_with_padding(self):
         # ("cuda", 8) for A100/A10, and ("cuda", 7) for T4.
@@ -657,32 +611,3 @@ class JambaModelIntegrationTest(unittest.TestCase):
         output_sentences = self.tokenizer.batch_decode(out)
         self.assertEqual(output_sentences[0], expected_sentences[0])
         self.assertEqual(output_sentences[1], expected_sentences[1])
-
-        # TODO: there are significant differences in the logits across major cuda versions, which shouldn't exist
-        if self.device_properties[0] == "cuda" and self.device_properties[1] == 8:
-            with torch.no_grad():
-                logits = self.model(input_ids=inputs["input_ids"]).logits
-
-            # TODO fix logits
-            EXPECTED_LOGITS_NO_GRAD_0 = torch.tensor(
-                [
-                    -7.7188, -7.6875,  8.8750, -7.8125, -7.4062, -8.0000, -8.3125, -7.4375,
-                    -7.8125, -8.1250, -7.8125, -7.4062, -7.8438, -7.5312, -8.0625, -8.0625,
-                    -7.6250, -8.0000, -8.3125, -7.5938, -7.7500, -7.7500, -7.6562, -7.6562,
-                    -8.1250, -8.0625, -8.1250, -7.8750, -8.1875, -8.2500, -7.5938, -8.0625,
-                     -7.5000, -7.7812, -7.9375, -7.4688, -8.0625, -7.3750, -8.0000, -7.50003
-                ]
-                , dtype=torch.float32)  # fmt: skip
-
-            EXPECTED_LOGITS_NO_GRAD_1 = torch.tensor(
-                [
-                    -3.5469, -4.0625,  8.5000, -3.8125, -3.6406, -3.7969, -3.8125, -3.3594,
-                     -3.7188, -3.7500, -3.7656, -3.5469, -3.7969, -4.0000, -3.5625, -3.6406,
-                    -3.7188, -3.6094, -4.0938, -3.6719, -3.8906, -3.9844, -3.8594, -3.4219,
-                    -3.2031, -3.4375, -3.7500, -3.6562, -3.9688, -4.1250, -3.6406, -3.57811,
-                    -3.0312, -3.4844, -3.6094, -3.5938, -3.7656, -3.8125, -3.7500, -3.8594
-                ]
-                , dtype=torch.float32)  # fmt: skip
-
-            torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_0, rtol=1e-3, atol=1e-3)
-            torch.testing.assert_close(logits[1, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_1, rtol=1e-3, atol=1e-3)

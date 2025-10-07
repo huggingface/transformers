@@ -1,7 +1,6 @@
 from typing import Callable, Optional
 
 import torch
-import torch.utils.checkpoint
 from packaging import version
 from torch import nn
 
@@ -144,7 +143,7 @@ class Qwen2Model(MistralModel):
         super().__init__(config)
         self.has_sliding_layers = "sliding_attention" in self.config.layer_types
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,

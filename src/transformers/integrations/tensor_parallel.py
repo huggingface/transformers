@@ -40,7 +40,7 @@ if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
 
 def initialize_tensor_parallelism(tp_plan, tp_size=None):
     r"""
-    Sets up the device mesh and initilized the backend for tensor parallelism.
+    Sets up the device mesh and initialized the backend for tensor parallelism.
     This function is called when the model is loaded and the TP plan is set to 'auto'.
     """
     if tp_plan is None:
@@ -128,7 +128,7 @@ def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str], is_weig
     The parameter name can be a generic name with wildcards (e.g. "*.weight") or a specific name (e.g. "layer_1.weight").
 
     The `is_weight` is important because for weights, we want to support `.weights` and `.bias` cases seamlessly! but
-    not parrent classes for `post_init` calls
+    not parent classes for `post_init` calls
     """
     generic_param_name = re.sub(r"\d+", "*", parameter_name)
     if generic_param_name in tp_plan:
@@ -846,7 +846,7 @@ class RouterParallel(TensorParallelLayer):
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
         """
         Imagine if you had 4 tokens, top_k = 4, and 128experts.
-        With EP = 8.
+        With EP = 8. The num_local_expert should be 128/8 = 16
         Imagine router_indices being:
         [ 52,  42, 119,  67],
         [102,  89,  61,  40],
@@ -860,12 +860,12 @@ class RouterParallel(TensorParallelLayer):
         [5, 6, 0, 2],
         [5, 1, 6, 0],
 
-        Thus for say rank 0, you fill with 0 the index tensor
+        Thus for say rank 0, you fill with 16 (num_local_expert) the index tensor
 
-        [ 0, 0, 0, 0],
-        [ 0, 0, 0, 0],
-        [ 0, 0, 4, 0],
-        [ 0, 0, 0, 11],
+        [ 16, 16, 16, 16],
+        [ 16, 16, 16, 16],
+        [ 16, 16, 4, 16],
+        [ 16, 16, 16, 11],
 
         This works well. For another rank you need to make sure you round to num_local_expert
         because the next operation will one hot encode the router index vector.
@@ -876,13 +876,25 @@ class RouterParallel(TensorParallelLayer):
 
         The kinda naive training loop that we use for device_map "auto" uses a similar logic.
         Here we are just making each rank believe that he is alone, and he computes his part of the hiddenstates.
+        Mask invalid indices with num_local_expert for one-hot encoding, so the computes will skip the masking index.
         """
         ep_rank, ep_size = device_mesh.get_local_rank(), device_mesh.size()
+        if mod.num_experts % ep_size != 0:
+            raise ValueError(
+                f"The number of experts must be divisible by number of ep_size: {mod.num_experts} % {ep_size} != 0"
+            )
         num_local_experts = mod.num_experts // ep_size
         router_scores, router_indices = outputs
         router_scores = router_scores[:, ep_rank * num_local_experts : (ep_rank + 1) * num_local_experts]
-        router_indices = router_indices.masked_fill((router_indices // num_local_experts) != ep_rank, 0)
-        router_indices = router_indices % num_local_experts
+        router_indices = router_indices.masked_fill((router_indices // num_local_experts) != ep_rank, -1)
+        # As -1 % 1 is 0, we can only use mask fill when num_local_experts is 1
+        if num_local_experts > 1:
+            router_indices = torch.fmod(router_indices, num_local_experts)
+        else:
+            router_indices = router_indices.masked_fill(router_indices > 0, 0).masked_fill(router_indices < 0, -1)
+        router_indices = router_indices.masked_fill(
+            router_indices == -1, num_local_experts
+        )  # masking class for one hot
         return router_scores, router_indices
 
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
@@ -997,7 +1009,7 @@ def add_tensor_parallel_hooks_to_module(
 
 
 def shard_and_distribute_module(
-    model, param, empty_param, parameter_name, param_casting_dtype, is_contiguous, rank, device_mesh, set_param=True
+    model, param, empty_param, parameter_name, param_casting_dtype, is_contiguous, rank, device_mesh
 ):  # TODO: rename to shard_and_distribute_param
     r"""
     This function is called in `from_pretrained` when loading a model's checkpoints.
@@ -1091,8 +1103,6 @@ def distribute_model(model, distributed_config, device_mesh, tp_size):
                 raise ValueError(f"Unsupported tensor parallel style {v}. Supported styles are {ALL_PARALLEL_STYLES}")
         for name, module in model.named_modules():
             if not getattr(module, "_is_hooked", False):
-                from transformers.integrations.tensor_parallel import add_tensor_parallel_hooks_to_module
-
                 plan = _get_parameter_tp_plan(parameter_name=name, tp_plan=model_plan, is_weight=False)
                 add_tensor_parallel_hooks_to_module(
                     model=model,

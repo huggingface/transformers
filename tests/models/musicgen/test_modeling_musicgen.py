@@ -18,6 +18,7 @@ import inspect
 import math
 import tempfile
 import unittest
+from functools import cached_property
 
 import numpy as np
 import pytest
@@ -28,7 +29,7 @@ from transformers import (
     MusicgenConfig,
     MusicgenDecoderConfig,
     MusicgenProcessor,
-    PretrainedConfig,
+    PreTrainedConfig,
     T5Config,
 )
 from transformers.testing_utils import (
@@ -43,7 +44,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -67,7 +67,7 @@ def _config_zero_init(config):
     for key in configs_no_init.__dict__:
         if "_range" in key or "_std" in key or "initializer_factor" in key or "layer_scale" in key:
             setattr(configs_no_init, key, 1e-10)
-        if isinstance(getattr(configs_no_init, key, None), PretrainedConfig):
+        if isinstance(getattr(configs_no_init, key, None), PreTrainedConfig):
             no_init_subconfig = _config_zero_init(getattr(configs_no_init, key))
             setattr(configs_no_init, key, no_init_subconfig)
     return configs_no_init
@@ -242,7 +242,7 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             input_ids = input_ids.reshape(-1, config.num_codebooks, input_ids.shape[-1])
 
             inputs["inputs_embeds"] = sum(
-                [embed_tokens[codebook](input_ids[:, codebook]) for codebook in range(config.num_codebooks)]
+                embed_tokens[codebook](input_ids[:, codebook]) for codebook in range(config.num_codebooks)
             )
 
             with torch.no_grad():
@@ -573,7 +573,6 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     # Addition keys that are required for forward. MusicGen isn't encoder-decoder in config so we have to pass decoder ids as additional
     additional_model_inputs = ["decoder_input_ids"]
     test_pruning = False  # training is not supported yet for MusicGen
-    test_headmasking = False
     test_resize_embeddings = False
     # not to test torchscript as the model tester doesn't prepare `input_values` and `padding_mask`
     # (and `torchscript` hates `None` values).
@@ -756,11 +755,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 "decoder_input_ids",
                 "decoder_attention_mask",
             ]
-            expected_arg_names.extend(
-                ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
-                if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
-                else ["encoder_outputs"]
-            )
+            expected_arg_names.extend(["encoder_outputs"])
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     # override since changing `gradient_checkpointing` from the top-level model config won't work
@@ -879,29 +874,6 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    # override since the conv layers and lstm's in encodec are exceptions
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                uniform_init_parms = ["conv"]
-                ignore_init = ["lstm"]
-                if param.requires_grad:
-                    if any(x in name for x in uniform_init_parms):
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    elif not any(x in name for x in ignore_init):
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-
     # override since we have embeddings / LM heads over multiple codebooks
     def test_model_get_set_embeddings(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -941,93 +913,6 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     @require_torch_gpu
     @mark.flash_attn_test
     @slow
-    # Adapted from tests.test_modeling_common.ModelTesterMixin.test_flash_attn_2_inference_equivalence
-    def test_flash_attn_2_inference_equivalence(self):
-        for model_class in self.all_model_classes:
-            if not model_class._supports_flash_attn:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model_fa = model_class.from_pretrained(
-                    tmpdirname,
-                    dtype=torch.bfloat16,
-                    attn_implementation={"decoder": "flash_attention_2", "audio_encoder": None, "text_encoder": None},
-                )
-                model_fa.to(torch_device)
-
-                model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
-                model.to(torch_device)
-
-                # Ignore copy
-                dummy_input = inputs_dict[model.main_input_name]
-                if dummy_input.dtype in [torch.float32, torch.float16]:
-                    dummy_input = dummy_input.to(torch.bfloat16)
-
-                dummy_attention_mask = inputs_dict.get("attention_mask", None)
-
-                if dummy_attention_mask is not None:
-                    # Ignore copy
-                    dummy_attention_mask[:, 1:] = 1
-                    dummy_attention_mask[:, :1] = 0
-
-                # Ignore copy
-                decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)
-                # Ignore copy
-                outputs = model(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
-                # Ignore copy
-                outputs_fa = model_fa(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
-
-                logits = (
-                    outputs.hidden_states[-1]
-                    if not model.config.is_encoder_decoder
-                    else outputs.decoder_hidden_states[-1]
-                )
-                logits_fa = (
-                    outputs_fa.hidden_states[-1]
-                    if not model.config.is_encoder_decoder
-                    else outputs_fa.decoder_hidden_states[-1]
-                )
-
-                assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
-                # Ignore copy
-                other_inputs = {
-                    "decoder_input_ids": decoder_input_ids,
-                    "decoder_attention_mask": dummy_attention_mask,
-                    "output_hidden_states": True,
-                }
-                # Ignore copy
-                if dummy_attention_mask is not None:
-                    other_inputs["attention_mask"] = dummy_attention_mask
-                # Ignore copy
-                outputs = model(dummy_input, **other_inputs)
-                # Ignore copy
-                outputs_fa = model_fa(dummy_input, **other_inputs)
-
-                logits = (
-                    outputs.hidden_states[-1]
-                    if not model.config.is_encoder_decoder
-                    else outputs.decoder_hidden_states[-1]
-                )
-                logits_fa = (
-                    outputs_fa.hidden_states[-1]
-                    if not model.config.is_encoder_decoder
-                    else outputs_fa.decoder_hidden_states[-1]
-                )
-
-                assert torch.allclose(logits_fa[1:], logits[1:], atol=4e-2, rtol=4e-2)
-
-                # check with inference + dropout
-                model.train()
-                _ = model_fa(dummy_input, **other_inputs)
-
-    @require_flash_attn
-    @require_torch_gpu
-    @mark.flash_attn_test
-    @slow
     def test_flash_attn_2_conversion(self):
         self.skipTest(reason="Musicgen doesn't use the MusicgenFlashAttention2 class method.")
 
@@ -1057,7 +942,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 self.skipTest(
                     reason="Llava-like models currently (transformers==4.39.1) requires an attention_mask input"
                 )
-            if config.model_type in ["paligemma"]:
+            if config.model_type == "paligemma":
                 self.skipTest(
                     "PaliGemma-like models currently (transformers==4.41.0) requires an attention_mask input"
                 )
@@ -1083,90 +968,6 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
                 with sdpa_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
                     _ = model(**inputs_dict)
-
-    @require_flash_attn
-    @require_torch_gpu
-    @mark.flash_attn_test
-    @slow
-    # Adapted from tests.test_modeling_common.ModelTesterMixin.test_flash_attn_2_inference_equivalence_right_padding
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        for model_class in self.all_model_classes:
-            if not model_class._supports_flash_attn:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model_fa = model_class.from_pretrained(
-                    tmpdirname,
-                    dtype=torch.bfloat16,
-                    attn_implementation={"decoder": "flash_attention_2", "audio_encoder": None, "text_encoder": None},
-                )
-                model_fa.to(torch_device)
-
-                model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
-                model.to(torch_device)
-
-                # Ignore copy
-                dummy_input = inputs_dict[model.main_input_name]
-                if dummy_input.dtype in [torch.float32, torch.float16]:
-                    dummy_input = dummy_input.to(torch.bfloat16)
-
-                dummy_attention_mask = inputs_dict.get("attention_mask", None)
-
-                if dummy_attention_mask is not None:
-                    # Ignore copy
-                    dummy_attention_mask[:, :-1] = 1
-                    dummy_attention_mask[:, -1:] = 0
-
-                # Ignore copy
-                decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)
-                # Ignore copy
-                outputs = model(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
-                # Ignore copy
-                outputs_fa = model_fa(dummy_input, decoder_input_ids=decoder_input_ids, output_hidden_states=True)
-
-                logits = (
-                    outputs.hidden_states[-1]
-                    if not model.config.is_encoder_decoder
-                    else outputs.decoder_hidden_states[-1]
-                )
-                logits_fa = (
-                    outputs_fa.hidden_states[-1]
-                    if not model.config.is_encoder_decoder
-                    else outputs_fa.decoder_hidden_states[-1]
-                )
-
-                assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
-
-                # Ignore copy
-                other_inputs = {
-                    "decoder_input_ids": decoder_input_ids,
-                    "decoder_attention_mask": dummy_attention_mask,
-                    "output_hidden_states": True,
-                }
-                # Ignore copy
-                if dummy_attention_mask is not None:
-                    other_inputs["attention_mask"] = dummy_attention_mask
-                # Ignore copy
-                outputs = model(dummy_input, **other_inputs)
-                # Ignore copy
-                outputs_fa = model_fa(dummy_input, **other_inputs)
-
-                logits = (
-                    outputs.hidden_states[-1]
-                    if not model.config.is_encoder_decoder
-                    else outputs.decoder_hidden_states[-1]
-                )
-                logits_fa = (
-                    outputs_fa.hidden_states[-1]
-                    if not model.config.is_encoder_decoder
-                    else outputs_fa.decoder_hidden_states[-1]
-                )
-
-                assert torch.allclose(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2)
 
     def test_sdpa_can_dispatch_composite_models(self):
         if not self.has_attentions:

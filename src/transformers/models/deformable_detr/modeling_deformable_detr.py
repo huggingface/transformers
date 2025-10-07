@@ -18,7 +18,7 @@ import copy
 import math
 import warnings
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Any, Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -230,8 +230,8 @@ class DeformableDetrObjectDetectionOutput(ModelOutput):
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[tuple[torch.FloatTensor]] = None
-    enc_outputs_class: Optional = None
-    enc_outputs_coord_logits: Optional = None
+    enc_outputs_class: Any = None
+    enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
 
 
 def _get_clones(module, N):
@@ -959,8 +959,6 @@ class DeformableDetrPreTrainedModel(PreTrainedModel):
             nn.init.xavier_uniform_(module.output_proj.weight.data)
             nn.init.constant_(module.output_proj.bias.data, 0.0)
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -1364,9 +1362,6 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
 
     def get_encoder(self):
         return self.encoder
-
-    def get_decoder(self):
-        return self.decoder
 
     def freeze_backbone(self):
         for name, param in self.backbone.conv_encoder.model.named_parameters():

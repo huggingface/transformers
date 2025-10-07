@@ -19,25 +19,13 @@ import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
-from ...processing_utils import AudioKwargs, ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 
-class Gemma3nImagesKwargs(ImagesKwargs):
-    do_pan_and_scan: Optional[bool]
-    pan_and_scan_min_crop_size: Optional[int]
-    pan_and_scan_max_num_crops: Optional[int]
-    pan_and_scan_min_ratio_to_activate: Optional[float]
-    do_convert_rgb: Optional[bool]
-
-
 class Gemma3nProcessorKwargs(ProcessingKwargs, total=False):
-    audio_kwargs: AudioKwargs
-    images_kwargs: Gemma3nImagesKwargs
     _defaults = {
-        "text_kwargs": {
-            "padding": False,
-        },
+        "text_kwargs": {"padding": False},
     }
 
 
@@ -102,10 +90,9 @@ class Gemma3nProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio: Optional[Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]]] = None,
-        videos=None,
         **kwargs: Unpack[Gemma3nProcessorKwargs],
     ) -> BatchFeature:
         if text is None and images is None and audio is None:
@@ -120,7 +107,7 @@ class Gemma3nProcessor(ProcessorMixin):
         if isinstance(text, str):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
-            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+            raise TypeError("Invalid input text. Please provide a string, or a list of strings")
 
         if audio is not None:
             audio_inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
@@ -134,6 +121,7 @@ class Gemma3nProcessor(ProcessorMixin):
             audio_inputs = {}
 
         if images is not None:
+            images = self.image_processor.fetch_images(images)
             batched_images = make_nested_list_of_images(images)
             image_inputs = self.image_processor(batched_images, **output_kwargs["images_kwargs"])
 

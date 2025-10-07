@@ -32,7 +32,7 @@ MetaCLIP 2 is a replication of the original CLIP model trained on 300+ languages
 This model was contributed by [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/facebookresearch/MetaCLIP).
 
-You can find all the MetaCLIP 2 checkpoints under the [Meta](https://huggingface.co/facebook?search_models=metaclip-2) organization.
+You can find all the MetaCLIP 2 checkpoints under the [Meta](https://huggingface.co/facebook/models?search=metaclip-2) organization.
 
 > [!TIP]
 > Click on the MetaCLIP 2 models in the right sidebar for more examples of how to apply MetaCLIP 2 to different image and language tasks.
