@@ -126,18 +126,6 @@ class Llama4VisionConfig(PreTrainedConfig):
 
         self._vision_feature_layer = kwargs.get("vision_feature_layer", -1)
 
-        @property
-        def vision_feature_layer(self):
-            warnings.warn(
-                "The `vision_feature_layer` attribute is deprecated and will be removed in v4.58.0.",
-                FutureWarning,
-            )
-            return self._vision_feature_layer
-
-        @vision_feature_layer.setter
-        def vision_feature_layer(self, value):
-            self._vision_feature_layer = value
-
         super().__init__(**kwargs)
 
 

@@ -1911,16 +1911,6 @@ class GenerationMixin(ContinuousMixin):
                     f"Passing both `cache_implementation` (used to initialize certain caches) and `{cache_name}` (a "
                     "Cache object) is unsupported. Please use only one of the two."
                 )
-            if isinstance(user_defined_cache, tuple) and self._supports_default_dynamic_cache():
-                logger.warning_once(
-                    "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
-                    "You should pass an instance of `Cache` instead."
-                )
-                model_kwargs[cache_name] = (
-                    DynamicCache.from_legacy_cache(user_defined_cache)
-                    if not requires_cross_attention_cache
-                    else EncoderDecoderCache.from_legacy_cache(user_defined_cache)
-                )
             return
 
         # Quick escape route 2: if the user specifies no cache is to be used. (conflicting arguments are handled in
@@ -2005,14 +1995,6 @@ class GenerationMixin(ContinuousMixin):
                 model_kwargs[cache_name] = DynamicCache(**dynamic_cache_kwargs, offloading=True)
             elif "dynamic" in generation_config.cache_implementation:
                 model_kwargs[cache_name] = DynamicCache(**dynamic_cache_kwargs)
-
-        # Use DynamicCache instance by default. This will avoid back and forth from legacy format that
-        # keeps copying the cache thus using much more memory
-        # TODO (joao): remove this `else` when we remove the last traces of the legacy cache format (v4.58.0, search
-        # for `instance(past_key_values, Cache)` as well). In general, if `cache_implementation` is unset, cache
-        # initialization should happen inside the model at prefill time.
-        else:
-            model_kwargs[cache_name] = DynamicCache(**dynamic_cache_kwargs)
 
         # TODO (joao): this logic is incomplete, e.g. `offloaded` should apply to both caches. Refactor this function
         # to correctly pass parameterization to both caches.
