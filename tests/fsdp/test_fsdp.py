@@ -263,7 +263,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
         fsdp_args = ["--fsdp", f"{sharding_strategy} auto_wrap", "--fsdp_config", f"{fsdp_config}"]
         if dtype == "fp16":
             # fp16 + fsdp + fused adamw torch breaks so we switch optimizers
-            fsdp_args += ["--optim adamw_torch"]
+            fsdp_args += ["--optim", "adamw_torch"]
         script = [f"{self.examples_dir_str}/pytorch/text-classification/run_glue.py"]
         cmd = launcher + script + args + fsdp_args
         execute_subprocess_async(cmd, env=self.get_env())
@@ -280,7 +280,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
         fsdp_args = ["--fsdp", f"{sharding_strategy} auto_wrap", "--fsdp_config", f"{fsdp_config}"]
         if dtype == "fp16":
             # fp16 + fsdp + fused adamw torch breaks so we switch optimizers
-            fsdp_args += ["--optim adamw_torch"]
+            fsdp_args += ["--optim", "adamw_torch"]
         script = [f"{self.examples_dir_str}/pytorch/text-classification/run_glue.py"]
         cmd = launcher + script + args + fsdp_args
         execute_subprocess_async(cmd, env=self.get_env())
@@ -297,7 +297,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
         fsdp_args = ["--fsdp", "full_shard auto_wrap offload", "--fsdp_config", f"{fsdp_config}"]
         if dtype == "fp16":
             # fp16 + fsdp + fused adamw torch breaks so we switch optimizers
-            fsdp_args += ["--optim adamw_torch"]
+            fsdp_args += ["--optim", "adamw_torch"]
         script = [f"{self.examples_dir_str}/pytorch/text-classification/run_glue.py"]
         cmd = launcher + script + args + fsdp_args
         execute_subprocess_async(cmd, env=self.get_env())
