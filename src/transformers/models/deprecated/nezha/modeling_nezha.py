@@ -287,7 +287,6 @@ class NezhaAttention(nn.Module):
         super().__init__()
         self.self = NezhaSelfAttention(config)
         self.output = NezhaSelfOutput(config)
-        self.pruned_heads = set()
 
     def prune_heads(self, heads):
         if len(heads) == 0:

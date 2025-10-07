@@ -187,7 +187,6 @@ class UMT5Attention(nn.Module):
 
         if self.has_relative_attention_bias:
             self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
-        self.pruned_heads = set()
 
     def _shape(self, projection: torch.Tensor) -> torch.Tensor:
         new_projection_shape = projection.size()[:-1] + (self.n_heads, self.key_value_proj_dim)

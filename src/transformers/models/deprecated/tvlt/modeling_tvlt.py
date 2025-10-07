@@ -419,7 +419,6 @@ class TvltAttention(nn.Module):
         super().__init__()
         self.attention = TvltSelfAttention(config)
         self.output = TvltSelfOutput(config)
-        self.pruned_heads = set()
 
     def prune_heads(self, heads):
         if len(heads) == 0:

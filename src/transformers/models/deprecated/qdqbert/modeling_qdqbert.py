@@ -291,7 +291,6 @@ class QDQBertAttention(nn.Module):
         super().__init__()
         self.self = QDQBertSelfAttention(config)
         self.output = QDQBertSelfOutput(config)
-        self.pruned_heads = set()
 
     def prune_heads(self, heads):
         if len(heads) == 0:

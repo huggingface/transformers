@@ -31,7 +31,6 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging, torch_int
 from ...utils.generic import can_return_tuple, check_model_inputs
 from .configuration_deit import DeiTConfig
@@ -267,30 +266,6 @@ class DeiTAttention(nn.Module):
         super().__init__()
         self.attention = DeiTSelfAttention(config)
         self.output = DeiTSelfOutput(config)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads: set[int]):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.attention.num_attention_heads, self.attention.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.attention.query = prune_linear_layer(self.attention.query, index)
-        self.attention.key = prune_linear_layer(self.attention.key, index)
-        self.attention.value = prune_linear_layer(self.attention.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
-        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        self_attn_output, _ = self.attention(hidden_states)
-        output = self.output(self_attn_output, hidden_states)
-        return output
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTIntermediate with ViT->DeiT

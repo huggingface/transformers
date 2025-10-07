@@ -36,8 +36,6 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import (
     apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    prune_linear_layer,
 )
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, is_torch_flex_attn_available, logging
 from ...utils.generic import can_return_tuple, check_model_inputs
@@ -170,27 +168,8 @@ class AlbertAttention(nn.Module):
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
 
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.pruned_heads = set()
 
         self.is_causal = False
-
-    def prune_heads(self, heads: list[int]) -> None:
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.num_attention_heads, self.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.query = prune_linear_layer(self.query, index)
-        self.key = prune_linear_layer(self.key, index)
-        self.value = prune_linear_layer(self.value, index)
-        self.dense = prune_linear_layer(self.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.num_attention_heads = self.num_attention_heads - len(heads)
-        self.all_head_size = self.attention_head_size * self.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
         self,

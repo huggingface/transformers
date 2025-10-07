@@ -263,7 +263,6 @@ class RealmAttention(nn.Module):
             config, position_embedding_type=position_embedding_type
         )
         self.output = RealmSelfOutput(config)
-        self.pruned_heads = set()
 
     def prune_heads(self, heads):
         if len(heads) == 0:

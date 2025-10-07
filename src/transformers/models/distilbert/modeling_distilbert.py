@@ -42,8 +42,6 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import (
     apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    prune_linear_layer,
 )
 from ...utils import (
     TransformersKwargs,
@@ -177,24 +175,6 @@ class DistilBertSelfAttention(nn.Module):
 
         self.dropout = nn.Dropout(p=config.attention_dropout)
         self.is_causal = False
-
-        self.pruned_heads: set[int] = set()
-
-    def prune_heads(self, heads: list[int]):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.n_heads, self.attention_head_size, self.pruned_heads
-        )
-        # Prune linear layers
-        self.q_lin = prune_linear_layer(self.q_lin, index)
-        self.k_lin = prune_linear_layer(self.k_lin, index)
-        self.v_lin = prune_linear_layer(self.v_lin, index)
-        self.out_lin = prune_linear_layer(self.out_lin, index, dim=1)
-        # Update hyper params
-        self.n_heads = self.n_heads - len(heads)
-        self.dim = self.attention_head_size * self.n_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
         self,

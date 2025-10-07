@@ -298,7 +298,6 @@ class MCTCTAttention(nn.Module):
         super().__init__()
         self.self = MCTCTSelfAttention(config)
         self.output = MCTCTSelfOutput(config)
-        self.pruned_heads = set()
 
     def prune_heads(self, heads):
         if len(heads) == 0:

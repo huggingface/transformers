@@ -529,10 +529,6 @@ class LukeAttention(nn.Module):
         super().__init__()
         self.self = LukeSelfAttention(config)
         self.output = LukeSelfOutput(config)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads):
-        raise NotImplementedError("LUKE does not support the pruning of attention heads")
 
     def forward(
         self,

@@ -362,7 +362,6 @@ class NeighborhoodAttentionModule(nn.Module):
         super().__init__()
         self.self = NeighborhoodAttention(config, dim, num_heads, kernel_size)
         self.output = NeighborhoodAttentionOutput(config, dim)
-        self.pruned_heads = set()
 
     def prune_heads(self, heads):
         if len(heads) == 0:

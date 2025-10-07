@@ -38,7 +38,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import TransformersKwargs, auto_docstring, is_torch_flex_attn_available, logging
 from ...utils.generic import can_return_tuple, check_model_inputs
 from .configuration_xmod import XmodConfig
@@ -362,27 +362,8 @@ class XmodAttention(nn.Module):
         attention_class = XmodCrossAttention if is_cross_attention else XmodSelfAttention
         self.self = attention_class(config, is_causal=is_causal, layer_idx=layer_idx)
         self.output = XmodSelfOutput(config)
-        self.pruned_heads = set()
+
         self.pre_norm = config.pre_norm
-
-    # Copied from transformers.models.roberta.modeling_roberta.RobertaAttention.prune_heads
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.self.query = prune_linear_layer(self.self.query, index)
-        self.self.key = prune_linear_layer(self.self.key, index)
-        self.self.value = prune_linear_layer(self.self.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
-        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
         self,

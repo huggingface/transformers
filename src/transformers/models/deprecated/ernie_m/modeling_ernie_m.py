@@ -222,7 +222,6 @@ class ErnieMAttention(nn.Module):
         super().__init__()
         self.self_attn = ErnieMSelfAttention(config, position_embedding_type=position_embedding_type)
         self.out_proj = nn.Linear(config.hidden_size, config.hidden_size)
-        self.pruned_heads = set()
 
     def prune_heads(self, heads):
         if len(heads) == 0:

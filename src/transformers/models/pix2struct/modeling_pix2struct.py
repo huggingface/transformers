@@ -628,7 +628,7 @@ class Pix2StructTextAttention(nn.Module):
 
         if self.has_relative_attention_bias:
             self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
-        self.pruned_heads = set()
+
         self.gradient_checkpointing = False
 
     @staticmethod

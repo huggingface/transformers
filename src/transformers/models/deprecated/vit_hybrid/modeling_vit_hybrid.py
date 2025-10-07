@@ -307,7 +307,6 @@ class ViTHybridAttention(nn.Module):
         super().__init__()
         self.attention = ViTHybridSelfAttention(config)
         self.output = ViTHybridSelfOutput(config)
-        self.pruned_heads = set()
 
     def prune_heads(self, heads: set[int]) -> None:
         if len(heads) == 0:
