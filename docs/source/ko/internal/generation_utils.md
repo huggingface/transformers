@@ -237,21 +237,7 @@ generation_output[:2]
 
 [[autodoc]] QuantizedCache
 
-[[autodoc]] QuantoQuantizedCache
-
-[[autodoc]] HQQQuantizedCache
-
-[[autodoc]] OffloadedCache
-
 [[autodoc]] StaticCache
-
-[[autodoc]] OffloadedStaticCache
-
-[[autodoc]] HybridCache
-
-[[autodoc]] HybridChunkedCache
-
-[[autodoc]] SlidingWindowCache
 
 [[autodoc]] EncoderDecoderCache
     - to_legacy_cache
