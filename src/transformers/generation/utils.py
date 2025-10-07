@@ -1752,7 +1752,8 @@ class GenerationMixin(ContinuousMixin):
                     global_default_value = getattr(global_default_generation_config, key, None)
                     has_custom_gen_config_value = hasattr(generation_config, key)
                     custom_gen_config_value = getattr(generation_config, key, None)
-                    if ((not has_custom_gen_config_value)
+                    if (
+                        (not has_custom_gen_config_value)
                         and custom_gen_config_value == global_default_value
                         and model_gen_config_value != global_default_value
                     ):

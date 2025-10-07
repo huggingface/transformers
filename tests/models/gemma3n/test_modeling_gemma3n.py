@@ -997,9 +997,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         self.assertTrue(input_size > model.config.get_text_config().sliding_window)
 
         generation_config = GenerationConfig(max_new_tokens=20, do_sample=False)
-        out = model.generate(**inputs, generation_config=generation_config)[
-            :, input_size:
-        ]
+        out = model.generate(**inputs, generation_config=generation_config)[:, input_size:]
         output_text = tokenizer.batch_decode(out)
 
         EXPECTED_COMPLETIONS = Expectations({
