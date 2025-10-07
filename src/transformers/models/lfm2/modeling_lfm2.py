@@ -163,7 +163,6 @@ class Lfm2HybridConvCache:
                 dtype=self._dtype,
                 device=device,
             )
-            torch._dynamo.mark_static_address(conv_state)
             self.conv_cache.append(conv_state)
             self.key_cache.append(torch.tensor([]))
             self.value_cache.append(torch.tensor([]))

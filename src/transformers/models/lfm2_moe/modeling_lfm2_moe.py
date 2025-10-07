@@ -173,7 +173,7 @@ class Lfm2MoeSparseMoeBlock(nn.Module):
             routing_weights, selected_experts = torch.topk(routing_weights, k=self.top_k, dim=-1)
 
         if self.norm_topk_prob:
-            routing_weights /= routing_weights.sum(dim=-1, keepdim=True) + 1e-6
+            routing_weights = routing_weights / (routing_weights.sum(dim=-1, keepdim=True) + 1e-6)
         routing_weights = routing_weights * self.routed_scaling_factor
         return selected_experts, routing_weights
 
@@ -227,7 +227,6 @@ class Lfm2MoeHybridConvCache:
                 dtype=self._dtype,
                 device=device,
             )
-            torch._dynamo.mark_static_address(conv_state)
             self.conv_cache.append(conv_state)
             self.key_cache.append(torch.tensor([]))
             self.value_cache.append(torch.tensor([]))
