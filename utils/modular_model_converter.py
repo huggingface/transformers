@@ -1923,16 +1923,17 @@ def convert_modular_file(modular_file: str, source_library: Optional[str] = "tra
             cst_transformers, file_path=relative_path, package_name=source_library
         ).items():
             if module != {}:
+                if source_library != "transformers":
+                    # Convert back all absolute imports from the source library to relative ones
+                    class RelativeImportTransformer(cst.CSTTransformer):
+                        def leave_ImportFrom(self, original_node, updated_node):
+                            return convert_to_relative_import(
+                                updated_node,
+                                relative_path,
+                                source_library,
+                            )
 
-                class RelativeImportTransformer(cst.CSTTransformer):
-                    def leave_ImportFrom(self, original_node, updated_node):
-                        return convert_to_relative_import(
-                            updated_node,
-                            relative_path,
-                            source_library,
-                        )
-
-                module = module.visit(RelativeImportTransformer())
+                    module = module.visit(RelativeImportTransformer())
 
                 header = AUTO_GENERATED_MESSAGE.format(
                     relative_path=relative_path, short_name=os.path.basename(relative_path)
