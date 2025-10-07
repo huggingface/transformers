@@ -1367,7 +1367,7 @@ if PreTrainedConfig.push_to_hub.__doc__ is not None:
 
 
 # The alias is only here for BC - we did not have the correct CamelCasing before
-PreTrainedConfig = PreTrainedConfig
+PretrainedConfig = PreTrainedConfig
 
 
 ALLOWED_LAYER_TYPES = (
