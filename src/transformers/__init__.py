@@ -265,6 +265,10 @@ _import_structure = {
         "VptqConfig",
     ],
     "video_utils": [],
+
+    "quantizers.quantizer_finegrained_fp8": [
+        "FineGrainedFP8HfQuantizer",
+    ],
 }
 
 # tokenizers-backed objects
@@ -776,6 +780,7 @@ if TYPE_CHECKING:
     from .utils.quantization_config import VptqConfig as VptqConfig
     from .video_processing_utils import BaseVideoProcessor as BaseVideoProcessor
 
+    from .quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 else:
     import sys
 

@@ -35,6 +35,9 @@ class FP8QATQuantizer(HfQuantizer):
         )
         return model
 
+    def prepare_model(self, model: "PreTrainedModel", **kwargs):
+        return self.fake_quantize(model, **kwargs)
+
     def remove_fake_quantization(self, model: "PreTrainedModel", **kwargs):
         from ..integrations.finegrained_fp8 import remove_fp8_qat_hook
         remove_fp8_qat_hook(model)

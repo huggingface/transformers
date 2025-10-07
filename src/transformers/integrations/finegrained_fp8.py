@@ -430,13 +430,11 @@ def fp8_quant_dequant_activation(x: torch.Tensor, block_size_n: int) -> torch.Te
     if x is None or x.shape[-1] % block_size_n != 0:
         return x
     x = x.contiguous()
-    y, s = act_quant(x, block_size=block_size_n)  # y: fp8, s: [..., groups]
+    y, s = act_quant(x, block_size=block_size_n)
     s_expanded = s.repeat_interleave(block_size_n, dim=-1)
     return y.to(x.dtype) * s_expanded.to(x.dtype)
 
-
 def fp8_quant_dequant_weight(w: torch.Tensor, block_size_mn: tuple[int, int], out_dtype: torch.dtype) -> torch.Tensor:
-    # Expect [out_features, in_features]
     if w.ndim != 2:
         return w
     m, n = block_size_mn
@@ -461,7 +459,7 @@ def fp8_quant_dequant_weight(w: torch.Tensor, block_size_mn: tuple[int, int], ou
 def make_fp8_qat_linear_forward_hook(block_size_mn: tuple[int, int]):
     m, n = block_size_mn
 
-    def _hook(module, inputs):
+    def _hook(module, inputs, output):
         x = inputs[0]
         x_qdq = fp8_quant_dequant_activation(x, block_size_n=n)
         w_qdq = fp8_quant_dequant_weight(module.weight, (m, n), out_dtype=x_qdq.dtype)
