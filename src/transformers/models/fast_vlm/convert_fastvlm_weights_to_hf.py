@@ -204,8 +204,8 @@ def convert_fastvlm_to_hf(text_model_id, vision_model_id, output_hub_path, old_s
         expected_shape = torch.Size([1, 280, 152000])
         expected_slice = torch.tensor([ 3.3750, 11.5000, 11.8125], device="cuda")
     elif output_hub_path == "KamilaMila/FastVLM-7B":
-        expected_shape = torch.Size([1, 280, 152000])
-        expected_slice = torch.tensor([3.8125, 9.0625, 7.9062], device="cuda")
+        expected_shape = torch.Size([1, 280, 152128])
+        expected_slice = torch.tensor([3.8281, 9.0625, 7.9062], device="cuda")
 
     logits_slice = logits[0, -1, :3]
     assert torch.allclose(expected_slice, logits_slice, atol=1e-8)

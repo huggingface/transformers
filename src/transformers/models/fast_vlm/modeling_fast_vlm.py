@@ -123,12 +123,10 @@ class FastVlmModel(FastVlmPreTrainedModel):
             pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
                The tensors corresponding to the input images.
             vision_feature_layer (`Union[int, list[int]]`, *optional*):
-                The index of the layer to select the vision feature. If multiple indices are provided,
-                the vision feature of the corresponding indices will be concatenated to form the
-                vision features.
+                The index/indices of the layer to select the vision feature.
             vision_feature_select_strategy (`str`, *optional*):
                 The feature selection strategy used to select the vision feature from the vision backbone.
-                Can be one of `"default"` or `"full"`
+                Only "full" supported.
         Returns:
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
@@ -141,16 +139,14 @@ class FastVlmModel(FastVlmPreTrainedModel):
             else self.config.vision_feature_select_strategy
         )
 
-        # only those values make sense in FastVLM
+        # only this value makes sense in FastVLM
         if vision_feature_select_strategy != "full":
-            raise ValueError(f"Unexpected select feature strategy: {vision_feature_select_strategy}")
-
-        if vision_feature_layer != -1:
-            raise ValueError(f"Unexpected vision feature layer: {vision_feature_layer}")
+            raise ValueError(
+                f"Unexpected select feature strategy: {vision_feature_select_strategy}, Only 'full' is supported."
+            )
 
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
-        # this is not memory efficient at all (output_hidden_states=True) will save all the hidden states.
-        image_outputs = self.vision_tower(pixel_values, output_hidden_states=True, **kwargs)
+        image_outputs = self.vision_tower(pixel_values, **kwargs)  # add more choice here!
 
         # since the vision tower is hybrid in FastVLM, its output needs to be handled differently from Llava
         selected_image_feature = image_outputs.last_hidden_state
@@ -395,7 +391,7 @@ class FastVlmForConditionalGeneration(FastVlmPreTrainedModel, GenerationMixin):
         >>> import requests
         >>> from transformers import AutoProcessor, FastVlmForConditionalGeneration
 
-        >>> model = FastVlmForConditionalGeneration.from_pretrained("fast_vlm-hf/fast_vlm-1.5-7b-hf")
+        >>> model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/fast_vlm-1.5-7b-hf") #TODO change!!!
         >>> processor = AutoProcessor.from_pretrained("fast_vlm-hf/fast_vlm-1.5-7b-hf")
 
         >>> prompt = "USER: <image>\nWhat's the content of the image? ASSISTANT:"
