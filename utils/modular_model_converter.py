@@ -1222,7 +1222,8 @@ class ModularFileMapper(ModuleMapper):
                     _import = None
                 else:
                     _import = re.search(
-                        rf"(?:transformers\.models\.)|(?:\.\.)\w+\.({self.match_patterns})_.*", import_statement
+                        rf"(?:transformers\.models\.)|(?:\.\.\.models\.)|(?:\.\.)\w+\.({self.match_patterns}).*",
+                        import_statement,
                     )
                 if _import:
                     source = _import.group(1)
@@ -1272,7 +1273,7 @@ class ModularFileMapper(ModuleMapper):
                 if any(
                     external_file["name"] in import_statement for external_file in self.excluded_external_files
                 ) or not (
-                    re.search(rf"(?:transformers\.models\.)|(?:\.\.)\w+\.({self.match_patterns})_.*", import_statement)
+                    re.search(rf"(?:transformers\.models\.)|(?:\.\.)\w+\.({self.match_patterns}).*", import_statement)
                     and not any(import_to_skip in import_statement for import_to_skip in IMPORTS_TO_SKIP_IN_MODULAR)
                 ):
                     self.imports.append(node)
@@ -1335,7 +1336,7 @@ class ModularFileMapper(ModuleMapper):
         # Note that we may visit several of the same file types, thus we save them per file type, not file
         self.imported_objects_per_file = defaultdict(set)
         for file, mapper in self.visited_modules.items():
-            file_type = re.search(rf"^.*transformers\.models\.\w+\.({self.match_patterns})_.*", file).group(1)
+            file_type = re.search(rf"^transformers\.models\.\w+\.({self.match_patterns})", file).group(1)
 
             # If there are excluded external files, override the file type if there is a match
             if self.excluded_external_files:
