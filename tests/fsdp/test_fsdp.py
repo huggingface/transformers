@@ -307,7 +307,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
     @run_first
     @slow
     def test_training_and_can_resume_normally(self, state_dict_type):
-        output_dir = self.get_auto_remove_tmp_dir("./xxx", after=False)
+        output_dir = self.get_auto_remove_tmp_dir()
 
         sharding_strategy = "full_shard"
         use_accelerate = state_dict_type == "SHARDED_STATE_DICT"
@@ -363,7 +363,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
     @require_fsdp_v2_version
     @require_accelerate_fsdp2
     def test_accelerate_fsdp2_integration(self):
-        output_dir = self.get_auto_remove_tmp_dir("./xxx", after=False)
+        output_dir = self.get_auto_remove_tmp_dir()
         sharding_strategy = "full_shard"
         use_accelerate = True
 
