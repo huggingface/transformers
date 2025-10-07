@@ -448,6 +448,7 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         # named location of the RoPE layer class.
         base_model = self.model_tester.base_model_class(config)
         possible_rope_attributes = [
+            "pos_emb",
             "rotary_emb",  # most common case
             "global_rotary_emb",
             "local_rotary_emb",
