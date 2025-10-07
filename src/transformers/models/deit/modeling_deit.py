@@ -267,6 +267,11 @@ class DeiTAttention(nn.Module):
         self.attention = DeiTSelfAttention(config)
         self.output = DeiTSelfOutput(config)
 
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        self_attn_output, _ = self.attention(hidden_states)
+        output = self.output(self_attn_output, hidden_states)
+        return output
+
 
 # Copied from transformers.models.vit.modeling_vit.ViTIntermediate with ViT->DeiT
 class DeiTIntermediate(nn.Module):

@@ -220,7 +220,7 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     # TODO: support new pipeline behavior in tests
     pipeline_model_mapping = {}
     # pipeline_model_mapping = {"text-to-audio": DiaForConditionalGeneration} if is_torch_available() else {}
-    test_pruning = False
+
     test_resize_embeddings = False
     is_encoder_decoder = True
     # Indicates VLMs usually but there are many audio models which are also composite

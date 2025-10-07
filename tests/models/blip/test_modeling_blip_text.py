@@ -126,7 +126,6 @@ class BlipTextModelTester:
 class BlipTextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (BlipTextModel,) if is_torch_available() else ()
     fx_compatible = False
-    test_pruning = False
 
     def setUp(self):
         self.model_tester = BlipTextModelTester(self)

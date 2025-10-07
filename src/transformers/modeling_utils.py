@@ -1807,6 +1807,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     [`PreTrainedModel`] takes care of storing the configuration of the models and handles methods for loading,
     downloading and saving models as well as a few methods common to all models to:
+
         - resize the input embeddings
 
     Class attributes (overridden by derived classes):

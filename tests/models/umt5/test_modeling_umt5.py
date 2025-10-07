@@ -255,7 +255,7 @@ class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     )
     is_encoder_decoder = True
     fx_compatible = False
-    test_pruning = False
+
     test_missing_keys = True
     test_torchscript = True
     # The small UMT5 model needs higher percentages for CPU/MP tests
@@ -631,7 +631,7 @@ class UMT5EncoderOnlyModelTester:
 # Copied from tests.models.t5.test_modeling_t5.T5EncoderOnlyModelTest with T5->UMT5
 class UMT5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (UMT5EncoderModel, UMT5ForTokenClassification) if is_torch_available() else ()
-    test_pruning = False
+
     test_resize_embeddings = False
     pipeline_model_mapping = (
         {

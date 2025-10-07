@@ -898,7 +898,7 @@ class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         if is_torch_available()
         else {}
     )
-    test_pruning = False
+
     test_resize_embeddings = False
     is_encoder_decoder = True
 
@@ -1121,7 +1121,6 @@ class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 @require_torch
 class ProphetNetStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (ProphetNetDecoder, ProphetNetForCausalLM) if is_torch_available() else ()
-    test_pruning = False
 
     test_resize_embeddings = False
     is_encoder_decoder = False
@@ -1149,7 +1148,6 @@ class ProphetNetStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMix
 @require_torch
 class ProphetNetStandaloneEncoderModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (ProphetNetEncoder,) if is_torch_available() else ()
-    test_pruning = False
 
     test_resize_embeddings = False
     is_encoder_decoder = False

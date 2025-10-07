@@ -340,7 +340,7 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     fx_compatible = False
     test_missing_keys = False
-    test_pruning = False
+
     test_resize_embeddings = False
     test_torchscript = False
 
@@ -534,7 +534,7 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, PipelineTesterMixin, u
     is_encoder_decoder = True
     fx_compatible = False
     test_missing_keys = False
-    test_pruning = False
+
     test_resize_embeddings = True
     test_torchscript = False
 

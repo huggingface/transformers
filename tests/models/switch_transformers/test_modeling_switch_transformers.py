@@ -572,7 +572,7 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
         else {}
     )
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = True
     is_encoder_decoder = True
     test_torchscript = False
@@ -825,7 +825,7 @@ class SwitchTransformersEncoderOnlyModelTester:
 
 class SwitchTransformersEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SwitchTransformersEncoderModel,) if is_torch_available() else ()
-    test_pruning = False
+
     test_resize_embeddings = False
     test_model_parallel = False
     test_head_masking = False

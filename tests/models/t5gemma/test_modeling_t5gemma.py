@@ -592,7 +592,6 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         else {}
     )
 
-    test_pruning = False
     _is_stateful = True
     is_encoder_decoder = True
 
@@ -1458,7 +1457,7 @@ class T5GemmaEncoderOnlyModelTester:
 @require_torch
 class T5GemmaEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (T5GemmaEncoderModel, T5GemmaForTokenClassification) if is_torch_available() else ()
-    test_pruning = False
+
     test_resize_embeddings = False
     _is_stateful = True
     is_encoder_decoder = False
