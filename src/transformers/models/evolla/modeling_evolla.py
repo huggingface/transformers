@@ -44,7 +44,6 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import OutputRecorder, check_model_inputs
 from .configuration_evolla import EvollaConfig, SaProtConfig
 
@@ -909,7 +908,6 @@ class EvollaSequenceAlignerCrossAttention(nn.Module):
 
         return context_layer
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         query_states,
@@ -1129,7 +1127,6 @@ class EvollaAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1190,7 +1187,6 @@ class EvollaDecoderLayer(GradientCheckpointingLayer):
                 protein_encoder_dim=config.hidden_size,
             )
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

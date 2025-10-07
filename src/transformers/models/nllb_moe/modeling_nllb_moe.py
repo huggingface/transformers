@@ -38,7 +38,6 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import OutputRecorder, can_return_tuple, check_model_inputs
 from .configuration_nllb_moe import NllbMoeConfig
 
@@ -448,7 +447,6 @@ class NllbMoeAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

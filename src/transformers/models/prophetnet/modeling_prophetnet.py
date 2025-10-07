@@ -31,7 +31,6 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_prophetnet import ProphetNetConfig
 
 
@@ -433,7 +432,6 @@ class ProphetNetAttention(nn.Module):
 
         self.out_proj = nn.Linear(hidden_size, hidden_size)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
@@ -591,7 +589,6 @@ class ProphetNetNgramSelfAttention(nn.Module):
     def prepare_for_onnx_export_(self):
         self.onnx_trace = True
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
@@ -921,7 +918,6 @@ class ProphetNetDecoderLayer(GradientCheckpointingLayer):
         self.feed_forward = ProphetNetFeedForward(config, config.decoder_ffn_dim)
         self.feed_forward_layer_norm = LayerNorm(config.hidden_size)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
