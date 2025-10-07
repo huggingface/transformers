@@ -84,6 +84,7 @@ from .utils import (
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     ContextManagers,
+    KernelConfig,
     PushToHubMixin,
     cached_file,
     check_torch_load_is_safe,
@@ -4503,6 +4504,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         device_mesh = kwargs.pop("device_mesh", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         use_kernels = kwargs.pop("use_kernels", False)
+        kernel_config = kwargs.pop("kernel_config", None)
 
         key_mapping = kwargs.pop("key_mapping", None)
         # Load models with hardcoded key mapping on class for VLMs only, to keep BC and standardize model
@@ -4895,7 +4897,26 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # check if using kernels
         if use_kernels:
-            model.use_kernels = True
+            if not is_kernels_available():
+                raise ValueError(
+                    "Kernels are not available. To use kernels, please install kernels using `pip install kernels`"
+                )
+            from kernels import use_kernel_mapping
+
+            if kernel_config is not None and isinstance(kernel_config, KernelConfig):
+                # This will make sure the mapping is valid, and the layers are registered in the model
+                kernel_config.sanitize_kernel_mapping(model)
+
+                # This will create a compatible mapping for the model with the kernels library
+                kernel_config.create_compatible_mapping(model)
+
+                # This is a context manager to override the default kernel mapping
+                # We are calling kernelize inside this context manager using the use_kernels setter
+                with use_kernel_mapping(kernel_config.kernel_mapping):
+                    model.use_kernels = True
+            # We use the default kernel mapping in .integrations.hub_kernels
+            else:
+                model.use_kernels = True
 
         # If it is a model with generation capabilities, attempt to load generation files (generation config,
         # custom generate function)
@@ -5506,14 +5527,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     def loss_function(self, value):
         self._loss_function = value
 
-    def kernelize(self):
+    def kernelize(self, mode=None):
         if not is_kernels_available():
             raise ValueError(
                 "Kernels are not available. To use kernels, please install kernels using `pip install kernels`"
             )
         from kernels import Device, Mode, kernelize
 
-        mode = Mode.INFERENCE if not self.training else Mode.TRAINING
+        mode = Mode.INFERENCE if not self.training else Mode.TRAINING if mode is None else mode
         kernelize(self, device=Device(type=self.device.type), mode=mode)
         self._use_kernels = True
 

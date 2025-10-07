@@ -265,6 +265,7 @@ _import_structure = {
         "VptqConfig",
     ],
     "video_utils": [],
+    "utils.kernel_config": ["KernelConfig"],
 }
 
 # tokenizers-backed objects
@@ -754,6 +755,7 @@ if TYPE_CHECKING:
     from .utils import is_torch_npu_available as is_torch_npu_available
     from .utils import is_torch_xla_available as is_torch_xla_available
     from .utils import is_torch_xpu_available as is_torch_xpu_available
+    from .utils.kernel_config import KernelConfig as KernelConfig
 
     # bitsandbytes config
     from .utils.quantization_config import AqlmConfig as AqlmConfig
@@ -775,7 +777,6 @@ if TYPE_CHECKING:
     from .utils.quantization_config import TorchAoConfig as TorchAoConfig
     from .utils.quantization_config import VptqConfig as VptqConfig
     from .video_processing_utils import BaseVideoProcessor as BaseVideoProcessor
-
 else:
     import sys
 
