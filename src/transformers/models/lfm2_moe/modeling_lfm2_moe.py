@@ -152,20 +152,19 @@ class Lfm2MoeExperts(nn.ModuleList):
 class Lfm2MoeSparseMoeBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.num_experts = config.num_experts
         self.top_k = config.num_experts_per_tok
         self.routed_scaling_factor = config.routed_scaling_factor
         self.norm_topk_prob = config.norm_topk_prob
+        self.use_expert_bias = config.use_expert_bias
+
         self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
         self.experts = Lfm2MoeExperts(config)
-        if config.use_expert_bias:
-            self.register_buffer("expert_bias", torch.zeros(self.num_experts, dtype=torch.float32))
-        else:
-            self.register_buffer("expert_bias", None)
+        if self.use_expert_bias:
+            self.register_buffer("expert_bias", torch.zeros(config.num_experts, dtype=torch.float32))
 
     def route_tokens_to_experts(self, router_logits):
         routing_weights = router_logits.sigmoid()
-        if self.expert_bias is not None:
+        if self.use_expert_bias:
             scores_for_routing = routing_weights + self.expert_bias
             _, selected_experts = torch.topk(scores_for_routing, k=self.top_k, dim=-1)
             routing_weights = torch.gather(routing_weights, dim=1, index=selected_experts).type_as(router_logits)
