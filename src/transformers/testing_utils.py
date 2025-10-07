@@ -129,7 +129,6 @@ from .utils import (
     is_qutlass_available,
     is_rjieba_available,
     is_sacremoses_available,
-    is_safetensors_available,
     is_schedulefree_available,
     is_scipy_available,
     is_sentencepiece_available,
@@ -159,7 +158,6 @@ from .utils import (
     is_torchao_available,
     is_torchaudio_available,
     is_torchcodec_available,
-    is_torchdynamo_available,
     is_torchvision_available,
     is_triton_available,
     is_vision_available,
@@ -496,13 +494,6 @@ def require_g2p_en(test_case):
     Decorator marking a test that requires g2p_en. These tests are skipped when SentencePiece isn't installed.
     """
     return unittest.skipUnless(is_g2p_en_available(), "test requires g2p_en")(test_case)
-
-
-def require_safetensors(test_case):
-    """
-    Decorator marking a test that requires safetensors. These tests are skipped when safetensors isn't installed.
-    """
-    return unittest.skipUnless(is_safetensors_available(), "test requires safetensors")(test_case)
 
 
 def require_rjieba(test_case):
@@ -1009,11 +1000,6 @@ if is_torch_available():
         torch_device = "cpu"
 else:
     torch_device = None
-
-
-def require_torchdynamo(test_case):
-    """Decorator marking a test that requires TorchDynamo"""
-    return unittest.skipUnless(is_torchdynamo_available(), "test requires TorchDynamo")(test_case)
 
 
 def require_torchao(test_case):
@@ -2761,7 +2747,7 @@ def run_test_using_subprocess(func):
                             test = test.split("::")[1:]
                             command[idx] = "::".join([f"{func.__globals__['__file__']}"] + test)
                     command = [f"{sys.executable}", "-m", "pytest"] + command
-                    command = [x for x in command if x not in ["--no-summary"]]
+                    command = [x for x in command if x != "--no-summary"]
                 # Otherwise, simply run the test with no option at all
                 else:
                     command = [f"{sys.executable}", "-m", "pytest", f"{test}"]
@@ -4074,7 +4060,7 @@ def _format_py_obj(obj, indent=0, mode="", cache=None, prefix=""):
                     if element_types[0] in [int, float]:
                         # one-line repr. without width limit
                         return no_new_line_in_elements
-                    elif element_types[0] in [str]:
+                    elif element_types[0] is str:
                         if len(obj) == 1:
                             # one single string element --> one-line repr. without width limit
                             return no_new_line_in_elements

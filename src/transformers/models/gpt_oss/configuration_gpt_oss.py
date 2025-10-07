@@ -14,11 +14,11 @@
 # limitations under the License.
 """openai model configuration"""
 
-from ...configuration_utils import PretrainedConfig, layer_type_validation
+from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_rope_utils import rope_config_validation
 
 
-class GptOssConfig(PretrainedConfig):
+class GptOssConfig(PreTrainedConfig):
     r"""
     This will yield a configuration to that of the BERT
     [google-bert/bert-base-uncased](https://huggingface.co/google-bert/bert-base-uncased) architecture.

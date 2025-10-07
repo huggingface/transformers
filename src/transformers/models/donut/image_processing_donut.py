@@ -40,6 +40,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, filter_out_non_signature_kwargs, logging
 from ...utils.import_utils import is_vision_available, requires
 
@@ -49,6 +50,18 @@ logger = logging.get_logger(__name__)
 
 if is_vision_available():
     import PIL
+
+
+class DonutImageProcessorKwargs(ImagesKwargs):
+    """
+    do_thumbnail (`bool`, *optional*, defaults to `self.do_thumbnail`):
+        Whether to resize the image using thumbnail method.
+    do_align_long_axis (`bool`, *optional*, defaults to `self.do_align_long_axis`):
+        Whether to align the long axis of the image with the long axis of `size` by rotating by 90 degrees.
+    """
+
+    do_thumbnail: Optional[bool]
+    do_align_long_axis: Optional[bool]
 
 
 @requires(backends=("vision",))
@@ -90,6 +103,7 @@ class DonutImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
+    valid_kwargs = DonutImageProcessorKwargs
 
     def __init__(
         self,

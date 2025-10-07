@@ -17,7 +17,7 @@ import inspect
 import os
 import re
 
-from transformers.configuration_utils import PretrainedConfig
+from transformers.configuration_utils import PreTrainedConfig
 from transformers.utils import direct_transformers_import
 
 
@@ -434,10 +434,10 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
     if not attribute_used:
         case_allowed = False
         for attribute in attributes:
-            # Allow if the default value in the configuration class is different from the one in `PretrainedConfig`
-            if attribute in ["is_encoder_decoder"] and default_value is True:
+            # Allow if the default value in the configuration class is different from the one in `PreTrainedConfig`
+            if attribute == "is_encoder_decoder" and default_value is True:
                 case_allowed = True
-            elif attribute in ["tie_word_embeddings"] and default_value is False:
+            elif attribute == "tie_word_embeddings" and default_value is False:
                 case_allowed = True
 
             # Allow cases without checking the default value in the configuration class
@@ -512,7 +512,7 @@ def check_config_attributes():
             for name, cls in inspect.getmembers(
                 inspect.getmodule(_config_class),
                 lambda x: inspect.isclass(x)
-                and issubclass(x, PretrainedConfig)
+                and issubclass(x, PreTrainedConfig)
                 and inspect.getmodule(x) == inspect.getmodule(_config_class),
             )
         ]
