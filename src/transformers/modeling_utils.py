@@ -766,18 +766,14 @@ def _load_state_dict_into_meta_model(
                     param_name = hf_quantizer.update_param_name(param_name)
                     module, param_type = get_module_from_name(model, param_name)
                     value = getattr(module, param_type)
-                    # special case for gpt_oss model, we wait for the param to be leave the meta device before casting it to cpu
-                    if model.config.model_type == "gpt_oss" and value.device.type == "meta":
+                    # We need to wait until the quantized value is created
+                    if value.device.type == "meta":
                         continue
-                    param_to = "cpu"
-                    if is_fsdp_enabled() and not is_local_dist_rank_0():
-                        param_to = "meta"
-                    val_kwargs = {}
-                    if (hasattr(module, "weight") and module.weight.__class__.__name__ == "Int8Params") or (
-                        value.dtype == torch.uint8 or value.dtype == torch.int8
-                    ):
+                    val_kwargs = value.__dict__
+                    if value.dtype in [torch.uint8, torch.int8]:
                         val_kwargs["requires_grad"] = False
-                    value = type(value)(value.data.to(param_to), **val_kwargs, **value.__dict__)
+                    param_to = "meta" if is_fsdp_enabled() and not is_local_dist_rank_0() else "cpu"
+                    value = type(value)(value.data.to(param_to), **val_kwargs)
                     setattr(module, param_type, value)
 
         # Remove the param from the state dict if it was not loaded on the fly to avoid wasting memory
