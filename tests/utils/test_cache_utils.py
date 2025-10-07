@@ -352,9 +352,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
         decoded = tokenizer.batch_decode(gen_out.sequences, skip_special_tokens=True)
         # sum of the scores for the generated tokens
         input_length = inputs.input_ids.shape[1]
-        score_sum = sum(
-            [score[0][gen_out.sequences[0][input_length + idx]] for idx, score in enumerate(gen_out.scores)]
-        )
+        score_sum = sum(score[0][gen_out.sequences[0][input_length + idx]] for idx, score in enumerate(gen_out.scores))
 
         EXPECTED_GENERATION = (
             "Here's everything I know about cats. Cats are mammals, they have four legs, they have a tail, they have "
