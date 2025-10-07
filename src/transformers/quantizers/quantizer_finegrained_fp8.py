@@ -241,7 +241,10 @@ class FineGrainedFP8HfQuantizer(FP8QATQuantizer):
 
     @property
     def is_trainable(self) -> bool:
-        return False
+        return True
+
+    def is_qat_trainable(self) -> bool:
+        return True
 
     def get_accelerator_warm_up_factor(self):
         # Pre-processing is done cleanly, so we can allocate everything here
