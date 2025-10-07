@@ -424,3 +424,80 @@ def replace_with_fp8_linear(
         )
 
     return model
+
+## QAT functions
+def fp8_quant_dequant_activation(x: torch.Tensor, block_size_n: int) -> torch.Tensor:
+    if x is None or x.shape[-1] % block_size_n != 0:
+        return x
+    x = x.contiguous()
+    y, s = act_quant(x, block_size=block_size_n)  # y: fp8, s: [..., groups]
+    s_expanded = s.repeat_interleave(block_size_n, dim=-1)
+    return y.to(x.dtype) * s_expanded.to(x.dtype)
+
+
+def fp8_quant_dequant_weight(w: torch.Tensor, block_size_mn: tuple[int, int], out_dtype: torch.dtype) -> torch.Tensor:
+    # Expect [out_features, in_features]
+    if w.ndim != 2:
+        return w
+    m, n = block_size_mn
+    rows, cols = w.shape
+    if rows % m != 0 or cols % n != 0:
+        return w
+
+    fp8_min = torch.finfo(torch.float8_e4m3fn).min
+    fp8_max = torch.finfo(torch.float8_e4m3fn).max
+
+    # Shape to blocks: [-1, rows//m, m, cols//n, n] and transpose to group blocks as (M, N)
+    w_view = w.reshape(-1, rows // m, m, cols // n, n).permute(0, 1, 3, 2, 4)
+    # Per-block scale
+    max_abs = torch.amax(torch.abs(w_view), dim=(-1, -2)).clamp_min(1e-12)
+    scale = fp8_max / max_abs  # broadcast later
+    scale_expanded = scale.unsqueeze(-1).unsqueeze(-1)
+
+    w_q = torch.clamp(w_view * scale_expanded, min=fp8_min, max=fp8_max).to(torch.float8_e4m3fn)
+    w_qdq = (w_q.to(out_dtype) / scale_expanded).permute(0, 1, 3, 2, 4).reshape(rows, cols)
+    return w_qdq
+
+def make_fp8_qat_linear_forward_hook(block_size_mn: tuple[int, int]):
+    m, n = block_size_mn
+
+    def _hook(module, inputs):
+        x = inputs[0]
+        x_qdq = fp8_quant_dequant_activation(x, block_size_n=n)
+        w_qdq = fp8_quant_dequant_weight(module.weight, (m, n), out_dtype=x_qdq.dtype)
+        b = module.bias
+        return F.linear(x_qdq, w_qdq, b)
+    return _hook
+
+def add_fp8_qat_hook(model, modules_to_not_convert=None, block_size: tuple[int, int] = (128, 128)):
+    """
+    Registers forward hooks on nn.Linear to fake-quantize both inputs and weights
+    (quantize→dequantize) and then perform the linear op. Handles saved in model._fp8_qat_hooks.
+    """
+    if modules_to_not_convert is None:
+        modules_to_not_convert = []
+
+    def _skip(name: str) -> bool:
+        return any(key in name for key in modules_to_not_convert)
+
+    import torch.nn as nn
+
+    handles = []
+    hook = make_fp8_qat_linear_forward_hook(block_size)
+    for name, module in model.named_modules():
+        if isinstance(module, nn.Linear) and not _skip(name):
+            handles.append(module.register_forward_hook(hook, with_kwargs=False))
+    model._fp8_qat_hooks = handles
+    return model
+
+
+def remove_fp8_qat_hook(model):
+    """
+    Removes QAT hooks registered by add_fp8_qat_linear.
+    """
+    handles = getattr(model, "_fp8_qat_hooks", None)
+    if handles:
+        for h in handles:
+            h.remove()
+        delattr(model, "_fp8_qat_hooks")
+    return model
