@@ -28,7 +28,6 @@ if is_torch_available():
     import torch
 
     from transformers import AutoTokenizer, DeepseekV2ForCausalLM, DeepseekV2ForSequenceClassification, DeepseekV2Model
-    from transformers.models.deepseek_v2.modeling_deepseek_v2 import DeepseekV2RotaryEmbedding
 
 
 class DeepseekV2ModelTester(CausalLMModelTester):
@@ -86,64 +85,6 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
 
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = DeepseekV2ForCausalLM if is_torch_available() else None
-
-    def test_model_rope_parameters_frequencies(self):
-        """
-        Overwritten: DeepseekV2 implements RoPE in the complex domain, as opposed to in the real domain with
-        `sin` and `cos`. Nevertheless, the checks are the same as in the original test.
-        """
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        scaling_factor = 10
-        short_input_length = 10
-        rope_theta = config.rope_theta if hasattr(config, "rope_theta") else config.rope_parameters["rope_theta"]
-        long_input_length = int(config.max_position_embeddings * 1.5)
-
-        # Inputs
-        x = torch.randn(
-            1, dtype=torch.float32, device=torch_device
-        )  # used exclusively to get the dtype and the device
-        position_ids_short = torch.arange(short_input_length, dtype=torch.long, device=torch_device)
-        position_ids_short = position_ids_short.unsqueeze(0)
-        position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)
-        position_ids_long = position_ids_long.unsqueeze(0)
-
-        # Sanity check original RoPE
-        original_rope = DeepseekV2RotaryEmbedding(config=config).to(torch_device)
-        original_freqs_cis_short = original_rope(x, position_ids_short)
-        original_freqs_cis_long = original_rope(x, position_ids_long)
-        torch.testing.assert_close(original_freqs_cis_short, original_freqs_cis_long[:, :short_input_length, :])
-
-        # Sanity check linear RoPE scaling
-        # New position "x" should match original position with index "x/scaling_factor"
-        config.rope_parameters = {"rope_type": "linear", "factor": scaling_factor, "rope_theta": rope_theta}
-        linear_scaling_rope = DeepseekV2RotaryEmbedding(config=config).to(torch_device)
-        linear_freqs_cis_short = linear_scaling_rope(x, position_ids_short)
-        linear_freqs_cis_long = linear_scaling_rope(x, position_ids_long)
-        torch.testing.assert_close(linear_freqs_cis_short, linear_freqs_cis_long[:, :short_input_length, :])
-
-        # Sanity check Dynamic NTK RoPE scaling
-        # Scaling should only be observed after a long input is fed. We can observe that the frequencies increase
-        # with scaling_factor (or that `inv_freq` decreases)
-        config.rope_parameters = {"rope_type": "dynamic", "factor": scaling_factor, "rope_theta": rope_theta}
-        ntk_scaling_rope = DeepseekV2RotaryEmbedding(config=config).to(torch_device)
-        ntk_freqs_cis_short = ntk_scaling_rope(x, position_ids_short)
-        ntk_freqs_cis_long = ntk_scaling_rope(x, position_ids_long)
-        torch.testing.assert_close(ntk_freqs_cis_short, original_freqs_cis_short)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(ntk_freqs_cis_long, original_freqs_cis_long)
-        self.assertTrue((ntk_scaling_rope.inv_freq <= original_rope.inv_freq).all())
-
-        # Sanity check Yarn RoPE scaling
-        # Scaling should be over the entire input
-        config.rope_parameters = {"rope_type": "yarn", "factor": scaling_factor, "rope_theta": rope_theta}
-        yarn_scaling_rope = DeepseekV2RotaryEmbedding(config=config).to(torch_device)
-        yarn_freqs_cis_short = yarn_scaling_rope(x, position_ids_short)
-        yarn_freqs_cis_long = yarn_scaling_rope(x, position_ids_long)
-        torch.testing.assert_close(yarn_freqs_cis_short, yarn_freqs_cis_long[:, :short_input_length, :])
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(yarn_freqs_cis_short, original_freqs_cis_short)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(yarn_freqs_cis_long, original_freqs_cis_long)
 
     def test_past_key_values_format(self):
         """

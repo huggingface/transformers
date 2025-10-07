@@ -325,7 +325,7 @@ class HunYuanDenseV1RotaryEmbedding(nn.Module):
         self.original_inv_freq = inv_freq
 
         # Diff from Llama - DynamicNTKAlphaRotary
-        if self.rope_type == "dynamic" and self.config.rope_parameters["alpha"]:
+        if self.rope_type == "dynamic" and self.config.rope_parameters.get("alpha"):
             base = self.config.rope_parameters["rope_theta"] * self.config.rope_parameters["alpha"] ** (
                 self.config.head_dim / (self.config.head_dim - 2)
             )

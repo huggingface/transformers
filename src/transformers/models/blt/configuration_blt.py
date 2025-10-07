@@ -63,7 +63,6 @@ class BltLocalEncoderConfig(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.dropout = dropout
         self.max_position_embeddings = max_position_embeddings
-        self.rope_parameters = rope_parameters
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.rope_parameters = rope_parameters

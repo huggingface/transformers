@@ -203,6 +203,7 @@ class Qwen3NextConfig(PretrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.head_dim = head_dim
+        self.rope_parameters = rope_parameters
 
         self.layer_types = layer_types
         if self.layer_types is None:

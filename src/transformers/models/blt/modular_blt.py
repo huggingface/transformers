@@ -28,8 +28,8 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import OutputRecorder, check_model_inputs
+from ..cohere2.modeling_cohere2 import rotate_half  # noqa: F401
 from ..llama.modeling_llama import LlamaRotaryEmbedding
-from ..cohere2.modeling_cohere2 import rotate_half # noqa: F401
 from ..mllama.modeling_mllama import (
     MllamaForCausalLM,
     MllamaPreTrainedModel,

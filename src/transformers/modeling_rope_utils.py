@@ -105,7 +105,7 @@ def dynamic_rope_update(rope_forward):
         original_max_position_embeddings = getattr(
             self.config, "original_max_position_embeddings", self.config.max_position_embeddings
         )
-        if layer_type is None or len(self.layer_types) == 1:
+        if layer_type is None:
             rope_type = self.rope_type
             original_inv_freq = self.original_inv_freq
             prefix = ""
@@ -139,7 +139,7 @@ def dynamic_rope_update(rope_forward):
         2 - the current sequence length is in the original scale (avoid losing precision with small sequences)
         """
         seq_len = torch.max(position_ids) + 1
-        if layer_type is None or len(self.layer_types) == 1:
+        if layer_type is None:
             rope_type = self.rope_type
             max_seq_len_cached = self.max_seq_len_cached
             original_inv_freq = self.original_inv_freq
@@ -172,7 +172,7 @@ def dynamic_rope_update(rope_forward):
 
     @wraps(rope_forward)
     def wrapper(self, x, position_ids, layer_type=None):
-        rope_type = self.rope_type if layer_type is None or len(self.layer_types) == 1 else self.rope_type[layer_type]
+        rope_type = self.rope_type if layer_type is None else self.rope_type[layer_type]
         if "dynamic" in rope_type:
             dynamic_frequency_update(self, position_ids, device=x.device, layer_type=layer_type)
         elif rope_type == "longrope":

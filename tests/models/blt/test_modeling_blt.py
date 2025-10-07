@@ -18,7 +18,7 @@ import unittest
 import pytest
 from parameterized import parameterized
 
-from transformers import AutoTokenizer, is_torch_available, set_seed
+from transformers import AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     cleanup,
     require_read_token,
@@ -33,7 +33,6 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     _test_eager_matches_sdpa_inference,
-    ids_tensor,
 )
 
 
@@ -244,45 +243,6 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
         _test_eager_matches_sdpa_inference(
             self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels, atols=atols
         )
-
-    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
-    def test_model_rope_parameters_from_config(self, scaling_type):
-        """Override rope scaling from config test to handle Blt's sub-config structure."""
-        if self.rotary_embedding_layer is None:
-            self.skipTest("Rotary embedding layer not set")
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        short_input = ids_tensor([1, 10], config.vocab_size)
-        long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
-
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        original_model = self.model_tester_class.base_model_class(config)
-        original_model.to(torch_device)
-        original_model.eval()
-        original_short_output = original_model(short_input).last_hidden_state
-        original_long_output = original_model(long_input).last_hidden_state
-
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        config.rope_parameters = {"rope_type": scaling_type, "factor": 10.0}
-        # Propagate rope_parameters to sub-configs for Blt
-        config.encoder_config.rope_parameters = config.rope_parameters
-        config.decoder_config.rope_parameters = config.rope_parameters
-        config.global_config.rope_parameters = config.rope_parameters
-        config.patcher_config.rope_parameters = config.rope_parameters
-
-        scaled_model = self.model_tester_class.base_model_class(config)
-        scaled_model.to(torch_device)
-        scaled_model.eval()
-        scaled_short_output = scaled_model(short_input).last_hidden_state
-        scaled_long_output = scaled_model(long_input).last_hidden_state
-
-        # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
-        # maximum sequence length, so the outputs for the short input should match.
-        if scaling_type == "dynamic":
-            torch.testing.assert_close(original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5)
-        else:
-            self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
-
-        self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
     @unittest.skip(reason="Decoder cannot keep gradients")
     def test_flex_attention_with_grads():

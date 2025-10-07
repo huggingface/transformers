@@ -120,12 +120,12 @@ class PhimoeModelTest(CausalLMModelTest, unittest.TestCase):
         return True
 
     @unittest.skip("PhiMoE's RoPE has custom parameterization")
-    def test_model_rope_parameters_frequencies(self):
+    def test_model_rope_scaling_frequencies(self):
         pass
 
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     @unittest.skip("PhiMoE's RoPE has custom parameterization")
-    def test_model_rope_parameters_from_config(self, scaling_type):
+    def test_model_rope_scaling_from_config(self, scaling_type):
         pass
 
 
