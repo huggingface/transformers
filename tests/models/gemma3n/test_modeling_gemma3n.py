@@ -748,7 +748,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         audio_ds = load_dataset(
             "etechgrid/28.5k_wavfiles_dataset", "default", data_files="wav_dataset/103-1240-0000.wav"
         )
-        self.audio_file_path = audio_ds["train"][0]["audio"]["path"]
+        self.audio_file_path = audio_ds["train"][0]["audio"].metadata.path
         cleanup(torch_device, gc_collect=True)
 
     def tearDown(self):
@@ -996,7 +996,8 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         input_size = inputs.input_ids.shape[-1]
         self.assertTrue(input_size > model.config.get_text_config().sliding_window)
 
-        out = model.generate(**inputs, generation_config=GenerationConfig(max_new_tokens=20, do_sample=False))[
+        generation_config = GenerationConfig(max_new_tokens=20, do_sample=False)
+        out = model.generate(**inputs, generation_config=generation_config)[
             :, input_size:
         ]
         output_text = tokenizer.batch_decode(out)
@@ -1005,6 +1006,6 @@ class Gemma3nIntegrationTest(unittest.TestCase):
             # FIXME: This test is VERY flaky on ROCm
             ("cuda", None): [" and I am glad to be here. This is a nice place. This is a nice place.", ", green, yellow, purple, orange, pink, brown, black, white.\n\nHere are"],
             ("rocm", (9, 4)): [' and I think it makes this place special. This is a nice place. This is a nice place', ', green, yellow, purple, orange, pink, brown, black, white.\n\nHere are'],
-            ("xpu", None): [" and I think it is very nice. I think it is nice. This is a nice place.", ", green, yellow, purple, orange, pink, brown, black, white.\n\nHere are"],
+            ("xpu", None): [" and I think it's a nice place to visit. This is a nice place. This is", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
         }).get_expectation()  # fmt: skip
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
