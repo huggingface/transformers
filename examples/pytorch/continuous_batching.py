@@ -33,6 +33,7 @@ from transformers.generation.continuous_batching.requests import logger
 SLIDING_WINDOW = 0
 MODEL_ID = "google/gemma-2-2b-it" if SLIDING_WINDOW > 0 else "Qwen/Qwen3-4B-Instruct-2507" # "meta-llama/Meta-Llama-3-8B"
 FORCE_MAX_LENGTH = False  # should be False unless you are debugging sliding window features
+SKIP_SPECIAL_TOKENS = False
 
 
 def generate_simple(
@@ -43,6 +44,7 @@ def generate_simple(
         "eager_paged": "eager",
         "paged_attention": "eager",  # TODO: this does not work on AMD docker
         "flash_paged": "flash_attention_2",  # TODO: this does not work on AMD docker
+        "paged_attention|kernels-community/flash-attn": "eager",
     }[attn_impl]
 
     model = AutoModelForCausalLM.from_pretrained(MODEL_ID, dtype=torch.bfloat16, attn_implementation=attn_impl)
@@ -57,7 +59,7 @@ def generate_simple(
         # attention_mask = torch.ones_like(input_ids)
         outputs = model.generate(input_ids, generation_config=generation_config, use_model_defaults=False)
         generated_tokens = outputs[0][input_ids.shape[1] :]
-        decoded_output = tokenizer.decode(generated_tokens, skip_special_tokens=True)
+        decoded_output = tokenizer.decode(generated_tokens, skip_special_tokens=SKIP_SPECIAL_TOKENS)
         decoded_outputs[key] = decoded_output
     return decoded_outputs
 
@@ -117,19 +119,19 @@ def batch_generate(
     token_count = 0
     data = []
     for i, request in enumerate(batch_outputs):
-        input_text = tokenizer.decode(batch_outputs[request].prompt_ids, skip_special_tokens=True)
+        input_text = tokenizer.decode(batch_outputs[request].prompt_ids, skip_special_tokens=SKIP_SPECIAL_TOKENS)
         # The key is used to tie back to the output of unbatched generation
         key = " ".join(map(str, batch_outputs[request].prompt_ids))
         data.append({"input": input_text, "key": key})
 
         # Try to decode the output
         try:
-            output_text = tokenizer.decode(batch_outputs[request].generated_tokens, skip_special_tokens=True)
+            output_text = tokenizer.decode(batch_outputs[request].generated_tokens, skip_special_tokens=SKIP_SPECIAL_TOKENS)
             token_count += len(batch_outputs[request].generated_tokens[1:])
-            data[-1]["output"] = output_text
+            data[-1]["cb_outputs"] = output_text
         except Exception as e:
             print(f"Decoding failed for request {request}: {e}")
-            data[-1]["output"] = "__ERROR__"
+            data[-1]["cb_outputs"] = "__ERROR__"
             continue
 
         # Display sample if asked
@@ -147,7 +149,7 @@ def batch_generate(
         if expected_outputs is not None:
             expected_output = expected_outputs.pop(key)
             matches = output_text == expected_output  # TODO: rework this for a better distance metric
-            data[-1]["ref"] = expected_output
+            data[-1]["without_cb"] = expected_output
             data[-1]["matches"] = matches
             data[-1].pop("key")
             print(f"Request {i} matches" if matches else f"Request {i} does NOT match!")
@@ -185,7 +187,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--attn", type=str, default="kernels-community/flash-attn", help="Attention implementation")
     parser.add_argument("--matmul-precision", "-mp", type=str, default="high")  # set to "none" to disable
-    parser.add_argument("--cuda-graph", "-cg", help="Use cuda graphs", default=None)
+    parser.add_argument("--cuda-graph", "-cg", help="Use cuda graphs", type=str, default=None)
     parser.add_argument("--compile", action="store_true", help="Compile the model using torch.compile")
 
     parser.add_argument("--samples", type=int, default=500, help="Number of samples to generate")
@@ -207,6 +209,15 @@ if __name__ == "__main__":
     # Set matmul precision if not none
     if args.matmul_precision != "none":
         torch.set_float32_matmul_precision(args.matmul_precision)
+    # Parse cuda graph argument
+    if args.cuda_graph is not None:
+        use_cuda_graph = {
+            "none": None,
+            "yes": True, "y": True, "true": True, "t": True, "1": True,
+            "no": False, "n": False, "false": False, "f": False, "0": False,
+        }[args.cuda_graph.lower()]  # fmt: skip
+    else:
+        use_cuda_graph = None
 
     # Prepare model
     model = AutoModelForCausalLM.from_pretrained(
@@ -234,7 +245,7 @@ if __name__ == "__main__":
     # Prepare generation config
     generation_config = GenerationConfig(
         max_new_tokens=512,
-        use_cuda_graph=(None if args.cuda_graph is None else bool(args.cuda_graph)),
+        use_cuda_graph=use_cuda_graph,
         eos_token_id=tokenizer.pad_token_id if FORCE_MAX_LENGTH else tokenizer.eos_token_id,
         pad_token_id=tokenizer.pad_token_id,
         do_sample=True,
