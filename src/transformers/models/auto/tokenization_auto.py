@@ -26,11 +26,13 @@ from transformers.utils.import_utils import is_mistral_common_available
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...modeling_gguf_pytorch_utils import load_gguf_checkpoint
+from ...tokenization_sentencepiece import PreTrainedSentencePieceTokenizer
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
 from ...utils import (
     cached_file,
     extract_commit_hash,
+    has_file,
     is_g2p_en_available,
     is_sentencepiece_available,
     is_tokenizers_available,
@@ -46,12 +48,10 @@ from .configuration_auto import (
     replace_list_option_in_docstrings,
 )
 
-
 if is_tokenizers_available():
     from ...tokenization_utils_fast import PreTrainedTokenizerFast
 else:
     PreTrainedTokenizerFast = None
-
 
 logger = logging.get_logger(__name__)
 
@@ -356,7 +356,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         (
             "llama",
             (
-                "LlamaTokenizer" if is_sentencepiece_available() else None,
+                None,
                 "LlamaTokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
@@ -818,16 +818,16 @@ def tokenizer_class_from_name(class_name: str) -> Union[type[Any], None]:
 
 
 def get_tokenizer_config(
-    pretrained_model_name_or_path: Union[str, os.PathLike[str]],
-    cache_dir: Optional[Union[str, os.PathLike[str]]] = None,
-    force_download: bool = False,
-    resume_download: Optional[bool] = None,
-    proxies: Optional[dict[str, str]] = None,
-    token: Optional[Union[bool, str]] = None,
-    revision: Optional[str] = None,
-    local_files_only: bool = False,
-    subfolder: str = "",
-    **kwargs,
+        pretrained_model_name_or_path: Union[str, os.PathLike[str]],
+        cache_dir: Optional[Union[str, os.PathLike[str]]] = None,
+        force_download: bool = False,
+        resume_download: Optional[bool] = None,
+        proxies: Optional[dict[str, str]] = None,
+        token: Optional[Union[bool, str]] = None,
+        revision: Optional[str] = None,
+        local_files_only: bool = False,
+        subfolder: str = "",
+        **kwargs,
 ) -> dict[str, Any]:
     """
     Loads the tokenizer configuration from a pretrained model tokenizer configuration.
@@ -1098,11 +1098,11 @@ class AutoTokenizer:
 
         has_remote_code = tokenizer_auto_map is not None
         has_local_code = type(config) in TOKENIZER_MAPPING or (
-            config_tokenizer_class is not None
-            and (
-                tokenizer_class_from_name(config_tokenizer_class) is not None
-                or tokenizer_class_from_name(config_tokenizer_class + "Fast") is not None
-            )
+                config_tokenizer_class is not None
+                and (
+                        tokenizer_class_from_name(config_tokenizer_class) is not None
+                        or tokenizer_class_from_name(config_tokenizer_class + "Fast") is not None
+                )
         )
         if has_remote_code:
             if use_fast and tokenizer_auto_map[1] is not None:
@@ -1133,6 +1133,31 @@ class AutoTokenizer:
                 tokenizer_class_candidate = config_tokenizer_class
                 tokenizer_class = tokenizer_class_from_name(tokenizer_class_candidate)
             if tokenizer_class is None:
+                try:
+                    vocab_file_exists = has_file(
+                        pretrained_model_name_or_path,
+                        "tokenizer.model",
+                        revision=kwargs.get("revision", None),
+                        token=kwargs.get("token", None),
+                        cache_dir=kwargs.get("cache_dir", None),
+                        local_files_only=kwargs.get("local_files_only", False),
+                    )
+                except Exception:
+                    vocab_file_exists = False
+
+                if vocab_file_exists:
+                    logger.info(
+                        "Falling back to PreTrainedSentencePieceTokenizer since tokenizer.model file was found "
+                        "but no config or tokenizer class could be determined."
+                    )
+                    return PreTrainedSentencePieceTokenizer.from_pretrained(
+                        pretrained_model_name_or_path, *inputs, **kwargs
+                    )
+
+                raise ValueError(
+                    f"Could not load tokenizer from {pretrained_model_name_or_path}. "
+                    "No tokenizer configuration or model config could be found."
+                )
                 raise ValueError(
                     f"Tokenizer class {tokenizer_class_candidate} does not exist or is not currently imported."
                 )
@@ -1192,10 +1217,10 @@ class AutoTokenizer:
             raise ValueError("You passed a slow tokenizer in the `fast_tokenizer_class`.")
 
         if (
-            slow_tokenizer_class is not None
-            and fast_tokenizer_class is not None
-            and issubclass(fast_tokenizer_class, PreTrainedTokenizerFast)
-            and fast_tokenizer_class.slow_tokenizer_class != slow_tokenizer_class
+                slow_tokenizer_class is not None
+                and fast_tokenizer_class is not None
+                and issubclass(fast_tokenizer_class, PreTrainedTokenizerFast)
+                and fast_tokenizer_class.slow_tokenizer_class != slow_tokenizer_class
         ):
             raise ValueError(
                 "The fast tokenizer class you are passing has a `slow_tokenizer_class` attribute that is not "

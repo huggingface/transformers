@@ -175,6 +175,7 @@ _import_structure = {
     "processing_utils": ["ProcessorMixin"],
     "quantizers": [],
     "testing_utils": [],
+    "tokenization_sentencepiece": ["PreTrainedSentencePieceTokenizer"],
     "tokenization_utils": ["PreTrainedTokenizer"],
     "tokenization_utils_base": [
         "AddedToken",
@@ -710,6 +711,7 @@ if TYPE_CHECKING:
     from .pytorch_utils import prune_layer as prune_layer
 
     # Tokenization
+    from .tokenization_sentencepiece import PreTrainedSentencePieceTokenizer as PreTrainedSentencePieceTokenizer
     from .tokenization_utils import PreTrainedTokenizer as PreTrainedTokenizer
     from .tokenization_utils_base import AddedToken as AddedToken
     from .tokenization_utils_base import BatchEncoding as BatchEncoding
