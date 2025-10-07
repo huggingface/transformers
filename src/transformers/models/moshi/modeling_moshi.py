@@ -624,7 +624,6 @@ class MoshiSdpaAttention(MoshiAttention):
     """
 
     # Adapted from MoshiAttention.forward
-
     def forward(
         self,
         hidden_states: torch.Tensor,

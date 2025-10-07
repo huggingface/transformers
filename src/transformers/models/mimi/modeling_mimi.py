@@ -828,7 +828,6 @@ class MimiSdpaAttention(MimiAttention):
     """
 
     # Adapted from MimiAttention.forward
-
     def forward(
         self,
         hidden_states: torch.Tensor,

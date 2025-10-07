@@ -709,7 +709,6 @@ class Pix2StructTextAttention(nn.Module):
         return values
 
     # Adapted from transformers.models.t5.modeling_t5.T5Attention.forward
-
     def forward(
         self,
         hidden_states,

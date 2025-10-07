@@ -624,7 +624,6 @@ class KyutaiSpeechToTextSdpaAttention(KyutaiSpeechToTextAttention):
     """
 
     # Adapted from KyutaiSpeechToTextAttention.forward
-
     def forward(
         self,
         hidden_states: torch.Tensor,

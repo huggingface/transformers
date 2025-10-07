@@ -373,7 +373,6 @@ class DiffLlamaSdpaAttention(DiffLlamaAttention):
     """
 
     # Adapted from DiffLlamaAttention.forward
-
     def forward(
         self,
         hidden_states: torch.Tensor,
