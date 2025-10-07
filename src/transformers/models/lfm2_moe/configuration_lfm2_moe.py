@@ -31,9 +31,9 @@ class Lfm2MoeConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 65536):
             Vocabulary size of the LLaMA model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`Lfm2Model`]
-        hidden_size (`int`, *optional*, defaults to 2560):
+        hidden_size (`int`, *optional*, defaults to 2048):
             Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 12288):
+        intermediate_size (`int`, *optional*, defaults to 7168):
             Dimension of the MLP representations.
         moe_intermediate_size (`int`, *optional*, defaults to 1792):
             Intermediate size of the routed expert.
@@ -51,8 +51,6 @@ class Lfm2MoeConfig(PretrainedConfig):
             The base period of the RoPE embeddings.
         max_position_embeddings (`int`, *optional*, defaults to 128000):
             The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
@@ -80,14 +78,10 @@ class Lfm2MoeConfig(PretrainedConfig):
             Number of routed experts.
         use_expert_bias (`bool`, *optional*, defaults to `True`):
             Whether to use the expert bias on the routing weights.
-        router_scaling_factor (`float`, *optional*, defaults to 1.0):
+        routed_scaling_factor (`float`, *optional*, defaults to 1.0):
             Scaling factor for routed experts in MoE models.
-        router_score_function (`str`, *optional*, defaults to `"sigmoid"`):
-            Function to score the routing weights.
         norm_topk_prob (`bool`, *optional*, defaults to `True`):
             Whether to normalize the topk probabilities.
-        full_attn_idxs (`Optional`, *optional*):
-            Index of the layers which use attention.
         layer_types (`Optional`, *optional*):
             Type of each layers.
 
@@ -120,7 +114,6 @@ class Lfm2MoeConfig(PretrainedConfig):
         tie_word_embeddings: bool = True,
         rope_theta: float = 1000000.0,
         max_position_embeddings: int = 128_000,
-        initializer_range: float = 0.02,
         use_cache: bool = True,
         norm_eps: float = 0.00001,
         num_attention_heads: int = 32,
@@ -131,9 +124,8 @@ class Lfm2MoeConfig(PretrainedConfig):
         num_experts_per_tok: int = 4,
         num_experts: int = 32,
         use_expert_bias: bool = True,
-        routed_scaling_factor: Optional[float] = None,
+        routed_scaling_factor: float = 1.0,
         norm_topk_prob: bool = True,
-        full_attn_idxs: Optional[list[int]] = None,
         layer_types: Optional[list[str]] = None,
         **kwargs,
     ):
@@ -143,7 +135,6 @@ class Lfm2MoeConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.rope_theta = rope_theta
         self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
         self.use_cache = use_cache
         self.norm_eps = norm_eps
 
@@ -163,11 +154,7 @@ class Lfm2MoeConfig(PretrainedConfig):
         self.use_expert_bias = use_expert_bias
         self.routed_scaling_factor = routed_scaling_factor
         self.norm_topk_prob = norm_topk_prob
-
         self.layer_types = layer_types
-        if self.layer_types is None:
-            full_attn_idxs = full_attn_idxs if full_attn_idxs is not None else list(range(num_hidden_layers))
-            self.layer_types = ["full_attention" if i in full_attn_idxs else "conv" for i in range(num_hidden_layers)]
 
         tie_word_embeddings = kwargs.get("tie_embedding", tie_word_embeddings)  # to fit original config keys
         super().__init__(

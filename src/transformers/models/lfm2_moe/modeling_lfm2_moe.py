@@ -174,8 +174,7 @@ class Lfm2MoeSparseMoeBlock(nn.Module):
 
         if self.norm_topk_prob:
             routing_weights /= routing_weights.sum(dim=-1, keepdim=True) + 1e-6
-        if self.routed_scaling_factor:
-            routing_weights = routing_weights * self.routed_scaling_factor
+        routing_weights = routing_weights * self.routed_scaling_factor
         return selected_experts, routing_weights
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
