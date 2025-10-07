@@ -168,9 +168,7 @@ def is_kernel(attn_implementation: Optional[str]) -> bool:
     )
 
 
-def load_and_register_kernel(
-    attn_implementation: str,
-) -> None:
+def load_and_register_kernel(attn_implementation: str, use_paged=False) -> None:
     """Load and register the kernel associated to `attn_implementation`."""
     from ..masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
     from ..modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -178,12 +176,11 @@ def load_and_register_kernel(
     attention_wrapper = None
     # FIXME: @ArthurZucker this is dirty, did not want to do a lof of extra work
     actual_attn_name = attn_implementation
-    if "|" in attn_implementation:
-        attention_wrapper, actual_attn_name = attn_implementation.split("|")
+    if use_paged in attn_implementation:
+        attention_wrapper = f"paged|{attn_implementation}"
         # `transformers` has wrapper for sdpa, paged, flash, flex etc.
-        attention_wrapper = ALL_ATTENTION_FUNCTIONS.get(
-            attention_wrapper, ALL_ATTENTION_FUNCTIONS.get("paged|flash_attention_2")
-        )
+        attention_wrapper = ALL_ATTENTION_FUNCTIONS.get(attention_wrapper)
+
     # Extract repo_id and kernel_name from the string
     if ":" in actual_attn_name:
         repo_id, kernel_name = actual_attn_name.split(":")

@@ -606,9 +606,8 @@ class ContinuousBatchingManager:
             max_queue_size: Maximum size of the request queue (0 = unlimited)
             streaming: Whether to stream tokens as they are generated
         """
-        if "paged|" not in model.config._attn_implementation:
-            attn_implementation = "paged|" + model.config._attn_implementation
-            model.set_attn_implementation(attn_implementation)
+        model.config.use_paged = True
+        model.set_attn_implementation(model.config._attn_implementation)
         self.model = model.eval()
         generation_config = model.generation_config if generation_config is None else generation_config
         self.generation_config = generation_config
