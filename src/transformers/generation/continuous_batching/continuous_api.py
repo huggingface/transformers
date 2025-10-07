@@ -37,7 +37,17 @@ from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
 
 
 PADDING = True
-PAD_TO = 50000
+NUM_Q_CUDA_GRAPHS = 2
+NUM_KV_CUDA_GRAPHS = 5
+
+
+def pad_by_intervals(size: int, max_value: int, intervals: int) -> int:
+    for i in range(intervals):
+        padded_size = (i + 1) * max_value / intervals
+        padded_size = min(int(padded_size), max_value)
+        if padded_size >= size:
+            return padded_size
+    return max_value
 
 
 def build_attention_mask(
@@ -185,8 +195,8 @@ class ContinuousBatchProcessor:
         self.sliding_window = 1 if getattr(config, "sliding_window", None) is None else config.sliding_window
         # Accumulator for batch scheduling
         self.requests_in_batch: list[RequestState] = []
-        # Cuda graph for the generation step
-        self.graph = None
+        # Cuda graphs for the generation step
+        self.graphs: Optional[dict[tuple[int, int], torch.cuda.CUDAGraph]] = {} if PADDING else None
 
         # Set up metrics collector
         self.max_batch_tokens = cache.max_batch_tokens
@@ -282,11 +292,11 @@ class ContinuousBatchProcessor:
             self.write_index_storage[i][:q_len].fill_(-2)  # -1 is used to let the cache where new states go
             self.read_index_storage[i][: q_len + k_len].fill_(-2)  # same
 
-    def get_model_kwargs(self) -> PagedAttentionArgs:
+    def get_model_kwargs(self, queries_size: int = 0, read_index_padded_size: int = 0) -> PagedAttentionArgs:
         """Get model keyword arguments for the current batch."""
         # Compute the slice to return
-        q_len = self.max_batch_tokens if PADDING else self.actual_query_length
-        b_size = self.max_batch_tokens if PADDING else self.actual_batch_size
+        q_len = queries_size if PADDING else self.actual_query_length
+        b_size = queries_size if PADDING else self.actual_batch_size
 
         # Prepare the kwargs, the attributes that are either tensors or dict of tensors are initialized to empty dicts
         kwargs = {
@@ -306,7 +316,7 @@ class ContinuousBatchProcessor:
 
         # For the attributes that are lists of tensors, we construct list of tensor references
         for i in range(self.cache.num_groups):
-            r, w = (PAD_TO + self.max_batch_tokens, self.max_batch_tokens) if PADDING else self.actual_group_indices[i]
+            r, w = (read_index_padded_size + queries_size, queries_size) if PADDING else self.actual_group_indices[i]
             kwargs["read_index"].append(self.read_index_storage[i][:r])
             kwargs["write_index"].append(self.write_index_storage[i][:w])
 
@@ -578,14 +588,34 @@ class ContinuousBatchProcessor:
     @torch.no_grad
     def _generation_step(self, model: nn.Module, logit_processor: LogitsProcessor, do_sample: bool) -> None:
         """Perform a single generation step."""
-        batch_data = self.get_model_kwargs()
+
+        # If padding is disabled, we just use the actual size
+        if not PADDING:
+            batch_data = self.get_model_kwargs()
+            self._forward_process_and_sample(model, batch_data, logit_processor, do_sample)
+            return None
+
+        # Determine the padded size of the queries and keys/values
+        padded_q = pad_by_intervals(self.actual_query_length, self.max_batch_tokens, NUM_Q_CUDA_GRAPHS)
+
+        max_read_index_size = max(self.actual_group_indices[i][0] for i in range(self.cache.num_groups))
+        padded_read_index_size = pad_by_intervals(
+            max_read_index_size - self.max_batch_tokens,
+            self.cache.num_blocks * self.cache.block_size,
+            NUM_KV_CUDA_GRAPHS
+        )
+
+        # Get the batch data and the associated graph
+        batch_data = self.get_model_kwargs(padded_q, padded_read_index_size)
+        graph = self.graphs.get((padded_q, padded_read_index_size))
 
         # If we have a graph that fits, we replay it
-        if self.graph is not None:
-            self.graph.replay()
-            return
+        if graph is not None:
+            graph.replay()
+            return None
 
         # Otherwise, we need to create it
+        logger.info(f"Creating graph for {(padded_q, padded_read_index_size) = }")
         stream = torch.cuda.Stream(device=model.device)
         stream.wait_stream(torch.cuda.current_stream())
         # Warmup
@@ -593,9 +623,10 @@ class ContinuousBatchProcessor:
             self._forward_process_and_sample(model, batch_data, logit_processor, do_sample)
         torch.cuda.current_stream().wait_stream(stream)
         # Catpure
-        self.graph = torch.cuda.CUDAGraph()
-        with torch.cuda.graph(self.graph, stream=stream):
+        graph = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(graph, stream=stream):
             self._forward_process_and_sample(model, batch_data, logit_processor, do_sample)
+        self.graphs[(padded_q, padded_read_index_size)] = graph
 
     @traced
     def _forward_process_and_sample(
