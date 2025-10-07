@@ -33,7 +33,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
 @requires(backends=("sentencepiece",))
 class CpmTokenizer(PreTrainedTokenizer):
-    """Runs pre-tokenization with Jieba segmentation tool. It is used in CPM models."""
+    """Runs pre-tokenization with Jieba-RS segmentation tool. It is used in CPM models."""
 
     vocab_files_names = VOCAB_FILES_NAMES
 
@@ -55,7 +55,7 @@ class CpmTokenizer(PreTrainedTokenizer):
         **kwargs,
     ) -> None:
         """
-        Construct a CPM tokenizer. Based on [Jieba](https://pypi.org/project/jieba/) and
+        Construct a CPM tokenizer. Based on [Jieba-RS](https://pypi.org/project/rjieba/) and
         [SentencePiece](https://github.com/google/sentencepiece).
 
         This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should
@@ -129,13 +129,13 @@ class CpmTokenizer(PreTrainedTokenizer):
         self.sp_model.Load(vocab_file)
 
         try:
-            import jieba
+            import rjieba
         except ModuleNotFoundError as error:
             raise error.__class__(
-                "You need to install jieba to use CpmTokenizer or CpmTokenizerFast. "
-                "See https://pypi.org/project/jieba/ for installation."
+                "You need to install rjieba to use CpmTokenizer or CpmTokenizerFast. "
+                "See https://pypi.org/project/rjieba/ for installation."
             )
-        self.jieba = jieba
+        self.jieba = rjieba
         self.translator = str.maketrans(" \n", "\u2582\u2583")
 
         super().__init__(

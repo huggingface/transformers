@@ -18,10 +18,6 @@ rendered properly in your Markdown viewer.
 
 このガイドは、CPU上で大規模なモデルの効率的な推論に焦点を当てています。
 
-## `BetterTransformer` for faster inference
-
-最近、テキスト、画像、および音声モデルのCPU上での高速な推論のために`BetterTransformer`を統合しました。詳細については、この統合に関するドキュメンテーションを[こちら](https://huggingface.co/docs/optimum/bettertransformer/overview)で確認してください。
-
 ## PyTorch JITモード（TorchScript）
 TorchScriptは、PyTorchコードからシリアライズ可能で最適化可能なモデルを作成する方法です。任意のTorchScriptプログラムは、Python依存性のないプロセスで保存およびロードできます。
 デフォルトのイーガーモードと比較して、PyTorchのjitモードは通常、オペレーターフュージョンなどの最適化手法によりモデル推論のパフォーマンスが向上します。

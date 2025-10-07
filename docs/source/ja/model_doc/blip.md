@@ -66,8 +66,6 @@ BLIP は、次のようなさまざまなマルチモーダル タスクを実�
 [[autodoc]] BlipImageProcessorFast
     - preprocess
 
-<frameworkcontent>
-<pt>
 
 ## BlipModel
 
@@ -101,39 +99,3 @@ BLIP は、次のようなさまざまなマルチモーダル タスクを実�
 [[autodoc]] BlipForQuestionAnswering
     - forward
 
-</pt>
-<tf>
-
-## TFBlipModel
-
-[[autodoc]] TFBlipModel
-    - call
-    - get_text_features
-    - get_image_features
-
-## TFBlipTextModel
-
-[[autodoc]] TFBlipTextModel
-    - call
-
-## TFBlipVisionModel
-
-[[autodoc]] TFBlipVisionModel
-    - call
-
-## TFBlipForConditionalGeneration
-
-[[autodoc]] TFBlipForConditionalGeneration
-    - call
-
-## TFBlipForImageTextRetrieval
-
-[[autodoc]] TFBlipForImageTextRetrieval
-    - call
-
-## TFBlipForQuestionAnswering
-
-[[autodoc]] TFBlipForQuestionAnswering
-    - call
-</tf>
-</frameworkcontent>

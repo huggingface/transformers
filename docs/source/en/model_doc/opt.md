@@ -25,7 +25,7 @@ rendered properly in your Markdown viewer.
 
 # OPT
 
-[OPT](https://huggingface.co/papers/2205.01068) is a suite of open-source decoder-only pre-trained transformers whose parameters range from 125M to 175B. OPT models are designed for casual language modeling and aim to enable responsible and reproducible research at scale. OPT-175B is comparable in performance to GPT-3 with only 1/7th the carbon footprint.
+[OPT](https://huggingface.co/papers/2205.01068) is a suite of open-source decoder-only pre-trained transformers whose parameters range from 125M to 175B. OPT models are designed for causal language modeling and aim to enable responsible and reproducible research at scale. OPT-175B is comparable in performance to GPT-3 with only 1/7th the carbon footprint.
 
 You can find all the original OPT checkpoints under the [OPT](https://huggingface.co/collections/facebook/opt-66ed00e15599f02966818844) collection.
 
@@ -35,7 +35,6 @@ You can find all the original OPT checkpoints under the [OPT](https://huggingfac
 > Click on the OPT models in the right sidebar for more examples of how to apply OPT to different language tasks.
 
 The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`], and from the command line.
-
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -65,12 +64,14 @@ model_inputs = tokenizer([prompt], return_tensors="pt").to(model.device)
 generated_ids = model.generate(**model_inputs, max_new_tokens=30, do_sample=False)
 tokenizer.batch_decode(generated_ids)[0]
 ```
+
 </hfoption>
 <hfoption id="transformers CLI">
 
 ```py
 echo -e "Plants create energy through a process known as" | transformers run --task text-generation --model facebook/opt-125m --device 0
 ```
+
 </hfoption>
 </hfoptions>
 
@@ -99,8 +100,6 @@ tokenizer.batch_decode(generated_ids)[0]
 ## Notes
 
 - OPT adds an `EOS` token `</s>` to the beginning of every prompt.
-
-- The `head_mask` argument is ignored if the attention implementation isn't `"eager"`. Set `attn_implementation="eager"` to enable the `head_mask`.
 
 ## Resources
 

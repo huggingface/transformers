@@ -94,9 +94,6 @@ class MaskGenerationPipeline(ChunkPipeline):
         requires_backends(self, "vision")
         requires_backends(self, "torch")
 
-        if self.framework != "pt":
-            raise ValueError(f"The {self.__class__} is only available in PyTorch.")
-
         self.check_model_type(MODEL_FOR_MASK_GENERATION_MAPPING_NAMES)
 
     def _sanitize_parameters(self, **kwargs):
@@ -195,8 +192,8 @@ class MaskGenerationPipeline(ChunkPipeline):
         points_per_batch=64,
         crops_n_layers: int = 0,
         crop_overlap_ratio: float = 512 / 1500,
-        points_per_crop: Optional[int] = 32,
-        crop_n_points_downscale_factor: Optional[int] = 1,
+        points_per_crop: int = 32,
+        crop_n_points_downscale_factor: int = 1,
         timeout: Optional[float] = None,
     ):
         image = load_image(image, timeout=timeout)
@@ -205,26 +202,24 @@ class MaskGenerationPipeline(ChunkPipeline):
             image, target_size, crops_n_layers, crop_overlap_ratio, points_per_crop, crop_n_points_downscale_factor
         )
         model_inputs = self.image_processor(images=cropped_images, return_tensors="pt")
-        if self.framework == "pt":
-            model_inputs = model_inputs.to(self.dtype)
+        model_inputs = model_inputs.to(self.dtype)
 
         with self.device_placement():
-            if self.framework == "pt":
-                inference_context = self.get_inference_context()
-                with inference_context():
-                    model_inputs = self._ensure_tensor_on_device(model_inputs, device=self.device)
-                    embeddings = self.model.get_image_embeddings(model_inputs.pop("pixel_values"))
+            inference_context = self.get_inference_context()
+            with inference_context():
+                model_inputs = self._ensure_tensor_on_device(model_inputs, device=self.device)
+                embeddings = self.model.get_image_embeddings(model_inputs.pop("pixel_values"))
 
-                    # Handle both SAM (single tensor) and SAM-HQ (tuple) outputs
-                    if isinstance(embeddings, tuple):
-                        image_embeddings, intermediate_embeddings = embeddings
-                        model_inputs["intermediate_embeddings"] = intermediate_embeddings
-                    else:
-                        image_embeddings = embeddings
-                    # TODO: Identifying the model by the type of its returned embeddings is brittle.
-                    #       Consider using a more robust method for distinguishing model types here.
+                # Handle both SAM (single tensor) and SAM-HQ (tuple) outputs
+                if isinstance(embeddings, tuple):
+                    image_embeddings, intermediate_embeddings = embeddings
+                    model_inputs["intermediate_embeddings"] = intermediate_embeddings
+                else:
+                    image_embeddings = embeddings
+                # TODO: Identifying the model by the type of its returned embeddings is brittle.
+                #       Consider using a more robust method for distinguishing model types here.
 
-                    model_inputs["image_embeddings"] = image_embeddings
+                model_inputs["image_embeddings"] = image_embeddings
 
         n_points = grid_points.shape[1]
         points_per_batch = points_per_batch if points_per_batch is not None else n_points

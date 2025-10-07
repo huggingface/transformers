@@ -297,7 +297,7 @@ class EncoderLayer(nn.Module):
         self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = LayerNorm(self.embed_dim)
 
-    def forward(self, x, encoder_padding_mask, layer_head_mask, output_attentions=False):
+    def forward(self, x, encoder_padding_mask, output_attentions=False):
         """
         Args:
             x (`torch.Tensor`): input to the layer of shape *(seq_len, batch, embed_dim)*
@@ -305,8 +305,6 @@ class EncoderLayer(nn.Module):
                 *(batch, src_len)* where padding elements are indicated by `1`.
             for t_tgt, t_src is excluded (or masked out), =0 means it is
             included in attention
-            layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
-                *(config.encoder_attention_heads,)*.
 
         Returns:
             encoded output of shape *(seq_len, batch, embed_dim)*
@@ -316,7 +314,6 @@ class EncoderLayer(nn.Module):
             query=x,
             key=x,
             key_padding_mask=encoder_padding_mask,
-            layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
         )
         x = nn.functional.dropout(x, p=self.dropout, training=self.training)
@@ -359,7 +356,6 @@ class FSMTEncoder(nn.Module):
         input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
@@ -371,11 +367,6 @@ class FSMTEncoder(nn.Module):
             attention_mask (`torch.LongTensor`): indicating which indices are padding tokens
             inputs_embeds (`torch.FloatTensor`):
                 embedding vectors of shape *(batch, src_len, embed_dim)*
-            head_mask (`torch.Tensor` of shape `(num_layers, num_heads)`, *optional*):
-                Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
 
         Returns:
             BaseModelOutput or Tuple comprised of:
@@ -416,11 +407,6 @@ class FSMTEncoder(nn.Module):
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
-        # check if head_mask has a correct number of layers specified if desired
-        if head_mask is not None:
-            assert head_mask.size()[0] == (len(self.layers)), (
-                f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
-            )
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 x = x.transpose(0, 1)  # T x B x C -> B x T x C
@@ -434,7 +420,6 @@ class FSMTEncoder(nn.Module):
                 x, attn = encoder_layer(
                     x,
                     attention_mask,
-                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
                     output_attentions=output_attentions,
                 )
 
@@ -487,8 +472,6 @@ class DecoderLayer(nn.Module):
         encoder_attn_mask=None,
         layer_state=None,
         causal_mask=None,
-        layer_head_mask=None,
-        cross_attn_layer_head_mask=None,
         decoder_padding_mask=None,
         output_attentions=False,
         cache_position=None,
@@ -502,7 +485,6 @@ class DecoderLayer(nn.Module):
             layer_state=layer_state,  # adds keys to layer state
             key_padding_mask=decoder_padding_mask,
             attn_mask=causal_mask,
-            layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
             cache_position=cache_position,
         )
@@ -518,7 +500,6 @@ class DecoderLayer(nn.Module):
             key=encoder_hidden_states,
             key_padding_mask=encoder_attn_mask,
             layer_state=layer_state,  # mutates layer state
-            layer_head_mask=cross_attn_layer_head_mask,
             output_attentions=output_attentions,
             cache_position=cache_position,
         )
@@ -583,10 +564,8 @@ class FSMTDecoder(nn.Module):
         encoder_padding_mask: torch.Tensor,
         decoder_padding_mask: torch.Tensor,
         decoder_causal_mask: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
@@ -604,17 +583,6 @@ class FSMTDecoder(nn.Module):
                 encoder-side attention
             encoder_padding_mask: for ignoring pad tokens
             past_key_values (dict or None): dictionary used for storing state during generation
-            head_mask (`torch.Tensor` of shape `(num_layers, num_heads)`, *optional*):
-                Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
-
-            cross_attn_head_mask (`torch.Tensor` of shape `(num_layers, num_heads)`, *optional*):
-                Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
 
         Returns:
             BaseModelOutputWithPast or tuple:
@@ -650,7 +618,7 @@ class FSMTDecoder(nn.Module):
 
         # initialize `past_key_values`
         if use_cache and past_key_values is None:
-            past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
         if use_cache and isinstance(past_key_values, tuple):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
@@ -671,13 +639,6 @@ class FSMTDecoder(nn.Module):
         all_self_attns = () if output_attentions else None
         all_cross_attns = () if output_attentions else None
 
-        # check if head_mask has a correct number of layers specified if desired
-        for attn_mask, mask_name in zip([head_mask, cross_attn_head_mask], ["head_mask", "cross_attn_head_mask"]):
-            if attn_mask is not None:
-                assert attn_mask.size()[0] == (len(self.layers)), (
-                    f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for"
-                    f" {head_mask.size()[0]}."
-                )
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             if output_hidden_states:
@@ -696,8 +657,6 @@ class FSMTDecoder(nn.Module):
                 decoder_padding_mask=decoder_padding_mask,
                 layer_state=past_key_values,
                 causal_mask=decoder_causal_mask,
-                layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                cross_attn_layer_head_mask=(cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None),
                 output_attentions=output_attentions,
                 cache_position=cache_position,
             )
@@ -773,7 +732,6 @@ class Attention(nn.Module):
         key_padding_mask: Optional[Tensor] = None,
         layer_state: Optional[Cache] = None,
         attn_mask: Optional[Tensor] = None,
-        layer_head_mask: Optional[Tensor] = None,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.Tensor] = None,
     ) -> tuple[Tensor, Optional[Tensor]]:
@@ -793,7 +751,7 @@ class Attention(nn.Module):
             else:
                 curr_past_key_value = layer_state
 
-        # NOTE: FSMT has format (seq_len, BS, model_dim) ofr inputs
+        # NOTE: FSMT has format (seq_len, BS, model_dim) for inputs
         current_states = key if self.encoder_decoder_attention else query
         if self.encoder_decoder_attention and layer_state is not None and is_updated:
             # reuse k,v, cross_attentions
@@ -847,13 +805,6 @@ class Attention(nn.Module):
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
-        if layer_head_mask is not None:
-            assert layer_head_mask.size() == (self.num_heads,), (
-                f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
-            )
-            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
         if output_attentions:
             # make sure that attn_weights are included in graph
             attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
@@ -906,9 +857,6 @@ class FSMTModel(PretrainedFSMTModel):
     def get_encoder(self):
         return self.encoder
 
-    def get_decoder(self):
-        return self.decoder
-
     def _tie_weights(self):
         if self.config.tie_word_embeddings:
             self._tie_or_clone_weights(self.decoder.embed_tokens, self.get_input_embeddings())
@@ -921,11 +869,8 @@ class FSMTModel(PretrainedFSMTModel):
         attention_mask: Optional[torch.Tensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        decoder_head_mask: Optional[torch.Tensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[tuple[torch.FloatTensor]] = None,
-        past_key_values: Optional[tuple[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -948,12 +893,6 @@ class FSMTModel(PretrainedFSMTModel):
         decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
-        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in `[0,
-            1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
         """
         if decoder_input_ids is None:
             use_cache = False
@@ -985,7 +924,6 @@ class FSMTModel(PretrainedFSMTModel):
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 inputs_embeds=inputs_embeds,
-                head_mask=head_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
@@ -1006,8 +944,6 @@ class FSMTModel(PretrainedFSMTModel):
             decoder_padding_mask,
             decoder_causal_mask=causal_mask,
             inputs_embeds=decoder_inputs_embeds,
-            head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -1067,11 +1003,8 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel, GenerationMixin):
         attention_mask: Optional[torch.Tensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        decoder_head_mask: Optional[torch.Tensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[tuple[torch.FloatTensor]] = None,
-        past_key_values: Optional[tuple[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -1095,12 +1028,6 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel, GenerationMixin):
         decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
-        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in `[0,
-            1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -1135,9 +1062,6 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel, GenerationMixin):
             decoder_inputs_embeds=decoder_inputs_embeds,
             encoder_outputs=encoder_outputs,
             decoder_attention_mask=decoder_attention_mask,
-            head_mask=head_mask,
-            decoder_head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
             output_attentions=output_attentions,

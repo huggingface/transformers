@@ -67,7 +67,7 @@ out = model.generate(**inputs, do_sample=False, max_new_tokens=20, past_key_valu
 
 ## Fixed-size cache
 
-The default [`DynamicCache`] prevents you from taking advantage of most just-in-time (JIT) optimizations because the cache size isn't fixed. JIT optimizations enable you to maximize latency at the expense of memory usage. All of the following cache types are compatible with JIT optimizations like [torch.compile](./llm_optims#static-kv-cache-and-torchcompile) to accelerate generation. 
+The default [`DynamicCache`] prevents you from taking advantage of most just-in-time (JIT) optimizations because the cache size isn't fixed. JIT optimizations enable you to maximize latency at the expense of memory usage. All of the following cache types are compatible with JIT optimizations like [torch.compile](./llm_optims#static-kv-cache-and-torchcompile) to accelerate generation.
 
 A fixed-size cache ([`StaticCache`]) pre-allocates a specific maximum cache size for the kv pairs. You can generate up to the maximum cache size without needing to modify it. However, having a fixed (usually large) size for the key/value states means that while generating, a lot of tokens will actually be masked as they should not take part in the attention. So this trick allows to easily `compile` the decoding stage, but it incurs a waste of tokens in the attention computation. As all things, it's then a trade-off which should be very good if you generate with several sequence of more or less the same lengths, but may be sub-optimal if you have for example 1 very large sequence, and then only short sequences (as the fix cache size would be large, a lot would be wasted for the short sequences). Make sure you understand the impact if you use it!
 
@@ -102,7 +102,7 @@ You may want to consider offloading if you have a small GPU and you're getting o
 Offloading is available for both [`DynamicCache`] and [`StaticCache`]. You can enable it by configuring `cache_implementation="offloaded"` for the dynamic version, or `cache_implementation="offloaded_static"` for the static version, in either [`GenerationConfig`] or [`~GenerationMixin.generate`].
 Additionally, you can also instantiate your own [`DynamicCache`] or [`StaticCache`] with the `offloading=True` option, and pass this cache in `generate` or your model's `forward` (for example, `past_key_values=DynamicCache(config=model.config, offloading=True)` for a dynamic cache).
 
-Note that the 2 [`Cache`] classes mentionned above have an additional option when instantiating them directly, `offload_only_non_sliding`.
+Note that the 2 [`Cache`] classes mentioned above have an additional option when instantiating them directly, `offload_only_non_sliding`.
 This additional argument decides if the layers using sliding window/chunk attention (if any), will be offloaded as well. Since
 these layers are usually short anyway, it may be better to avoid offloading them, as offloading may incur a speed penalty. By default, this option is `False` for [`DynamicCache`], and `True` for [`StaticCache`].
 
@@ -146,7 +146,7 @@ tokenizer = AutoTokenizer.from_pretrained(ckpt)
 model = AutoModelForCausalLM.from_pretrained(ckpt, dtype=torch.float16, device_map="auto")
 prompt = ["okay "*1000 + "Fun fact: The most"]
 inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-beams = { "num_beams": 40, "num_beam_groups": 40, "num_return_sequences": 40, "diversity_penalty": 1.0, "max_new_tokens": 23, "early_stopping": True, }
+beams = { "num_beams": 40, "num_return_sequences": 20, "max_new_tokens": 23, "early_stopping": True, }
 out = resilient_generate(model, **inputs, **beams)
 responses = tokenizer.batch_decode(out[:,-28:], skip_special_tokens=True)
 ```
@@ -213,7 +213,7 @@ A cache can also work in iterative generation settings where there is back-and-f
 
 For iterative generation with a cache, start by initializing an empty cache class and then you can feed in your new prompts. Keep track of dialogue history with a [chat template](./chat_templating).
 
-The following example demonstrates [Llama-2-7b-chat-hf](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf). If you’re using a different chat-style model, [`~PreTrainedTokenizer.apply_chat_template`] may process messages differently. It might cut out important tokens depending on how the Jinja template is written.
+The following example demonstrates [Llama-2-7b-chat-hf](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf). If you're using a different chat-style model, [`~PreTrainedTokenizer.apply_chat_template`] may process messages differently. It might cut out important tokens depending on how the Jinja template is written.
 
 For example, some models use special `<think> ... </think>` tokens during reasoning. These could get lost during re-encoding, causing indexing issues. You might need to manually remove or adjust extra tokens from the completions to keep things stable.
 
@@ -227,7 +227,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 
 user_prompts = ["Hello, what's your name?", "Btw, yesterday I was on a rock concert."]
 
-past_key_values = DynamicCache()
+past_key_values = DynamicCache(config=model.config)
 
 messages = []
 for prompt in user_prompts:

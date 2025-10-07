@@ -21,13 +21,10 @@ import unittest
 import numpy as np
 import requests
 from parameterized import parameterized
-from pytest import mark
 
 from transformers import MetaClip2Config, MetaClip2TextConfig, MetaClip2VisionConfig
 from transformers.testing_utils import (
-    require_flash_attn,
     require_torch,
-    require_torch_gpu,
     require_vision,
     slow,
     torch_device,
@@ -215,7 +212,6 @@ class MetaClip2VisionModelTest(MetaClip2ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = MetaClip2VisionModelTester(self)
@@ -410,7 +406,6 @@ class MetaClip2TextModelTest(MetaClip2ModelTesterMixin, unittest.TestCase):
     all_model_classes = (MetaClip2TextModel, MetaClip2TextModelWithProjection) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
-    test_head_masking = False
     model_split_percents = [0.5, 0.8, 0.9]
 
     def setUp(self):
@@ -542,7 +537,6 @@ class MetaClip2ModelTest(MetaClip2ModelTesterMixin, PipelineTesterMixin, unittes
     )
     additional_model_inputs = ["pixel_values"]
     fx_compatible = False
-    test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
@@ -577,30 +571,6 @@ class MetaClip2ModelTest(MetaClip2ModelTesterMixin, PipelineTesterMixin, unittes
     @unittest.skip(reason="MetaClip2Model does not have input/output embeddings")
     def test_model_get_set_embeddings(self):
         pass
-
-    # override as the `logit_scale` parameter initialization is different for MetaClip2
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    # check if `logit_scale` is initialized as per the original implementation
-                    if name == "logit_scale":
-                        self.assertAlmostEqual(
-                            param.data.item(),
-                            np.log(1 / 0.07),
-                            delta=1e-3,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
@@ -712,94 +682,6 @@ class MetaClip2ModelTest(MetaClip2ModelTesterMixin, PipelineTesterMixin, unittes
     def test_sdpa_can_compile_dynamic(self):
         self.skipTest(reason="MetaClip2 model can't be compiled dynamic, error in metaclip_2_loss`")
 
-    @require_flash_attn
-    @require_torch_gpu
-    @mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_equivalence(self):
-        for model_class in self.all_model_classes:
-            if not model_class._supports_flash_attn:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model_fa = model_class.from_pretrained(
-                    tmpdirname, dtype=torch.bfloat16, attn_implementation="flash_attention_2"
-                )
-                model_fa.to(torch_device)
-
-                model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
-                model.to(torch_device)
-
-                dummy_pixel_values = inputs_dict["pixel_values"].to(torch.bfloat16)
-                dummy_input_ids = inputs_dict["input_ids"]
-
-                outputs = model(pixel_values=dummy_pixel_values, input_ids=dummy_input_ids, output_hidden_states=True)
-                outputs_fa = model_fa(
-                    pixel_values=dummy_pixel_values, input_ids=dummy_input_ids, output_hidden_states=True
-                )
-
-                self.assertTrue(
-                    torch.allclose(outputs.logits_per_image, outputs_fa.logits_per_image, atol=4e-2, rtol=4e-2),
-                    f"Image logits max diff: {torch.max(torch.abs(outputs.logits_per_image - outputs_fa.logits_per_image))}",
-                )
-                self.assertTrue(
-                    torch.allclose(outputs.logits_per_text, outputs_fa.logits_per_text, atol=4e-2, rtol=4e-2),
-                    f"Text logits max diff: {torch.max(torch.abs(outputs.logits_per_text - outputs_fa.logits_per_text))}",
-                )
-
-    @require_flash_attn
-    @require_torch_gpu
-    @mark.flash_attn_test
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        for model_class in self.all_model_classes:
-            if not model_class._supports_flash_attn:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model_fa = model_class.from_pretrained(
-                    tmpdirname, dtype=torch.bfloat16, attn_implementation="flash_attention_2"
-                )
-                model_fa.to(torch_device)
-
-                model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16, attn_implementation="eager")
-                model.to(torch_device)
-
-                dummy_pixel_values = inputs_dict["pixel_values"].to(torch.bfloat16)
-                dummy_input_ids = inputs_dict["input_ids"]
-                dummy_pixel_mask = inputs_dict["attention_mask"]
-
-                # right padding
-                dummy_pixel_mask[:] = 1
-                dummy_pixel_mask[:, -1:] = 0
-
-                outputs = model(pixel_values=dummy_pixel_values, input_ids=dummy_input_ids, output_hidden_states=True)
-                outputs_fa = model_fa(
-                    pixel_values=dummy_pixel_values, input_ids=dummy_input_ids, output_hidden_states=True
-                )
-
-                logits_per_image_eager = outputs.logits_per_image[:, :-1]
-                logits_per_text_eager = outputs.logits_per_text[:, :-1]
-
-                logits_per_image_sdpa = outputs_fa.logits_per_image[:, :-1]
-                logits_per_text_sdpa = outputs_fa.logits_per_text[:, :-1]
-
-                self.assertTrue(
-                    torch.allclose(logits_per_image_eager, logits_per_image_sdpa, atol=4e-2, rtol=4e-2),
-                    f"Image logits max diff: {torch.max(torch.abs(logits_per_image_eager - logits_per_image_sdpa))}",
-                )
-                self.assertTrue(
-                    torch.allclose(logits_per_text_eager, logits_per_text_sdpa, atol=4e-2, rtol=4e-2),
-                    f"Text logits max diff: {torch.max(torch.abs(logits_per_text_eager - logits_per_text_sdpa))}",
-                )
-
 
 class MetaClip2ForImageClassificationModelTester(MetaClip2ModelTester):
     def __init__(self, parent):
@@ -827,7 +709,6 @@ class MetaClip2ForImageClassificationModelTest(MetaClip2ModelTesterMixin, Pipeli
     all_model_classes = (MetaClip2ForImageClassification,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-classification": MetaClip2ForImageClassification} if is_torch_available() else {}
     fx_compatible = False
-    test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
@@ -854,10 +735,6 @@ class MetaClip2ForImageClassificationModelTest(MetaClip2ModelTesterMixin, Pipeli
 
     @unittest.skip(reason="MetaClip2ForImageClassification does not support gradient checkpointing yet")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="MetaClip2 uses the same initialization scheme as the Flax original implementation")
-    def test_initialization(self):
         pass
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)

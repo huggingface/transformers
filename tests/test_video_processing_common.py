@@ -34,6 +34,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import is_torch_available, is_vision_available
+from transformers.video_utils import VideoMetadata
 
 
 if is_torch_available():
@@ -327,8 +328,8 @@ class VideoProcessingTestMixin:
 
             # Sample with `fps` requires metadata to infer number of frames from total duration
             with self.assertRaises(ValueError):
-                encoded_videos = video_processing(video_inputs[0], return_tensors="pt", fps=3)[self.input_name]
-                encoded_videos_batched = video_processing(video_inputs, return_tensors="pt", fps=3)[self.input_name]
+                metadata = VideoMetadata(**{"total_num_frames": 8})
+                video_processing.sample_frames(metadata=metadata, fps=3)
 
             metadata = [[{"duration": 2.0, "total_num_frames": 8, "fps": 4}]]
             batched_metadata = metadata * len(video_inputs)
@@ -340,6 +341,13 @@ class VideoProcessingTestMixin:
             )[self.input_name]
             self.assertEqual(encoded_videos.shape[1], 6)
             self.assertEqual(encoded_videos_batched.shape[1], 6)
+
+            # The same as above but uses a `VideoMetadata` object in the input
+            metadata = [[VideoMetadata(duration=2.0, total_num_frames=8, fps=4)]]
+            batched_metadata = metadata * len(video_inputs)
+            encoded_videos = video_processing(video_inputs[0], return_tensors="pt", fps=3, video_metadata=metadata)[
+                self.input_name
+            ]
 
             # We should raise error when asked to sample more frames than there are in input video
             with self.assertRaises(ValueError):

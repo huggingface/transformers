@@ -53,7 +53,6 @@ Tips:
 - This model was contributed by [THUDM](https://huggingface.co/THUDM). The most recent code can be
   found [here](https://github.com/thudm/GLM-4).
 
-  
 ## Usage tips
 
 `GLM-4` can be found on the [Huggingface Hub](https://huggingface.co/collections/THUDM/glm-4-665fcf188c414b03c2f7e3b7)

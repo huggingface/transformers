@@ -111,8 +111,8 @@ class TrainerState:
     is_world_process_zero: bool = True
     is_hyper_param_search: bool = False
     trial_name: Optional[str] = None
-    trial_params: dict[str, Union[str, float, int, bool]] = None
-    stateful_callbacks: list["TrainerCallback"] = None
+    trial_params: Optional[dict[str, Union[str, float, int, bool]]] = None
+    stateful_callbacks: Optional[list["TrainerCallback"]] = None
 
     def __post_init__(self):
         if self.log_history is None:

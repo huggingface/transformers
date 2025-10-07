@@ -17,7 +17,6 @@
 from typing import Callable, Optional
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from transformers.cache_utils import Cache
@@ -114,7 +113,7 @@ class HunYuanDenseV1Attention(LlamaAttention):
 
 class HunYuanDenseV1DecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: HunYuanDenseV1Config, layer_idx: int):
-        super().__init__()
+        super().__init__(config, layer_idx)
         self.layer_idx = layer_idx
 
 

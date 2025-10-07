@@ -17,7 +17,7 @@
 from dataclasses import asdict, dataclass
 from typing import Optional
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
@@ -26,15 +26,15 @@ logger = logging.get_logger(__name__)
 # TODO Update this
 
 
-class EsmConfig(PretrainedConfig):
+class EsmConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ESMModel`]. It is used to instantiate a ESM model
     according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the ESM
     [facebook/esm-1b](https://huggingface.co/facebook/esm-1b) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -67,11 +67,7 @@ class EsmConfig(PretrainedConfig):
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
         position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
-            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query", "rotary"`.
-            For positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
-            [Self-Attention with Relative Position Representations (Shaw et al.)](https://huggingface.co/papers/1803.02155).
-            For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
-            with Better Relative Position Embeddings (Huang et al.)](https://huggingface.co/papers/2009.13658).
+            Type of position embedding. Choose either `"absolute"` or "rotary"`.
         is_decoder (`bool`, *optional*, defaults to `False`):
             Whether the model is used as a decoder or not. If `False`, the model is used as an encoder.
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -159,7 +155,7 @@ class EsmConfig(PretrainedConfig):
 
     def to_dict(self):
         """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
+        Serializes this instance to a Python dictionary. Override the default [`~PreTrainedConfig.to_dict`].
 
         Returns:
             `dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
@@ -193,7 +189,7 @@ class EsmFoldConfig:
 
     def to_dict(self):
         """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
+        Serializes this instance to a Python dictionary. Override the default [`~PreTrainedConfig.to_dict`].
 
         Returns:
             `dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
@@ -258,7 +254,7 @@ class TrunkConfig:
 
     def to_dict(self):
         """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
+        Serializes this instance to a Python dictionary. Override the default [`~PreTrainedConfig.to_dict`].
 
         Returns:
             `dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,

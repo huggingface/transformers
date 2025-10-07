@@ -17,14 +17,12 @@ import unittest
 
 import pytest
 
-from transformers import MiniMaxConfig, is_torch_available
+from transformers import is_torch_available
 from transformers.cache_utils import Cache
 from transformers.testing_utils import (
     Expectations,
-    require_flash_attn,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -40,18 +38,12 @@ if is_torch_available():
         MiniMaxForTokenClassification,
         MiniMaxModel,
     )
-
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 class MiniMaxModelTester(CausalLMModelTester):
-    config_class = MiniMaxConfig
     if is_torch_available():
         base_model_class = MiniMaxModel
-        causal_lm_class = MiniMaxForCausalLM
-        sequence_class = MiniMaxForSequenceClassification
-        token_class = MiniMaxForTokenClassification
-        question_answering_class = MiniMaxForQuestionAnswering
 
     def __init__(self, parent, layer_types=None, block_size=3):
         super().__init__(parent)
@@ -61,17 +53,6 @@ class MiniMaxModelTester(CausalLMModelTester):
 
 @require_torch
 class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            MiniMaxModel,
-            MiniMaxForCausalLM,
-            MiniMaxForSequenceClassification,
-            MiniMaxForTokenClassification,
-            MiniMaxForQuestionAnswering,
-        )
-        if is_torch_available()
-        else ()
-    )
     pipeline_model_mapping = (
         {
             "feature-extraction": MiniMaxModel,
@@ -83,9 +64,6 @@ class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-
-    test_headmasking = False
-    test_pruning = False
     model_tester_class = MiniMaxModelTester
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
@@ -100,13 +78,6 @@ class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
         processor_name,
     ):
         return True
-
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest(reason="MiniMax flash attention does not support right padding")
 
     def test_load_balancing_loss(self):
         r"""
@@ -219,10 +190,6 @@ class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
     @unittest.skip(reason="MiniMaxCache does not support `crop()` method")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
-    @unittest.skip(reason="MiniMaxCache does not support `crop()` method")
     def test_assisted_decoding_sample(self):
         pass
 
@@ -234,12 +201,16 @@ class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
     def test_assisted_decoding_matches_greedy_search_1_same(self):
         pass
 
-    @unittest.skip(reason="MiniMaxCache does not support `crop()` method")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
     @unittest.skip("Model needs refactor")
     def test_attention_outputs(self):
+        pass
+
+    @unittest.skip("MiniMax is special")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("MiniMax is special")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
         pass
 
     @unittest.skip("MiniMax is special")

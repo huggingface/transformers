@@ -18,8 +18,8 @@ from collections import OrderedDict
 from collections.abc import Mapping
 from typing import Any, Optional
 
-from ... import PreTrainedTokenizer, TensorType, is_torch_available
-from ...configuration_utils import PretrainedConfig
+from ... import PreTrainedTokenizer, is_torch_available
+from ...configuration_utils import PreTrainedConfig
 from ...onnx import OnnxConfigWithPast, PatchingSpec
 from ...utils import logging
 
@@ -27,14 +27,14 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class CodeGenConfig(PretrainedConfig):
+class CodeGenConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`CodeGenModel`]. It is used to instantiate a
     CodeGen model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the CodeGen
     [Salesforce/codegen-2B-mono](https://huggingface.co/Salesforce/codegen-2B-mono) architecture. Configuration objects
-    inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the documentation from
-    [`PretrainedConfig`] for more information.
+    inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the documentation from
+    [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 50400):
@@ -146,11 +146,11 @@ class CodeGenConfig(PretrainedConfig):
         )
 
 
-# Copied from transformers.models.gpt2.configuration_gpt2.GPT2OnnxConfig
+# Copied from transformers.models.gpt2.configuration_gpt2.GPT2OnnxConfig with GPT2->CodeGen
 class CodeGenOnnxConfig(OnnxConfigWithPast):
     def __init__(
         self,
-        config: PretrainedConfig,
+        config: PreTrainedConfig,
         task: str = "default",
         patching_specs: Optional[list[PatchingSpec]] = None,
         use_past: bool = False,
@@ -185,10 +185,9 @@ class CodeGenOnnxConfig(OnnxConfigWithPast):
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
-        framework: Optional[TensorType] = None,
     ) -> Mapping[str, Any]:
         common_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
-            tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
+            tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair
         )
 
         # We need to order the input in the way they appears in the forward()

@@ -48,8 +48,6 @@ class Qwen2VLVideoProcessingTester:
         max_resolution=80,
         do_resize=True,
         size=None,
-        do_center_crop=True,
-        crop_size=None,
         do_normalize=True,
         image_mean=OPENAI_CLIP_MEAN,
         image_std=OPENAI_CLIP_STD,
@@ -61,7 +59,6 @@ class Qwen2VLVideoProcessingTester:
         merge_size=2,
     ):
         size = size if size is not None else {"shortest_edge": 20}
-        crop_size = crop_size if crop_size is not None else {"height": 18, "width": 18}
         self.parent = parent
         self.batch_size = batch_size
         self.num_frames = num_frames
@@ -70,8 +67,6 @@ class Qwen2VLVideoProcessingTester:
         self.max_resolution = max_resolution
         self.do_resize = do_resize
         self.size = size
-        self.do_center_crop = do_center_crop
-        self.crop_size = crop_size
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
@@ -85,8 +80,6 @@ class Qwen2VLVideoProcessingTester:
     def prepare_video_processor_dict(self):
         return {
             "do_resize": self.do_resize,
-            "do_center_crop": self.do_center_crop,
-            "crop_size": self.crop_size,
             "do_normalize": self.do_normalize,
             "image_mean": self.image_mean,
             "image_std": self.image_std,
@@ -149,14 +142,12 @@ class Qwen2VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
         video_processing = self.fast_video_processing_class(**self.video_processor_dict)
         self.assertTrue(hasattr(video_processing, "do_resize"))
         self.assertTrue(hasattr(video_processing, "size"))
-        self.assertTrue(hasattr(video_processing, "do_center_crop"))
-        self.assertTrue(hasattr(video_processing, "center_crop"))
         self.assertTrue(hasattr(video_processing, "do_normalize"))
         self.assertTrue(hasattr(video_processing, "image_mean"))
         self.assertTrue(hasattr(video_processing, "image_std"))
         self.assertTrue(hasattr(video_processing, "do_convert_rgb"))
 
-    # OVERRIDEN BECAUSE QWEN2_VL HAS SPECIAL OUTPUT SHAPES
+    # OVERRIDDEN BECAUSE QWEN2_VL HAS SPECIAL OUTPUT SHAPES
     def test_video_processor_from_dict_with_kwargs(self):
         for video_processing_class in self.video_processor_list:
             video_processor = video_processing_class(**self.video_processor_dict)
@@ -325,11 +316,6 @@ class Qwen2VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
             )
             self.assertListEqual(list(encoded_videos.shape), expected_output_video_shape)
             self.assertListEqual(list(encoded_videos_batched.shape), expected_output_video_shape_batched)
-
-            # Sample with `fps` requires metadata to infer number of frames from total duration
-            with self.assertRaises(ValueError):
-                encoded_videos = video_processing(video_inputs[0], return_tensors="pt", fps=3)[self.input_name]
-                encoded_videos_batched = video_processing(video_inputs, return_tensors="pt", fps=3)[self.input_name]
 
             metadata = [[{"duration": 2.0, "total_num_frames": 8, "fps": 4}]]
             batched_metadata = metadata * len(video_inputs)

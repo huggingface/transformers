@@ -38,9 +38,10 @@ from datasets import load_dataset
 dataset = load_dataset("davanstrien/ufo-ColPali")
 dataset = dataset["train"]
 dataset = dataset.filter(lambda example: example["specific_detail_query"] is not None)
-dataset
+print(dataset)
 ```
-```
+
+```text
 Dataset({
     features: ['image', 'raw_queries', 'broad_topical_query', 'broad_topical_explanation', 'specific_detail_query', 'specific_detail_explanation', 'visual_element_query', 'visual_element_explanation', 'parsed_into_json'],
     num_rows: 2172
@@ -79,7 +80,7 @@ Index the images offline, and during inference, return the query text embeddings
 Store the image and image embeddings by writing them to the dataset with [`~datasets.Dataset.map`] as shown below. Add an `embeddings` column that contains the indexed embeddings. ColPali embeddings take up a lot of storage, so remove them from the accelerator and store them in the CPU as NumPy vectors.
 
 ```python
-ds_with_embeddings = dataset.map(lambda example: {'embeddings': model(**processor(images=example["image"]).to(devide), return_tensors="pt").embeddings.to(torch.float32).detach().cpu().numpy()})
+ds_with_embeddings = dataset.map(lambda example: {'embeddings': model(**processor(images=example["image"]).to(device), return_tensors="pt").embeddings.to(torch.float32).detach().cpu().numpy()})
 ```
 
 For online inference, create a function to search the image embeddings in batches and retrieve the k-most relevant images. The function below returns the indices in the dataset and their scores for a given indexed dataset, text embeddings, number of top results, and the batch size.
@@ -119,7 +120,7 @@ indices, scores = find_top_k_indices_batched(ds_with_embeddings, text_embeds, pr
 print(indices, scores)
 ```
 
-```
+```text
 ([440, 442, 443],
  [14.370786666870117,
   13.675487518310547,
@@ -134,13 +135,13 @@ for i in indices:
 ```
 
 <div style="display: flex; align-items: center;">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/doc_1.png" 
-         alt="Document 1" 
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/doc_1.png"
+         alt="Document 1"
          style="height: 200px; object-fit: contain; margin-right: 10px;">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/doc_2.png" 
-         alt="Document 2" 
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/doc_2.png"
+         alt="Document 2"
          style="height: 200px; object-fit: contain;">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/doc_3.png" 
-         alt="Document 3" 
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/doc_3.png"
+         alt="Document 3"
          style="height: 200px; object-fit: contain;">
 </div>

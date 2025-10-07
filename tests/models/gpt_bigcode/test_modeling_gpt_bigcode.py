@@ -424,14 +424,6 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip(reason="Contrastive search not supported due to non-standard caching mechanism")
-    def test_contrastive_generate(self):
-        pass
-
-    @unittest.skip(reason="Contrastive search not supported due to non-standard caching mechanism")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
     @unittest.skip(reason="CPU offload seems to be broken for some reason - tiny models keep hitting corner cases")
     def test_cpu_offload(self):
         pass
