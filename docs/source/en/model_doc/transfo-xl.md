@@ -52,10 +52,6 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] models.deprecated.transfo_xl.modeling_transfo_xl.TransfoXLLMHeadModelOutput
 
-[[autodoc]] models.deprecated.transfo_xl.modeling_tf_transfo_xl.TFTransfoXLModelOutput
-
-[[autodoc]] models.deprecated.transfo_xl.modeling_tf_transfo_xl.TFTransfoXLLMHeadModelOutput
-
 ## TransfoXLModel
 
 [[autodoc]] TransfoXLModel
@@ -74,6 +70,3 @@ rendered properly in your Markdown viewer.
 ## Internal Layers
 
 [[autodoc]] AdaptiveEmbedding
-
-[[autodoc]] TFAdaptiveEmbedding
-
