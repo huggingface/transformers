@@ -243,6 +243,9 @@ class HfQuantizer(ABC):
         if model.quantization_config.quant_method == QuantizationMethod.TORCHAO:
             model.set_metadata(checkpoint_files)
 
+    def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
+        return model
+
     def postprocess_model(self, model: "PreTrainedModel", **kwargs):
         """
         Post-process the model post weights loading.
