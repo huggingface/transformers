@@ -155,7 +155,7 @@ def lazy_import_flash_attention(implementation: Optional[str], attention_wrapper
     return (_flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn), _process_flash_kwargs_fn
 
 
-def paged_lazy_import_flash_attention(implementation: Optional[str]):
+def lazy_import_paged_flash_attention(implementation: Optional[str]):
     """
     Same as `lazy_import_flash_attention` but explicitly wrapping it with the paged implementation.
     """

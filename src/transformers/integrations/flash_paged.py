@@ -3,7 +3,7 @@ from typing import Optional
 import torch
 
 from ..generation.continuous_batching import PagedAttentionCache
-from ..modeling_flash_attention_utils import paged_lazy_import_flash_attention
+from ..modeling_flash_attention_utils import lazy_import_paged_flash_attention
 
 
 def paged_attention_forward(
@@ -41,7 +41,7 @@ def paged_attention_forward(
         window_size: (left, right). If not (-1, -1), implements sliding window local attention.
         softcap: float. Anything > 0 activates softcapping attention.
     """
-    flash_attn_varlen_func = paged_lazy_import_flash_attention(module.config._attn_implementation)
+    flash_attn_varlen_func = lazy_import_paged_flash_attention(module.config._attn_implementation)
 
     sliding_window = (-1, -1) if not getattr(module, "sliding_window", False) else (module.sliding_window - 1, 0)
     layer_type = "full_attention" if sliding_window == (-1, -1) else "sliding_attention"
