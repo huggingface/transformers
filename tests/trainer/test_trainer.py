@@ -14,7 +14,6 @@
 
 import dataclasses
 import gc
-import importlib
 import json
 import math
 import os
@@ -33,7 +32,6 @@ from unittest.mock import Mock, patch
 import numpy as np
 import pytest
 from huggingface_hub import ModelCard, create_branch, list_repo_commits, list_repo_files
-from packaging import version
 from parameterized import parameterized
 
 from transformers import (
@@ -5856,35 +5854,34 @@ if is_torch_available():
             )
         )
 
-        if version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.44.0"):
-            optim_test_params.append(
-                (
-                    OptimizerNames.ADEMAMIX,
-                    bnb.optim.AdEMAMix,
-                    default_ademamix_kwargs,
-                )
+        optim_test_params.append(
+            (
+                OptimizerNames.ADEMAMIX,
+                bnb.optim.AdEMAMix,
+                default_ademamix_kwargs,
             )
-            optim_test_params.append(
-                (
-                    OptimizerNames.ADEMAMIX_8BIT,
-                    bnb.optim.AdEMAMix,
-                    default_ademamix_kwargs,
-                )
+        )
+        optim_test_params.append(
+            (
+                OptimizerNames.ADEMAMIX_8BIT,
+                bnb.optim.AdEMAMix,
+                default_ademamix_kwargs,
             )
-            optim_test_params.append(
-                (
-                    OptimizerNames.PAGED_ADEMAMIX_8BIT,
-                    bnb.optim.AdEMAMix,
-                    default_ademamix_kwargs,
-                )
+        )
+        optim_test_params.append(
+            (
+                OptimizerNames.PAGED_ADEMAMIX_8BIT,
+                bnb.optim.AdEMAMix,
+                default_ademamix_kwargs,
             )
-            optim_test_params.append(
-                (
-                    OptimizerNames.PAGED_ADEMAMIX,
-                    bnb.optim.AdEMAMix,
-                    default_ademamix_kwargs,
-                )
+        )
+        optim_test_params.append(
+            (
+                OptimizerNames.PAGED_ADEMAMIX,
+                bnb.optim.AdEMAMix,
+                default_ademamix_kwargs,
             )
+        )
 
     if is_torchdistx_available():
         import torchdistx
@@ -5965,6 +5962,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     Trainer.get_optimizer_cls_and_kwargs(args)
 
+    @require_bitsandbytes
     def test_bnb_adam8bit(self):
         # Pretend that Bits and Bytes is installed and mock bnb.optim.Adam8bit exists.
         # Trainer.get_optimizer_cls_and_kwargs does not use Adam8bit. It only has to return the
@@ -5984,6 +5982,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
                     default_adam_kwargs,
                 )
 
+    @require_bitsandbytes
     def test_bnb_paged_adam8bit_alias(self):
         mock = Mock()
         modules = {
@@ -5999,6 +5998,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
                     default_adam_kwargs,
                 )
 
+    @require_bitsandbytes
     def test_bnb_paged_adam(self):
         mock = Mock()
         modules = {
@@ -6014,6 +6014,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
                     default_adam_kwargs,
                 )
 
+    @require_bitsandbytes
     def test_bnb_paged_adam8bit(self):
         mock = Mock()
         modules = {
@@ -6029,6 +6030,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
                     default_adam_kwargs,
                 )
 
+    @require_bitsandbytes
     def test_bnb_ademamix(self):
         mock = Mock()
         modules = {
@@ -6044,6 +6046,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
                     default_ademamix_kwargs,
                 )
 
+    @require_bitsandbytes
     def test_bnb_ademamix8bit(self):
         mock = Mock()
         modules = {
@@ -6059,6 +6062,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
                     default_ademamix_kwargs,
                 )
 
+    @require_bitsandbytes
     def test_bnb_paged_ademamix(self):
         mock = Mock()
         modules = {
@@ -6074,6 +6078,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
                     default_ademamix_kwargs,
                 )
 
+    @require_bitsandbytes
     def test_bnb_paged_ademamix8bit(self):
         mock = Mock()
         modules = {
@@ -6089,6 +6094,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
                     default_ademamix_kwargs,
                 )
 
+    @require_bitsandbytes
     def test_bnb_lion(self):
         mock = Mock()
         modules = {
@@ -6104,6 +6110,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
                     default_lion_kwargs,
                 )
 
+    @require_bitsandbytes
     def test_bnb_lion8bit(self):
         mock = Mock()
         modules = {
@@ -6119,6 +6126,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
                     default_lion_kwargs,
                 )
 
+    @require_bitsandbytes
     def test_bnb_paged_lion8bit(self):
         mock = Mock()
         modules = {
@@ -6134,6 +6142,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
                     default_lion_kwargs,
                 )
 
+    @require_bitsandbytes
     def test_bnb_paged_lion(self):
         mock = Mock()
         modules = {
@@ -6156,7 +6165,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
             # bnb will fail even if `bitsandbytes` is installed.
             with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-                with self.assertRaises(ValueError):
+                with self.assertRaises(ImportError):
                     Trainer.get_optimizer_cls_and_kwargs(args)
 
     def test_bnb_paged_adam_no_bnb(self):
@@ -6166,7 +6175,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
             # bnb will fail even if `bitsandbytes` is installed.
             with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-                with self.assertRaises(ValueError):
+                with self.assertRaises(ImportError):
                     Trainer.get_optimizer_cls_and_kwargs(args)
 
     def test_bnb_paged_adam8bit_no_bnb(self):
@@ -6176,7 +6185,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
             # bnb will fail even if `bitsandbytes` is installed.
             with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-                with self.assertRaises(ValueError):
+                with self.assertRaises(ImportError):
                     Trainer.get_optimizer_cls_and_kwargs(args)
 
     def test_bnb_ademamix_no_bnb(self):
@@ -6186,7 +6195,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
             # bnb will fail even if `bitsandbytes` is installed.
             with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-                with self.assertRaises(ValueError):
+                with self.assertRaises(ImportError):
                     Trainer.get_optimizer_cls_and_kwargs(args)
 
     def test_bnb_ademamix8bit_no_bnb(self):
@@ -6196,7 +6205,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
             # bnb will fail even if `bitsandbytes` is installed.
             with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-                with self.assertRaises(ValueError):
+                with self.assertRaises(ImportError):
                     Trainer.get_optimizer_cls_and_kwargs(args)
 
     def test_bnb_paged_ademamix_no_bnb(self):
@@ -6206,7 +6215,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
             # bnb will fail even if `bitsandbytes` is installed.
             with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-                with self.assertRaises(ValueError):
+                with self.assertRaises(ImportError):
                     Trainer.get_optimizer_cls_and_kwargs(args)
 
     def test_bnb_paged_ademamix8bit_no_bnb(self):
@@ -6216,7 +6225,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
             # bnb will fail even if `bitsandbytes` is installed.
             with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-                with self.assertRaises(ValueError):
+                with self.assertRaises(ImportError):
                     Trainer.get_optimizer_cls_and_kwargs(args)
 
     def test_bnb_paged_lion_no_bnb(self):
@@ -6226,7 +6235,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
             # bnb will fail even if `bitsandbytes` is installed.
             with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-                with self.assertRaises(ValueError):
+                with self.assertRaises(ImportError):
                     Trainer.get_optimizer_cls_and_kwargs(args)
 
     def test_bnb_paged_lion8bit_no_bnb(self):
@@ -6236,7 +6245,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
             # bnb will fail even if `bitsandbytes` is installed.
             with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-                with self.assertRaises(ValueError):
+                with self.assertRaises(ImportError):
                     Trainer.get_optimizer_cls_and_kwargs(args)
 
     def test_anyprecision_adamw(self):

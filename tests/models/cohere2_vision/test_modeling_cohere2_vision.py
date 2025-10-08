@@ -158,7 +158,7 @@ class Cohere2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         else {}
     )
     fx_compatible = False
-    test_pruning = False
+
     test_torchscript = False
     _is_composite = True
 
