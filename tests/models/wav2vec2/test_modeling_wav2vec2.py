@@ -498,7 +498,6 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         else {}
     )
     fx_compatible = True
-    test_pruning = False
 
     def setUp(self):
         self.model_tester = Wav2Vec2ModelTester(self)
@@ -795,7 +794,6 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    test_pruning = False
 
     def setUp(self):
         self.model_tester = Wav2Vec2ModelTester(

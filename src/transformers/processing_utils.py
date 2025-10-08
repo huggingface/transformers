@@ -1333,6 +1333,13 @@ class ProcessorMixin(PushToHubMixin):
         # pass defaults to output dictionary
         output_kwargs.update(default_kwargs)
 
+        # For `common_kwargs` just update all modality-specific kwargs with same key/values
+        common_kwargs = ModelProcessorKwargs._defaults.get("common_kwargs", {})
+        common_kwargs.update(kwargs.get("common_kwargs", {}))
+        if common_kwargs:
+            for kwarg in output_kwargs.values():
+                kwarg.update(common_kwargs)
+
         # update modality kwargs with passed kwargs
         non_modality_kwargs = set(kwargs) - set(output_kwargs)
         for modality, output_kwarg in output_kwargs.items():
@@ -1381,13 +1388,6 @@ class ProcessorMixin(PushToHubMixin):
                     logger.warning_once(
                         f"Keyword argument `{key}` is not a valid argument for this processor and will be ignored."
                     )
-
-        # For `common_kwargs` just update all modality-specific kwargs with same key/values
-        common_kwargs = kwargs.get("common_kwargs", {})
-        common_kwargs.update(ModelProcessorKwargs._defaults.get("common_kwargs", {}))
-        if common_kwargs:
-            for kwarg in output_kwargs.values():
-                kwarg.update(common_kwargs)
 
         for key, typed_dict_obj in ModelProcessorKwargs.__annotations__.items():
             if key in map_preprocessor_kwargs:

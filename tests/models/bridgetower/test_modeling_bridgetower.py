@@ -307,7 +307,7 @@ class BridgeTowerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     pipeline_model_mapping = {"feature-extraction": BridgeTowerModel} if is_torch_available() else {}
 
     is_training = False
-    test_pruning = False
+
     test_torchscript = False
     test_resize_embeddings = False
     has_attentions = False

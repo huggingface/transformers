@@ -313,7 +313,6 @@ class HubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
     fx_compatible = True
-    test_pruning = False
 
     def setUp(self):
         self.model_tester = HubertModelTester(self)
@@ -547,7 +546,6 @@ class HubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 @require_torch
 class HubertRobustModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (HubertForCTC, HubertForSequenceClassification, HubertModel) if is_torch_available() else ()
-    test_pruning = False
 
     def setUp(self):
         self.model_tester = HubertModelTester(
