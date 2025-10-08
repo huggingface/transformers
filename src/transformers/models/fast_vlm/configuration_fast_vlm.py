@@ -29,7 +29,7 @@ class FastVlmConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FastVLMForConditionalGeneration`]. It is used to instantiate a
     FastVLM model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield the same configurationa as the one of FastVLM-7B.
+    with the defaults will yield the same configuration as the one of FastVLM-7B.
 
     e.g. [KamilaMila/FastVLM-7B](https://huggingface.co/KamilaMila/FastVLM-7B)
 
@@ -47,7 +47,7 @@ class FastVlmConfig(PreTrainedConfig):
             The activation function used by the multimodal projector.
         vision_feature_select_strategy (`str`, *optional*, defaults to `"full"`):
             The feature selection strategy used to select the vision feature from the vision backbone.
-            Can only be `"full"`.
+            Only "full" supported.
         vision_feature_layer (`Union[int, list[int]]`, *optional*, defaults to -1):
             The index of the layer to select the vision feature. If multiple indices are provided,
             the vision feature of the corresponding indices will be concatenated to form the
@@ -99,8 +99,7 @@ class FastVlmConfig(PreTrainedConfig):
 
         if vision_feature_select_strategy != "full":
             raise ValueError(
-                "Only vision_feature_select_strategy='full' supported in FastVLM!"
-                f"Got: {vision_feature_select_strategy}"
+                f"Unexpected select feature strategy: {vision_feature_select_strategy}, Only 'full' is supported in FastVLM."
             )
 
         if any(
@@ -109,7 +108,7 @@ class FastVlmConfig(PreTrainedConfig):
                 vision_feature_layer if isinstance(vision_feature_layer, Iterable) else [vision_feature_layer]
             )
         ):
-            raise ValueError(f"Only negative layer values are supported. Got {vision_feature_layer}")
+            raise ValueError(f"Only negative vision feature layer values are supported. Got {vision_feature_layer}")
 
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.vision_feature_layer = vision_feature_layer
