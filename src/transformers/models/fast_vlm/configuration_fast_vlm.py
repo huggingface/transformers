@@ -102,7 +102,7 @@ class FastVlmConfig(PretrainedConfig):
             )
 
         if (isinstance(vision_feature_layer, int) and vision_feature_layer >= 0) or any(
-            [layer >= 0 for layer in vision_feature_layer]
+            layer >= 0 for layer in vision_feature_layer
         ):
             raise ValueError(f"Only negative layer values are supported. Got {vision_feature_layer}")
 
