@@ -14,7 +14,7 @@
 import inspect
 import os
 from functools import partial
-from typing import Optional, TypedDict
+from typing import Callable, Optional, TypedDict
 
 import torch
 import torch.nn.functional as F
@@ -64,7 +64,7 @@ _hf_api_to_flash_mapping = {
 }
 
 
-def _lazy_imports(implementation: Optional[str]):
+def _lazy_imports(implementation: Optional[str], attention_wrapper: Optional[Callable] = None):
     """
     Lazy loads the respective flash attention implementations.
 
@@ -95,7 +95,7 @@ def _lazy_imports(implementation: Optional[str]):
         else:
             from .integrations.hub_kernels import load_and_register_kernel
 
-            kernel = load_and_register_kernel(implementation)
+            kernel = load_and_register_kernel(implementation, attention_wrapper)
             flash_attn_func = getattr(kernel, "flash_attn_func", None)
             flash_attn_varlen_func = getattr(kernel, "flash_attn_varlen_func", None)
             if flash_attn_varlen_func is None or flash_attn_func is None:
@@ -128,7 +128,7 @@ def _lazy_define_process_function(flash_function):
     return partial(_process_flash_attention_kwargs, supports_mapping=supports_mapping)
 
 
-def lazy_import_flash_attention(implementation: Optional[str]):
+def lazy_import_flash_attention(implementation: Optional[str], attention_wrapper: Optional[Callable] = None):
     """
     Lazily import flash attention and return the respective functions + flags.
 
@@ -143,10 +143,17 @@ def lazy_import_flash_attention(implementation: Optional[str]):
     if implementation is not None and _loaded_implementation != implementation:
         _loaded_implementation = implementation
 
-        _flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn = _lazy_imports(implementation)
+        _flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn = _lazy_imports(implementation, attention_wrapper)
         _process_flash_kwargs_fn = _lazy_define_process_function(_flash_varlen_fn)
 
     return (_flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn), _process_flash_kwargs_fn
+
+
+def paged_lazy_import_flash_attention(implementation: Optional[str]):
+    from .integrations.flash_paged import paged_attention_forward
+
+    (_, flash_attn_varlen_func, _, _), _ = lazy_import_flash_attention(implementation, attention_wrapper=paged_attention_forward)
+    return flash_attn_varlen_func
 
 
 def _index_first_axis(tensor, indices):

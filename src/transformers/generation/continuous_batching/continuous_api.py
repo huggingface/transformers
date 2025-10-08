@@ -617,8 +617,8 @@ class ContinuousBatchingManager:
                 from ...integrations.flash_paged import paged_attention_forward
 
                 load_and_register_kernel(attn_implementation, paged_attention_forward)
-
             model.config._attn_implementation = attn_implementation
+
         self.model = model.eval()
         generation_config = model.generation_config if generation_config is None else generation_config
         self.generation_config = generation_config
