@@ -1950,43 +1950,47 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     @require_liger_kernel
     @require_torch_accelerator
     def test_use_liger_kernel_trainer(self):
-        # Check that trainer still works with liger kernel applied
-        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
-        tiny_llama = LlamaForCausalLM(config)
+        # Ensure any monkey patching is cleaned up for subsequent tests
+        with patch("transformers.models.llama.modeling_llama"):
+            # Check that trainer still works with liger kernel applied
+            config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+            tiny_llama = LlamaForCausalLM(config)
 
-        x = torch.randint(0, 100, (128,))
-        train_dataset = RepeatDataset(x)
+            x = torch.randint(0, 100, (128,))
+            train_dataset = RepeatDataset(x)
 
-        args = TrainingArguments(
-            self.get_auto_remove_tmp_dir(), learning_rate=1e-2, logging_steps=5, max_steps=20, use_liger_kernel=True
-        )
-        trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+            args = TrainingArguments(
+                self.get_auto_remove_tmp_dir(), learning_rate=1e-2, logging_steps=5, max_steps=20, use_liger_kernel=True
+            )
+            trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
 
-        # Check this works
-        _ = trainer.train()
+            # Check this works
+            _ = trainer.train()
 
     @require_liger_kernel
     @require_torch_accelerator
     def test_use_liger_kernel_custom_config_trainer(self):
-        # Check that trainer still works with liger kernel applied when using a custom config
-        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
-        tiny_llama = LlamaForCausalLM(config)
+        # Ensure any monkey patching is cleaned up for subsequent tests
+        with patch("transformers.models.llama.modeling_llama"):
+            # Check that trainer still works with liger kernel applied when using a custom config
+            config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+            tiny_llama = LlamaForCausalLM(config)
 
-        x = torch.randint(0, 100, (128,))
-        train_dataset = RepeatDataset(x)
+            x = torch.randint(0, 100, (128,))
+            train_dataset = RepeatDataset(x)
 
-        args = TrainingArguments(
-            self.get_auto_remove_tmp_dir(),
-            learning_rate=1e-2,
-            logging_steps=5,
-            max_steps=20,
-            use_liger_kernel=True,
-            liger_kernel_config={"rms_norm": False, "cross_entropy": True, "fused_linear_cross_entropy": False},
-        )
-        trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+            args = TrainingArguments(
+                self.get_auto_remove_tmp_dir(),
+                learning_rate=1e-2,
+                logging_steps=5,
+                max_steps=20,
+                use_liger_kernel=True,
+                liger_kernel_config={"rms_norm": False, "cross_entropy": True, "fused_linear_cross_entropy": False},
+            )
+            trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
 
-        # Check this works
-        _ = trainer.train()
+            # Check this works
+            _ = trainer.train()
 
     @require_lomo
     @require_torch_accelerator
