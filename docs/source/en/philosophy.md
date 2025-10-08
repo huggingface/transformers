@@ -20,7 +20,8 @@ rendered properly in your Markdown viewer.
 
 A longer, in-depth article with examples, visualisations and timelines is available [here as our canonical reference](https://huggingface.co/spaces/transformers-community/Transformers-tenets).
 
-> Note: our philosophy has evolved through practice. What follows is the current, stable set of principles.
+> [!NOTE]
+> Our philosophy has evolved through practice. What follows is the current, stable set of principles.
 
 ## Who this library is for
 
