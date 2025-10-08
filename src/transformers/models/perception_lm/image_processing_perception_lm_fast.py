@@ -42,7 +42,7 @@ from ...utils import (
 )
 
 
-class PerceptionLMImageProcessorKwargs(ImagesKwargs):
+class PerceptionLMImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     vision_input_type (`str`, *optional*, defaults to `"thumb+tile"`):
         Vision processing strategy. `"thumb+tile"` uses both thumbnails and multiple tiles for

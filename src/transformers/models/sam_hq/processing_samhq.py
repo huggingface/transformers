@@ -31,7 +31,7 @@ if is_torch_available():
     import torch
 
 
-class SamHQImagesKwargs(ImagesKwargs):
+class SamHQImagesKwargs(ImagesKwargs, total=False):
     segmentation_maps: Optional[ImageInput]
     input_points: Optional[list[list[float]]]
     input_labels: Optional[list[list[int]]]

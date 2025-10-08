@@ -45,7 +45,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-class ImageGPTImageProcessorKwargs(ImagesKwargs):
+class ImageGPTImageProcessorKwargs(ImagesKwargs, total=False):
     """
     clusters (`np.ndarray` or `list[list[int]]` or `torch.Tensor`, *optional*):
         The color clusters to use, of shape `(n_clusters, 3)` when color quantizing. Can be overridden by `clusters`

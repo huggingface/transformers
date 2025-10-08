@@ -49,7 +49,7 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
-class GotOcr2ImageProcessorKwargs(ImagesKwargs):
+class GotOcr2ImageProcessorKwargs(ImagesKwargs, total=False):
     """
     crop_to_patches (`bool`, *optional*, defaults to `False`):
         Whether to crop the image to patches. Can be overridden by the `crop_to_patches` parameter in the

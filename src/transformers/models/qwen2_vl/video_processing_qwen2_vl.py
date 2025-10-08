@@ -41,7 +41,7 @@ from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 from .image_processing_qwen2_vl import smart_resize
 
 
-class Qwen2VLVideoProcessorInitKwargs(VideosKwargs):
+class Qwen2VLVideoProcessorInitKwargs(VideosKwargs, total=False):
     min_pixels: Optional[int]
     max_pixels: Optional[int]
     patch_size: Optional[int]

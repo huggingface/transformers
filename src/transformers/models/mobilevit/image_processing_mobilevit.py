@@ -53,7 +53,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-class MobileVitImageProcessorKwargs(ImagesKwargs):
+class MobileVitImageProcessorKwargs(ImagesKwargs, total=False):
     """
     do_flip_channel_order (`bool`, *optional*, defaults to `self.do_flip_channel_order`):
         Whether to flip the color channels from RGB to BGR or vice versa.

@@ -54,7 +54,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-class PromptDepthAnythingImageProcessorKwargs(ImagesKwargs):
+class PromptDepthAnythingImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     keep_aspect_ratio (`bool`, *optional*):
         If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved.

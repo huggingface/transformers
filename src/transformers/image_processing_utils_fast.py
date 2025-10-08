@@ -18,6 +18,7 @@ from functools import lru_cache, partial
 from typing import Any, Optional, Union
 
 import numpy as np
+from huggingface_hub.dataclasses import validate_typed_dict
 
 from .image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from .image_transforms import (
@@ -50,7 +51,6 @@ from .utils import (
     logging,
 )
 from .utils.import_utils import is_rocm_platform
-from .utils.type_validators import TypedDictAdapter
 
 
 if is_vision_available():
@@ -713,8 +713,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_kwargs_names)
 
         # Perform type validation on received kwargs
-        type_validator = TypedDictAdapter(self.valid_kwargs)
-        type_validator.validate_fields(**kwargs)
+        validate_typed_dict(self.valid_kwargs, kwargs)
 
         # Set default kwargs from self. This ensures that if a kwarg is not provided
         # by the user, it gets its default value from the instance, or is set to None.

@@ -35,7 +35,7 @@ from ...utils import (
 logger = logging.get_logger(__name__)
 
 
-class Phi4MultimodalImageProcessorKwargs(ImagesKwargs):
+class Phi4MultimodalImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     patch_size (`int`, *optional*):
         The size of the patch.

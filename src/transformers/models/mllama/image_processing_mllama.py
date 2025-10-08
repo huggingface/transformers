@@ -50,7 +50,7 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
-class MllamaImageProcessorKwargs(ImagesKwargs):
+class MllamaImageProcessorKwargs(ImagesKwargs, total=False):
     """
     max_image_tiles (`int`, *optional*):
         The maximum number of tiles allowed.

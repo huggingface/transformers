@@ -30,7 +30,7 @@ from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import group_videos_by_shape, reorder_videos
 
 
-class InstructBlipVideoVideoProcessorInitKwargs(VideosKwargs): ...
+class InstructBlipVideoVideoProcessorInitKwargs(VideosKwargs, total=False): ...
 
 
 class InstructBlipVideoVideoProcessor(BaseVideoProcessor):

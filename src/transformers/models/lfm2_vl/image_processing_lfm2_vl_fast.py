@@ -169,7 +169,7 @@ def pad_along_first_dim(
     return images, pixel_mask
 
 
-class Lfm2VlImageProcessorKwargs(ImagesKwargs):
+class Lfm2VlImageProcessorKwargs(ImagesKwargs, total=False):
     """
     downsample_factor (`int`, *optional*, defaults to `2`):
         The downsampling factor for images used when resizing the image.

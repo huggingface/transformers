@@ -49,7 +49,7 @@ logger = logging.get_logger(__name__)
 DEFAULT_FONT_PATH = "ybelkada/fonts"
 
 
-class Pix2StructImageProcessorKwargs(ImagesKwargs):
+class Pix2StructImageProcessorKwargs(ImagesKwargs, total=False):
     """
     max_patches (`int`, *optional*):
         Maximum number of patches to extract.

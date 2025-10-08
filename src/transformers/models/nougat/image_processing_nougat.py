@@ -52,7 +52,7 @@ if is_vision_available():
     import PIL
 
 
-class NougatImageProcessorKwargs(ImagesKwargs):
+class NougatImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     do_crop_margin (`bool`, *optional*, defaults to `True`):
         Whether to crop the image margins.

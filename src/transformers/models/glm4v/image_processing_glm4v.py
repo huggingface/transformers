@@ -47,7 +47,7 @@ from ...video_utils import VideoInput
 logger = logging.get_logger(__name__)
 
 
-class Glm4vImageProcessorKwargs(ImagesKwargs):
+class Glm4vImageProcessorKwargs(ImagesKwargs, total=False):
     """
     patch_size (`int`, *optional*, defaults to 14):
         The spatial patch size of the vision encoder.

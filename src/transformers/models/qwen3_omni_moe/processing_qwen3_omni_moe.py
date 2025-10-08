@@ -34,7 +34,7 @@ from ...video_utils import VideoInput, make_batched_videos
 
 # Redefine kwargs for videos because Qwen-Omni uses some kwargs for processing omni
 # and does not use them in video processor class
-class Qwen3OmniMoeVideosKwargs(VideosKwargs):
+class Qwen3OmniMoeVideosKwargs(VideosKwargs, total=False):
     min_pixels: Optional[int]
     max_pixels: Optional[int]
     patch_size: Optional[int]

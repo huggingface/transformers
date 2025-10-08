@@ -308,7 +308,7 @@ def get_best_fit(
     return optimal_canvas
 
 
-class Llama4ImageProcessorKwargs(ImagesKwargs):
+class Llama4ImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     max_patches (`int`, *optional*, defaults to 16):
         The maximum number of patches to be extracted from the image.

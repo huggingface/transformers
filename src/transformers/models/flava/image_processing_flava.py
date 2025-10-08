@@ -57,7 +57,7 @@ FLAVA_CODEBOOK_STD = [1.0, 1.0, 1.0]
 LOGIT_LAPLACE_EPS: float = 0.1
 
 
-class FlavaImageProcessorKwargs(ImagesKwargs):
+class FlavaImageProcessorKwargs(ImagesKwargs, total=False):
     """
     return_image_mask (`bool`, *optional*, defaults to `False`):
         Whether to return the image mask. Can be overridden by the `return_image_mask` parameter in `preprocess`.

@@ -729,7 +729,7 @@ def compute_segments(
     return segmentation, segments
 
 
-class ConditionalDetrImageProcessorKwargs(ImagesKwargs):
+class ConditionalDetrImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
         Data format of the annotations. One of "coco_detection" or "coco_panoptic".

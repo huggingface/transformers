@@ -47,7 +47,7 @@ if is_vision_available():
     from PIL import Image
 
 
-class Idefics2ImageProcessorKwargs(ImagesKwargs):
+class Idefics2ImageProcessorKwargs(ImagesKwargs, total=False):
     """
     do_image_splitting (`bool`, *optional*, defaults to `False`):
         Whether to split the image into a sequence 4 equal sub-images concatenated with the original image.

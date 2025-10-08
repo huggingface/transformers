@@ -36,7 +36,7 @@ IDEFICS_STANDARD_MEAN = [0.48145466, 0.4578275, 0.40821073]
 IDEFICS_STANDARD_STD = [0.26862954, 0.26130258, 0.27577711]
 
 
-class IdeficsImageProcessorKwargs(ImagesKwargs):
+class IdeficsImageProcessorKwargs(ImagesKwargs, total=False):
     """
     transform (`Callable`, *optional*):
         A custom transform function that accepts a single image can be passed for training. For example,

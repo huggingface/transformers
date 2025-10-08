@@ -52,7 +52,7 @@ from ...video_utils import VideoInput, make_batched_videos
 logger = logging.get_logger(__name__)
 
 
-class Qwen2VLImageProcessorKwargs(ImagesKwargs):
+class Qwen2VLImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     min_pixels (`int`, *optional*, defaults to `56 * 56`):
         The min pixels of the image to resize the image.

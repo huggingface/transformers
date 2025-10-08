@@ -58,7 +58,7 @@ if is_vision_available():
     from PIL import Image
 
 
-class LlavaOnevisionImageProcessorKwargs(ImagesKwargs):
+class LlavaOnevisionImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     image_grid_pinpoints (`list[list[int]]`, *optional*):
         A list of possible resolutions to use for processing high resolution images. The best resolution is selected

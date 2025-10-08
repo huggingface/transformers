@@ -64,7 +64,7 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
-class DPTImageProcessorKwargs(ImagesKwargs):
+class DPTImageProcessorKwargs(ImagesKwargs, total=False):
     """
     ensure_multiple_of (`int`, *optional*, defaults to 1):
         If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overridden

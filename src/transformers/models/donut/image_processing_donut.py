@@ -52,7 +52,7 @@ if is_vision_available():
     import PIL
 
 
-class DonutImageProcessorKwargs(ImagesKwargs):
+class DonutImageProcessorKwargs(ImagesKwargs, total=False):
     """
     do_thumbnail (`bool`, *optional*, defaults to `self.do_thumbnail`):
         Whether to resize the image using thumbnail method.

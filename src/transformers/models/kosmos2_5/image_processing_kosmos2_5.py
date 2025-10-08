@@ -46,7 +46,7 @@ logger = logging.get_logger(__name__)
 DEFAULT_FONT_PATH = "ybelkada/fonts"
 
 
-class Kosmos2_5ImageProcessorKwargs(ImagesKwargs):
+class Kosmos2_5ImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     patch_size (`Dict[str, int]`, *optional*, defaults to `{"height": 16, "width": 16}`):
         The patch size to use for the image. According to Kosmos2_5 paper and code, the patch size is 16x16.

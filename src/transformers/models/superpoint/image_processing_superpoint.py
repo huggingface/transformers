@@ -46,7 +46,7 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
-class SuperPointImageProcessorKwargs(ImagesKwargs):
+class SuperPointImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     do_grayscale (`bool`, *optional*, defaults to `True`):
         Whether to convert the image to grayscale. Can be overridden by `do_grayscale` in the `preprocess` method.

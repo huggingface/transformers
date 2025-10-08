@@ -61,7 +61,7 @@ if is_torch_available():
     from torch import nn
 
 
-class Mask2FormerImageProcessorKwargs(ImagesKwargs):
+class Mask2FormerImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     ignore_index (`int`, *optional*):
         Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels

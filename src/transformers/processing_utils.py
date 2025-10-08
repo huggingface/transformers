@@ -30,6 +30,7 @@ from typing import Annotated, Any, Literal, Optional, TypedDict, TypeVar, Union
 
 import numpy as np
 import typing_extensions
+from huggingface_hub.dataclasses import validate_typed_dict
 from huggingface_hub.errors import EntryNotFoundError
 
 from .audio_utils import AudioInput, load_audio
@@ -38,7 +39,6 @@ from .feature_extraction_utils import BatchFeature
 from .image_utils import ChannelDimension, ImageInput, is_vision_available
 from .utils.chat_template_utils import render_jinja_template
 from .utils.type_validators import (
-    TypedDictAdapter,
     device_validator,
     image_size_validator,
     padding_validator,
@@ -1398,9 +1398,9 @@ class ProcessorMixin(PushToHubMixin):
                 typed_dict_obj = TypedDict(
                     "merged_typed_dict",
                     {**preprocessor_typed_dict_obj.__annotations__, **typed_dict_obj.__annotations__},
+                    total=False,
                 )
-            type_validator = TypedDictAdapter(typed_dict_obj)
-            type_validator.validate_fields(**output_kwargs[key])
+            validate_typed_dict(typed_dict_obj, output_kwargs[key])
         return output_kwargs
 
     @classmethod

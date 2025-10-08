@@ -82,7 +82,7 @@ if is_scipy_available():
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
-class DeformableDetrImageProcessorKwargs(ImagesKwargs):
+class DeformableDetrImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
         Data format of the annotations. One of "coco_detection" or "coco_panoptic".

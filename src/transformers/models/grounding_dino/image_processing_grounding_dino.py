@@ -93,7 +93,7 @@ class AnnotationFormat(ExplicitEnum):
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 
 
-class GroundingDinoImageProcessorKwargs(ImagesKwargs):
+class GroundingDinoImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
         Data format of the annotations. One of "coco_detection" or "coco_panoptic".

@@ -50,7 +50,7 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
-class TvpImageProcessorKwargs(ImagesKwargs):
+class TvpImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     do_flip_channel_order (`bool`, *optional*):
         Whether to flip the channel order of the image from RGB to BGR.

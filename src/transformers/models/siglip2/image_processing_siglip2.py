@@ -48,7 +48,7 @@ if is_vision_available():
     from PIL import Image
 
 
-class Siglip2ImageProcessorKwargs(ImagesKwargs):
+class Siglip2ImageProcessorKwargs(ImagesKwargs, total=False):
     """
     patch_size (`int`, *optional*, defaults to 16):
         The size (resolution) of each patch the image will be split to.

@@ -49,7 +49,7 @@ if is_vision_available():
     import PIL
 
 
-class TextNetImageProcessorKwargs(ImagesKwargs):
+class TextNetImageProcessorKwargs(ImagesKwargs, total=False):
     size_divisor: Optional[int]
 
 

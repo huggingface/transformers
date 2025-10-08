@@ -64,7 +64,7 @@ if is_torch_available():
     from torch import nn
 
 
-class OneFormerImageProcessorKwargs(ImagesKwargs):
+class OneFormerImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     repo_path (`str`, *optional*, defaults to `shi-labs/oneformer_demo`):
         Path to a local directory or Hugging Face Hub repository containing model metadata.

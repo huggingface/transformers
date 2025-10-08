@@ -64,7 +64,7 @@ def smart_resize(
     return h_bar, w_bar
 
 
-class Qwen3VLVideoProcessorInitKwargs(VideosKwargs):
+class Qwen3VLVideoProcessorInitKwargs(VideosKwargs, total=False):
     patch_size: Optional[int]
     temporal_patch_size: Optional[int]
     merge_size: Optional[int]

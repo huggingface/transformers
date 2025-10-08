@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from dataclasses import MISSING, field, make_dataclass
 from typing import Annotated, ForwardRef, Optional, TypedDict, Union, get_args, get_origin
 
-from huggingface_hub.dataclasses import as_validated_field, strict
+from huggingface_hub.dataclasses import strict
 
 from ..tokenization_utils_base import PaddingStrategy, TruncationStrategy
 from ..video_utils import VideoMetadataType
@@ -100,19 +100,16 @@ class TypedDictAdapter:
         return make_dataclass(self.type.__name__ + "Config", fields)
 
 
-@as_validated_field
 def positive_any_number(value: Optional[Union[int, float]] = None):
     if value is not None and (not isinstance(value, (int, float)) or not value >= 0):
         raise ValueError(f"Value must be a positive integer or floating number, got {value}")
 
 
-@as_validated_field
 def positive_int(value: Optional[int] = None):
     if value is not None and (not isinstance(value, int) or not value >= 0):
         raise ValueError(f"Value must be a positive integer, got {value}")
 
 
-@as_validated_field
 def padding_validator(value: Optional[Union[bool, str, PaddingStrategy]] = None):
     possible_names = ["longest", "max_length", "do_not_pad"]
     if value is None:
@@ -123,7 +120,6 @@ def padding_validator(value: Optional[Union[bool, str, PaddingStrategy]] = None)
         raise ValueError(f"If padding is a string, the value must be one of {possible_names}")
 
 
-@as_validated_field
 def truncation_validator(value: Optional[Union[bool, str, TruncationStrategy]] = None):
     possible_names = ["only_first", "only_second", "longest_first", "do_not_truncate"]
     if value is None:
@@ -134,7 +130,6 @@ def truncation_validator(value: Optional[Union[bool, str, TruncationStrategy]] =
         raise ValueError(f"If truncation is a string, value must be one of {possible_names}")
 
 
-@as_validated_field
 def image_size_validator(value: Optional[Union[int, Sequence[int], dict[str, int]]] = None):
     possible_keys = ["height", "width", "longest_edge", "shortest_edge", "max_height", "max_width"]
     if value is None:
@@ -143,7 +138,6 @@ def image_size_validator(value: Optional[Union[int, Sequence[int], dict[str, int
         raise ValueError(f"Value for size must be a dict with keys {possible_keys} but got size={value}")
 
 
-@as_validated_field
 def device_validator(value: Optional[Union[str, int]] = None):
     possible_names = ["cpu", "cuda", "xla", "xpu", "mps", "meta"]
     if value is None:
@@ -160,7 +154,6 @@ def device_validator(value: Optional[Union[str, int]] = None):
         )
 
 
-@as_validated_field
 def resampling_validator(value: Optional[Union[int, "PILImageResampling"]] = None):
     if value is None:
         pass
@@ -172,7 +165,6 @@ def resampling_validator(value: Optional[Union[int, "PILImageResampling"]] = Non
         raise ValueError(f"The resampling should an integer or `PIL.Image.Resampling`, but got resampling={value}")
 
 
-@as_validated_field
 def video_metadata_validator(value: Optional[VideoMetadataType] = None):
     if value is None:
         return
@@ -204,7 +196,6 @@ def video_metadata_validator(value: Optional[VideoMetadataType] = None):
             )
 
 
-@as_validated_field
 def tensor_type_validator(value: Optional[Union[str, TensorType]] = None):
     possible_names = ["pt", "np", "mlx"]
     if value is None:

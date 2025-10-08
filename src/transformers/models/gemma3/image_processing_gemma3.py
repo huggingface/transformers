@@ -51,7 +51,7 @@ if is_vision_available():
     import PIL
 
 
-class Gemma3ImageProcessorKwargs(ImagesKwargs):
+class Gemma3ImageProcessorKwargs(ImagesKwargs, total=False):
     """
     do_pan_and_scan (`bool`, *optional*):
         Whether to apply `pan_and_scan` to images.

@@ -47,7 +47,7 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
-class ViltImageProcessorKwargs(ImagesKwargs):
+class ViltImageProcessorKwargs(ImagesKwargs, total=False):
     size_divisor: Optional[int]
 
 
