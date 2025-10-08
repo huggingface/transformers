@@ -215,7 +215,7 @@ Flash Attention 2 is an even faster, optimized version of the previous optimizat
 
 ## Resources
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with image-to-text transformers (here using the example of Llava).
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with image-to-text transformers (here using Llava as an example).
 
 <PipelineTag pipeline="image-to-text"/>
 
