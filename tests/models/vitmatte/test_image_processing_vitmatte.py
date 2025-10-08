@@ -261,7 +261,7 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             trimap = np.random.randint(0, 3, size=image.size[::-1])
 
             # Type validation will fail for fast processors only (for now)
-            if i == 1:
+            if image_processing_class.__name__.endswith("Fast"):
                 with self.assertRaises(TypeError):
                     image_processor(image, trimaps=trimap, extra_argument=True)
             else:

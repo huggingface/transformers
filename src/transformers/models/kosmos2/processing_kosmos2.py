@@ -37,7 +37,7 @@ NestedList = list[Union[Optional[int], "NestedList"]]
 
 
 class Kosmos2ImagesKwargs(ImagesKwargs, total=False):
-    bboxes: Optional[NestedList]
+    bboxes: Optional[NestedList]  # NOTE: hub validators can't accept `Sequence`
     num_image_tokens: Optional[int]
     first_image_token_id: Optional[int]
 
