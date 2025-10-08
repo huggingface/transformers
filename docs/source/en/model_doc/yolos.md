@@ -87,13 +87,6 @@ for score, label, box in zip(results["scores"], results["labels"], results["boxe
     - pad
     - post_process_object_detection
 
-## YolosFeatureExtractor
-
-[[autodoc]] YolosFeatureExtractor
-    - __call__
-    - pad
-    - post_process_object_detection
-
 ## YolosModel
 
 [[autodoc]] YolosModel
