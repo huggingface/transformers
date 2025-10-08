@@ -1306,8 +1306,8 @@ class ProcessorMixin(PushToHubMixin):
         output_kwargs.update(default_kwargs)
 
         # For `common_kwargs` just update all modality-specific kwargs with same key/values
-        common_kwargs = kwargs.get("common_kwargs", {})
-        common_kwargs.update(ModelProcessorKwargs._defaults.get("common_kwargs", {}))
+        common_kwargs = ModelProcessorKwargs._defaults.get("common_kwargs", {})
+        common_kwargs.update(kwargs.get("common_kwargs", {}))
         if common_kwargs:
             for kwarg in output_kwargs.values():
                 kwarg.update(common_kwargs)
