@@ -43,8 +43,8 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
     This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
     most of the main methods. Users should refer to this superclass for more information regarding those methods.
 
-    This class extracts mel-filter bank features from raw speech using a custom numpy implementation of the Short Time
-    Fourier Transform (STFT).
+    This class extracts mel-filter bank features from raw speech using `torchaudio.transforms.MelSpectrogram` which performs a Short-Time
+    Fourier Transform (STFT) and then applies a Mel filter bank.
 
     Args:
         feature_size (`int`, *optional*, defaults to 100):
@@ -186,6 +186,11 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
                 device = audio[0].device
             else:
                 device = "cpu"
+                logger.warning(
+                    f"The `device` argument was not provided to the processor call. "
+                    f"Defaulting to device='{device}'. For GPU acceleration, pass the `device` parameter "
+                    "to the processor (e.g., processor(audio=audio, device='cuda'))."
+                )
 
         # Check mono input(s)
         for _audio in audio:

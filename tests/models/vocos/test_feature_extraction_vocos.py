@@ -18,7 +18,6 @@ import os
 import random
 import tempfile
 import unittest
-from unittest.mock import patch
 
 import numpy as np
 from datasets import Audio, load_dataset
@@ -65,7 +64,7 @@ class VocosFeatureExtractionTester:
         padding_value=0.0,
         sampling_rate=4000,
         padding="center",
-        return_attention_mask=False,
+        return_attention_mask=True,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -227,25 +226,12 @@ class VocosFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Te
             pt_processed = feature_extractor.pad([{"audio_spectrogram": inputs}], return_tensors="pt")
             self.assertTrue(pt_processed.audio_spectrogram.dtype == torch.float32)
 
-    def _load_datasamples(self, num_samples):
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        ds = ds.cast_column("audio", Audio(sampling_rate=24000))
-        speech_samples = ds.sort("id")[:num_samples]["audio"]
-        return [x["array"] for x in speech_samples]
-
     @require_torch
     def test_integration_torch_backend(self):
-        speech = self._load_datasamples(1)
-        feature_extractor = VocosFeatureExtractor.from_pretrained("Manel/vocos-mel-24khz")
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        ds = ds.cast_column("audio", Audio(sampling_rate=24000))
+        speech = ds[0]["audio"]["array"]
+        feature_extractor = VocosFeatureExtractor.from_pretrained("hf-audio/vocos-mel-24khz")
         audio_spectrogram = feature_extractor(speech, return_tensors="pt").audio_spectrogram
         self.assertEqual(audio_spectrogram.shape, (1, 100, 549))
-        torch.testing.assert_close(audio_spectrogram[0, 0, :30], self.EXPECTED_INPUT_FEATURES, rtol=1e-6, atol=1e-6)
-
-    @patch("transformers.models.vocos.feature_extraction_vocos.is_torch_available", return_value=False)
-    def test_integration_numpy_backend(self, _mock_torch_avail):
-        speech = self._load_datasamples(1)
-        feature_extractor = VocosFeatureExtractor.from_pretrained("Manel/vocos-mel-24khz")
-        audio_spectrogram = feature_extractor(speech, return_tensors="pt").audio_spectrogram
-        self.assertEqual(audio_spectrogram.shape, (1, 100, 549))
-
         torch.testing.assert_close(audio_spectrogram[0, 0, :30], self.EXPECTED_INPUT_FEATURES, rtol=1e-6, atol=1e-6)
