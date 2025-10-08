@@ -23,6 +23,7 @@ from transformers.testing_utils import (
     Expectations,
     cleanup,
     require_bitsandbytes,
+    require_deterministic_for_xpu,
     require_torch,
     require_torch_accelerator,
     require_torch_large_accelerator,
@@ -421,6 +422,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
 
         EXPECTED_OUTPUTS = Expectations(
             {
+                ("xpu", 3): "Hello today Iava,\n\nI am writing to you today to discuss the importance of maintaining a healthy lifestyle",
                 ("cuda", 7): "Hello today I am going to show you how to make a simple and easy to make paper plane.\nStep",
                 ("cuda", 8): 'Hello today Iava,\n\nI am writing to you today to discuss the importance of maintaining a healthy lifestyle',
             }
@@ -454,13 +456,13 @@ class FalconMambaIntegrationTests(unittest.TestCase):
 
         inputs = self.tokenizer(self.text, return_tensors="pt").to(torch_device)
         out = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        print(self.tokenizer.batch_decode(out, skip_special_tokens=False)[0])
 
         self.assertEqual(
             self.tokenizer.batch_decode(out, skip_special_tokens=False)[0],
             "Hello today Iava,\n\nI am writing to you today to discuss the importance of maintaining a healthy lifestyle",
         )
 
+    @require_deterministic_for_xpu
     def test_batched_generation(self):
         model_id = "tiiuae/falcon-mamba-7b"
         tok = AutoTokenizer.from_pretrained(model_id)
@@ -470,6 +472,10 @@ class FalconMambaIntegrationTests(unittest.TestCase):
 
         EXPECTED_OUTPUTS = Expectations(
             {
+                ("xpu", 3): [
+                    'Hello today I will be talking about the “Theory of Relativity” by Albert Einstein.\nThe',
+                    'Hello my name is Younes and today I will be talking about the importance of the internet in our lives.\nThe internet is a global',
+                ],
                 ("cuda", 7): [
                     'Hello today I will be talking about the “Theory of Relativity” by Albert Einstein.\nThe',
                     'Hello my name is Younes and today I will be talking about the importance of the internet in our lives.\nThe internet is a global',
@@ -500,6 +506,10 @@ class FalconMambaIntegrationTests(unittest.TestCase):
 
         EXPECTED_OUTPUTS = Expectations(
             {
+                ("xpu", 3): [
+                    ' I will be talking about the “Theory of Relativity” by Albert Einstein.\nThe',
+                    ' I will be talking about the importance of the internet in our lives.\nThe internet is a global',
+                ],
                 ("cuda", 7): [
                     ' I will be talking about the “Theory of Relativity” by Albert Einstein.\nThe',
                     ' I will be talking about the importance of the internet in our lives.\nThe internet is a global',
