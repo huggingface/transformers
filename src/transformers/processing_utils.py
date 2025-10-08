@@ -25,10 +25,11 @@ import typing
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional, TypedDict, TypeVar, Union
+from typing import Annotated, Any, Literal, Optional, TypedDict, TypeVar, Union
 
 import numpy as np
 import typing_extensions
+from huggingface_hub.dataclasses import validate_typed_dict
 from huggingface_hub.errors import EntryNotFoundError
 
 from .audio_utils import AudioInput, load_audio
@@ -36,12 +37,22 @@ from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature
 from .image_utils import ChannelDimension, ImageInput, is_vision_available
 from .utils.chat_template_utils import render_jinja_template
-from .video_utils import VideoInput, VideoMetadata
+from .utils.type_validators import (
+    device_validator,
+    image_size_validator,
+    padding_validator,
+    positive_any_number,
+    positive_int,
+    resampling_validator,
+    tensor_type_validator,
+    truncation_validator,
+    video_metadata_validator,
+)
+from .video_utils import VideoInput, VideoMetadataType
 
 
 if is_vision_available():
     from .image_utils import PILImageResampling
-
 
 from .tokenization_utils_base import (
     PaddingStrategy,
@@ -72,8 +83,6 @@ from .utils.deprecation import deprecate_kwarg
 
 
 if is_torch_available():
-    import torch
-
     from .modeling_utils import PreTrainedAudioTokenizerBase
 
 
@@ -137,18 +146,22 @@ class TextKwargs(TypedDict, total=False):
             The side on which padding will be applied.
         return_mm_token_type_ids (`bool`, *optional*):
             Whether to return multimodal token type ids indicating mm placeholder token positions.
+        return_tensors (`str` or [`~utils.TensorType`], *optional*):
+            If set, will return tensors of a particular framework. Acceptable values are:
+            - `'pt'`: Return PyTorch `torch.Tensor` objects.
+            - `'np'`: Return NumPy `np.ndarray` objects.
     """
 
     text_pair: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]]
-    text_target: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]
+    text_target: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]]
     text_pair_target: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]]
     add_special_tokens: Optional[bool]
-    padding: Union[bool, str, PaddingStrategy]
-    truncation: Union[bool, str, TruncationStrategy]
-    max_length: Optional[int]
-    stride: Optional[int]
+    padding: Annotated[Optional[Union[bool, str, PaddingStrategy]], padding_validator()]
+    truncation: Annotated[Optional[Union[bool, str, TruncationStrategy]], truncation_validator()]
+    max_length: Annotated[Optional[int], positive_int()]
+    stride: Annotated[Optional[int], positive_int()]
     is_split_into_words: Optional[bool]
-    pad_to_multiple_of: Optional[int]
+    pad_to_multiple_of: Annotated[Optional[int], positive_int()]
     return_token_type_ids: Optional[bool]
     return_attention_mask: Optional[bool]
     return_overflowing_tokens: Optional[bool]
@@ -156,9 +169,9 @@ class TextKwargs(TypedDict, total=False):
     return_offsets_mapping: Optional[bool]
     return_length: Optional[bool]
     verbose: Optional[bool]
-    padding_side: Optional[str]
+    padding_side: Optional[Literal["left", "right"]]
     return_mm_token_type_ids: Optional[bool]
-    return_tensors: Optional[Union[str, TensorType]]
+    return_tensors: Annotated[Optional[Union[str, TensorType]], tensor_type_validator()]
 
 
 class ImagesKwargs(TypedDict, total=False):
@@ -175,6 +188,8 @@ class ImagesKwargs(TypedDict, total=False):
             Resize the shorter side of the input to `size["shortest_edge"]`.
         crop_size (`dict[str, int]`, *optional*):
             Desired output size when applying center-cropping.
+        do_convert_rgb (`bool`):
+            Whether to convert the video to RGB format.
         resample (`PILImageResampling`, *optional*):
             Resampling filter to use if resizing the image.
         do_rescale (`bool`, *optional*):
@@ -183,9 +198,9 @@ class ImagesKwargs(TypedDict, total=False):
             Scale factor to use if rescaling the image.
         do_normalize (`bool`, *optional*):
             Whether to normalize the image.
-        image_mean (`float` or `list[float]`, *optional*):
+        image_mean (`float` or `list[float] or tuple[float, float, float]`, *optional*):
             Mean to use if normalizing the image.
-        image_std (`float` or `list[float]`, *optional*):
+        image_std (`float` or `list[float] or tuple[float, float, float]`, *optional*):
             Standard deviation to use if normalizing the image.
         do_pad (`bool`, *optional*):
             Whether to pad the images in the batch.
@@ -199,28 +214,32 @@ class ImagesKwargs(TypedDict, total=False):
             The channel dimension format for the input image.
         device (`Union[str, torch.Tensor]`, *optional*):
             The device to use for processing (e.g. "cpu", "cuda"), only relevant for fast image processing.
+        return_tensors (`str` or [`~utils.TensorType`], *optional*):
+            If set, will return tensors of a particular framework. Acceptable values are:
+            - `'pt'`: Return PyTorch `torch.Tensor` objects.
+            - `'np'`: Return NumPy `np.ndarray` objects.
         disable_grouping (`bool`, *optional*):
             Whether to group images by shapes when processing or not, only relevant for fast image processing.
     """
 
     do_convert_rgb: Optional[bool]
     do_resize: Optional[bool]
-    size: Optional[dict[str, int]]
-    crop_size: Optional[dict[str, int]]
-    resample: Optional[Union["PILImageResampling", int]]
+    size: Annotated[Optional[Union[int, list[int], tuple[int, ...], dict[str, int]]], image_size_validator()]
+    crop_size: Annotated[Optional[Union[int, list[int], tuple[int, ...], dict[str, int]]], image_size_validator()]
+    resample: Annotated[Optional[Union["PILImageResampling", int]], resampling_validator()]
     do_rescale: Optional[bool]
     rescale_factor: Optional[float]
     do_normalize: Optional[bool]
-    image_mean: Optional[Union[float, list[float]]]
-    image_std: Optional[Union[float, list[float]]]
+    image_mean: Optional[Union[float, list[float], tuple[float, ...]]]
+    image_std: Optional[Union[float, list[float], tuple[float, ...]]]
     do_pad: Optional[bool]
-    pad_size: Optional[dict[str, int]]
+    pad_size: Annotated[Optional[Union[int, list[int], tuple[int, ...], dict[str, int]]], image_size_validator()]
     do_center_crop: Optional[bool]
-    data_format: Optional[ChannelDimension]
+    data_format: Optional[Union[str, ChannelDimension]]
     input_data_format: Optional[Union[str, ChannelDimension]]
-    device: Optional[Union[str, "torch.device"]]
+    device: Annotated[Optional[str], device_validator()]
+    return_tensors: Annotated[Optional[Union[str, TensorType]], tensor_type_validator()]
     disable_grouping: Optional[bool]
-    return_tensors: Optional[Union[str, TensorType]]
 
 
 class VideosKwargs(TypedDict, total=False):
@@ -244,9 +263,9 @@ class VideosKwargs(TypedDict, total=False):
             Scale factor to use if rescaling the video.
         do_normalize (`bool`, *optional*):
             Whether to normalize the video.
-        image_mean (`float` or `list[float]`, *optional*):
+        image_mean (`float` or `list[float] or tuple[float, float, float]`, *optional*):
             Mean to use if normalizing the video.
-        image_std (`float` or `list[float]`, *optional*):
+        image_std (`float` or `list[float] or tuple[float, float, float]`, *optional*):
             Standard deviation to use if normalizing the video.
         do_center_crop (`bool`, *optional*):
             Whether to center crop the video.
@@ -268,32 +287,36 @@ class VideosKwargs(TypedDict, total=False):
             The channel dimension format for the input video.
         device (`Union[str, torch.Tensor]`, *optional*):
             The device to use for processing (e.g. "cpu", "cuda"), only relevant for fast image processing.
-        return_metadata (`ChannelDimension` or `str`, *optional*):
+        return_metadata (`bool`, *optional*):
             Whether to return video metadata or not.
+        return_tensors (`str` or [`~utils.TensorType`], *optional*):
+            If set, will return tensors of a particular framework. Acceptable values are:
+            - `'pt'`: Return PyTorch `torch.Tensor` objects.
+            - `'np'`: Return NumPy `np.ndarray` objects.
     """
 
     do_convert_rgb: Optional[bool]
     do_resize: Optional[bool]
-    size: Optional[dict[str, int]]
+    size: Annotated[Optional[Union[int, list[int], tuple[int, ...], dict[str, int]]], image_size_validator()]
     default_to_square: Optional[bool]
-    resample: Optional["PILImageResampling"]
+    resample: Annotated[Optional[Union["PILImageResampling", int]], resampling_validator()]
     do_rescale: Optional[bool]
     rescale_factor: Optional[float]
     do_normalize: Optional[bool]
-    image_mean: Optional[Union[float, list[float]]]
-    image_std: Optional[Union[float, list[float]]]
+    image_mean: Optional[Union[float, list[float], tuple[float, ...]]]
+    image_std: Optional[Union[float, list[float], tuple[float, ...]]]
     do_center_crop: Optional[bool]
     do_pad: Optional[bool]
-    crop_size: Optional[dict[str, int]]
-    data_format: Optional[ChannelDimension]
+    crop_size: Annotated[Optional[Union[int, list[int], tuple[int, ...], dict[str, int]]], image_size_validator()]
+    data_format: Optional[Union[str, ChannelDimension]]
     input_data_format: Optional[Union[str, ChannelDimension]]
-    device: Optional[Union[str, "torch.device"]]
+    device: Annotated[Optional[str], device_validator()]
     do_sample_frames: Optional[bool]
-    video_metadata: Optional[Union[VideoMetadata, dict]]
-    fps: Optional[Union[int, float]]
-    num_frames: Optional[int]
+    video_metadata: Annotated[Optional[VideoMetadataType], video_metadata_validator()]
+    fps: Annotated[Optional[Union[int, float]], positive_any_number()]
+    num_frames: Annotated[Optional[int], positive_int()]
     return_metadata: Optional[bool]
-    return_tensors: Optional[Union[str, TensorType]]
+    return_tensors: Annotated[Optional[Union[str, TensorType]], tensor_type_validator()]
 
 
 class AudioKwargs(TypedDict, total=False):
@@ -324,16 +347,20 @@ class AudioKwargs(TypedDict, total=False):
             If set, will pad the sequence to a multiple of the provided value.
         return_attention_mask (`bool`, *optional*):
             Whether or not [`~ASTFeatureExtractor.__call__`] should return `attention_mask`.
+        return_tensors (`str` or [`~utils.TensorType`], *optional*):
+            If set, will return tensors of a particular framework. Acceptable values are:
+            - `'pt'`: Return PyTorch `torch.Tensor` objects.
+            - `'np'`: Return NumPy `np.ndarray` objects.
     """
 
-    sampling_rate: Optional[int]
-    raw_speech: Optional[Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]]]
-    padding: Optional[Union[bool, str, PaddingStrategy]]
-    max_length: Optional[int]
-    truncation: Optional[bool]
-    pad_to_multiple_of: Optional[int]
+    sampling_rate: Annotated[Optional[int], positive_int()]
+    raw_speech: Optional[Union["np.ndarray", list[float], list["np.ndarray"], list[list[float]]]]
+    padding: Annotated[Optional[Union[bool, str, PaddingStrategy]], padding_validator()]
+    max_length: Annotated[Optional[int], positive_int()]
+    truncation: Annotated[Optional[Union[bool, str, TruncationStrategy]], truncation_validator()]
+    pad_to_multiple_of: Annotated[Optional[int], positive_int()]
     return_attention_mask: Optional[bool]
-    return_tensors: Optional[Union[str, TensorType]]
+    return_tensors: Annotated[Optional[Union[str, TensorType]], tensor_type_validator()]
 
 
 class ProcessingKwargs(TypedDict, total=False):
@@ -1361,6 +1388,18 @@ class ProcessorMixin(PushToHubMixin):
                         f"Keyword argument `{key}` is not a valid argument for this processor and will be ignored."
                     )
 
+        for key, typed_dict_obj in ModelProcessorKwargs.__annotations__.items():
+            if key in map_preprocessor_kwargs:
+                preprocessor = getattr(self, map_preprocessor_kwargs[key], None)
+                if preprocessor is None or getattr(preprocessor, "valid_kwargs", None) is None:
+                    continue
+                preprocessor_typed_dict_obj = getattr(preprocessor, "valid_kwargs")
+                typed_dict_obj = TypedDict(
+                    "merged_typed_dict",
+                    {**preprocessor_typed_dict_obj.__annotations__, **typed_dict_obj.__annotations__},
+                    total=False,
+                )
+            validate_typed_dict(typed_dict_obj, output_kwargs[key])
         return output_kwargs
 
     @classmethod
