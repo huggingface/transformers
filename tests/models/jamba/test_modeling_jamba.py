@@ -348,16 +348,19 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         # (batch, kv heads, seq_length, head_dim)
         num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
         head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        expected_shape = (batch_size, num_heads, seq_length, head_dim)
+        attention_shape = (batch_size, num_heads, seq_length, head_dim)
+        conv_shape = (batch_size, config.mamba_expand * config.hidden_size, config.mamba_d_conv)
+        ssm_shape = (batch_size, config.mamba_expand * config.hidden_size, config.mamba_d_state)
 
-        self.assertListEqual(
-            [key_tensor.shape for key_tensor in past_key_values.key_cache],
-            [expected_shape] * len(past_key_values.key_cache),
-        )
-        self.assertListEqual(
-            [value_cache.shape for value_cache in past_key_values.value_cache],
-            [expected_shape] * len(past_key_values.value_cache),
-        )
+        self.assertTrue(config.num_hidden_layers, len(past_key_values))
+
+        for idx in range(len(past_key_values)):
+            if config.layers_block_type[idx] == "mamba":
+                self.assertEqual(past_key_values.conv_states[idx].shape, conv_shape)
+                self.assertEqual(past_key_values.ssm_states[idx].shape, ssm_shape)
+            else:
+                self.assertEqual(past_key_values.key_cache[idx].shape, attention_shape)
+                self.assertEqual(past_key_values.value_cache[idx].shape, attention_shape)
 
     def _check_caches_are_equal(
         self, cache1: HybridMambaAttentionDynamicCache, cache2: HybridMambaAttentionDynamicCache

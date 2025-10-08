@@ -52,7 +52,6 @@ if is_torch_available():
         PreTrainedModel,
     )
     from transformers.cache_utils import (
-        Cache,
         StaticCache,
     )
     from transformers.models.dia.modeling_dia import DiaDecoder, DiaEncoder
@@ -375,26 +374,6 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         self.assertListEqual(
             [layer_hidden_states.shape for layer_hidden_states in hidden_states],
             [encoder_expected_shape] * len(hidden_states),
-        )
-
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        self.assertIsInstance(past_key_values, Cache)
-
-        # we need the decoder config here
-        config = config.decoder_config
-
-        # (batch, kv heads, seq_length, head_dim)
-        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
-        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        expected_shape = (batch_size, num_heads, seq_length, head_dim)
-
-        self.assertListEqual(
-            [layer.keys.shape for layer in past_key_values.layers],
-            [expected_shape] * len(past_key_values.layers),
-        )
-        self.assertListEqual(
-            [layer.values.shape for layer in past_key_values.layers],
-            [expected_shape] * len(past_key_values.layers),
         )
 
     def _check_scores(self, batch_size, scores, generated_length, config):

@@ -231,21 +231,6 @@ class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
     def test_save_load_fast_init_to_base(self):
         pass
 
-    def test_past_key_values_format(self):
-        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        batch_size, seq_length = inputs["input_ids"].shape
-
-        k_embed_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
-        v_embed_dim = config.v_head_dim
-
-        self_attention_keys_shape = (batch_size, config.num_key_value_heads, seq_length, k_embed_dim)
-        self_attention_values_shape = (batch_size, config.num_key_value_heads, seq_length, v_embed_dim)
-
-        num_hidden_layers = config.num_hidden_layers
-        all_cache_shapes = [[self_attention_keys_shape, self_attention_values_shape] for _ in range(num_hidden_layers)]
-
-        super().test_past_key_values_format(custom_all_cache_shapes=all_cache_shapes)
-
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         self.assertIsInstance(past_key_values, Cache)
 

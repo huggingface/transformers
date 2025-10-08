@@ -2424,7 +2424,7 @@ class GenerationTesterMixin:
         # Check the size is coherent
         num_hidden_layers = config.num_hidden_layers
         if getattr(config, "num_kv_shared_layers", None) is not None:
-            num_hidden_layers += config.num_kv_shared_layers
+            num_hidden_layers -= config.num_kv_shared_layers
         self.assertEqual(num_hidden_layers, len(past_key_values))
 
         # Check each layer has the correct shape
