@@ -265,6 +265,7 @@ _import_structure = {
         "VptqConfig",
     ],
     "video_utils": [],
+    "utils.kernel_config": ["KernelConfig"],
 }
 
 # tokenizers-backed objects
@@ -355,21 +356,21 @@ else:
         "DynamicLayer",
         "StaticLayer",
         "StaticSlidingWindowLayer",
-        "SlidingWindowLayer",
-        "ChunkedSlidingLayer",
         "QuantoQuantizedLayer",
         "HQQQuantizedLayer",
-        "Cache",
-        "DynamicCache",
-        "EncoderDecoderCache",
+        "SlidingWindowLayer",
+        "ChunkedSlidingLayer",
         "HQQQuantizedCache",
         "HybridCache",
         "HybridChunkedCache",
         "OffloadedCache",
         "OffloadedStaticCache",
-        "QuantizedCache",
         "QuantoQuantizedCache",
         "SlidingWindowCache",
+        "Cache",
+        "DynamicCache",
+        "EncoderDecoderCache",
+        "QuantizedCache",
         "StaticCache",
     ]
     _import_structure["data.datasets"] = [
@@ -461,7 +462,6 @@ else:
     _import_structure["pytorch_utils"] = [
         "Conv1D",
         "apply_chunking_to_forward",
-        "prune_layer",
         "infer_device",
     ]
     _import_structure["time_series_utils"] = []
@@ -692,7 +692,6 @@ if TYPE_CHECKING:
     from .processing_utils import ProcessorMixin as ProcessorMixin
     from .pytorch_utils import Conv1D as Conv1D
     from .pytorch_utils import apply_chunking_to_forward as apply_chunking_to_forward
-    from .pytorch_utils import prune_layer as prune_layer
 
     # Tokenization
     from .tokenization_utils import PreTrainedTokenizer as PreTrainedTokenizer
@@ -706,8 +705,6 @@ if TYPE_CHECKING:
 
     # Trainer
     from .trainer import Trainer as Trainer
-
-    # Trainer
     from .trainer_callback import DefaultFlowCallback as DefaultFlowCallback
     from .trainer_callback import EarlyStoppingCallback as EarlyStoppingCallback
     from .trainer_callback import PrinterCallback as PrinterCallback
@@ -754,8 +751,9 @@ if TYPE_CHECKING:
     from .utils import is_torch_npu_available as is_torch_npu_available
     from .utils import is_torch_xla_available as is_torch_xla_available
     from .utils import is_torch_xpu_available as is_torch_xpu_available
+    from .utils.kernel_config import KernelConfig as KernelConfig
 
-    # bitsandbytes config
+    # Quantization config
     from .utils.quantization_config import AqlmConfig as AqlmConfig
     from .utils.quantization_config import AutoRoundConfig as AutoRoundConfig
     from .utils.quantization_config import AwqConfig as AwqConfig
@@ -775,7 +773,6 @@ if TYPE_CHECKING:
     from .utils.quantization_config import TorchAoConfig as TorchAoConfig
     from .utils.quantization_config import VptqConfig as VptqConfig
     from .video_processing_utils import BaseVideoProcessor as BaseVideoProcessor
-
 else:
     import sys
 

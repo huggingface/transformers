@@ -317,7 +317,7 @@ class CodeGenModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         {"feature-extraction": CodeGenModel, "text-generation": CodeGenForCausalLM} if is_torch_available() else {}
     )
     fx_compatible = False
-    test_pruning = False
+
     test_missing_keys = False
 
     # special case for DoubleHeads model
