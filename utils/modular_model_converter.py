@@ -978,10 +978,14 @@ def replace_class_node(
             if m.matches(value_node, m.Dict()):
                 for element in value_node.elements:
                     if m.matches(element, m.DictElement()):
-                        old_key = element.key.evaluated_value if hasattr(element.key, 'evaluated_value') else None
-                        new_val = element.value.evaluated_value if hasattr(element.value, 'evaluated_value') else None
+                        old_key = element.key.evaluated_value if hasattr(element.key, "evaluated_value") else None
+                        new_val = element.value.evaluated_value if hasattr(element.value, "evaluated_value") else None
                         if old_key and new_val:
-                            transformed_key = preserve_case_replace(old_key, renamer.patterns, renamer.cased_new_name) if renamer else old_key
+                            transformed_key = (
+                                preserve_case_replace(old_key, renamer.patterns, renamer.cased_new_name)
+                                if renamer
+                                else old_key
+                            )
                             attribute_renames[transformed_key] = new_val
         modular_class_attributes.pop("_attribute_renames")
 
