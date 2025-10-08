@@ -253,21 +253,7 @@ A [`StoppingCriteria`] can be used to change when to stop generation (other than
 
 [[autodoc]] QuantizedCache
 
-[[autodoc]] QuantoQuantizedCache
-
-[[autodoc]] HQQQuantizedCache
-
-[[autodoc]] OffloadedCache
-
 [[autodoc]] StaticCache
-
-[[autodoc]] OffloadedStaticCache
-
-[[autodoc]] HybridCache
-
-[[autodoc]] HybridChunkedCache
-
-[[autodoc]] SlidingWindowCache
 
 [[autodoc]] EncoderDecoderCache
     - to_legacy_cache
