@@ -163,7 +163,7 @@ class MimiModelTester:
 class MimiModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (MimiModel,) if is_torch_available() else ()
     is_encoder_decoder = True
-    test_pruning = False
+
     test_resize_embeddings = False
     test_torchscript = False
 

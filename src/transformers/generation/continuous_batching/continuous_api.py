@@ -599,7 +599,8 @@ class ContinuousBatchingManager:
         streaming: bool = True,
         slice_inputs: bool = True,
     ):
-        """Initialize the continuous batching manager.
+        """
+        Initialize the continuous batching manager.
 
         Args:
             model: The language model for generation
@@ -607,11 +608,18 @@ class ContinuousBatchingManager:
             max_queue_size: Maximum size of the request queue (0 = unlimited)
             streaming: Whether to stream tokens as they are generated
         """
-        self.model = model.eval()
         if "paged|" not in model.config._attn_implementation:
-            attn_implementation = "paged|" + self.model.config._attn_implementation
-            load_and_register_kernel(attn_implementation)
-            model.set_attn_implementation(attn_implementation)
+            attn_implementation = f"paged|{model.config._attn_implementation}"
+
+            from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+
+            if attn_implementation not in ALL_ATTENTION_FUNCTIONS._global_mapping:  # when its a kernel
+                from ...integrations.flash_paged import paged_attention_forward
+
+                load_and_register_kernel(attn_implementation, paged_attention_forward)
+
+            model.config._attn_implementation = attn_implementation
+        self.model = model.eval()
         generation_config = model.generation_config if generation_config is None else generation_config
         self.generation_config = generation_config
         self.input_queue = queue.Queue(maxsize=max_queue_size)

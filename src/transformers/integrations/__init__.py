@@ -34,10 +34,7 @@ _import_structure = {
     "bitsandbytes": [
         "dequantize_and_replace",
         "get_keys_to_not_convert",
-        "replace_8bit_linear",
         "replace_with_bnb_linear",
-        "set_module_8bit_tensor_to_device",
-        "set_module_quantized_tensor_to_device",
         "validate_bnb_backend_availability",
     ],
     "deepspeed": [
@@ -184,10 +181,7 @@ if TYPE_CHECKING:
     from .bitsandbytes import (
         dequantize_and_replace,
         get_keys_to_not_convert,
-        replace_8bit_linear,
         replace_with_bnb_linear,
-        set_module_8bit_tensor_to_device,
-        set_module_quantized_tensor_to_device,
         validate_bnb_backend_availability,
     )
     from .deepspeed import (
