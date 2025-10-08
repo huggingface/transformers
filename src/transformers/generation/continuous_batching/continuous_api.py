@@ -28,7 +28,6 @@ from tqdm import tqdm
 from ...configuration_utils import PreTrainedConfig
 from ...generation.configuration_utils import GenerationConfig
 from ...integrations.hub_kernels import load_and_register_kernel
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...utils.logging import logging
 from ...utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
 from .cache import PagedAttentionCache
@@ -611,6 +610,9 @@ class ContinuousBatchingManager:
         """
         if "paged|" not in model.config._attn_implementation:
             attn_implementation = f"paged|{model.config._attn_implementation}"
+
+            from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+
             if attn_implementation not in ALL_ATTENTION_FUNCTIONS._global_mapping:  # when its a kernel
                 from ...integrations.flash_paged import paged_attention_forward
 
