@@ -186,7 +186,7 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_pruning = False
+
     fx_compatible = False
     model_tester_class = BltModelTester
     rotary_embedding_layer = BltRotaryEmbedding  # Enables RoPE tests if set
