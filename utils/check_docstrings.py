@@ -42,6 +42,7 @@ import operator as op
 import os
 import re
 from collections import OrderedDict
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional, Union
 
@@ -57,6 +58,18 @@ from transformers.utils.auto_docstring import (
     parse_docstring,
     set_min_indent,
 )
+
+
+@dataclass
+class ASTIndexes:
+    """Clean data structure holding all precomputed AST indexes for a file."""
+
+    def_line_to_kind: dict[int, str]
+    deco_line_to_custom_args: dict[int, str]
+    deco_line_to_def_line: dict[int, int]
+    def_line_to_body_start: dict[int, int]
+    def_line_to_args: dict[int, list[str]]
+    auto_doc_info_by_def_line: dict[int, dict]
 
 
 PATH_TO_REPO = Path(__file__).parent.parent.resolve()
@@ -1102,15 +1115,14 @@ def generate_new_docstring_for_function(
     lines,
     current_line_end,
     custom_args_dict,
-    def_line_to_body_start,
-    def_line_to_args: dict[int, list[str]],
+    ast_indexes: ASTIndexes,
 ):
     """
     Wrapper for function docstring generation using the generalized helper.
     """
-    sig_end_line = def_line_to_body_start.get(current_line_end, current_line_end + 1)
+    sig_end_line = ast_indexes.def_line_to_body_start.get(current_line_end, current_line_end + 1)
     # Use precomputed args from AST indexes
-    args_in_signature = def_line_to_args[current_line_end]
+    args_in_signature = ast_indexes.def_line_to_args[current_line_end]
     docstring_start_line = sig_end_line if '"""' in lines[sig_end_line] else None
     return generate_new_docstring_for_signature(
         lines,
@@ -1126,8 +1138,7 @@ def generate_new_docstring_for_class(
     lines,
     current_line_end,
     custom_args_dict,
-    def_line_to_body_start,
-    def_line_to_args: dict[int, list[str]],
+    ast_indexes: ASTIndexes,
 ):
     """
     Wrapper for class docstring generation (via __init__) using the generalized helper.
@@ -1150,9 +1161,9 @@ def generate_new_docstring_for_class(
             return "", None, None, [], [], []
 
     if found_init_method:
-        sig_end_line = def_line_to_body_start.get(sig_start_line, sig_start_line + 1)
+        sig_end_line = ast_indexes.def_line_to_body_start.get(sig_start_line, sig_start_line + 1)
         # Use precomputed args from AST indexes
-        args_in_signature = def_line_to_args[sig_start_line]
+        args_in_signature = ast_indexes.def_line_to_args[sig_start_line]
     else:
         # we have a ModelOutput class, the class attributes are the args
         sig_end_line = sig_start_line + 1
@@ -1271,13 +1282,13 @@ def _build_ast_indexes(source: str):
                         # plain @auto_docstring (no args)
                         pass
                     auto_doc_info_by_def_line[def_line0] = info
-    return (
-        def_line_to_kind,
-        deco_line_to_custom_args,
-        deco_line_to_def_line,
-        def_line_to_body_start,
-        def_line_to_args,
-        auto_doc_info_by_def_line,
+    return ASTIndexes(
+        def_line_to_kind=def_line_to_kind,
+        deco_line_to_custom_args=deco_line_to_custom_args,
+        deco_line_to_def_line=deco_line_to_def_line,
+        def_line_to_body_start=def_line_to_body_start,
+        def_line_to_args=def_line_to_args,
+        auto_doc_info_by_def_line=auto_doc_info_by_def_line,
     )
 
 
@@ -1286,11 +1297,7 @@ def update_file_with_new_docstrings(
     lines,
     line_starts_candidates,
     line_ends_candidates,
-    precomputed_def_line_to_kind: dict[int, str],
-    precomputed_deco_line_to_custom_args: dict[int, str],
-    precomputed_def_line_to_body_start: dict[int, int],
-    precomputed_def_line_to_args: dict[int, tuple[list[str], Optional[str]]],
-    precomputed_autodoc_info: dict[int, dict],
+    ast_indexes: ASTIndexes,
     overwrite=False,
 ):
     """
@@ -1305,17 +1312,12 @@ def update_file_with_new_docstrings(
     docstring_args_ro_remove_warnings = []
 
     # Use precomputed AST indexes
-    def_line_to_kind = precomputed_def_line_to_kind
-    deco_line_to_custom_args = precomputed_deco_line_to_custom_args
-    def_line_to_body_start = precomputed_def_line_to_body_start
-    def_line_to_args = precomputed_def_line_to_args
-    auto_doc_info_by_def_line = precomputed_autodoc_info or {}
 
     while index <= len(line_starts_candidates):
         custom_args_dict = {}
         # Prefer precomputed info if available
-        custom_args_text = deco_line_to_custom_args.get(current_line_start + 1)
-        info = auto_doc_info_by_def_line.get(current_line_end)
+        custom_args_text = ast_indexes.deco_line_to_custom_args.get(current_line_start + 1)
+        info = ast_indexes.auto_doc_info_by_def_line.get(current_line_end)
         if info and info.get("custom_args_text"):
             custom_args_text = info["custom_args_text"]
         if custom_args_text:
@@ -1323,7 +1325,7 @@ def update_file_with_new_docstrings(
         new_docstring = ""
         modify_class_docstring = False
         # Detect kind via AST map first
-        kind = def_line_to_kind.get(current_line_end)
+        kind = ast_indexes.def_line_to_kind.get(current_line_end)
         # Function
         if kind == "function":
             (
@@ -1337,8 +1339,7 @@ def update_file_with_new_docstrings(
                 lines,
                 current_line_end,
                 custom_args_dict,
-                def_line_to_body_start,
-                def_line_to_args,
+                ast_indexes,
             )
         # Class
         elif kind == "class":
@@ -1353,8 +1354,7 @@ def update_file_with_new_docstrings(
                 lines,
                 current_line_end,
                 custom_args_dict,
-                def_line_to_body_start,
-                def_line_to_args,
+                ast_indexes,
             )
             modify_class_docstring = class_sig_line_end is not None
         # Add warnings if needed
@@ -1423,29 +1423,18 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
             content = f.read()
         lines = content.split("\n")
         # Build indexes once per file and reuse
-        (
-            def_line_to_kind,
-            deco_line_to_custom_args,
-            deco_line_to_def_line,
-            def_line_to_body_start,
-            def_line_to_args,
-            auto_doc_info_by_def_line,
-        ) = _build_ast_indexes(content)
+        ast_indexes = _build_ast_indexes(content)
         # Derive candidate lines directly from decorator line/index map
-        line_starts_candidates = sorted(deco_line_to_def_line.keys())
-        line_ends_candidates = [deco_line_to_def_line[start] - 1 for start in line_starts_candidates]
+        line_starts_candidates = sorted(ast_indexes.deco_line_to_def_line.keys())
+        line_ends_candidates = [ast_indexes.deco_line_to_def_line[start] - 1 for start in line_starts_candidates]
         missing_docstring_args_warnings, fill_docstring_args_warnings, docstring_args_ro_remove_warnings = (
             update_file_with_new_docstrings(
                 candidate_file,
                 lines,
                 [i - 1 for i in line_starts_candidates],  # convert to 0-based
                 line_ends_candidates,
+                ast_indexes,
                 overwrite=overwrite,
-                precomputed_def_line_to_kind=def_line_to_kind,
-                precomputed_deco_line_to_custom_args=deco_line_to_custom_args,
-                precomputed_def_line_to_body_start=def_line_to_body_start,
-                precomputed_def_line_to_args=def_line_to_args,
-                precomputed_autodoc_info=auto_doc_info_by_def_line,
             )
         )
         if missing_docstring_args_warnings:
