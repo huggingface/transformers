@@ -35,7 +35,6 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import TransformersKwargs, auto_docstring, is_accelerate_available
-from ..dinov3_vit.modeling_dinov3_vit import DINOv3ViTEmbeddings
 from ...utils.generic import check_model_inputs
 from .configuration_eomt_dinov3 import EomtDinov3Config
 
@@ -46,6 +45,41 @@ if is_scipy_available():
 if is_accelerate_available():
     from accelerate import PartialState
     from accelerate.utils import reduce
+
+
+class EomtDinov3ViTEmbeddings(nn.Module):
+    """
+    Construct the CLS token, mask token, position and patch embeddings.
+    """
+
+    def __init__(self, config: EomtDinov3Config):
+        super().__init__()
+        self.config = config
+        self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
+        self.register_tokens = nn.Parameter(torch.empty(1, config.num_register_tokens, config.hidden_size))
+        self.patch_embeddings = nn.Conv2d(
+            config.num_channels, config.hidden_size, kernel_size=config.patch_size, stride=config.patch_size
+        )
+
+    def forward(self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.Tensor] = None) -> torch.Tensor:
+        batch_size = pixel_values.shape[0]
+        target_dtype = self.patch_embeddings.weight.dtype
+
+        # (batch_size, num_channels, height, width) -> (batch_size, num_patches, hidden_size)
+        patch_embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
+        patch_embeddings = patch_embeddings.flatten(2).transpose(1, 2)
+
+        if bool_masked_pos is not None:
+            mask_token = self.mask_token.to(patch_embeddings.dtype)
+            patch_embeddings = torch.where(bool_masked_pos.unsqueeze(-1), mask_token, patch_embeddings)
+
+        # Add CLS and register tokens
+        cls_token = self.cls_token.expand(batch_size, -1, -1)
+        register_tokens = self.register_tokens.expand(batch_size, -1, -1)
+        embeddings = torch.cat([cls_token, register_tokens, patch_embeddings], dim=1)
+
+        return embeddings
 
 
 @dataclass
@@ -1110,7 +1144,7 @@ class EomtDinov3PreTrainedModel(PreTrainedModel):
         elif isinstance(module, EomtDinov3LayerScale):
             if hasattr(module, "lambda1"):
                 module.lambda1.data.fill_(self.config.layerscale_value)
-        elif isinstance(module, DINOv3ViTEmbeddings):
+        elif isinstance(module, EomtDinov3ViTEmbeddings):
             module.cls_token.data = nn.init.trunc_normal_(
                 module.cls_token.data.to(torch.float32), mean=0.0, std=std
             ).to(module.cls_token.dtype)
@@ -1132,15 +1166,12 @@ class EomtDinov3ForUniversalSegmentation(EomtDinov3PreTrainedModel):
         self.num_prefix_tokens = 1 + config.num_register_tokens
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-        self.embeddings = DINOv3ViTEmbeddings(config)
-        self.embeddings.register_parameter("mask_token", None)
+        self.embeddings = EomtDinov3ViTEmbeddings(config)
         self.embeddings.num_prefix_tokens = self.num_prefix_tokens
-        self.rope_embeddings = EomtDinov3RopePositionEmbedding(config)
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         self.query = nn.Embedding(config.num_queries, config.hidden_size)
         self.layers = nn.ModuleList([EomtDinov3Layer(config) for _ in range(config.num_hidden_layers)])
-
         self.upscale_block = EomtDinov3ScaleBlock(config)
         self.mask_head = EomtDinov3MaskHead(config)
 
@@ -1156,6 +1187,9 @@ class EomtDinov3ForUniversalSegmentation(EomtDinov3PreTrainedModel):
         self.criterion = EomtDinov3Loss(config=config, weight_dict=self.weight_dict)
 
         self.register_buffer("attn_mask_probs", torch.ones(config.num_blocks))
+        self.embeddings.register_parameter("mask_token", None)
+
+        self.rope_embeddings = EomtDinov3RopePositionEmbedding(config)
 
         self.post_init()
 

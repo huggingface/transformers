@@ -223,6 +223,10 @@ class EomtDinov3Config(EomtConfig):
         self.pos_embed_rescale = pos_embed_rescale
 
 
+class EomtDinov3ViTEmbeddings(DINOv3ViTEmbeddings):
+    pass
+
+
 class EomtDinov3ForUniversalSegmentationOutput(EomtForUniversalSegmentationOutput):
     pass
 
@@ -309,7 +313,7 @@ class EomtDinov3PreTrainedModel(PreTrainedModel):
         elif isinstance(module, EomtDinov3LayerScale):
             if hasattr(module, "lambda1"):
                 module.lambda1.data.fill_(self.config.layerscale_value)
-        elif isinstance(module, DINOv3ViTEmbeddings):
+        elif isinstance(module, EomtDinov3ViTEmbeddings):
             module.cls_token.data = nn.init.trunc_normal_(
                 module.cls_token.data.to(torch.float32), mean=0.0, std=std
             ).to(module.cls_token.dtype)
@@ -323,9 +327,9 @@ class EomtDinov3PreTrainedModel(PreTrainedModel):
 )
 class EomtDinov3ForUniversalSegmentation(EomtDinov3PreTrainedModel, EomtForUniversalSegmentation):
     def __init__(self, config: EomtDinov3Config):
-        EomtForUniversalSegmentation.__init__(self, config)
+        super().__init__(config)
 
-        self.embeddings = DINOv3ViTEmbeddings(config)
+        self.embeddings = EomtDinov3ViTEmbeddings(config)
         self.embeddings.register_parameter("mask_token", None)
         self.embeddings.num_prefix_tokens = self.num_prefix_tokens
 
