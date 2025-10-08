@@ -45,7 +45,6 @@ from transformers import (
     TrainerCallback,
     TrainingArguments,
     default_data_collator,
-    enable_full_determinism,
     get_polynomial_decay_schedule_with_warmup,
     is_datasets_available,
     is_torch_available,
@@ -66,10 +65,8 @@ from transformers.testing_utils import (
     backend_max_memory_allocated,
     backend_memory_allocated,
     backend_reset_max_memory_allocated,
-    backend_reset_peak_memory_stats,
     evaluate_side_effect_factory,
     execute_subprocess_async,
-    get_gpu_count,
     get_steps_per_epoch,
     get_tests_dir,
     is_staging_test,
@@ -97,9 +94,7 @@ from transformers.testing_utils import (
     require_torch_gpu,
     require_torch_multi_accelerator,
     require_torch_non_multi_accelerator,
-    require_torch_non_multi_gpu,
     require_torch_optimi,
-    require_torch_tensorrt_fx,
     require_torch_tf32,
     require_torch_up_to_2_accelerators,
     require_vision,
@@ -1960,7 +1955,11 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             train_dataset = RepeatDataset(x)
 
             args = TrainingArguments(
-                self.get_auto_remove_tmp_dir(), learning_rate=1e-2, logging_steps=5, max_steps=20, use_liger_kernel=True
+                self.get_auto_remove_tmp_dir(),
+                learning_rate=1e-2,
+                logging_steps=5,
+                max_steps=20,
+                use_liger_kernel=True,
             )
             trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
 
@@ -2773,6 +2772,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     def test_evaluate(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(a=1.5, b=2.5, compute_metrics=AlmostAccuracy(), output_dir=tmp_dir)
+            # the model loss don't take into account num_items_in_batch
+            trainer.model_accepts_loss_kwargs = False
             results = trainer.evaluate()
 
             x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
@@ -2786,6 +2787,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer = get_regression_trainer(
                 a=1.5, b=2.5, eval_len=66, compute_metrics=AlmostAccuracy(), output_dir=tmp_dir
             )
+            # the model loss don't take into account num_items_in_batch
+            trainer.model_accepts_loss_kwargs = False
             results = trainer.evaluate()
 
             x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
@@ -2803,6 +2806,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 preprocess_logits_for_metrics=lambda logits, labels: logits + 1,
                 output_dir=tmp_dir,
             )
+            # the model loss don't take into account num_items_in_batch
+            trainer.model_accepts_loss_kwargs = False
             results = trainer.evaluate()
 
             x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
@@ -2817,6 +2822,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer = get_regression_trainer(
                 a=1.5, b=2.5, compute_metrics=AlmostAccuracyBatched(), batch_eval_metrics=True, output_dir=tmp_dir
             )
+            # the model loss don't take into account num_items_in_batch
+            trainer.model_accepts_loss_kwargs = False
             results = trainer.evaluate()
 
             x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
@@ -3910,8 +3917,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         with tempfile.TemporaryDirectory() as tmp_dir:
             args = RegressionTrainingArguments(output_dir=tmp_dir)
             trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset, compute_metrics=AlmostAccuracy())
+            # the model loss don't take into account num_items_in_batch
+            trainer.model_accepts_loss_kwargs = False
             results = trainer.evaluate()
-
             x, y = trainer.eval_dataset.dataset.x, trainer.eval_dataset.dataset.ys[0]
             pred = 1.5 * x + 2.5
             expected_loss = ((pred - y) ** 2).mean()
@@ -3938,7 +3946,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         with tempfile.TemporaryDirectory() as tmp_dir:
             args = RegressionTrainingArguments(output_dir=tmp_dir)
             trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset, compute_metrics=AlmostAccuracy())
-
             preds = trainer.predict(trainer.eval_dataset).predictions
             x = eval_dataset.dataset.x
             self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
@@ -4244,11 +4251,11 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer = get_regression_trainer(output_dir=tmp_dir)
             metrics = trainer.train()
             original_train_loss = metrics.training_loss
-            
+
             trainer = get_regression_trainer(torch_compile=True, output_dir=tmp_dir)
             metrics = trainer.train()
             self.assertAlmostEqual(metrics.training_loss, original_train_loss)
- 
+
     @require_torch_gpu
     @pytest.mark.torch_compile_test
     def test_torch_compile_eval(self):
@@ -4257,10 +4264,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             metrics = trainer.evaluate()
             original_eval_loss = metrics["eval_loss"]
 
-            trainer = get_regression_trainer(torch_compile=True, output_dir=tmp_dir
-            )
+            trainer = get_regression_trainer(torch_compile=True, output_dir=tmp_dir)
             metrics = trainer.evaluate()
-    
+
             self.assertAlmostEqual(metrics["eval_loss"], original_eval_loss)
 
     @require_torch_accelerator

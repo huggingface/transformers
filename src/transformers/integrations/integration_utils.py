@@ -417,8 +417,11 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
 
         Assumes that `_objective`, defined above, is a function.
         """
-        if is_datasets_available() and packaging.version.parse(importlib.metadata.version("datasets")) < packaging.version.parse("4.0.0"):
+        if is_datasets_available() and packaging.version.parse(
+            importlib.metadata.version("datasets")
+        ) < packaging.version.parse("4.0.0"):
             import datasets.load
+
             dynamic_modules_path = os.path.join(datasets.load.init_dynamic_modules(), "__init__.py")
             # load dynamic_modules from path
             spec = importlib.util.spec_from_file_location("datasets_modules", dynamic_modules_path)

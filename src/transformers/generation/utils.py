@@ -2044,7 +2044,6 @@ class GenerationMixin(ContinuousMixin):
         bos_token_tensor = _tensor_or_none(generation_config.bos_token_id, device=device)
         eos_token_tensor = _tensor_or_none(generation_config.eos_token_id, device=device)
         pad_token_tensor = _tensor_or_none(generation_config.pad_token_id, device=device)
-        print(generation_config.decoder_start_token_id)
         decoder_start_token_tensor = _tensor_or_none(generation_config.decoder_start_token_id, device=device)
 
         # for BC we also try to get `decoder_start_token_id` or `bos_token_id` (#30892)
