@@ -192,7 +192,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         encoder = list(self.added_tokens_encoder.keys()) + [str(token) for token in tokens_to_add]
         # if some of the special tokens are strings, we check if we don't already have a token
         tokens_to_add += [
-            token for token in self.all_special_tokens_extended if token not in encoder and token not in tokens_to_add
+            token for token in self.all_special_tokens if token not in encoder and token not in tokens_to_add
         ]
 
         if len(tokens_to_add) > 0:
@@ -735,18 +735,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         if isinstance(token_ids, int):
             token_ids = [token_ids]
-        text = self._tokenizer.decode(token_ids, skip_special_tokens=skip_special_tokens)
-
-        clean_up_tokenization_spaces = (
-            clean_up_tokenization_spaces
-            if clean_up_tokenization_spaces is not None
-            else self.clean_up_tokenization_spaces
-        )
-        if clean_up_tokenization_spaces:
-            clean_text = self.clean_up_tokenization(text)
-            return clean_text
-        else:
-            return text
+        return self._tokenizer.decode(token_ids, skip_special_tokens=skip_special_tokens)
 
     def _save_pretrained(
         self,

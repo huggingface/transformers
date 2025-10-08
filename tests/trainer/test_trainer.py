@@ -1530,10 +1530,12 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         tiny_model = get_peft_model(tiny_model, peft_config, "adapter1")
         tiny_model.add_adapter("adapter2", peft_config)
 
+        max_len_single_sentence = self.model_max_length - self.num_special_tokens_to_add(pair=False)
+
         train_dataset = LineByLineTextDataset(
             tokenizer=tokenizer,
             file_path=PATH_SAMPLE_TEXT,
-            block_size=tokenizer.max_len_single_sentence,
+            block_size=max_len_single_sentence,
         )
         for example in train_dataset.examples:
             example["labels"] = example["input_ids"]
@@ -3823,10 +3825,13 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         MODEL_ID = "openai-community/gpt2"
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
         model = AutoModelForCausalLM.from_pretrained(MODEL_ID)
+
+        max_len_single_sentence = self.model_max_length - self.num_special_tokens_to_add(pair=False)
+
         dataset = LineByLineTextDataset(
             tokenizer=tokenizer,
             file_path=PATH_SAMPLE_TEXT,
-            block_size=tokenizer.max_len_single_sentence,
+            block_size=max_len_single_sentence,
         )
         for example in dataset.examples:
             example["labels"] = example["input_ids"]
@@ -3853,10 +3858,11 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     def test_trainer_eval_lm(self):
         MODEL_ID = "distilbert/distilroberta-base"
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
+        max_len_single_sentence = self.model_max_length - self.num_special_tokens_to_add(pair=False)
         dataset = LineByLineTextDataset(
             tokenizer=tokenizer,
             file_path=PATH_SAMPLE_TEXT,
-            block_size=tokenizer.max_len_single_sentence,
+            block_size=max_len_single_sentence,
         )
         self.assertEqual(len(dataset), 31)
 
@@ -5147,11 +5153,12 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
         model = BasicTextGenerationModel(vocab_size=tokenizer.vocab_size, hidden_size=32)
         # Note that this class does not have a config attribute
+        max_len_single_sentence = self.model_max_length - self.num_special_tokens_to_add(pair=False)
 
         train_dataset = LineByLineTextDataset(
             tokenizer=tokenizer,
             file_path=PATH_SAMPLE_TEXT,
-            block_size=tokenizer.max_len_single_sentence,
+            block_size=max_len_single_sentence,
         )
         for example in train_dataset.examples:
             example["labels"] = example["input_ids"]

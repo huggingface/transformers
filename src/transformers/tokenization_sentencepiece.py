@@ -330,7 +330,7 @@ class PreTrainedSentencePieceTokenizer(PreTrainedTokenizerBase):
         # 6. If some of the special tokens are not part of the vocab, we add them, at the end.
         # the order of addition is the same as self.SPECIAL_TOKENS_ATTRIBUTES following `tokenizers`
         self._add_tokens(
-            [token for token in self.all_special_tokens_extended if token not in self._added_tokens_encoder],
+            [token for token in self.all_special_tokens if token not in self._added_tokens_encoder],
             special_tokens=True,
         )
 
@@ -779,9 +779,6 @@ class PreTrainedSentencePieceTokenizer(PreTrainedTokenizerBase):
             verbose=verbose,
         )
 
-    def _batch_encode_plus(self, *args, **kwargs):
-        raise NotImplementedError("Batch encoding is handled directly in _encode_plus for this tokenizer backend.")
-
     def prepare_for_tokenization(
         self, text: str, is_split_into_words: bool = False, **kwargs
     ) -> tuple[str, dict[str, Any]]:
@@ -831,9 +828,8 @@ class PreTrainedSentencePieceTokenizer(PreTrainedTokenizerBase):
                     "ids is already formatted with special tokens for the model."
                 )
 
-            return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
-            )
+            return [1 if token in  self.all_special_ids  else 0 for token in token_ids_0]
+
         return [0] * ((len(token_ids_1) if token_ids_1 else 0) + len(token_ids_0))
 
     @overload
@@ -998,16 +994,7 @@ class PreTrainedSentencePieceTokenizer(PreTrainedTokenizerBase):
         else:
             text = "".join(sub_texts)
 
-        clean_up_tokenization_spaces = (
-            clean_up_tokenization_spaces
-            if clean_up_tokenization_spaces is not None
-            else self.clean_up_tokenization_spaces
-        )
-        if clean_up_tokenization_spaces:
-            clean_text = self.clean_up_tokenization(text)
-            return clean_text
-        else:
-            return text
+        return text
 
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def prepare_for_model(
