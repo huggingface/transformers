@@ -854,7 +854,6 @@ class Trainer:
         model_has_generation_config = (
             hasattr(self.model, "generation_config") and self.model.generation_config is not None
         )
-        print(self.model.generation_config)
         updated_tokens = {}
 
         # 1 - Align EOS token. EOS is more complex than the others, as `generation_config` may hold more than one EOS
