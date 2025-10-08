@@ -203,15 +203,6 @@ class MiniMaxCache(DynamicCache):
     def __len__(self):
         return max(super().__len__(), len(self.linear_cache))
 
-    def __getitem__(self, layer_idx: int):
-        if layer_idx < len(self.linear_cache) and self.linear_cache[layer_idx] != []:
-            return (self.linear_cache[layer_idx],)
-        return super().__getitem__(layer_idx)
-
-    def __iter__(self):
-        for layer_idx in range(len(self)):
-            yield self[layer_idx]
-
     def batch_repeat_interleave(self, repeats: int):
         for layer_idx in range(len(self)):
             if self.linear_cache[layer_idx] != []:
