@@ -235,20 +235,6 @@ class EomtDinov3Loss(EomtLoss):
     pass
 
 
-class EomtDinov3Embeddings(DINOv3ViTEmbeddings):
-    def __init__(self, config: EomtDinov3Config) -> None:
-        super().__init__(config)
-
-        self.num_prefix_tokens = 1 + config.num_register_tokens
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        embeddings = super().forward(pixel_values)
-        embeddings = self.dropout(embeddings)
-
-        return embeddings
-
-
 class EomtDinov3Attention(DINOv3ViTAttention):
     pass
 
@@ -323,7 +309,7 @@ class EomtDinov3PreTrainedModel(PreTrainedModel):
         elif isinstance(module, EomtDinov3LayerScale):
             if hasattr(module, "lambda1"):
                 module.lambda1.data.fill_(self.config.layerscale_value)
-        elif isinstance(module, EomtDinov3Embeddings):
+        elif isinstance(module, DINOv3ViTEmbeddings):
             module.cls_token.data = nn.init.trunc_normal_(
                 module.cls_token.data.to(torch.float32), mean=0.0, std=std
             ).to(module.cls_token.dtype)
@@ -337,32 +323,18 @@ class EomtDinov3PreTrainedModel(PreTrainedModel):
 )
 class EomtDinov3ForUniversalSegmentation(EomtDinov3PreTrainedModel, EomtForUniversalSegmentation):
     def __init__(self, config: EomtDinov3Config):
-        PreTrainedModel.__init__(self, config)
-        self.config = config
-        self.num_hidden_layers = config.num_hidden_layers
+        EomtForUniversalSegmentation.__init__(self, config)
 
-        self.embeddings = EomtDinov3Embeddings(config)
+        self.embeddings = DINOv3ViTEmbeddings(config)
+        self.embeddings.register_parameter("mask_token", None)
+        self.embeddings.num_prefix_tokens = self.num_prefix_tokens
+
         self.rope_embeddings = EomtDinov3RopePositionEmbedding(config)
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-        self.query = nn.Embedding(config.num_queries, config.hidden_size)
         self.layers = nn.ModuleList([EomtDinov3Layer(config) for _ in range(config.num_hidden_layers)])
-
         self.upscale_block = EomtDinov3ScaleBlock(config)
         self.mask_head = EomtDinov3MaskHead(config)
 
-        self.class_predictor = nn.Linear(config.hidden_size, config.num_labels + 1)
-
-        self.grid_size = (config.image_size // config.patch_size, config.image_size // config.patch_size)
-        self.weight_dict: dict[str, float] = {
-            "loss_cross_entropy": config.class_weight,
-            "loss_mask": config.mask_weight,
-            "loss_dice": config.dice_weight,
-        }
-
         self.criterion = EomtDinov3Loss(config=config, weight_dict=self.weight_dict)
-
-        self.register_buffer("attn_mask_probs", torch.ones(config.num_blocks))
 
         self.post_init()
 

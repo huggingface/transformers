@@ -689,8 +689,6 @@ class EomtEmbeddings(nn.Module):
 
         self.patch_embeddings = EomtPatchEmbeddings(config)
         num_patches = self.patch_embeddings.num_patches
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.num_prefix_tokens = 1 + config.num_register_tokens  # 1 for [CLS]
         self.position_embeddings = nn.Embedding(num_patches, config.hidden_size)
         self.register_buffer("position_ids", torch.arange(num_patches).expand((1, -1)), persistent=False)
 
@@ -704,8 +702,6 @@ class EomtEmbeddings(nn.Module):
 
         embeddings = embeddings + self.position_embeddings(self.position_ids)
         embeddings = torch.cat([cls_tokens, register_tokens, embeddings], dim=1)
-
-        embeddings = self.dropout(embeddings)
 
         return embeddings
 
@@ -1032,7 +1028,11 @@ class EomtForUniversalSegmentation(EomtPreTrainedModel):
         super().__init__(config)
         self.config = config
         self.num_hidden_layers = config.num_hidden_layers
+        self.num_prefix_tokens = 1 + config.num_register_tokens
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
         self.embeddings = EomtEmbeddings(config)
+        self.embeddings.num_prefix_tokens = self.num_prefix_tokens
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         self.query = nn.Embedding(config.num_queries, config.hidden_size)
@@ -1109,7 +1109,7 @@ class EomtForUniversalSegmentation(EomtPreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        hidden_states = self.embeddings(pixel_values)
+        hidden_states = self.dropout(self.embeddings(pixel_values))
         position_embeddings = self.get_position_embeddings(pixel_values)
 
         for idx, layer_module in enumerate(self.layers):
@@ -1140,7 +1140,7 @@ class EomtForUniversalSegmentation(EomtPreTrainedModel):
                 )
 
                 num_query_tokens = self.config.num_queries
-                encoder_start_tokens = num_query_tokens + self.embeddings.num_prefix_tokens
+                encoder_start_tokens = num_query_tokens + self.num_prefix_tokens
 
                 # Set attention mask for queries to focus on encoder tokens based on interpolated logits
                 attention_mask[:, :num_query_tokens, encoder_start_tokens:] = interpolated_logits > 0
@@ -1203,7 +1203,7 @@ class EomtForUniversalSegmentation(EomtPreTrainedModel):
         query_tokens = logits[:, : self.config.num_queries, :]
         class_logits = self.class_predictor(query_tokens)
 
-        prefix_tokens = logits[:, self.config.num_queries + self.embeddings.num_prefix_tokens :, :]
+        prefix_tokens = logits[:, self.config.num_queries + self.num_prefix_tokens :, :]
         prefix_tokens = prefix_tokens.transpose(1, 2)
 
         prefix_tokens = prefix_tokens.reshape(prefix_tokens.shape[0], -1, *self.grid_size)

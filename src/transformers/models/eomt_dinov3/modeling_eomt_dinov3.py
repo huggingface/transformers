@@ -35,6 +35,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import TransformersKwargs, auto_docstring, is_accelerate_available
+from ..dinov3_vit.modeling_dinov3_vit import DINOv3ViTEmbeddings
 from ...utils.generic import check_model_inputs
 from .configuration_eomt_dinov3 import EomtDinov3Config
 
@@ -640,31 +641,6 @@ class EomtDinov3Loss(nn.Module):
         return num_masks
 
 
-class EomtDinov3Embeddings(nn.Module):
-    """
-    Construct the CLS token, mask token, position and patch embeddings.
-    """
-
-    def __init__(self, config: EomtDinov3Config) -> None:
-        super().__init__()
-        self.config = config
-        self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
-        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-        self.register_tokens = nn.Parameter(torch.empty(1, config.num_register_tokens, config.hidden_size))
-        self.patch_embeddings = nn.Conv2d(
-            config.num_channels, config.hidden_size, kernel_size=config.patch_size, stride=config.patch_size
-        )
-
-        self.num_prefix_tokens = 1 + config.num_register_tokens
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        embeddings = super().forward(pixel_values)
-        embeddings = self.dropout(embeddings)
-
-        return embeddings
-
-
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
@@ -1134,7 +1110,7 @@ class EomtDinov3PreTrainedModel(PreTrainedModel):
         elif isinstance(module, EomtDinov3LayerScale):
             if hasattr(module, "lambda1"):
                 module.lambda1.data.fill_(self.config.layerscale_value)
-        elif isinstance(module, EomtDinov3Embeddings):
+        elif isinstance(module, DINOv3ViTEmbeddings):
             module.cls_token.data = nn.init.trunc_normal_(
                 module.cls_token.data.to(torch.float32), mean=0.0, std=std
             ).to(module.cls_token.dtype)
@@ -1153,8 +1129,12 @@ class EomtDinov3ForUniversalSegmentation(EomtDinov3PreTrainedModel):
         super().__init__(config)
         self.config = config
         self.num_hidden_layers = config.num_hidden_layers
+        self.num_prefix_tokens = 1 + config.num_register_tokens
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-        self.embeddings = EomtDinov3Embeddings(config)
+        self.embeddings = DINOv3ViTEmbeddings(config)
+        self.embeddings.register_parameter("mask_token", None)
+        self.embeddings.num_prefix_tokens = self.num_prefix_tokens
         self.rope_embeddings = EomtDinov3RopePositionEmbedding(config)
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
@@ -1232,7 +1212,7 @@ class EomtDinov3ForUniversalSegmentation(EomtDinov3PreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        hidden_states = self.embeddings(pixel_values)
+        hidden_states = self.dropout(self.embeddings(pixel_values))
         position_embeddings = self.get_position_embeddings(pixel_values)
 
         for idx, layer_module in enumerate(self.layers):
@@ -1263,7 +1243,7 @@ class EomtDinov3ForUniversalSegmentation(EomtDinov3PreTrainedModel):
                 )
 
                 num_query_tokens = self.config.num_queries
-                encoder_start_tokens = num_query_tokens + self.embeddings.num_prefix_tokens
+                encoder_start_tokens = num_query_tokens + self.num_prefix_tokens
 
                 # Set attention mask for queries to focus on encoder tokens based on interpolated logits
                 attention_mask[:, :num_query_tokens, encoder_start_tokens:] = interpolated_logits > 0
@@ -1326,7 +1306,7 @@ class EomtDinov3ForUniversalSegmentation(EomtDinov3PreTrainedModel):
         query_tokens = logits[:, : self.config.num_queries, :]
         class_logits = self.class_predictor(query_tokens)
 
-        prefix_tokens = logits[:, self.config.num_queries + self.embeddings.num_prefix_tokens :, :]
+        prefix_tokens = logits[:, self.config.num_queries + self.num_prefix_tokens :, :]
         prefix_tokens = prefix_tokens.transpose(1, 2)
 
         prefix_tokens = prefix_tokens.reshape(prefix_tokens.shape[0], -1, *self.grid_size)
