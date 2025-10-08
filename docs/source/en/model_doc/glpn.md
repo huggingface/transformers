@@ -66,11 +66,6 @@ Image.fromarray(depth.astype("uint8"))
 
 [[autodoc]] GLPNConfig
 
-## GLPNFeatureExtractor
-
-[[autodoc]] GLPNFeatureExtractor
-    - __call__
-
 ## GLPNImageProcessor
 
 [[autodoc]] GLPNImageProcessor

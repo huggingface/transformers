@@ -62,11 +62,6 @@ print("Predicted class:", model.config.id2label[predicted_class_idx])
 [[autodoc]] PerceiverTokenizer
     - __call__
 
-## PerceiverFeatureExtractor
-
-[[autodoc]] PerceiverFeatureExtractor
-    - __call__
-
 ## PerceiverImageProcessor
 
 [[autodoc]] PerceiverImageProcessor

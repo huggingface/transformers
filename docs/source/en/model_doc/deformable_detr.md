@@ -74,12 +74,6 @@ for score, label, box in zip(results["scores"], results["labels"], results["boxe
     - preprocess
     - post_process_object_detection
 
-## DeformableDetrFeatureExtractor
-
-[[autodoc]] DeformableDetrFeatureExtractor
-    - __call__
-    - post_process_object_detection
-
 ## DeformableDetrConfig
 
 [[autodoc]] DeformableDetrConfig

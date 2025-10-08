@@ -61,11 +61,6 @@ print(model.config.id2label[predicted_label])
 
 [[autodoc]] MobileNetV1Config
 
-## MobileNetV1FeatureExtractor
-
-[[autodoc]] MobileNetV1FeatureExtractor
-    - preprocess
-
 ## MobileNetV1ImageProcessor
 
 [[autodoc]] MobileNetV1ImageProcessor

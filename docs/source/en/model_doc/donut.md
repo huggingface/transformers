@@ -71,11 +71,6 @@ print(processor.decode(outputs[0], skip_special_tokens=True))
 [[autodoc]] DonutImageProcessorFast
     - preprocess
 
-## DonutFeatureExtractor
-
-[[autodoc]] DonutFeatureExtractor
-    - __call__
-
 ## DonutProcessor
 
 [[autodoc]] DonutProcessor

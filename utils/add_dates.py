@@ -180,15 +180,6 @@ def get_contributors(file_path: str) -> str:
     if not match and result_origin_main:
         match = re.search(contributed_pattern, result_origin_main, re.IGNORECASE | re.DOTALL | re.MULTILINE)
 
-    result = (
-        result_v4_50
-        if (
-            match
-            and result_v4_50
-            and re.search(contributed_pattern, result_v4_50, re.IGNORECASE | re.DOTALL | re.MULTILINE)
-        )
-        else result_origin_main
-    )
 
     if not match:
         return ""

@@ -73,12 +73,6 @@ print(model.config.id2label[predicted_label])
 
 [[autodoc]] BeitConfig
 
-## BeitFeatureExtractor
-
-[[autodoc]] BeitFeatureExtractor
-    - __call__
-    - post_process_semantic_segmentation
-
 ## BeitImageProcessor
 
 [[autodoc]] BeitImageProcessor

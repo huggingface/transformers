@@ -84,15 +84,6 @@ for score, label, box in zip(results["scores"], results["labels"], results["boxe
     - post_process_semantic_segmentation
     - post_process_panoptic_segmentation
 
-## ConditionalDetrFeatureExtractor
-
-[[autodoc]] ConditionalDetrFeatureExtractor
-    - __call__
-    - post_process_object_detection
-    - post_process_instance_segmentation
-    - post_process_semantic_segmentation
-    - post_process_panoptic_segmentation
-
 ## ConditionalDetrModel
 
 [[autodoc]] ConditionalDetrModel
