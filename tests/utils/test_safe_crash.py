@@ -114,6 +114,33 @@ def test_raw_regex_thread_safety_crashes_under_gil0():
     pytest.fail(message)
 
 
+@pytest.mark.xfail(strict=False, reason="Compiled regex still crashes under PYTHON_GIL=0")
+def test_compiled_regex_thread_safety_crashes_under_gil0():
+    script = _regex_thread_script(
+        imports="import regex",
+        setup_code="""
+        compiled_pattern = regex.compile(pattern_text)
+
+        def match_once():
+            return compiled_pattern.match(text_to_match)
+        """,
+    )
+
+    result, message = _run_regex_thread_script("compiled regex", script)
+
+    if result.returncode == 0:
+        pytest.fail("compiled regex unexpectedly behaved thread-safely\n" + message)
+
+    if result.returncode == -11:
+        message += "\nProcess terminated with SIGSEGV (Segmentation fault)."
+
+    if message:
+        sys.stderr.write(message + "\n")
+        sys.stderr.flush()
+
+    pytest.fail(message)
+
+
 def test_threaded_stdlib_re():
     re_script = _regex_thread_script(
         imports="import re",
