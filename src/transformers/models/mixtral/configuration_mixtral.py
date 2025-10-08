@@ -133,9 +133,9 @@ class MixtralConfig(PreTrainedConfig):
     # How de we handle sharding on top of it? (update the tp plan as well)
     # and quantization, without materializing the weights
     dynamic_weight_conversion = {
-        "layers.*.block_sparse_moe.experts.*.w1": "layers*.block_sparse_moe.experts.gate_up",
-        "layers.*.block_sparse_moe.experts.*.w2": "layers*.block_sparse_moe.experts.gate_up",
-        "layers.*.block_sparse_moe.experts.*.w3": "layers*.block_sparse_moe.experts.down_proj",
+        "layers.*.block_sparse_moe.experts.*.w1": "layers.*.block_sparse_moe.experts.gate_up",
+        "layers.*.block_sparse_moe.experts.*.w2": "layers.*.block_sparse_moe.experts.gate_up",
+        "layers.*.block_sparse_moe.experts.*.w3": "layers.*.block_sparse_moe.experts.down_proj",
         "layers.*.self_attn.q_proj": "layers.*.self_attn.qkv_proj",
         "layers.*.self_attn.k_proj": "layers.*.self_attn.qkv_proj",
         "layers.*.self_attn.v_proj": "layers.*.self_attn.qkv_proj",
