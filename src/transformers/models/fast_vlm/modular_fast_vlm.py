@@ -19,11 +19,16 @@ import torch
 from torch import nn
 from torch.nn.functional import adaptive_avg_pool2d
 
-from ..llava.configuration_llava import LlavaConfig
-from ..llava.modeling_llava import LlavaModel, LlavaForConditionalGeneration, LlavaMultiModalProjector
+from ...activations import ACT2FN
 from ...configuration_utils import PretrainedConfig
 from ..auto import CONFIG_MAPPING
-from ...activations import ACT2FN
+from ..llava.configuration_llava import LlavaConfig
+from ..llava.modeling_llava import (
+    LlavaForConditionalGeneration,
+    LlavaModel,
+    LlavaMultiModalProjector,
+    LlavaPreTrainedModel,
+)
 
 
 class FastVlmConfig(LlavaConfig):
@@ -72,6 +77,7 @@ class FastVlmConfig(LlavaConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "fast_vlm"
 
     def __init__(
@@ -91,14 +97,16 @@ class FastVlmConfig(LlavaConfig):
         self.image_seq_length = image_seq_length
         if math.isqrt(image_seq_length).pow(2) != image_seq_length:
             raise ValueError(f"Inavalid image_seq_length: {image_seq_length}. It needs to be a perfect square.")
-        
+
         if vision_feature_select_strategy != "full":
             raise ValueError(
                 "Only vision_feature_select_strategy='full' supported in FastVLM!"
                 f"Got: {vision_feature_select_strategy}"
             )
-        
-        if (isinstance(vision_feature_layer, int) and vision_feature_layer >= 0) or any([layer >= 0 for layer in vision_feature_layer]):
+
+        if (isinstance(vision_feature_layer, int) and vision_feature_layer >= 0) or any(
+            layer >= 0 for layer in vision_feature_layer
+        ):
             raise ValueError(f"Only negative layer values are supported. Got {vision_feature_layer}")
 
         self.vision_feature_select_strategy = vision_feature_select_strategy
@@ -114,7 +122,7 @@ class FastVlmConfig(LlavaConfig):
                 global_pool="avg",
                 hidden_size=3072,
                 initializer_range=0.02,
-                model_args={"inference_mode": True}
+                model_args={"inference_mode": True},
             )
 
         self.vision_config = vision_config
@@ -123,17 +131,20 @@ class FastVlmConfig(LlavaConfig):
             text_config["model_type"] = text_config.get("model_type", "qwen2")
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
-            text_config = CONFIG_MAPPING["qwen2"](hidden_size=3584,
-                                                  vocab_size=152128,
-                                                  intermediate_size=18944,
-                                                  num_attention_heads=28,
-                                                  num_key_value_heads=4,
-                                                  num_hidden_layers=28)
+            text_config = CONFIG_MAPPING["qwen2"](
+                hidden_size=3584,
+                vocab_size=152128,
+                intermediate_size=18944,
+                num_attention_heads=28,
+                num_key_value_heads=4,
+                num_hidden_layers=28,
+            )
 
         self.text_config = text_config
         self.multimodal_projector_bias = multimodal_projector_bias
 
         PretrainedConfig.__init__(**kwargs)
+
 
 class FastVlmMultiModalProjector(LlavaMultiModalProjector):
     def __init__(self, config: FastVlmConfig):
@@ -155,6 +166,12 @@ class FastVlmMultiModalProjector(LlavaMultiModalProjector):
         self.linear_2 = nn.Linear(
             config.text_config.hidden_size, config.text_config.hidden_size, bias=config.multimodal_projector_bias
         )
+
+
+class FastVlmPreTrainedModel(LlavaPreTrainedModel):
+    pass
+
+
 class FastVlmModel(LlavaModel):
     def get_image_features(
         self,
@@ -172,7 +189,7 @@ class FastVlmModel(LlavaModel):
             vision_feature_layer (`Union[int, list[int]]`, *optional*):
                 The index/indices of the layer to select the vision feature. Must be negative.
             vision_feature_select_strategy (`str`, *optional*):
-                The feature selection strategy used to select the vision feature from the vision backbone. 
+                The feature selection strategy used to select the vision feature from the vision backbone.
                 Only "full" supported.
         Returns:
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
@@ -188,14 +205,18 @@ class FastVlmModel(LlavaModel):
 
         # only this value makes sense in FastVLM (we can't have a CLS token in conv layers)
         if vision_feature_select_strategy != "full":
-            raise ValueError(f"Unexpected select feature strategy: {vision_feature_select_strategy}, Only 'full' is supported in FastVLM.")
-        
-        if (isinstance(vision_feature_layer, int) and vision_feature_layer >= 0) or any([layer >= 0 for layer in vision_feature_layer]):
+            raise ValueError(
+                f"Unexpected select feature strategy: {vision_feature_select_strategy}, Only 'full' is supported in FastVLM."
+            )
+
+        if (isinstance(vision_feature_layer, int) and vision_feature_layer >= 0) or any(
+            layer >= 0 for layer in vision_feature_layer
+        ):
             raise ValueError(f"Only negative layer values are supported. Got {vision_feature_layer}")
 
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
         # this is not memory-efficient at all
-        image_outputs = self.vision_tower(pixel_values, output_hidden_states=True, **kwargs) 
+        image_outputs = self.vision_tower(pixel_values, output_hidden_states=True, **kwargs)
 
         # since the vision tower is hybrid in FastVLM, its output needs to be handled differently from Llava
         desired_shape = math.isqrt(self.config.image_seq_length)
@@ -220,18 +241,19 @@ class FastVlmModel(LlavaModel):
         image_features = self.multi_modal_projector(selected_image_feature)
         image_features = list(image_features)
         return image_features
-    
+
     def forward(self, **super_kwargs):
         r"""
         vision_feature_select_strategy (`str`, *optional*):
             The feature selection strategy used to select the vision feature from the vision backbone. Can only be `"full"`.
 
         vision_feature_layer (`Union[int, list[int], NoneType]`, *optional*):
-            The index of the layer to select the vision feature. If multiple indices are provided, the vision feature of the 
+            The index of the layer to select the vision feature. If multiple indices are provided, the vision feature of the
             corresponding indices will be concatenated to form the vision features. Must be negative.
         """
         super().forward(**super_kwargs)
-    
+
+
 class FastVlmForConditionalGeneration(LlavaForConditionalGeneration):
     def forward(self, **super_kwargs):
         r"""
@@ -244,7 +266,7 @@ class FastVlmForConditionalGeneration(LlavaForConditionalGeneration):
             The feature selection strategy used to select the vision feature from the vision backbone. Can only be `"full"`.
 
         vision_feature_layer (`Union[int, list[int], NoneType]`, *optional*):
-            The index of the layer to select the vision feature. If multiple indices are provided, the vision feature of the 
+            The index of the layer to select the vision feature. If multiple indices are provided, the vision feature of the
             corresponding indices will be concatenated to form the vision features. Must be negative.
 
         Example:
@@ -268,6 +290,6 @@ class FastVlmForConditionalGeneration(LlavaForConditionalGeneration):
         >>> processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         ```"""
         super().forward(**super_kwargs)
-        
+
 
 __all__ = ["FastVlmForConditionalGeneration", "FastVlmModel", "FastVlmPreTrainedModel", "FastVlmConfig"]
