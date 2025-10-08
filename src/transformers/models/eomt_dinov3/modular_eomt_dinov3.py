@@ -335,10 +335,6 @@ class EomtDinov3ForUniversalSegmentation(EomtDinov3PreTrainedModel, EomtForUnive
 
         self.rope_embeddings = EomtDinov3RopePositionEmbedding(config)
         self.layers = nn.ModuleList([EomtDinov3Layer(config) for _ in range(config.num_hidden_layers)])
-        self.upscale_block = EomtDinov3ScaleBlock(config)
-        self.mask_head = EomtDinov3MaskHead(config)
-
-        self.criterion = EomtDinov3Loss(config=config, weight_dict=self.weight_dict)
 
         self.post_init()
 

@@ -1172,6 +1172,7 @@ class EomtDinov3ForUniversalSegmentation(EomtDinov3PreTrainedModel):
 
         self.query = nn.Embedding(config.num_queries, config.hidden_size)
         self.layers = nn.ModuleList([EomtDinov3Layer(config) for _ in range(config.num_hidden_layers)])
+
         self.upscale_block = EomtDinov3ScaleBlock(config)
         self.mask_head = EomtDinov3MaskHead(config)
 
