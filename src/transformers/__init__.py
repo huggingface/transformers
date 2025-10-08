@@ -705,8 +705,6 @@ if TYPE_CHECKING:
 
     # Trainer
     from .trainer import Trainer as Trainer
-
-    # Trainer
     from .trainer_callback import DefaultFlowCallback as DefaultFlowCallback
     from .trainer_callback import EarlyStoppingCallback as EarlyStoppingCallback
     from .trainer_callback import PrinterCallback as PrinterCallback
@@ -755,7 +753,7 @@ if TYPE_CHECKING:
     from .utils import is_torch_xpu_available as is_torch_xpu_available
     from .utils.kernel_config import KernelConfig as KernelConfig
 
-    # bitsandbytes config
+    # Quantization config
     from .utils.quantization_config import AqlmConfig as AqlmConfig
     from .utils.quantization_config import AutoRoundConfig as AutoRoundConfig
     from .utils.quantization_config import AwqConfig as AwqConfig
