@@ -184,8 +184,8 @@ def make_task_cmds():
         ],
         "clm": [
             # "big_bird", not use why there is an issue with the architecture, some modules are not ZeROOrderedDict suddenly
-            "bigbird_pegasus", 
-            "blenderbot", 
+            "bigbird_pegasus",
+            "blenderbot",
             "bloom",
             "gpt2",
             "gpt_neo",
