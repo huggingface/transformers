@@ -220,7 +220,6 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     )
     fx_compatible = False
     test_missing_keys = False
-    test_pruning = False
 
     def setUp(self):
         self.model_tester = RwkvModelTester(self)
