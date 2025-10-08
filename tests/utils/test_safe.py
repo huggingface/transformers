@@ -18,11 +18,12 @@ import threading
 import types
 
 import pytest
+import regex as _regex
 
 from transformers.utils.safe import ThreadSafe, regex
 
 
-pytestmark = pytest.mark.skipif(
+requires_no_gil = pytest.mark.skipif(
     not hasattr(sys, "_is_gil_enabled") or sys._is_gil_enabled(),
     reason="Safe regex test only runs when the GIL is disabled",
 )
@@ -65,6 +66,7 @@ def _exercise_pattern(pattern_factory):
     return errors
 
 
+@requires_no_gil
 def test_regex_thread_safety_under_gil0():
     def factory():
         return regex.compile(r"(?P<prefix>test)(?P<number>\d+)")
@@ -73,6 +75,7 @@ def test_regex_thread_safety_under_gil0():
     assert not errors
 
 
+@requires_no_gil
 def test_regex_thread_safety_shared_pattern_under_gil0():
     shared_pattern = regex.compile(r"(?P<prefix>test)(?P<number>\d+)")
 
@@ -83,6 +86,7 @@ def test_regex_thread_safety_shared_pattern_under_gil0():
     assert not errors
 
 
+@requires_no_gil
 def test_regex_thread_safety_direct_match_under_gil0():
     def factory():
         class _DirectMatcher:
@@ -95,6 +99,7 @@ def test_regex_thread_safety_direct_match_under_gil0():
     assert not errors
 
 
+@requires_no_gil
 def test_regex_threadsafe_allows_reentrant_calls_under_gil0():
     pattern = regex.compile(r"(?P<prefix>test)(?P<number>\d+)")
     completed = threading.Event()
@@ -115,6 +120,7 @@ def test_regex_threadsafe_allows_reentrant_calls_under_gil0():
     assert completed.is_set(), "Re-entrant call should not deadlock"
 
 
+@requires_no_gil
 def test_threadsafe_callable_cache_is_serialized_under_gil0():
     module = types.ModuleType("_threadsafe_test_module")
 
@@ -161,7 +167,53 @@ def test_threadsafe_callable_cache_is_serialized_under_gil0():
     assert call_counter["count"] == num_threads * 256
 
 
-def test_threadsafe_copies_existing_module_metadata_under_gil0():
+def test_regex_compile_returns_threadsafe_proxy():
+    pattern = regex.compile(r"(?P<prefix>test)(?P<number>\d+)")
+    assert hasattr(pattern, "__wrapped__")
+    assert isinstance(pattern.__wrapped__, _regex.Pattern)
+    assert pattern.match("test123").group(0) == "test123"
+
+
+def test_regex_constructor_returns_threadsafe_proxy():
+    pattern = regex.Regex(r"(?P<prefix>test)(?P<number>\d+)")
+    assert hasattr(pattern, "__wrapped__")
+    assert isinstance(pattern.__wrapped__, _regex.Pattern)
+    assert pattern.fullmatch("test123").group("number") == "123"
+
+
+def test_regex_shared_pattern_is_thread_safe_with_proxy():
+    pattern = regex.compile(r"(?P<prefix>test)(?P<number>\d+)")
+    ready_group = threading.Barrier(9)
+    start_event = threading.Event()
+    errors = []
+    errors_lock = threading.Lock()
+
+    def worker():
+        try:
+            ready_group.wait()
+            start_event.wait()
+            for _ in range(128):
+                match = pattern.match("test123")
+                assert match.group("prefix") == "test"
+                assert match.group("number") == "123"
+        except Exception as exc:
+            with errors_lock:
+                errors.append(exc)
+
+    threads = [threading.Thread(target=worker) for _ in range(8)]
+    for thread in threads:
+        thread.start()
+
+    ready_group.wait()
+    start_event.set()
+
+    for thread in threads:
+        thread.join()
+
+    assert not errors
+
+
+def test_threadsafe_copies_existing_module_metadata():
     thread_safe_regex = ThreadSafe(regex)
 
     for attr in ("__package__", "__file__", "__spec__"):
@@ -170,7 +222,7 @@ def test_threadsafe_copies_existing_module_metadata_under_gil0():
             assert getattr(thread_safe_regex, attr) == getattr(regex, attr)
 
 
-def test_threadsafe_skips_missing_module_metadata_under_gil0():
+def test_threadsafe_skips_missing_module_metadata():
     thread_safe_builtins = ThreadSafe(builtins)
 
     for attr in ("__package__", "__file__", "__spec__"):
