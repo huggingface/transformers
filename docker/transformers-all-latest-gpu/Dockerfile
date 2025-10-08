@@ -57,6 +57,15 @@ RUN python3 -m pip install --no-cache-dir quanto
 # After using A10 as CI runner, let's run FA2 tests
 RUN [ "$PYTORCH" != "pre" ] && python3 -m pip uninstall -y ninja && python3 -m pip install --no-cache-dir ninja && python3 -m pip install flash-attn --no-cache-dir --no-build-isolation || echo "Don't install FA2 with nightly torch"
 
+ARG FA3=FALSE
+RUN if [ "$FA3" != "FALSE" ]; then \
+        git clone https://github.com/Dao-AILab/flash-attention && \
+        cd flash-attention/hopper && \
+        MAX_JOBS=32 python setup.py install; \
+    else \
+        echo "FA3 is not installed."; \
+    fi
+
 # TODO (ydshieh): check this again
 # `quanto` will install `ninja` which leads to many `CUDA error: an illegal memory access ...` in some model tests
 # (`deformable_detr`, `rwkv`, `mra`)

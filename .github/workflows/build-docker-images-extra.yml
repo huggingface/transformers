@@ -1,0 +1,42 @@
+name: Build other docker images (scheduled)
+
+on:
+  push:
+    branches:
+      - build_ci_docker_image_extra*
+      - docker-with-fa3
+  schedule:
+    - cron: "17 0 * * *"
+
+concurrency:
+  group: docker-images-extra-builds
+  cancel-in-progress: false
+
+jobs:
+  latest-docker:
+    name: "Latest PyTorch [dev] with FA3"
+    runs-on:
+      group: aws-highcpu-32-priv
+    steps:
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      -
+        name: Check out code
+        uses: actions/checkout@v4
+      -
+        name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+      -
+        name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: ./docker/transformers-all-latest-gpu
+          build-args: |
+            REF=main
+            FA3=TRUE
+          push: true
+          tags: huggingface/transformers-all-latest-gpu:fa3
