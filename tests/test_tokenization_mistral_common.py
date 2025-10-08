@@ -82,6 +82,17 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         cls.ref_tokenizer: MistralTokenizer = MistralTokenizer.from_hf_hub(
             cls.repo_id, local_files_only=cls.local_files_only
         )
+
+        # Define SPM tokenizer to test the private methods that handle SPM and Tekken differencies.
+        cls.spm_repo_id = "mistralai/Mistral-7B-Instruct-v0.3"
+        cls.spm_local_files_only = len(list_local_hf_repo_files(cls.repo_id, revision=None)) > 0
+        cls.spm_tokenizer: MistralCommonTokenizer = AutoTokenizer.from_pretrained(
+            cls.spm_repo_id,
+            tokenizer_type="mistral",
+            local_files_only=cls.spm_local_files_only,
+            revision=None,
+        )
+
         # cls.tokenizer_audio: MistralCommonTokenizer = AutoTokenizer.from_pretrained(
         #     "hf-internal-testing/namesspace-mistralai-repo_name-Voxtral-Mini-3B-2507"
         # )
@@ -127,12 +138,42 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         del cls.ref_special_ids
         gc.collect()
 
+    # Copy paste of `MistralCommonTokenizer._tekken_piece_to_id`
     def _ref_piece_to_id(self, piece: str) -> int:
-        pieces = self.ref_tokenizer.instruct_tokenizer.tokenizer._model.encode(
-            piece, allowed_special="all", disallowed_special=set()
-        )
-        assert len(pieces) == 1, f"Expected to decode 1 token, got {len(pieces)}"
-        return pieces[0]
+        tekken_tokenizer = self.ref_tokenizer.instruct_tokenizer.tokenizer
+
+        piece_bytes = piece.encode("utf-8")
+        shift = tekken_tokenizer.num_special_tokens
+        try:
+            return shift + tekken_tokenizer._tekken_token2id_nospecial[piece_bytes]
+        except KeyError:
+            piece_str = piece_bytes.decode("utf-8")
+            if piece_str in tekken_tokenizer._special_tokens_reverse_vocab:
+                return tekken_tokenizer._special_tokens_reverse_vocab[piece_str]
+            return tekken_tokenizer.unk_id
+
+    def test_spm_vs_tekken_is_control_token(self):
+        self.assertTrue(self.spm_tokenizer._is_control_token(1))
+        self.assertTrue(self.spm_tokenizer._is_control_token(768))
+        self.assertFalse(self.spm_tokenizer._is_control_token(999))
+
+        self.assertTrue(self.tokenizer._is_control_token(0))
+        self.assertTrue(self.tokenizer._is_control_token(768))
+        self.assertTrue(self.tokenizer._is_control_token(999))
+        self.assertFalse(self.tokenizer._is_control_token(1000))
+
+    def test_spm_vs_tekken_piece_to_id(self):
+        self.assertEqual(self.spm_tokenizer._piece_to_id("<s>"), 1)
+        self.assertEqual(self.spm_tokenizer._piece_to_id("h"), 29484)
+
+        self.assertEqual(self.tokenizer._piece_to_id("<s>"), 1)
+        self.assertEqual(self._ref_piece_to_id("<s>"), 1)
+        self.assertEqual(self.tokenizer._piece_to_id("\u0000"), 1000)
+        self.assertEqual(self._ref_piece_to_id("\u0000"), 1000)
+        self.assertEqual(self.tokenizer._piece_to_id(" String"), 3000)
+        self.assertEqual(self._ref_piece_to_id(" String"), 3000)
+        self.assertEqual(self.tokenizer._piece_to_id("后汉书"), 131071)
+        self.assertEqual(self._ref_piece_to_id("后汉书"), 131071)
 
     def test_vocab_size(self):
         self.assertEqual(self.tokenizer.vocab_size, self.ref_tokenizer.instruct_tokenizer.tokenizer.n_words)
@@ -785,6 +826,40 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         with self.assertRaises(InvalidMessageStructureException):
             self.tokenizer.apply_chat_template(conversation, tokenize=False, continue_final_message=False)
 
+    def test_apply_chat_template_with_add_generation_prompt(self):
+        conversation = [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Hi!"},
+        ]
+
+        # Test 1:
+        # with add_generation_prompt
+        for add_generation_prompt in [False, True]:
+            expected_tokenized = self.ref_tokenizer.encode_chat_completion(
+                ChatCompletionRequest.from_openai(conversation)
+            )
+            token_outputs = self.tokenizer.apply_chat_template(
+                conversation, tokenize=True, add_generation_prompt=add_generation_prompt
+            )
+            self.assertEqual(token_outputs, expected_tokenized.tokens)
+
+        # Test 2:
+        # with continue_final_message
+        with self.assertRaises(ValueError):
+            self.tokenizer.apply_chat_template(
+                conversation, tokenize=True, add_generation_prompt=True, continue_final_message=True
+            )
+
+        # Test 3:
+        # with last message with assistant role
+        conversation = [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Hi!"},
+            {"role": "asistant", "content": "Hey!"},
+        ]
+        with self.assertRaises(ValueError):
+            self.tokenizer.apply_chat_template(conversation, tokenize=True, add_generation_prompt=True)
+
     def test_apply_chat_template_with_tools(self):
         conversation = [
             {"role": "system", "content": "You are a helpful assistant."},
@@ -891,7 +966,8 @@ class TestMistralCommonTokenizer(unittest.TestCase):
             conversation, tokenize=True, return_dict=True, return_tensors="pt"
         )
         self.assertEqual(output_dict["input_ids"].tolist()[0], expected_tokenized.tokens)
-        self.assertTrue(torch.allclose(output_dict["pixel_values"], torch.tensor(expected_tokenized.images)))
+        expected_images_pt_tensor = torch.from_numpy(np.stack(expected_tokenized.images))
+        self.assertTrue(torch.allclose(output_dict["pixel_values"], expected_images_pt_tensor))
 
     def test_apply_chat_template_with_audio(self):
         ref_conversation = conversation = [
@@ -1193,6 +1269,54 @@ class TestMistralCommonTokenizer(unittest.TestCase):
                 tokenize=True,
                 continue_final_message=True,
             )
+
+    def test_batch_apply_chat_template_with_add_generation_prompt(self):
+        conversations = [
+            [
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": "Hi!"},
+            ],
+            [
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": "Hi!"},
+            ],
+        ]
+
+        # Test 1:
+        # with add_generation_prompt
+        for add_generation_prompt in [False, True]:
+            expected_tokenized = [
+                self.ref_tokenizer.encode_chat_completion(ChatCompletionRequest.from_openai(conversation))
+                for conversation in conversations
+            ]
+            token_outputs = self.tokenizer.apply_chat_template(
+                conversations, tokenize=True, add_generation_prompt=add_generation_prompt
+            )
+            for output, expected in zip(token_outputs, expected_tokenized):
+                self.assertEqual(output, expected.tokens)
+
+        # Test 2:
+        # with continue_final_message
+        with self.assertRaises(ValueError):
+            self.tokenizer.apply_chat_template(
+                conversations, tokenize=True, add_generation_prompt=True, continue_final_message=True
+            )
+
+        # Test 3:
+        # with last message with assistant role
+        conversations = [
+            [
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": "Hi!"},
+                {"role": "asistant", "content": "Hey!"},
+            ],
+            [
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": "Hi!"},
+            ],
+        ]
+        with self.assertRaises(ValueError):
+            self.tokenizer.apply_chat_template(conversations, tokenize=True, add_generation_prompt=True)
 
     def test_batch_apply_chat_template_with_truncation(
         self,
