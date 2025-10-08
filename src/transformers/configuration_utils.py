@@ -425,16 +425,18 @@ class PreTrainedConfig(PushToHubMixin):
     @property
     def rope_scaling(self):
         logger.warning_once(
-            "`rope_scaling` has been deprecated. Please use `rope_parameters` instead, which contains all RoPE configuration "
-            "options, including `rope_theta`. Refer to `RopeParameters` for the full list of available keys."
+            "`rope_scaling` has been deprecated and will be removed in v5.8. Please use `rope_parameters` instead, "
+            "which contains all RoPE configuration options, including `rope_theta`. Refer to `RopeParameters` "
+            "for the full list of available keys."
         )
         return self.rope_parameters
 
     @rope_scaling.setter
     def rope_scaling(self, value):
         logger.warning_once(
-            "`rope_scaling` has been deprecated. Please use `rope_parameters` instead, which contains all RoPE configuration "
-            "options, including `rope_theta`. Refer to `RopeParameters` for the full list of available keys."
+            "`rope_scaling` has been deprecated and will be removed in v5.8. Please use `rope_parameters` instead, "
+            "which contains all RoPE configuration options, including `rope_theta`. Refer to `RopeParameters` "
+            "for the full list of available keys."
         )
         self.rope_parameters = value
 
