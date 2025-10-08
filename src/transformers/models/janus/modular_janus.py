@@ -1289,7 +1289,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             return generated_tokens
 
 
-class JanusImageProcessorKwargs(ImagesKwargs):
+class JanusImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     min_size (`int`, *optional*, defaults to 14):
         The minimum allowed size for the resized image. Ensures that neither the height nor width
