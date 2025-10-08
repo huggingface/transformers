@@ -145,11 +145,17 @@ class TestMistralCommonTokenizer(unittest.TestCase):
                 return tekken_tokenizer._special_tokens_reverse_vocab[piece_str]
             return tekken_tokenizer.unk_id
 
-    def test_spm_vs_tekken_is_control_token(self):
-        spm_tokenizer: MistralCommonTokenizer = AutoTokenizer.from_pretrained(
+    def _get_spm_tokenizer(self) -> MistralCommonTokenizer:
+        local_files_only = len(list_local_hf_repo_files(self.spm_repo_id, revision=None)) > 0
+        return AutoTokenizer.from_pretrained(
             self.spm_repo_id,
+            local_files_only=local_files_only,
+            revision=None,
             tokenizer_type="mistral",
         )
+
+    def test_spm_vs_tekken_is_control_token(self):
+        spm_tokenizer = self._get_spm_tokenizer()
         self.assertTrue(spm_tokenizer._is_control_token(1))
         self.assertTrue(spm_tokenizer._is_control_token(768))
         self.assertFalse(spm_tokenizer._is_control_token(999))
@@ -160,10 +166,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         self.assertFalse(self.tokenizer._is_control_token(1000))
 
     def test_spm_vs_tekken_piece_to_id(self):
-        spm_tokenizer: MistralCommonTokenizer = AutoTokenizer.from_pretrained(
-            self.spm_repo_id,
-            tokenizer_type="mistral",
-        )
+        spm_tokenizer = self._get_spm_tokenizer()
         self.assertEqual(spm_tokenizer._piece_to_id("<s>"), 1)
         self.assertEqual(spm_tokenizer._piece_to_id("h"), 29484)
 
@@ -1140,7 +1143,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         ):
             self.tokenizer.apply_chat_template(conversations, tools=tools, tokenize=True, unk_args="")
 
-    def test_batch_apply_images(self):
+    def test_batch_apply_chat_template_images(self):
         conversations = [
             [
                 {"role": "system", "content": "You are a helpful assistant."},
@@ -1212,7 +1215,8 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         )
         self.assertEqual(output["input_ids"].tolist(), [expected_tokenized.tokens] * 3)
         self.assertEqual(output["input_ids"].shape[0], len(expected_tokenized.images) * 3)
-        self.assertTrue(torch.allclose(output["pixel_values"], torch.tensor([expected_tokenized.images] * 3)))
+        expected_images_pt_tensor = torch.from_numpy(np.stack([expected_tokenized.images] * 3))
+        self.assertTrue(torch.allclose(output["pixel_values"], expected_images_pt_tensor))
 
         output = self.tokenizer.apply_chat_template(
             conversations, tokenize=True, return_dict=True, return_tensors="np"
