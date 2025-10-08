@@ -900,7 +900,7 @@ def rope_config_validation(config: PreTrainedConfig, ignore_keys: Optional[set] 
 
 class RopeParameters(TypedDict):
     """
-    Arguments to be passed to RoPE embedding layer:
+    Args:
         rope_theta (`float`):
             The base period of the RoPE embeddings.
         rope_type (`str`, *optional*, defaults to "default"):

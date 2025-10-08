@@ -79,10 +79,6 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
             Number of selected experts.
         num_experts (`int`, *optional*, defaults to 60):
             Number of routed experts.
-        norm_topk_prob (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the topk probabilities.
-        router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
-            The aux loss factor for the total loss.
         mlp_only_layers (`List[int]`, *optional*, defaults to `[]`):
             Indicate which layers use Qwen3VLMoeMLP rather than Qwen3VLMoeSparseMoeBlock
             The list contains layer index, from 0 to num_layers-1 if we have num_layers layers
@@ -147,7 +143,7 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
         num_experts_per_tok: Optional[int] = 4,
         num_experts: Optional[int] = 60,
         mlp_only_layers: Optional[list[int]] = None,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters] = None,
         head_dim: Optional[int] = None,
         **kwargs,
     ):
