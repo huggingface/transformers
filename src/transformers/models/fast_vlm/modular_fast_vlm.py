@@ -21,7 +21,7 @@ from torch import nn
 from torch.nn.functional import adaptive_avg_pool2d
 
 from ...activations import ACT2FN
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ..auto import CONFIG_MAPPING
 from ..llava.configuration_llava import LlavaConfig
 from ..llava.modeling_llava import (
@@ -93,6 +93,7 @@ class FastVlmConfig(LlavaConfig):
         multimodal_projector_bias=True,
         **kwargs,
     ):
+        PreTrainedConfig.__init__(**kwargs)
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
         self.image_seq_length = image_seq_length
@@ -147,8 +148,6 @@ class FastVlmConfig(LlavaConfig):
         self.text_config = text_config
         self.multimodal_projector_bias = multimodal_projector_bias
 
-        PretrainedConfig.__init__(**kwargs)
-
 
 class FastVlmMultiModalProjector(LlavaMultiModalProjector):
     def __init__(self, config: FastVlmConfig):
@@ -161,7 +160,7 @@ class FastVlmMultiModalProjector(LlavaMultiModalProjector):
         total_hidden_size = 0
         for layer in layers:
             total_hidden_size += config.vision_config.hidden_size // (2 ** (-layer - 1))
-            
+
         self.linear_1 = nn.Linear(
             total_hidden_size,
             config.text_config.hidden_size,
@@ -272,6 +271,7 @@ class FastVlmModel(LlavaModel):
 
 class FastVlmForConditionalGeneration(LlavaForConditionalGeneration):
     _checkpoint_conversion_mapping = {}
+
     def forward(self, **super_kwargs):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

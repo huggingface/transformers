@@ -21,11 +21,11 @@
 import math
 from collections.abc import Iterable
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-class FastVlmConfig(PretrainedConfig):
+class FastVlmConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FastVLMForConditionalGeneration`]. It is used to instantiate a
     FastVLM model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -90,6 +90,7 @@ class FastVlmConfig(PretrainedConfig):
         multimodal_projector_bias=True,
         **kwargs,
     ):
+        super().__init__(**kwargs)
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
         self.image_seq_length = image_seq_length
@@ -143,8 +144,6 @@ class FastVlmConfig(PretrainedConfig):
 
         self.text_config = text_config
         self.multimodal_projector_bias = multimodal_projector_bias
-
-        super().__init__(**kwargs)
 
 
 __all__ = ["FastVlmConfig"]
