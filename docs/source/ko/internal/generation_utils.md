@@ -252,8 +252,6 @@ generation_output[:2]
 [[autodoc]] SlidingWindowCache
 
 [[autodoc]] EncoderDecoderCache
-    - to_legacy_cache
-    - from_legacy_cache
 
 ## 워터마크 유틸리티 (Watermark Utils) [[transformers.WatermarkDetector]]
 
