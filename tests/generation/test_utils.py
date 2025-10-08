@@ -1052,7 +1052,6 @@ class GenerationTesterMixin:
 
             # 2. retrieve the KV cache and compute its default expected shapes (if no custom shapes are provided)
             past_kv = outputs["past_key_values"]
-            is_legacy_cache = not isinstance(past_kv, Cache)
 
             num_decoder_layers = decoder_config.num_hidden_layers
             if custom_all_cache_shapes is None:
@@ -1090,30 +1089,19 @@ class GenerationTesterMixin:
             # 3. Check cache shapes
             # 3.1. Encoder-Decoder checks
             if config.is_encoder_decoder:
-                num_cache_decoder_layers = len(past_kv) if is_legacy_cache else len(past_kv.self_attention_cache)
+                num_cache_decoder_layers = len(past_kv)
                 self.assertEqual(num_cache_decoder_layers, num_decoder_layers)
 
                 for i in range(num_decoder_layers):
-                    if is_legacy_cache:
-                        self.assertEqual(len(past_kv[0]), 4)  # legacy check: confirm number of elements in tuple
-
                     # Self attention
-                    self_attention_layer_keys = (
-                        past_kv[i][0] if is_legacy_cache else past_kv.self_attention_cache.layers[i].keys
-                    )
-                    self_attention_layer_values = (
-                        past_kv[i][1] if is_legacy_cache else past_kv.self_attention_cache.layers[i].values
-                    )
+                    self_attention_layer_keys = past_kv.self_attention_cache.layers[i].keys
+                    self_attention_layer_values = past_kv.self_attention_cache.layers[i].values
                     self.assertEqual(self_attention_layer_keys.shape, all_cache_shapes[i][0])
                     self.assertEqual(self_attention_layer_values.shape, all_cache_shapes[i][1])
 
                     # Cross attention (ignore 3rd dim, see default shape preparation)
-                    cross_attention_layer_keys = (
-                        past_kv[i][2] if is_legacy_cache else past_kv.cross_attention_cache.layers[i].keys
-                    )
-                    cross_attention_layer_values = (
-                        past_kv[i][3] if is_legacy_cache else past_kv.cross_attention_cache.layers[i].values
-                    )
+                    cross_attention_layer_keys = past_kv.cross_attention_cache.layers[i].keys
+                    cross_attention_layer_values = past_kv.cross_attention_cache.layers[i].values
                     cross_attention_layer_keys = cross_attention_layer_keys[:, :, 0, :]
                     cross_attention_layer_values = cross_attention_layer_values[:, :, 0, :]
                     self.assertEqual(cross_attention_layer_keys.shape, all_cache_shapes[i][2])
@@ -1129,15 +1117,8 @@ class GenerationTesterMixin:
                 )
 
                 for i in range(num_cache_decoder_layers):
-                    if is_legacy_cache:
-                        self.assertEqual(len(past_kv[0]), 2)  # legacy check: confirm number of elements in tuple
-
-                    # Self attention
-                    if is_legacy_cache:
-                        self_attention_layer_keys = past_kv[i][0]
-                        self_attention_layer_values = past_kv[i][1]
-                    elif getattr(past_kv, "layers", None) is None:
-                        # Cache is lot layered (i.e, Mamba derivatives)
+                    # Cache is lot layered (i.e, Mamba derivatives)
+                    if getattr(past_kv, "layers", None) is None:
                         self_attention_layer_keys = past_kv.key_cache[i]
                         self_attention_layer_values = past_kv.value_cache[i]
                     else:
@@ -1416,14 +1397,7 @@ class GenerationTesterMixin:
 
             # The two sets of generated text and past kv should be equal to each other
             self.assertTrue(has_similar_generate_outputs(outputs, outputs_cached))
-            for layer_idx in range(len(outputs_cached.past_key_values)):
-                for kv_idx in range(len(outputs_cached.past_key_values[layer_idx])):
-                    self.assertTrue(
-                        torch.allclose(
-                            outputs.past_key_values[layer_idx][kv_idx],
-                            outputs_cached.past_key_values[layer_idx][kv_idx],
-                        )
-                    )
+            self._check_caches_are_equal(outputs.past_key_values, outputs_cached.past_key_values)
 
     @pytest.mark.generate
     def test_generate_continue_from_inputs_embeds(self):
@@ -1486,14 +1460,7 @@ class GenerationTesterMixin:
             combined_output_sequences = torch.concat([initial_output.sequences, cached_output.sequences], axis=1)
             self.assertListEqual(outputs.sequences.tolist(), combined_output_sequences.tolist())
             # The two sets of past kv should be equal to each other
-            for layer_idx in range(len(cached_output.past_key_values)):
-                for kv_idx in range(len(cached_output.past_key_values[layer_idx])):
-                    self.assertTrue(
-                        torch.allclose(
-                            outputs.past_key_values[layer_idx][kv_idx],
-                            cached_output.past_key_values[layer_idx][kv_idx],
-                        )
-                    )
+            self._check_caches_are_equal(outputs.past_key_values, cached_output.past_key_values)
 
     @pytest.mark.generate
     def test_generate_with_static_cache(self):
@@ -2536,22 +2503,8 @@ class GenerationTesterMixin:
                 [layer.values.shape for layer in decoder_past_key_values.layers],
                 [expected_shape] * len(decoder_past_key_values.layers),
             )
-
-        # Legacy cache format checks. This branch should be removed when all models use `Cache` by default
         else:
-            self.assertListEqual(
-                [isinstance(iter_past_key_values, tuple) for iter_past_key_values in decoder_past_key_values],
-                [True] * len(decoder_past_key_values),
-            )
-            # check shape key, value
-            self.assertListEqual(
-                [layer_past_key_values[0].shape for layer_past_key_values in decoder_past_key_values],
-                [expected_shape] * len(decoder_past_key_values),
-            )
-            self.assertListEqual(
-                [layer_past_key_values[1].shape for layer_past_key_values in decoder_past_key_values],
-                [expected_shape] * len(decoder_past_key_values),
-            )
+            raise ValueError("The cache is not standard! Please overwrite `_check_past_key_values_for_generate`")
 
     def _check_sequence_inside_sequence(self, tensor_1, tensor_2):
         # check if tensor_1 inside tensor_2 or tensor_2 inside tensor_1.
@@ -2575,6 +2528,24 @@ class GenerationTesterMixin:
                 break
 
         self.assertTrue(flag)
+
+    def _check_caches_are_equal(self, cache1: Cache, cache2: Cache):
+        if not isinstance(cache1, Cache) or not isinstance(cache2, Cache):
+            raise ValueError("The cache is not standard! Please overwrite `_check_caches_are_equal`")
+
+        # In this case, we simply call recursively the function on both internal caches
+        if isinstance(cache1, EncoderDecoderCache):
+            self._check_caches_are_equal(cache1.self_attention_cache, cache2.self_attention_cache)
+            self._check_caches_are_equal(cache1.cross_attention_cache, cache2.cross_attention_cache)
+            return
+
+        if not len(cache1) == len(cache2):
+            raise ValueError("Both caches do not have the same number of layers.")
+
+        num_layers = len(cache1)
+        for idx in range(num_layers):
+            torch.testing.assert_close(cache1.layers[idx].keys, cache2.layers[idx].keys)
+            torch.testing.assert_close(cache1.layers[idx].values, cache2.layers[idx].values)
 
 
 @require_torch
@@ -3058,6 +3029,34 @@ class GenerationIntegrationTests(unittest.TestCase):
             rtol=0,
         )
         self.assertTrue(torch.all(is_close))
+
+    @slow
+    def test_TopH_example_integration(self):
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-3B")
+        model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-3B")
+        tokenizer.pad_token = tokenizer.eos_token
+        model.config.pad_token_id = tokenizer.pad_token_id
+        encoder_input_str = "Tell me a joke about a monkey."
+        input_ids = tokenizer(encoder_input_str, return_tensors="pt")
+
+        torch.manual_seed(0)
+
+        outputs = model.generate(
+            **input_ids,
+            eos_token_id=model.config.eos_token_id,
+            do_sample=True,
+            temperature=1.0,
+            top_h=0.4,
+            max_new_tokens=32,
+            pad_token_id=tokenizer.pad_token_id,
+        )
+        outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        self.assertListEqual(
+            outputs,
+            [
+                'Tell me a joke about a monkey. Why did the monkey go to the doctor? Because he was feeling a little "tropic"!'
+            ],
+        )
 
     @slow
     def test_beam_search_example_integration(self):
@@ -4916,7 +4915,7 @@ class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
         self.original_threshold = self.assistant_model.generation_config.assistant_confidence_threshold
 
     def assert_no_sklearn(self):
-        with patch("transformers.utils.import_utils._sklearn_available", False):
+        with patch("transformers.generation.candidate_generator.is_sklearn_available", lambda: False):
             self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
             self.assertEqual(self.candidate_generator.matches, self.original_matches)
             self.assertEqual(self.candidate_generator.probs, self.original_probs)

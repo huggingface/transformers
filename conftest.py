@@ -54,7 +54,6 @@ NOT_DEVICE_TESTS = {
     "test_gradient_checkpointing_backward_compatibility",
     "test_gradient_checkpointing_enable_disable",
     "test_torch_save_load",
-    "test_initialization",
     "test_forward_signature",
     "test_model_get_set_embeddings",
     "test_model_main_input_name",

@@ -14,22 +14,22 @@
 # limitations under the License.
 """PEGASUS-X model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class PegasusXConfig(PretrainedConfig):
+class PegasusXConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PegasusXModel`]. It is used to instantiate a
     PEGASUS-X model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the PEGASUS-X
     [google/pegasus-x-large](https://huggingface.co/google/pegasus-x-large) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:

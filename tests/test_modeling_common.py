@@ -510,7 +510,7 @@ def _config_zero_init(config):
     for key in configs_no_init.__dict__:
         if "_range" in key or "_std" in key or "initializer_factor" in key or "layer_scale" in key:
             setattr(configs_no_init, key, 1e-10)
-        if isinstance(getattr(configs_no_init, key, None), PretrainedConfig):
+        if isinstance(getattr(configs_no_init, key, None), PreTrainedConfig):
             no_init_subconfig = _config_zero_init(getattr(configs_no_init, key))
             setattr(configs_no_init, key, no_init_subconfig)
     return configs_no_init
@@ -524,10 +524,6 @@ def _mock_init_weights(self, module):
 
 
 def _mock_all_init_weights(self):
-    # Prune heads if needed
-    if self.config.pruned_heads:
-        self.prune_heads(self.config.pruned_heads)
-
     import transformers.modeling_utils
 
     if transformers.modeling_utils._init_weights:
@@ -572,7 +568,6 @@ class ModelTesterMixin:
     all_model_classes = ()
     fx_compatible = False
     test_torchscript = True
-    test_pruning = True
     test_resize_embeddings = True
     test_resize_position_embeddings = False
     test_mismatched_shapes = True
@@ -1021,28 +1016,6 @@ class ModelTesterMixin:
                 check_equal(load_state_dict(pt_checkpoint_path))
                 torch.save(state_dict, pt_checkpoint_path, _use_new_zipfile_serialization=False)
                 check_equal(load_state_dict(pt_checkpoint_path))
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=copy.deepcopy(configs_no_init))
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    data = torch.flatten(param.data)
-                    n_elements = torch.numel(data)
-                    # skip 2.5% of elements on each side to avoid issues caused by `nn.init.trunc_normal_` described in
-                    # https://github.com/huggingface/transformers/pull/27906#issuecomment-1846951332
-                    n_elements_to_skip_on_each_side = int(n_elements * 0.025)
-                    data_to_check = torch.sort(data).values
-                    if n_elements_to_skip_on_each_side > 0:
-                        data_to_check = data_to_check[n_elements_to_skip_on_each_side:-n_elements_to_skip_on_each_side]
-                    self.assertIn(
-                        ((data_to_check.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
 
     def test_determinism(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1629,7 +1602,7 @@ class ModelTesterMixin:
                             )
                             for i in range(model.config.num_hidden_layers)
                         )
-                        non_empty_pkv = DynamicCache.from_legacy_cache(non_empty_pkv)
+                        non_empty_pkv = DynamicCache(non_empty_pkv)
 
                         inps = copy.deepcopy(inputs_to_test[0])
 
@@ -1712,161 +1685,6 @@ class ModelTesterMixin:
                 # Avoid memory leak. Without this, each call increase RAM usage by ~20MB.
                 # (Even with this call, there are still memory leak by ~0.04MB)
                 self.clear_torch_jit_class_registry()
-
-    def test_head_pruning(self):
-        if not self.test_pruning:
-            self.skipTest(reason="Pruning is not activated")
-
-        for model_class in self.all_model_classes:
-            (
-                config,
-                inputs_dict,
-            ) = self.model_tester.prepare_config_and_inputs_for_common()
-
-            inputs_dict["output_attentions"] = True
-            config.output_hidden_states = False
-            config._attn_implementation = "eager"
-            model = model_class(config=config)
-            model.to(torch_device)
-            model.eval()
-            model.set_attn_implementation("eager")
-            heads_to_prune = {
-                0: list(range(1, self.model_tester.num_attention_heads)),
-                -1: [0],
-            }
-            model.prune_heads(heads_to_prune)
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            attentions = outputs[-1]
-
-            self.assertEqual(attentions[0].shape[-3], 1)
-            # TODO: To have this check, we will need at least 3 layers. Do we really need it?
-            # self.assertEqual(attentions[1].shape[-3], self.model_tester.num_attention_heads)
-            self.assertEqual(attentions[-1].shape[-3], self.model_tester.num_attention_heads - 1)
-
-    def test_head_pruning_save_load_from_pretrained(self):
-        if not self.test_pruning:
-            self.skipTest(reason="Pruning is not activated")
-
-        for model_class in self.all_model_classes:
-            (
-                config,
-                inputs_dict,
-            ) = self.model_tester.prepare_config_and_inputs_for_common()
-
-            inputs_dict["output_attentions"] = True
-            config.output_hidden_states = False
-            config._attn_implementation = "eager"
-            model = model_class(config=config)
-            model.to(torch_device)
-            model.eval()
-            model.set_attn_implementation("eager")
-            heads_to_prune = {
-                0: list(range(1, self.model_tester.num_attention_heads)),
-                -1: [0],
-            }
-            model.prune_heads(heads_to_prune)
-
-            with tempfile.TemporaryDirectory() as temp_dir_name:
-                model.save_pretrained(temp_dir_name)
-                model = model_class.from_pretrained(temp_dir_name, attn_implementation="eager")
-                model.to(torch_device)
-
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs[-1]
-            self.assertEqual(attentions[0].shape[-3], 1)
-            # TODO: To have this check, we will need at least 3 layers. Do we really need it?
-            # self.assertEqual(attentions[1].shape[-3], self.model_tester.num_attention_heads)
-            self.assertEqual(attentions[-1].shape[-3], self.model_tester.num_attention_heads - 1)
-
-    def test_head_pruning_save_load_from_config_init(self):
-        if not self.test_pruning:
-            self.skipTest(reason="Pruning is not activated")
-
-        for model_class in self.all_model_classes:
-            (
-                config,
-                inputs_dict,
-            ) = self.model_tester.prepare_config_and_inputs_for_common()
-
-            inputs_dict["output_attentions"] = True
-            config.output_hidden_states = False
-            config._attn_implementation = "eager"
-
-            heads_to_prune = {
-                0: list(range(1, self.model_tester.num_attention_heads)),
-                -1: [0],
-            }
-            config.pruned_heads = heads_to_prune
-
-            model = model_class(config=config)
-            model.to(torch_device)
-            model.eval()
-            model.set_attn_implementation("eager")
-
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs[-1]
-
-            self.assertEqual(attentions[0].shape[-3], 1)
-            # TODO: To have this check, we will need at least 3 layers. Do we really need it?
-            # self.assertEqual(attentions[1].shape[-3], self.model_tester.num_attention_heads)
-            self.assertEqual(attentions[-1].shape[-3], self.model_tester.num_attention_heads - 1)
-
-    def test_head_pruning_integration(self):
-        if not self.test_pruning:
-            self.skipTest(reason="Pruning is not activated")
-
-        for model_class in self.all_model_classes:
-            (
-                config,
-                inputs_dict,
-            ) = self.model_tester.prepare_config_and_inputs_for_common()
-
-            inputs_dict["output_attentions"] = True
-            config.output_hidden_states = False
-            config._attn_implementation = "eager"
-
-            heads_to_prune = {1: [1, 2]}
-            config.pruned_heads = heads_to_prune
-
-            model = model_class(config=config)
-            model.to(torch_device)
-            model.eval()
-            model.set_attn_implementation("eager")
-
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs[-1]
-
-            self.assertEqual(attentions[0].shape[-3], self.model_tester.num_attention_heads - 0)
-            self.assertEqual(attentions[1].shape[-3], self.model_tester.num_attention_heads - 2)
-
-            with tempfile.TemporaryDirectory() as temp_dir_name:
-                model.save_pretrained(temp_dir_name)
-                model = model_class.from_pretrained(temp_dir_name, attn_implementation="eager")
-                model.to(torch_device)
-
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs[-1]
-
-            self.assertEqual(attentions[0].shape[-3], self.model_tester.num_attention_heads - 0)
-            self.assertEqual(attentions[1].shape[-3], self.model_tester.num_attention_heads - 2)
-
-            heads_to_prune = {0: [0], 1: [1, 2]}
-            model.prune_heads(heads_to_prune)
-
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs[-1]
-
-            self.assertEqual(attentions[0].shape[-3], self.model_tester.num_attention_heads - 1)
-            self.assertEqual(attentions[1].shape[-3], self.model_tester.num_attention_heads - 2)
-
-            self.assertDictEqual(model.config.pruned_heads, {0: [0], 1: [1, 2]})
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -3702,7 +3520,7 @@ class ModelTesterMixin:
                         tmpdirname, dtype=dtype, attn_implementation=attn_implementation
                     )
                     for key in model_fa.config:
-                        if isinstance(getattr(model_fa.config, key), PretrainedConfig):
+                        if isinstance(getattr(model_fa.config, key), PreTrainedConfig):
                             sub_config = getattr(model_fa.config, key)
                             self.assertTrue(sub_config._attn_implementation == attn_implementation)
 
@@ -3990,7 +3808,7 @@ class ModelTesterMixin:
         Test if model can be exported with torch.export.export()
 
         Args:
-            config (PretrainedConfig):
+            config (PreTrainedConfig):
                 Config to use for the model, if None, use default config from model_tester
             inputs_dict (dict):
                 Inputs to use for the model, if None, use default inputs from model_tester
@@ -4269,14 +4087,14 @@ class ModelTesterMixin:
     def test_config_attn_implementation_setter(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
-        def check_attn_implementation_setter(config: PretrainedConfig, attn_implementation: str):
+        def check_attn_implementation_setter(config: PreTrainedConfig, attn_implementation: str):
             if not config._attn_implementation == attn_implementation:
                 raise ValueError(
                     f"Unexpected attn_implementation for config {config.__class__.__name__}: "
                     f"{config._attn_implementation} != {attn_implementation}"
                 )
             for attribute_value in config.__dict__.values():
-                if isinstance(attribute_value, PretrainedConfig):
+                if isinstance(attribute_value, PreTrainedConfig):
                     check_attn_implementation_setter(attribute_value, attn_implementation)
 
         config._attn_implementation = "eager"

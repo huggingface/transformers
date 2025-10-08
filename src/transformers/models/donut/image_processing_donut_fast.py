@@ -19,7 +19,7 @@ from typing import Optional, Union
 import torch
 from torchvision.transforms.v2 import functional as F
 
-from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature, DefaultFastImageProcessorKwargs
+from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
@@ -28,22 +28,10 @@ from ...utils import (
     auto_docstring,
     logging,
 )
+from .image_processing_donut import DonutImageProcessorKwargs
 
 
 logger = logging.get_logger(__name__)
-
-
-class DonutFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    Args:
-        do_thumbnail (`bool`, *optional*, defaults to `self.do_thumbnail`):
-            Whether to resize the image using thumbnail method.
-        do_align_long_axis (`bool`, *optional*, defaults to `self.do_align_long_axis`):
-            Whether to align the long axis of the image with the long axis of `size` by rotating by 90 degrees.
-    """
-
-    do_thumbnail: Optional[bool]
-    do_align_long_axis: Optional[bool]
 
 
 @auto_docstring
@@ -58,9 +46,9 @@ class DonutImageProcessorFast(BaseImageProcessorFast):
     do_thumbnail = True
     do_align_long_axis = False
     do_pad = True
-    valid_kwargs = DonutFastImageProcessorKwargs
+    valid_kwargs = DonutImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[DonutFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[DonutImageProcessorKwargs]):
         size = kwargs.pop("size", None)
         if isinstance(size, (tuple, list)):
             size = size[::-1]
@@ -68,7 +56,7 @@ class DonutImageProcessorFast(BaseImageProcessorFast):
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[DonutFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[DonutImageProcessorKwargs]) -> BatchFeature:
         if "size" in kwargs:
             size = kwargs.pop("size")
             if isinstance(size, (tuple, list)):

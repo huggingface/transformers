@@ -17,27 +17,6 @@ rendered properly in your Markdown viewer.
 
 이 가이드 외에도, [단일 GPU에서의 훈련 가이드](perf_train_gpu_one)와 [CPU에서의 추론 가이드](perf_infer_cpu)에서도 관련 정보를 찾을 수 있습니다.
 
-## Better Transformer: PyTorch 네이티브 Transformer 패스트패스 [[better-transformer-pytorchnative-transformer-fastpath]]
-
-PyTorch 네이티브 [`nn.MultiHeadAttention`](https://pytorch.org/blog/a-better-transformer-for-fast-transformer-encoder-inference/) 어텐션 패스트패스인 BetterTransformer는 [🤗 Optimum 라이브러리](https://huggingface.co/docs/optimum/bettertransformer/overview)의 통합을 통해 Transformers와 함께 사용할 수 있습니다.
-
-PyTorch의 어텐션 패스트패스는 커널 퓨전과 [중첩된 텐서](https://pytorch.org/docs/stable/nested.html)의 사용을 통해 추론 속도를 높일 수 있습니다. 자세한 벤치마크는 [이 블로그 글](https://medium.com/pytorch/bettertransformer-out-of-the-box-performance-for-huggingface-transformers-3fbe27d50ab2)에서 확인할 수 있습니다.
-
-[`optimum`](https://github.com/huggingface/optimum) 패키지를 설치한 후에는 추론 중 Better Transformer를 사용할 수 있도록 [`~PreTrainedModel.to_bettertransformer`]를 호출하여 관련 내부 모듈을 대체합니다:
-
-```python
-model = model.to_bettertransformer()
-```
-
-[`~PreTrainedModel.reverse_bettertransformer`] 메소드는 정규화된 transformers 모델링을 사용하기 위해 모델을 저장하기 전 원래의 모델링으로 돌아갈 수 있도록 해줍니다:
-
-```python
-model = model.reverse_bettertransformer()
-model.save_pretrained("saved_model")
-```
-
-PyTorch 2.0부터는 어텐션 패스트패스가 인코더와 디코더 모두에서 지원됩니다. 지원되는 아키텍처 목록은 [여기](https://huggingface.co/docs/optimum/bettertransformer/overview#supported-models)에서 확인할 수 있습니다.
-
 ## FP4 혼합 정밀도 추론을 위한 `bitsandbytes` 통합 [[bitsandbytes-integration-for-fp4-mixedprecision-inference]]
 
 `bitsandbytes`를 설치하면 GPU에서 손쉽게 모델을 압축할 수 있습니다. FP4 양자화를 사용하면 원래의 전체 정밀도 버전과 비교하여 모델 크기를 최대 8배 줄일 수 있습니다. 아래에서 시작하는 방법을 확인하세요.

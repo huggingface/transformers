@@ -33,6 +33,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
 
 
@@ -41,6 +42,29 @@ if is_vision_available():
 
 
 logger = logging.get_logger(__name__)
+
+
+class Ovis2ImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    crop_to_patches (`bool`, *optional*, defaults to `False`):
+        Whether to crop the image to patches. Can be overridden by the `crop_to_patches` parameter in the
+        `preprocess` method.
+    min_patches (`int`, *optional*, defaults to 1):
+        The minimum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
+        set to `True`. Can be overridden by the `min_patches` parameter in the `preprocess` method.
+    max_patches (`int`, *optional*, defaults to 12):
+        The maximum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
+        set to `True`. Can be overridden by the `max_patches` parameter in the `preprocess` method.
+    use_covering_area_grid (`bool`, *optional*, defaults to `True`):
+        Whether to use the covering area grid to determine the number of patches. Only has an effect if
+        `crop_to_patches` is set to `True`. Can be overridden by the `use_covering_area_grid` parameter in the
+        `preprocess` method.
+    """
+
+    crop_to_patches: bool
+    min_patches: int
+    max_patches: int
+    use_covering_area_grid: bool
 
 
 # Similar to image_processing_mllama.get_all_supported_aspect_ratios
@@ -160,7 +184,7 @@ def get_min_tile_covering_grid(
     for tile_grid in candidate_tile_grids:
         tile_regions = split_image_into_grid(image_height, image_width, tile_grid)
         tile_covering_ratio = (
-            sum([compute_patch_covering_area(*region, target_patch_size) for region in tile_regions]) / image_area
+            sum(compute_patch_covering_area(*region, target_patch_size) for region in tile_regions) / image_area
         )
 
         evaluated_grids.append((tile_grid, tile_covering_ratio))
@@ -224,6 +248,7 @@ class Ovis2ImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
+    valid_kwargs = Ovis2ImageProcessorKwargs
 
     def __init__(
         self,

@@ -14,18 +14,18 @@
 # limitations under the License.
 from collections import deque
 from math import floor, gcd, sqrt
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...generation.configuration_utils import GenerationConfig
 from ...utils.metrics import attach_tracer, traced
 from .cache_manager import CacheAllocator, FullAttentionCacheAllocator, SlidingAttentionCacheAllocator
 from .requests import get_device_and_memory_breakdown, logger
 
 
-def group_layers_by_attn_type(config: PretrainedConfig) -> tuple[list[list[int]], list[str]]:
+def group_layers_by_attn_type(config: PreTrainedConfig) -> tuple[list[list[int]], list[str]]:
     """
     Group layers depending on the attention mix, according to VLLM's hybrid allocator rules:
         - Layers in each group need to have the same type of attention
@@ -119,11 +119,10 @@ class PagedAttentionCache:
     # TODO: this init is quite long, maybe a refactor is in order
     def __init__(
         self,
-        config: PretrainedConfig,
+        config: PreTrainedConfig,
         generation_config: GenerationConfig,
         device: torch.device,
         dtype: torch.dtype = torch.float16,
-        layer_device_map: Optional[dict[int, Union[str, torch.device, int]]] = None,
         tp_size: Optional[int] = None,
     ) -> None:
         """Initialize a paged attention cache for efficient memory usage.
@@ -133,7 +132,6 @@ class PagedAttentionCache:
             generation_config: Generation configuration containing cache parameters
             device: Device for the cache tensors
             dtype: Data type of the cache
-            layer_device_map: Optional mapping of layer indices to devices
             tp_size: Tensor parallelism size
         """
         self.config = config
@@ -174,8 +172,8 @@ class PagedAttentionCache:
         # Infer number of blocks and max batch tokens
         page_size = self.head_dim * self.num_key_value_heads
 
-        if getattr(config, "attn_implementation", None) == "paged_attention":
-            num_attention_masks = 0
+        if "flash" in self.config._attn_implementation:
+            num_attention_masks = 1  # only used to compute the default meme args
         else:
             # TODO: when we generalize to allow for block-attn, we can use `num_attention_masks=sum(set(group_types))`
             num_attention_masks = 2 if "sliding_attention" in group_types else 1
