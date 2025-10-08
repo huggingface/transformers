@@ -1851,15 +1851,15 @@ class Trainer:
                     self.callback_handler.on_train_end(self.args, self.state, self.control)
                     raise optuna.TrialPruned()
         elif self.hp_search_backend == HPSearchBackend.RAY:
-            import ray.train
+            import ray.tune
 
             with tempfile.TemporaryDirectory() as temp_checkpoint_dir:
                 checkpoint = None
                 if self.control.should_save:
                     self._tune_save_checkpoint(checkpoint_dir=temp_checkpoint_dir)
-                    checkpoint = ray.train.Checkpoint.from_directory(temp_checkpoint_dir)
+                    checkpoint = ray.tune.Checkpoint.from_directory(temp_checkpoint_dir)
                 metrics["objective"] = self.objective
-                ray.train.report(metrics, checkpoint=checkpoint)
+                ray.tune.report(metrics, checkpoint=checkpoint)
 
     def _tune_save_checkpoint(self, checkpoint_dir: str):
         output_dir = os.path.join(checkpoint_dir, f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}")
@@ -2706,9 +2706,9 @@ class Trainer:
             if self.hp_search_backend == HPSearchBackend.OPTUNA:
                 run_id = trial.number
             elif self.hp_search_backend == HPSearchBackend.RAY:
-                import ray.train
+                import ray.tune
 
-                run_id = ray.train.get_context().get_trial_id()
+                run_id = ray.tune.get_context().get_trial_id()
             elif self.hp_search_backend == HPSearchBackend.SIGOPT:
                 run_id = trial.id
             elif self.hp_search_backend == HPSearchBackend.WANDB:
