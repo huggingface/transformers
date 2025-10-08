@@ -65,9 +65,6 @@ class XLNetRelativeAttention(nn.Module):
         self.layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.dropout)
 
-    def prune_heads(self, heads):
-        raise NotImplementedError
-
     @staticmethod
     def rel_shift(x, klen=-1):
         """perform relative shift to form the relative attention score."""
@@ -891,9 +888,6 @@ class XLNetModel(XLNetPreTrainedModel):
 
     def set_input_embeddings(self, new_embeddings):
         self.word_embedding = new_embeddings
-
-    def _prune_heads(self, heads_to_prune):
-        raise NotImplementedError
 
     def create_mask(self, qlen, mlen):
         """

@@ -56,9 +56,9 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
                 "Please install the latest version of fbgemm-gpu library by following : https://pytorch.org/FBGEMM/fbgemm_gpu-development/InstallationInstructions.html#fbgemm-gpu-install-libraries"
             )
 
-        if not is_accelerate_available("0.32.2"):
+        if not is_accelerate_available():
             raise ImportError(
-                "Loading an FP8 quantized model requires accelerate > 0.32.1 (`pip install --upgrade accelerate`)"
+                "Loading an FP8 quantized model requires accelerate (`pip install --upgrade accelerate`)"
             )
 
         if not torch.cuda.is_available():

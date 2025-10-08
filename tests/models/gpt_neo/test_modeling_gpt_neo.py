@@ -380,7 +380,6 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     )
     fx_compatible = True
     test_missing_keys = False
-    test_pruning = False
 
     # special case for DoubleHeads model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
