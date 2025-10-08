@@ -123,9 +123,6 @@ class Qwen3NextDynamicCache:
     def __len__(self):
         return len(self.layer_types)
 
-    def __getitem__(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
-        return self.key_cache[layer_idx], self.value_cache[layer_idx]
-
     def update(
         self,
         key_states: torch.Tensor,

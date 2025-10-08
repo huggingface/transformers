@@ -1807,7 +1807,7 @@ class ModelUtilsTest(TestCasePlus):
         # simulate injecting virtual tokens like in prefix tuning
         num_virtual_tokens = 3
         past_key_values = [torch.randn(2, 1, 2, num_virtual_tokens, 8)] * 2
-        past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+        past_key_values = DynamicCache(past_key_values)
         model_inputs["attention_mask"] = torch.cat(
             (
                 model_inputs["attention_mask"],
