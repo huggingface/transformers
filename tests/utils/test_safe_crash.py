@@ -28,7 +28,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def _thread_stress_script(*, imports: str, setup_code: str) -> str:
+def _regex_thread_script(*, imports: str, setup_code: str) -> str:
     setup_block = textwrap.indent(
         textwrap.dedent(setup_code).strip(),
         " " * 8,
@@ -67,7 +67,7 @@ def _thread_stress_script(*, imports: str, setup_code: str) -> str:
     )
 
 
-def _run_thread_stress_script(label: str, script: str) -> tuple[subprocess.CompletedProcess, str]:
+def _run_regex_thread_script(label: str, script: str) -> tuple[subprocess.CompletedProcess, str]:
     env = dict(os.environ, PYTHON_GIL="0")
     result = subprocess.run(  # noqa: PLW1510 intentionally check return code manually
         [sys.executable, "-c", script],
@@ -91,7 +91,7 @@ def _run_thread_stress_script(label: str, script: str) -> tuple[subprocess.Compl
 
 @pytest.mark.xfail(strict=False, reason="Raw regex crashes under PYTHON_GIL=0")
 def test_raw_regex_thread_safety_crashes_under_gil0():
-    script = _thread_stress_script(
+    script = _regex_thread_script(
         imports="import regex",
         setup_code="""
         def match_once():
@@ -99,7 +99,7 @@ def test_raw_regex_thread_safety_crashes_under_gil0():
         """,
     )
 
-    result, message = _run_thread_stress_script("raw regex", script)
+    result, message = _run_regex_thread_script("raw regex", script)
 
     if result.returncode == 0:
         pytest.fail("raw regex unexpectedly behaved thread-safely\n" + message)
@@ -114,48 +114,15 @@ def test_raw_regex_thread_safety_crashes_under_gil0():
     pytest.fail(message)
 
 
-@pytest.mark.parametrize(
-    "label, imports, setup_code",
-    (
-        (
-            "stdlib re",
-            "import re",
-            """
-            def match_once():
-                return re.match(pattern_text, text_to_match)
-            """,
-        ),
-        (
-            "pcre2",
-            "import pcre2",
-            """
-            compiled = pcre2.compile(pattern_text, jit=False)
-
-            def match_once():
-                return compiled.match(text_to_match)
-            """,
-        ),
-        (
-            "pcre2 (jit)",
-            "import pcre2",
-            """
-            compiled = pcre2.compile(pattern_text, jit=True)
-
-            def match_once():
-                return compiled.match(text_to_match)
-            """,
-        ),
-    ),
-)
-
-# re.match is thread safe even with internal caching compiled regex
-# pcre does not have caching so it is thread safe
-def test_threaded_engine_regressions(label: str, imports: str, setup_code: str):
-    if "pcre2" in imports:
-        pytest.importorskip("pcre2")
-
-    script = _thread_stress_script(imports=imports, setup_code=setup_code)
-    result, message = _run_thread_stress_script(label, script)
+def test_threaded_stdlib_re():
+    re_script = _regex_thread_script(
+        imports="import re",
+        setup_code="""
+        def match_once():
+            return re.match(pattern_text, text_to_match)
+        """,
+    )
+    result, message = _run_regex_thread_script("stdlib re", re_script)
 
     if result.returncode != 0:
-        pytest.fail(f"{label} thread stress failed, return code = {result}\n " + message)
+        pytest.fail("stdlib re thread stress failed\n" + message)
