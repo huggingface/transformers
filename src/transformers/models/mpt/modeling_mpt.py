@@ -242,25 +242,6 @@ class MptPreTrainedModel(PreTrainedModel):
                 module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    @staticmethod
-    def _convert_to_mpt_cache(
-        past_key_values: tuple[tuple[torch.Tensor, torch.Tensor]],
-    ) -> tuple[tuple[torch.Tensor, torch.Tensor]]:
-        """
-        Converts the cache to the format expected by Mpt, i.e. to tuple(tuple([batch_size * num_heads, ...]))
-        """
-        batch_size, num_heads, head_dim, seq_length = past_key_values[0][0].shape
-        batch_size_times_num_heads = batch_size * num_heads
-        # key:  [batch_size, num_heads, head_dim, seq_length] -> [batch_size * num_heads, head_dim, seq_length]
-        # value: [batch_size, num_heads, seq_length, head_dim] -> [batch_size * num_heads, seq_length, head_dim]
-        return tuple(
-            (
-                layer_past[0].reshape(batch_size_times_num_heads, head_dim, seq_length),
-                layer_past[1].reshape(batch_size_times_num_heads, seq_length, head_dim),
-            )
-            for layer_past in past_key_values
-        )
-
 
 @auto_docstring
 class MptModel(MptPreTrainedModel):
@@ -350,13 +331,6 @@ class MptModel(MptPreTrainedModel):
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
-        if use_cache and isinstance(past_key_values, tuple):
-            logger.warning_once(
-                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
-                "You should pass an instance of `DynamicCache` instead, e.g. "
-                "`past_key_values=DynamicCache.from_legacy_cache(past_key_values)`."
-            )
-            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
 
         hidden_states = inputs_embeds
 
