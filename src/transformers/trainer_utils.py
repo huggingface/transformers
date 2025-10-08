@@ -29,7 +29,6 @@ from functools import partial
 from typing import Any, Callable, NamedTuple, Optional, Union
 
 import numpy as np
-from safetensors.torch import load_file as safe_load_file
 
 from .utils import (
     SAFE_WEIGHTS_INDEX_NAME,
@@ -52,6 +51,7 @@ from .utils import (
 
 if is_torch_available():
     import torch
+    from safetensors.torch import load_file as safe_load_file
 
 
 def seed_worker(worker_id: int, num_workers: int, rank: int):
