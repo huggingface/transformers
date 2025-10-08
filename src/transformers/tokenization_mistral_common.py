@@ -355,7 +355,9 @@ class MistralCommonTokenizer(PushToHubMixin):
         """
         if self._cache_get_vocab is None:
             # We reverse the order to make sure that the first token is the one to be returned when there are multiple tokens with the same string representation.
-            self._cache_get_vocab = {self.convert_ids_to_tokens(i, skip_special_tokens=False): i for i in range(self.vocab_size, -1, -1)}
+            self._cache_get_vocab = {
+                self.convert_ids_to_tokens(i, skip_special_tokens=False): i for i in range(self.vocab_size, -1, -1)
+            }
         return self._cache_get_vocab
 
     def __len__(self):
