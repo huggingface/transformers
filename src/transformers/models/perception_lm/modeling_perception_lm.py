@@ -30,9 +30,20 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_utils import PreTrainedModel
+from ...configuration_utils import PretrainedConfig
 from ...utils import auto_docstring, can_return_tuple
 from ..auto import AutoModel
 from .configuration_perception_lm import PerceptionLMConfig
+
+class PerceptionEncoder(PreTrainedModel):
+    config_class = PretrainedConfig
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.dummy_layer = None
+
+    def forward(self, x):
+        return x
 
 
 class PerceptionLMAdaptiveAvgPooling(nn.Module):
@@ -484,4 +495,4 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
         return model_inputs
 
 
-__all__ = ["PerceptionLMForConditionalGeneration", "PerceptionLMPreTrainedModel", "PerceptionLMModel"]
+__all__ = ["PerceptionLMForConditionalGeneration", "PerceptionLMPreTrainedModel", "PerceptionLMModel", "PerceptionEncoder"]
