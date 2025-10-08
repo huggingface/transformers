@@ -222,7 +222,26 @@ class HfQuantizer(ABC):
         model.quantization_method = self.quantization_config.quant_method
         if self.pre_quantized:
             self._convert_model_for_quantization(model)
-        return self._process_model_before_weight_loading(model, **kwargs)
+        self._process_model_before_weight_loading(model, **kwargs)
+
+        # We store the original dtype for quantized models as we cannot easily retrieve it
+        # once the weights have been quantized
+        # Note that once you have loaded a quantized model, you can't change its dtype so this will
+        # remain a single source of truth
+        original_dtype = dtype if dtype is not None else torch.get_default_dtype()
+
+        def _assign_original_dtype(module):
+            for child in module.children():
+                if isinstance(child, PreTrainedModel):
+                    child.config._pre_quantization_dtype = original_dtype
+                _assign_original_dtype(child)
+
+        config._pre_quantization_dtype = original_dtype
+        _assign_original_dtype(model)
+
+        # Torchao needs access to all metadata later
+        if model.quantization_config.quant_method == QuantizationMethod.TORCHAO:
+            model.set_metadata(checkpoint_files)
 
     def postprocess_model(self, model: "PreTrainedModel", **kwargs):
         """

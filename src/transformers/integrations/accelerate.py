@@ -194,3 +194,72 @@ def find_tied_parameters(model: "nn.Module", **kwargs):
                 tied_param_groups[param_name].append(tied_param_name)
 
     return [sorted([weight] + list(set(tied))) for weight, tied in tied_param_groups.items()]
+
+
+def auto_set_device_map(device_map):
+    # Potentially detect context manager or global device, and use it (only if no device_map was provided)
+    if device_map is None and not is_deepspeed_zero3_enabled():
+        device_in_context = get_torch_context_manager_or_global_device()
+        if device_in_context == torch.device("meta"):
+            raise RuntimeError(
+                "You are using `from_pretrained` with a meta device context manager or `torch.set_default_device('meta')`.\n"
+                "This is an anti-pattern as `from_pretrained` wants to load existing weights.\nIf you want to initialize an "
+                "empty model on the meta device, use the context manager or global device with `from_config`, or `ModelClass(config)`"
+            )
+        device_map = device_in_context
+
+    # change device_map into a map if we passed an int, a str or a torch.device
+    if isinstance(device_map, torch.device):
+        device_map = {"": device_map}
+    elif isinstance(device_map, str) and device_map not in ["auto", "balanced", "balanced_low_0", "sequential"]:
+        try:
+            device_map = {"": torch.device(device_map)}
+        except RuntimeError:
+            raise ValueError(
+                "When passing device_map as a string, the value needs to be a device name (e.g. cpu, cuda:0) or "
+                f"'auto', 'balanced', 'balanced_low_0', 'sequential' but found {device_map}."
+            )
+    elif isinstance(device_map, int):
+        if device_map < 0:
+            raise ValueError(
+                "You can't pass device_map as a negative int. If you want to put the model on the cpu, pass device_map = 'cpu' "
+            )
+        else:
+            device_map = {"": device_map}
+
+    if device_map is not None:
+        if is_deepspeed_zero3_enabled():
+            raise ValueError("DeepSpeed Zero-3 is not compatible with passing a `device_map`.")
+        if not is_accelerate_available():
+            raise ValueError(
+                "Using a `device_map`, `tp_plan`, `torch.device` context manager or setting `torch.set_default_device(device)` "
+                "requires `accelerate`. You can install it with `pip install accelerate`"
+            )
+
+
+def accelerate_dispatch(model, hf_quantizer, device_map, offload_folder, offload_index, offload_buffers):
+    device_map_kwargs = {
+        "device_map": device_map,
+        "offload_dir": offload_folder,
+        "offload_index": offload_index,
+        "offload_buffers": offload_buffers,
+    }
+    if "skip_keys" in inspect.signature(dispatch_model).parameters:
+        device_map_kwargs["skip_keys"] = model._skip_keys_device_placement
+    # For HQQ method we force-set the hooks for single GPU envs
+    if (
+        "force_hooks" in inspect.signature(dispatch_model).parameters
+        and hf_quantizer is not None
+        and hf_quantizer.quantization_config.quant_method == QuantizationMethod.HQQ
+    ):
+        device_map_kwargs["force_hooks"] = True
+    if (
+        hf_quantizer is not None
+        and hf_quantizer.quantization_config.quant_method == QuantizationMethod.FBGEMM_FP8
+        and isinstance(device_map, dict)
+        and ("cpu" in device_map.values() or "disk" in device_map.values())
+    ):
+        device_map_kwargs["offload_buffers"] = True
+
+    if not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
+        dispatch_model(model, **device_map_kwargs)

@@ -14,6 +14,8 @@
 
 import importlib
 import inspect
+import json
+import os
 import re
 from typing import Any, Optional, Union
 
@@ -614,3 +616,58 @@ class PeftAdapterMixin:
         if len(self.peft_config) == 0:
             del self.peft_config
             self._hf_peft_config_loaded = False
+
+
+def maybe_load_adapters(
+    pretrained_model_name_or_path,
+    cache_dir,
+    force_download,
+    proxies,
+    local_files_only,
+    commit_hash,
+    token,
+    **adapter_kwargs,
+):
+    if token is not None and adapter_kwargs is not None and "token" not in adapter_kwargs:
+        adapter_kwargs["token"] = token
+    if commit_hash is None:
+        if not isinstance(config, PreTrainedConfig):
+            # We make a call to the config file first (which may be absent) to get the commit hash as soon as possible
+            resolved_config_file = cached_file(
+                pretrained_model_name_or_path,
+                CONFIG_NAME,
+                cache_dir=cache_dir,
+                force_download=force_download,
+                proxies=proxies,
+                local_files_only=local_files_only,
+                token=token,
+                revision=revision,
+                subfolder=subfolder,
+                _raise_exceptions_for_gated_repo=False,
+                _raise_exceptions_for_missing_entries=False,
+                _raise_exceptions_for_connection_errors=False,
+            )
+            commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
+        else:
+            commit_hash = getattr(config, "_commit_hash", None)
+
+    if is_peft_available():
+        _adapter_model_path = adapter_kwargs.pop("_adapter_model_path", None)
+
+        if _adapter_model_path is None:
+            _adapter_model_path = find_adapter_config_file(
+                pretrained_model_name_or_path,
+                cache_dir=cache_dir,
+                force_download=force_download,
+                proxies=proxies,
+                local_files_only=local_files_only,
+                _commit_hash=_commit_hash,
+                **adapter_kwargs,
+            )
+        if _adapter_model_path is not None and os.path.isfile(_adapter_model_path):
+            with open(_adapter_model_path, "r", encoding="utf-8") as f:
+                _adapter_model_path = pretrained_model_name_or_path
+                pretrained_model_name_or_path = json.load(f)["base_model_name_or_path"]
+    else:
+        _adapter_model_path = None
+    return _adapter_model_path

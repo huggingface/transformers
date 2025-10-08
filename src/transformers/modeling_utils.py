@@ -48,7 +48,7 @@ from .distributed import DistributedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
 from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled, is_fsdp_enabled
-from .integrations.accelerate import find_tied_parameters, init_empty_weights
+from .integrations.accelerate import find_tied_parameters, init_empty_weights, accelerate_dispatch, auto_set_device_map
 from .integrations.deepspeed import _load_state_dict_into_zero3_model
 from .integrations.eager_paged import eager_paged_attention_forward
 from .integrations.flash_attention import flash_attention_forward
@@ -66,6 +66,7 @@ from .integrations.tensor_parallel import (
     shard_and_distribute_module,
     verify_tp_plan,
 )
+from .integrations.peft import maybe_load_adapters
 from .loss.loss_utils import LOSS_MAPPING
 from .modeling_flash_attention_utils import lazy_import_flash_attention
 from .pytorch_utils import id_tensor_storage
@@ -274,6 +275,27 @@ def restore_default_dtype(func):
             torch.set_default_dtype(old_dtype)
 
     return _wrapper
+
+
+def get_keep_in_fp32_regex(model, hf_quantizer, dtype):
+    # Find fp32 modules if needed
+    keep_in_fp32_modules = []
+    # The _keep_in_fp32_modules flag is only used to avoid bf16 -> fp16 casting precision issues. It was introduced
+    # in case of force loading a model that should stay bf16 in fp16 (which includes a few quantizers as this is a pre-processing
+    # step for e.g. bitsandbytes). See https://github.com/huggingface/transformers/issues/20287 for details.
+    if model._keep_in_fp32_modules is not None and (
+        dtype == torch.float16 or getattr(hf_quantizer, "use_keep_in_fp32_modules", False)
+    ):
+        keep_in_fp32_modules.extend(model._keep_in_fp32_modules)
+
+    if model._keep_in_fp32_modules_strict is not None and (dtype == torch.float16 or dtype == torch.bfloat16):
+        keep_in_fp32_modules.extend(model._keep_in_fp32_modules_strict)
+
+    keep_in_fp32_regex = None
+    if keep_in_fp32_modules:
+        # We need to match exact layers, so we add either `.` on each side, or start/end of string
+        keep_in_fp32_regex = re.compile("|".join([rf"((^|\.){module}($|\.))" for module in keep_in_fp32_modules]))
+    return keep_in_fp32_regex
 
 
 def get_torch_context_manager_or_global_device():
@@ -4448,22 +4470,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # For BC on torch_dtype argument
         if torch_dtype is not None:
-            logger.warning_once("`torch_dtype` is deprecated! Use `dtype` instead!")
-            # If both kwargs are provided, use `dtype`
             dtype = dtype if dtype is not None else torch_dtype
 
         if state_dict is not None and (pretrained_model_name_or_path is not None or gguf_file is not None):
             raise ValueError(
                 "`state_dict` cannot be passed together with a model name or a `gguf_file`. Use one of the two loading strategies."
-            )
-        if tp_size is not None and tp_plan is None:
-            raise ValueError("tp_plan has to be set when tp_size is passed.")
-        if tp_plan is not None and tp_plan != "auto":
-            # TODO: we can relax this check when we support taking tp_plan from a json file, for example.
-            raise ValueError(f"tp_plan supports 'auto' only for now but got {tp_plan}.")
-        if tp_plan is not None and device_map is not None:
-            raise ValueError(
-                "`tp_plan` and `device_map` are mutually exclusive. Choose either one for parallelization."
             )
 
         if device_map == "auto" and int(os.environ.get("WORLD_SIZE", "0")):
@@ -4473,140 +4484,26 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 ": PartialState().process_index} where PartialState comes from accelerate library"
             )
 
-        # We need to correctly dispatch the model on the current process device. The easiest way for this is to use a simple
-        # `device_map` pointing to the correct device
-        if tp_plan is not None:
-            if device_mesh is None:
-                tp_plan, device_map, device_mesh, tp_size = initialize_tensor_parallelism(tp_plan, tp_size=tp_size)
-            else:
-                if device_mesh.ndim > 1:
-                    if "tp" not in device_mesh.mesh_dim_names:
-                        raise ValueError(
-                            "When using `tp_plan` and n-d `device_mesh`, it must contain a 'tp' dimension. "
-                            "Please provide a valid `device_mesh`."
-                        )
-                    device_mesh = device_mesh["tp"]
-                tp_size = device_mesh.size()
-                device_map = torch.device(f"{device_mesh.device_type}:{int(os.environ['LOCAL_RANK'])}")
-
-            if tp_size is None:
-                tp_size = torch.distributed.get_world_size()
-
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
+        if tp_plan is not None:  # TP warnings, and setup
+            tp_plan, device_map, device_mesh, tp_size = initialize_tensor_parallelism(
+                tp_plan, tp_size=tp_size, device_mesh=device_mesh, device_map=device_map
             )
-            if token is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            token = use_auth_token
-
-        if token is not None and adapter_kwargs is not None and "token" not in adapter_kwargs:
-            adapter_kwargs["token"] = token
 
         if gguf_file is not None and not is_accelerate_available():
             raise ValueError("accelerate is required when loading a GGUF file `pip install accelerate`.")
 
-        if commit_hash is None:
-            if not isinstance(config, PreTrainedConfig):
-                # We make a call to the config file first (which may be absent) to get the commit hash as soon as possible
-                resolved_config_file = cached_file(
-                    pretrained_model_name_or_path,
-                    CONFIG_NAME,
-                    cache_dir=cache_dir,
-                    force_download=force_download,
-                    proxies=proxies,
-                    local_files_only=local_files_only,
-                    token=token,
-                    revision=revision,
-                    subfolder=subfolder,
-                    _raise_exceptions_for_gated_repo=False,
-                    _raise_exceptions_for_missing_entries=False,
-                    _raise_exceptions_for_connection_errors=False,
-                )
-                commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
-            else:
-                commit_hash = getattr(config, "_commit_hash", None)
+        _adapter_model_path = maybe_load_adapters(
+            pretrained_model_name_or_path,
+            cache_dir=cache_dir,
+            force_download=force_download,
+            proxies=proxies,
+            local_files_only=local_files_only,
+            commit_hash=commit_hash,
+            token=token,
+            **adapter_kwargs,
+        )
 
-        if is_peft_available():
-            _adapter_model_path = adapter_kwargs.pop("_adapter_model_path", None)
-
-            if _adapter_model_path is None:
-                _adapter_model_path = find_adapter_config_file(
-                    pretrained_model_name_or_path,
-                    cache_dir=cache_dir,
-                    force_download=force_download,
-                    proxies=proxies,
-                    local_files_only=local_files_only,
-                    _commit_hash=commit_hash,
-                    **adapter_kwargs,
-                )
-            if _adapter_model_path is not None and os.path.isfile(_adapter_model_path):
-                with open(_adapter_model_path, "r", encoding="utf-8") as f:
-                    _adapter_model_path = pretrained_model_name_or_path
-                    pretrained_model_name_or_path = json.load(f)["base_model_name_or_path"]
-        else:
-            _adapter_model_path = None
-
-        # Potentially detect context manager or global device, and use it (only if no device_map was provided)
-        if device_map is None and not is_deepspeed_zero3_enabled():
-            device_in_context = get_torch_context_manager_or_global_device()
-            if device_in_context == torch.device("meta"):
-                raise RuntimeError(
-                    "You are using `from_pretrained` with a meta device context manager or `torch.set_default_device('meta')`.\n"
-                    "This is an anti-pattern as `from_pretrained` wants to load existing weights.\nIf you want to initialize an "
-                    "empty model on the meta device, use the context manager or global device with `from_config`, or `ModelClass(config)`"
-                )
-            device_map = device_in_context
-
-        # change device_map into a map if we passed an int, a str or a torch.device
-        if isinstance(device_map, torch.device):
-            device_map = {"": device_map}
-        elif isinstance(device_map, str) and device_map not in ["auto", "balanced", "balanced_low_0", "sequential"]:
-            try:
-                device_map = {"": torch.device(device_map)}
-            except RuntimeError:
-                raise ValueError(
-                    "When passing device_map as a string, the value needs to be a device name (e.g. cpu, cuda:0) or "
-                    f"'auto', 'balanced', 'balanced_low_0', 'sequential' but found {device_map}."
-                )
-        elif isinstance(device_map, int):
-            if device_map < 0:
-                raise ValueError(
-                    "You can't pass device_map as a negative int. If you want to put the model on the cpu, pass device_map = 'cpu' "
-                )
-            else:
-                device_map = {"": device_map}
-
-        if device_map is not None:
-            if is_deepspeed_zero3_enabled():
-                raise ValueError("DeepSpeed Zero-3 is not compatible with passing a `device_map`.")
-            if not is_accelerate_available():
-                raise ValueError(
-                    "Using a `device_map`, `tp_plan`, `torch.device` context manager or setting `torch.set_default_device(device)` "
-                    "requires `accelerate`. You can install it with `pip install accelerate`"
-                )
-
-        # handling bnb config from kwargs, remove after `load_in_{4/8}bit` deprecation.
-        if load_in_4bit or load_in_8bit:
-            if quantization_config is not None:
-                raise ValueError(
-                    "You can't pass `load_in_4bit`or `load_in_8bit` as a kwarg when passing "
-                    "`quantization_config` argument at the same time."
-                )
-
-            # preparing BitsAndBytesConfig from kwargs
-            config_dict = {k: v for k, v in kwargs.items() if k in inspect.signature(BitsAndBytesConfig).parameters}
-            config_dict = {**config_dict, "load_in_4bit": load_in_4bit, "load_in_8bit": load_in_8bit}
-            quantization_config, kwargs = BitsAndBytesConfig.from_dict(
-                config_dict=config_dict, return_unused_kwargs=True, **kwargs
-            )
-            logger.warning(
-                "The `load_in_4bit` and `load_in_8bit` arguments are deprecated and will be removed in the future versions. "
-                "Please, pass a `BitsAndBytesConfig` object in `quantization_config` argument instead."
-            )
+        device_map = auto_set_device_map(device_map)  # warn, error and fix the device map
 
         user_agent = {"file_type": "model", "framework": "pytorch", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
@@ -4646,7 +4543,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             config._attn_implementation = kwargs.pop("attn_implementation")
 
         transformers_explicit_filename = getattr(config, "transformers_weights", None)
-
         if transformers_explicit_filename is not None:
             if not transformers_explicit_filename.endswith(
                 ".safetensors"
@@ -4661,20 +4557,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             config, quantization_config, dtype, device_map, weights_only, user_agent
         )
 
-        if gguf_file is not None and hf_quantizer is not None:
-            raise ValueError(
-                "You cannot combine Quantization and loading a model from a GGUF file, try again by making sure you did not passed a `quantization_config` or that you did not load a quantized model from the Hub."
-            )
-
-        if (
-            gguf_file
-            and device_map is not None
-            and ((isinstance(device_map, dict) and "disk" in device_map.values()) or "disk" in device_map)
-        ):
-            raise RuntimeError(
-                "One or more modules is configured to be mapped to disk. Disk offload is not supported for models "
-                "loaded from GGUF files."
-            )
+        if gguf_file:
+            if hf_quantizer is not None:
+                raise ValueError(
+                    "You cannot combine Quantization and loading a model from a GGUF file, try again by making sure you did not passed a `quantization_config` or that you did not load a quantized model from the Hub."
+                )
+            if device_map is not None and (
+                (isinstance(device_map, dict) and "disk" in device_map.values()) or "disk" in device_map
+            ):
+                raise RuntimeError(
+                    "One or more modules is configured to be mapped to disk. Disk offload is not supported for models "
+                    "loaded from GGUF files."
+                )
 
         checkpoint_files, sharded_metadata = _get_resolved_checkpoint_files(
             pretrained_model_name_or_path=pretrained_model_name_or_path,
@@ -4695,18 +4589,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         )
 
         is_quantized = hf_quantizer is not None
-        is_from_file = pretrained_model_name_or_path is not None or gguf_file is not None
-
-        # Just a helpful message in case we try to load safetensors files coming from old Transformers tf/flax classes
-        if is_from_file and checkpoint_files[0].endswith(".safetensors"):
-            with safe_open(checkpoint_files[0], framework="pt") as f:
-                metadata = f.metadata()
-            if metadata is not None and metadata.get("format") in ["tf", "flax"]:
-                logger.warning(
-                    "The safetensors checkpoint found has format `tf` or `flax`. This mean that the keys will very"
-                    "likely not match to the model you are trying to load, and will be newly initialized. If it's the case "
-                    "another warning will be raised later. Consider converting your checkpoint to the correct format."
-                )
 
         if gguf_file:
             from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
@@ -4737,24 +4619,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # make sure we use the model's config since the __init__ call might have copied it
         config = model.config
 
-        # Find fp32 modules if needed
-        keep_in_fp32_modules = []
-        # The _keep_in_fp32_modules flag is only used to avoid bf16 -> fp16 casting precision issues. It was introduced
-        # in case of force loading a model that should stay bf16 in fp16 (which includes a few quantizers as this is a pre-processing
-        # step for e.g. bitsandbytes). See https://github.com/huggingface/transformers/issues/20287 for details.
-        if model._keep_in_fp32_modules is not None and (
-            dtype == torch.float16 or getattr(hf_quantizer, "use_keep_in_fp32_modules", False)
-        ):
-            keep_in_fp32_modules.extend(model._keep_in_fp32_modules)
-
-        if model._keep_in_fp32_modules_strict is not None and (dtype == torch.float16 or dtype == torch.bfloat16):
-            keep_in_fp32_modules.extend(model._keep_in_fp32_modules_strict)
-
-        keep_in_fp32_regex = None
-        if keep_in_fp32_modules:
-            # We need to match exact layers, so we add either `.` on each side, or start/end of string
-            keep_in_fp32_regex = re.compile("|".join([rf"((^|\.){module}($|\.))" for module in keep_in_fp32_modules]))
-
+        # Regex to keep a fixed dtype
+        keep_in_fp32_regex = get_keep_in_fp32_regex(model, hf_quantizer, dtype)
         if hf_quantizer is not None:
             hf_quantizer.preprocess_model(
                 model=model,
@@ -4763,26 +4629,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 config=config,
                 use_kernels=use_kernels,
             )
-            # We store the original dtype for quantized models as we cannot easily retrieve it
-            # once the weights have been quantized
-            # Note that once you have loaded a quantized model, you can't change its dtype so this will
-            # remain a single source of truth
-            original_dtype = dtype if dtype is not None else torch.get_default_dtype()
 
-            def _assign_original_dtype(module):
-                for child in module.children():
-                    if isinstance(child, PreTrainedModel):
-                        child.config._pre_quantization_dtype = original_dtype
-                    _assign_original_dtype(child)
-
-            config._pre_quantization_dtype = original_dtype
-            _assign_original_dtype(model)
-
-            # Torchao needs access to all metadata later
-            if hf_quantizer.quantization_config.quant_method == QuantizationMethod.TORCHAO:
-                hf_quantizer.set_metadata(checkpoint_files)
-
-        if _torch_distributed_available and device_mesh is not None:
+        if _torch_distributed_available and device_mesh is not None:  # accelerate device_map auto hooks
             model = distribute_model(model, distributed_config, device_mesh, tp_size)
 
         # Prepare the full device map
@@ -4821,74 +4669,28 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if use_kernels:
             model.use_kernels = True
 
-        # TODO: put this in a separate self.load_generation_config
         # If it is a model with generation capabilities, attempt to load generation files (generation config,
         # custom generate function)
-        if model.can_generate() and generation_config is not None:
-            logger.info("The user-defined `generation_config` will be used to override the default generation config.")
-            model.generation_config = model.generation_config.from_dict(generation_config.to_dict())
-        elif model.can_generate() and pretrained_model_name_or_path is not None:
-            repo_loading_kwargs = {
-                "cache_dir": cache_dir,
-                "force_download": force_download,
-                "proxies": proxies,
-                "local_files_only": local_files_only,
-                "token": token,
-                "revision": revision,
-                "subfolder": subfolder,
-                **kwargs,
-            }
-            # Load generation config
-            try:
-                model.generation_config = GenerationConfig.from_pretrained(
-                    pretrained_model_name_or_path,
-                    _from_auto=from_auto_class,
-                    _from_pipeline=from_pipeline,
-                    **repo_loading_kwargs,
-                )
-            except OSError:
-                logger.info(
-                    "Generation config file not found, using a generation config created from the model config."
-                )
-                pass
-            # Load custom generate function if `pretrained_model_name_or_path` defines it (and override `generate`)
-            if hasattr(model, "load_custom_generate"):
-                try:
-                    custom_generate = model.load_custom_generate(
-                        pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **repo_loading_kwargs
-                    )
-                    model.generate = functools.partial(custom_generate, model=model)
-                except OSError:  # there is no custom generate function
-                    pass
+        model.adjust_generation_function(
+            generation_config,
+            from_auto_class,
+            from_pipeline,
+            pretrained_model_name_or_path,
+            cache_dir,
+            force_download,
+            proxies,
+            local_files_only,
+            token,
+            revision,
+            subfolder,
+            trust_remote_code,
+            **kwargs,
+        )
 
         # for device_map="auto" : dispatch model with hooks on all devices if necessary (not needed with a tp_plan, so we skip it as it slightly
-        # harm performances). TODO: split this in a separate function
+        # harm performances).
         if device_map is not None and device_mesh is None:
-            device_map_kwargs = {
-                "device_map": device_map,
-                "offload_dir": offload_folder,
-                "offload_index": offload_index,
-                "offload_buffers": offload_buffers,
-            }
-            if "skip_keys" in inspect.signature(dispatch_model).parameters:
-                device_map_kwargs["skip_keys"] = model._skip_keys_device_placement
-            # For HQQ method we force-set the hooks for single GPU envs
-            if (
-                "force_hooks" in inspect.signature(dispatch_model).parameters
-                and hf_quantizer is not None
-                and hf_quantizer.quantization_config.quant_method == QuantizationMethod.HQQ
-            ):
-                device_map_kwargs["force_hooks"] = True
-            if (
-                hf_quantizer is not None
-                and hf_quantizer.quantization_config.quant_method == QuantizationMethod.FBGEMM_FP8
-                and isinstance(device_map, dict)
-                and ("cpu" in device_map.values() or "disk" in device_map.values())
-            ):
-                device_map_kwargs["offload_buffers"] = True
-
-            if not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
-                dispatch_model(model, **device_map_kwargs)
+            accelerate_dispatch(model, hf_quantizer, device_map, offload_folder, offload_index, offload_buffers)
 
         if hf_quantizer is not None:
             model.hf_quantizer = hf_quantizer
