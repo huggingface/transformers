@@ -5600,9 +5600,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # This will only initialize submodules that are not marked as initialized by the line above.
         if is_deepspeed_zero3_enabled() and not is_quantized:
             import deepspeed
-
-            not_initialized_parameters = list(
-                {v for v in self.state_dict().values() if not getattr(v, "_is_hf_initialized", False)}
+            not_initialized_parameters =  list(
+                set(
+                    p for module in self.modules()
+                    if not getattr(module, "_is_hf_initialized", False)
+                    for p in module.parameters(recurse=False)
+                )
             )
             with deepspeed.zero.GatheredParameters(not_initialized_parameters, modifier_rank=0):
                 self.initialize_weights()

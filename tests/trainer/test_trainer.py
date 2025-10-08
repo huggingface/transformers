@@ -575,7 +575,7 @@ if is_torch_available():
         preprocess_logits_for_metrics = kwargs.pop("preprocess_logits_for_metrics", None)
         assert output_dir is not None, "output_dir should be specified for testing"
         args = RegressionTrainingArguments(output_dir, a=a, b=b, keep_report_to=keep_report_to, **kwargs)
-        return Trainer(
+        trainer = Trainer(
             model,
             args,
             data_collator=data_collator,
@@ -586,6 +586,9 @@ if is_torch_available():
             model_init=model_init,
             preprocess_logits_for_metrics=preprocess_logits_for_metrics,
         )
+        # TODO: loss function defined in RegressionModel doesn't accept num_item_per_batch, to fix later
+        trainer.model_accepts_loss_kwargs = False
+        return trainer
 
     def get_language_model_trainer(**kwargs):
         dataset = datasets.load_dataset("fka/awesome-chatgpt-prompts")
@@ -2774,8 +2777,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     def test_evaluate(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(a=1.5, b=2.5, compute_metrics=AlmostAccuracy(), output_dir=tmp_dir)
-            # the model loss don't take into account num_items_in_batch
-            trainer.model_accepts_loss_kwargs = False
             results = trainer.evaluate()
 
             x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
@@ -2789,8 +2790,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer = get_regression_trainer(
                 a=1.5, b=2.5, eval_len=66, compute_metrics=AlmostAccuracy(), output_dir=tmp_dir
             )
-            # the model loss don't take into account num_items_in_batch
-            trainer.model_accepts_loss_kwargs = False
             results = trainer.evaluate()
 
             x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
@@ -2808,8 +2807,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 preprocess_logits_for_metrics=lambda logits, labels: logits + 1,
                 output_dir=tmp_dir,
             )
-            # the model loss don't take into account num_items_in_batch
-            trainer.model_accepts_loss_kwargs = False
             results = trainer.evaluate()
 
             x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
@@ -2824,8 +2821,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer = get_regression_trainer(
                 a=1.5, b=2.5, compute_metrics=AlmostAccuracyBatched(), batch_eval_metrics=True, output_dir=tmp_dir
             )
-            # the model loss don't take into account num_items_in_batch
-            trainer.model_accepts_loss_kwargs = False
             results = trainer.evaluate()
 
             x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
@@ -3919,8 +3914,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         with tempfile.TemporaryDirectory() as tmp_dir:
             args = RegressionTrainingArguments(output_dir=tmp_dir)
             trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset, compute_metrics=AlmostAccuracy())
-            # the model loss don't take into account num_items_in_batch
-            trainer.model_accepts_loss_kwargs = False
             results = trainer.evaluate()
             x, y = trainer.eval_dataset.dataset.x, trainer.eval_dataset.dataset.ys[0]
             pred = 1.5 * x + 2.5
