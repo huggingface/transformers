@@ -4,11 +4,27 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_fast_vlm.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+# Copyright 2025 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import math
 from dataclasses import dataclass
 from typing import Optional, Union
 
 import torch
 from torch import nn
+from torch.nn.functional import adaptive_avg_pool2d
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
@@ -20,6 +36,34 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ..auto import AutoModel
 from .configuration_fast_vlm import FastVlmConfig
+
+
+class FastVlmMultiModalProjector(nn.Module):
+    def __init__(self, config: FastVlmConfig):
+        super().__init__()
+        if isinstance(config.vision_feature_layer, int):
+            layers = [config.vision_feature_layer]
+        else:
+            layers = config.vision_feature_layer
+        #  different layers have different hidden sizes that are concatenated
+        total_hidden_size = 0
+        for layer in layers:
+            total_hidden_size += config.vision_feature_layer // (2).pow(-layer - 1)
+        self.linear_1 = nn.Linear(
+            total_hidden_size,
+            config.text_config.hidden_size,
+            bias=config.multimodal_projector_bias,
+        )
+        self.act = ACT2FN[config.projector_hidden_act]
+        self.linear_2 = nn.Linear(
+            config.text_config.hidden_size, config.text_config.hidden_size, bias=config.multimodal_projector_bias
+        )
+
+    def forward(self, image_features):
+        hidden_states = self.linear_1(image_features)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.linear_2(hidden_states)
+        return hidden_states
 
 
 @dataclass
@@ -42,28 +86,6 @@ class FastVlmModelOutputWithPast(BaseModelOutputWithPast):
     """
 
     image_hidden_states: Optional[torch.FloatTensor] = None
-
-
-class FastVlmMultiModalProjector(nn.Module):
-    def __init__(self, config: FastVlmConfig):
-        super().__init__()
-        # We have hidden_size * the number of vision feature layers
-        num_feature_layers = 1 if isinstance(config.vision_feature_layer, int) else len(config.vision_feature_layer)
-        self.linear_1 = nn.Linear(
-            config.vision_config.hidden_size * num_feature_layers,
-            config.text_config.hidden_size,
-            bias=config.multimodal_projector_bias,
-        )
-        self.act = ACT2FN[config.projector_hidden_act]
-        self.linear_2 = nn.Linear(
-            config.text_config.hidden_size, config.text_config.hidden_size, bias=config.multimodal_projector_bias
-        )
-
-    def forward(self, image_features):
-        hidden_states = self.linear_1(image_features)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.linear_2(hidden_states)
-        return hidden_states
 
 
 @auto_docstring
@@ -123,7 +145,7 @@ class FastVlmModel(FastVlmPreTrainedModel):
             pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
                The tensors corresponding to the input images.
             vision_feature_layer (`Union[int, list[int]]`, *optional*):
-                The index/indices of the layer to select the vision feature.
+                The index/indices of the layer to select the vision feature. Must be negative.
             vision_feature_select_strategy (`str`, *optional*):
                 The feature selection strategy used to select the vision feature from the vision backbone.
                 Only "full" supported.
@@ -139,29 +161,43 @@ class FastVlmModel(FastVlmPreTrainedModel):
             else self.config.vision_feature_select_strategy
         )
 
-        # only this value makes sense in FastVLM
+        # only this value makes sense in FastVLM (we can't have a CLS token in conv layers)
         if vision_feature_select_strategy != "full":
             raise ValueError(
-                f"Unexpected select feature strategy: {vision_feature_select_strategy}, Only 'full' is supported."
+                f"Unexpected select feature strategy: {vision_feature_select_strategy}, Only 'full' is supported in FastVLM."
             )
 
+        if (isinstance(vision_feature_layer, int) and vision_feature_layer >= 0) or any(
+            [layer >= 0 for layer in vision_feature_layer]
+        ):
+            raise ValueError(f"Only negative layer values are supported. Got {vision_feature_layer}")
+
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
-        image_outputs = self.vision_tower(pixel_values, **kwargs)  # add more choice here!
+        # this is not memory-efficient at all
+        image_outputs = self.vision_tower(pixel_values, output_hidden_states=True, **kwargs)
 
         # since the vision tower is hybrid in FastVLM, its output needs to be handled differently from Llava
-        selected_image_feature = image_outputs.last_hidden_state
-        selected_image_feature = selected_image_feature.flatten(2).permute(0, 2, 1)
-
-        image_features = self.multi_modal_projector(selected_image_feature)
-
-        if "image_sizes" in kwargs:
-            split_sizes = [
-                (height // self.vision_tower.patch_size) * (width // self.vision_tower.patch_size)
-                for height, width in kwargs["image_sizes"]
-            ]
-            image_features = torch.split(image_features.squeeze(0), split_sizes)
+        desired_shape = math.isqrt(self.config.image_seq_length)
+        if isinstance(vision_feature_layer, int):
+            if vision_feature_layer == -1:
+                selected_image_feature = image_outputs.last_hidden_state
+            else:
+                selected_image_feature = image_outputs.hidden_states[vision_feature_layer + 1]
+            selected_image_feature = adaptive_avg_pool2d(selected_image_feature, (desired_shape, desired_shape))
         else:
-            image_features = list(image_features)
+            hs_pool = []
+            for layer_idx in vision_feature_layer:
+                if layer_idx == -1:
+                    selected_image_feature = image_outputs.last_hidden_state
+                else:
+                    selected_image_feature = image_outputs.hidden_states[layer_idx + 1]
+                selected_image_feature = adaptive_avg_pool2d(selected_image_feature, (desired_shape, desired_shape))
+                hs_pool.append(selected_image_feature)
+            selected_image_feature = torch.cat(hs_pool, dim=-1)
+
+        selected_image_feature = selected_image_feature.flatten(2).permute(0, 2, 1)
+        image_features = self.multi_modal_projector(selected_image_feature)
+        image_features = list(image_features)
         return image_features
 
     def get_placeholder_mask(
@@ -391,19 +427,18 @@ class FastVlmForConditionalGeneration(FastVlmPreTrainedModel, GenerationMixin):
         >>> import requests
         >>> from transformers import AutoProcessor, FastVlmForConditionalGeneration
 
-        >>> model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/fast_vlm-1.5-7b-hf") #TODO change!!!
-        >>> processor = AutoProcessor.from_pretrained("fast_vlm-hf/fast_vlm-1.5-7b-hf")
+        >>> model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-7B")
+        >>> processor = AutoProcessor.from_pretrained("KamilaMila/FastVLM-7B")
 
-        >>> prompt = "USER: <image>\nWhat's the content of the image? ASSISTANT:"
+        >>> prompt = "<|im_start|>user\n<image>\nWhat's the content of the image?<|im_end|>\n<|im_start|>assistant\n"
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> inputs = processor(images=image, text=prompt, return_tensors="pt")
 
         >>> # Generate
-        >>> generate_ids = model.generate(**inputs, max_new_tokens=15)
-        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "USER:  \nWhat's the content of the image? ASSISTANT: The image features a busy city street with a stop sign prominently displayed"
+        >>> generated_ids = model.generate(**inputs, max_new_tokens=15)
+        >>> processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
