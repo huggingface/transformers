@@ -61,12 +61,6 @@ print(model.config.id2label[predicted_label])
 
 [[autodoc]] MobileViTConfig
 
-## MobileViTFeatureExtractor
-
-[[autodoc]] MobileViTFeatureExtractor
-    - __call__
-    - post_process_semantic_segmentation
-
 ## MobileViTImageProcessor
 
 [[autodoc]] MobileViTImageProcessor
@@ -93,12 +87,4 @@ print(model.config.id2label[predicted_label])
 
 [[autodoc]] MobileViTForSemanticSegmentation
     - forward
-
-```py
-import torch
-from transformers import pipeline
-
-pipeline = pipeline(task="image-classification", model="apple/mobilevit-small", dtype="auto")
-pipeline("path/to/image.png")
-```
 
