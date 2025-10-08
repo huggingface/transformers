@@ -81,7 +81,7 @@ logger = logging.get_logger(__name__)
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 
 
-class YolosImageProcessorKwargs(ImagesKwargs):
+class YolosImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
         Data format of the annotations. One of "coco_detection" or "coco_panoptic".
@@ -97,9 +97,9 @@ class YolosImageProcessorKwargs(ImagesKwargs):
         Path to the directory containing the segmentation masks.
     """
 
-    format: Optional[Union[str, AnnotationFormat]]
-    do_convert_annotations: Optional[bool]
-    return_segmentation_masks: Optional[bool]
+    format: Union[str, AnnotationFormat]
+    do_convert_annotations: bool
+    return_segmentation_masks: bool
     annotations: Optional[Union[AnnotationType, list[AnnotationType]]]
     masks_path: Optional[Union[str, pathlib.Path]]
 

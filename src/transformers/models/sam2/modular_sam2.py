@@ -70,13 +70,13 @@ from .configuration_sam2 import (
 logger = logging.get_logger(__name__)
 
 
-class Sam2FastImageProcessorKwargs(ImagesKwargs):
+class Sam2FastImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     mask_size (`dict[str, int]`, *optional*):
         The size `{"height": int, "width": int}` to resize the segmentation maps to.
     """
 
-    mask_size: Optional[dict[str, int]]
+    mask_size: dict[str, int]
 
 
 @auto_docstring
