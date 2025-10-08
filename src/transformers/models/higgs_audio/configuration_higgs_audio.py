@@ -267,7 +267,7 @@ class HiggsAudioConfig(PretrainedConfig):
         use_cache=True,
         pad_token_id=128001,
         bos_token_id=1,
-        eos_token_id=2,
+        eos_token_id=128009,
         pretraining_tp=1,
         tie_word_embeddings=False,
         rope_theta=10000.0,
@@ -348,7 +348,6 @@ class HiggsAudioConfig(PretrainedConfig):
 
         self.num_codebooks = audio_num_codebooks
         self.codebook_size = audio_codebook_size + 2
-
 
 
 __all__ = ["HiggsAudioConfig"]

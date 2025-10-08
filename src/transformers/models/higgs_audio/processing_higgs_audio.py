@@ -428,15 +428,15 @@ class HiggsAudioProcessor(ProcessorMixin):
             **kwargs,
         )
 
-        common_kwargs = output_kwargs["common_kwargs"]
+        # common_kwargs = output_kwargs["common_kwargs"]
         text_kwargs = output_kwargs["text_kwargs"]
         audio_kwargs = output_kwargs["audio_kwargs"]
         audio_in_token = audio_kwargs["audio_in_token"]
         audio_out_token = audio_kwargs["audio_out_token"]
 
-        return_tensors = common_kwargs.pop("return_tensors", None)
-        if return_tensors != "pt":
-            raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
+        # return_tensors = common_kwargs.pop("return_tensors", None)
+        # if return_tensors != "pt":
+        #     raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
 
         # If text is already a rendered string (single item), use it directly
         num_audio_tokens = []
@@ -520,7 +520,7 @@ class HiggsAudioProcessor(ProcessorMixin):
         inputs = asdict(batch_data) if hasattr(batch_data, "__dict__") else batch_data._asdict()
         inputs = {k: v for k, v in inputs.items() if v is not None}
 
-        return BatchFeature(data=inputs, tensor_type=return_tensors)
+        return BatchFeature(data=inputs, tensor_type="pt")
 
     @staticmethod
     def process_sample(

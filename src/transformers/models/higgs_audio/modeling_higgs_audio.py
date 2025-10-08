@@ -19,25 +19,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Callable, Optional
 
 import torch
 import torch.nn as nn
-from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import check_model_inputs
 from .configuration_higgs_audio import HiggsAudioConfig
 from .generation_higgs_audio import HiggsAudioGenerationMixin
 
@@ -57,21 +54,7 @@ class HiggsAudioDecoderProjector(nn.Module):
         hidden_states,
         audio_out_mask,
     ):
-        """
-        Args:
-            hidden_states (`torch.Tensor` of shape `(batch_size, seq_len, hidden_size)`):
-                Hidden states from the LLM component
-            audio_out_mask (`torch.Tensor` of shape `(batch_size, seq_len)`):
-                Mask for identifying the audio out tokens.
-
-        Returns:
-            logits (`torch.Tensor` of shape `(batch_size, seq_len, vocab_size)`):
-                Logits for text tokens
-            audio_logits (`torch.Tensor` of shape `(num_audio_out_tokens, audio_num_codebooks * audio_codebook_size)`):
-                Logits for audio tokens. We ensure `num_text_tokens + num_audio_tokens == batch_size * seq_len`
-        """
         logits = self.text_lm_head(hidden_states)
-
         audio_logits = self.audio_lm_head(hidden_states[audio_out_mask])
 
         return logits, audio_logits
@@ -280,7 +263,7 @@ class HiggsAudioDecoderLayer(GradientCheckpointingLayer):
         attention_mask: Optional[torch.Tensor] = None,
         audio_out_mask: Optional[torch.BoolTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -299,7 +282,7 @@ class HiggsAudioDecoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             use_cache=use_cache,
             cache_position=cache_position,
             position_embeddings=position_embeddings,
@@ -335,11 +318,6 @@ class HiggsAudioPreTrainedModel(PreTrainedModel):
     _supports_flash_attn_2 = True
     _supports_sdpa = True
 
-    _can_record_outputs = {
-        "hidden_states": Union[HiggsAudioDecoderLayer, HiggsAudioDecoderLayer],
-        "attentions": HiggsAudioAttention,
-    }
-
     def _init_weights(self, module):
         if hasattr(self.config, "initializer_range"):
             std = self.config.initializer_range
@@ -360,127 +338,6 @@ class HiggsAudioPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
         elif isinstance(module, HiggsAudioRMSNorm):
             module.weight.data.fill_(1.0)
-
-
-@dataclass
-class HiggsAudioModelOutputWithPast(ModelOutput):
-    """
-    Output type for HiggsAudioModel when using past key values (for fast decoding)
-    and multi-modal audio-text processing.
-
-    Attributes:
-        expanded_input_ids (Optional[torch.LongTensor]):
-            Expanded text token IDs after alignment with audio features and tokens.
-
-        expanded_labels (Optional[torch.LongTensor]):
-            Expanded target labels, aligned with `expanded_input_ids` for loss computation.
-
-        audio_in_mask (Optional[torch.BoolTensor]):
-            Mask indicating which positions in the input correspond to audio features.
-
-        audio_out_mask (Optional[torch.BoolTensor]):
-            Mask indicating which positions in the output correspond to audio predictions.
-
-        attention_mask (Optional[torch.BoolTensor]):
-            Attention mask for the Transformer to avoid attending to padding tokens.
-
-        past_key_values (Optional[Cache]):
-            Pre-computed key and value tensors for each attention layer, used to speed up
-            generation by avoiding re-computation.
-
-        last_hidden_states (Optional[torch.FloatTensor]):
-            The model’s hidden state output.
-
-        hidden_states (Optional[Tuple[torch.FloatTensor, ...]]):
-            Tuple of hidden states from each layer of the transformer decoder.
-
-        attentions (Optional[Tuple[torch.FloatTensor, ...]]):
-            Tuple of attention weight tensors from each layer, each of shape
-            `(batch_size, num_heads, seq_length, seq_length)`.
-    """
-
-    expanded_input_ids: Optional[torch.LongTensor] = None
-    expanded_labels: Optional[torch.LongTensor] = None
-    audio_in_mask: Optional[torch.BoolTensor] = None
-    audio_out_mask: Optional[torch.BoolTensor] = None
-    attention_mask: Optional[torch.BoolTensor] = None
-    past_key_values: Optional[Cache] = None
-    last_hidden_states: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
-
-
-@dataclass
-class HiggsAudioOutputWithPast(ModelOutput):
-    """
-    Output type for HiggsAudioModel when computing losses during training,
-    extending `HiggsAudioModelOutputWithPast` with additional loss fields.
-
-    Attributes:
-        loss (Optional[torch.FloatTensor]):
-            Total training loss (can be a weighted sum of multiple loss components).
-
-        llm_loss (Optional[torch.FloatTensor]):
-            Loss from the language model (text) prediction component.
-
-        audio_loss (Optional[torch.FloatTensor]):
-            Loss from the audio token prediction component.
-
-        codebook_losses (Optional[torch.FloatTensor]):
-            Losses related to vector quantization codebooks, such as commitment
-            or reconstruction losses in audio discretization.
-
-        logits (Optional[torch.FloatTensor]):
-            Prediction scores (before softmax) of shape `(batch_size, sequence_length, vocab_size)`.
-
-        expanded_input_ids (Optional[torch.LongTensor]):
-            Expanded text token IDs after alignment with audio features and tokens.
-
-        expanded_labels (Optional[torch.LongTensor]):
-            Expanded target labels, aligned with `expanded_input_ids` for loss computation.
-
-        audio_in_mask (Optional[torch.BoolTensor]):
-            Mask indicating which positions in the input correspond to audio features.
-
-        audio_out_mask (Optional[torch.BoolTensor]):
-            Mask indicating which positions in the output correspond to audio predictions.
-
-        attention_mask (Optional[torch.BoolTensor]):
-            Attention mask for the Transformer to avoid attending to padding tokens.
-
-        audio_logits (Optional[torch.FloatTensor]):
-            Prediction scores for audio tokens of shape
-            `(num_audio_out_tokens, audio_num_codebooks, audio_codebook_size)`.
-
-        past_key_values (Optional[Cache]):
-            Pre-computed key and value tensors for each attention
-
-        last_hidden_states (Optional[torch.FloatTensor]):
-            The model’s hidden state output.
-
-        hidden_states (Optional[Tuple[torch.FloatTensor, ...]]):
-            Tuple of hidden states from each layer of the transformer decoder.
-
-        attentions (Optional[Tuple[torch.FloatTensor, ...]]):
-            Tuple of attention weight tensors from each layer, each of shape
-            `(batch_size, num_heads, seq_length, seq_length)`.
-    """
-
-    loss: Optional[torch.FloatTensor] = None
-    llm_loss: Optional[torch.FloatTensor] = None
-    audio_loss: Optional[torch.FloatTensor] = None
-    codebook_losses: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    expanded_input_ids: Optional[torch.LongTensor] = None
-    expanded_labels: Optional[torch.LongTensor] = None
-    audio_in_mask: Optional[torch.BoolTensor] = None
-    audio_out_mask: Optional[torch.BoolTensor] = None
-    attention_mask: Optional[torch.BoolTensor] = None
-    audio_logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Cache] = None
-    last_hidden_states: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 class HiggsAudioEmbeddings(nn.Module):
@@ -535,23 +392,6 @@ class HiggsAudioRotaryEmbedding(nn.Module):
 
 @auto_docstring
 class HiggsAudioModel(HiggsAudioPreTrainedModel):
-    """Higgs-Audio is an end-to-end multimodal model with the capability to understand and generate text / audio.
-
-    Consider the following example for mixed text/audio understanding / generation:
-
-    - input_tokens: <text_token1><|audio_bos|>[AUDIO]<|audio_eos|><text_token2><|audio_bos|>[AUDIO]<|audio_eos|><text_token4>
-    - input_tokens: <text_token1><|audio_bos|>[AUDIO]<|audio_eos|><text_token2><|audio_out_bos|>[AUDIO_OUT]<|audio_eos|><text_token4>
-
-    We will fill [AUDIO] with the audio features extracted by Whisper and fill [AUDIO_OUT] with the audio tokens.
-
-    Consider the following example for mixed text/audio generation:
-
-    text: <|audio_out_bos|>    MASK           MASK           MASK          MASK               MASK         <|audio_eos|> [text_token1]
-    audio:     MASK    <|audio_stream_bos|> [audio_token1] [audio_token2] [audio_token3] <|audio_stream_eos|>   MASK           MASK
-    token_type: 0               1              1              1             1                  1                 0              0
-
-    """
-
     def __init__(self, config: HiggsAudioConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -569,7 +409,6 @@ class HiggsAudioModel(HiggsAudioPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
     @auto_docstring
     @can_return_tuple
     def forward(
@@ -661,6 +500,22 @@ class HiggsAudioForConditionalGeneration(HiggsAudioPreTrainedModel, HiggsAudioGe
 
         self.post_init()
 
+    def prepare_inputs_for_generation(self, *args, audio_input_ids: Optional[torch.LongTensor] = None, **kwargs):
+        model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
+
+        # Handle audio_input_ids slicing for generation with past_key_values
+        if audio_input_ids is not None and model_inputs.get("past_key_values") is not None:
+            current_input_length = (
+                model_inputs["inputs_embeds"].shape[1]
+                if model_inputs.get("inputs_embeds") is not None
+                else model_inputs["input_ids"].shape[1]
+            )
+            audio_input_ids = audio_input_ids[:, -current_input_length:]
+            audio_input_ids = audio_input_ids.clone(memory_format=torch.contiguous_format)
+            model_inputs["audio_input_ids"] = audio_input_ids
+
+        return model_inputs
+
     @auto_docstring
     @can_return_tuple
     def forward(
@@ -679,125 +534,21 @@ class HiggsAudioForConditionalGeneration(HiggsAudioPreTrainedModel, HiggsAudioGe
         cache_audio_discrete_codes_mask: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        r"""
-        input_ids (:obj:`torch.LongTensor`):
-            The input ids of the prompt. It will have shape (bsz, seq_len).
-            When use_cache is enabled, the input_ids will have
-            shape (bsz, 1) for incremental decode or None
-        attention_mask (:obj:`torch.LongTensor`):
-            The attention mask of the prompt. It will have shape (bsz, seq_len).
-        audio_in_ids (:obj:`torch.LongTensor`):
-            The discretized audio tokens. It will have shape (num_codebooks, audio_in_total_length).
-        audio_in_ids_start (:obj:`torch.LongTensor`):
-            The start indices for each audio in audio_in_ids. It will have shape (num_audio_in,)
-        audio_out_ids (:obj:`torch.LongTensor`):
-            The discretized audio tokens. It will have shape (num_codebooks, audio_out_total_length).
-        audio_out_ids_start (:obj:`torch.LongTensor`):
-            The start indices for each audio in audio_out_ids. It will have shape (num_audio_out,)
-        label_ids (:obj:`torch.LongTensor`):
-            The labels of the prompt. It will have shape (bsz, seq_len).
-        label_audio_ids (:obj:`torch.LongTensor`):
-            The labels of the audio tokens. It will have the same shape as audio_out_ids, i.e., (num_codebooks, audio_out_total_length)
-        past_key_values (:obj:`Tuple`):
-            Tuple of past key values.
-        use_cache (:obj:`bool`):
-            Whether to use cache.
-        cache_position (:obj:`torch.LongTensor`):
-            The position of the cache.
-        cache_audio_discrete_codes_mask (:obj:`torch.LongTensor`):
-            The cached audio discrete codes mask. It will only be used when use_cache is turned on.
-        """
-        target_device = input_ids.device
-
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             audio_input_ids=audio_input_ids,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            cache_position=cache_position,
             **kwargs,
         )
 
-        # Loss calculation when label_ids is not None
-        # labels = outputs.expanded_labels
-        # audio_in_mask = outputs.audio_in_mask
-        # audio_out_mask = outputs.audio_out_mask
-        audio_out_mask = input_ids == self.config.audio_out_token_idx
-        # attention_mask = outputs.attention_mask
-        past_key_values = outputs.past_key_values
         last_hidden_state = outputs.last_hidden_state
-        # hidden_states = outputs.hidden_states
-        # attentions = outputs.attentions
+        # TODO: add lost computation back
 
-        # Apply the audio decoder projector
-        logits, audio_logits = self.audio_decoder_proj(
-            last_hidden_state,
-            audio_out_mask,
-        )
-
-        if audio_logits is not None:
-            audio_logits = audio_logits.view(
-                audio_logits.shape[0], self.model.audio_num_codebooks, self.model.audio_codebook_size
-            ).float()
-
-        loss = None
-        llm_loss = None
-        audio_loss = None
-        codebook_losses = None
-
-        # Calculate the loss function
-        # There will be two loss functions, one for the text-stream and one for the audio stream.
-        if label_ids is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
-
-        if label_audio_ids is not None and label_audio_ids.shape[-1] > 0:
-            # audio_logits have shape (num_audio_out_tokens, audio_num_codebooks * audio_codebook_size)
-            audio_shift_logits = audio_logits[:-1, :, :].contiguous()
-
-            # Ignore the first label token for each audio for proper auto-regressive training.
-            # input:                    a1, a2, a3,   b1, b2, b3, b4, c1, d1
-            # label (masked):           a1, a2, a3, -100, b2, b3, b4, c1, -100
-            # label (shifted):          a2, a3, -100, b2, b3, b4, c1, -100
-            # label_audio_ids have shape (num_codebooks, num_audio_out_tokens)
-            label_audio_ids[:, audio_out_ids_start] = -100
-
-            audio_shift_labels = label_audio_ids[:, 1:]
-
-            audio_loss_fct = CrossEntropyLoss()
-            codebook_losses = torch.zeros([self.config.audio_num_codebooks], device=target_device)
-            for codebook in range(self.config.audio_num_codebooks):
-                codebook_logits = (
-                    audio_shift_logits[:, codebook, :].contiguous().view(-1, self.model.audio_codebook_size)
-                )
-                codebook_labels = audio_shift_labels[codebook, :].contiguous().to(codebook_logits.device)
-                if (codebook_labels == -100).all():
-                    codebook_loss = audio_shift_logits.sum() * 0.0  # connect the gradient
-                else:
-                    codebook_loss = audio_loss_fct(codebook_logits, codebook_labels)
-                codebook_losses[codebook] = codebook_loss
-
-            audio_loss = torch.sum(codebook_losses * self.audio_codebook_weights.to(target_device))
-            loss += audio_loss
-
-        if loss is not None and audio_loss is None:
-            llm_loss = loss
-        elif loss is not None and audio_loss is not None:
-            llm_loss = loss - audio_loss
-
-        return HiggsAudioOutputWithPast(
-            loss=loss,
-            llm_loss=llm_loss,
-            audio_loss=audio_loss,
-            codebook_losses=codebook_losses,
-            logits=logits,
-            audio_logits=audio_logits,
-            expanded_input_ids=input_ids,
-            expanded_labels=labels,
-            audio_in_mask=audio_in_mask,
-            audio_out_mask=audio_out_mask,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            last_hidden_states=last_hidden_states,
-            hidden_states=hidden_states,
-            attentions=attentions,
+        return CausalLMOutputWithPast(
+            logits=self.audio_decoder_proj.audio_lm_head(last_hidden_state),
         )
 
 
