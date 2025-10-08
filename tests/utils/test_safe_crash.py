@@ -18,7 +18,6 @@ import os
 import subprocess
 import sys
 import textwrap
-from typing import Tuple
 
 import pytest
 
@@ -68,7 +67,7 @@ def _thread_stress_script(*, imports: str, setup_code: str) -> str:
     )
 
 
-def _run_thread_stress_script(label: str, script: str) -> Tuple[subprocess.CompletedProcess, str]:
+def _run_thread_stress_script(label: str, script: str) -> tuple[subprocess.CompletedProcess, str]:
     env = dict(os.environ, PYTHON_GIL="0")
     result = subprocess.run(  # noqa: PLW1510 intentionally check return code manually
         [sys.executable, "-c", script],
