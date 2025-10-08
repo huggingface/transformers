@@ -216,6 +216,7 @@ if is_accelerate_available():
         DataLoaderConfiguration,
         DistributedDataParallelKwargs,
         DistributedType,
+        clear_device_cache,
         load_fsdp_model,
         load_fsdp_optimizer,
         release_memory,
@@ -2241,8 +2242,6 @@ class Trainer:
         self._train_batch_size = batch_size
         if self.args.auto_find_batch_size:
             if self.state.train_batch_size != self._train_batch_size:
-                from accelerate.utils import release_memory
-
                 (self.model_wrapped,) = release_memory(self.model_wrapped)
                 self.model_wrapped = self.model
 
@@ -3840,7 +3839,7 @@ class Trainer:
                 self.args.torch_empty_cache_steps is not None
                 and self.state.global_step % self.args.torch_empty_cache_steps == 0
             ):
-                release_memory()
+                clear_device_cache()
 
             kwargs = {}
 
