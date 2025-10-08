@@ -21,14 +21,19 @@ from typing import Any, Optional, Union
 
 from packaging import version
 
+from ..configuration_utils import PreTrainedConfig
 from ..utils import (
+    CONFIG_NAME,
+    cached_file,
     check_peft_version,
+    extract_commit_hash,
     find_adapter_config_file,
     is_accelerate_available,
     is_peft_available,
     is_torch_available,
     logging,
 )
+from ..utils.hub import DownloadKwargs
 
 
 if is_torch_available():
@@ -620,54 +625,57 @@ class PeftAdapterMixin:
 
 def maybe_load_adapters(
     pretrained_model_name_or_path,
-    cache_dir=None,
-    force_download=None,
-    proxies=None,
-    local_files_only=None,
-    commit_hash=None,
-    token=None,
+    download_kwargs: DownloadKwargs,
+    config: Optional[PreTrainedConfig] = None,
     **adapter_kwargs,
 ):
+    if not is_peft_available():
+        return None
+
+    token = download_kwargs.get("token")
     if token is not None and adapter_kwargs is not None and "token" not in adapter_kwargs:
         adapter_kwargs["token"] = token
-    if commit_hash is None:
-        if not isinstance(config, PreTrainedConfig):
-            # We make a call to the config file first (which may be absent) to get the commit hash as soon as possible
-            resolved_config_file = cached_file(
-                pretrained_model_name_or_path,
-                CONFIG_NAME,
-                cache_dir=cache_dir,
-                force_download=force_download,
-                proxies=proxies,
-                local_files_only=local_files_only,
-                token=token,
-                revision=revision,
-                subfolder=subfolder,
-                _raise_exceptions_for_gated_repo=False,
-                _raise_exceptions_for_missing_entries=False,
-                _raise_exceptions_for_connection_errors=False,
-            )
-            commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
-        else:
-            commit_hash = getattr(config, "_commit_hash", None)
 
-    if is_peft_available():
-        _adapter_model_path = adapter_kwargs.pop("_adapter_model_path", None)
+    # Ensure we propagate a commit hash if available or derivable
+    if download_kwargs.get("commit_hash") is None and config is not None:
+        download_kwargs["commit_hash"] = getattr(config, "_commit_hash", None)
 
-        if _adapter_model_path is None:
-            _adapter_model_path = find_adapter_config_file(
-                pretrained_model_name_or_path,
-                cache_dir=cache_dir,
-                force_download=force_download,
-                proxies=proxies,
-                local_files_only=local_files_only,
-                _commit_hash=_commit_hash,
-                **adapter_kwargs,
-            )
-        if _adapter_model_path is not None and os.path.isfile(_adapter_model_path):
-            with open(_adapter_model_path, "r", encoding="utf-8") as f:
-                _adapter_model_path = pretrained_model_name_or_path
-                pretrained_model_name_or_path = json.load(f)["base_model_name_or_path"]
-    else:
-        _adapter_model_path = None
+    if download_kwargs.get("commit_hash") is None:
+        resolved_config_file = cached_file(
+            pretrained_model_name_or_path,
+            CONFIG_NAME,
+            cache_dir=download_kwargs.get("cache_dir"),
+            force_download=bool(download_kwargs.get("force_download", False)),
+            proxies=download_kwargs.get("proxies"),
+            local_files_only=bool(download_kwargs.get("local_files_only", False)),
+            token=token,
+            revision=download_kwargs.get("revision"),
+            subfolder=download_kwargs.get("subfolder", ""),
+            _raise_exceptions_for_gated_repo=False,
+            _raise_exceptions_for_missing_entries=False,
+            _raise_exceptions_for_connection_errors=False,
+        )
+        download_kwargs["commit_hash"] = extract_commit_hash(resolved_config_file, None)
+
+    _adapter_model_path = adapter_kwargs.pop("_adapter_model_path", None)
+
+    if _adapter_model_path is None:
+        _adapter_model_path = find_adapter_config_file(
+            pretrained_model_name_or_path,
+            cache_dir=download_kwargs.get("cache_dir"),
+            force_download=bool(download_kwargs.get("force_download", False)),
+            proxies=download_kwargs.get("proxies"),
+            token=token,
+            revision=download_kwargs.get("revision"),
+            local_files_only=bool(download_kwargs.get("local_files_only", False)),
+            subfolder=download_kwargs.get("subfolder", ""),
+            _commit_hash=download_kwargs.get("commit_hash"),
+            **adapter_kwargs,
+        )
+
+    if _adapter_model_path is not None and os.path.isfile(_adapter_model_path):
+        with open(_adapter_model_path, "r", encoding="utf-8") as f:
+            _adapter_model_path = pretrained_model_name_or_path
+            pretrained_model_name_or_path = json.load(f)["base_model_name_or_path"]
+
     return _adapter_model_path

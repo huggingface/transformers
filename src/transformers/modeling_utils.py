@@ -108,7 +108,7 @@ from .utils import (
     logging,
 )
 from .utils.generic import _CAN_RECORD_REGISTRY, GeneralInterface, OutputRecorder
-from .utils.hub import create_and_tag_model_card, get_checkpoint_shard_files
+from .utils.hub import DownloadKwargs, create_and_tag_model_card, get_checkpoint_shard_files
 from .utils.import_utils import (
     ENV_VARS_TRUE_VALUES,
     is_huggingface_hub_greater_or_equal,
@@ -857,18 +857,11 @@ def update_key_name(keys):
 
 def _get_resolved_checkpoint_files(
     pretrained_model_name_or_path: Optional[Union[str, os.PathLike]],
-    subfolder: str,
     variant: Optional[str],
     gguf_file: Optional[str],
     use_safetensors: Optional[bool],
-    cache_dir: str,
-    force_download: bool,
-    proxies: Optional[dict[str, str]],
-    local_files_only: bool,
-    token: Optional[Union[str, bool]],
+    download_kwargs: DownloadKwargs,
     user_agent: dict,
-    revision: str,
-    commit_hash: Optional[str],
     is_remote_code: bool,  # Because we can't determine this inside this function, we need it to be passed in
     transformers_explicit_filename: Optional[str] = None,
 ) -> tuple[Optional[list[str]], Optional[dict]]:
@@ -876,6 +869,15 @@ def _get_resolved_checkpoint_files(
     checkpoints are sharded.
     This function will download the data if necessary.
     """
+    cache_dir = download_kwargs.get("cache_dir")
+    force_download = bool(download_kwargs.get("force_download", False))
+    proxies = download_kwargs.get("proxies")
+    local_files_only = bool(download_kwargs.get("local_files_only", False))
+    token = download_kwargs.get("token")
+    revision = download_kwargs.get("revision") or "main"
+    subfolder = download_kwargs.get("subfolder", "")
+    commit_hash = download_kwargs.get("commit_hash")
+
     is_sharded = False
 
     if pretrained_model_name_or_path is not None and gguf_file is None:
@@ -4476,6 +4478,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             "local_files_only": local_files_only,
             "token": token,
             "revision": revision,
+            "subfolder": subfolder,
         }
         download_kwargs_with_commit = {**download_kwargs, "commit_hash": commit_hash}
 
@@ -4500,12 +4503,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             raise ValueError("accelerate is required when loading a GGUF file `pip install accelerate`.")
 
         adapter_download_kwargs = download_kwargs_with_commit.copy()
-        adapter_download_kwargs.pop("revision", None)
         _adapter_model_path = maybe_load_adapters(
             pretrained_model_name_or_path,
-            **adapter_download_kwargs,
+            adapter_download_kwargs,
+            config=None,
             **adapter_kwargs,
         )
+        commit_hash = adapter_download_kwargs.get("commit_hash", commit_hash)
+        download_kwargs_with_commit["commit_hash"] = commit_hash
 
         device_map = auto_set_device_map(device_map)  # warn, error and fix the device map
 
@@ -4575,14 +4580,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         checkpoint_files, sharded_metadata = _get_resolved_checkpoint_files(
             pretrained_model_name_or_path=pretrained_model_name_or_path,
-            subfolder=subfolder,
             variant=variant,
             gguf_file=gguf_file,
             use_safetensors=use_safetensors,
+            download_kwargs=download_kwargs_with_commit,
             user_agent=user_agent,
             is_remote_code=cls._auto_class is not None,
             transformers_explicit_filename=transformers_explicit_filename,
-            **download_kwargs_with_commit,
         )
 
         is_quantized = hf_quantizer is not None
@@ -4674,7 +4678,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             from_pipeline,
             pretrained_model_name_or_path,
             **download_kwargs,
-            subfolder=subfolder,
             trust_remote_code=trust_remote_code,
             **kwargs,
         )
