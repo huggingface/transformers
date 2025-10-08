@@ -626,7 +626,6 @@ class PeftAdapterMixin:
 def maybe_load_adapters(
     pretrained_model_name_or_path,
     download_kwargs: DownloadKwargs,
-    config: Optional[PreTrainedConfig] = None,
     **adapter_kwargs,
 ):
     if not is_peft_available():
@@ -635,10 +634,6 @@ def maybe_load_adapters(
     token = download_kwargs.get("token")
     if token is not None and adapter_kwargs is not None and "token" not in adapter_kwargs:
         adapter_kwargs["token"] = token
-
-    # Ensure we propagate a commit hash if available or derivable
-    if download_kwargs.get("commit_hash") is None and config is not None:
-        download_kwargs["commit_hash"] = getattr(config, "_commit_hash", None)
 
     if download_kwargs.get("commit_hash") is None:
         resolved_config_file = cached_file(

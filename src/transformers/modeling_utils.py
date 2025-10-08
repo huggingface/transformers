@@ -877,6 +877,15 @@ def _get_resolved_checkpoint_files(
     revision = download_kwargs.get("revision") or "main"
     subfolder = download_kwargs.get("subfolder", "")
     commit_hash = download_kwargs.get("commit_hash")
+    if transformers_explicit_filename is not None:
+        if not transformers_explicit_filename.endswith(".safetensors") and not transformers_explicit_filename.endswith(
+            ".safetensors.index.json"
+        ):
+            raise ValueError(
+                "The transformers file in the config seems to be incorrect: it is neither a safetensors file "
+                "(*.safetensors) nor a safetensors index file (*.safetensors.index.json): "
+                f"{transformers_explicit_filename}"
+            )
 
     is_sharded = False
 
@@ -4460,16 +4469,16 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             tp_plan = "auto"
 
         # Not used anymore -- remove them from the kwargs
-        _ = kwargs.pop("mirror", None)
-        _ = kwargs.pop("_fast_init", None)
-        _ = kwargs.pop("low_cpu_mem_usage", None)
-        _ = kwargs.pop("from_tf", None)
-        _ = kwargs.pop("from_flax", None)
-        _ = kwargs.pop("offload_state_dict", None)
+        for name in ["mirror", "_fast_init", "low_cpu_mem_usage", "from_tf", "from_flax", "offload_state_dict"]:
+            _ = kwargs.pop(name, None)
 
         # For BC on torch_dtype argument
         if torch_dtype is not None:
             dtype = dtype if dtype is not None else torch_dtype
+
+        if is_offline_mode() and not local_files_only:
+            logger.info("Offline mode: forcing local_files_only=True")
+            local_files_only = True
 
         download_kwargs = {
             "cache_dir": cache_dir,
@@ -4506,7 +4515,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         _adapter_model_path = maybe_load_adapters(
             pretrained_model_name_or_path,
             adapter_download_kwargs,
-            config=None,
             **adapter_kwargs,
         )
         commit_hash = adapter_download_kwargs.get("commit_hash", commit_hash)
@@ -4517,10 +4525,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         user_agent = {"file_type": "model", "framework": "pytorch", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
             user_agent["using_pipeline"] = from_pipeline
-
-        if is_offline_mode() and not local_files_only:
-            logger.info("Offline mode: forcing local_files_only=True")
-            local_files_only = True
 
         # Load config if we don't provide a configuration
         if not isinstance(config, PreTrainedConfig):
@@ -4550,17 +4554,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if "attn_implementation" in kwargs:
             config._attn_implementation = kwargs.pop("attn_implementation")
 
-        transformers_explicit_filename = getattr(config, "transformers_weights", None)
-        if transformers_explicit_filename is not None:
-            if not transformers_explicit_filename.endswith(
-                ".safetensors"
-            ) and not transformers_explicit_filename.endswith(".safetensors.index.json"):
-                raise ValueError(
-                    "The transformers file in the config seems to be incorrect: it is neither a safetensors file "
-                    "(*.safetensors) nor a safetensors index file (*.safetensors.index.json): "
-                    f"{transformers_explicit_filename}"
-                )
-
         hf_quantizer, config, dtype, device_map = get_hf_quantizer(
             config, quantization_config, dtype, device_map, weights_only, user_agent
         )
@@ -4586,7 +4579,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             download_kwargs=download_kwargs_with_commit,
             user_agent=user_agent,
             is_remote_code=cls._auto_class is not None,
-            transformers_explicit_filename=transformers_explicit_filename,
+            transformers_explicit_filename=getattr(config, "transformers_weights", None),
         )
 
         is_quantized = hf_quantizer is not None
