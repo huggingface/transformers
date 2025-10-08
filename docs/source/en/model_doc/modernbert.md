@@ -16,23 +16,15 @@ rendered properly in your Markdown viewer.
 *This model was released on 2024-12-18 and added to Hugging Face Transformers on 2024-12-19.*
 
 <div style="float: right;">
-  <div class="flex flex-wrap space-x-1">
-    <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-    <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
-  </div>
+    <div class="flex flex-wrap space-x-1">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
 </div>
 
 # ModernBERT
 
-[ModernBERT](https://huggingface.co/papers/2412.13663) is a modernized version of [`BERT`] trained on 2T tokens. It brings many improvements to the original architecture such as rotary positional embeddings to support sequences of up to 8192 tokens, unpadding to avoid wasting compute on padding tokens, GeGLU layers, and alternating attention.
-
-You can find all the original ModernBERT checkpoints under the [ModernBERT](https://huggingface.co/collections/answerdotai/modernbert-67627ad707a4acbf33c41deb) collection.
-
-> [!TIP]
-> Click on the ModernBERT models in the right sidebar for more examples of how to apply ModernBERT to different language tasks.
-
-The example below demonstrates how to predict the `[MASK]` token with [`Pipeline`], [`AutoModel`], and from the command line.
+[ModernBERT](https://huggingface.co/papers/2412.13663) refreshes the traditional encoder architecture by integrating modern improvements such as Rotary Positional Embeddings for handling up to 8192 tokens, Unpadding to optimize processing of mixed-length sequences, GeGLU layers for enhanced performance, Alternating Attention with a sliding window and global attention, Flash Attention for speed, and hardware-co-designed efficiency. Trained on 2 trillion tokens, ModernBERT achieves state-of-the-art results across various classification and retrieval tasks, including code, while being highly efficient in terms of speed and memory usage for inference on common GPUs.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -41,12 +33,7 @@ The example below demonstrates how to predict the `[MASK]` token with [`Pipeline
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(
-    task="fill-mask",
-    model="answerdotai/ModernBERT-base",
-    dtype=torch.float16,
-    device=0
-)
+pipeline = pipeline(task="fill-mask", model="answerdotai/ModernBERT-base", dtype="auto")
 pipeline("Plants create [MASK] through a process known as photosynthesis.")
 ```
 
@@ -57,33 +44,15 @@ pipeline("Plants create [MASK] through a process known as photosynthesis.")
 import torch
 from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained(
-    "answerdotai/ModernBERT-base",
-)
-model = AutoModelForMaskedLM.from_pretrained(
-    "answerdotai/ModernBERT-base",
-    dtype=torch.float16,
-    device_map="auto",
-    attn_implementation="sdpa"
-)
-inputs = tokenizer("Plants create [MASK] through a process known as photosynthesis.", return_tensors="pt").to(model.device)
+model = AutoModelForMaskedLM.from_pretrained("answerdotai/ModernBERT-base", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("answerdotai/ModernBERT-base")
 
-with torch.no_grad():
-    outputs = model(**inputs)
-    predictions = outputs.logits
-
-masked_index = torch.where(inputs['input_ids'] == tokenizer.mask_token_id)[1]
-predicted_token_id = predictions[0, masked_index].argmax(dim=-1)
-predicted_token = tokenizer.decode(predicted_token_id)
-
-print(f"The predicted token is: {predicted_token}")
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Plants create [MASK] through a process known as photosynthesis." | transformers run --task fill-mask --model answerdotai/ModernBERT-base --device 0
+inputs = tokenizer("Plants create [MASK] through a process known as photosynthesis.", return_tensors="pt")
+outputs = model(**inputs)
+mask_token_id = tokenizer.mask_token_id
+mask_position = (inputs.input_ids == tokenizer.mask_token_id).nonzero(as_tuple=True)[1]
+predicted_word = tokenizer.decode(outputs.logits[0, mask_position].argmax(dim=-1))
+print(f"Predicted word: {predicted_word}")
 ```
 
 </hfoption>
@@ -123,6 +92,11 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 [[autodoc]] ModernBertForQuestionAnswering
     - forward
 
-### Usage tips
+```py
+import torch
+from transformers import pipeline
 
-The ModernBert model can be fine-tuned using the HuggingFace Transformers library with its [official script](https://github.com/huggingface/transformers/blob/main/examples/pytorch/question-answering/run_qa.py) for question-answering tasks.
+pipeline = pipeline(task="fill-mask", model="answerdotai/ModernBERT-base", dtype="auto")
+pipeline("The capital of France is [MASK].")
+```
+

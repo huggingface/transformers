@@ -13,59 +13,43 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-11-18 and added to Hugging Face Transformers on 2022-01-26.*
+*This model was released on 2021-11-18 and added to Hugging Face Transformers on 2022-01-26 and contributed by [novice03](https://huggingface.co/novice03).*
 
 # YOSO
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[YOSO](https://huggingface.co/papers/2111.09714) approximates standard softmax self-attention using a Bernoulli sampling scheme based on Locality Sensitive Hashing (LSH). This method reduces the quadratic complexity of self-attention to linear by sampling Bernoulli random variables with a single hash. The approach is modified for GPU deployment and evaluated on the GLUE and Long Range Arena (LRA) benchmarks, showing favorable performance and efficiency improvements over standard Transformers.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The YOSO model was proposed in [You Only Sample (Almost) Once: Linear Cost Self-Attention Via Bernoulli Sampling](https://huggingface.co/papers/2111.09714)  
-by Zhanpeng Zeng, Yunyang Xiong, Sathya N. Ravi, Shailesh Acharya, Glenn Fung, Vikas Singh. YOSO approximates standard softmax self-attention
-via a Bernoulli sampling scheme based on Locality Sensitive Hashing (LSH). In principle, all the Bernoulli random variables can be sampled with
-a single hash.
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the paper is the following:
+pipeline = pipeline(task="fill-mask", model="uw-madison/yoso-4096", dtype="auto")
+pipeline("Plants create <mask> through a process known as photosynthesis.")
+```
 
-*Transformer-based models are widely used in natural language processing (NLP). Central to the transformer model is
-the self-attention mechanism, which captures the interactions of token pairs in the input sequences and depends quadratically
-on the sequence length. Training such models on longer sequences is expensive. In this paper, we show that a Bernoulli sampling
-attention mechanism based on Locality Sensitive Hashing (LSH), decreases the quadratic complexity of such models to linear.
-We bypass the quadratic cost by considering self-attention as a sum of individual tokens associated with Bernoulli random
-variables that can, in principle, be sampled at once by a single hash (although in practice, this number may be a small constant).
-This leads to an efficient sampling scheme to estimate self-attention which relies on specific modifications of
-LSH (to enable deployment on GPU architectures). We evaluate our algorithm on the GLUE benchmark with standard 512 sequence
-length where we see favorable performance relative to a standard pretrained Transformer. On the Long Range Arena (LRA) benchmark,
-for evaluating performance on long sequences, our method achieves results consistent with softmax self-attention but with sizable
-speed-ups and memory savings and often outperforms other efficient self-attention methods. Our code is available at this https URL*
+</hfoption>
+<hfoption id="AutoModel">
 
-This model was contributed by [novice03](https://huggingface.co/novice03). The original code can be found [here](https://github.com/mlpen/YOSO).
+```py
+import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-## Usage tips
+model = AutoModelForMaskedLM.from_pretrained("uw-madison/yoso-4096", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("uw-madison/yoso-4096")
 
-- The YOSO attention algorithm is implemented through custom CUDA kernels, functions written in CUDA C++ that can be executed multiple times
-in parallel on a GPU.
-- The kernels provide a `fast_hash` function, which approximates the random projections of the queries and keys using the Fast Hadamard Transform. Using these
-hash codes, the `lsh_cumulation` function approximates self-attention via LSH-based Bernoulli sampling.
-- To use the custom kernels, the user should set `config.use_expectation = False`. To ensure that the kernels are compiled successfully,
-the user must install the correct version of PyTorch and cudatoolkit. By default, `config.use_expectation = True`, which uses YOSO-E and
-does not require compiling CUDA kernels.
+inputs = tokenizer("Plants create <mask> through a process known as photosynthesis.", return_tensors="pt")
+outputs = model(**inputs)
+mask_token_id = tokenizer.mask_token_id
+mask_position = (inputs.input_ids == tokenizer.mask_token_id).nonzero(as_tuple=True)[1]
+predicted_word = tokenizer.decode(outputs.logits[0, mask_position].argmax(dim=-1))
+print(f"Predicted word: {predicted_word}")
+```
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/yoso_architecture.jpg"
-alt="drawing" width="600"/>
-
-<small> YOSO Attention Algorithm. Taken from the <a href="https://huggingface.co/papers/2111.09714">original paper</a>.</small>
-
-## Resources
-
-- [Text classification task guide](../tasks/sequence_classification)
-- [Token classification task guide](../tasks/token_classification)
-- [Question answering task guide](../tasks/question_answering)
-- [Masked language modeling task guide](../tasks/masked_language_modeling)
-- [Multiple choice task guide](../tasks/multiple_choice)
+</hfoption>
+</hfoptions>
 
 ## YosoConfig
 
@@ -100,3 +84,4 @@ alt="drawing" width="600"/>
 
 [[autodoc]] YosoForQuestionAnswering
     - forward
+

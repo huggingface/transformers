@@ -13,32 +13,40 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2020-12-14 and added to Hugging Face Transformers on 2023-03-08.*
+*This model was released on 2020-12-14 and added to Hugging Face Transformers on 2023-03-08 and contributed by [elisim](https://huggingface.co/elisim) and [kashif](https://huggingface.co/kashif).*
 
 # Informer
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[Informer: Beyond Efficient Transformer for Long Sequence Time-Series Forecasting](https://huggingface.co/papers/2012.07436) addresses the challenges of long sequence time-series forecasting (LSTF) by introducing a ProbSparse self-attention mechanism that reduces time complexity and memory usage to O(L logL). It also employs self-attention distillation to focus on significant attention points and uses a generative style decoder for efficient long-sequence predictions. These features enable Informer to outperform existing methods on large-scale datasets.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="InformerForPrediction">
 
-The Informer model was proposed in [Informer: Beyond Efficient Transformer for Long Sequence Time-Series Forecasting](https://huggingface.co/papers/2012.07436) by Haoyi Zhou, Shanghang Zhang, Jieqi Peng, Shuai Zhang, Jianxin Li, Hui Xiong, and Wancai Zhang.
+```py
+import torch
+from huggingface_hub import hf_hub_download
+from transformers import InformerForPrediction
 
-This method introduces a Probabilistic Attention mechanism to select the "active" queries rather than the "lazy" queries and provides a sparse Transformer thus mitigating the quadratic compute and memory requirements of vanilla attention.
+file = hf_hub_download(
+    repo_id="hf-internal-testing/tourism-monthly-batch", filename="train-batch.pt", repo_type="dataset"
+)
+batch = torch.load(file)
 
-The abstract from the paper is the following:
+model = InformerForPrediction.from_pretrained("huggingface/informer-tourism-monthly", dtype="auto")
+outputs = model.generate(
+    past_values=batch["past_values"],
+    past_time_features=batch["past_time_features"],
+    past_observed_mask=batch["past_observed_mask"],
+    static_categorical_features=batch["static_categorical_features"],
+    static_real_features=batch["static_real_features"],
+    future_time_features=batch["future_time_features"],
+)
 
-*Many real-world applications require the prediction of long sequence time-series, such as electricity consumption planning. Long sequence time-series forecasting (LSTF) demands a high prediction capacity of the model, which is the ability to capture precise long-range dependency coupling between output and input efficiently. Recent studies have shown the potential of Transformer to increase the prediction capacity. However, there are several severe issues with Transformer that prevent it from being directly applicable to LSTF, including quadratic time complexity, high memory usage, and inherent limitation of the encoder-decoder architecture. To address these issues, we design an efficient transformer-based model for LSTF, named Informer, with three distinctive characteristics: (i) a ProbSparse self-attention mechanism, which achieves O(L logL) in time complexity and memory usage, and has comparable performance on sequences' dependency alignment. (ii) the self-attention distilling highlights dominating attention by halving cascading layer input, and efficiently handles extreme long input sequences. (iii) the generative style decoder, while conceptually simple, predicts the long time-series sequences at one forward operation rather than a step-by-step way, which drastically improves the inference speed of long-sequence predictions. Extensive experiments on four large-scale datasets demonstrate that Informer significantly outperforms existing methods and provides a new solution to the LSTF problem.*
+mean_prediction = outputs.sequences.mean(dim=1)
+```
 
-This model was contributed by [elisim](https://huggingface.co/elisim) and [kashif](https://huggingface.co/kashif).
-The original code can be found [here](https://github.com/zhouhaoyi/Informer2020).
-
-## Resources
-
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
-
-- Check out the Informer blog-post in HuggingFace blog: [Multivariate Probabilistic Time Series Forecasting with Informer](https://huggingface.co/blog/informer)
+</hfoption>
+</hfoptions>
 
 ## InformerConfig
 
@@ -53,3 +61,4 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] InformerForPrediction
     - forward
+

@@ -13,117 +13,49 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-05-02 and added to Hugging Face Transformers on 2022-01-29.*
+*This model was released on 2021-05-02 and added to Hugging Face Transformers on 2022-01-29 and contributed by [Soonhwan-Kwon](https://github.com/Soonhwan-Kwon) and [stefan-it](https://huggingface.co/stefan-it).*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
 </div>
 
 # XLM-RoBERTa-XL
 
-[XLM-RoBERTa-XL](https://huggingface.co/papers/2105.00572) is a 3.5B parameter multilingual masked language model pretrained on 100 languages. It shows that by scaling model capacity, multilingual models demonstrates strong performance on high-resource languages and can even zero-shot low-resource languages.
-
-You can find all the original XLM-RoBERTa-XL checkpoints under the [AI at Meta](https://huggingface.co/facebook?search_models=xlm) organization.
-
-> [!TIP]
-> Click on the XLM-RoBERTa-XL models in the right sidebar for more examples of how to apply XLM-RoBERTa-XL to different cross-lingual tasks like classification, translation, and question answering.
-
-The example below demonstrates how to predict the `<mask>` token with [`Pipeline`], [`AutoModel`], and from the command line.
+[XLM-RoBERTa-XL](https://huggingface.co/papers/2105.00572) presents two larger multilingual masked language models with 3.5B and 10.7B parameters, named XLM-R XL and XLM-R XXL. These models outperform XLM-R by 1.8% and 2.4% on XNLI, respectively, and surpass RoBERTa-Large on English GLUE tasks by 0.3% on average while supporting 99 additional languages.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```python
+```py
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(
-    task="fill-mask",
-    model="facebook/xlm-roberta-xl",
-    dtype=torch.float16,
-    device=0
-)
-pipeline("Bonjour, je suis un modèle <mask>.")
+pipeline = pipeline(task="fill-mask", model="facebook/xlm-roberta-xl", dtype="auto")
+pipeline("Les plantes créent <mask> grâce à un processus appelé photosynthèse.")
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
-```python
+```py
 import torch
 from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained(
-    "facebook/xlm-roberta-xl",
-)
-model = AutoModelForMaskedLM.from_pretrained(
-    "facebook/xlm-roberta-xl",
-    dtype=torch.float16,
-    device_map="auto",
-    attn_implementation="sdpa"
-)
-inputs = tokenizer("Bonjour, je suis un modèle <mask>.", return_tensors="pt").to(model.device)
+model = AutoModelForMaskedLM.from_pretrained("facebook/xlm-roberta-xl", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("facebook/xlm-roberta-xl")
 
-with torch.no_grad():
-    outputs = model(**inputs)
-    predictions = outputs.logits
-
-masked_index = torch.where(inputs['input_ids'] == tokenizer.mask_token_id)[1]
-predicted_token_id = predictions[0, masked_index].argmax(dim=-1)
-predicted_token = tokenizer.decode(predicted_token_id)
-
-print(f"The predicted token is: {predicted_token}")
-```
-
-</hfoption>
-
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Plants create <mask> through a process known as photosynthesis." | transformers run --task fill-mask --model facebook/xlm-roberta-xl --device 0
+inputs = tokenizer("Les plantes créent <mask> grâce à un processus appelé photosynthèse.", return_tensors="pt")
+outputs = model(**inputs)
+mask_token_id = tokenizer.mask_token_id
+mask_position = (inputs.input_ids == tokenizer.mask_token_id).nonzero(as_tuple=True)[1]
+predicted_word = tokenizer.decode(outputs.logits[0, mask_position].argmax(dim=-1))
+print(f"Predicted word: {predicted_word}")
 ```
 
 </hfoption>
 </hfoptions>
-
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
-
-The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.
-
-```py
-import torch
-from transformers import AutoModelForMaskedLM, AutoTokenizer, TorchAoConfig
-
-quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
-tokenizer = AutoTokenizer.from_pretrained(
-    "facebook/xlm-roberta-xl",
-)
-model = AutoModelForMaskedLM.from_pretrained(
-    "facebook/xlm-roberta-xl",
-    dtype=torch.float16,
-    device_map="auto",
-    attn_implementation="sdpa",
-    quantization_config=quantization_config
-)
-inputs = tokenizer("Bonjour, je suis un modèle <mask>.", return_tensors="pt").to(model.device)
-
-with torch.no_grad():
-    outputs = model(**inputs)
-    predictions = outputs.logits
-
-masked_index = torch.where(inputs['input_ids'] == tokenizer.mask_token_id)[1]
-predicted_token_id = predictions[0, masked_index].argmax(dim=-1)
-predicted_token = tokenizer.decode(predicted_token_id)
-
-print(f"The predicted token is: {predicted_token}")
-```
-
-## Notes
-
-- Unlike some XLM models, XLM-RoBERTa-XL doesn't require `lang` tensors to understand which language is used. It automatically determines the language from the input ids.
 
 ## XLMRobertaXLConfig
 
@@ -163,3 +95,4 @@ print(f"The predicted token is: {predicted_token}")
 
 [[autodoc]] XLMRobertaXLForQuestionAnswering
     - forward
+

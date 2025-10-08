@@ -13,47 +13,45 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2020-08-06 and added to Hugging Face Transformers on 2021-01-27.*
+*This model was released on 2020-08-06 and added to Hugging Face Transformers on 2021-01-27 and contributed by [abhishek](https://huggingface.co/abhishek).*
 
 # ConvBERT
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[ConvBERT: Improving BERT with Span-based Dynamic Convolution](https://huggingface.co/papers/2008.02496) proposes a novel span-based dynamic convolution to enhance BERT by replacing some self-attention heads with convolution heads, forming a mixed attention block. This design improves efficiency in learning both global and local contexts. ConvBERT outperforms BERT and its variants in various tasks, achieving an 86.4 GLUE score with less training cost and fewer parameters.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The ConvBERT model was proposed in [ConvBERT: Improving BERT with Span-based Dynamic Convolution](https://huggingface.co/papers/2008.02496) by Zihang Jiang, Weihao Yu, Daquan Zhou, Yunpeng Chen, Jiashi Feng, Shuicheng
-Yan.
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the paper is the following:
+pipeline = pipeline(task="fill-mask", model="YituTech/conv-bert-base", dtype="auto")
+pipeline("Plants create [MASK] through a process known as photosynthesis.")
+```
 
-*Pre-trained language models like BERT and its variants have recently achieved impressive performance in various
-natural language understanding tasks. However, BERT heavily relies on the global self-attention block and thus suffers
-large memory footprint and computation cost. Although all its attention heads query on the whole input sequence for
-generating the attention map from a global perspective, we observe some heads only need to learn local dependencies,
-which means the existence of computation redundancy. We therefore propose a novel span-based dynamic convolution to
-replace these self-attention heads to directly model local dependencies. The novel convolution heads, together with the
-rest self-attention heads, form a new mixed attention block that is more efficient at both global and local context
-learning. We equip BERT with this mixed attention design and build a ConvBERT model. Experiments have shown that
-ConvBERT significantly outperforms BERT and its variants in various downstream tasks, with lower training cost and
-fewer model parameters. Remarkably, ConvBERTbase model achieves 86.4 GLUE score, 0.7 higher than ELECTRAbase, while
-using less than 1/4 training cost. Code and pre-trained models will be released.*
+</hfoption>
+<hfoption id="AutoModel">
 
-This model was contributed by [abhishek](https://huggingface.co/abhishek). The original implementation can be found
-here: https://github.com/yitu-opensource/ConvBert
+```py
+import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-## Usage tips
+model = AutoModelForMaskedLM.from_pretrained("YituTech/conv-bert-base", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("YituTech/conv-bert-base")
 
-ConvBERT training tips are similar to those of BERT. For usage tips refer to [BERT documentation](bert).
+inputs = tokenizer("Plants create [MASK] through a process known as photosynthesis.", return_tensors="pt")
+outputs = model(**inputs)
+mask_token_id = tokenizer.mask_token_id
+mask_position = (inputs.input_ids == tokenizer.mask_token_id).nonzero(as_tuple=True)[1]
+predicted_word = tokenizer.decode(outputs.logits[0, mask_position].argmax(dim=-1))
+print(f"Predicted word: {predicted_word}")
+```
+
+</hfoption>
+</hfoptions>
 
 ## Resources
-
-- [Text classification task guide](../tasks/sequence_classification)
-- [Token classification task guide](../tasks/token_classification)
-- [Question answering task guide](../tasks/question_answering)
-- [Masked language modeling task guide](../tasks/masked_language_modeling)
-- [Multiple choice task guide](../tasks/multiple_choice)
 
 ## ConvBertConfig
 
@@ -100,3 +98,4 @@ ConvBERT training tips are similar to those of BERT. For usage tips refer to [BE
 
 [[autodoc]] ConvBertForQuestionAnswering
     - forward
+

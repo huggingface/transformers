@@ -9,38 +9,44 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
-*This model was released on 2023-05-11 and added to Hugging Face Transformers on 2023-06-26.*
+*This model was released on 2023-05-11 and added to Hugging Face Transformers on 2023-06-26 and contributed by [nielsr](https://huggingface.co/nielsr).*
 
 # InstructBLIP
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[InstructBLIP](https://huggingface.co/papers/2305.06500) leverages the BLIP-2 architecture for vision-language instruction tuning. It uses a wide variety of 26 publicly available datasets, transformed into an instruction tuning format, and categorized into held-in and held-out clusters. The model introduces instruction-aware visual feature extraction, enhancing its ability to extract relevant features based on given instructions. InstructBLIP achieves state-of-the-art zero-shot performance across 13 held-out datasets, outperforming BLIP-2 and Flamingo. It also excels in fine-tuned downstream tasks, such as achieving 90.7% accuracy on ScienceQA IMG, and demonstrates qualitative advantages over other multimodal models.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="InstructBlipForConditionalGeneration">
 
-The InstructBLIP model was proposed in [InstructBLIP: Towards General-purpose Vision-Language Models with Instruction Tuning](https://huggingface.co/papers/2305.06500) by Wenliang Dai, Junnan Li, Dongxu Li, Anthony Meng Huat Tiong, Junqi Zhao, Weisheng Wang, Boyang Li, Pascale Fung, Steven Hoi.
-InstructBLIP leverages the [BLIP-2](blip2) architecture for visual instruction tuning.
+```py
+import torch
+import requests
+from PIL import Image
+from transformers import InstructBlipProcessor, InstructBlipForConditionalGeneration
 
-The abstract from the paper is the following:
+model = InstructBlipForConditionalGeneration.from_pretrained("Salesforce/instructblip-vicuna-7b", dtype="auto")
+processor = InstructBlipProcessor.from_pretrained("Salesforce/instructblip-vicuna-7b")
 
-*General-purpose language models that can solve various language-domain tasks have emerged driven by the pre-training and instruction-tuning pipeline. However, building general-purpose vision-language models is challenging due to the increased task discrepancy introduced by the additional visual input. Although vision-language pre-training has been widely studied, vision-language instruction tuning remains relatively less explored. In this paper, we conduct a systematic and comprehensive study on vision-language instruction tuning based on the pre-trained BLIP-2 models. We gather a wide variety of 26 publicly available datasets, transform them into instruction tuning format and categorize them into two clusters for held-in instruction tuning and held-out zero-shot evaluation. Additionally, we introduce instruction-aware visual feature extraction, a crucial method that enables the model to extract informative features tailored to the given instruction. The resulting InstructBLIP models achieve state-of-the-art zero-shot performance across all 13 held-out datasets, substantially outperforming BLIP-2 and the larger Flamingo. Our models also lead to state-of-the-art performance when finetuned on individual downstream tasks (e.g., 90.7% accuracy on ScienceQA IMG). Furthermore, we qualitatively demonstrate the advantages of InstructBLIP over concurrent multimodal models.*
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/instructblip_architecture.jpg"
-alt="drawing" width="600"/>
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+prompt = "What is the weather in this image?"
+inputs = processor(images=image, text=prompt, return_tensors="pt").to(device)
 
-<small> InstructBLIP architecture. Taken from the <a href="https://huggingface.co/papers/2305.06500">original paper.</a> </small>
-
-This model was contributed by [nielsr](https://huggingface.co/nielsr).
-The original code can be found [here](https://github.com/salesforce/LAVIS/tree/main/projects/instructblip).
-
-## Usage tips
-
-InstructBLIP uses the same architecture as [BLIP-2](blip2) with a tiny but important difference: it also feeds the text prompt (instruction) to the Q-Former.
-
-> [!NOTE]
-> BLIP models after release v4.46 will raise warnings about adding `processor.num_query_tokens = {{num_query_tokens}}` and expand model embeddings layer to add special `<image>` token. It is strongly recommended to add the attributes to the processor if you own the model checkpoint, or open a PR if it is not owned by you. Adding these attributes means that BLIP will add the number of query tokens required per image and expand the text with as many `<image>` placeholders as there will be query tokens. Usually it is around 500 tokens per image, so make sure that the text is not truncated as otherwise there wil be failure when merging the embeddings.
-The attributes can be obtained from model config, as `model.config.num_query_tokens` and model embeddings expansion can be done by following [this link](https://gist.github.com/zucchini-nlp/e9f20b054fa322f84ac9311d9ab67042).
+outputs = model.generate(
+    **inputs,
+    do_sample=False,
+    num_beams=5,
+    max_length=256,
+    min_length=1,
+    top_p=0.9,
+    repetition_penalty=1.5,
+    length_penalty=1.0,
+    temperature=1,
+)
+generated_text = processor.batch_decode(outputs, skip_special_tokens=True)[0].strip()
+print(generated_text)
+```
 
 ## InstructBlipConfig
 
@@ -68,12 +74,14 @@ The attributes can be obtained from model config, as `model.config.num_query_tok
 [[autodoc]] InstructBlipQFormerModel
     - forward
 
-## InstructBlipModel
-
-[[autodoc]] InstructBlipModel
-
 ## InstructBlipForConditionalGeneration
 
 [[autodoc]] InstructBlipForConditionalGeneration
     - forward
     - generate
+
+## InstructBlipModel
+
+[[autodoc]] InstructBlipModel
+    - forward
+

@@ -13,58 +13,35 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-06-11 and added to Hugging Face Transformers on 2024-08-19.*
+*This model was released on 2023-06-11 and added to Hugging Face Transformers on 2024-08-19 and contributed by [kamilakesbi](https://huggingface.co/kamilakesbi).*
 
 # DAC
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[DAC](https://huggingface.co/papers/2306.06546) is a high-fidelity universal neural audio compression algorithm that compresses 44.1 KHz audio into tokens at 8kbps bandwidth, achieving approximately 90x compression. It combines advancements in high-fidelity audio generation with improved vector quantization techniques from the image domain, enhanced adversarial and reconstruction losses, and a single universal model for various audio domains including speech, environment, and music. This method outperforms competing audio compression algorithms and is supported by open-source code and trained model weights.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="DacModel">
 
-The DAC model was proposed in [Descript Audio Codec: High-Fidelity Audio Compression with Improved RVQGAN](https://huggingface.co/papers/2306.06546) by Rithesh Kumar, Prem Seetharaman, Alejandro Luebs, Ishaan Kumar, Kundan Kumar.
+```py
+from datasets import load_dataset, Audio
+from transformers import DacModel, AutoProcessor
 
-The Descript Audio Codec (DAC) model is a powerful tool for compressing audio data, making it highly efficient for storage and transmission. By compressing 44.1 KHz audio into tokens at just 8kbps bandwidth, the DAC model enables high-quality audio processing while significantly reducing the data footprint. This is particularly useful in scenarios where bandwidth is limited or storage space is at a premium, such as in streaming applications, remote conferencing, and archiving large audio datasets.
+model = DacModel.from_pretrained("descript/dac_16khz", dtype="auto")
+processor = AutoProcessor.from_pretrained("descript/dac_16khz")
 
-The abstract from the paper is the following:
+librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
+audio_sample = librispeech_dummy[-1]["audio"]["array"]
+inputs = processor(raw_audio=audio_sample, sampling_rate=processor.sampling_rate, return_tensors="pt")
 
-*Language models have been successfully used to model natural signals, such as images, speech, and music. A key component of these models is a high quality neural compression model that can compress high-dimensional natural signals into lower dimensional discrete tokens. To that end, we introduce a high-fidelity universal neural audio compression algorithm that achieves ~90x compression of 44.1 KHz audio into tokens at just 8kbps bandwidth. We achieve this by combining advances in high-fidelity audio generation with better vector quantization techniques from the image domain, along with improved adversarial and reconstruction losses. We compress all domains (speech, environment, music, etc.) with a single universal model, making it widely applicable to generative modeling of all audio. We compare with competing audio compression algorithms, and find our method outperforms them significantly. We provide thorough ablations for every design choice, as well as open-source code and trained model weights. We hope our work can lay the foundation for the next generation of high-fidelity audio modeling.*
-
-This model was contributed by [Kamil Akesbi](https://huggingface.co/kamilakesbi).
-The original code can be found [here](https://github.com/descriptinc/descript-audio-codec/tree/main?tab=readme-ov-file).
-
-## Model structure
-
-The Descript Audio Codec (DAC) model is structured into three distinct stages:
-
-1. Encoder Model: This stage compresses the input audio, reducing its size while retaining essential information.
-2. Residual Vector Quantizer (RVQ) Model: Working in tandem with the encoder, this model quantizes the latent codes of the audio, refining the compression and ensuring high-quality reconstruction.
-3. Decoder Model: This final stage reconstructs the audio from its compressed form, restoring it to a state that closely resembles the original input.
-
-## Usage example
-
-Here is a quick example of how to encode and decode an audio using this model:
-
-```python
->>> from datasets import load_dataset, Audio
->>> from transformers import DacModel, AutoProcessor
->>> librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-
->>> model = DacModel.from_pretrained("descript/dac_16khz")
->>> processor = AutoProcessor.from_pretrained("descript/dac_16khz")
->>> librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
->>> audio_sample = librispeech_dummy[-1]["audio"]["array"]
->>> inputs = processor(raw_audio=audio_sample, sampling_rate=processor.sampling_rate, return_tensors="pt")
-
->>> encoder_outputs = model.encode(inputs["input_values"])
->>> # Get the intermediate audio codes
->>> audio_codes = encoder_outputs.audio_codes
->>> # Reconstruct the audio from its quantized representation
->>> audio_values = model.decode(encoder_outputs.quantized_representation)
->>> # or the equivalent with a forward pass
->>> audio_values = model(inputs["input_values"]).audio_values
+encoder_outputs = model.encode(inputs["input_values"])
+audio_codes = encoder_outputs.audio_codes
+audio_values = model.decode(encoder_outputs.quantized_representation)
+audio_values = model(inputs["input_values"]).audio_values
 ```
+
+</hfoption>
+</hfoptions>
 
 ## DacConfig
 
@@ -81,3 +58,4 @@ Here is a quick example of how to encode and decode an audio using this model:
     - decode
     - encode
     - forward
+

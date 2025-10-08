@@ -13,42 +13,21 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2019-04-19 and added to Hugging Face Transformers on 2022-09-09.*
-
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white" >
-    </div>
-</div>
+*This model was released on 2019-04-19 and added to Hugging Face Transformers on 2022-09-09 and contributed by [nghuyong](https://huggingface.co/nghuyong).*
 
 # ERNIE
 
-[ERNIE1.0](https://huggingface.co/papers/1904.09223), [ERNIE2.0](https://ojs.aaai.org/index.php/AAAI/article/view/6428),
-[ERNIE3.0](https://huggingface.co/papers/2107.02137), [ERNIE-Gram](https://huggingface.co/papers/2010.12148), [ERNIE-health](https://huggingface.co/papers/2110.07244) are a series of powerful models proposed by baidu, especially in Chinese tasks.
-
-ERNIE (Enhanced Representation through kNowledge IntEgration) is designed to learn language representation enhanced by knowledge masking strategies, which includes entity-level masking and phrase-level masking.
-
-Other ERNIE models released by baidu can be found at [Ernie 4.5](./ernie4_5), and [Ernie 4.5 MoE](./ernie4_5_moe).
-
-> [!TIP]
-> This model was contributed by [nghuyong](https://huggingface.co/nghuyong), and the official code can be found in [PaddleNLP](https://github.com/PaddlePaddle/PaddleNLP) (in PaddlePaddle).
->
-> Click on the ERNIE models in the right sidebar for more examples of how to apply ERNIE to different language tasks.
-
-The example below demonstrates how to predict the `[MASK]` token with [`Pipeline`], [`AutoModel`], and from the command line.
+[ERNIE](https://huggingface.co/papers/1904.09223) is a language representation model that extends BERT by introducing knowledge-driven masking strategies. Unlike BERT’s word-level masking, ERNIE applies entity-level masking (covering named entities) and phrase-level masking (covering multi-word concepts) to better capture semantic and contextual information. Experiments show that ERNIE achieves state-of-the-art performance on five major Chinese NLP tasks, including inference, similarity, named entity recognition, sentiment, and question answering. It also demonstrates superior knowledge inference ability in cloze-style evaluations.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
 ```py
+import torch
 from transformers import pipeline
 
-pipeline = pipeline(
-    task="fill-mask",
-    model="nghuyong/ernie-3.0-xbase-zh"
-)
-
-pipeline("巴黎是[MASK]国的首都。")
+pipeline = pipeline(task="text-generation", model="nghuyong/ernie-1.0-base-zh", dtype="auto")
+pipeline("植物通过光合作用产生能量。")
 ```
 
 </hfoption>
@@ -56,61 +35,19 @@ pipeline("巴黎是[MASK]国的首都。")
 
 ```py
 import torch
-from transformers import AutoModelForMaskedLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained(
-    "nghuyong/ernie-3.0-xbase-zh",
-)
-model = AutoModelForMaskedLM.from_pretrained(
-    "nghuyong/ernie-3.0-xbase-zh",
-    dtype=torch.float16,
-    device_map="auto"
-)
-inputs = tokenizer("巴黎是[MASK]国的首都。", return_tensors="pt").to(model.device)
+model = AutoModelForCausalLM.from_pretrained("nghuyong/ernie-1.0-base-zh", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("nghuyong/ernie-1.0-base-zh")
 
-with torch.no_grad():
-    outputs = model(**inputs)
-    predictions = outputs.logits
-
-masked_index = torch.where(inputs['input_ids'] == tokenizer.mask_token_id)[1]
-predicted_token_id = predictions[0, masked_index].argmax(dim=-1)
-predicted_token = tokenizer.decode(predicted_token_id)
-
-print(f"The predicted token is: {predicted_token}")
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "巴黎是[MASK]国的首都。" | transformers run --task fill-mask --model nghuyong/ernie-3.0-xbase-zh --device 0
+inputs = tokenizer("植物通过光合作用产生能量。", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50, do_sample=True)
+generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+print(generated_text)
 ```
 
 </hfoption>
 </hfoptions>
-
-## Notes
-
-Model variants are available in different sizes and languages.
-
-|     Model Name      | Language |           Description           |
-|:-------------------:|:--------:|:-------------------------------:|
-|  ernie-1.0-base-zh  | Chinese  | Layer:12, Heads:12, Hidden:768  |
-|  ernie-2.0-base-en  | English  | Layer:12, Heads:12, Hidden:768  |
-| ernie-2.0-large-en  | English  | Layer:24, Heads:16, Hidden:1024 |
-|  ernie-3.0-base-zh  | Chinese  | Layer:12, Heads:12, Hidden:768  |
-| ernie-3.0-medium-zh | Chinese  |  Layer:6, Heads:12, Hidden:768  |
-|  ernie-3.0-mini-zh  | Chinese  |  Layer:6, Heads:12, Hidden:384  |
-| ernie-3.0-micro-zh  | Chinese  |  Layer:4, Heads:12, Hidden:384  |
-|  ernie-3.0-nano-zh  | Chinese  |  Layer:4, Heads:12, Hidden:312  |
-|   ernie-health-zh   | Chinese  | Layer:12, Heads:12, Hidden:768  |
-|    ernie-gram-zh    | Chinese  | Layer:12, Heads:12, Hidden:768  |
-
-## Resources
-
-You can find all the supported models from huggingface's model hub: [huggingface.co/nghuyong](https://huggingface.co/nghuyong), and model details from paddle's official
-repo: [PaddleNLP](https://paddlenlp.readthedocs.io/zh/latest/model_zoo/transformers/ERNIE/contents.html)
-and [ERNIE's legacy branch](https://github.com/PaddlePaddle/ERNIE/tree/legacy/develop).
 
 ## ErnieConfig
 

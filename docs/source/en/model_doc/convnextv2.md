@@ -13,39 +13,49 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-01-02 and added to Hugging Face Transformers on 2023-03-14.*
+*This model was released on 2023-01-02 and added to Hugging Face Transformers on 2023-03-14 and contributed by [adirik](https://huggingface.co/adirik).*
 
 # ConvNeXt V2
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[ConvNeXt V2](https://huggingface.co/papers/2301.00808) is a fully convolutional model inspired by Vision Transformers and built upon ConvNeXt. It integrates a novel Global Response Normalization (GRN) layer to enhance inter-channel feature competition and a fully convolutional masked autoencoder framework. This co-design improves performance on various recognition tasks, including ImageNet classification, COCO detection, and ADE20K segmentation. Pre-trained ConvNeXt V2 models range from an efficient 3.7M-parameter Atto model achieving 76.7% top-1 accuracy on ImageNet to a 650M Huge model with 88.9% accuracy using only public training data.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The ConvNeXt V2 model was proposed in [ConvNeXt V2: Co-designing and Scaling ConvNets with Masked Autoencoders](https://huggingface.co/papers/2301.00808) by Sanghyun Woo, Shoubhik Debnath, Ronghang Hu, Xinlei Chen, Zhuang Liu, In So Kweon, Saining Xie.
-ConvNeXt V2 is a pure convolutional model (ConvNet), inspired by the design of Vision Transformers, and a successor of [ConvNeXT](convnext).
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the paper is the following:
+pipeline = pipeline(task="image-classification", model="facebook/convnextv2-tiny-1k-224", dtype="auto")
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
+```
 
-*Driven by improved architectures and better representation learning frameworks, the field of visual recognition has enjoyed rapid modernization and performance boost in the early 2020s. For example, modern ConvNets, represented by ConvNeXt, have demonstrated strong performance in various scenarios. While these models were originally designed for supervised learning with ImageNet labels, they can also potentially benefit from self-supervised learning techniques such as masked  autoencoders (MAE). However, we found that simply combining these two approaches leads to subpar performance. In this paper, we propose a fully convolutional masked autoencoder framework and a new Global Response Normalization (GRN) layer that can be added to the ConvNeXt architecture to enhance inter-channel feature competition. This co-design of self-supervised learning techniques and architectural improvement results in a new model family called ConvNeXt V2, which significantly improves the performance of pure ConvNets on various recognition benchmarks, including ImageNet classification, COCO detection, and ADE20K segmentation. We also provide pre-trained ConvNeXt V2 models of various sizes, ranging from an efficient 3.7M-parameter Atto model with 76.7% top-1 accuracy on ImageNet, to a 650M Huge model that achieves a state-of-the-art 88.9% accuracy using only public training data.*
+</hfoption>
+<hfoption id="AutoModel">
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/convnextv2_architecture.png"
-alt="drawing" width="600"/>
+```python
+import torch
+import requests
+from PIL import Image
+from transformers import AutoImageProcessor, AutoModelForImageClassification
 
-<small> ConvNeXt V2 architecture. Taken from the <a href="https://huggingface.co/papers/2301.00808">original paper</a>.</small>
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
 
-This model was contributed by [adirik](https://huggingface.co/adirik). The original code can be found [here](https://github.com/facebookresearch/ConvNeXt-V2).
+image_processor = AutoImageProcessor.from_pretrained("facebook/convnextv2-tiny-1k-224")
+model = AutoModelForImageClassification.from_pretrained("facebook/convnextv2-tiny-1k-224", dtype="auto")
 
-## Resources
+inputs = image_processor(image, return_tensors="pt")
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with ConvNeXt V2.
+with torch.no_grad():
+    logits = model(**inputs).logits
 
-<PipelineTag pipeline="image-classification"/>
+predicted_label = logits.argmax(-1).item()
+print(model.config.id2label[predicted_label])
+```
 
-- [`ConvNextV2ForImageClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
-
-If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+</hfoption>
+</hfoptions>
 
 ## ConvNextV2Config
 
@@ -60,3 +70,4 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] ConvNextV2ForImageClassification
     - forward
+

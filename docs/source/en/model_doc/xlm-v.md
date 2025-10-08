@@ -13,45 +13,40 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-01-25 and added to Hugging Face Transformers on 2023-06-20.*
+*This model was released on 2023-01-25 and added to Hugging Face Transformers on 2023-06-20 and contributed by [stefan-it](https://huggingface.co/stefan-it).*
 
 # XLM-V
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[XLM-V](https://huggingface.co/papers/2301.10472) is a multilingual language model featuring a one million token vocabulary, trained on 2.5TB of data from Common Crawl. It addresses the vocabulary bottleneck in multilingual models by optimizing token sharing and vocabulary capacity for individual languages, resulting in more semantically meaningful and shorter tokenizations. XLM-V outperforms XLM-R across various tasks, including natural language inference, question answering, named entity recognition, and low-resource tasks.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-XLM-V is multilingual language model with a one million token vocabulary trained on 2.5TB of data from Common Crawl (same as XLM-R).
-It was introduced in the [XLM-V: Overcoming the Vocabulary Bottleneck in Multilingual Masked Language Models](https://huggingface.co/papers/2301.10472)
-paper by Davis Liang, Hila Gonen, Yuning Mao, Rui Hou, Naman Goyal, Marjan Ghazvininejad, Luke Zettlemoyer and Madian Khabsa.
+```py
+import torch
+from transformers import pipeline
 
-From the abstract of the XLM-V paper:
+pipeline = pipeline(task="fill-mask", model="facebook/xlm-v-base", dtype="auto")
+pipeline("Les plantes créent <mask> grâce à un processus appelé photosynthèse.")
+```
 
-*Large multilingual language models typically rely on a single vocabulary shared across 100+ languages.
-As these models have increased in parameter count and depth, vocabulary size has remained largely unchanged.
-This vocabulary bottleneck limits the representational capabilities of multilingual models like XLM-R.
-In this paper, we introduce a new approach for scaling to very large multilingual vocabularies by
-de-emphasizing token sharing between languages with little lexical overlap and assigning vocabulary capacity
-to achieve sufficient coverage for each individual language. Tokenizations using our vocabulary are typically
-more semantically meaningful and shorter compared to XLM-R. Leveraging this improved vocabulary, we train XLM-V,
-a multilingual language model with a one million token vocabulary. XLM-V outperforms XLM-R on every task we
-tested on ranging from natural language inference (XNLI), question answering (MLQA, XQuAD, TyDiQA), and
-named entity recognition (WikiAnn) to low-resource tasks (Americas NLI, MasakhaNER).*
+</hfoption>
+<hfoption id="AutoModel">
 
-This model was contributed by [stefan-it](https://huggingface.co/stefan-it), including detailed experiments with XLM-V on downstream tasks.
-The experiments repository can be found [here](https://github.com/stefan-it/xlm-v-experiments).
+```py
+import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-## Usage tips
+model = AutoModelForMaskedLM.from_pretrained("facebook/xlm-v-base", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("facebook/xlm-v-base")
 
-- XLM-V is compatible with the XLM-RoBERTa model architecture, only model weights from [`fairseq`](https://github.com/facebookresearch/fairseq)
-  library had to be converted.
-- The `XLMTokenizer` implementation is used to load the vocab and performs tokenization.
+inputs = tokenizer("Les plantes créent <mask> grâce à un processus appelé photosynthèse.", return_tensors="pt")
+outputs = model(**inputs)
+mask_token_id = tokenizer.mask_token_id
+mask_position = (inputs.input_ids == tokenizer.mask_token_id).nonzero(as_tuple=True)[1]
+predicted_word = tokenizer.decode(outputs.logits[0, mask_position].argmax(dim=-1))
+print(f"Predicted word: {predicted_word}")
+```
 
-A XLM-V (base size) model is available under the [`facebook/xlm-v-base`](https://huggingface.co/facebook/xlm-v-base) identifier.
-
-<Tip>
-
-XLM-V architecture is the same as XLM-RoBERTa, refer to [XLM-RoBERTa documentation](xlm-roberta) for API reference, and examples.
-</Tip>
+</hfoption>
+</hfoptions>

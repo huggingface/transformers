@@ -13,99 +13,49 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-04-14 and added to Hugging Face Transformers on 2023-06-20.*
+*This model was released on 2021-04-14 and added to Hugging Face Transformers on 2023-06-20 and contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten).*
+
+> [!WARNING]
+> This model is in maintenance mode only, we don’t accept any new PRs changing its code. If you run into any issues running this model, please reinstall the last version that supported this model: v4.40.2. You can do so by running the following command: pip install -U transformers==4.40.2.
 
 # Speech2Text2
 
-  <Tip warning={true}>
+[Speech2Text2](https://huggingface.co/papers/2104.06678) a speech translation model that leverages large unlabeled speech and text datasets through both pretraining and self-training. It uses wav2vec 2.0 for speech representation learning on the Libri-Light corpus and integrates language modeling trained on CommonCrawl text data. By combining these components with a single round of self-training and language model–assisted decoding, the approach achieves a 2.6 BLEU improvement on average across four CoVoST 2 language pairs. Notably, the method requires no additional supervised data beyond the original speech translation dataset.
 
-  This model is in maintenance mode only, we don't accept any new PRs changing its code.
-  If you run into any issues running this model, please reinstall the last version that supported this model: v4.40.2.
-  You can do so by running the following command: `pip install -U transformers==4.40.2`.
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-  </Tip>
+```py
+import torch
+from transformers import pipeline
 
-## Overview
-
-The Speech2Text2 model is used together with [Wav2Vec2](wav2vec2) for Speech Translation models proposed in
-[Large-Scale Self- and Semi-Supervised Learning for Speech Translation](https://huggingface.co/papers/2104.06678) by
-Changhan Wang, Anne Wu, Juan Pino, Alexei Baevski, Michael Auli, Alexis Conneau.
-
-Speech2Text2 is a *decoder-only* transformer model that can be used with any speech *encoder-only*, such as
-[Wav2Vec2](wav2vec2) or [HuBERT](hubert) for Speech-to-Text tasks. Please refer to the
-[SpeechEncoderDecoder](speech-encoder-decoder) class on how to combine Speech2Text2 with any speech *encoder-only*
-model.
-
-This model was contributed by [Patrick von Platen](https://huggingface.co/patrickvonplaten).
-
-The original code can be found [here](https://github.com/pytorch/fairseq/blob/1f7ef9ed1e1061f8c7f88f8b94c7186834398690/fairseq/models/wav2vec/wav2vec2_asr.py#L266).
-
-## Usage tips
-
-- Speech2Text2 achieves state-of-the-art results on the CoVoST Speech Translation dataset. For more information, see
-  the [official models](https://huggingface.co/models?other=speech2text2) .
-- Speech2Text2 is always used within the [SpeechEncoderDecoder](speech-encoder-decoder) framework.
-- Speech2Text2's tokenizer is based on [fastBPE](https://github.com/glample/fastBPE).
-
-## Inference
-
-Speech2Text2's [`SpeechEncoderDecoderModel`] model accepts raw waveform input values from speech and
-makes use of [`~generation.GenerationMixin.generate`] to translate the input speech
-autoregressively to the target language.
-
-The [`Wav2Vec2FeatureExtractor`] class is responsible for preprocessing the input speech and
-[`Speech2Text2Tokenizer`] decodes the generated target tokens to the target string. The
-[`Speech2Text2Processor`] wraps [`Wav2Vec2FeatureExtractor`] and
-[`Speech2Text2Tokenizer`] into a single instance to both extract the input features and decode the
-predicted token ids.
-
-- Step-by-step Speech Translation
-
-```python
->>> from transformers import Speech2Text2Processor, SpeechEncoderDecoderModel
->>> from datasets import load_dataset
-
->>> model = SpeechEncoderDecoderModel.from_pretrained("facebook/s2t-wav2vec2-large-en-de")
->>> processor = Speech2Text2Processor.from_pretrained("facebook/s2t-wav2vec2-large-en-de")
-
-
->>> def map_to_array(example):
-...     example["speech"] = example["audio"]["array"]
-...     return example
-
-
->>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
->>> ds = ds.map(map_to_array)
-
->>> inputs = processor(ds["speech"][0], sampling_rate=16_000, return_tensors="pt")
->>> generated_ids = model.generate(inputs=inputs["input_values"], attention_mask=inputs["attention_mask"])
-
->>> transcription = processor.batch_decode(generated_ids)
+pipeline = pipeline(task="automatic-speech-recognition", model="facebook/s2t-wav2vec2-large-en-de", dtype="auto")
+pipeline("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac")
 ```
 
-- Speech Translation via Pipelines
+</hfoption>
+<hfoption id="SpeechEncoderDecoderModel">
 
-  The automatic speech recognition pipeline can also be used to translate speech in just a couple lines of code
+```py
+import torch
+from datasets import load_dataset
+from transformers import AutoProcessor, AutoModelForCTC
 
-```python
->>> from datasets import load_dataset
->>> from transformers import pipeline
+dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation").sort("id")
+sampling_rate = dataset.features["audio"].sampling_rate
 
->>> librispeech_en = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
->>> asr = pipeline(
-...     "automatic-speech-recognition",
-...     model="facebook/s2t-wav2vec2-large-en-de",
-...     feature_extractor="facebook/s2t-wav2vec2-large-en-de",
-... )
+processor = AutoProcessor.from_pretrained("facebook/s2t-wav2vec2-large-en-de")
+model = AutoModelForCTC.from_pretrained("facebook/s2t-wav2vec2-large-en-de", dtype="auto")
 
->>> translation_de = asr(librispeech_en[0]["file"])
+inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
+with torch.no_grad():
+    logits = model(**inputs).logits
+predicted_ids = torch.argmax(logits, dim=-1)
+print(f"Transcription: {processor.batch_decode(predicted_ids)[0]}")
 ```
 
-See [model hub](https://huggingface.co/models?filter=speech2text2) to look for Speech2Text2 checkpoints.
-
-## Resources
-
-- [Causal language modeling task guide](../tasks/language_modeling)
+</hfoption>
+</hfoptions>
 
 ## Speech2Text2Config
 

@@ -13,115 +13,55 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-04-21 and added to Hugging Face Transformers on 2025-06-26.*
+*This model was released on 2025-04-21 and added to Hugging Face Transformers on 2025-06-26 and contributed by [buttercrab](https://huggingface.co/buttercrab) and [ArthurZ](https://huggingface.co/ArthurZ).*
 
 # Dia
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
 </div>
 
-## Overview
+[Dia](https://github.com/nari-labs/dia) is a 1.6B-parameter text-to-speech model from Nari Labs designed to generate natural, emotionally expressive dialogue, including non-verbal sounds like laughter and coughing. It uses an encoder-decoder transformer architecture enhanced with modern features such as rotational positional embeddings (RoPE). Text input is processed with a byte tokenizer, while audio is handled through a pretrained DAC codec that converts speech to and from discrete codebook tokens. This setup enables realistic voice synthesis with controllable tone and emotion via audio conditioning.
 
-[Dia](https://github.com/nari-labs/dia) is an open-source text-to-speech (TTS) model (1.6B parameters) developed by [Nari Labs](https://huggingface.co/nari-labs).
-It can generate highly realistic dialogue from transcript including non-verbal communications such as laughter and coughing.
-Furthermore, emotion and tone control is also possible via audio conditioning (voice cloning).
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-**Model Architecture:**
-Dia is an encoder-decoder transformer based on the original transformer architecture. However, some more modern features such as
-rotational positional embeddings (RoPE) are also included. For its text portion (encoder), a byte tokenizer is utilized while
-for the audio portion (decoder), a pretrained codec model [DAC](./dac) is used - DAC encodes speech into discrete codebook
-tokens and decodes them back into audio.
+```py
+import torch
+from transformers import pipeline
 
-## Usage Tips
-
-### Generation with Text
-
-```python
-from transformers import AutoProcessor, DiaForConditionalGeneration
-from accelerate import Accelerator
-
-torch_device = Accelerator().device
-model_checkpoint = "nari-labs/Dia-1.6B-0626"
-
-text = ["[S1] Dia is an open weights text to dialogue model."]
-processor = AutoProcessor.from_pretrained(model_checkpoint)
-inputs = processor(text=text, padding=True, return_tensors="pt").to(torch_device)
-
-model = DiaForConditionalGeneration.from_pretrained(model_checkpoint).to(torch_device)
-outputs = model.generate(**inputs, max_new_tokens=256)  # corresponds to around ~2s
-
-# save audio to a file
-outputs = processor.batch_decode(outputs)
-processor.save_audio(outputs, "example.wav")
-
+pipeline = pipeline(task="text-to-audio", model="nari-labs/Dia-1.6B-0626", dtype="auto")
+output = pipeline("Plants create energy through a process known as photosynthesis.")
+audio = output["audio"]
 ```
 
-### Generation with Text and Audio (Voice Cloning)
+</hfoption>
+<hfoption id="DiaForConditionalGeneration">
 
 ```python
 from datasets import load_dataset, Audio
 from transformers import AutoProcessor, DiaForConditionalGeneration
-from accelerate import Accelerator
 
-torch_device = Accelerator().device
-model_checkpoint = "nari-labs/Dia-1.6B-0626"
+processor = AutoProcessor.from_pretrained("nari-labs/Dia-1.6B-0626")
+model = DiaForConditionalGeneration.from_pretrained("nari-labs/Dia-1.6B-0626").to(torch_device)
 
 ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
 ds = ds.cast_column("audio", Audio(sampling_rate=44100))
 audio = ds[-1]["audio"]["array"]
-# text is a transcript of the audio + additional text you want as new audio
-text = ["[S1] I know. It's going to save me a lot of money, I hope. [S2] I sure hope so for you."]
-
-processor = AutoProcessor.from_pretrained(model_checkpoint)
-inputs = processor(text=text, audio=audio, padding=True, return_tensors="pt").to(torch_device)
+text = ["[S1] Plants create energy through a process known as photosynthesis. [S2] That is so amazing!"]
+inputs = processor(text=text, audio=audio, padding=True, return_tensors="pt")
 prompt_len = processor.get_audio_prompt_len(inputs["decoder_attention_mask"])
 
-model = DiaForConditionalGeneration.from_pretrained(model_checkpoint).to(torch_device)
-outputs = model.generate(**inputs, max_new_tokens=256)  # corresponds to around ~2s
-
-# retrieve actually generated audio and save to a file
+outputs = model.generate(**inputs, max_new_tokens=256)
 outputs = processor.batch_decode(outputs, audio_prompt_len=prompt_len)
 processor.save_audio(outputs, "example_with_audio.wav")
 ```
 
-### Training
-
-```python
-from datasets import load_dataset, Audio
-from transformers import AutoProcessor, DiaForConditionalGeneration
-from accelerate import Accelerator
-
-torch_device = Accelerator().device
-model_checkpoint = "nari-labs/Dia-1.6B-0626"
-
-ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
-ds = ds.cast_column("audio", Audio(sampling_rate=44100))
-audio = ds[-1]["audio"]["array"]
-# text is a transcript of the audio
-text = ["[S1] I know. It's going to save me a lot of money, I hope."]
-
-processor = AutoProcessor.from_pretrained(model_checkpoint)
-inputs = processor(
-    text=text,
-    audio=audio,
-    generation=False,
-    output_labels=True,
-    padding=True,
-    return_tensors="pt"
-).to(torch_device)
-
-model = DiaForConditionalGeneration.from_pretrained(model_checkpoint).to(torch_device)
-out = model(**inputs)
-out.loss.backward()
-```
-
-This model was contributed by [Jaeyong Sung](https://huggingface.co/buttercrab), [Arthur Zucker](https://huggingface.co/ArthurZ),
-and [Anton Vlasjuk](https://huggingface.co/AntonV). The original code can be found [here](https://github.com/nari-labs/dia/).
+</hfoption>
+</hfoptions>
 
 ## DiaConfig
 

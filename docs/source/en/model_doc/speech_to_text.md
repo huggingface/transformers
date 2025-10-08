@@ -13,93 +13,42 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2020-10-11 and added to Hugging Face Transformers on 2021-03-10.*
+*This model was released on 2020-10-11 and added to Hugging Face Transformers on 2021-03-10 and contributed by [valhalla](https://huggingface.co/valhalla).*
 
 # Speech2Text
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[Speech2Text](https://huggingface.co/papers/2010.05171) is an extension of the Fairseq framework designed for speech-to-text tasks like automatic speech recognition and speech translation. It offers a full pipeline for data preprocessing, model training, and both offline and online inference. The toolkit supports state-of-the-art RNN, Transformer, and Conformer architectures, along with open-source training recipes. It also enables integration with Fairseq’s machine translation and language models for multi-task or transfer learning applications.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The Speech2Text model was proposed in [fairseq S2T: Fast Speech-to-Text Modeling with fairseq](https://huggingface.co/papers/2010.05171) by Changhan Wang, Yun Tang, Xutai Ma, Anne Wu, Dmytro Okhonko, Juan Pino. It's a
-transformer-based seq2seq (encoder-decoder) model designed for end-to-end Automatic Speech Recognition (ASR) and Speech
-Translation (ST). It uses a convolutional downsampler to reduce the length of speech inputs by 3/4th before they are
-fed into the encoder. The model is trained with standard autoregressive cross-entropy loss and generates the
-transcripts/translations autoregressively. Speech2Text has been fine-tuned on several datasets for ASR and ST:
-[LibriSpeech](http://www.openslr.org/12), [CoVoST 2](https://github.com/facebookresearch/covost), [MuST-C](https://ict.fbk.eu/must-c/).
+```py
+import torch
+from transformers import pipeline
 
-This model was contributed by [valhalla](https://huggingface.co/valhalla). The original code can be found [here](https://github.com/pytorch/fairseq/tree/master/examples/speech_to_text).
-
-## Inference
-
-Speech2Text is a speech model that accepts a float tensor of log-mel filter-bank features extracted from the speech
-signal. It's a transformer-based seq2seq model, so the transcripts/translations are generated autoregressively. The
-`generate()` method can be used for inference.
-
-The [`Speech2TextFeatureExtractor`] class is responsible for extracting the log-mel filter-bank
-features. The [`Speech2TextProcessor`] wraps [`Speech2TextFeatureExtractor`] and
-[`Speech2TextTokenizer`] into a single instance to both extract the input features and decode the
-predicted token ids.
-
-The feature extractor depends on `torchaudio` and the tokenizer depends on `sentencepiece` so be sure to
-install those packages before running the examples. You could either install those as extra speech dependencies with
-`pip install transformers"[speech, sentencepiece]"` or install the packages separately with `pip install torchaudio sentencepiece`. Also `torchaudio` requires the development version of the [libsndfile](http://www.mega-nerd.com/libsndfile/) package which can be installed via a system package manager. On Ubuntu it can
-be installed as follows: `apt install libsndfile1-dev`
-
-- ASR and Speech Translation
-
-```python
->>> import torch
->>> from transformers import Speech2TextProcessor, Speech2TextForConditionalGeneration
->>> from datasets import load_dataset
-
->>> model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr")
->>> processor = Speech2TextProcessor.from_pretrained("facebook/s2t-small-librispeech-asr")
-
-
->>> ds = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
-
->>> inputs = processor(ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], return_tensors="pt")
->>> generated_ids = model.generate(inputs["input_features"], attention_mask=inputs["attention_mask"])
-
->>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)
->>> transcription
-['mister quilter is the apostle of the middle classes and we are glad to welcome his gospel']
+pipeline = pipeline(task="automatic-speech-recognition", model="facebook/s2t-small-librispeech-asr", dtype="auto")
+pipeline("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac")
 ```
 
-- Multilingual speech translation
+</hfoption>
+<hfoption id="Speech2TextForConditionalGeneration">
 
-  For multilingual speech translation models, `eos_token_id` is used as the `decoder_start_token_id` and
-  the target language id is forced as the first generated token. To force the target language id as the first
-  generated token, pass the `forced_bos_token_id` parameter to the `generate()` method. The following
-  example shows how to translate English speech to French text using the *facebook/s2t-medium-mustc-multilingual-st*
-  checkpoint.
+```py
+import torch
+from datasets import load_dataset
+from transformers import Speech2TextProcessor, Speech2TextForConditionalGeneration
 
-```python
->>> import torch
->>> from transformers import Speech2TextProcessor, Speech2TextForConditionalGeneration
->>> from datasets import load_dataset
+model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr", dtype="auto")
+processor = Speech2TextProcessor.from_pretrained("facebook/s2t-small-librispeech-asr")
 
->>> model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-medium-mustc-multilingual-st")
->>> processor = Speech2TextProcessor.from_pretrained("facebook/s2t-medium-mustc-multilingual-st")
-
->>> ds = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
-
->>> inputs = processor(ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], return_tensors="pt")
->>> generated_ids = model.generate(
-...     inputs["input_features"],
-...     attention_mask=inputs["attention_mask"],
-...     forced_bos_token_id=processor.tokenizer.lang_code_to_id["fr"],
-... )
-
->>> translation = processor.batch_decode(generated_ids, skip_special_tokens=True)
->>> translation
-["(Vidéo) Si M. Kilder est l'apossible des classes moyennes, et nous sommes heureux d'être accueillis dans son évangile."]
+ds = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+inputs = processor(ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], return_tensors="pt")
+generated_ids = model.generate(inputs["input_features"], attention_mask=inputs["attention_mask"])
+print(f"Transcription: {processor.batch_decode(generated_ids, skip_special_tokens=True)}")
 ```
 
-See the [model hub](https://huggingface.co/models?filter=speech_to_text) to look for Speech2Text checkpoints.
+</hfoption>
+</hfoptions>
 
 ## Speech2TextConfig
 
@@ -136,3 +85,4 @@ See the [model hub](https://huggingface.co/models?filter=speech_to_text) to look
 
 [[autodoc]] Speech2TextForConditionalGeneration
     - forward
+

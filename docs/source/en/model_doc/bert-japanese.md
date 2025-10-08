@@ -13,73 +13,49 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2019-03-24 and added to Hugging Face Transformers on 2020-11-16.*
+*This model was released on 2019-03-24 and added to Hugging Face Transformers on 2020-11-16 and contributed by [cl-tohoku](https://huggingface.co/cl-tohoku).*
 
 # BertJapanese
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[BERTJapanese](https://github.com/cl-tohoku/bert-japanese) is a collection of pretrained BERT models for Japanese, developed at Tohoku University and released on Hugging Face. The models follow the original BERT architecture, with base models (12 layers, 768 hidden units, 12 heads) and large models (24 layers, 1024 hidden units, 16 heads). Training was performed on large-scale Japanese corpora such as Wikipedia and the Japanese portion of Common Crawl, with different tokenization strategies including subword and character-based. Multiple versions exist (v1, v2, v3), improving coverage and accuracy for Japanese natural language processing tasks
 
-## Overview
+Run the command below to install the Japanese dependencies.
 
-The BERT models trained on Japanese text.
-
-There are models with two different tokenization methods:
-
-- Tokenize with MeCab and WordPiece. This requires some extra dependencies, [fugashi](https://github.com/polm/fugashi) which is a wrapper around [MeCab](https://taku910.github.io/mecab/).
-- Tokenize into characters.
-
-To use *MecabTokenizer*, you should `pip install transformers["ja"]` (or `pip install -e .["ja"]` if you install
-from source) to install dependencies.
-
-See [details on cl-tohoku repository](https://github.com/cl-tohoku/bert-japanese).
-
-Example of using a model with MeCab and WordPiece tokenization:
-
-```python
->>> import torch
->>> from transformers import AutoModel, AutoTokenizer
-
->>> bertjapanese = AutoModel.from_pretrained("cl-tohoku/bert-base-japanese")
->>> tokenizer = AutoTokenizer.from_pretrained("cl-tohoku/bert-base-japanese")
-
->>> ## Input Japanese Text
->>> line = "吾輩は猫である。"
-
->>> inputs = tokenizer(line, return_tensors="pt")
-
->>> print(tokenizer.decode(inputs["input_ids"][0]))
-[CLS] 吾輩 は 猫 で ある 。 [SEP]
-
->>> outputs = bertjapanese(**inputs)
+```bash
+!pip install transformers["ja"]
 ```
 
-Example of using a model with Character tokenization:
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-```python
->>> bertjapanese = AutoModel.from_pretrained("cl-tohoku/bert-base-japanese-char")
->>> tokenizer = AutoTokenizer.from_pretrained("cl-tohoku/bert-base-japanese-char")
+```py
+import torch
+from transformers import pipeline
 
->>> ## Input Japanese Text
->>> line = "吾輩は猫である。"
-
->>> inputs = tokenizer(line, return_tensors="pt")
-
->>> print(tokenizer.decode(inputs["input_ids"][0]))
-[CLS] 吾 輩 は 猫 で あ る 。 [SEP]
-
->>> outputs = bertjapanese(**inputs)
+pipeline = pipeline(task="fill-mask", model="tohoku-nlp/bert-base-japanese", dtype="auto")
+pipeline("植物は[MASK]を光合成と呼ばれる過程を通じて作り出します。")
 ```
 
-This model was contributed by [cl-tohoku](https://huggingface.co/cl-tohoku).
+</hfoption>
+<hfoption id="AutoModel">
 
-<Tip>
+```py
+import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-This implementation is the same as BERT, except for tokenization method. Refer to [BERT documentation](bert) for
-API reference information.
+model = AutoModelForMaskedLM.from_pretrained("tohoku-nlp/bert-base-japanese", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("tohoku-nlp/bert-base-japanese")
 
-</Tip>
+inputs = tokenizer("植物は[MASK]を光合成と呼ばれる過程を通じて作り出します。", return_tensors="pt")
+outputs = model(**inputs)
+mask_token_id = tokenizer.mask_token_id
+mask_position = (inputs.input_ids == tokenizer.mask_token_id).nonzero(as_tuple=True)[1]
+predicted_word = tokenizer.decode(outputs.logits[0, mask_position].argmax(dim=-1))
+print(f"Predicted word: {predicted_word}")
+```
+
+</hfoption>
+</hfoptions>
 
 ## BertJapaneseTokenizer
 

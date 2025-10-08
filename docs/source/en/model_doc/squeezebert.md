@@ -13,55 +13,43 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2020-06-19 and added to Hugging Face Transformers on 2020-11-16.*
+*This model was released on 2020-06-19 and added to Hugging Face Transformers on 2020-11-16 and contributed by [forresti](https://huggingface.co/forresti).*
 
 # SqueezeBERT
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[SqueezeBERT](https://huggingface.co/papers/2006.11316) is a bidirectional transformer model that leverages grouped convolutions in place of fully-connected layers for Q, K, V, and FFN layers, significantly enhancing efficiency. This approach enables SqueezeBERT to run 4.3x faster than BERT-base on a Pixel 3 smartphone while maintaining competitive accuracy on the GLUE test set.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The SqueezeBERT model was proposed in [SqueezeBERT: What can computer vision teach NLP about efficient neural networks?](https://huggingface.co/papers/2006.11316) by Forrest N. Iandola, Albert E. Shaw, Ravi Krishna, Kurt W. Keutzer. It's a
-bidirectional transformer similar to the BERT model. The key difference between the BERT architecture and the
-SqueezeBERT architecture is that SqueezeBERT uses [grouped convolutions](https://blog.yani.io/filter-group-tutorial)
-instead of fully-connected layers for the Q, K, V and FFN layers.
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the paper is the following:
+pipeline = pipeline(task="fill-mask", model="squeezebert/squeezebert-uncased", dtype="auto")
+pipeline("Plants create [MASK] through a process known as photosynthesis.")
+```
 
-*Humans read and write hundreds of billions of messages every day. Further, due to the availability of large datasets,
-large computing systems, and better neural network models, natural language processing (NLP) technology has made
-significant strides in understanding, proofreading, and organizing these messages. Thus, there is a significant
-opportunity to deploy NLP in myriad applications to help web users, social networks, and businesses. In particular, we
-consider smartphones and other mobile devices as crucial platforms for deploying NLP models at scale. However, today's
-highly-accurate NLP neural network models such as BERT and RoBERTa are extremely computationally expensive, with
-BERT-base taking 1.7 seconds to classify a text snippet on a Pixel 3 smartphone. In this work, we observe that methods
-such as grouped convolutions have yielded significant speedups for computer vision networks, but many of these
-techniques have not been adopted by NLP neural network designers. We demonstrate how to replace several operations in
-self-attention layers with grouped convolutions, and we use this technique in a novel network architecture called
-SqueezeBERT, which runs 4.3x faster than BERT-base on the Pixel 3 while achieving competitive accuracy on the GLUE test
-set. The SqueezeBERT code will be released.*
+</hfoption>
+<hfoption id="AutoModel">
 
-This model was contributed by [forresti](https://huggingface.co/forresti).
+```py
+import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-## Usage tips
+model = AutoModelForMaskedLM.from_pretrained("squeezebert/squeezebert-uncased", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("squeezebert/squeezebert-uncased")
 
-- SqueezeBERT is a model with absolute position embeddings so it's usually advised to pad the inputs on the right
-  rather than the left.
-- SqueezeBERT is similar to BERT and therefore relies on the masked language modeling (MLM) objective. It is therefore
-  efficient at predicting masked tokens and at NLU in general, but is not optimal for text generation. Models trained
-  with a causal language modeling (CLM) objective are better in that regard.
-- For best results when finetuning on sequence classification tasks, it is recommended to start with the
-  *squeezebert/squeezebert-mnli-headless* checkpoint.
+inputs = tokenizer("Plants create [MASK] through a process known as photosynthesis.", return_tensors="pt")
+outputs = model(**inputs)
+mask_token_id = tokenizer.mask_token_id
+mask_position = (inputs.input_ids == tokenizer.mask_token_id).nonzero(as_tuple=True)[1]
+predicted_word = tokenizer.decode(outputs.logits[0, mask_position].argmax(dim=-1))
+print(f"Predicted word: {predicted_word}")
+```
 
-## Resources
-
-- [Text classification task guide](../tasks/sequence_classification)
-- [Token classification task guide](../tasks/token_classification)
-- [Question answering task guide](../tasks/question_answering)
-- [Masked language modeling task guide](../tasks/masked_language_modeling)
-- [Multiple choice task guide](../tasks/multiple_choice)
+</hfoption>
+</hfoptions>
 
 ## SqueezeBertConfig
 
@@ -102,3 +90,4 @@ This model was contributed by [forresti](https://huggingface.co/forresti).
 ## SqueezeBertForQuestionAnswering
 
 [[autodoc]] SqueezeBertForQuestionAnswering
+

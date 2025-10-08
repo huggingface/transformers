@@ -15,25 +15,57 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2021-11-15 and added to Hugging Face Transformers on 2021-11-30.*
 
-# VisionTextDualEncoder
-
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
 </div>
 
-## Overview
+# VisionTextDualEncoder
 
-The [`VisionTextDualEncoderModel`] can be used to initialize a vision-text dual encoder model with
-any pretrained vision autoencoding model as the vision encoder (*e.g.* [ViT](vit), [BEiT](beit), [DeiT](deit)) and any pretrained text autoencoding model as the text encoder (*e.g.* [RoBERTa](roberta), [BERT](bert)). Two projection layers are added on top of both the vision and text encoder to project the output embeddings
-to a shared latent space. The projection layers are randomly initialized so the model should be fine-tuned on a
-downstream task. This model can be used to align the vision-text embeddings using CLIP like contrastive image-text
-training and then can be used for zero-shot vision tasks such image-classification or retrieval.
+VisionTextDualEncoderModel ccombines a pretrained vision encoder (such as ViT, BEiT, or DeiT) with a pretrained text encoder (such as RoBERTa or BERT) to form a dual-encoder architecture. Each encoder’s output is mapped into a shared latent space via randomly initialized projection layers, which require fine-tuning. The model supports CLIP-style contrastive training to align image and text embeddings for tasks like zero-shot image classification and retrieval. Building on the LiT framework, it can also leverage frozen pretrained encoders to achieve stronger zero-shot performance across vision tasks.
 
-In [LiT: Zero-Shot Transfer with Locked-image Text Tuning](https://huggingface.co/papers/2111.07991) it is shown how
-leveraging pre-trained (locked/frozen) image and text model for contrastive learning yields significant improvement on
-new zero-shot vision tasks such as image classification or retrieval.
+<hfoptions id="usage">
+<hfoption id="VisionTextDualEncoderModel">
+
+```py
+import torch
+import requests
+from PIL import Image
+from transformers import (
+    VisionTextDualEncoderModel,
+    VisionTextDualEncoderProcessor,
+    AutoImageProcessor,
+    AutoTokenizer,
+)
+
+tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
+image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
+processor = VisionTextDualEncoderProcessor(image_processor, tokenizer)
+model = VisionTextDualEncoderModel.from_vision_text_pretrained("google/vit-base-patch16-224", "google-bert/bert-base-uncased")
+
+urls = [
+    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+    "https://farm3.staticflickr.com/2674/5850229113_4fe05d5265_z.jpg",
+]
+images = [Image.open(requests.get(url, stream=True).raw) for url in urls]
+text_labels = ["a photo of a cat", "a photo of a dog"]
+inputs = processor(
+    text=text_labels, images=images, return_tensors="pt", padding=True
+)
+outputs = model(**inputs)
+logits_per_image = outputs.logits_per_image
+probs = logits_per_image.softmax(dim=1)
+
+for i, image_probs in enumerate(probs):
+    print(f"\nImage {i+1}:")
+    for j, (label, prob) in enumerate(zip(text_labels, image_probs)):
+        print(f"  {label}: {prob:.4f}")
+```
+
+</hfoption>
+</hfoptions>
 
 ## VisionTextDualEncoderConfig
 
@@ -47,3 +79,4 @@ new zero-shot vision tasks such as image classification or retrieval.
 
 [[autodoc]] VisionTextDualEncoderModel
     - forward
+

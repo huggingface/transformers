@@ -13,64 +13,42 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-05-31 and added to Hugging Face Transformers on 2025-08-18.*
+*This model was released on 2024-05-31 and added to Hugging Face Transformers on 2025-08-18 and contributed by [thisisiron](https://huggingface.co/thisisiron).*
 
 # Ovis2
 
-## Overview
+[Ovis2](https://huggingface.co/papers/2405.20797) is a multimodal large language model (MLLM) that addresses the misalignment between textual embeddings and visual embeddings in traditional MLLMs. It introduces a learnable visual embedding table within the visual encoder, allowing each image patch to index the table multiple times and produce a probabilistic combination of embeddings that structurally mirrors textual embeddings. This alignment enables more seamless fusion of visual and textual information. Evaluations show that Ovis outperforms comparable open-source MLLMs and even surpasses the proprietary Qwen-VL-Plus, demonstrating the effectiveness of its structured visual representation.
 
-The [Ovis2](https://github.com/AIDC-AI/Ovis) is an updated version of the [Ovis](https://huggingface.co/papers/2405.20797) model developed by the AIDC-AI team at Alibaba International Digital Commerce Group.
+<hfoptions id="usage">
+<hfoption id="AutoModel">
 
-Ovis2 is the latest advancement in multi-modal large language models (MLLMs), succeeding Ovis1.6. It retains the architectural design of the Ovis series, which focuses on aligning visual and textual embeddings, and introduces major improvements in data curation and training methods.
-
-<img src="https://cdn-uploads.huggingface.co/production/uploads/637aebed7ce76c3b834cea37/XB-vgzDL6FshrSNGyZvzc.png"  width="600">
-
-<small> Ovis2 architecture.</small>
-
-This model was contributed by [thisisiron](https://huggingface.co/thisisiron).
-
-## Usage example
-
-```python
-
-from PIL import Image
+```py
 import requests
 import torch
-from torchvision import io
-from typing import Dict
-from transformers.image_utils import load_images, load_video
-from transformers import AutoModelForImageTextToText, AutoTokenizer, AutoProcessor
-from accelerate import Accelerator
+from PIL import Image
+from transformers import AutoModelForVision2Seq, AutoTokenizer, AutoProcessor
 
-device = Accelerator().device
-
-model = AutoModelForImageTextToText.from_pretrained(
-    "thisisiron/Ovis2-2B-hf",
-    dtype=torch.bfloat16,
-).eval().to(device)
+model = AutoModelForVision2Seq.from_pretrained("thisisiron/Ovis2-2B-hf", dtype="auto")
 processor = AutoProcessor.from_pretrained("thisisiron/Ovis2-2B-hf")
+
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
 
 messages = [
     {
         "role": "user",
         "content": [
-            {"type": "image"},
+            {"type": "image", "url": url},
             {"type": "text", "text": "Describe the image."},
         ],
     },
 ]
-url = "http://images.cocodataset.org/val2014/COCO_val2014_000000537955.jpg"
-image = Image.open(requests.get(url, stream=True).raw)
 messages = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-print(messages)
-
 inputs = processor(
     images=[image],
     text=messages,
     return_tensors="pt",
 )
-inputs = inputs.to(model.device)
-inputs['pixel_values'] = inputs['pixel_values'].to(torch.bfloat16)
 
 with torch.inference_mode():
     output_ids = model.generate(**inputs, max_new_tokens=128, do_sample=False)
@@ -78,6 +56,9 @@ with torch.inference_mode():
     output_text = processor.batch_decode(generated_ids, skip_special_tokens=True)
     print(output_text)
 ```
+
+</hfoption>
+</hfoptions>
 
 ## Ovis2Config
 

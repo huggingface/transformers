@@ -17,7 +17,6 @@ rendered properly in your Markdown viewer.
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
@@ -28,6 +27,14 @@ rendered properly in your Markdown viewer.
 [Arcee](https://www.arcee.ai/blog/deep-dive-afm-4-5b-the-first-arcee-foundational-model) is a decoder-only transformer model based on the Llama architecture with a key modification: it uses ReLU² (ReLU-squared) activation in the MLP blocks instead of SiLU, following recent research showing improved training efficiency with squared activations. This architecture is designed for efficient training and inference while maintaining the proven stability of the Llama design.
 
 The Arcee model is architecturally similar to Llama but uses `x * relu(x)` in MLP layers for improved gradient flow and is optimized for efficiency in both training and inference scenarios.
+
+```py
+import torch
+from transformers import pipeline
+
+pipeline = pipeline(task="text-generation", model="arcee-ai/Arcee-4.5B", dtype="auto")
+pipeline("The future of artificial intelligence is")
+```
 
 > [!TIP]
 > The Arcee model supports extended context with RoPE scaling and all standard transformers features including Flash Attention 2, SDPA, gradient checkpointing, and quantization support.

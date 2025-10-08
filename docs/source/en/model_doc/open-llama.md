@@ -13,38 +13,43 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-04-16 and added to Hugging Face Transformers on 2023-06-20.*
+*This model was released on {release_date} and added to Hugging Face Transformers on 2023-06-20 and contributed by [s-JoL](https://huggingface.co/s-JoL).*
+
+> [!WARNING]
+> This model is in maintenance mode only, we don’t accept any new PRs changing its code. If you run into any issues running this model, please reinstall the last version that supported this model: v4.31.0. You can do so by running the following command: pip install -U transformers==4.31.0.
 
 # Open-Llama
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[Open-Llama](https://github.com/s-JoL/Open-Llama) is an open-source framework for training large language models, covering the full pipeline from dataset preparation and tokenization to pre-training, instruction tuning, LoRA fine-tuning, and RLHF. It supports HuggingFace Transformers and achieves high performance, reaching 89% of GPT-3.5 on Chinese benchmarks, with a training speed of 3620 tokens/s, surpassing the original LLaMA. The project provides both pre-trained and instruction-tuned checkpoints, trained on 330 billion tokens with a global batch size of 4 million, and includes multi-turn dialogue, programming, and mathematical abilities. Evaluation follows FastChat methods, and the codebase is designed for high-performance experimentation and deployment.
 
-<Tip warning={true}>
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-This model is in maintenance mode only, we don't accept any new PRs changing its code.
+```py
+import torch
+from transformers import pipeline
 
-If you run into any issues running this model, please reinstall the last version that supported this model: v4.31.0.
-You can do so by running the following command: `pip install -U transformers==4.31.0`.
+pipeline = pipeline(task="text-generation", model="openlm-research/open_llama_7b", dtype="auto",)
+pipeline("Plants create energy through a process known as photosynthesis.")
+```
 
-</Tip>
+</hfoption>
+<hfoption id="AutoModel">
 
-<Tip warning={true}>
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-This model differs from the [OpenLLaMA models](https://huggingface.co/models?search=openllama) on the Hugging Face Hub, which primarily use the [LLaMA](llama) architecture.
+tokenizer = AutoTokenizer.from_pretrained("openlm-research/open_llama_7b")
+model = AutoModelForCausalLM.from_pretrained("openlm-research/open_llama_7b", dtype="auto",)
 
-</Tip>
+inputs = tokenizer("Plants create energy through a process known as photosynthesis.", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
+print(tokenizer.decode(outputs[0]))
+```
 
-## Overview
-
-The Open-Llama model was proposed in the open source Open-Llama project by community developer s-JoL.
-
-The model is mainly based on LLaMA with some modifications, incorporating memory-efficient attention from Xformers, stable embedding from Bloom, and shared input-output embedding from PaLM.
-And the model is pre-trained on both Chinese and English, which gives it better performance on Chinese language tasks.
-
-This model was contributed by [s-JoL](https://huggingface.co/s-JoL).
-The original code was released on GitHub by [s-JoL](https://github.com/s-JoL), but is now removed.
+</hfoption>
+</hfoptions>
 
 ## OpenLlamaConfig
 

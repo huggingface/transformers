@@ -17,32 +17,84 @@ rendered properly in your Markdown viewer.
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">    </div>
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
 </div>
 
 # Glm4vMoe
 
-## Overview
+[Glm4vMoe](https://huggingface.co/papers/2508.06471) is an open-source Mixture-of-Experts (MoE) language model with 355 billion total parameters and 32 billion active per inference, designed to alternate between reasoning and direct response modes. It was trained on 23 trillion tokens using multi-stage training, expert model iteration, and reinforcement learning. The model demonstrates strong performance on reasoning and coding benchmarks—70.1% on TAU-Bench, 91.0% on AIME 24, and 64.2% on SWE-bench Verified—ranking third overall and second on agentic tasks despite its smaller active parameter count. A compact 106 billion-parameter version, GLM-4.5-Air, is also released to support research in reasoning and agentic AI.
 
-Vision-language models (VLMs) have become a key cornerstone of intelligent systems. As real-world AI tasks grow increasingly complex, VLMs urgently need to enhance reasoning capabilities beyond basic multimodal perception — improving accuracy, comprehensiveness, and intelligence — to enable complex problem solving, long-context understanding, and multimodal agents.
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-Through our open-source work, we aim to explore the technological frontier together with the community while empowering more developers to create exciting and innovative applications.
+```py
+import torch
+from transformers import pipeline
 
-[GLM-4.5V](https://huggingface.co/papers/2508.06471) ([Github repo](https://github.com/zai-org/GLM-V)) is based on ZhipuAI’s next-generation flagship text foundation model GLM-4.5-Air (106B parameters, 12B active).  It continues the technical approach of [GLM-4.1V-Thinking](https://huggingface.co/papers/2507.01006), achieving SOTA performance among models of the same scale on 42 public vision-language benchmarks.  It covers common tasks such as image, video, and document understanding, as well as GUI agent operations.
+pipeline = pipeline(task="image-text-to-text", model="THUDM/GLM-4.1V-9B-Thinking", dtype="auto")
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {
+                "type": "image",
+                "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+            },
+            { "type": "text", "text": "Describe this image."},
+        ]
+    }
+]
+pipeline(text=messages,max_new_tokens=20, return_full_text=False)
+```
 
-![bench_45](https://raw.githubusercontent.com/zai-org/GLM-V/refs/heads/main/resources/bench_45v.jpeg)
+</hfoption>
+<hfoption id="Glm4vMoeForConditionalGeneration">
 
-Beyond benchmark performance, GLM-4.5V focuses on real-world usability. Through efficient hybrid training, it can handle diverse types of visual content, enabling full-spectrum vision reasoning, including:
+```py
+import torch
+from transformers import Glm4vMoeForConditionalGeneration, AutoProcessor
 
-- **Image reasoning** (scene understanding, complex multi-image analysis, spatial recognition)
-- **Video understanding** (long video segmentation and event recognition)
-- **GUI tasks** (screen reading, icon recognition, desktop operation assistance)
-- **Complex chart & long document parsing** (research report analysis, information extraction)
-- **Grounding** (precise visual element localization)
+model = Glm4vMoeForConditionalGeneration.from_pretrained("THUDM/GLM-4.1V-9B-Thinking", dtype="auto")
+processor = AutoProcessor.from_pretrained("THUDM/GLM-4.1V-9B-Thinking")
+messages = [
+    {
+        "role":"user",
+        "content":[
+            {
+                "type":"image",
+                "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+            },
+            {
+                "type":"text",
+                "text":"Describe this image."
+            }
+        ]
+    }
 
-The model also introduces a **Thinking Mode** switch, allowing users to balance between quick responses and deep reasoning. This switch works the same as in the `GLM-4.5` language model.
+]
+
+inputs = processor.apply_chat_template(
+    messages,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt"
+)
+
+generated_ids = model.generate(**inputs, max_new_tokens=128)
+generated_ids_trimmed = [
+            out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+]
+output_text = processor.batch_decode(
+       generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
+)
+print(output_text)
+```
+
+</hfoption>
+</hfoptions>
 
 ## Glm4vMoeConfig
 

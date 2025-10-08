@@ -13,62 +13,40 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-04-18 and added to Hugging Face Transformers on 2021-11-03.*
+*This model was released on 2021-04-18 and added to Hugging Face Transformers on 2021-11-03 and contributed by [nielsr](https://huggingface.co/nielsr).*
 
 # LayoutXLM
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[LayoutXLM](https://huggingface.co/papers/2104.08836) is a multimodal pre-trained model for multilingual document understanding, extending LayoutLMv2 to support 53 languages. It integrates text, layout, and image data to achieve state-of-the-art results in visually-rich document tasks. The model's performance is evaluated using XFUN, a multilingual form understanding benchmark dataset with samples in seven languages (Chinese, Japanese, Spanish, French, Italian, German, Portuguese). LayoutXLM significantly outperforms existing cross-lingual pre-trained models on this dataset.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="LayoutLMv2ForQuestionAnswering">
 
-LayoutXLM was proposed in [LayoutXLM: Multimodal Pre-training for Multilingual Visually-rich Document Understanding](https://huggingface.co/papers/2104.08836) by Yiheng Xu, Tengchao Lv, Lei Cui, Guoxin Wang, Yijuan Lu, Dinei Florencio, Cha
-Zhang, Furu Wei. It's a multilingual extension of the [LayoutLMv2 model](https://huggingface.co/papers/2012.14740) trained
-on 53 languages.
+```py
+import torch
+from transformers import AutoProcessor, LayoutLMv2ForQuestionAnswering
+from PIL import Image
+from datasets import load_dataset
 
-The abstract from the paper is the following:
+processor = AutoProcessor.from_pretrained("microsoft/layoutxlm-base")
+model = LayoutLMv2ForQuestionAnswering.from_pretrained("microsoft/layoutxlm-base", dtype="auto")
 
-*Multimodal pre-training with text, layout, and image has achieved SOTA performance for visually-rich document
-understanding tasks recently, which demonstrates the great potential for joint learning across different modalities. In
-this paper, we present LayoutXLM, a multimodal pre-trained model for multilingual document understanding, which aims to
-bridge the language barriers for visually-rich document understanding. To accurately evaluate LayoutXLM, we also
-introduce a multilingual form understanding benchmark dataset named XFUN, which includes form understanding samples in
-7 languages (Chinese, Japanese, Spanish, French, Italian, German, Portuguese), and key-value pairs are manually labeled
-for each language. Experiment results show that the LayoutXLM model has significantly outperformed the existing SOTA
-cross-lingual pre-trained models on the XFUN dataset.*
+dataset = load_dataset("hf-internal-testing/fixtures_docvqa")
+image = dataset["test"][0]["image"]
+question = "When is coffee break?"
+encoding = processor(image, question, return_tensors="pt")
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/microsoft/unilm).
+outputs = model(**encoding)
+predicted_start_idx = outputs.start_logits.argmax(-1).item()
+predicted_end_idx = outputs.end_logits.argmax(-1).item()
+predicted_start_idx, predicted_end_idx
 
-## Usage tips and examples
-
-One can directly plug in the weights of LayoutXLM into a LayoutLMv2 model, like so:
-
-```python
-from transformers import LayoutLMv2Model
-
-model = LayoutLMv2Model.from_pretrained("microsoft/layoutxlm-base")
+predicted_answer_tokens = encoding.input_ids.squeeze()[predicted_start_idx : predicted_end_idx + 1]
+print(processor.tokenizer.decode(predicted_answer_tokens))
 ```
 
-Note that LayoutXLM has its own tokenizer, based on
-[`LayoutXLMTokenizer`]/[`LayoutXLMTokenizerFast`]. You can initialize it as
-follows:
-
-```python
-from transformers import LayoutXLMTokenizer
-
-tokenizer = LayoutXLMTokenizer.from_pretrained("microsoft/layoutxlm-base")
-```
-
-Similar to LayoutLMv2, you can use [`LayoutXLMProcessor`] (which internally applies
-[`LayoutLMv2ImageProcessor`] and
-[`LayoutXLMTokenizer`]/[`LayoutXLMTokenizerFast`] in sequence) to prepare all
-data for the model.
-
-<Tip>
-
-As LayoutXLM's architecture is equivalent to that of LayoutLMv2, one can refer to [LayoutLMv2's documentation page](layoutlmv2) for all tips, code examples and notebooks.
-</Tip>
+</hfoption>
+</hfoptions>
 
 ## LayoutXLMTokenizer
 
@@ -88,3 +66,4 @@ As LayoutXLM's architecture is equivalent to that of LayoutLMv2, one can refer t
 
 [[autodoc]] LayoutXLMProcessor
     - __call__
+

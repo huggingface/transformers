@@ -9,50 +9,49 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
-*This model was released on 2021-02-24 and added to Hugging Face Transformers on 2023-07-24.*
+*This model was released on 2021-02-24 and added to Hugging Face Transformers on 2023-07-24 and contributed by [Xrenya](https://huggingface.co/Xrenya).*
 
 # Pyramid Vision Transformer (PVT)
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[Pyramid Vision Transformer: A Versatile Backbone for Dense Prediction without Convolutions](https://huggingface.co/papers/2102.12122) proposes PVT, a vision transformer with a pyramid structure for dense prediction tasks. PVT uses fine-grained inputs and progressively shrinks feature maps to reduce computational costs. It incorporates a spatial-reduction attention layer to further decrease resource consumption for high-resolution features. PVT combines the strengths of CNNs and Transformers, serving as a versatile backbone for various vision tasks without convolutions. Experiments demonstrate that PVT enhances performance in object detection, instance, and semantic segmentation, outperforming ResNet50+RetinNet on the COCO dataset.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The PVT model was proposed in
-[Pyramid Vision Transformer: A Versatile Backbone for Dense Prediction without Convolutions](https://huggingface.co/papers/2102.12122)
-by Wenhai Wang, Enze Xie, Xiang Li, Deng-Ping Fan, Kaitao Song, Ding Liang, Tong Lu, Ping Luo, Ling Shao. The PVT is a type of
-vision transformer that utilizes a pyramid structure to make it an effective backbone for dense prediction tasks. Specifically
-it allows for more fine-grained inputs (4 x 4 pixels per patch) to be used, while simultaneously shrinking the sequence length
-of the Transformer as it deepens - reducing the computational cost. Additionally, a spatial-reduction attention (SRA) layer
-is used to further reduce the resource consumption when learning high-resolution features.
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the paper is the following:
+pipeline = pipeline(task="image-classification", model="Xrenya/pvt-tiny-224", dtype="auto")
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
+```
 
-*Although convolutional neural networks (CNNs) have achieved great success in computer vision, this work investigates a
-simpler, convolution-free backbone network useful for many dense prediction tasks. Unlike the recently proposed Vision
-Transformer (ViT) that was designed for image classification specifically, we introduce the Pyramid Vision Transformer
-(PVT), which overcomes the difficulties of porting Transformer to various dense prediction tasks. PVT has several
-merits compared to current state of the arts. Different from ViT that typically yields low resolution outputs and
-incurs high computational and memory costs, PVT not only can be trained on dense partitions of an image to achieve high
-output resolution, which is important for dense prediction, but also uses a progressive shrinking pyramid to reduce the
-computations of large feature maps. PVT inherits the advantages of both CNN and Transformer, making it a unified
-backbone for various vision tasks without convolutions, where it can be used as a direct replacement for CNN backbones.
-We validate PVT through extensive experiments, showing that it boosts the performance of many downstream tasks, including
-object detection, instance and semantic segmentation. For example, with a comparable number of parameters, PVT+RetinaNet
-achieves 40.4 AP on the COCO dataset, surpassing ResNet50+RetinNet (36.3 AP) by 4.1 absolute AP (see Figure 2). We hope
-that PVT could serve as an alternative and useful backbone for pixel-level predictions and facilitate future research.*
+</hfoption>
+<hfoption id="AutoModel">
 
-This model was contributed by [Xrenya](https://huggingface.co/Xrenya). The original code can be found [here](https://github.com/whai362/PVT).
+```python
+import torch
+import requests
+from PIL import Image
+from transformers import AutoImageProcessor, AutoModelForImageClassification
 
-- PVTv1 on ImageNet-1K
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
 
-| **Model variant**  |**Size** |**Acc@1**|**Params (M)**|
-|--------------------|:-------:|:-------:|:------------:|
-| PVT-Tiny           |    224  |   75.1  |     13.2     |
-| PVT-Small          |    224  |   79.8  |     24.5     |
-| PVT-Medium         |    224  |   81.2  |     44.2     |
-| PVT-Large          |    224  |   81.7  |     61.4     |
+image_processor = AutoImageProcessor.from_pretrained("Xrenya/pvt-tiny-224")
+model = AutoModelForImageClassification.from_pretrained("Xrenya/pvt-tiny-224", dtype="auto")
+
+inputs = image_processor(image, return_tensors="pt")
+
+with torch.no_grad():
+    logits = model(**inputs).logits
+
+predicted_label = logits.argmax(-1).item()
+print(model.config.id2label[predicted_label])
+```
+
+</hfoption>
+</hfoptions>
 
 ## PvtConfig
 
@@ -77,3 +76,4 @@ This model was contributed by [Xrenya](https://huggingface.co/Xrenya). The origi
 
 [[autodoc]] PvtModel
     - forward
+

@@ -17,17 +17,34 @@ rendered properly in your Markdown viewer.
 
 # HunYuanDenseV1
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-To be released with the official model launch.
+```py
+import torch
+from transformers import pipeline
 
-### Model Details
+pipeline = pipeline(task="text-generation", model="tencent/Hunyuan-0.5B-Pretrain", dtype="auto",)
+pipeline("Plants create energy through a process known as photosynthesis.")
+```
 
-To be released with the official model launch.
+</hfoption>
+<hfoption id="AutoModel">
 
-## Usage tips
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-To be released with the official model launch.
+tokenizer = AutoTokenizer.from_pretrained("tencent/Hunyuan-0.5B-Pretrain")
+model = AutoModelForCausalLM.from_pretrained("tencent/Hunyuan-0.5B-Pretrain", dtype="auto",)
+
+inputs = tokenizer("Plants create energy through a process known as photosynthesis.", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
+print(tokenizer.decode(outputs[0]))
+```
+
+</hfoption>
+</hfoptions>
 
 ## HunYuanDenseV1Config
 

@@ -13,11 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2025-08-20.*
+*This model was released on 2025-07-29 and added to Hugging Face Transformers on 2025-08-20 and contributed by [nielsr](https://huggingface.co/nielsr).*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
@@ -25,19 +24,7 @@ rendered properly in your Markdown viewer.
 
 # MetaCLIP 2
 
-## Overview
-
-MetaCLIP 2 is a replication of the original CLIP model trained on 300+ languages. It achieves state-of-the-art (SOTA) results on multilingual benchmarks (e.g., XM3600, CVQA, Babel‑ImageNet), surpassing previous SOTA such as [mSigLIP](siglip) and [SigLIP‑2](siglip2). The authors show that English and non-English worlds can mutually benefit and elevate each other.
-
-This model was contributed by [nielsr](https://huggingface.co/nielsr).
-The original code can be found [here](https://github.com/facebookresearch/MetaCLIP).
-
-You can find all the MetaCLIP 2 checkpoints under the [Meta](https://huggingface.co/facebook/models?search=metaclip-2) organization.
-
-> [!TIP]
-> Click on the MetaCLIP 2 models in the right sidebar for more examples of how to apply MetaCLIP 2 to different image and language tasks.
-
-The example below demonstrates how to calculate similarity scores between multiple text descriptions and an image with [`Pipeline`] or the [`AutoModel`] class. Usage of the MetaCLIP 2 models is identical to the CLIP models, you just need the `MetaClip2Model` class instead of `CLIPModel`.
+[MetaCLIP 2](https://huggingface.co/papers/2507.22062) is a CLIP-based foundation model trained from scratch on web-scale, multilingual image-text pairs to overcome limitations of previous multilingual CLIP models, including poor non-English performance and the “curse of multilinguality.” It introduces a training recipe that effectively leverages both English and non-English data without relying on translations or specialized architecture changes. In experiments, MetaCLIP 2 ViT-H/14 improves zero-shot ImageNet classification over English-only CLIP and outperforms prior multilingual models like mSigLIP. It also sets new state-of-the-art results on multilingual benchmarks such as CVQA, Babel-ImageNet, and XM3600 for image-to-text retrieval.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -46,14 +33,9 @@ The example below demonstrates how to calculate similarity scores between multip
 import torch
 from transformers import pipeline
 
-clip = pipeline(
-   task="zero-shot-image-classification",
-   model="facebook/metaclip-2-worldwide-huge-quickgelu",
-   dtype=torch.bfloat16,
-   device=0
-)
+pipeline = pipeline(task="zero-shot-image-classification", model="facebook/metaclip-2-worldwide-huge-quickgelu", dtype="auto"")
 labels = ["a photo of a cat", "a photo of a dog", "a photo of a car"]
-clip("http://images.cocodataset.org/val2017/000000039769.jpg", candidate_labels=labels)
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg", candidate_labels=labels)
 ```
 
 </hfoption>
@@ -65,15 +47,14 @@ import torch
 from PIL import Image
 from transformers import AutoProcessor, AutoModel
 
-model = AutoModel.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu", dtype=torch.bfloat16, attn_implementation="sdpa")
+model = AutoModel.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu", dtype="auto")
 processor = AutoProcessor.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
 
-url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
 labels = ["a photo of a cat", "a photo of a dog", "a photo of a car"]
 
 inputs = processor(text=labels, images=image, return_tensors="pt", padding=True)
-
 outputs = model(**inputs)
 logits_per_image = outputs.logits_per_image
 probs = logits_per_image.softmax(dim=1)

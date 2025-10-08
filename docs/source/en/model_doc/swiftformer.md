@@ -13,25 +13,49 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-03-27 and added to Hugging Face Transformers on 2023-05-12.*
+*This model was released on 2023-03-27 and added to Hugging Face Transformers on 2023-05-12 and contributed by [shehan97](https://huggingface.co/shehan97).*
 
 # SwiftFormer
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[SwiftFormer](https://huggingface.co/papers/2303.15446) introduces an efficient additive attention mechanism that replaces quadratic matrix multiplications in self-attention with linear element-wise multiplications, enabling its use throughout the network without accuracy loss. This results in a series of models achieving top performance in accuracy and mobile inference speed. The small variant of SwiftFormer achieves 78.5% top-1 ImageNet-1K accuracy with 0.8 ms latency on iPhone 14, surpassing MobileViT-v2 in both accuracy and speed.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The SwiftFormer model was proposed in [SwiftFormer: Efficient Additive Attention for Transformer-based Real-time Mobile Vision Applications](https://huggingface.co/papers/2303.15446) by Abdelrahman Shaker, Muhammad Maaz, Hanoona Rasheed, Salman Khan, Ming-Hsuan Yang, Fahad Shahbaz Khan.
+```py
+import torch
+from transformers import pipeline
 
-The SwiftFormer paper introduces a novel efficient additive attention mechanism that effectively replaces the quadratic matrix multiplication operations in the self-attention computation with linear element-wise multiplications. A series of models called 'SwiftFormer' is built based on this, which achieves state-of-the-art performance in terms of both accuracy and mobile inference speed. Even their small variant achieves 78.5% top-1 ImageNet1K accuracy with only 0.8 ms latency on iPhone 14, which is more accurate and 2× faster compared to MobileViT-v2.
+pipeline = pipeline(task="image-classification", model="MBZUAI/swiftformer-xs", dtype="auto")
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
+```
 
-The abstract from the paper is the following:
+</hfoption>
+<hfoption id="AutoModel">
 
-*Self-attention has become a defacto choice for capturing global context in various vision applications. However, its quadratic computational complexity with respect to image resolution limits its use in real-time applications, especially for deployment on resource-constrained mobile devices. Although hybrid approaches have been proposed to combine the advantages of convolutions and self-attention for a better speed-accuracy trade-off, the expensive matrix multiplication operations in self-attention remain a bottleneck. In this work, we introduce a novel efficient additive attention mechanism that effectively replaces the quadratic matrix multiplication operations with linear element-wise multiplications. Our design shows that the key-value interaction can be replaced with a linear layer without sacrificing any accuracy. Unlike previous state-of-the-art methods, our efficient formulation of self-attention enables its usage at all stages of the network. Using our proposed efficient additive attention, we build a series of models called "SwiftFormer" which achieves state-of-the-art performance in terms of both accuracy and mobile inference speed. Our small variant achieves 78.5% top-1 ImageNet-1K accuracy with only 0.8 ms latency on iPhone 14, which is more accurate and 2x faster compared to MobileViT-v2.*
+```python
+import torch
+import requests
+from PIL import Image
+from transformers import AutoImageProcessor, AutoModelForImageClassification
 
-This model was contributed by [shehan97](https://huggingface.co/shehan97). The original code can be found [here](https://github.com/Amshaker/SwiftFormer).
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
+
+image_processor = AutoImageProcessor.from_pretrained("MBZUAI/swiftformer-xs")
+model = AutoModelForImageClassification.from_pretrained("MBZUAI/swiftformer-xs", dtype="auto")
+
+inputs = image_processor(image, return_tensors="pt")
+
+with torch.no_grad():
+    logits = model(**inputs).logits
+
+predicted_label = logits.argmax(-1).item()
+print(model.config.id2label[predicted_label])
+```
+
+</hfoption>
+</hfoptions>
 
 ## SwiftFormerConfig
 
@@ -46,3 +70,4 @@ This model was contributed by [shehan97](https://huggingface.co/shehan97). The o
 
 [[autodoc]] SwiftFormerForImageClassification
     - forward
+

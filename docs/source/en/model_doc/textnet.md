@@ -13,31 +13,49 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-11-03 and added to Hugging Face Transformers on 2025-01-08.*
+*This model was released on 2021-11-03 and added to Hugging Face Transformers on 2025-01-08 and contributed by [Raghavan](https://huggingface.co/Raghavan), [jadechoghari](https://huggingface.co/jadechoghari), and [nielsr](https://huggingface.co/nielsr).*
 
 # TextNet
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[TextNet](https://huggingface.co/papers/2111.02394) introduces FAST, a scene text detection framework optimized for both speed and accuracy. Instead of relying on complex architectures and heavy post-processing, FAST uses a minimalist 1-channel kernel representation for arbitrary-shaped text and a GPU-parallel post-processing step that assembles text lines with minimal overhead. The network architecture is automatically searched and specialized for text detection, producing stronger features than classification-based backbones. FAST achieves state-of-the-art performance, reaching 81.6% F-measure at 152 FPS on Total-Text, and can be further accelerated to 600+ FPS with TensorRT, significantly outperforming prior fast detectors.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The TextNet model was proposed in [FAST: Faster Arbitrarily-Shaped Text Detector with Minimalist Kernel Representation](https://huggingface.co/papers/2111.02394) by Zhe Chen, Jiahao Wang, Wenhai Wang, Guo Chen, Enze Xie, Ping Luo, Tong Lu. TextNet is a vision backbone useful for text detection tasks. It is the result of neural architecture search (NAS) on backbones with reward function as text detection task (to provide powerful features for text detection).
+```py
+import torch
+from transformers import pipeline
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/fast_architecture.png"
-alt="drawing" width="600"/>
+pipeline = pipeline(task="image-classification", model="czczup/textnet-base", dtype="auto")
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
+```
 
-<small> TextNet backbone as part of FAST. Taken from the <a href="https://huggingface.co/papers/2111.02394">original paper.</a> </small>
+</hfoption>
+<hfoption id="AutoModel">
 
-This model was contributed by [Raghavan](https://huggingface.co/Raghavan), [jadechoghari](https://huggingface.co/jadechoghari) and [nielsr](https://huggingface.co/nielsr).
+```python
+import torch
+import requests
+from PIL import Image
+from transformers import AutoImageProcessor, AutoModelForImageClassification
 
-## Usage tips
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
 
-TextNet is mainly used as a backbone network for the architecture search of text detection. Each stage of the backbone network is comprised of a stride-2 convolution and searchable blocks.
-Specifically, we present a layer-level candidate set, defined as {conv3×3, conv1×3, conv3×1, identity}. As the 1×3 and 3×1 convolutions have asymmetric kernels and oriented structure priors, they may help to capture the features of extreme aspect-ratio and rotated text lines.
+image_processor = AutoImageProcessor.from_pretrained("czczup/textnet-base")
+model = AutoModelForImageClassification.from_pretrained("czczup/textnet-base", dtype="auto")
 
-TextNet is the backbone for Fast, but can also be used as an efficient text/image classification, we add a `TextNetForImageClassification` as is it would allow people to train an image classifier on top of the pre-trained textnet weights
+inputs = image_processor(image, return_tensors="pt")
+
+with torch.no_grad():
+    logits = model(**inputs).logits
+
+predicted_label = logits.argmax(-1).item()
+print(model.config.id2label[predicted_label])
+```
+
+</hfoption>
+</hfoptions>
 
 ## TextNetConfig
 
@@ -62,3 +80,4 @@ TextNet is the backbone for Fast, but can also be used as an efficient text/imag
 
 [[autodoc]] TextNetForImageClassification
     - forward
+

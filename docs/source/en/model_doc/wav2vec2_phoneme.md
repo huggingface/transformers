@@ -13,57 +13,52 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-09-23 and added to Hugging Face Transformers on 2021-12-17.*
+*This model was released on 2021-09-23 and added to Hugging Face Transformers on 2021-12-17 and contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten).*
 
 # Wav2Vec2Phoneme
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[Wav2Vec2Phoneme](https://huggingface.co/papers/2109.11680) extends zero-shot cross-lingual transfer learning by fine-tuning a multilingually pretrained Wav2Vec 2.0 model to transcribe unseen languages. It achieves this by mapping phonemes of training languages to the target language using articulatory features, outperforming prior methods that relied on task-specific architectures and partial monolingual pretraining.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The Wav2Vec2Phoneme model was proposed in [Simple and Effective Zero-shot Cross-lingual Phoneme Recognition (Xu et al.,
-2021)](https://huggingface.co/papers/2109.11680) by Qiantong Xu, Alexei Baevski, Michael Auli.
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the paper is the following:
+pipeline = pipeline(task="automatic-speech-recognition", model="facebook/wav2vec2-lv-60-espeak-cv-ft", dtype="auto")
+pipeline("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac")
+```
 
-*Recent progress in self-training, self-supervised pretraining and unsupervised learning enabled well performing speech
-recognition systems without any labeled data. However, in many cases there is labeled data available for related
-languages which is not utilized by these methods. This paper extends previous work on zero-shot cross-lingual transfer
-learning by fine-tuning a multilingually pretrained wav2vec 2.0 model to transcribe unseen languages. This is done by
-mapping phonemes of the training languages to the target language using articulatory features. Experiments show that
-this simple method significantly outperforms prior work which introduced task-specific architectures and used only part
-of a monolingually pretrained model.*
+</hfoption>
+<hfoption id="AutoModel">
 
-Relevant checkpoints can be found under https://huggingface.co/models?other=phoneme-recognition.
+```py
+import torch
+from datasets import load_dataset
+from transformers import AutoProcessor, AutoModelForCTC
 
-This model was contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten)
+dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation").sort("id")
+sampling_rate = dataset.features["audio"].sampling_rate
 
-The original code can be found [here](https://github.com/pytorch/fairseq/tree/master/fairseq/models/wav2vec).
+processor = AutoProcessor.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft")
+model = AutoModelForCTC.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft", dtype="auto")
 
-## Usage tips
+inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
+with torch.no_grad():
+    logits = model(**inputs).logits
+predicted_ids = torch.argmax(logits, dim=-1)
+print(f"Transcription: {processor.batch_decode(predicted_ids)[0]}")
+```
 
-- Wav2Vec2Phoneme uses the exact same architecture as Wav2Vec2
-- Wav2Vec2Phoneme is a speech model that accepts a float array corresponding to the raw waveform of the speech signal.
-- Wav2Vec2Phoneme model was trained using connectionist temporal classification (CTC) so the model output has to be
-  decoded using [`Wav2Vec2PhonemeCTCTokenizer`].
-- Wav2Vec2Phoneme can be fine-tuned on multiple language at once and decode unseen languages in a single forward pass
-  to a sequence of phonemes
-- By default, the model outputs a sequence of phonemes. In order to transform the phonemes to a sequence of words one
-  should make use of a dictionary and language model.
-
-<Tip>
-
-Wav2Vec2Phoneme's architecture is based on the Wav2Vec2 model, for API reference, check out [`Wav2Vec2`](wav2vec2)'s documentation page
-except for the tokenizer.
-
-</Tip>
+</hfoption>
+</hfoptions>
 
 ## Wav2Vec2PhonemeCTCTokenizer
 
 [[autodoc]] Wav2Vec2PhonemeCTCTokenizer
-    - __call__
-    - batch_decode
-    - decode
-    - phonemize
+	- __call__
+	- batch_decode
+	- decode
+	- phonemize
+

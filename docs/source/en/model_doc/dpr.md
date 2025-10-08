@@ -13,40 +13,42 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2020-04-10 and added to Hugging Face Transformers on 2020-11-16.*
+*This model was released on 2020-04-10 and added to Hugging Face Transformers on 2020-11-16 and contributed by [lhoestq](https://huggingface.co/lhoestq).*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # DPR
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[DPR](https://huggingface.co/papers/2004.04906) demonstrates that dense representations can be effectively used for open-domain question answering retrieval, surpassing traditional sparse models like TF-IDF or BM25. Using a dual-encoder framework, embeddings are learned from a limited set of questions and passages. This dense retriever achieves a significant improvement of 9%-19% in top-20 passage retrieval accuracy across various datasets, enhancing the overall performance of end-to-end QA systems.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="DPRReader">
 
-Dense Passage Retrieval (DPR) is a set of tools and models for state-of-the-art open-domain Q&A research. It was
-introduced in [Dense Passage Retrieval for Open-Domain Question Answering](https://huggingface.co/papers/2004.04906) by
-Vladimir Karpukhin, Barlas Oğuz, Sewon Min, Patrick Lewis, Ledell Wu, Sergey Edunov, Danqi Chen, Wen-tau Yih.
+```py
+import torch
+from transformers import DPRReader, DPRReaderTokenizer
 
-The abstract from the paper is the following:
+tokenizer = DPRReaderTokenizer.from_pretrained("facebook/dpr-reader-single-nq-base")
+model = DPRReader.from_pretrained("facebook/dpr-reader-single-nq-base", dtype="auto")
+encoded_inputs = tokenizer(
+    questions=["What is photosynthesis?"],
+    titles=["Plant Biology"],
+    texts=["Photosynthesis is the process by which plants convert sunlight, carbon dioxide, and water into glucose and oxygen using chlorophyll in their leaves."],
+    return_tensors="pt",
+)
+outputs = model(**encoded_inputs)
+start_logits = outputs.start_logits
+end_logits = outputs.end_logits
+relevance_logits = outputs.relevance_logits
+```
 
-*Open-domain question answering relies on efficient passage retrieval to select candidate contexts, where traditional
-sparse vector space models, such as TF-IDF or BM25, are the de facto method. In this work, we show that retrieval can
-be practically implemented using dense representations alone, where embeddings are learned from a small number of
-questions and passages by a simple dual-encoder framework. When evaluated on a wide range of open-domain QA datasets,
-our dense retriever outperforms a strong Lucene-BM25 system largely by 9%-19% absolute in terms of top-20 passage
-retrieval accuracy, and helps our end-to-end QA system establish new state-of-the-art on multiple open-domain QA
-benchmarks.*
+</hfoption>
+</hfoptions>
 
-This model was contributed by [lhoestq](https://huggingface.co/lhoestq). The original code can be found [here](https://github.com/facebookresearch/DPR).
-
-## Usage tips
-
-- DPR consists in three models:
-
-  * Question encoder: encode questions as vectors
-  * Context encoder: encode contexts as vectors
-  * Reader: extract the answer of the questions inside retrieved contexts, along with a relevance score (high if the inferred span actually answers the question).
 
 ## DPRConfig
 
@@ -98,3 +100,4 @@ This model was contributed by [lhoestq](https://huggingface.co/lhoestq). The ori
 
 [[autodoc]] DPRReader
     - forward
+

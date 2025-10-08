@@ -13,61 +13,41 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-02-28 and added to Hugging Face Transformers on 2022-10-12.*
+*This model was released on 2022-02-28 and added to Hugging Face Transformers on 2022-10-12 and contributed by [nielsr](https://huggingface.co/nielsr).*
 
 # LiLT
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[LiLT: A Simple yet Effective Language-Independent Layout Transformer for Structured Document Understanding](https://huggingface.co/papers/2202.13669) combines a pre-trained RoBERTa text encoder with a lightweight Layout Transformer to enable document understanding across multiple languages. LiLT can be pre-trained on structured documents in one language and fine-tuned on others using off-the-shelf monolingual or multilingual pre-trained textual models. Experiments across eight languages demonstrate competitive or superior performance on various benchmarks, highlighting its language-independent benefits in document layout structure pre-training.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="AutoModel">
 
-The LiLT model was proposed in [LiLT: A Simple yet Effective Language-Independent Layout Transformer for Structured Document Understanding](https://huggingface.co/papers/2202.13669) by Jiapeng Wang, Lianwen Jin, Kai Ding.
-LiLT allows to combine any pre-trained RoBERTa text encoder with a lightweight Layout Transformer, to enable [LayoutLM](layoutlm)-like document understanding for many
-languages.
+```py
+import torch
+from transformers import AutoTokenizer, AutoModelForQuestionAnswering
+from datasets import load_dataset
 
-The abstract from the paper is the following:
+tokenizer = AutoTokenizer.from_pretrained("SCUT-DLVCLab/lilt-roberta-en-base")
+model = AutoModelForQuestionAnswering.from_pretrained("SCUT-DLVCLab/lilt-roberta-en-base", dtype="auto")
 
-*Structured document understanding has attracted considerable attention and made significant progress recently, owing to its crucial role in intelligent document processing. However, most existing related models can only deal with the document data of specific language(s) (typically English) included in the pre-training collection, which is extremely limited. To address this issue, we propose a simple yet effective Language-independent Layout Transformer (LiLT) for structured document understanding. LiLT can be pre-trained on the structured documents of a single language and then directly fine-tuned on other languages with the corresponding off-the-shelf monolingual/multilingual pre-trained textual models. Experimental results on eight languages have shown that LiLT can achieve competitive or even superior performance on diverse widely-used downstream benchmarks, which enables language-independent benefit from the pre-training of document layout structure.*
+dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+example = dataset[0]
+words = example["tokens"]
+boxes = example["bboxes"]
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/lilt_architecture.jpg"
-alt="drawing" width="600"/>
+encoding = tokenizer(words, boxes=boxes, return_tensors="pt")
 
-<small> LiLT architecture. Taken from the <a href="https://huggingface.co/papers/2202.13669">original paper</a>. </small>
+outputs = model(**encoding)
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr).
-The original code can be found [here](https://github.com/jpwang/lilt).
+answer_start_index = outputs.start_logits.argmax()
+answer_end_index = outputs.end_logits.argmax()
 
-## Usage tips
-
-- To combine the Language-Independent Layout Transformer with a new RoBERTa checkpoint from the [hub](https://huggingface.co/models?search=roberta), refer to [this guide](https://github.com/jpWang/LiLT#or-generate-your-own-checkpoint-optional).
-The script will result in `config.json` and `pytorch_model.bin` files being stored locally. After doing this, one can do the following (assuming you're logged in with your HuggingFace account):
-
-```python
-from transformers import LiltModel
-
-model = LiltModel.from_pretrained("path_to_your_files")
-model.push_to_hub("name_of_repo_on_the_hub")
+predict_answer_tokens = encoding.input_ids[0, answer_start_index : answer_end_index + 1]
+print(tokenizer.decode(predict_answer_tokens))
 ```
 
-- When preparing data for the model, make sure to use the token vocabulary that corresponds to the RoBERTa checkpoint you combined with the Layout Transformer.
-- As [lilt-roberta-en-base](https://huggingface.co/SCUT-DLVCLab/lilt-roberta-en-base) uses the same vocabulary as [LayoutLMv3](layoutlmv3), one can use [`LayoutLMv3TokenizerFast`] to prepare data for the model.
-The same is true for [lilt-roberta-en-base](https://huggingface.co/SCUT-DLVCLab/lilt-infoxlm-base): one can use [`LayoutXLMTokenizerFast`] for that model.
-
-## Resources
-
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with LiLT.
-
-- Demo notebooks for LiLT can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/LiLT).
-
-**Documentation resources**
-
-- [Text classification task guide](../tasks/sequence_classification)
-- [Token classification task guide](../tasks/token_classification)
-- [Question answering task guide](../tasks/question_answering)
-
-If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+</hfoption>
+</hfoptions>
 
 ## LiltConfig
 
@@ -92,3 +72,4 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] LiltForQuestionAnswering
     - forward
+

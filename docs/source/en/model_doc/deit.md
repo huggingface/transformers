@@ -13,114 +13,65 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2020-12-23 and added to Hugging Face Transformers on 2021-04-13.*
+*This model was released on 2020-12-23 and added to Hugging Face Transformers on 2021-04-13 and contributed by [nielsr](https://huggingface.co/nielsr).*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # DeiT
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[DeiT](https://huggingface.co/papers/2012.12877) addresses the inefficiency of training visual transformers by developing a more data-efficient model. This model achieves competitive results on ImageNet with only internal data and minimal computational resources, training on a single computer in less than 3 days. A key innovation is the introduction of a token-based distillation strategy, which enhances the student model's learning from a teacher model, particularly when the teacher is a convolutional neural network. This approach results in top-1 accuracy of up to 85.2% on ImageNet and strong performance on other tasks.
 
-## Overview
-
-The DeiT model was proposed in [Training data-efficient image transformers & distillation through attention](https://huggingface.co/papers/2012.12877) by Hugo Touvron, Matthieu Cord, Matthijs Douze, Francisco Massa, Alexandre
-Sablayrolles, Hervé Jégou. The [Vision Transformer (ViT)](vit) introduced in [Dosovitskiy et al., 2020](https://huggingface.co/papers/2010.11929) has shown that one can match or even outperform existing convolutional neural
-networks using a Transformer encoder (BERT-like). However, the ViT models introduced in that paper required training on
-expensive infrastructure for multiple weeks, using external data. DeiT (data-efficient image transformers) are more
-efficiently trained transformers for image classification, requiring far less data and far less computing resources
-compared to the original ViT models.
-
-The abstract from the paper is the following:
-
-*Recently, neural networks purely based on attention were shown to address image understanding tasks such as image
-classification. However, these visual transformers are pre-trained with hundreds of millions of images using an
-expensive infrastructure, thereby limiting their adoption. In this work, we produce a competitive convolution-free
-transformer by training on Imagenet only. We train them on a single computer in less than 3 days. Our reference vision
-transformer (86M parameters) achieves top-1 accuracy of 83.1% (single-crop evaluation) on ImageNet with no external
-data. More importantly, we introduce a teacher-student strategy specific to transformers. It relies on a distillation
-token ensuring that the student learns from the teacher through attention. We show the interest of this token-based
-distillation, especially when using a convnet as a teacher. This leads us to report results competitive with convnets
-for both Imagenet (where we obtain up to 85.2% accuracy) and when transferring to other tasks. We share our code and
-models.*
-
-This model was contributed by [nielsr](https://huggingface.co/nielsr).
-
-## Usage tips
-
-- Compared to ViT, DeiT models use a so-called distillation token to effectively learn from a teacher (which, in the
-  DeiT paper, is a ResNet like-model). The distillation token is learned through backpropagation, by interacting with
-  the class ([CLS]) and patch tokens through the self-attention layers.
-- There are 2 ways to fine-tune distilled models, either (1) in a classic way, by only placing a prediction head on top
-  of the final hidden state of the class token and not using the distillation signal, or (2) by placing both a
-  prediction head on top of the class token and on top of the distillation token. In that case, the [CLS] prediction
-  head is trained using regular cross-entropy between the prediction of the head and the ground-truth label, while the
-  distillation prediction head is trained using hard distillation (cross-entropy between the prediction of the
-  distillation head and the label predicted by the teacher). At inference time, one takes the average prediction
-  between both heads as final prediction. (2) is also called "fine-tuning with distillation", because one relies on a
-  teacher that has already been fine-tuned on the downstream dataset. In terms of models, (1) corresponds to
-  [`DeiTForImageClassification`] and (2) corresponds to
-  [`DeiTForImageClassificationWithTeacher`].
-- Note that the authors also did try soft distillation for (2) (in which case the distillation prediction head is
-  trained using KL divergence to match the softmax output of the teacher), but hard distillation gave the best results.
-- All released checkpoints were pre-trained and fine-tuned on ImageNet-1k only. No external data was used. This is in
-  contrast with the original ViT model, which used external data like the JFT-300M dataset/Imagenet-21k for
-  pre-training.
-- The authors of DeiT also released more efficiently trained ViT models, which you can directly plug into
-  [`ViTModel`] or [`ViTForImageClassification`]. Techniques like data
-  augmentation, optimization, and regularization were used in order to simulate training on a much larger dataset
-  (while only using ImageNet-1k for pre-training). There are 4 variants available (in 3 different sizes):
-  *facebook/deit-tiny-patch16-224*, *facebook/deit-small-patch16-224*, *facebook/deit-base-patch16-224* and
-  *facebook/deit-base-patch16-384*. Note that one should use [`DeiTImageProcessor`] in order to
-  prepare images for the model.
-
-### Using Scaled Dot Product Attention (SDPA)
-
-PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function
-encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the
-[official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html)
-or the [GPU Inference](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention)
-page for more information.
-
-SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set
-`attn_implementation="sdpa"` in `from_pretrained()` to explicitly request SDPA to be used.
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
 ```py
-from transformers import DeiTForImageClassification
-model = DeiTForImageClassification.from_pretrained("facebook/deit-base-distilled-patch16-224", attn_implementation="sdpa", dtype=torch.float16)
-...
+import torch
+from transformers import pipeline
+
+pipeline = pipeline(task="image-classification", model="facebook/deit-base-distilled-patch16-224", dtype="auto")
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
 ```
 
-For the best speedups, we recommend loading the model in half-precision (e.g. `torch.float16` or `torch.bfloat16`).
+</hfoption>
+<hfoption id="AutoModel">
 
-On a local benchmark (A100-40GB, PyTorch 2.3.0, OS Ubuntu 22.04) with `float32` and `facebook/deit-base-distilled-patch16-224` model, we saw the following speedups during inference.
+```python
+import torch
+import requests
+from PIL import Image
+from transformers import AutoImageProcessor, AutoModelForImageClassification
 
-|   Batch size |   Average inference time (ms), eager mode |   Average inference time (ms), sdpa model |   Speed up, Sdpa / Eager (x) |
-|--------------|-------------------------------------------|-------------------------------------------|------------------------------|
-|            1 |                                         8 |                                         6 |                      1.33 |
-|            2 |                                         9 |                                         6 |                      1.5  |
-|            4 |                                         9 |                                         6 |                      1.5  |
-|            8 |                                         8 |                                         6 |                      1.33 |
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
 
-## Resources
+image_processor = AutoImageProcessor.from_pretrained("facebook/deit-base-distilled-patch16-224")
+model = AutoModelForImageClassification.from_pretrained("facebook/deit-base-distilled-patch16-224", dtype="auto")
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with DeiT.
+inputs = image_processor(image, return_tensors="pt")
 
-<PipelineTag pipeline="image-classification"/>
+with torch.no_grad():
+    logits = model(**inputs).logits
 
-- [`DeiTForImageClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
-- See also: [Image classification task guide](../tasks/image_classification)
+predicted_label = logits.argmax(-1).item()
+print(model.config.id2label[predicted_label])
+```
 
-Besides that:
-
-- [`DeiTForMaskedImageModeling`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
-
-If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+</hfoption>
+</hfoptions>
 
 ## DeiTConfig
 
 [[autodoc]] DeiTConfig
+
+## DeiTFeatureExtractor
+
+[[autodoc]] DeiTFeatureExtractor
+    - __call__
 
 ## DeiTImageProcessor
 
@@ -151,3 +102,4 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] DeiTForImageClassificationWithTeacher
     - forward
+

@@ -13,64 +13,50 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-02-05 and added to Hugging Face Transformers on 2022-01-19.*
+*This model was released on 2021-02-05 and added to Hugging Face Transformers on 2022-01-19 and contributed by [nielsr](https://huggingface.co/nielsr).*
 
 # ViLT
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[ViLT: Vision-and-Language Transformer Without Convolution or Region Supervision](https://huggingface.co/papers/2102.03334) presents a minimal Vision-and-Language Pre-training (VLP) model that integrates text embeddings into a Vision Transformer (ViT). This approach eliminates the need for convolutional architectures and region supervision, significantly reducing computational requirements while maintaining competitive performance on downstream tasks. ViLT processes visual inputs in a convolution-free manner, similar to text inputs, achieving up to tens of times faster processing speeds compared to previous models.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="ViltForQuestionAnswering">
 
-The ViLT model was proposed in [ViLT: Vision-and-Language Transformer Without Convolution or Region Supervision](https://huggingface.co/papers/2102.03334)
-by Wonjae Kim, Bokyung Son, Ildoo Kim. ViLT incorporates text embeddings into a Vision Transformer (ViT), allowing it to have a minimal design
-for Vision-and-Language Pre-training (VLP).
+```py
+import torch
+import requests
+from transformers import AutoProcessor, ViltForQuestionAnswering
+from PIL import Image
 
-The abstract from the paper is the following:
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
+text = "How many cats are there?"
 
-*Vision-and-Language Pre-training (VLP) has improved performance on various joint vision-and-language downstream tasks.
-Current approaches to VLP heavily rely on image feature extraction processes, most of which involve region supervision
-(e.g., object detection) and the convolutional architecture (e.g., ResNet). Although disregarded in the literature, we
-find it problematic in terms of both (1) efficiency/speed, that simply extracting input features requires much more
-computation than the multimodal interaction steps; and (2) expressive power, as it is upper bounded to the expressive
-power of the visual embedder and its predefined visual vocabulary. In this paper, we present a minimal VLP model,
-Vision-and-Language Transformer (ViLT), monolithic in the sense that the processing of visual inputs is drastically
-simplified to just the same convolution-free manner that we process textual inputs. We show that ViLT is up to tens of
-times faster than previous VLP models, yet with competitive or better downstream task performance.*
+processor = AutoProcessor.from_pretrained("dandelin/vilt-b32-finetuned-vqa")
+model = ViltForQuestionAnswering.from_pretrained("dandelin/vilt-b32-finetuned-vqa", dtype="auto")
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/vilt_architecture.jpg"
-alt="drawing" width="600"/>
+encoding = processor(image, text, return_tensors="pt")
+outputs = model(**encoding)
+logits = outputs.logits
+idx = logits.argmax(-1).item()
+print("Predicted answer:", model.config.id2label[idx])
+```
 
-<small> ViLT architecture. Taken from the <a href="https://huggingface.co/papers/2102.03334">original paper</a>. </small>
-
-This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/dandelin/ViLT).
-
-## Usage tips
-
-- The quickest way to get started with ViLT is by checking the [example notebooks](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/ViLT)
-  (which showcase both inference and fine-tuning on custom data).
-- ViLT is a model that takes both `pixel_values` and `input_ids` as input. One can use [`ViltProcessor`] to prepare data for the model.
-  This processor wraps a image processor (for the image modality) and a tokenizer (for the language modality) into one.
-- ViLT is trained with images of various sizes: the authors resize the shorter edge of input images to 384 and limit the longer edge to
-  under 640 while preserving the aspect ratio. To make batching of images possible, the authors use a `pixel_mask` that indicates
-  which pixel values are real and which are padding. [`ViltProcessor`] automatically creates this for you.
-- The design of ViLT is very similar to that of a standard Vision Transformer (ViT). The only difference is that the model includes
-  additional embedding layers for the language modality.
-- The PyTorch version of this model is only available in torch 1.10 and higher.
+</hfoption>
+</hfoptions>
 
 ## ViltConfig
 
 [[autodoc]] ViltConfig
 
+## ViltFeatureExtractor
+
+[[autodoc]] ViltFeatureExtractor
+    - __call__
+
 ## ViltImageProcessor
 
 [[autodoc]] ViltImageProcessor
-    - preprocess
-
-## ViltImageProcessorFast
-
-[[autodoc]] ViltImageProcessorFast
     - preprocess
 
 ## ViltProcessor
@@ -107,3 +93,9 @@ This model was contributed by [nielsr](https://huggingface.co/nielsr). The origi
 
 [[autodoc]] ViltForTokenClassification
     - forward
+
+## ViltImageProcessorFast
+
+[[autodoc]] ViltImageProcessorFast
+    - preprocess
+

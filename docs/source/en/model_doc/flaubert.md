@@ -13,47 +13,43 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2019-12-11 and added to Hugging Face Transformers on 2020-11-16.*
+*This model was released on 2019-12-11 and added to Hugging Face Transformers on 2020-11-16 and contributed by [formiel](https://huggingface.co/formiel).*
 
 # FlauBERT
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[FlauBERT](https://huggingface.co/papers/1912.05372) is a transformer model pretrained using masked language modeling, similar to BERT. Trained on a large and diverse French corpus using the CNRS Jean Zay supercomputer, FlauBERT demonstrates superior performance across various NLP tasks including text classification, paraphrasing, natural language inference, parsing, and word sense disambiguation. The model, along with a unified evaluation protocol called FLUE, is available for further research in French NLP.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The FlauBERT model was proposed in the paper [FlauBERT: Unsupervised Language Model Pre-training for French](https://huggingface.co/papers/1912.05372) by Hang Le et al. It's a transformer model pretrained using a masked language
-modeling (MLM) objective (like BERT).
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the paper is the following:
+pipeline = pipeline("fill-mask", model="flaubert/flaubert_base_cased", dtype="auto")
+pipeline("Les plantes créent [MASK] grâce à un processus appelé photosynthèse.")
+```
 
-*Language models have become a key step to achieve state-of-the art results in many different Natural Language
-Processing (NLP) tasks. Leveraging the huge amount of unlabeled texts nowadays available, they provide an efficient way
-to pre-train continuous word representations that can be fine-tuned for a downstream task, along with their
-contextualization at the sentence level. This has been widely demonstrated for English using contextualized
-representations (Dai and Le, 2015; Peters et al., 2018; Howard and Ruder, 2018; Radford et al., 2018; Devlin et al.,
-2019; Yang et al., 2019b). In this paper, we introduce and share FlauBERT, a model learned on a very large and
-heterogeneous French corpus. Models of different sizes are trained using the new CNRS (French National Centre for
-Scientific Research) Jean Zay supercomputer. We apply our French language models to diverse NLP tasks (text
-classification, paraphrasing, natural language inference, parsing, word sense disambiguation) and show that most of the
-time they outperform other pretraining approaches. Different versions of FlauBERT as well as a unified evaluation
-protocol for the downstream tasks, called FLUE (French Language Understanding Evaluation), are shared to the research
-community for further reproducible experiments in French NLP.*
+</hfoption>
+<hfoption id="Pipeline">
 
-This model was contributed by [formiel](https://huggingface.co/formiel). The original code can be found [here](https://github.com/getalp/Flaubert).
+```py
+import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-Tips:
+model = AutoModelForMaskedLM.from_pretrained("flaubert/flaubert_base_cased", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("flaubert/flaubert_base_cased")
 
-- Like RoBERTa, without the sentence ordering prediction (so just trained on the MLM objective).
+inputs = tokenizer("Les plantes créent [MASK] grâce à un processus appelé photosynthèse.", return_tensors="pt")
+outputs = model(**inputs)
+mask_token_id = tokenizer.mask_token_id
+mask_position = (inputs.input_ids == tokenizer.mask_token_id).nonzero(as_tuple=True)[1]
+predicted_word = tokenizer.decode(outputs.logits[0, mask_position].argmax(dim=-1))
+print(f"Predicted word: {predicted_word}")
+```
 
-## Resources
-
-- [Text classification task guide](../tasks/sequence_classification)
-- [Token classification task guide](../tasks/token_classification)
-- [Question answering task guide](../tasks/question_answering)
-- [Masked language modeling task guide](../tasks/masked_language_modeling)
-- [Multiple choice task guide](../tasks/multiple_choice)
+</hfoption>
+</hfoptions>
 
 ## FlaubertConfig
 
@@ -97,3 +93,4 @@ Tips:
 
 [[autodoc]] FlaubertForQuestionAnswering
     - forward
+

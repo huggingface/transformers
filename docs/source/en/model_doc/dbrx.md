@@ -9,105 +9,47 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
-*This model was released on 2024-03-27 and added to Hugging Face Transformers on 2024-04-18.*
+*This model was released on {release_date} and added to Hugging Face Transformers on 2024-04-18 and contributed by [eitanturok](https://huggingface.co/eitanturok) and [abhi-db](https://huggingface.co/abhi-db).*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # DBRX
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[DBRX](https://www.databricks.com/blog/introducing-dbrx-new-state-art-open-llm) is an open, general-purpose large language model introduced by Databricks that achieves state-of-the-art performance among open LLMs, surpassing GPT-3.5 and competing with Gemini 1.0 Pro. It uses a fine-grained mixture-of-experts (MoE) architecture, making inference up to 2x faster than LLaMA2-70B and about 4x more compute-efficient than Databricks’ previous MPT models. DBRX excels at programming tasks, outperforming specialized models like CodeLLaMA-70B, and is strong in language understanding and math benchmarks. Both base and instruction-tuned versions are openly released on Hugging Face, with availability via APIs and integration into Databricks products
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-DBRX is a [transformer-based](https://www.isattentionallyouneed.com/) decoder-only large language model (LLM) that was trained using next-token prediction.
-It uses a *fine-grained* mixture-of-experts (MoE) architecture with 132B total parameters of which 36B parameters are active on any input.
-It was pre-trained on 12T tokens of text and code data.
-Compared to other open MoE models like Mixtral-8x7B and Grok-1, DBRX is fine-grained, meaning it uses a larger number of smaller experts. DBRX has 16 experts and chooses 4, while Mixtral-8x7B and Grok-1 have 8 experts and choose 2.
-This provides 65x more possible combinations of experts and we found that this improves model quality.
-DBRX uses rotary position encodings (RoPE), gated linear units (GLU), and grouped query attention (GQA).
-It is a BPE based model and uses the GPT-4 tokenizer as described in the [tiktoken](https://github.com/openai/tiktoken) repository.
-We made these choices based on exhaustive evaluation and scaling experiments.
-
-DBRX was pretrained on 12T tokens of carefully curated data and a maximum context length of 32K tokens.
-We estimate that this data is at least 2x better token-for-token than the data we used to pretrain the MPT family of models.
-This new dataset was developed using the full suite of Databricks tools, including Apache Spark™ and Databricks notebooks for data processing, and Unity Catalog for data management and governance.
-We used curriculum learning for pretraining, changing the data mix during training in ways we found to substantially improve model quality.
-
-More detailed information about DBRX Instruct and DBRX Base can be found in our [technical blog post](https://www.databricks.com/blog/introducing-dbrx-new-state-art-open-llm).
-
-This model was contributed by [eitan-turok](https://huggingface.co/eitanturok) and [abhi-db](https://huggingface.co/abhi-db). The original code can be found [here](https://github.com/databricks/dbrx-instruct), though this may not be up to date.
-
-## Usage Examples
-
-The `generate()` method can be used to generate text using DBRX. You can generate using the standard attention implementation, flash-attention, and the PyTorch scaled dot product attention. The last two attention implementations give speed ups.
-
-```python
-from transformers import DbrxForCausalLM, AutoTokenizer
+```py
 import torch
+from transformers import pipeline
 
-tokenizer = AutoTokenizer.from_pretrained("databricks/dbrx-instruct", token="YOUR_HF_TOKEN")
-model = DbrxForCausalLM.from_pretrained(
-    "databricks/dbrx-instruct",
-    device_map="auto",
-    dtype=torch.bfloat16,
-    token="YOUR_HF_TOKEN",
-    )
+pipeline = pipeline("text-generation", model="databricks/dbrx-instruct", dtype="auto")
+pipeline("Plants create energy through a process known as photosynthesis.")
+```
 
-input_text = "What does it take to build a great LLM?"
-messages = [{"role": "user", "content": input_text}]
-input_ids = tokenizer.apply_chat_template(messages, return_dict=True, tokenize=True, add_generation_prompt=True, return_tensors="pt").to(model.device)
+</hfoption>
+<hfoption id="AutoModel">
 
-outputs = model.generate(**input_ids, max_new_tokens=200)
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model = AutoModelForCausalLM.from_pretrained("databricks/dbrx-instruct", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("databricks/dbrx-instruct")
+
+inputs = tokenizer("Plants create energy through a process known as photosynthesis.", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
 print(tokenizer.decode(outputs[0]))
 ```
 
-If you have flash-attention installed (`pip install flash-attn`), it is possible to generate faster. (The HuggingFace documentation for flash-attention can be found [here](https://huggingface.co/docs/transformers/perf_infer_gpu_one#flashattention-2).)
-
-```python
-from transformers import DbrxForCausalLM, AutoTokenizer
-import torch
-
-tokenizer = AutoTokenizer.from_pretrained("databricks/dbrx-instruct", token="YOUR_HF_TOKEN")
-model = DbrxForCausalLM.from_pretrained(
-    "databricks/dbrx-instruct",
-    device_map="auto",
-    dtype=torch.bfloat16,
-    token="YOUR_HF_TOKEN",
-    attn_implementation="flash_attention_2",
-    )
-
-input_text = "What does it take to build a great LLM?"
-messages = [{"role": "user", "content": input_text}]
-input_ids = tokenizer.apply_chat_template(messages, return_dict=True, tokenize=True, add_generation_prompt=True, return_tensors="pt").to(model.device)
-
-outputs = model.generate(**input_ids, max_new_tokens=200)
-print(tokenizer.decode(outputs[0]))
-```
-
-You can also generate faster using the PyTorch scaled dot product attention. (The HuggingFace documentation for scaled dot product attention can be found [here](https://huggingface.co/docs/transformers/perf_infer_gpu_one#pytorch-scaled-dot-product-attention).)
-
-```python
-from transformers import DbrxForCausalLM, AutoTokenizer
-import torch
-
-tokenizer = AutoTokenizer.from_pretrained("databricks/dbrx-instruct", token="YOUR_HF_TOKEN")
-model = DbrxForCausalLM.from_pretrained(
-    "databricks/dbrx-instruct",
-    device_map="auto",
-    dtype=torch.bfloat16,
-    token="YOUR_HF_TOKEN",
-    attn_implementation="sdpa",
-    )
-
-input_text = "What does it take to build a great LLM?"
-messages = [{"role": "user", "content": input_text}]
-input_ids = tokenizer.apply_chat_template(messages, return_dict=True, tokenize=True, add_generation_prompt=True, return_tensors="pt").to(model.device)
-
-outputs = model.generate(**input_ids, max_new_tokens=200)
-print(tokenizer.decode(outputs[0]))
-```
+</hfoption>
+</hfoptions>
 
 ## DbrxConfig
 
@@ -122,3 +64,4 @@ print(tokenizer.decode(outputs[0]))
 
 [[autodoc]] DbrxForCausalLM
     - forward
+

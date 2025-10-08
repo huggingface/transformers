@@ -13,73 +13,64 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2018-06-11 and added to Hugging Face Transformers on 2023-06-20.*
+*This model was released on 2018-09-19 and added to Hugging Face Transformers on 2023-06-20 and contributed by [thomwolf](https://huggingface.co/thomwolf).*
 
 <div style="float: right;">
-  <div class="flex flex-wrap space-x-1">
-    <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
-    <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-  </div>
+    <div class="flex flex-wrap space-x-1">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
 </div>
 
 # GPT
 
-[GPT (Generative Pre-trained Transformer)](https://cdn.openai.com/research-covers/language-unsupervised/language_understanding_paper.pdf) ([blog post](https://openai.com/index/language-unsupervised/)) focuses on effectively learning text representations and transferring them to tasks. This model trains the Transformer decoder to predict the next word, and then fine-tuned on labeled data.
-
-GPT can generate high-quality text, making it well-suited for a variety of natural language understanding tasks such as textual entailment, question answering, semantic similarity, and document classification.
-
-You can find all the original GPT checkpoints under the [OpenAI community](https://huggingface.co/openai-community/openai-gpt) organization.
-
-> [!TIP]
-> Click on the GPT models in the right sidebar for more examples of how to apply GPT to different language tasks.
-
-The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`], and from the command line.
+[GPT](https://cdn.openai.com/research-covers/language-unsupervised/language_understanding_paper.pdf) addresses the challenge of limited labeled data for natural language understanding tasks like textual entailment, question answering, semantic similarity, and document classification. It shows that pretraining a language model generatively on large unlabeled text, followed by task-specific discriminative fine-tuning with task-aware input transformations, can achieve strong performance with minimal architectural changes. This approach outperforms traditional discriminative models designed for individual tasks and improves the state of the art in 9 of 12 evaluated benchmarks. The results demonstrate that a single, task-agnostic model can effectively transfer knowledge across diverse NLU tasks.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```python
+```py
 import torch
 from transformers import pipeline
 
-generator = pipeline(task="text-generation", model="openai-community/gpt", dtype=torch.float16, device=0)
-output = generator("The future of AI is", max_length=50, do_sample=True)
-print(output[0]["generated_text"])
+pipeline = pipeline(task="text-generation", model="openai-community/openai-gpt", dtype="auto",)
+pipeline("Plants create energy through a process known as photosynthesis.")
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
-```python
+```py
+import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt")
-model = AutoModelForCausalLM.from_pretrained("openai-community/openai-gpt", dtype=torch.float16)
+tokenizer = AutoTokenizer.from_pretrained("openai-community/openai-gpt")
+model = AutoModelForCausalLM.from_pretrained("openai-community/openai-gpt", dtype="auto",)
 
-inputs = tokenizer("The future of AI is", return_tensors="pt")
+inputs = tokenizer("Plants create energy through a process known as photosynthesis.", return_tensors="pt")
 outputs = model.generate(**inputs, max_length=50)
-print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "The future of AI is" | transformers run --task text-generation --model openai-community/openai-gpt --device 0
-
+print(tokenizer.decode(outputs[0]))
 ```
 
 </hfoption>
 </hfoptions>
 
-## Notes
-
-- Inputs should be padded on the right because GPT uses absolute position embeddings.
-
 ## OpenAIGPTConfig
 
 [[autodoc]] OpenAIGPTConfig
+
+## OpenAIGPTTokenizer
+
+[[autodoc]] OpenAIGPTTokenizer
+    - save_vocabulary
+
+## OpenAIGPTTokenizerFast
+
+[[autodoc]] OpenAIGPTTokenizerFast
+
+## OpenAI specific outputs
+
+[[autodoc]] models.openai.modeling_openai.OpenAIGPTDoubleHeadsModelOutput
 
 ## OpenAIGPTModel
 
@@ -101,10 +92,3 @@ echo -e "The future of AI is" | transformers run --task text-generation --model 
 [[autodoc]] OpenAIGPTForSequenceClassification
     - forward
 
-## OpenAIGPTTokenizer
-
-[[autodoc]] OpenAIGPTTokenizer
-
-## OpenAIGPTTokenizerFast
-
-[[autodoc]] OpenAIGPTTokenizerFast

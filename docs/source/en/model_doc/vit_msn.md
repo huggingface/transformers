@@ -13,87 +13,56 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-04-14 and added to Hugging Face Transformers on 2022-09-22.*
+*This model was released on 2022-04-14 and added to Hugging Face Transformers on 2022-09-22 and contributed by [sayakpaul](https://huggingface.co/sayakpaul).*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # ViTMSN
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[Masked Siamese Networks (MSN)](https://huggingface.co/papers/2204.07141) is a self-supervised learning framework designed to learn image representations by matching the representation of an image with randomly masked patches to that of the original unmasked image. This approach enhances scalability, especially for Vision Transformers, by processing only the unmasked patches. MSN achieves high semantic-level representations, demonstrating competitive performance in low-shot image classification. On ImageNet-1K, the base MSN model reaches 72.4% top-1 accuracy with 5,000 annotated images and 75.7% top-1 accuracy with just 1% of the labels, establishing a new state-of-the-art in self-supervised learning.
 
-## Overview
-
-The ViTMSN model was proposed in [Masked Siamese Networks for Label-Efficient Learning](https://huggingface.co/papers/2204.07141) by Mahmoud Assran, Mathilde Caron, Ishan Misra, Piotr Bojanowski, Florian Bordes,
-Pascal Vincent, Armand Joulin, Michael Rabbat, Nicolas Ballas. The paper presents a joint-embedding architecture to match the prototypes
-of masked patches with that of the unmasked patches. With this setup, their method yields excellent performance in the low-shot and extreme low-shot
-regimes.
-
-The abstract from the paper is the following:
-
-*We propose Masked Siamese Networks (MSN), a self-supervised learning framework for learning image representations. Our
-approach matches the representation of an image view containing randomly masked patches to the representation of the original
-unmasked image. This self-supervised pre-training strategy is particularly scalable when applied to Vision Transformers since only the
-unmasked patches are processed by the network. As a result, MSNs improve the scalability of joint-embedding architectures,
-while producing representations of a high semantic level that perform competitively on low-shot image classification. For instance,
-on ImageNet-1K, with only 5,000 annotated images, our base MSN model achieves 72.4% top-1 accuracy,
-and with 1% of ImageNet-1K labels, we achieve 75.7% top-1 accuracy, setting a new state-of-the-art for self-supervised learning on this benchmark.*
-
-<img src="https://i.ibb.co/W6PQMdC/Screenshot-2022-09-13-at-9-08-40-AM.png" alt="drawing" width="600"/>
-
-<small> MSN architecture. Taken from the <a href="https://huggingface.co/papers/2204.07141">original paper.</a> </small>
-
-This model was contributed by [sayakpaul](https://huggingface.co/sayakpaul). The original code can be found [here](https://github.com/facebookresearch/msn).
-
-## Usage tips
-
-- MSN (masked siamese networks) is a method for self-supervised pre-training of Vision Transformers (ViTs). The pre-training
-objective is to match the prototypes assigned to the unmasked views of the images to that of the masked views of the same images.
-- The authors have only released pre-trained weights of the backbone (ImageNet-1k pre-training). So, to use that on your own image classification dataset,
-use the [`ViTMSNForImageClassification`] class which is initialized from [`ViTMSNModel`]. Follow
-[this notebook](https://github.com/huggingface/notebooks/blob/main/examples/image_classification.ipynb) for a detailed tutorial on fine-tuning.
-- MSN is particularly useful in the low-shot and extreme low-shot regimes. Notably, it achieves 75.7% top-1 accuracy with only 1% of ImageNet-1K
-labels when fine-tuned.
-
-### Using Scaled Dot Product Attention (SDPA)
-
-PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function
-encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the
-[official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html)
-or the [GPU Inference](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention)
-page for more information.
-
-SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set
-`attn_implementation="sdpa"` in `from_pretrained()` to explicitly request SDPA to be used.
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
 ```py
-from transformers import ViTMSNForImageClassification
-model = ViTMSNForImageClassification.from_pretrained("facebook/vit-msn-base", attn_implementation="sdpa", dtype=torch.float16)
-...
+import torch
+from transformers import pipeline
+
+pipeline = pipeline(task="image-classification", model="facebook/vit-msn-small", dtype="auto")
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
 ```
 
-For the best speedups, we recommend loading the model in half-precision (e.g. `torch.float16` or `torch.bfloat16`).
+</hfoption>
+<hfoption id="AutoModel">
 
-On a local benchmark (A100-40GB, PyTorch 2.3.0, OS Ubuntu 22.04) with `float32` and `facebook/vit-msn-base` model, we saw the following speedups during inference.
+```python
+import torch
+import requests
+from PIL import Image
+from transformers import AutoImageProcessor, AutoModelForImageClassification
 
-|   Batch size |   Average inference time (ms), eager mode |   Average inference time (ms), sdpa model |   Speed up, Sdpa / Eager (x) |
-|--------------|-------------------------------------------|-------------------------------------------|------------------------------|
-|            1 |                                         7 |                                         6 |                      1.17 |
-|            2 |                                         8 |                                         6 |                      1.33 |
-|            4 |                                         8 |                                         6 |                      1.33 |
-|            8 |                                         8 |                                         6 |                      1.33 |
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
 
-## Resources
+image_processor = AutoImageProcessor.from_pretrained("facebook/vit-msn-small")
+model = AutoModelForImageClassification.from_pretrained("facebook/vit-msn-small", dtype="auto")
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with ViT MSN.
+inputs = image_processor(image, return_tensors="pt")
 
-<PipelineTag pipeline="image-classification"/>
+with torch.no_grad():
+    logits = model(**inputs).logits
 
-- [`ViTMSNForImageClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
-- See also: [Image classification task guide](../tasks/image_classification)
+predicted_label = logits.argmax(-1).item()
+print(model.config.id2label[predicted_label])
+```
 
-If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+</hfoption>
+</hfoptions>
 
 ## ViTMSNConfig
 
@@ -108,3 +77,4 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] ViTMSNForImageClassification
     - forward
+

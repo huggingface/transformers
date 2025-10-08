@@ -13,62 +13,33 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-10-14 and added to Hugging Face Transformers on 2025-04-16.*
+
+*This model was released on 2023-10-14 and added to Hugging Face Transformers on 2025-04-16 and contributed by [kashif](https://huggingface.co/kashif).*
 
 # TimesFM
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[TimesFM](https://huggingface.co/papers/2310.10688) is a pretrained time-series foundation model designed for forecasting. It leverages a patched-decoder style attention mechanism and is trained on a large time-series corpus. The model demonstrates strong zero-shot performance across various datasets, matching or nearly matching the accuracy of specialized supervised forecasting models. It handles different forecasting history lengths, prediction lengths, and temporal granularities effectively.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="TimesFmModelForPrediction">
 
-TimesFM (Time Series Foundation Model) is a pretrained time-series foundation model proposed in [A decoder-only foundation model for time-series forecasting](https://huggingface.co/papers/2310.10688) by Abhimanyu Das, Weihao Kong, Rajat Sen, and  Yichen Zhou. It is a decoder only model that uses non-overlapping patches of time-series data as input and outputs some output patch length prediction in an autoregressive fashion.
-
-The abstract from the paper is the following:
-
-*Motivated by recent advances in large language models for Natural Language Processing (NLP), we design a time-series foundation model for forecasting whose out-of-the-box zero-shot performance on a variety of public datasets comes close to the accuracy of state-of-the-art supervised forecasting models for each individual dataset. Our model is based on pretraining a patched-decoder style attention model on a large time-series corpus, and can work well across different forecasting history lengths, prediction lengths and temporal granularities.*
-
-This model was contributed by [kashif](https://huggingface.co/kashif).
-The original code can be found [here](https://github.com/google-research/timesfm).
-
-To use the model:
-
-```python
-import numpy as np
+```py
 import torch
 from transformers import TimesFmModelForPrediction
 
+model = TimesFmModelForPrediction.from_pretrained("google/timesfm-2.0-500m-pytorch", dtype="auto")
 
-model = TimesFmModelForPrediction.from_pretrained(
-    "google/timesfm-2.0-500m-pytorch",
-    dtype=torch.bfloat16,
-    attn_implementation="sdpa",
-    device_map="auto"
-)
+forecast_input = [torch.linspace(0, 20, 100).sin(), torch.linspace(0, 20, 200).sin(), torch.linspace(0, 20, 400).sin()]
+frequency_input = torch.tensor([0, 1, 2], dtype=torch.long)
 
-
- # Create dummy inputs
-forecast_input = [
-    np.sin(np.linspace(0, 20, 100)),
-    np.sin(np.linspace(0, 20, 200)),
-    np.sin(np.linspace(0, 20, 400)),
-]
-frequency_input = [0, 1, 2]
-
-# Convert inputs to sequence of tensors
-forecast_input_tensor = [
-    torch.tensor(ts, dtype=torch.bfloat16).to(model.device)
-    for ts in forecast_input
-]
-frequency_input_tensor = torch.tensor(frequency_input, dtype=torch.long).to(model.device)
-
-# Get predictions from the pre-trained model
 with torch.no_grad():
-    outputs = model(past_values=forecast_input_tensor, freq=frequency_input_tensor, return_dict=True)
-    point_forecast_conv = outputs.mean_predictions.float().cpu().numpy()
-    quantile_forecast_conv = outputs.full_predictions.float().cpu().numpy()
+    outputs = model(past_values=forecast_input, freq=frequency_input, return_dict=True)
+    point_forecast_conv = outputs.mean_predictions
+    quantile_forecast_conv = outputs.full_predictions
 ```
+
+</hfoption>
+</hfoptions>
 
 ## TimesFmConfig
 
@@ -83,3 +54,4 @@ with torch.no_grad():
 
 [[autodoc]] TimesFmModelForPrediction
     - forward
+

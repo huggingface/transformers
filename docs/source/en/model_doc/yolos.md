@@ -13,10 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-06-01 and added to Hugging Face Transformers on 2022-05-02.*
+*This model was released on 2021-06-01 and added to Hugging Face Transformers on 2022-05-02 and contributed by [nielsr](https://huggingface.co/nielsr).*
+
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
@@ -24,19 +24,7 @@ rendered properly in your Markdown viewer.
 
 # YOLOS
 
-[YOLOS](https://huggingface.co/papers/2106.00666) uses a [Vision Transformer (ViT)](./vit) for object detection with minimal modifications and region priors. It can achieve performance comparable to specialized object detection models and frameworks with knowledge about 2D spatial structures.
-
-You can find all the original YOLOS checkpoints under the [HUST Vision Lab](https://huggingface.co/hustvl/models?search=yolos) organization.
-
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/yolos_architecture.png" alt="drawing" width="600"/>
-
-<small> YOLOS architecture. Taken from the <a href="https://huggingface.co/papers/2106.00666">original paper</a>.</small>
-
-> [!TIP]
-> This model wasa contributed by [nielsr](https://huggingface.co/nielsr).
-> Click on the YOLOS models in the right sidebar for more examples of how to apply YOLOS to different object detection tasks.
-
-The example below demonstrates how to detect objects with [`Pipeline`] or the [`AutoModel`] class.
+[YOLOS](https://huggingface.co/papers/2106.00666) leverages a plain Vision Transformer for object detection, inspired by DETR. It demonstrates that a base-sized encoder-only Transformer can achieve 42 AP on COCO, similar to DETR and more complex frameworks like Faster R-CNN. YOLOS pre-trained on ImageNet-1k achieves competitive performance with minimal modifications and without specific region priors or task-specific inductive biases. The model also explores the impacts and limitations of pre-training schemes and scaling strategies for Transformers in vision tasks.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -45,65 +33,41 @@ The example below demonstrates how to detect objects with [`Pipeline`] or the [`
 import torch
 from transformers import pipeline
 
-detector = pipeline(
-    task="object-detection",
-    model="hustvl/yolos-base",
-    dtype=torch.float16,
-    device=0
-)
-detector("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png")
+pipeline = pipeline(task="object-detection", model="hustvl/yolos-base", dtype="auto")
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
 ```
 
 </hfoption>
-<hfoption id="Automodel">
+<hfoption id="AutoModel">
 
 ```py
 import torch
-from PIL import Image
 import requests
+from PIL import Image
 from transformers import AutoImageProcessor, AutoModelForObjectDetection
-from accelerate import Accelerator
 
-device = Accelerator().device
-
-processor = AutoImageProcessor.from_pretrained("hustvl/yolos-base")
-model = AutoModelForObjectDetection.from_pretrained("hustvl/yolos-base", dtype=torch.float16, attn_implementation="sdpa").to(device)
-
-url = "https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png"
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
-inputs = processor(images=image, return_tensors="pt").to(model.device)
 
-with torch.no_grad():
-    outputs = model(**inputs)
-logits = outputs.logits.softmax(-1)
-scores, labels = logits[..., :-1].max(-1)
-boxes = outputs.pred_boxes
+image_processor = AutoImageProcessor.from_pretrained("hustvl/yolos-base")
+model = AutoModelForObjectDetection.from_pretrained("hustvl/yolos-base", dtype="auto")
 
-threshold = 0.3
-keep = scores[0] > threshold
-
-filtered_scores = scores[0][keep]
-filtered_labels = labels[0][keep]
-filtered_boxes  = boxes[0][keep]
-
-width, height = image.size
-pixel_boxes = filtered_boxes * torch.tensor([width, height, width, height], device=boxes.device)
-
-for score, label, box in zip(filtered_scores, filtered_labels, pixel_boxes):
-    x0, y0, x1, y1 = box.tolist()
-    print(f"Label {model.config.id2label[label.item()]}: {score:.2f} at [{x0:.0f}, {y0:.0f}, {x1:.0f}, {y1:.0f}]")
+inputs = image_processor(images=image, return_tensors="pt")
+outputs = model(**inputs)
+target_sizes = torch.tensor([image.size[::-1]])
+results = image_processor.post_process_object_detection(outputs, threshold=0.5, target_sizes=target_sizes)[
+    0
+]
+for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
+    box = [round(i, 2) for i in box.tolist()]
+    print(
+        f"Detected {model.config.id2label[label.item()]} with confidence "
+        f"{round(score.item(), 3)} at location {box}"
+    )
 ```
 
 </hfoption>
 </hfoptions>
-
-## Notes
-
-- Use [`YolosImageProcessor`] for preparing images (and optional targets) for the model. Contrary to [DETR](./detr), YOLOS doesn't require a `pixel_mask`.
-
-## Resources
-
-- Refer to these [notebooks](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/YOLOS) for inference and fine-tuning with [`YolosForObjectDetection`] on a custom dataset.
 
 ## YolosConfig
 
@@ -113,11 +77,20 @@ for score, label, box in zip(filtered_scores, filtered_labels, pixel_boxes):
 
 [[autodoc]] YolosImageProcessor
     - preprocess
+    - pad
+    - post_process_object_detection
 
 ## YolosImageProcessorFast
 
 [[autodoc]] YolosImageProcessorFast
     - preprocess
+    - pad
+    - post_process_object_detection
+
+## YolosFeatureExtractor
+
+[[autodoc]] YolosFeatureExtractor
+    - __call__
     - pad
     - post_process_object_detection
 
@@ -130,3 +103,4 @@ for score, label, box in zip(filtered_scores, filtered_labels, pixel_boxes):
 
 [[autodoc]] YolosForObjectDetection
     - forward
+

@@ -13,42 +13,43 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-02-07 and added to Hugging Face Transformers on 2022-01-11.*
+*This model was released on 2021-02-07 and added to Hugging Face Transformers on 2022-01-11 and contributed by [novice03](https://huggingface.co/novice03).*
 
 # Nyströmformer
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[Nyströmformer](https://huggingface.co/papers/2102.03902) addresses the quadratic complexity issue of self-attention in Transformers by adapting the Nyström method to approximate standard self-attention with O(n) complexity. This enables the model to handle longer sequences containing thousands of tokens. Evaluations on GLUE benchmark and IMDB reviews show that Nyströmformer performs comparably or better than standard self-attention. On longer sequence tasks in the Long Range Arena (LRA) benchmark, it outperforms other efficient self-attention methods.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The Nyströmformer model was proposed in [*Nyströmformer: A Nyström-Based Algorithm for Approximating Self-Attention*](https://huggingface.co/papers/2102.03902) by Yunyang Xiong, Zhanpeng Zeng, Rudrasis Chakraborty, Mingxing Tan, Glenn
-Fung, Yin Li, and Vikas Singh.
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the paper is the following:
+pipeline = pipeline(task="fill-mask", model="uw-madison/nystromformer-512", dtype="auto")
+pipeline("Plants create <mask> through a process known as photosynthesis.")
+```
 
-*Transformers have emerged as a powerful tool for a broad range of natural language processing tasks. A key component
-that drives the impressive performance of Transformers is the self-attention mechanism that encodes the influence or
-dependence of other tokens on each specific token. While beneficial, the quadratic complexity of self-attention on the
-input sequence length has limited its application to longer sequences -- a topic being actively studied in the
-community. To address this limitation, we propose Nyströmformer -- a model that exhibits favorable scalability as a
-function of sequence length. Our idea is based on adapting the Nyström method to approximate standard self-attention
-with O(n) complexity. The scalability of Nyströmformer enables application to longer sequences with thousands of
-tokens. We perform evaluations on multiple downstream tasks on the GLUE benchmark and IMDB reviews with standard
-sequence length, and find that our Nyströmformer performs comparably, or in a few cases, even slightly better, than
-standard self-attention. On longer sequence tasks in the Long Range Arena (LRA) benchmark, Nyströmformer performs
-favorably relative to other efficient self-attention methods. Our code is available at this https URL.*
+</hfoption>
+<hfoption id="AutoModel">
 
-This model was contributed by [novice03](https://huggingface.co/novice03). The original code can be found [here](https://github.com/mlpen/Nystromformer).
+```py
+import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-## Resources
+model = AutoModelForMaskedLM.from_pretrained("uw-madison/nystromformer-512", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("uw-madison/nystromformer-512")
 
-- [Text classification task guide](../tasks/sequence_classification)
-- [Token classification task guide](../tasks/token_classification)
-- [Question answering task guide](../tasks/question_answering)
-- [Masked language modeling task guide](../tasks/masked_language_modeling)
-- [Multiple choice task guide](../tasks/multiple_choice)
+inputs = tokenizer("Plants create <mask> through a process known as photosynthesis.", return_tensors="pt")
+outputs = model(**inputs)
+mask_token_id = tokenizer.mask_token_id
+mask_position = (inputs.input_ids == tokenizer.mask_token_id).nonzero(as_tuple=True)[1]
+predicted_word = tokenizer.decode(outputs.logits[0, mask_position].argmax(dim=-1))
+print(f"Predicted word: {predicted_word}")
+```
+
+</hfoption>
+</hfoptions>
 
 ## NystromformerConfig
 
@@ -83,3 +84,4 @@ This model was contributed by [novice03](https://huggingface.co/novice03). The o
 
 [[autodoc]] NystromformerForQuestionAnswering
     - forward
+

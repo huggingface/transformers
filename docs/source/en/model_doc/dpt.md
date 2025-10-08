@@ -13,73 +13,76 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-03-24 and added to Hugging Face Transformers on 2022-03-28.*
+*This model was released on 2021-03-24 and added to Hugging Face Transformers on 2022-03-28 and contributed by [nielsr](https://huggingface.co/nielsr).*
 
 # DPT
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[DPT](https://huggingface.co/papers/2103.13413) leverages Vision Transformers (ViT) as a backbone for dense prediction tasks such as semantic segmentation and depth estimation. It constructs tokens from various stages of the ViT into image-like representations at different resolutions, which are then combined into full-resolution predictions using a convolutional decoder. The transformer backbone maintains a constant and high-resolution processing with a global receptive field at every stage, enabling finer-grained and more coherent predictions compared to fully-convolutional networks. Experiments demonstrate significant improvements on dense prediction tasks, particularly with large training datasets. For monocular depth estimation, DPT achieves up to a 28% relative performance boost over state-of-the-art fully-convolutional networks. In semantic segmentation, it sets a new state of the art on ADE20K with 49.02% mIoU. Additionally, DPT outperforms on smaller datasets like NYUv2, KITTI, and Pascal Context, establishing new benchmarks in these areas.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The DPT model was proposed in [Vision Transformers for Dense Prediction](https://huggingface.co/papers/2103.13413) by René Ranftl, Alexey Bochkovskiy, Vladlen Koltun.
-DPT is a model that leverages the [Vision Transformer (ViT)](vit) as backbone for dense prediction tasks like semantic segmentation and depth estimation.
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the paper is the following:
-
-*We introduce dense vision transformers, an architecture that leverages vision transformers in place of convolutional networks as a backbone for dense prediction tasks. We assemble tokens from various stages of the vision transformer into image-like representations at various resolutions and progressively combine them into full-resolution predictions using a convolutional decoder. The transformer backbone processes representations at a constant and relatively high resolution and has a global receptive field at every stage. These properties allow the dense vision transformer to provide finer-grained and more globally coherent predictions when compared to fully-convolutional networks. Our experiments show that this architecture yields substantial improvements on dense prediction tasks, especially when a large amount of training data is available. For monocular depth estimation, we observe an improvement of up to 28% in relative performance when compared to a state-of-the-art fully-convolutional network. When applied to semantic segmentation, dense vision transformers set a new state of the art on ADE20K with 49.02% mIoU. We further show that the architecture can be fine-tuned on smaller datasets such as NYUv2, KITTI, and Pascal Context where it also sets the new state of the art.*
-
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/dpt_architecture.jpg"
-alt="drawing" width="600"/>
-
-<small> DPT architecture. Taken from the <a href="https://huggingface.co/papers/2103.13413" target="_blank">original paper</a>. </small>
-
-This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/isl-org/DPT).
-
-## Usage tips
-
-DPT is compatible with the [`AutoBackbone`] class. This allows to use the DPT framework with various computer vision backbones available in the library, such as [`VitDetBackbone`] or [`Dinov2Backbone`]. One can create it as follows:
-
-```python
-from transformers import Dinov2Config, DPTConfig, DPTForDepthEstimation
-
-# initialize with a Transformer-based backbone such as DINOv2
-# in that case, we also specify `reshape_hidden_states=False` to get feature maps of shape (batch_size, num_channels, height, width)
-backbone_config = Dinov2Config.from_pretrained("facebook/dinov2-base", out_features=["stage1", "stage2", "stage3", "stage4"], reshape_hidden_states=False)
-
-config = DPTConfig(backbone_config=backbone_config)
-model = DPTForDepthEstimation(config=config)
+pipeline = pipeline(task="depth-estimation", model="Intel/dpt-large", dtype="auto")
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
 ```
 
-## Resources
+</hfoption>
+<hfoption id="AutoModel">
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with DPT.
+```python
+import torch
+import requests
+import numpy as np
+from PIL import Image
+from transformers import AutoImageProcessor, AutoModelForDepthEstimation
 
-- Demo notebooks for [`DPTForDepthEstimation`] can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/DPT).
+image_processor = AutoImageProcessor.from_pretrained("Intel/dpt-large")
+model = AutoModelForDepthEstimation.from_pretrained("Intel/dpt-large", dtype="auto")
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
+inputs = image_processor(images=image, return_tensors="pt")
 
-- [Semantic segmentation task guide](../tasks/semantic_segmentation)
-- [Monocular depth estimation task guide](../tasks/monocular_depth_estimation)
+with torch.no_grad():
+    outputs = model(**inputs)
 
-If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+post_processed_output = image_processor.post_process_depth_estimation(
+    outputs,
+    target_sizes=[(image.height, image.width)],
+)
+predicted_depth = post_processed_output[0]["predicted_depth"]
+depth = (predicted_depth - predicted_depth.min()) / (predicted_depth.max() - predicted_depth.min())
+depth = depth.detach().cpu().numpy() * 255
+Image.fromarray(depth.astype("uint8"))
+```
+
+</hfoption>
+</hfoptions>
 
 ## DPTConfig
 
 [[autodoc]] DPTConfig
 
+## DPTFeatureExtractor
+
+[[autodoc]] DPTFeatureExtractor
+    - __call__
+    - post_process_semantic_segmentation
+
 ## DPTImageProcessor
 
 [[autodoc]] DPTImageProcessor
     - preprocess
+    - post_process_semantic_segmentation
 
 ## DPTImageProcessorFast
 
 [[autodoc]] DPTImageProcessorFast
     - preprocess
     - post_process_semantic_segmentation
-    - post_process_depth_estimation
 
 ## DPTModel
 
@@ -95,3 +98,4 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] DPTForSemanticSegmentation
     - forward
+

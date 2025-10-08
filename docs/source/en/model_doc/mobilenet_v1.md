@@ -13,38 +13,20 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2017-04-17 and added to Hugging Face Transformers on 2022-11-21.*
-
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-EE4C2C?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
+*This model was released on 2017-04-17 and added to Hugging Face Transformers on 2022-11-21 and contributed by [Matthijs](https://huggingface.co/Matthijs).*
 
 # MobileNet V1
 
-[MobileNet V1](https://huggingface.co/papers/1704.04861) is a family of efficient convolutional neural networks optimized for on-device or embedded vision tasks. It achieves this efficiency by using depth-wise separable convolutions instead of standard convolutions. The architecture allows for easy trade-offs between latency and accuracy using two main hyperparameters, a width multiplier (alpha) and an image resolution multiplier.
-
-You can all the original MobileNet checkpoints under the [Google](https://huggingface.co/google?search_models=mobilenet) organization.
-
-> [!TIP]
-> Click on the MobileNet V1 models in the right sidebar for more examples of how to apply MobileNet to different vision tasks.
-
-The example below demonstrates how to classify an image with [`Pipeline`] or the [`AutoModel`] class.
+[MobileNets: Efficient Convolutional Neural Networks for Mobile Vision Applications](https://huggingface.co/papers/1704.04861) presents MobileNets, a class of efficient models for mobile and embedded vision applications. These models use depth-wise separable convolutions to create lightweight deep neural networks. Two global hyper-parameters are introduced to balance latency and accuracy, enabling model builders to select the appropriate model size for specific applications. Experiments demonstrate strong performance on ImageNet classification and across various applications such as object detection, fine-grain classification, face attributes, and large-scale geo-localization.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```python
+```py
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(
-    task="image-classification",
-    model="google/mobilenet_v1_1.0_224",
-    dtype=torch.float16,
-    device=0
-)
+pipeline = pipeline(task="image-classification", model="google/mobilenet_v1_1.0_224", dtype="auto")
 pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
 ```
 
@@ -55,56 +37,34 @@ pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resol
 import torch
 import requests
 from PIL import Image
-from transformers import AutoModelForImageClassification, AutoImageProcessor
-
-image_processor = AutoImageProcessor.from_pretrained(
-    "google/mobilenet_v1_1.0_224",
-)
-model = AutoModelForImageClassification.from_pretrained(
-    "google/mobilenet_v1_1.0_224",
-)
+from transformers import AutoImageProcessor, AutoModelForImageClassification
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
+
+image_processor = AutoImageProcessor.from_pretrained("google/mobilenet_v1_1.0_224")
+model = AutoModelForImageClassification.from_pretrained("google/mobilenet_v1_1.0_224", dtype="auto")
+
 inputs = image_processor(image, return_tensors="pt")
 
 with torch.no_grad():
-  logits = model(**inputs).logits
-predicted_class_id = logits.argmax(dim=-1).item()
+    logits = model(**inputs).logits
 
-class_labels = model.config.id2label
-predicted_class_label = class_labels[predicted_class_id]
-print(f"The predicted class label is: {predicted_class_label}")
+predicted_label = logits.argmax(-1).item()
+print(model.config.id2label[predicted_label])
 ```
 
 </hfoption>
 </hfoptions>
 
-<!-- Quantization - Not applicable -->
-<!-- Attention Visualization - Not applicable for this model type -->
-
-## Notes
-
-- Checkpoint names follow the pattern `mobilenet_v1_{depth_multiplier}_{resolution}`, like `mobilenet_v1_1.0_224`. `1.0` is the depth multiplier and `224` is the image resolution.
-- While trained on images of a specific sizes, the model architecture works with images of different sizes (minimum 32x32). The [`MobileNetV1ImageProcessor`] handles the necessary preprocessing.
-- MobileNet is pretrained on [ImageNet-1k](https://huggingface.co/datasets/imagenet-1k), a dataset with 1000 classes. However, the model actually predicts 1001 classes. The additional class is an extra "background" class (index 0).
-- The original TensorFlow checkpoints determines the padding amount at inference because it depends on the input image size. To use the native PyTorch padding behavior, set `tf_padding=False` in [`MobileNetV1Config`].
-
-    ```python
-    from transformers import MobileNetV1Config
-
-    config = MobileNetV1Config.from_pretrained("google/mobilenet_v1_1.0_224", tf_padding=True)
-    ```
-
-- The Transformers implementation does not support the following features.
-  - Uses global average pooling instead of the optional 7x7 average pooling with stride 2. For larger inputs, this gives a pooled output that is larger than a 1x1 pixel.
-  - Does not support other `output_stride` values (fixed at 32). For smaller `output_strides`, the original implementation uses dilated convolution to prevent spatial resolution from being reduced further. (which would require dilated convolutions).
-  - `output_hidden_states=True` returns *all* intermediate hidden states. It is not possible to extract the output from specific layers for other downstream purposes.
-  - Does not include the quantized models from the original checkpoints because they include "FakeQuantization" operations to unquantize the weights.
-
 ## MobileNetV1Config
 
 [[autodoc]] MobileNetV1Config
+
+## MobileNetV1FeatureExtractor
+
+[[autodoc]] MobileNetV1FeatureExtractor
+    - preprocess
 
 ## MobileNetV1ImageProcessor
 

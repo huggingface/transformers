@@ -13,47 +13,49 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-10-30 and added to Hugging Face Transformers on 2023-06-20.*
+*This model was released on 2021-10-30 and added to Hugging Face Transformers on 2023-06-20 and contributed by [cwkeam](https://huggingface.co/cwkeam).*
+
+> [!WARNING]
+> This model is in maintenance mode only, so we won’t accept any new PRs changing its code. If you run into any issues running this model, please reinstall the last version that supported this model: v4.30.0. You can do so by running the following command: pip install -U transformers==4.30.0.
 
 # M-CTC-T
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[M-CTC-T](https://huggingface.co/papers/2111.00161) is a 1B-param transformer encoder with a CTC head for 8065 character labels and a language identification head for 60 languages. Trained on Common Voice and VoxPopuli datasets, it uses pseudo-labeling to enhance performance across multiple languages, including low-resource ones. The model processes Mel filterbank features from 16Khz audio signals and demonstrates improved performance and transferability to LibriSpeech.
 
-<Tip warning={true}>
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-This model is in maintenance mode only, so we won't accept any new PRs changing its code.
+```py
+import torch
+from transformers import pipeline
 
-If you run into any issues running this model, please reinstall the last version that supported this model: v4.30.0.
-You can do so by running the following command: `pip install -U transformers==4.30.0`.
+pipeline = pipeline(task="automatic-speech-recognition", model="speechbrain/m-ctc-t-large", dtype="auto")
+pipeline("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac")
+```
 
-</Tip>
+</hfoption>
+<hfoption id="AutoModel">
 
-## Overview
+```py
+import torch
+from datasets import load_dataset
+from transformers import AutoProcessor, AutoModelForCTC
 
-The M-CTC-T model was proposed in [Pseudo-Labeling For Massively Multilingual Speech Recognition](https://huggingface.co/papers/2111.00161) by Loren Lugosch, Tatiana Likhomanenko, Gabriel Synnaeve, and Ronan Collobert. The model is a 1B-param transformer encoder, with a CTC head over 8065 character labels and a language identification head over 60 language ID labels. It is trained on Common Voice (version 6.1, December 2020 release) and VoxPopuli. After training on Common Voice and VoxPopuli, the model is trained on Common Voice only. The labels are unnormalized character-level transcripts (punctuation and capitalization are not removed). The model takes as input Mel filterbank features from a 16Khz audio signal.
+dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation").sort("id")
+sampling_rate = dataset.features["audio"].sampling_rate
 
-The abstract from the paper is the following:
+processor = AutoProcessor.from_pretrained("speechbrain/m-ctc-t-large")
+model = AutoModelForCTC.from_pretrained("speechbrain/m-ctc-t-large", dtype="auto")
 
-*Semi-supervised learning through pseudo-labeling has become a staple of state-of-the-art monolingual
-speech recognition systems. In this work, we extend pseudo-labeling to massively multilingual speech
-recognition with 60 languages. We propose a simple pseudo-labeling recipe that works well even
-with low-resource languages: train a supervised multilingual model, fine-tune it with semi-supervised
-learning on a target language, generate pseudo-labels for that language, and train a final model using
-pseudo-labels for all languages, either from scratch or by fine-tuning. Experiments on the labeled
-Common Voice and unlabeled VoxPopuli datasets show that our recipe can yield a model with better
-performance for many languages that also transfers well to LibriSpeech.*
+inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
+with torch.no_grad():
+    logits = model(**inputs).logits
+predicted_ids = torch.argmax(logits, dim=-1)
+print(f"Transcription: {processor.batch_decode(predicted_ids)[0]}")
+```
 
-This model was contributed by [cwkeam](https://huggingface.co/cwkeam). The original code can be found [here](https://github.com/flashlight/wav2letter/tree/main/recipes/mling_pl).
-
-## Usage tips
-
-The PyTorch version of this model is only available in torch 1.9 and higher.
-
-## Resources
-
-- [Automatic speech recognition task guide](../tasks/asr)
+</hfoption>
+</hfoptions>
 
 ## MCTCTConfig
 
@@ -82,3 +84,4 @@ The PyTorch version of this model is only available in torch 1.9 and higher.
 
 [[autodoc]] MCTCTForCTC
     - forward
+

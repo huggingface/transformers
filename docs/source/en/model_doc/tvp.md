@@ -9,21 +9,23 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
-*This model was released on 2023-03-09 and added to Hugging Face Transformers on 2023-11-22.*
+*This model was released on 2023-03-09 and added to Hugging Face Transformers on 2023-11-22 and contributed by [Jiqing](https://huggingface.co/Jiqing).*
+
+
+
+```py
+from transformers import AutoModel, AutoImageProcessor
+
+model = AutoModel.from_pretrained("Intel/tvp-base")
+imageprocessor = AutoImageProcessor.from_pretrained("Intel/tvp-base")
+
+inputs = imageprocessor("Input data", return_tensors="pt")
+outputs = model(**inputs)
+```
 
 # TVP
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
-
-## Overview
-
-The text-visual prompting (TVP) framework was proposed in the paper [Text-Visual Prompting for Efficient 2D Temporal Video Grounding](https://huggingface.co/papers/2303.04995) by Yimeng Zhang, Xin Chen, Jinghan Jia, Sijia Liu, Ke Ding.
-
-The abstract from the paper is the following:
-
-*In this paper, we study the problem of temporal video grounding (TVG), which aims to predict the starting/ending time points of moments described by a text sentence within a long untrimmed video. Benefiting from fine-grained 3D visual features, the TVG techniques have achieved remarkable progress in recent years. However, the high complexity of 3D convolutional neural networks (CNNs) makes extracting dense 3D visual features time-consuming, which calls for intensive memory and computing resources. Towards efficient TVG, we propose a novel text-visual prompting (TVP) framework, which incorporates optimized perturbation patterns (that we call ‘prompts’) into both visual inputs and textual features of a TVG model. In sharp contrast to 3D CNNs, we show that TVP allows us to effectively co-train vision encoder and language encoder in a 2D TVG model and improves the performance of cross-modal feature fusion using only low-complexity sparse 2D visual features. Further, we propose a Temporal-Distance IoU (TDIoU) loss for efficient learning of TVG. Experiments on two benchmark datasets, Charades-STA and ActivityNet Captions datasets, empirically show that the proposed TVP significantly boosts the performance of 2D TVG (e.g., 9.79% improvement on Charades-STA and 30.77% improvement on ActivityNet Captions) and achieves 5× inference acceleration over TVG using 3D visual features.*
+[Text-Visual Prompting for Efficient 2D Temporal Video Grounding](https://huggingface.co/papers/2303.04995) addresses temporal video grounding (TVG) by proposing a text-visual prompting (TVP) framework. TVP integrates optimized perturbation patterns, or 'prompts', into both visual and textual inputs of a TVG model, enabling efficient co-training of vision and language encoders using low-complexity sparse 2D visual features instead of high-complexity 3D CNNs. The framework also introduces a Temporal-Distance IoU (TDIoU) loss for efficient learning. Experiments on Charades-STA and ActivityNet Captions datasets demonstrate significant performance improvements and 5× inference acceleration compared to models using 3D visual features.
 
 This research addresses temporal video grounding (TVG), which is the process of pinpointing the start and end times of specific events in a long video, as described by a text sentence. Text-visual prompting (TVP), is proposed to enhance TVG. TVP involves integrating specially designed patterns, known as 'prompts', into both the visual (image-based) and textual (word-based) input components of a TVG model. These prompts provide additional spatial-temporal context, improving the model's ability to accurately determine event timings in the video. The approach employs 2D visual inputs in place of 3D ones. Although 3D inputs offer more spatial-temporal detail, they are also more time-consuming to process. The use of 2D inputs with the prompting method aims to provide similar levels of context and accuracy more efficiently.
 
@@ -47,7 +49,6 @@ The [`TvpProcessor`] wraps [`BertTokenizer`] and [`TvpImageProcessor`] into a si
 encode the text and prepare the images respectively.
 
 The following example shows how to run temporal video grounding using [`TvpProcessor`] and [`TvpForVideoGrounding`].
-
 ```python
 import av
 import cv2
@@ -55,7 +56,6 @@ import numpy as np
 import torch
 from huggingface_hub import hf_hub_download
 from transformers import AutoProcessor, TvpForVideoGrounding
-
 
 def pyav_decode(container, sampling_rate, num_frames, clip_idx, num_clips, target_fps):
     '''
@@ -96,7 +96,6 @@ def pyav_decode(container, sampling_rate, num_frames, clip_idx, num_clips, targe
     frames = [frames[pts] for pts in sorted(frames)]
     return frames, fps
 
-
 def decode(container, sampling_rate, num_frames, clip_idx, num_clips, target_fps):
     '''
     Decode the video and perform temporal sampling.
@@ -121,7 +120,6 @@ def decode(container, sampling_rate, num_frames, clip_idx, num_clips, target_fps
     frames = np.array([frames[idx].to_rgb().to_ndarray() for idx in index])
     frames = frames.transpose(0, 3, 1, 2)
     return frames
-
 
 file = hf_hub_download(repo_id="Intel/tvp_demo", filename="AK2KG.mp4", repo_type="dataset")
 model = TvpForVideoGrounding.from_pretrained("Intel/tvp-base")
@@ -164,7 +162,7 @@ Tips:
 
 - This implementation of TVP uses [`BertTokenizer`] to generate text embeddings and Resnet-50 model to compute visual embeddings.
 - Checkpoints for pre-trained [tvp-base](https://huggingface.co/Intel/tvp-base) is released.
-- Please refer to [Table 2](https://huggingface.co/papers/2303.04995) for TVP's performance on Temporal Video Grounding task.
+- Please refer to [Table 2](https://huggingface.co/papers/2303.04995.pdf) for TVP's performance on Temporal Video Grounding task.
 
 ## TvpConfig
 
@@ -194,3 +192,4 @@ Tips:
 
 [[autodoc]] TvpForVideoGrounding
     - forward
+

@@ -13,24 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-03-11 and added to Hugging Face Transformers on 2021-06-30.*
-
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
+*This model was released on 2021-03-11 and added to Hugging Face Transformers on 2021-06-30 and contributed by [nielsr](https://huggingface.co/nielsr).*
 
 # CANINE
 
-[CANINE](https://huggingface.co/papers/2103.06874) is a tokenization-free Transformer. It skips the usual step of splitting text into subwords or wordpieces and processes text character by character. That means it works directly with raw Unicode, making it especially useful for languages with complex or inconsistent tokenization rules and even noisy inputs like typos. Since working with characters means handling longer sequences, CANINE uses a smart trick. The model compresses the input early on (called downsampling) so the transformer doesn't have to process every character individually. This keeps things fast and efficient.
-
-You can find all the original CANINE checkpoints under the [Google](https://huggingface.co/google?search_models=canine) organization.
-
-> [!TIP]
-> Click on the CANINE models in the right sidebar for more examples of how to apply CANINE to different language tasks.
-
-The example below demonstrates how to generate embeddings with [`Pipeline`], [`AutoModel`], and from the command line.
+[CANINE: Pre-training an Efficient Tokenization-Free Encoder for Language Representation](https://huggingface.co/papers/2103.06874) presents CANINE, a neural encoder that processes text directly at the Unicode character level without explicit tokenization or vocabulary. It addresses the challenges of varying language suitability and vocabulary limitations by using a downsampling strategy to manage longer sequences and a deep Transformer stack to capture context. CANINE achieves a 2.8 F1 score improvement on TyDi QA compared to a similar mBERT model, despite having 28% fewer parameters.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -39,13 +26,8 @@ The example below demonstrates how to generate embeddings with [`Pipeline`], [`A
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(
-    task="feature-extraction",
-    model="google/canine-c",
-    device=0,
-)
-
-pipeline("Plant create energy through a process known as photosynthesis.")
+pipeline = pipeline(task="text-classification", model="google/canine-s", dtype="auto")
+pipeline("Plants are amazing because they can create energy from the sun.")
 ```
 
 </hfoption>
@@ -53,41 +35,20 @@ pipeline("Plant create energy through a process known as photosynthesis.")
 
 ```py
 import torch
-from transformers import AutoModel
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-model = AutoModel.from_pretrained("google/canine-c")
+model = AutoModelForSequenceClassification.from_pretrained("google/canine-s", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("google/canine-s")
 
-text = "Plant create energy through a process known as photosynthesis."
-input_ids = torch.tensor([[ord(char) for char in text]])
-
-outputs = model(input_ids)
-pooled_output = outputs.pooler_output
-sequence_output = outputs.last_hidden_state
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Plant create energy through a process known as photosynthesis." | transformers run --task feature-extraction --model google/canine-c --device 0
+inputs = tokenizer("Plants are amazing because they can create energy from the sun.", return_tensors="pt")
+outputs = model(**inputs)
+predicted_class_id = outputs.logits.argmax(dim=-1).item()
+label = model.config.id2label[predicted_class_id]
+print(f"Predicted label: {label}")
 ```
 
 </hfoption>
 </hfoptions>
-
-## Notes
-
-- CANINE skips tokenization entirely — it works directly on raw characters, not subwords. You can use it with or without a tokenizer. For batched inference and training, it is recommended to use the tokenizer to pad and truncate all sequences to the same length.
-
-    ```py
-    from transformers import AutoTokenizer, AutoModel
-
-    tokenizer = AutoTokenizer("google/canine-c")
-    inputs = ["Life is like a box of chocolates.", "You never know what you gonna get."]
-    encoding = tokenizer(inputs, padding="longest", truncation=True, return_tensors="pt")
-    ```
-
-- CANINE is primarily designed to be fine-tuned on a downstream task. The pretrained model can be used for either masked language modeling or next sentence prediction.
 
 ## CanineConfig
 
@@ -128,3 +89,4 @@ echo -e "Plant create energy through a process known as photosynthesis." | trans
 
 [[autodoc]] CanineForQuestionAnswering
     - forward
+

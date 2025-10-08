@@ -13,28 +13,18 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2020-01-22 and added to Hugging Face Transformers on 2020-11-16.*
+*This model was released on 2020-01-22 and added to Hugging Face Transformers on 2020-11-16 and contributed by [valhalla](https://huggingface.co/valhalla).*
 
 <div style="float: right;">
-  <div class="flex flex-wrap space-x-1">
-    <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-    <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
-  </div>
+    <div class="flex flex-wrap space-x-1">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
 </div>
 
-# mBART
+# MBart and MBart-50
 
-[mBART](https://huggingface.co/papers/2001.08210) is a multilingual machine translation model that pretrains the entire translation model (encoder-decoder) unlike previous methods that only focused on parts of the model. The model is trained on a denoising objective which reconstructs the corrupted text. This allows mBART to handle the source language and the target text to translate to.
-
-[mBART-50](https://huggingface.co/paper/2008.00401) is pretrained on an additional 25 languages.
-
-You can find all the original mBART checkpoints under the [AI at Meta](https://huggingface.co/facebook?search_models=mbart) organization.
-
-> [!TIP]
-> Click on the mBART models in the right sidebar for more examples of applying mBART to different language tasks.
-
-The example below demonstrates how to translate text with [`Pipeline`] or the [`AutoModel`] class.
+[MBart](https://huggingface.co/papers/2001.08210) is a multilingual sequence-to-sequence denoising auto-encoder pretrained on large-scale monolingual corpora across multiple languages using the BART objective. It is notable for being one of the first models to pretrain a complete sequence-to-sequence model by denoising full texts in various languages. MBart is designed for translation tasks and requires special language ID tokens in both source and target texts. The model is trained using a supervised approach and generates translations by setting the `decoder_start_token_id` to the target language ID.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -43,15 +33,8 @@ The example below demonstrates how to translate text with [`Pipeline`] or the [`
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(
-    task="translation",
-    model="facebook/mbart-large-50-many-to-many-mmt",
-    device=0,
-    dtype=torch.float16,
-    src_lang="en_XX",
-    tgt_lang="fr_XX",
-)
-print(pipeline("UN Chief Says There Is No Military Solution in Syria"))
+pipeline = pipeline(task="translation_en_to_fr", model="facebook/mbart-large-50-many-to-many-mmt", dtype="auto")
+pipeline("Plants create energy through a process known as photosynthesis.")
 ```
 
 </hfoption>
@@ -61,57 +44,16 @@ print(pipeline("UN Chief Says There Is No Military Solution in Syria"))
 import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-article_en = "UN Chief Says There Is No Military Solution in Syria"
-
-model = AutoModelForSeq2SeqLM.from_pretrained("facebook/mbart-large-50-many-to-many-mmt", dtype=torch.bfloat16, attn_implementation="sdpa", device_map="auto")
+model = AutoModelForSeq2SeqLM.from_pretrained("facebook/mbart-large-50-many-to-many-mmt", dtype="auto")
 tokenizer = AutoTokenizer.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
 
-tokenizer.src_lang = "en_XX"
-encoded_hi = tokenizer(article_en, return_tensors="pt").to(model.device)
-generated_tokens = model.generate(**encoded_hi, forced_bos_token_id=tokenizer.lang_code_to_id["fr_XX"], cache_implementation="static")
-print(tokenizer.batch_decode(generated_tokens, skip_special_tokens=True))
+inputs = tokenizer("Plants create energy through a process known as photosynthesis.", return_tensors="pt")
+outputs = model.generate(**inputs, forced_bos_token_id=tokenizer.lang_code_to_id["fr_XX"])
+print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
 ```
 
 </hfoption>
 </hfoptions>
-
-## Notes
-
-- You can check the full list of language codes via `tokenizer.lang_code_to_id.keys()`.
-- mBART requires a special language id token in the source and target text during training. The source text format is `X [eos, src_lang_code]` where `X` is the source text. The target text format is `[tgt_lang_code] X [eos]`. The `bos` token is never used. The [`~PreTrainedTokenizerBase._call_`] encodes the source text format passed as the first argument or with the `text` keyword. The target text format is passed with the `text_label` keyword.
-- Set the `decoder_start_token_id` to the target language id for mBART.
-
-    ```py
-    import torch
-    from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
-
-    model = AutoModelForSeq2SeqLM.from_pretrained("facebook/mbart-large-en-ro", dtype=torch.bfloat16, attn_implementation="sdpa", device_map="auto")
-    tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-en-ro", src_lang="en_XX")
-
-    article = "UN Chief Says There Is No Military Solution in Syria"
-    inputs = tokenizer(article, return_tensors="pt")
-
-    translated_tokens = model.generate(**inputs, decoder_start_token_id=tokenizer.lang_code_to_id["ro_RO"])
-    tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
-    ```
-
-- mBART-50 has a different text format. The language id token is used as the prefix for the source and target text. The text format is `[lang_code] X [eos]` where `lang_code` is the source language id for the source text and target language id for the target text. `X` is the source or target text respectively.
-- Set the `eos_token_id` as the `decoder_start_token_id` for mBART-50. The target language id is used as the first generated token by passing `forced_bos_token_id` to [`~GenerationMixin.generate`].
-
-    ```py
-    import torch
-    from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
-
-    model = AutoModelForSeq2SeqLM.from_pretrained("facebook/mbart-large-50-many-to-many-mmt", dtype=torch.bfloat16, attn_implementation="sdpa", device_map="auto")
-    tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
-
-    article_ar = "الأمين العام للأمم المتحدة يقول إنه لا يوجد حل عسكري في سوريا."
-    tokenizer.src_lang = "ar_AR"
-
-    encoded_ar = tokenizer(article_ar, return_tensors="pt")
-    generated_tokens = model.generate(**encoded_ar, forced_bos_token_id=tokenizer.lang_code_to_id["en_XX"])
-    tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
-    ```
 
 ## MBartConfig
 
@@ -154,3 +96,4 @@ print(tokenizer.batch_decode(generated_tokens, skip_special_tokens=True))
 
 [[autodoc]] MBartForCausalLM
     - forward
+
