@@ -3724,6 +3724,7 @@ class ModelTesterMixin:
             config.use_sliding_window = True
             config_dict = config.to_diff_dict()
             config_dict.pop("layer_types", None)
+            config_dict.pop("rope_parameters", None)
             new_config = config.__class__(**config_dict)
             # We need to set eager as otherwise `output_attentions` is not supported
             model = model_class._from_config(new_config, attn_implementation="eager").to(torch_device)
@@ -3741,6 +3742,7 @@ class ModelTesterMixin:
             config.use_sliding_window = False
             config_dict = config.to_diff_dict()
             config_dict.pop("layer_types", None)
+            config_dict.pop("rope_parameters", None)
             new_config = config.__class__(**config_dict)
             # We need to set eager as otherwise `output_attentions` is not supported
             model = model_class._from_config(new_config, attn_implementation="eager").to(torch_device)
