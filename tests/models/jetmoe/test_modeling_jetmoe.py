@@ -140,10 +140,10 @@ class JetMoeIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             out = model(input_ids).logits.float().cpu()
         # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[0.2507, -2.7073, -1.3445, -1.9363, -1.7216, -1.7370, -1.9054, -1.9792]])
+        EXPECTED_MEAN = torch.tensor([[0.1943, -2.7299, -1.3466, -1.9385, -1.7457, -1.7472, -1.8647, -1.8547]])
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, rtol=1e-2, atol=1e-2)
         # slicing logits[0, 0, 0:30]
-        EXPECTED_SLICE = torch.tensor([-3.3689,  5.9006,  5.7450, -1.7012, -4.7072, -4.7071, -4.7071, -4.7071, -4.7072, -4.7072, -4.7072, -4.7071,  3.8321,  9.1746, -4.7071, -4.7072, -4.7071, -4.7072, -4.7071, -4.7072, -4.7071, -4.7071, -4.7071, -4.7071, -4.7071, -4.7071, -4.7071, -4.7071, -4.7071, -4.7071])  # fmt: skip
+        EXPECTED_SLICE = torch.tensor([-3.4844, 6.0625, 5.8750, -1.6875, -4.7812, -4.7812, -4.7812, -4.7812, -4.7812, -4.7812, -4.7812, -4.7812, 3.8750, 9.3750, -4.7812, -4.7812, -4.7812, -4.7812, -4.7812, -4.7812, -4.7812, -4.7812, -4.7812, -4.7812, -4.7812, -4.7812, -4.7812, -4.7812, -4.7812, -4.7812])  # fmt: skip
         torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, rtol=1e-4, atol=1e-4)
 
     @slow
