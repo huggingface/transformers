@@ -152,7 +152,7 @@ class BlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (BlipVisionModel,) if is_torch_available() else ()
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
 
     def setUp(self):
@@ -313,7 +313,6 @@ class BlipTextModelTester:
 class BlipTextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (BlipTextModel,) if is_torch_available() else ()
     fx_compatible = False
-    test_pruning = False
 
     def setUp(self):
         self.model_tester = BlipTextModelTester(self)
@@ -422,7 +421,7 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = True
     test_attention_outputs = False
 
@@ -766,7 +765,7 @@ class BlipVQAModelTest(ModelTesterMixin, unittest.TestCase):
     # Doesn't run generation tests due to custom generation logic -- won't fix
     all_generative_model_classes = ()
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = True
     test_attention_outputs = False
     test_torchscript = False
@@ -844,7 +843,7 @@ class BlipVQAModelTest(ModelTesterMixin, unittest.TestCase):
 class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (BlipForImageTextRetrieval,) if is_torch_available() else ()
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = True
     test_attention_outputs = False
     test_torchscript = False
@@ -1045,7 +1044,7 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
     # Doesn't run generation tests due to custom generation logic -- wont fix
     all_generative_model_classes = ()
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = True
     test_attention_outputs = False
     test_torchscript = False

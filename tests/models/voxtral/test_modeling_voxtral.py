@@ -139,7 +139,7 @@ class VoxtralForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
         if is_torch_available()
         else {}
     )
-    test_pruning = False
+
     _is_composite = True
 
     def setUp(self):

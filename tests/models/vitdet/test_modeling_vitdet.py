@@ -165,7 +165,7 @@ class VitDetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     pipeline_model_mapping = {"feature-extraction": VitDetModel} if is_torch_available() else {}
 
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
     test_torch_exportable = True
 
