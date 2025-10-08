@@ -168,16 +168,16 @@ class TestMistralCommonTokenizer(unittest.TestCase):
 
     def test_spm_vs_tekken_piece_to_id(self):
         spm_tokenizer = self._get_spm_tokenizer()
-        self.assertEqual(spm_tokenizer._piece_to_id("<s>"), 1)
-        self.assertEqual(spm_tokenizer._piece_to_id("h"), 1104)
+        self.assertEqual(spm_tokenizer._piece_to_id("<s>", False), 1)
+        self.assertEqual(spm_tokenizer._piece_to_id("h", False), 1104)
 
-        self.assertEqual(self.tokenizer._piece_to_id("<s>"), 1)
+        self.assertEqual(self.tokenizer._piece_to_id("<s>", False), 1)
         self.assertEqual(self._ref_piece_to_id("<s>"), 1)
-        self.assertEqual(self.tokenizer._piece_to_id("\u0000"), 1000)
+        self.assertEqual(self.tokenizer._piece_to_id("\u0000", False), 1000)
         self.assertEqual(self._ref_piece_to_id("\u0000"), 1000)
-        self.assertEqual(self.tokenizer._piece_to_id(" String"), 3000)
+        self.assertEqual(self.tokenizer._piece_to_id(" String", False), 3000)
         self.assertEqual(self._ref_piece_to_id(" String"), 3000)
-        self.assertEqual(self.tokenizer._piece_to_id("后汉书"), 131071)
+        self.assertEqual(self.tokenizer._piece_to_id("后汉书", False), 131071)
         self.assertEqual(self._ref_piece_to_id("后汉书"), 131071)
 
     def test_vocab_size(self):

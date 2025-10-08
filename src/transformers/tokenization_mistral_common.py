@@ -356,7 +356,7 @@ class MistralCommonTokenizer(PushToHubMixin):
         if self._cache_get_vocab is None:
             # We reverse the order to make sure that the first token is the one to be returned when there are multiple tokens with the same string representation.
             vocab = self.tokenizer.instruct_tokenizer.tokenizer.vocab()
-            self._cache_get_vocab = {token: self._piece_to_id(token) for token in vocab}
+            self._cache_get_vocab = {token: self._piece_to_id(token, False) for token in vocab}
             # Order the dict.
             self._cache_get_vocab = dict(
                 sorted(((k, v) for k, v in self._cache_get_vocab.items()), key=lambda x: x[1])
@@ -567,7 +567,7 @@ class MistralCommonTokenizer(PushToHubMixin):
             return tokens[0]
         return tokens
 
-    def _tekken_piece_to_id(self, piece: str) -> int:
+    def _tekken_piece_to_id(self, piece: str, warn: bool) -> int:
         tekken_tokenizer = self.tokenizer.instruct_tokenizer.tokenizer
         assert isinstance(tekken_tokenizer, Tekkenizer), type(tekken_tokenizer)
 
@@ -579,13 +579,15 @@ class MistralCommonTokenizer(PushToHubMixin):
             piece_str = piece_bytes.decode("utf-8")
             if piece_str in tekken_tokenizer._special_tokens_reverse_vocab:
                 return tekken_tokenizer._special_tokens_reverse_vocab[piece_str]
+            if warn:
+                logger.warning("Failed to convert token %s to id, replacing with <unk>", piece_bytes)
             return tekken_tokenizer.unk_id
 
-    def _piece_to_id(self, piece: str) -> int:
+    def _piece_to_id(self, piece: str, warn: bool) -> int:
         if self._tokenizer_type == MistralTokenizerType.spm:
             return self.tokenizer.instruct_tokenizer.tokenizer._model.piece_to_id(piece)
         elif self._tokenizer_type == MistralTokenizerType.tekken:
-            return self._tekken_piece_to_id(piece)
+            return self._tekken_piece_to_id(piece, warn)
         else:
             raise ValueError(f"Unknown tokenizer type: {self._tokenizer_type}")
 
@@ -609,7 +611,7 @@ class MistralCommonTokenizer(PushToHubMixin):
 
         ids: list[int] = []
         for token in tokens:
-            ids.append(self._piece_to_id(token))
+            ids.append(self._piece_to_id(token, True))
 
         if one_token:
             return ids[0]
