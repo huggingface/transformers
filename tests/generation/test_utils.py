@@ -1056,7 +1056,7 @@ class GenerationTesterMixin:
                 batch_size, seq_length = inputs["input_ids"].shape[:2]
 
             # Check the format
-            self._check_past_key_values_for_generate(batch_size, cache, seq_length, config)
+            self._check_past_key_values_for_generate(batch_size, cache, seq_length, decoder_config)
 
     @pytest.mark.generate
     def test_generate_from_random_inputs_embeds(self):
@@ -2411,18 +2411,21 @@ class GenerationTesterMixin:
 
         # (batch, kv heads, seq_length, head_dim)
         num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
-        # hidden_size = getattr(decoder_config, "d_model", decoder_config.hidden_size)
-        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        hidden_size = getattr(config, "d_model", config.hidden_size)
+        head_dim = getattr(config, "head_dim", hidden_size // config.num_attention_heads)
 
         # For cross attention cache, the seq_length depends on the model, so we remove that dim
         expected_shape = (
             (batch_size, num_heads, seq_length, head_dim)
             if seq_length is not None
-            else (batch_size, num_heads, 1, head_dim)
+            else (batch_size, num_heads, head_dim)
         )
 
         # Check the size is coherent
-        self.assertEqual(config.num_hidden_layers, len(past_key_values))
+        num_hidden_layers = config.num_hidden_layers
+        if getattr(config, "num_kv_shared_layers", None) is not None:
+            num_hidden_layers += config.num_kv_shared_layers
+        self.assertEqual(num_hidden_layers, len(past_key_values))
 
         # Check each layer has the correct shape
         for layer in past_key_values.layers:

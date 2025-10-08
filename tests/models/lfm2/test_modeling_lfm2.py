@@ -76,7 +76,7 @@ class Lfm2ModelTest(CausalLMModelTest, unittest.TestCase):
                 self.assertEqual(past_key_values.key_cache[i].shape, attention_shape)
                 self.assertEqual(past_key_values.value_cache[i].shape, attention_shape)
             else:
-                self.assertEqual(past_key_values.conv_cache[i], conv_shape)
+                self.assertEqual(past_key_values.conv_cache[i].shape, conv_shape)
 
     def _check_caches_are_equal(self, cache1: Lfm2HybridConvCache, cache2: Lfm2HybridConvCache):
         if not isinstance(cache1, Lfm2HybridConvCache) or not isinstance(cache2, Lfm2HybridConvCache):
