@@ -19,6 +19,7 @@
 # limitations under the License.
 
 import math
+from collections.abc import Iterable
 
 from ...configuration_utils import PretrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
@@ -92,7 +93,7 @@ class FastVlmConfig(PretrainedConfig):
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
         self.image_seq_length = image_seq_length
-        if math.isqrt(image_seq_length).pow(2) != image_seq_length:
+        if math.isqrt(image_seq_length) ** 2 != image_seq_length:
             raise ValueError(f"Inavalid image_seq_length: {image_seq_length}. It needs to be a perfect square.")
 
         if vision_feature_select_strategy != "full":
@@ -101,8 +102,11 @@ class FastVlmConfig(PretrainedConfig):
                 f"Got: {vision_feature_select_strategy}"
             )
 
-        if (isinstance(vision_feature_layer, int) and vision_feature_layer >= 0) or any(
-            layer >= 0 for layer in vision_feature_layer
+        if any(
+            layer >= 0
+            for layer in (
+                vision_feature_layer if isinstance(vision_feature_layer, Iterable) else [vision_feature_layer]
+            )
         ):
             raise ValueError(f"Only negative layer values are supported. Got {vision_feature_layer}")
 
