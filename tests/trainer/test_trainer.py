@@ -1944,6 +1944,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
     @require_liger_kernel
     @require_torch_accelerator
+    @require_torch_non_multi_accelerator  # Don't work with DP
     def test_use_liger_kernel_trainer(self):
         # Ensure any monkey patching is cleaned up for subsequent tests
         with patch("transformers.models.llama.modeling_llama"):
@@ -1968,6 +1969,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
     @require_liger_kernel
     @require_torch_accelerator
+    @require_torch_non_multi_accelerator  # don't work with DP
     def test_use_liger_kernel_custom_config_trainer(self):
         # Ensure any monkey patching is cleaned up for subsequent tests
         with patch("transformers.models.llama.modeling_llama"):
