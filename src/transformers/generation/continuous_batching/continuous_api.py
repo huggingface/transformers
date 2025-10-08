@@ -245,8 +245,8 @@ class ContinuousBatchProcessor:
 
     def return_attention_mask(self) -> bool:
         return self.config._attn_implementation in [
-            "eager",
-            "sdpa",
+            "paged|eager",
+            "paged|sdpa",
         ]  # we set `is_causal` to True in paged call
 
     @traced
