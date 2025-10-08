@@ -20,7 +20,6 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_cvt import *
     from .modeling_cvt import *
-    from .modeling_tf_cvt import *
 else:
     import sys
 

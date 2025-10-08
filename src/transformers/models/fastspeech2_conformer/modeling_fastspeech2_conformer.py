@@ -21,6 +21,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
@@ -472,24 +473,37 @@ class FastSpeech2ConformerAttention(nn.Module):
 
 
 class FastSpeech2ConformerConvolutionModule(nn.Module):
-    def __init__(self, config: FastSpeech2ConformerConfig, module_config):
+    def __init__(self, config: FastSpeech2ConformerConfig, module_config=None):
+        """
+        Args:
+            config (FastSpeech2ConformerConfig): Configuration for the model.
+            module_config (dict): Configuration for the module (e.g., encoder or decoder).
+        """
         super().__init__()
-        # kernel_size should be an odd number for 'SAME' padding
         channels = config.hidden_size
-        kernel_size = module_config["kernel_size"]
+        # kernel_size should be an odd number for 'SAME' padding
+        if module_config is None:
+            # e.g. using `ParakeetEncoderConfig` in src/transformers/models/parakeet/configuration_parakeet.py
+            kernel_size = config.conv_kernel_size
+            self.activation = ACT2FN[getattr(config, "hidden_act", "silu")]
+        else:
+            kernel_size = module_config["kernel_size"]
+            self.activation = ACT2FN[module_config.get("activation", "silu")]
+        self.padding = (kernel_size - 1) // 2
         self.pointwise_conv1 = nn.Conv1d(channels, 2 * channels, kernel_size=1, stride=1, padding=0, bias=True)
         self.depthwise_conv = nn.Conv1d(
-            channels, channels, kernel_size, stride=1, padding=(kernel_size - 1) // 2, groups=channels, bias=True
+            channels, channels, kernel_size, stride=1, padding=self.padding, groups=channels, bias=True
         )
         self.norm = nn.BatchNorm1d(channels)
         self.pointwise_conv2 = nn.Conv1d(channels, channels, kernel_size=1, stride=1, padding=0, bias=True)
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states, attention_mask=None):
         """
         Compute convolution module.
 
         Args:
             hidden_states (`torch.Tensor` of shape `(batch, time, channels)`): Input tensor.
+            attention_mask (`torch.Tensor` of shape `(batch, 1, time)`): Attention mask.
 
         Returns:
             `torch.Tensor`: Output tensor of shape `(batch, time, channels)`.
@@ -503,12 +517,15 @@ class FastSpeech2ConformerConvolutionModule(nn.Module):
         # (batch_size, channel, dim)
         hidden_states = nn.functional.glu(hidden_states, dim=1)
 
+        # Apply padding mask before convolution
+        if attention_mask is not None:
+            all_masked_rows = torch.all(~attention_mask, dim=-1)
+            hidden_states = hidden_states.masked_fill(all_masked_rows, 0.0)
+
         # 1D Depthwise Conv
         hidden_states = self.depthwise_conv(hidden_states)
         hidden_states = self.norm(hidden_states)
-
-        hidden_states = hidden_states * torch.sigmoid(hidden_states)
-
+        hidden_states = self.activation(hidden_states)
         hidden_states = self.pointwise_conv2(hidden_states)
 
         return hidden_states.transpose(1, 2)

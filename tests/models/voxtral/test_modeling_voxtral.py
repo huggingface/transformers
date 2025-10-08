@@ -59,7 +59,7 @@ class VoxtralModelTester:
             "use_mrope": False,
             "vocab_size": 99,
             "head_dim": 8,
-            "pad_token_id": 0,
+            "pad_token_id": 1,  # can't be the same as the audio token id
         },
         is_training=True,
         audio_config={
@@ -139,8 +139,7 @@ class VoxtralForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
         if is_torch_available()
         else {}
     )
-    test_pruning = False
-    test_head_masking = False
+
     _is_composite = True
 
     def setUp(self):

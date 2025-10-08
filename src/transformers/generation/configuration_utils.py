@@ -23,7 +23,7 @@ from dataclasses import dataclass, is_dataclass
 from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
 from .. import __version__
-from ..configuration_utils import PretrainedConfig
+from ..configuration_utils import PreTrainedConfig
 from ..utils import (
     GENERATION_CONFIG_NAME,
     ExplicitEnum,
@@ -151,8 +151,6 @@ class GenerationConfig(PushToHubMixin):
             our [cache documentation](https://huggingface.co/docs/transformers/en/kv_cache) for further information.
         cache_config (`dict`, *optional*, default to `None`):
             Arguments used in the key-value cache class can be passed in `cache_config`.
-        return_legacy_cache (`bool`, *optional*, default to `True`):
-            Whether to return the legacy or new format of the cache when `DynamicCache` is used by default.
 
         > Parameters for manipulation of the model output logits
 
@@ -349,7 +347,6 @@ class GenerationConfig(PushToHubMixin):
         self.cache_implementation = kwargs.pop("cache_implementation", None)
         self.cache_config = kwargs.pop("cache_config", None)
 
-        self.return_legacy_cache = kwargs.pop("return_legacy_cache", None)
         self.prefill_chunk_size = kwargs.pop("prefill_chunk_size", None)
 
         # Parameters for manipulation of the model output logits
@@ -634,7 +631,7 @@ class GenerationConfig(PushToHubMixin):
                 "You have set `use_cache` to `False`, but {cache_arg} is set to {cache_arg_value}. {cache_arg} will "
                 "have no effect."
             )
-            for arg_name in ("cache_implementation", "cache_config", "return_legacy_cache"):
+            for arg_name in ("cache_implementation", "cache_config"):
                 if getattr(self, arg_name) is not None:
                     minor_issues[arg_name] = no_cache_warning.format(
                         cache_arg=arg_name, cache_arg_value=getattr(self, arg_name)
@@ -796,9 +793,6 @@ class GenerationConfig(PushToHubMixin):
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force to (re-)download the configuration files and override the cached versions if
                 they exist.
-            resume_download:
-                Deprecated and ignored. All downloads are now resumed by default when possible.
-                Will be removed in v5 of Transformers.
             proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -862,7 +856,6 @@ class GenerationConfig(PushToHubMixin):
         ```"""
         config_file_name = config_file_name if config_file_name is not None else GENERATION_CONFIG_NAME
 
-        resume_download = kwargs.pop("resume_download", None)
         proxies = kwargs.pop("proxies", None)
         use_auth_token = kwargs.pop("use_auth_token", None)
         subfolder = kwargs.pop("subfolder", "")
@@ -906,7 +899,6 @@ class GenerationConfig(PushToHubMixin):
                     cache_dir=cache_dir,
                     force_download=force_download,
                     proxies=proxies,
-                    resume_download=resume_download,
                     local_files_only=local_files_only,
                     token=token,
                     user_agent=user_agent,
@@ -1106,13 +1098,13 @@ class GenerationConfig(PushToHubMixin):
             writer.write(self.to_json_string(use_diff=use_diff))
 
     @classmethod
-    def from_model_config(cls, model_config: PretrainedConfig) -> "GenerationConfig":
+    def from_model_config(cls, model_config: PreTrainedConfig) -> "GenerationConfig":
         """
-        Instantiates a [`GenerationConfig`] from a [`PretrainedConfig`]. This function is useful to convert legacy
-        [`PretrainedConfig`] objects, which may contain generation parameters, into a stand-alone [`GenerationConfig`].
+        Instantiates a [`GenerationConfig`] from a [`PreTrainedConfig`]. This function is useful to convert legacy
+        [`PreTrainedConfig`] objects, which may contain generation parameters, into a stand-alone [`GenerationConfig`].
 
         Args:
-            model_config (`PretrainedConfig`):
+            model_config (`PreTrainedConfig`):
                 The model config that will be used to instantiate the generation config.
 
         Returns:
@@ -1282,11 +1274,11 @@ class WatermarkingConfig(BaseWatermarkingConfig):
 
     def __init__(
         self,
-        greenlist_ratio: Optional[float] = 0.25,
-        bias: Optional[float] = 2.0,
-        hashing_key: Optional[int] = 15485863,
-        seeding_scheme: Optional[str] = "lefthash",
-        context_width: Optional[int] = 1,
+        greenlist_ratio: float = 0.25,
+        bias: float = 2.0,
+        hashing_key: int = 15485863,
+        seeding_scheme: str = "lefthash",
+        context_width: int = 1,
     ):
         self.greenlist_ratio = greenlist_ratio
         self.bias = bias

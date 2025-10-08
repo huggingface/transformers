@@ -18,19 +18,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 
 
-class Qwen3VLMoeTextConfig(PretrainedConfig):
+class Qwen3VLMoeTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3VLMoeTextModel`]. It is used to instantiate a
     Qwen3-VL-MOE model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of
     Qwen3-VL-30B-A3B-Instruct [Qwen/Qwen3-VL-30B-A3B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-30B-A3B-Instruct).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 151936):
@@ -80,6 +80,8 @@ class Qwen3VLMoeTextConfig(PretrainedConfig):
             Number of routed experts.
         norm_topk_prob (`bool`, *optional*, defaults to `True`):
             Whether to normalize the topk probabilities.
+        router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
+            The aux loss factor for the total loss.
         mlp_only_layers (`List[int]`, *optional*, defaults to `[]`):
             Indicate which layers use Qwen3VLMoeMLP rather than Qwen3VLMoeSparseMoeBlock
             The list contains layer index, from 0 to num_layers-1 if we have num_layers layers
@@ -178,6 +180,7 @@ class Qwen3VLMoeTextConfig(PretrainedConfig):
         num_experts_per_tok=4,
         num_experts=60,
         norm_topk_prob=True,
+        router_aux_loss_coef=0.001,
         mlp_only_layers=None,
         rope_scaling=None,
         head_dim=None,
@@ -213,12 +216,13 @@ class Qwen3VLMoeTextConfig(PretrainedConfig):
         self.num_experts_per_tok = num_experts_per_tok
         self.num_experts = num_experts
         self.norm_topk_prob = norm_topk_prob
+        self.router_aux_loss_coef = router_aux_loss_coef
         self.mlp_only_layers = [] if mlp_only_layers is None else mlp_only_layers
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 
-class Qwen3VLMoeVisionConfig(PretrainedConfig):
+class Qwen3VLMoeVisionConfig(PreTrainedConfig):
     model_type = "qwen3_vl_moe"
     base_config_key = "vision_config"
 
@@ -256,15 +260,15 @@ class Qwen3VLMoeVisionConfig(PretrainedConfig):
         self.deepstack_visual_indexes = deepstack_visual_indexes
 
 
-class Qwen3VLMoeConfig(PretrainedConfig):
+class Qwen3VLMoeConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3VLMoeModel`]. It is used to instantiate a
     Qwen3-VL-MOE model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of
     Qwen3-VL-30B-A3B-Instruct [Qwen/Qwen3-VL-30B-A3B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-30B-A3B-Instruct).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:

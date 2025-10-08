@@ -176,9 +176,8 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (SiglipVisionModel,) if is_torch_available() else ()
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_head_masking = False
     # MP works but offload doesn't work when the MultiheadAttention is offloaded
     # TODO: One potential solution would be to add to set preload_module_classes = ["SiglipMultiheadAttentionPoolingHead"]
     # in the dispatch_model function
@@ -238,10 +237,6 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="SiglipVisionModel does not support standalone training")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="Siglip uses the same initialization scheme as the Flax original implementation")
-    def test_initialization(self):
         pass
 
     @slow
@@ -347,8 +342,7 @@ class SiglipTextModelTester:
 class SiglipTextModelTest(SiglipModelTesterMixin, unittest.TestCase):
     all_model_classes = (SiglipTextModel,) if is_torch_available() else ()
     fx_compatible = False
-    test_pruning = False
-    test_head_masking = False
+
     model_split_percents = [0.5, 0.8, 0.9]
 
     # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.setUp with CLIP->Siglip
@@ -384,10 +378,6 @@ class SiglipTextModelTest(SiglipModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Siglip does not use inputs_embeds")
     # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_inputs_embeds
     def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="Siglip uses the same initialization scheme as the Flax original implementation")
-    def test_initialization(self):
         pass
 
     @slow
@@ -454,8 +444,7 @@ class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.Test
     all_model_classes = (SiglipModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": SiglipModel} if is_torch_available() else {}
     fx_compatible = False
-    test_head_masking = False
-    test_pruning = False
+
     test_resize_embeddings = False
     test_attention_outputs = False
     # MP works but offload doesn't work when the MultiheadAttention is offloaded
@@ -496,10 +485,6 @@ class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.Test
     @unittest.skip(reason="SiglipModel does not have input/output embeddings")
     # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest.test_model_get_set_embeddings
     def test_model_get_set_embeddings(self):
-        pass
-
-    @unittest.skip(reason="Siglip uses the same initialization scheme as the Flax original implementation")
-    def test_initialization(self):
         pass
 
     # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest._create_and_check_torchscript with CLIP->Siglip
@@ -623,8 +608,7 @@ class SiglipForImageClassificationModelTest(SiglipModelTesterMixin, PipelineTest
     all_model_classes = (SiglipForImageClassification,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-classification": SiglipForImageClassification} if is_torch_available() else {}
     fx_compatible = False
-    test_head_masking = False
-    test_pruning = False
+
     test_resize_embeddings = False
     test_attention_outputs = False
     # MP works but offload doesn't work when the MultiheadAttention is offloaded
@@ -656,10 +640,6 @@ class SiglipForImageClassificationModelTest(SiglipModelTesterMixin, PipelineTest
 
     @unittest.skip(reason="SiglipForImageClassification does not support gradient checkpointing yet")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="Siglip uses the same initialization scheme as the Flax original implementation")
-    def test_initialization(self):
         pass
 
 

@@ -39,8 +39,8 @@ class ArceeConfig(LlamaConfig):
     [arcee-ai/AFM-4.5B](https://huggingface.co/arcee-ai/AFM-4.5B)
     and were used to build the examples below.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 32000):

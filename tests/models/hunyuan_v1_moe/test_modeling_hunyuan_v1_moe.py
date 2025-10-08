@@ -18,7 +18,7 @@ import unittest
 import pytest
 from parameterized import parameterized
 
-from transformers import HunYuanMoEV1Config, is_torch_available
+from transformers import is_torch_available
 from transformers.testing_utils import (
     cleanup,
     require_torch,
@@ -40,26 +40,12 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 class HunYuanMoEV1ModelTester(CausalLMModelTester):
-    config_class = HunYuanMoEV1Config
     if is_torch_available():
         base_model_class = HunYuanMoEV1Model
-        causal_lm_class = HunYuanMoEV1ForCausalLM
-        sequence_class = HunYuanMoEV1ForSequenceClassification
 
 
 @require_torch
 class HunYuanMoEV1ModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            HunYuanMoEV1Model,
-            HunYuanMoEV1ForCausalLM,
-            HunYuanMoEV1ForSequenceClassification,
-        )
-        if is_torch_available()
-        else ()
-    )
-    test_headmasking = False
-    test_pruning = False
     test_all_params_have_gradient = False
     model_tester_class = HunYuanMoEV1ModelTester
     pipeline_model_mapping = (

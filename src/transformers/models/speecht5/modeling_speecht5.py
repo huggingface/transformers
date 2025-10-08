@@ -19,7 +19,6 @@ from typing import Optional, Union
 
 import numpy as np
 import torch
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, L1Loss
 
@@ -39,7 +38,6 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import EmbeddingAccessMixin, PreTrainedModel
 from ...utils import auto_docstring, logging
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_speecht5 import SpeechT5Config, SpeechT5HifiGanConfig
 
 
@@ -877,14 +875,12 @@ class SpeechT5Attention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
         position_bias: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         cache_position: Optional[torch.Tensor] = None,
@@ -967,15 +963,6 @@ class SpeechT5Attention(nn.Module):
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
-        if layer_head_mask is not None:
-            if layer_head_mask.size() != (self.num_heads,):
-                raise ValueError(
-                    f"Head mask for a single layer should be of size {(self.num_heads,)}, but is"
-                    f" {layer_head_mask.size()}"
-                )
-            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
         if output_attentions:
             # this operation is a bit awkward, but it's required to
             # make sure that attn_weights keeps its gradient.
@@ -1050,7 +1037,6 @@ class SpeechT5EncoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
         position_bias: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ):
@@ -1061,8 +1047,6 @@ class SpeechT5EncoderLayer(GradientCheckpointingLayer):
             attention_mask (`torch.FloatTensor`):
                 attention mask of size `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very
                 large negative values.
-            layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
-                `(config.encoder_attention_heads,)`.
             position_bias (`torch.FloatTensor`):
                 relative position embeddings of size `(seq_len, seq_len, hidden_size // encoder_attention_heads)`
             output_attentions (`bool`, *optional*):
@@ -1073,7 +1057,6 @@ class SpeechT5EncoderLayer(GradientCheckpointingLayer):
         hidden_states, attn_weights = self.attention(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            layer_head_mask=layer_head_mask,
             position_bias=position_bias,
             output_attentions=output_attentions,
         )
@@ -1118,15 +1101,12 @@ class SpeechT5DecoderLayer(GradientCheckpointingLayer):
         self.feed_forward = SpeechT5FeedForward(config, config.decoder_ffn_dim)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
-        cross_attn_layer_head_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = True,
@@ -1141,10 +1121,6 @@ class SpeechT5DecoderLayer(GradientCheckpointingLayer):
                 cross attention input to the layer of shape `(batch, seq_len, hidden_size)`
             encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
-                `(encoder_attention_heads,)`.
-            cross_attn_layer_head_mask (`torch.FloatTensor`): mask for cross-attention heads in a given layer of
-                size `(decoder_attention_heads,)`.
             past_key_values (`Cache`): cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
@@ -1157,7 +1133,6 @@ class SpeechT5DecoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
-            layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
             cache_position=cache_position,
         )
@@ -1174,7 +1149,6 @@ class SpeechT5DecoderLayer(GradientCheckpointingLayer):
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
-                layer_head_mask=cross_attn_layer_head_mask,
                 past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 cache_position=cache_position,
@@ -1265,7 +1239,6 @@ class SpeechT5Encoder(SpeechT5PreTrainedModel):
         self,
         hidden_states: torch.FloatTensor,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1285,12 +1258,6 @@ class SpeechT5Encoder(SpeechT5PreTrainedModel):
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
-            head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
-                Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
-
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
@@ -1318,14 +1285,6 @@ class SpeechT5Encoder(SpeechT5PreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
-        # check if head_mask has a correct number of layers specified if desired
-        if head_mask is not None:
-            if head_mask.size()[0] != len(self.layers):
-                raise ValueError(
-                    f"The head_mask should be specified for {len(self.layers)} layers, but it is for"
-                    f" {head_mask.size()[0]}."
-                )
-
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -1342,7 +1301,6 @@ class SpeechT5Encoder(SpeechT5PreTrainedModel):
                     hidden_states,
                     attention_mask=attention_mask,
                     position_bias=position_bias,
-                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
                     output_attentions=output_attentions,
                 )
                 hidden_states = layer_outputs[0]
@@ -1384,7 +1342,6 @@ class SpeechT5EncoderWithSpeechPrenet(SpeechT5PreTrainedModel):
         self,
         input_values: torch.FloatTensor,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1394,7 +1351,6 @@ class SpeechT5EncoderWithSpeechPrenet(SpeechT5PreTrainedModel):
         outputs = self.wrapped_encoder(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1426,7 +1382,6 @@ class SpeechT5EncoderWithTextPrenet(SpeechT5PreTrainedModel):
         self,
         input_values: torch.FloatTensor,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1436,7 +1391,6 @@ class SpeechT5EncoderWithTextPrenet(SpeechT5PreTrainedModel):
         outputs = self.wrapped_encoder(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1462,7 +1416,6 @@ class SpeechT5EncoderWithoutPrenet(SpeechT5PreTrainedModel):
         self,
         input_values: torch.FloatTensor,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1470,7 +1423,6 @@ class SpeechT5EncoderWithoutPrenet(SpeechT5PreTrainedModel):
         return self.wrapped_encoder(
             hidden_states=input_values,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1499,8 +1451,6 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
         attention_mask: Optional[torch.LongTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1530,19 +1480,6 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
-            head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-                Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
-
-            cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-                Mask to nullify selected heads of the cross-attention modules in the decoder to avoid performing
-                cross-attention on hidden heads. Mask values selected in `[0, 1]`:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
-
             past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
                 It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
@@ -1583,13 +1520,6 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
 
         if use_cache and past_key_values is None:
             past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
-        if use_cache and isinstance(past_key_values, tuple):
-            logger.warning_once(
-                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
-                "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
-                "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
-            )
-            past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
 
@@ -1611,15 +1541,6 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
 
-        # check if head_mask/cross_attn_head_mask has a correct number of layers specified if desired
-        for attn_mask, mask_name in zip([head_mask, cross_attn_head_mask], ["head_mask", "cross_attn_head_mask"]):
-            if attn_mask is not None:
-                if attn_mask.size()[0] != (len(self.layers)):
-                    raise ValueError(
-                        f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for"
-                        f" {head_mask.size()[0]}."
-                    )
-
         for idx, decoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -1637,8 +1558,6 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
                 attention_mask,
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,
-                layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                cross_attn_layer_head_mask=(cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None),
                 past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
@@ -1691,8 +1610,6 @@ class SpeechT5DecoderWithSpeechPrenet(SpeechT5PreTrainedModel):
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.LongTensor] = None,
         speaker_embeddings: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1707,8 +1624,6 @@ class SpeechT5DecoderWithSpeechPrenet(SpeechT5PreTrainedModel):
             attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
-            head_mask=head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -1745,8 +1660,6 @@ class SpeechT5DecoderWithTextPrenet(SpeechT5PreTrainedModel):
         attention_mask: Optional[torch.LongTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1761,8 +1674,6 @@ class SpeechT5DecoderWithTextPrenet(SpeechT5PreTrainedModel):
             attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
-            head_mask=head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -1793,8 +1704,6 @@ class SpeechT5DecoderWithoutPrenet(SpeechT5PreTrainedModel):
         attention_mask: Optional[torch.LongTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1807,8 +1716,6 @@ class SpeechT5DecoderWithoutPrenet(SpeechT5PreTrainedModel):
             attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
-            head_mask=head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -1996,9 +1903,6 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
         attention_mask: Optional[torch.LongTensor] = None,
         decoder_input_values: Optional[torch.Tensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        decoder_head_mask: Optional[torch.FloatTensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
@@ -2023,11 +1927,6 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
             If you want to change padding behavior, you should read [`SpeechT5Decoder._prepare_decoder_attention_mask`]
             and modify to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more
             information on the default strategy.
-        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
         speaker_embeddings (`torch.FloatTensor` of shape `(batch_size, config.speaker_embedding_dim)`, *optional*):
             Tensor containing the speaker embeddings.
         """
@@ -2043,7 +1942,6 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
             encoder_outputs = self.encoder(
                 input_values=input_values,
                 attention_mask=attention_mask,
-                head_mask=head_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
@@ -2074,8 +1972,6 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_outputs[0],
             encoder_attention_mask=encoder_attention_mask,
-            head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -2154,9 +2050,6 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel, GenerationMixin):
         attention_mask: Optional[torch.LongTensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        decoder_head_mask: Optional[torch.FloatTensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
@@ -2191,11 +2084,6 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel, GenerationMixin):
             If you want to change padding behavior, you should read [`SpeechT5Decoder._prepare_decoder_attention_mask`]
             and modify to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more
             information on the default strategy.
-        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the language modeling loss. Indices should either be in `[0, ..., config.vocab_size]`
             or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored (masked), the loss is
@@ -2251,9 +2139,6 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel, GenerationMixin):
             attention_mask=attention_mask,
             decoder_input_values=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
-            head_mask=head_mask,
-            decoder_head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
             encoder_outputs=encoder_outputs,
             past_key_values=past_key_values,
             use_cache=use_cache,
@@ -2478,9 +2363,6 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         attention_mask: Optional[torch.LongTensor] = None,
         decoder_input_values: Optional[torch.FloatTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        decoder_head_mask: Optional[torch.FloatTensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
@@ -2513,11 +2395,6 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
             If you want to change padding behavior, you should read [`SpeechT5Decoder._prepare_decoder_attention_mask`]
             and modify to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more
             information on the default strategy.
-        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
         speaker_embeddings (`torch.FloatTensor` of shape `(batch_size, config.speaker_embedding_dim)`, *optional*):
             Tensor containing the speaker embeddings.
         labels (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_mel_bins)`, *optional*):
@@ -2563,9 +2440,6 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
             attention_mask=attention_mask,
             decoder_input_values=decoder_input_values,
             decoder_attention_mask=decoder_attention_mask,
-            head_mask=head_mask,
-            decoder_head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
             encoder_outputs=encoder_outputs,
             past_key_values=past_key_values,
             use_cache=use_cache,
@@ -2833,9 +2707,6 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         attention_mask: Optional[torch.LongTensor] = None,
         decoder_input_values: Optional[torch.FloatTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        decoder_head_mask: Optional[torch.FloatTensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
@@ -2867,11 +2738,6 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
             If you want to change padding behavior, you should read [`SpeechT5Decoder._prepare_decoder_attention_mask`]
             and modify to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more
             information on the default strategy.
-        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
         speaker_embeddings (`torch.FloatTensor` of shape `(batch_size, config.speaker_embedding_dim)`, *optional*):
             Tensor containing the speaker embeddings.
         labels (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_mel_bins)`, *optional*):
@@ -2923,9 +2789,6 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
             attention_mask=attention_mask,
             decoder_input_values=decoder_input_values,
             decoder_attention_mask=decoder_attention_mask,
-            head_mask=head_mask,
-            decoder_head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
             encoder_outputs=encoder_outputs,
             past_key_values=past_key_values,
             use_cache=use_cache,

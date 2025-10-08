@@ -22,7 +22,7 @@ import torch
 from torch import nn
 
 from ...cache_utils import Cache, EncoderDecoderCache
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationConfig, GenerationMixin, LogitsProcessorList, StoppingCriteriaList
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -257,10 +257,6 @@ class RagPreTrainedModel(PreTrainedModel):
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
-                    - A path or url to a *tensorflow index checkpoint file* (e.g, `./tf_model/model.ckpt.index`). In
-                      this case, `from_tf` should be set to `True` and a configuration object should be provided as
-                      `config` argument. This loading path is slower than converting the TensorFlow checkpoint in a
-                      PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
 
             generator_pretrained_model_name_or_path (`str`, *optional*, defaults to `None`):
                 Information necessary to initiate the generator. Can be either:
@@ -268,10 +264,6 @@ class RagPreTrainedModel(PreTrainedModel):
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
-                    - A path or url to a *tensorflow index checkpoint file* (e.g, `./tf_model/model.ckpt.index`). In
-                      this case, `from_tf` should be set to `True` and a configuration object should be provided as
-                      `config` argument. This loading path is slower than converting the TensorFlow checkpoint in a
-                      PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
 
             model_args (remaining positional arguments, *optional*):
                 All remaining positional arguments will be passed to the underlying model's `__init__` method.
@@ -381,7 +373,7 @@ class RagPreTrainedModel(PreTrainedModel):
 class RagModel(RagPreTrainedModel):
     def __init__(
         self,
-        config: Optional[PretrainedConfig] = None,
+        config: Optional[PreTrainedConfig] = None,
         question_encoder: Optional[PreTrainedModel] = None,
         generator: Optional[PreTrainedModel] = None,
         retriever: Optional[RagRetriever] = None,  # or maybe just use a `set_retriever(...)` method
@@ -669,7 +661,7 @@ class RagModel(RagPreTrainedModel):
 class RagSequenceForGeneration(RagPreTrainedModel):
     def __init__(
         self,
-        config: Optional[PretrainedConfig] = None,
+        config: Optional[PreTrainedConfig] = None,
         question_encoder: Optional[PreTrainedModel] = None,
         generator: Optional[PreTrainedModel] = None,
         retriever: Optional[RagRetriever] = None,
@@ -1088,9 +1080,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
 
     @staticmethod
     def _cat_and_pad(tensors, pad_token_id):
-        output = (
-            tensors[0].new(sum([t.shape[0] for t in tensors]), max([t.shape[1] for t in tensors])).fill_(pad_token_id)
-        )
+        output = tensors[0].new(sum(t.shape[0] for t in tensors), max(t.shape[1] for t in tensors)).fill_(pad_token_id)
         ind = 0
         for t in tensors:
             output[ind : ind + t.shape[0], : t.shape[1]] = t
@@ -1106,7 +1096,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
 class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
     def __init__(
         self,
-        config: Optional[PretrainedConfig] = None,
+        config: Optional[PreTrainedConfig] = None,
         question_encoder: Optional[PreTrainedModel] = None,
         generator: Optional[PreTrainedModel] = None,
         retriever: Optional[RagRetriever] = None,
@@ -1194,15 +1184,24 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
             return result
 
         reordered_past = ()
-        for layer_past in past_key_values:
+        for idx in range(len(past_key_values)):
+            if isinstance(past_key_values, EncoderDecoderCache):
+                layer_past = (
+                    past_key_values.self_attention_cache.layers[idx].keys,
+                    past_key_values.self_attention_cache.layers[idx].values,
+                    past_key_values.cross_attention_cache.layers[idx].keys,
+                    past_key_values.cross_attention_cache.layers[idx].values,
+                )
+            else:
+                layer_past = (past_key_values.layers[idx].keys, past_key_values.layers[idx].values)
             # get the correct batch idx from decoder layer's batch dim for cross and self-attn
             reordered_past += (
                 tuple(_reorder_stacked(past_state, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
-        if isinstance(past_key_values, EncoderDecoderCache):
-            reordered_past = EncoderDecoderCache.from_legacy_cache(reordered_past)
 
-        return reordered_past
+        # Cast back to the correct cache class
+        reordered_cache = type(past_key_values)(reordered_past)
+        return reordered_cache
 
     def marginalize(self, seq_logits, doc_scores, n_docs=None):
         n_docs = n_docs if n_docs is not None else self.config.n_docs

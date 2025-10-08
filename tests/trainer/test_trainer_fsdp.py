@@ -179,7 +179,6 @@ if __name__ == "__main__":
     parser = HfArgumentParser((Seq2SeqTrainingArguments,))
     training_args = parser.parse_args_into_dataclasses()[0]
     training_args.per_device_eval_batch_size = 1
-    training_args.use_legacy_prediction_loop = False
     training_args.predict_with_generate = True
     training_args.generation_config = GenerationConfig(max_length=30)
 

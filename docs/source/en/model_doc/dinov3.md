@@ -19,7 +19,6 @@ specific language governing permissions and limitations under the License.
     </div>
 </div>
 
-
 # DINOv3
 
 [DINOv3](https://huggingface.co/papers/2508.10104) is a family of versatile vision foundation models that outperforms the specialized state of the art across a broad range of settings, without fine-tuning. DINOv3 produces high-quality dense features that achieve outstanding performance on various vision tasks, significantly surpassing previous self- and weakly-supervised foundation models.

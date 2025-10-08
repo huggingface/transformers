@@ -19,14 +19,14 @@ import torch
 import torch.nn.functional as F
 
 from .cache_utils import Cache
-from .configuration_utils import PretrainedConfig
+from .configuration_utils import PreTrainedConfig
 from .utils import is_torch_xpu_available, logging
 from .utils.generic import GeneralInterface
 from .utils.import_utils import is_torch_flex_attn_available, is_torch_greater_or_equal, is_torchdynamo_compiling
 
 
 if is_torch_flex_attn_available():
-    from torch.nn.attention.flex_attention import _DEFAULT_SPARSE_BLOCK_SIZE as flex_default_block_size  # noqa: N811
+    from torch.nn.attention.flex_attention import _DEFAULT_SPARSE_BLOCK_SIZE as flex_default_block_size
     from torch.nn.attention.flex_attention import BlockMask, create_block_mask
 else:
     # Register a fake type to avoid crashing for annotations and `isinstance` checks
@@ -43,7 +43,7 @@ if _is_torch_greater_or_equal_than_2_6:
 logger = logging.get_logger(__name__)
 
 
-def and_masks(*mask_functions: list[Callable]) -> Callable:
+def and_masks(*mask_functions: Callable) -> Callable:
     """Returns a mask function that is the intersection of provided mask functions"""
     if not all(callable(arg) for arg in mask_functions):
         raise RuntimeError(f"All inputs should be callable mask_functions: {mask_functions}")
@@ -57,7 +57,7 @@ def and_masks(*mask_functions: list[Callable]) -> Callable:
     return and_mask
 
 
-def or_masks(*mask_functions: list[Callable]) -> Callable:
+def or_masks(*mask_functions: Callable) -> Callable:
     """Returns a mask function that is the union of provided mask functions"""
     if not all(callable(arg) for arg in mask_functions):
         raise RuntimeError(f"All inputs should be callable mask_functions: {mask_functions}")
@@ -625,6 +625,7 @@ class AttentionMaskInterface(GeneralInterface):
         "sdpa": sdpa_mask,
         "eager": eager_mask,
         "flash_attention_2": flash_attention_mask,
+        "flash_attention_3": flash_attention_mask,
         "flex_attention": flex_attention_mask,
     }
 
@@ -661,7 +662,7 @@ def find_packed_sequence_indices(position_ids: torch.Tensor) -> torch.Tensor:
 
 
 def _preprocess_mask_arguments(
-    config: PretrainedConfig,
+    config: PreTrainedConfig,
     input_embeds: torch.Tensor,
     attention_mask: Optional[Union[torch.Tensor, BlockMask]],
     cache_position: torch.Tensor,
@@ -674,7 +675,7 @@ def _preprocess_mask_arguments(
     key-value length and offsets, and if we should early exit or not.
 
     Args:
-        config (`PretrainedConfig`):
+        config (`PreTrainedConfig`):
             The model config.
         input_embeds (`torch.Tensor`):
             The input embeddings of shape (batch_size, query_length, hidden_dim). This is used only to infer the
@@ -742,7 +743,7 @@ def _preprocess_mask_arguments(
 
 
 def create_causal_mask(
-    config: PretrainedConfig,
+    config: PreTrainedConfig,
     input_embeds: torch.Tensor,
     attention_mask: Optional[torch.Tensor],
     cache_position: torch.Tensor,
@@ -757,7 +758,7 @@ def create_causal_mask(
     to what is needed in the `modeling_xxx.py` files).
 
     Args:
-        config (`PretrainedConfig`):
+        config (`PreTrainedConfig`):
             The model config.
         input_embeds (`torch.Tensor`):
             The input embeddings of shape (batch_size, query_length, hidden_dim). This is used only to infer the
@@ -836,7 +837,7 @@ def create_causal_mask(
 
 
 def create_sliding_window_causal_mask(
-    config: PretrainedConfig,
+    config: PreTrainedConfig,
     input_embeds: torch.Tensor,
     attention_mask: Optional[torch.Tensor],
     cache_position: torch.Tensor,
@@ -852,7 +853,7 @@ def create_sliding_window_causal_mask(
     `modeling_xxx.py` files).
 
     Args:
-        config (`PretrainedConfig`):
+        config (`PreTrainedConfig`):
             The model config.
         input_embeds (`torch.Tensor`):
             The input embeddings of shape (batch_size, query_length, hidden_dim). This is used only to infer the
@@ -933,7 +934,7 @@ def create_sliding_window_causal_mask(
 
 
 def create_chunked_causal_mask(
-    config: PretrainedConfig,
+    config: PreTrainedConfig,
     input_embeds: torch.Tensor,
     attention_mask: Optional[torch.Tensor],
     cache_position: torch.Tensor,
@@ -949,7 +950,7 @@ def create_chunked_causal_mask(
     `modeling_xxx.py` files).
 
     Args:
-        config (`PretrainedConfig`):
+        config (`PreTrainedConfig`):
             The model config.
         input_embeds (`torch.Tensor`):
             The input embeddings of shape (batch_size, query_length, hidden_dim). This is used only to infer the
@@ -1062,7 +1063,7 @@ LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING = {
 
 
 def create_masks_for_generate(
-    config: PretrainedConfig,
+    config: PreTrainedConfig,
     input_embeds: torch.Tensor,
     attention_mask: Optional[torch.Tensor],
     cache_position: torch.Tensor,
@@ -1073,11 +1074,11 @@ def create_masks_for_generate(
     **kwargs,
 ):
     """
-    This function mimics how we create the masks in the `modeling_xxx.py` files, and is used in `generate` in order
-    to easily create the masks in advance, when we compile the forwards with Static caches.
+    This function mimics how we create the masks in the `modeling_xxx.py` files, and is used in places like `generate`
+    in order to easily create the masks in advance, when we compile the forwards with Static caches.
 
     Args:
-        config (`PretrainedConfig`):
+        config (`PreTrainedConfig`):
             The model config.
         input_embeds (`torch.Tensor`):
             The input embeddings of shape (batch_size, query_length, hidden_dim). This is used only to infer the

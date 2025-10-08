@@ -55,7 +55,7 @@ def get_chinese_word(tokens: list[str]):
 def add_sub_symbol(bert_tokens: list[str], chinese_word_set: set()):
     if not chinese_word_set:
         return bert_tokens
-    max_word_len = max([len(w) for w in chinese_word_set])
+    max_word_len = max(len(w) for w in chinese_word_set)
 
     bert_word = bert_tokens
     start, end = 0, len(bert_word)

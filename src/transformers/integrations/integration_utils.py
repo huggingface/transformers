@@ -48,7 +48,6 @@ from ..utils import (
     flatten_dict,
     is_datasets_available,
     is_pandas_available,
-    is_tf_available,
     is_torch_available,
     logging,
 )
@@ -56,8 +55,6 @@ from ..utils import (
 
 logger = logging.get_logger(__name__)
 
-if is_tf_available():
-    from .. import TFPreTrainedModel
 
 if is_torch_available():
     import torch
@@ -547,8 +544,6 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> Be
 
 
 def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
-    from ..integrations import is_wandb_available
-
     if not is_wandb_available():
         raise ImportError("This function needs wandb installed: `pip install wandb`")
     import wandb
@@ -686,7 +681,7 @@ class TensorBoardCallback(TrainerCallback):
             )
         if has_tensorboard:
             try:
-                from torch.utils.tensorboard import SummaryWriter  # noqa: F401
+                from torch.utils.tensorboard import SummaryWriter
 
                 self._SummaryWriter = SummaryWriter
             except ImportError:
@@ -760,12 +755,6 @@ def save_model_architecture_to_file(model: Any, output_dir: str):
     with open(f"{output_dir}/model_architecture.txt", "w+") as f:
         if isinstance(model, PreTrainedModel):
             print(model, file=f)
-        elif is_tf_available() and isinstance(model, TFPreTrainedModel):
-
-            def print_to_file(s):
-                print(s, file=f)
-
-            model.summary(print_fn=print_to_file)
         elif is_torch_available() and (
             isinstance(model, (torch.nn.Module, PushToHubMixin)) and hasattr(model, "base_model")
         ):
@@ -1092,19 +1081,28 @@ class TrackioCallback(TrainerCallback):
         """
         Setup the optional Trackio integration.
 
-        To customize the setup you can also override the following environment variables:
-
-        Environment:
-        - **TRACKIO_PROJECT** (`str`, *optional*, defaults to `"huggingface"`):
-            The name of the project (can be an existing project to continue tracking or a new project to start tracking
-            from scratch).
-        - **TRACKIO_SPACE_ID** (`str`, *optional*, defaults to `None`):
-            If set, the project will be logged to a Hugging Face Space instead of a local directory. Should be a
-            complete Space name like `"username/reponame"` or `"orgname/reponame"`, or just `"reponame" in which case
-            the Space will be created in the currently-logged-in Hugging Face user's namespace. If the Space does not
-            exist, it will be created. If the Space already exists, the project will be logged to it.
+        To customize the setup you can also set the arguments `project`, `trackio_space_id` and `hub_private_repo` in
+        [`TrainingArguments`]. Please refer to the docstring of for more details.
         """
         if state.is_world_process_zero:
+            if os.getenv("TRACKIO_PROJECT"):
+                logger.warning(
+                    "The `TRACKIO_PROJECT` environment variable is deprecated and will be removed in a future "
+                    "version. Use TrainingArguments.project instead."
+                )
+                project = os.getenv("TRACKIO_PROJECT")
+            else:
+                project = args.project
+
+            if os.getenv("TRACKIO_SPACE_ID"):
+                logger.warning(
+                    "The `TRACKIO_SPACE_ID` environment variable is deprecated and will be removed in a future "
+                    "version. Use TrainingArguments.trackio_space_id instead."
+                )
+                space_id = os.getenv("TRACKIO_SPACE_ID")
+            else:
+                space_id = args.trackio_space_id
+
             combined_dict = {**args.to_dict()}
 
             if hasattr(model, "config") and model.config is not None:
@@ -1115,10 +1113,11 @@ class TrackioCallback(TrainerCallback):
                 combined_dict = {**{"peft_config": peft_config}, **combined_dict}
 
             self._trackio.init(
-                project=os.getenv("TRACKIO_PROJECT", "huggingface"),
+                project=project,
                 name=args.run_name,
-                space_id=os.getenv("TRACKIO_SPACE_ID", None),
+                space_id=space_id,
                 resume="allow",
+                private=args.hub_private_repo,
             )
 
             # Add config parameters (run may have been created manually)
@@ -1225,7 +1224,7 @@ class CometCallback(TrainerCallback):
         - **COMET_PROJECT_NAME** (`str`, *optional*):
             Comet project name for experiments.
         - **COMET_LOG_ASSETS** (`str`, *optional*, defaults to `TRUE`):
-            Whether or not to log training assets (tf event logs, checkpoints, etc), to Comet. Can be `TRUE`, or
+            Whether or not to log training assets (checkpoints, etc), to Comet. Can be `TRUE`, or
             `FALSE`.
 
         For a number of configurable items in the environment, see

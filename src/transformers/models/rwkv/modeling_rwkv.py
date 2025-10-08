@@ -21,7 +21,6 @@ from pathlib import Path
 from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...generation import GenerationMixin
@@ -533,7 +532,7 @@ class RwkvModel(RwkvPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,  # noqa
+        attention_mask: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         state: Optional[list[torch.FloatTensor]] = None,
         use_cache: Optional[bool] = None,
@@ -731,7 +730,7 @@ class RwkvForCausalLM(RwkvPreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,  # noqa
+        attention_mask: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         state: Optional[list[torch.FloatTensor]] = None,
         labels: Optional[torch.LongTensor] = None,

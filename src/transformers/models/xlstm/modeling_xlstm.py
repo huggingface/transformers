@@ -18,7 +18,6 @@ from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
@@ -170,7 +169,7 @@ else:
         eps: float = 1e-6,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         _device = matQ.device
-        nc, chunk_size = num_chunks, chunk_size
+        nc = num_chunks
         batch_size, nh, dqk, dhv = matC_states.shape
         matC_k_states = matC_states.view(batch_size, nh, nc, dqk // nc, dhv)
         vecN_k_states = vecN_states.view(batch_size, nh, nc, dqk // nc)
@@ -1294,7 +1293,7 @@ class xLSTMCache:
     Cache for xLSTM model which does not have attention mechanism and key value states.
 
     Arguments:
-        config (`PretrainedConfig):
+        config (`PreTrainedConfig):
             The configuration file defining the shape-related attributes required to initialize the static cache.
         max_batch_size (`int`):
             The batch size with which the model will be used.
@@ -1606,7 +1605,7 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            # move labels to correct device to enable model parallelism
+            # move labels to correct device
             labels = labels.to(logits.device)
             # Shift so that tokens < nstate predict nstate
             shift_logits = logits[..., :-1, :].contiguous()

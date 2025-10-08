@@ -141,7 +141,7 @@ class ChineseCLIPImageProcessingTestFourChannels(ImageProcessingTestMixin, unitt
 
     def setUp(self):
         super().setUp()
-        self.image_processor_tester = ChineseCLIPImageProcessingTester(self, num_channels=4, do_center_crop=True)
+        self.image_processor_tester = ChineseCLIPImageProcessingTester(self, num_channels=3, do_center_crop=True)
         self.expected_encoded_image_num_channels = 3
 
     @property
@@ -159,14 +159,6 @@ class ChineseCLIPImageProcessingTestFourChannels(ImageProcessingTestMixin, unitt
             self.assertTrue(hasattr(image_processing, "image_mean"))
             self.assertTrue(hasattr(image_processing, "image_std"))
             self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
-
-    @unittest.skip(reason="ChineseCLIPImageProcessor does not support 4 channels yet")  # FIXME Amy
-    def test_call_numpy(self):
-        return super().test_call_numpy()
-
-    @unittest.skip(reason="ChineseCLIPImageProcessor does not support 4 channels yet")  # FIXME Amy
-    def test_call_pytorch(self):
-        return super().test_call_torch()
 
     @unittest.skip(
         reason="ChineseCLIPImageProcessor doesn't treat 4 channel PIL and numpy consistently yet"

@@ -14,11 +14,11 @@
 # limitations under the License.
 """openai model configuration"""
 
-from ...configuration_utils import PretrainedConfig, layer_type_validation
+from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_rope_utils import rope_config_validation
 
 
-class GptOssConfig(PretrainedConfig):
+class GptOssConfig(PreTrainedConfig):
     r"""
     This will yield a configuration to that of the BERT
     [google-bert/bert-base-uncased](https://huggingface.co/google-bert/bert-base-uncased) architecture.
@@ -103,7 +103,7 @@ class GptOssConfig(PretrainedConfig):
             self.layer_types = [
                 "sliding_attention" if bool((i + 1) % 2) else "full_attention" for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types)
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         self.attention_bias = True
         self.max_position_embeddings = max_position_embeddings

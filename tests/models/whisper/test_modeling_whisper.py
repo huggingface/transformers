@@ -363,7 +363,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     )
     is_encoder_decoder = True
     fx_compatible = False
-    test_pruning = False
+
     test_missing_keys = False
     # Needs higher percentages after model tester's vocab_size is changed to 200 (PR #21222)
     # `0.5` is for `test_disk_offload` (which also works for `test_model_parallelism`)
@@ -586,11 +586,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 "decoder_input_ids",
                 "decoder_attention_mask",
             ]
-            expected_arg_names.extend(
-                ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
-                if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
-                else ["encoder_outputs"]
-            )
+            expected_arg_names.extend(["encoder_outputs"])
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     def test_hidden_states_output(self):
@@ -810,6 +806,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
             model = model_class(config).to(torch_device)
+            model.eval()
 
             # if no output embeddings -> leave test
             if model.get_output_embeddings() is None:
@@ -3277,7 +3274,7 @@ class WhisperEncoderModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (WhisperForAudioClassification,) if is_torch_available() else ()
     is_encoder_decoder = False
     fx_compatible = False
-    test_pruning = False
+
     test_missing_keys = False
 
     def setUp(self):
@@ -3297,7 +3294,7 @@ class WhisperEncoderModelTest(ModelTesterMixin, unittest.TestCase):
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
-            expected_arg_names = ["input_features", "head_mask", "encoder_outputs"]
+            expected_arg_names = ["input_features", "encoder_outputs"]
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     def test_forward_pass(self):
@@ -3545,7 +3542,7 @@ class WhisperStandaloneDecoderModelTester:
 class WhisperStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (WhisperDecoder, WhisperForCausalLM) if is_torch_available() else ()
     fx_comptatible = False
-    test_pruning = False
+
     is_encoder_decoder = False
     test_missing_keys = False
 

@@ -25,7 +25,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.utils.checkpoint
 
 from transformers.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig, Qwen2VLTextConfig
 from transformers.models.qwen2_vl.modeling_qwen2_vl import (
@@ -41,18 +40,18 @@ from transformers.models.qwen2_vl.modeling_qwen2_vl import (
     VisionAttention,
     VisionRotaryEmbedding,
 )
-from transformers.models.qwen2_vl.processing_qwen2_vl import Qwen2VLImagesKwargs, Qwen2VLProcessor
+from transformers.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...modeling_flash_attention_utils import is_flash_attn_available
 from ...modeling_layers import GradientCheckpointingLayer
-from ...processing_utils import MultiModalData, ProcessingKwargs, Unpack, VideosKwargs
+from ...processing_utils import MultiModalData, ProcessingKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import is_torchdynamo_compiling, logging
+from ...utils import logging
 from ...video_utils import VideoInput
 
 
@@ -63,7 +62,7 @@ if is_flash_attn_available():
 logger = logging.get_logger(__name__)
 
 
-class Qwen2_5_VLVisionConfig(PretrainedConfig):
+class Qwen2_5_VLVisionConfig(PreTrainedConfig):
     model_type = "qwen2_5_vl"
     base_config_key = "vision_config"
 
@@ -595,19 +594,7 @@ class Qwen2_5_VLModel(Qwen2VLModel):
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
         if position_ids is None:
-            # Calculate RoPE index once per generation in the pre-fill stage only.
-            # When compiling, we can't check tensor values thus we check only input length
-            # It is safe to assume that `length!=1` means we're in pre-fill because compiled
-            # models currently cannot do asssisted decoding
-            prefill_compiled_stage = is_torchdynamo_compiling() and (
-                (input_ids is not None and input_ids.shape[1] != 1)
-                or (inputs_embeds is not None and inputs_embeds.shape[1] != 1)
-            )
-            prefill_noncompiled_stage = not is_torchdynamo_compiling() and (
-                (cache_position is not None and cache_position[0] == 0)
-                or (past_key_values is None or past_key_values.get_seq_length() == 0)
-            )
-            if (prefill_compiled_stage or prefill_noncompiled_stage) or self.rope_deltas is None:
+            if self.rope_deltas is None or cache_position is None or cache_position[0] == 0:
                 position_ids, rope_deltas = self.get_rope_index(
                     input_ids,
                     image_grid_thw,
@@ -815,6 +802,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
                     model_inputs.get("input_ids", None),
                     image_grid_thw=image_grid_thw,
                     video_grid_thw=video_grid_thw,
+                    second_per_grid_ts=second_per_grid_ts,
                     attention_mask=attention_mask,
                 )
                 self.model.rope_deltas = rope_deltas
@@ -839,17 +827,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         return model_inputs
 
 
-class Qwen2_5_VLVideosProcessorKwargs(VideosKwargs, total=False):
-    fps: Union[list[float], float]
-
-
-class Qwen2_5_VLImagesKwargs(Qwen2VLImagesKwargs):
-    pass
-
-
 class Qwen2_5_VLProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: Qwen2_5_VLImagesKwargs
-    videos_kwargs: Qwen2_5_VLVideosProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "padding": False,
@@ -909,10 +887,8 @@ class Qwen2_5_VLProcessor(Qwen2VLProcessor):
                 tensor, or a nested list of 3D frames. Both channels-first and channels-last formats are supported.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:

@@ -19,7 +19,6 @@ from itertools import cycle
 from typing import Callable, Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
@@ -30,7 +29,6 @@ from ...processing_utils import Unpack
 from ...utils import (
     logging,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.import_utils import (
     is_causal_conv1d_available,
     is_mamba_ssm_available,
@@ -228,7 +226,6 @@ class Zamba2Attention(ZambaAttention):
 
         self.layer_dic = {value: index for index, value in enumerate(self.layer_block_map)}
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -347,7 +344,7 @@ class Zamba2MambaMixer(nn.Module):
 
         if not is_fast_path_available:
             logger.warning_once(
-                "The fast path is not available because on of `(selective_state_update, causal_conv1d_fn, causal_conv1d_update)`"
+                "The fast path is not available because one of `(selective_state_update, causal_conv1d_fn, causal_conv1d_update)`"
                 " is None. Falling back to the naive implementation. To install follow https://github.com/state-spaces/mamba/#installation and"
                 " https://github.com/Dao-AILab/causal-conv1d"
             )
@@ -759,7 +756,6 @@ class Zamba2AttentionDecoderLayer(ZambaAttentionDecoderLayer):
         self.self_attn = Zamba2Attention(config, layer_idx=-1, num_fwd_mem_blocks=num_gs, block_id=block_id)
         self.feed_forward = Zamba2MLP(config, num_fwd_mem_blocks=num_gs, block_id=block_id)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -829,7 +825,6 @@ class Zamba2HybridLayer(ZambaHybridLayer):
         del self.shared_transf
         self.shared_transformer = shared_transformer
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

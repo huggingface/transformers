@@ -22,14 +22,17 @@ rendered properly in your Markdown viewer.
 The [Granite Vision](https://www.ibm.com/new/announcements/ibm-granite-3-1-powerful-performance-long-context-and-more) model is a variant of [LLaVA-NeXT](llava_next), leveraging a [Granite](granite) language model alongside a [SigLIP](SigLIP) visual encoder. It utilizes multiple concatenated vision hidden states as its image features, similar to [VipLlava](vipllava). It also uses a larger set of image grid pinpoints than the original LlaVa-NeXT models to support additional aspect ratios.
 
 Tips:
+
 - This model is loaded into Transformers as an instance of LlaVA-Next. The usage and tips from [LLaVA-NeXT](llava_next) apply to this model as well.
 
 - You can apply the chat template on the tokenizer / processor in the same way as well. Example chat format:
+
 ```bash
 "<|user|>\nWhat’s shown in this image?\n<|assistant|>\nThis image shows a red stop sign.<|end_of_text|><|user|>\nDescribe the image in more details.\n<|assistant|>\n"
 ```
 
 Sample inference:
+
 ```python
 from transformers import LlavaNextProcessor, LlavaNextForConditionalGeneration, infer_device
 

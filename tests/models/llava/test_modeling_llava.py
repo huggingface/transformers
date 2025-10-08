@@ -183,8 +183,7 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
         if is_torch_available()
         else {}
     )
-    test_pruning = False
-    test_head_masking = False
+
     _is_composite = True
 
     def setUp(self):
@@ -206,6 +205,7 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
+            model.eval()
             curr_input_dict = copy.deepcopy(input_dict)  # in=place modifications further
             _ = model(**curr_input_dict)  # successful forward with no modifications
 
@@ -626,7 +626,7 @@ The second image depicts a scenic mountain landscape. The mountains are rugged a
         EXPECTED_GENERATIONS = Expectations(
             {
                 ("cuda", 7): "Describe the images.The image showcases a dog, which is prominently positioned in the center, taking up a significant portion of the frame. The dog is situated against a backdrop of a wooden surface, which spans the entire image. The dog appears to be a black Labrador",
-                ("xpu", 3): "Describe the images.The image showcases a dog, which is prominently positioned in the center, taking up a significant portion of the frame. The dog is situated against a backdrop of a wooden surface, which covers the entire background. The dog appears to be the main focus",
+                ("xpu", 3): "Describe the images.The image showcases a dog, which is prominently positioned in the center, taking up a significant portion of the frame. The dog is situated against a backdrop of a wooden surface, which spans the entire image. The dog appears to be a black Labrador",
                 ("rocm", (9, 5)): "Describe the images.The image features a dog positioned centrally, taking up a significant portion of the frame. The dog is situated against a backdrop of rugged terrain, which includes rocky cliffs and grassy slopes. The dog appears to be in a relaxed posture, possibly looking directly",
             }
         )  # fmt: skip

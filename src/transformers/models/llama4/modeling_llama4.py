@@ -309,7 +309,6 @@ class Llama4TextAttention(nn.Module):
         if self.config.use_qk_norm and self.use_rope:
             self.qk_norm = Llama4TextL2Norm(config.rms_norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -386,7 +385,6 @@ class Llama4TextDecoderLayer(GradientCheckpointingLayer):
         self.input_layernorm = Llama4TextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Llama4TextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -491,7 +489,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         self.post_init()
 
     @can_return_tuple
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
@@ -586,7 +584,7 @@ class Llama4ForCausalLM(Llama4PreTrainedModel, GenerationMixin):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -1173,7 +1171,6 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        vision_feature_layer: Union[int, list[int]],
         vision_feature_select_strategy: str,
         **kwargs,
     ):
@@ -1183,10 +1180,6 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
         Args:
             pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
                The tensors corresponding to the input images.
-            vision_feature_layer (`Union[int, list[int]]`):
-                The index of the layer to select the vision feature. If multiple indices are provided,
-                the vision feature of the corresponding indices will be concatenated to form the
-                vision features.
             vision_feature_select_strategy (`str`):
                 The feature selection strategy used to select the vision feature from the vision backbone.
                 Can be one of `"default"` or `"full"`
@@ -1224,6 +1217,7 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
         return special_image_mask
 
     @auto_docstring
+    @deprecate_kwarg("vision_feature_layer", version="4.58")
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1241,7 +1235,6 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        image_sizes: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Llama4CausalLMOutputWithPast]:
         r"""
@@ -1277,11 +1270,6 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        vision_feature_layer = (
-            vision_feature_layer
-            if vision_feature_layer is not None
-            else self.config.vision_config.vision_feature_layer
-        )
         vision_feature_select_strategy = (
             vision_feature_select_strategy
             if vision_feature_select_strategy is not None
@@ -1302,9 +1290,7 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
         if pixel_values is not None:
             image_features = self.get_image_features(
                 pixel_values=pixel_values,
-                vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
-                image_sizes=image_sizes,
             )
 
             vision_flat = image_features.view(-1, image_features.size(-1))

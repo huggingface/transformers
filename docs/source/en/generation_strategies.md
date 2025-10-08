@@ -229,6 +229,7 @@ tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ## Custom generation methods
 
 Custom generation methods enable specialized behavior such as:
+
 - have the model continue thinking if it is uncertain;
 - roll back generation if the model gets stuck;
 - handle special tokens with custom logic;
@@ -289,7 +290,7 @@ print(tokenizer.batch_decode(gen_out)[0])
 
 If the custom method has pinned Python requirements that your environment doesn't meet, you'll get an exception about missing requirements. For instance, [transformers-community/custom_generate_bad_requirements](https://huggingface.co/transformers-community/custom_generate_bad_requirements) has an impossible set of requirements defined in its `custom_generate/requirements.txt` file, and you'll see the error message below if you try to run it.
 
-```
+```text
 ImportError: Missing requirements in your local environment for `transformers-community/custom_generate_bad_requirements`:
 foo (installed: None)
 bar==0.0.0 (installed: None)
@@ -301,6 +302,7 @@ Updating your Python requirements accordingly will remove this error message.
 ### Creating a custom generation method
 
 To create a new generation method, you need to create a new [**Model**](https://huggingface.co/new) repository and push a few files into it.
+
 1. The model you've designed your generation method with.
 2. `custom_generate/generate.py`, which contains all the logic for your custom generation method.
 3. `custom_generate/requirements.txt`, used to optionally add new Python requirements and/or lock specific versions to correctly use your method.
@@ -308,7 +310,7 @@ To create a new generation method, you need to create a new [**Model**](https://
 
 After you've added all required files, your repository should look like this
 
-```
+```text
 your_repo/
 ├── README.md          # include the 'custom_generate' tag
 ├── config.json
@@ -377,6 +379,7 @@ def generate(model, input_ids, generation_config=None, left_padding=None, **kwar
 ```
 
 Follow the recommended practices below to ensure your custom generation method works as expected.
+
 - Feel free to reuse the logic for validation and input preparation in the original [`~GenerationMixin.generate`].
 - Pin the `transformers` version in the requirements if you use any private method/attribute in `model`.
 - Consider adding model validation, input validation, or even a separate test file to help users sanity-check your code in their environment.
@@ -389,7 +392,6 @@ from .utils import some_function
 
 Only relative imports from the same-level `custom_generate` folder are supported. Parent/sibling folder imports are not valid. The `custom_generate` argument also works locally with any directory that contains a `custom_generate` structure. This is the recommended workflow for developing your custom generation method.
 
-
 #### requirements.txt
 
 You can optionally specify additional Python requirements in a `requirements.txt` file inside the `custom_generate` folder. These are checked at runtime and an exception will be thrown if they're missing, nudging users to update their environment accordingly.
@@ -400,7 +402,7 @@ The root level `README.md` in the model repository usually describes the model t
 
 For discoverability, we highly recommend you to add the `custom_generate` tag to your repository. To do so, the top of your `README.md` file should look like the example below. After you push the file, you should see the tag in your repository!
 
-```
+```text
 ---
 library_name: transformers
 tags:
@@ -411,13 +413,14 @@ tags:
 ```
 
 Recommended practices:
+
 - Document input and output differences in [`~GenerationMixin.generate`].
 - Add self-contained examples to enable quick experimentation.
 - Describe soft-requirements such as if the method only works well with a certain family of models.
 
-### Reusing `generate`’s input preparation
+### Reusing `generate`'s input preparation
 
-If you're adding a new decoding loop, you might want to preserve the input preparation present in `generate` (batch expansion, attention masks, logits processors, stopping criteria, etc.). You can also pass a **callable** to `custom_generate` to reuse [`~GenerationMixin.generate`]’s full preparation pipeline while overriding only the decoding loop.
+If you're adding a new decoding loop, you might want to preserve the input preparation present in `generate` (batch expansion, attention masks, logits processors, stopping criteria, etc.). You can also pass a **callable** to `custom_generate` to reuse [`~GenerationMixin.generate`]'s full preparation pipeline while overriding only the decoding loop.
 
 ```py
 def custom_loop(model, input_ids, attention_mask, logits_processor, stopping_criteria, generation_config, **model_kwargs):
@@ -438,11 +441,12 @@ output = model.generate(
 ```
 
 > [!TIP]
-> If you publish a `custom_generate` repository, your `generate` implementation can itself define a callable and pass it to `model.generate()`. This lets you customize the decoding loop while still benefiting from Transformers’ built-in input preparation logic.
+> If you publish a `custom_generate` repository, your `generate` implementation can itself define a callable and pass it to `model.generate()`. This lets you customize the decoding loop while still benefiting from Transformers' built-in input preparation logic.
 
 ### Finding custom generation methods
 
 You can find all custom generation methods by [searching for their custom tag.](https://huggingface.co/models?other=custom_generate), `custom_generate`. In addition to the tag, we curate two collections of `custom_generate` methods:
+
 - [Custom generation methods - Community](https://huggingface.co/collections/transformers-community/custom-generation-methods-community-6888fb1da0efbc592d3a8ab6) -- a collection of powerful methods contributed by the community;
 - [Custom generation methods - Tutorials](https://huggingface.co/collections/transformers-community/custom-generation-methods-tutorials-6823589657a94940ea02cfec) -- a collection of reference implementations for methods that previously were part of `transformers`, as well as tutorials for `custom_generate`.
 
