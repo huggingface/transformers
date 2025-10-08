@@ -71,10 +71,6 @@ multimodal_embeddings = outputs.multimodal_embeddings
 
 [[autodoc]] FlavaProcessor
 
-## FlavaFeatureExtractor
-
-[[autodoc]] FlavaFeatureExtractor
-
 ## FlavaImageProcessor
 
 [[autodoc]] FlavaImageProcessor
