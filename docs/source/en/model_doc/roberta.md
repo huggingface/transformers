@@ -13,25 +13,17 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2019-07-26 and added to Hugging Face Transformers on 2020-11-16.*
+*This model was released on 2019-07-26 and added to Hugging Face Transformers on 2020-11-16 and contributed by [julien-c](https://huggingface.co/julien-c).*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
 </div>
 
 # RoBERTa
 
-[RoBERTa](https://huggingface.co/papers/1907.11692) improves BERT with new pretraining objectives, demonstrating [BERT](./bert) was undertrained and training design is important. The pretraining objectives include dynamic masking, sentence packing, larger batches and a byte-level BPE tokenizer.
-
-You can find all the original RoBERTa checkpoints under the [Facebook AI](https://huggingface.co/FacebookAI) organization.
-
-> [!TIP]
-> Click on the RoBERTa models in the right sidebar for more examples of how to apply RoBERTa to different language tasks.
-
-The example below demonstrates how to predict the `<mask>` token with [`Pipeline`], [`AutoModel`], and from the command line.
+[RoBERTa: A Robustly Optimized BERT Pretraining Approach](https://huggingface.co/papers/1907.11692) builds on Google's BERT model by modifying key hyperparameters, including removing the next-sentence pretraining objective and training with larger mini-batches and learning rates. The study highlights the undertraining of BERT and demonstrates that with these adjustments, RoBERTa can match or exceed the performance of subsequent models on benchmarks like GLUE, RACE, and SQuAD. This underscores the significance of certain design choices in language model pretraining.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -40,12 +32,7 @@ The example below demonstrates how to predict the `<mask>` token with [`Pipeline
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(
-    task="fill-mask",
-    model="FacebookAI/roberta-base",
-    dtype=torch.float16,
-    device=0
-)
+pipeline = pipeline(task="fill-mask", model="FacebookAI/roberta-base", dtype="auto")
 pipeline("Plants create <mask> through a process known as photosynthesis.")
 ```
 
@@ -56,41 +43,19 @@ pipeline("Plants create <mask> through a process known as photosynthesis.")
 import torch
 from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained(
-    "FacebookAI/roberta-base",
-)
-model = AutoModelForMaskedLM.from_pretrained(
-    "FacebookAI/roberta-base",
-    dtype=torch.float16,
-    device_map="auto",
-    attn_implementation="sdpa"
-)
-inputs = tokenizer("Plants create <mask> through a process known as photosynthesis.", return_tensors="pt").to(model.device)
+model = AutoModelForMaskedLM.from_pretrained("FacebookAI/roberta-base", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("FacebookAI/roberta-base")
 
-with torch.no_grad():
-    outputs = model(**inputs)
-    predictions = outputs.logits
-
-masked_index = torch.where(inputs['input_ids'] == tokenizer.mask_token_id)[1]
-predicted_token_id = predictions[0, masked_index].argmax(dim=-1)
-predicted_token = tokenizer.decode(predicted_token_id)
-
-print(f"The predicted token is: {predicted_token}")
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Plants create <mask> through a process known as photosynthesis." | transformers run --task fill-mask --model FacebookAI/roberta-base --device 0
+inputs = tokenizer("Plants create <mask> through a process known as photosynthesis.", return_tensors="pt")
+outputs = model(**inputs)
+mask_token_id = tokenizer.mask_token_id
+mask_position = (inputs.input_ids == tokenizer.mask_token_id).nonzero(as_tuple=True)[1]
+predicted_word = tokenizer.decode(outputs.logits[0, mask_position].argmax(dim=-1))
+print(f"Predicted word: {predicted_word}")
 ```
 
 </hfoption>
 </hfoptions>
-
-## Notes
-
-- RoBERTa doesn't have `token_type_ids` so you don't need to indicate which token belongs to which segment. Separate your segments with the separation token `tokenizer.sep_token` or `</s>`.
 
 ## RobertaConfig
 
@@ -143,3 +108,4 @@ echo -e "Plants create <mask> through a process known as photosynthesis." | tran
 
 [[autodoc]] RobertaForQuestionAnswering
     - forward
+

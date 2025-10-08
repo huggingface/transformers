@@ -9,41 +9,41 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
-*This model was released on 2023-05-24 and added to Hugging Face Transformers on 2023-09-19.*
+*This model was released on 2023-05-24 and added to Hugging Face Transformers on 2023-09-19 and contributed by [nielsr](https://huggingface.co/nielsr).*
 
 # ViTMatte
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[ViTMatte](https://huggingface.co/papers/2305.15272) leverages plain Vision Transformers for image matting, combining a hybrid attention mechanism with a convolution neck to balance performance and computation. It also includes a detail capture module using lightweight convolutions to enhance detail accuracy. ViTMatte achieves state-of-the-art results on Composition-1k and Distinctions-646 benchmarks, outperforming existing methods significantly.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="VitMatteForImageMatting">
 
-The ViTMatte model was proposed in [Boosting Image Matting with Pretrained Plain Vision Transformers](https://huggingface.co/papers/2305.15272) by Jingfeng Yao, Xinggang Wang, Shusheng Yang, Baoyuan Wang.
-ViTMatte leverages plain [Vision Transformers](vit) for the task of image matting, which is the process of accurately estimating the foreground object in images and videos.
+```py
+import torch
+from transformers import VitMatteImageProcessor, VitMatteForImageMatting
+from PIL import Image
+from huggingface_hub import hf_hub_download
 
-The abstract from the paper is the following:
+processor = VitMatteImageProcessor.from_pretrained("hustvl/vitmatte-small-composition-1k")
+model = VitMatteForImageMatting.from_pretrained("hustvl/vitmatte-small-composition-1k", dtype="auto")
 
-*Recently, plain vision Transformers (ViTs) have shown impressive performance on various computer vision tasks, thanks to their strong modeling capacity and large-scale pretraining. However, they have not yet conquered the problem of image matting. We hypothesize that image matting could also be boosted by ViTs and present a new efficient and robust ViT-based matting system, named ViTMatte. Our method utilizes (i) a hybrid attention mechanism combined with a convolution neck to help ViTs achieve an excellent performance-computation trade-off in matting tasks. (ii) Additionally, we introduce the detail capture module, which just consists of simple lightweight convolutions to complement the detailed information required by matting. To the best of our knowledge, ViTMatte is the first work to unleash the potential of ViT on image matting with concise adaptation. It inherits many superior properties from ViT to matting, including various pretraining strategies, concise architecture design, and flexible inference strategies. We evaluate ViTMatte on Composition-1k and Distinctions-646, the most commonly used benchmark for image matting, our method achieves state-of-the-art performance and outperforms prior matting works by a large margin.*
+filepath = hf_hub_download(
+    repo_id="hf-internal-testing/image-matting-fixtures", filename="image.png", repo_type="dataset"
+)
+image = Image.open(filepath).convert("RGB")
+filepath = hf_hub_download(
+    repo_id="hf-internal-testing/image-matting-fixtures", filename="trimap.png", repo_type="dataset"
+)
+trimap = Image.open(filepath).convert("L")
+inputs = processor(images=image, trimaps=trimap, return_tensors="pt")
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr).
-The original code can be found [here](https://github.com/hustvl/ViTMatte).
+with torch.no_grad():
+    alphas = model(**inputs).alphas
+print(alphas.shape)
+```
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/vitmatte_architecture.png"
-alt="drawing" width="600"/>
-
-<small> ViTMatte high-level overview. Taken from the <a href="https://huggingface.co/papers/2305.15272">original paper.</a> </small>
-
-## Resources
-
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with ViTMatte.
-
-- A demo notebook regarding inference with [`VitMatteForImageMatting`], including background replacement, can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/ViTMatte).
-
-<Tip>
-
-The model expects both the image and trimap (concatenated) as input. Use [`ViTMatteImageProcessor`] for this purpose.
-</Tip>
+</hfoption>
+</hfoptions>
 
 ## VitMatteConfig
 
@@ -63,3 +63,4 @@ The model expects both the image and trimap (concatenated) as input. Use [`ViTMa
 
 [[autodoc]] VitMatteForImageMatting
     - forward
+

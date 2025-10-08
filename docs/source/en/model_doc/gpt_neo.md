@@ -13,25 +13,17 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-03-21 and added to Hugging Face Transformers on 2021-03-30.*
+*This model was released on 2021-03-21 and added to Hugging Face Transformers on 2021-03-30 and contributed by [valhalla](https://huggingface.co/valhalla).*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
     </div>
 </div>
 
-## GPT-Neo
+# GPT Neo
 
-[GPT-Neo](https://zenodo.org/records/5297715) is an open-source alternative to GPT-2 and GPT-3 models, built with Mesh TensorFlow for TPUs. GPT-Neo uses local attention in every other layer for more efficiency. It is trained on the [Pile](https://huggingface.co/datasets/EleutherAI/pile), a diverse dataset consisting of 22 smaller high-quality datasets. The original github repository can be found [here](https://github.com/EleutherAI/gpt-neo/tree/v1.1)
-
-You can find all the original GPT-Neo checkpoints under the [EleutherAI](https://huggingface.co/EleutherAI?search_models=gpt-neo) organization.
-
-> [!TIP]
-> Click on the GPT-Neo models in the right sidebar for more examples of how to apply GPT Neo to different language tasks.
-
-The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModel`], and from the command line.
+[GPT Neo](https://github.com/EleutherAI/gpt-neo) is an implementation of model & data-parallel GPT-2 and GPT-3-like models, utilizing Mesh Tensorflow for distributed support. This codebase is designed for TPUs. It should also work on GPUs, though we do not recommend this hardware configuration.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -40,8 +32,8 @@ The example below demonstrates how to generate text with [`Pipeline`] or the [`A
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(task="text-generation", model="EleutherAI/gpt-neo-1.3B", dtype=torch.float16, device=0)
-pipeline("Hello, I'm a language model")
+pipeline = pipeline(task="text-generation", model="EleutherAI/gpt-neo-1.3B", dtype="auto",)
+pipeline("Plants create energy through a process known as photosynthesis.")
 ```
 
 </hfoption>
@@ -51,55 +43,16 @@ pipeline("Hello, I'm a language model")
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model = AutoModelForCausalLM.from_pretrained("EleutherAI/gpt-neo-1.3B", dtype=torch.float16, device_map="auto", attn_implementation="flash_attention_2")
 tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neo-1.3B")
+model = AutoModelForCausalLM.from_pretrained("EleutherAI/gpt-neo-1.3B", dtype="auto",)
 
-input_ids = tokenizer("Hello, I'm a language model", return_tensors="pt").to(model.device)
-
-output = model.generate(**input_ids)
-print(tokenizer.decode(output[0], skip_special_tokens=True))
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Hello, I'm a language model" | transformers run --task text-generation --model EleutherAI/gpt-neo-1.3B --device 0
+inputs = tokenizer("Plants create energy through a process known as photosynthesis.", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
+print(tokenizer.decode(outputs[0]))
 ```
 
 </hfoption>
 </hfoptions>
-
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
-
-The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 4-bits.
-
-```py
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-
-quantization_config = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_quant_type="nf4",
-    bnb_4bit_compute_dtype="float16",
-    bnb_4bit_use_double_quant=True
-)
-
-model = AutoModelForCausalLM.from_pretrained(
-    "EleutherAI/gpt-neo-2.7B",
-    quantization_config=quantization_config,
-    device_map="auto"
-)
-
-tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neo-2.7B")
-inputs = tokenizer("Hello, I'm a language model", return_tensors="pt").to(model.device)
-outputs = model.generate(**inputs, max_new_tokens=100)
-print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-```
-
-## Notes
-
-- Pad inputs on the right because GPT-Neo uses absolute position embeddings.
 
 ## GPTNeoConfig
 
@@ -129,3 +82,4 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 
 [[autodoc]] GPTNeoForTokenClassification
     - forward
+

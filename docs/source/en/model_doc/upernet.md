@@ -13,66 +13,56 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2018-07-26 and added to Hugging Face Transformers on 2023-01-16.*
+*This model was released on 2018-07-26 and added to Hugging Face Transformers on 2023-01-16 and contributed by [nielsr](https://huggingface.co/nielsr).*
 
 # UPerNet
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[UPerNet](https://huggingface.co/papers/1807.10221) is a multi-task framework designed for Unified Perceptual Parsing, enabling machines to recognize a wide array of visual concepts from images. It leverages various vision backbones such as ConvNeXt and Swin. The framework is trained using heterogeneous image annotations and demonstrates effective segmentation across a broad range of concepts, facilitating the discovery of visual knowledge in natural scenes.
 
-## Overview
-
-The UPerNet model was proposed in [Unified Perceptual Parsing for Scene Understanding](https://huggingface.co/papers/1807.10221)
-by Tete Xiao, Yingcheng Liu, Bolei Zhou, Yuning Jiang, Jian Sun. UPerNet is a general framework to effectively segment
-a wide range of concepts from images, leveraging any vision backbone like [ConvNeXt](convnext) or [Swin](swin).
-
-The abstract from the paper is the following:
-
-*Humans recognize the visual world at multiple levels: we effortlessly categorize scenes and detect objects inside, while also identifying the textures and surfaces of the objects along with their different compositional parts. In this paper, we study a new task called Unified Perceptual Parsing, which requires the machine vision systems to recognize as many visual concepts as possible from a given image. A multi-task framework called UPerNet and a training strategy are developed to learn from heterogeneous image annotations. We benchmark our framework on Unified Perceptual Parsing and show that it is able to effectively segment a wide range of concepts from images. The trained networks are further applied to discover visual knowledge in natural scenes.*
-
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/upernet_architecture.jpg"
-alt="drawing" width="600"/>
-
-<small> UPerNet framework. Taken from the <a href="https://huggingface.co/papers/1807.10221">original paper</a>. </small>
-
-This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code is based on OpenMMLab's mmsegmentation [here](https://github.com/open-mmlab/mmsegmentation/blob/master/mmseg/models/decode_heads/uper_head.py).
-
-## Usage examples
-
-UPerNet is a general framework for semantic segmentation. It can be used with any vision backbone, like so:
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
 ```py
-from transformers import SwinConfig, UperNetConfig, UperNetForSemanticSegmentation
+import torch
+from transformers import pipeline
 
-backbone_config = SwinConfig(out_features=["stage1", "stage2", "stage3", "stage4"])
-
-config = UperNetConfig(backbone_config=backbone_config)
-model = UperNetForSemanticSegmentation(config)
+pipeline = pipeline(task="image-segmentation", model="openmmlab/upernet-convnext-tiny", dtype="auto")
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
 ```
 
-To use another vision backbone, like [ConvNeXt](convnext), simply instantiate the model with the appropriate backbone:
+</hfoption>
+<hfoption id="AutoModel">
 
 ```py
-from transformers import ConvNextConfig, UperNetConfig, UperNetForSemanticSegmentation
+import torch
+import requests
+import matplotlib.pyplot as plt
+from PIL import Image
+from transformers import UperNetForSemanticSegmentation, AutoImageProcessor
 
-backbone_config = ConvNextConfig(out_features=["stage1", "stage2", "stage3", "stage4"])
 
-config = UperNetConfig(backbone_config=backbone_config)
-model = UperNetForSemanticSegmentation(config)
+processor = AutoImageProcessor.from_pretrained("openmmlab/upernet-convnext-tiny")
+model = UperNetForSemanticSegmentation.from_pretrained("openmmlab/upernet-convnext-tiny", dtype="auto")
+
+image = Image.open(requests.get("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg", stream=True).raw)
+inputs = processor(images=image, return_tensors="pt",)
+
+with torch.inference_mode():
+    outputs = model(**inputs)
+
+target_sizes = [(image.height, image.width)]
+outputs = processor.post_process_semantic_segmentation(
+    outputs,
+    target_sizes=target_sizes,
+)
+
+plt.imshow(outputs[0])
+plt.axis("off")
+plt.show()
 ```
 
-Note that this will randomly initialize all the weights of the model.
-
-## Resources
-
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with UPerNet.
-
-- Demo notebooks for UPerNet can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/UPerNet).
-- [`UperNetForSemanticSegmentation`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/semantic-segmentation) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/semantic_segmentation.ipynb).
-- See also: [Semantic segmentation task guide](../tasks/semantic_segmentation)
-
-If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+</hfoption>
+</hfoptions>
 
 ## UperNetConfig
 
@@ -82,3 +72,4 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] UperNetForSemanticSegmentation
     - forward
+

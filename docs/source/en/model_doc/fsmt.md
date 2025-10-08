@@ -13,33 +13,39 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2019-07-15 and added to Hugging Face Transformers on 2020-11-16.*
+*This model was released on 2019-07-15 and added to Hugging Face Transformers on 2020-11-16 and contributed by [stas](https://huggingface.co/stas).*
 
 # FSMT
+[FSMT](https://huggingface.co/papers/1907.06616) models participated in the WMT19 shared news translation task for English <-> German and English <-> Russian. The systems are large BPE-based transformer models trained with Fairseq, utilizing sampled back-translations. This year, experiments included various bitext data filtering schemes and the addition of filtered back-translated data. Models were ensembled and fine-tuned on domain-specific data, with decoding enhanced by noisy channel model reranking. The submissions achieved top rankings in all four directions, with the En->De system outperforming other systems and human translations, improving by 4.5 BLEU points from the WMT'18 submission.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-FSMT (FairSeq MachineTranslation) models were introduced in [Facebook FAIR's WMT19 News Translation Task Submission](https://huggingface.co/papers/1907.06616) by Nathan Ng, Kyra Yee, Alexei Baevski, Myle Ott, Michael Auli, Sergey Edunov.
+```py
+import torch
+from transformers import pipeline
 
-The abstract of the paper is the following:
+pipeline = pipeline(task="text2text-generation", model="facebook/wmt19-en-de", dtype="auto")
+pipeline("Plants generate energy through a process known as photosynthesis.")
+```
 
-*This paper describes Facebook FAIR's submission to the WMT19 shared news translation task. We participate in two
-language pairs and four language directions, English <-> German and English <-> Russian. Following our submission from
-last year, our baseline systems are large BPE-based transformer models trained with the Fairseq sequence modeling
-toolkit which rely on sampled back-translations. This year we experiment with different bitext data filtering schemes,
-as well as with adding filtered back-translated data. We also ensemble and fine-tune our models on domain-specific
-data, then decode using noisy channel model reranking. Our submissions are ranked first in all four directions of the
-human evaluation campaign. On En->De, our system significantly outperforms other systems as well as human translations.
-This system improves upon our WMT'18 submission by 4.5 BLEU points.*
+</hfoption>
+<hfoption id="AutoModel">
 
-This model was contributed by [stas](https://huggingface.co/stas). The original code can be found
-[here](https://github.com/pytorch/fairseq/tree/master/examples/wmt19).
+```py
+import torch
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-## Implementation Notes
+model = AutoModelForSeq2SeqLM.from_pretrained("facebook/wmt19-en-de", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("facebook/wmt19-en-de")
 
-- FSMT uses source and target vocabulary pairs that aren't combined into one. It doesn't share embeddings tokens
-  either. Its tokenizer is very similar to [`XLMTokenizer`] and the main model is derived from
-  [`BartModel`].
+inputs = tokenizer("Plants generate energy through a process known as photosynthesis.", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
+print(tokenizer.decode(outputs[0]))
+```
+
+</hfoption>
+</hfoptions>
 
 ## FSMTConfig
 

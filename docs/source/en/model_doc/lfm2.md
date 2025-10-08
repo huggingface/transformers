@@ -15,60 +15,40 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2025-07-10 and added to Hugging Face Transformers on 2025-07-10.*
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
-
 # LFM2
 
 ## Overview
 
-[LFM2](https://www.liquid.ai/blog/liquid-foundation-models-v2-our-second-series-of-generative-ai-models) represents a new generation of Liquid Foundation Models developed by Liquid AI, specifically designed for edge AI and on-device deployment.
+[LFM2](https://www.liquid.ai/blog/liquid-foundation-models-v2-our-second-series-of-generative-ai-models) models are ultra-efficient foundation models optimized for on-device use, offering up to 2x faster CPU decoding than Qwen3 and 3x faster training efficiency than the prior generation. They use a new hybrid architecture with multiplicative gates and short convolutions across 16 blocks, achieving strong benchmark performance in knowledge, math, multilingual tasks, and instruction following. LFM2 comes in 0.35B, 0.7B, and 1.2B parameter sizes and consistently outperforms larger peers like Gemma 3 and Llama 3.2 in its class. Designed for phones, laptops, vehicles, and edge devices, these models balance speed, memory efficiency, and privacy for real-time, local AI deployment
 
-The models are available in four sizes (350M, 700M, 1.2B, and 2.6B parameters) and are engineered to run efficiently on CPU, GPU, and NPU hardware, making them particularly well-suited for applications requiring low latency, offline operation, and privacy.
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-## Architecture
+```py
+import torch
+from transformers import pipeline
 
-The architecture consists of blocks of gated short convolution blocks and blocks of grouped query attention with QK layernorm. This design stems from the concept of dynamical systems, where linear operations are modulated by input-dependent gates. The short convolutions are particularly optimized for embedded SoC CPUs, making them ideal for devices that require fast, local inference without relying on cloud connectivity.
+pipeline = pipeline(task="text-generation", model="LiquidAI/LFM2-1.2B", dtype="auto",)
+pipeline("Plants create energy through a process known as photosynthesis.")
+```
 
-LFM2 was designed to maximize quality under strict speed and memory constraints. This was accomplished through a systematic architecture search to optimize the models for real-world performance on embedded hardware by measuring actual peak memory usage and inference speed on Qualcomm Snapdragon processors. This results in models that achieve 2x faster decode and prefill performance compared to similar-sized models, while maintaining superior benchmark performance across knowledge, mathematics, instruction following, and multilingual tasks.
+</hfoption>
+<hfoption id="AutoModel">
 
-## Example
-
-The following example shows how to generate an answer using the `AutoModelForCausalLM` class.
-
-```python
+```py
+import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-# Load model and tokenizer
-model_id = "LiquidAI/LFM2-1.2B"
-model = AutoModelForCausalLM.from_pretrained(
-    model_id,
-    device_map="auto",
-    dtype="bfloat16",
-)
-tokenizer = AutoTokenizer.from_pretrained(model_id)
+tokenizer = AutoTokenizer.from_pretrained("LiquidAI/LFM2-1.2B")
+model = AutoModelForCausalLM.from_pretrained("LiquidAI/LFM2-1.2B", dtype="auto",)
 
-# Generate answer
-prompt = "What is C. elegans?"
-input_ids = tokenizer.apply_chat_template(
-    [{"role": "user", "content": prompt}],
-    add_generation_prompt=True,
-    return_tensors="pt",
-    tokenize=True,
-)
-
-output = model.generate(
-    input_ids,
-    do_sample=True,
-    temperature=0.3,
-    min_p=0.15,
-    repetition_penalty=1.05,
-    max_new_tokens=512,
-)
-
-print(tokenizer.decode(output[0], skip_special_tokens=False))
+inputs = tokenizer("Plants create energy through a process known as photosynthesis.", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
+print(tokenizer.decode(outputs[0]))
 ```
+
+</hfoption>
+</hfoptions>
 
 ## Lfm2Config
 

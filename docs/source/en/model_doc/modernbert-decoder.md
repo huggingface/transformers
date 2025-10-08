@@ -13,30 +13,18 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-12-18 and added to Hugging Face Transformers on 2025-07-15.*
+*This model was released on 2024-12-18 and added to Hugging Face Transformers on 2025-07-15 and contributed by [orionweller](https://huggingface.co/orionweller).*
 
 <div style="float: right;">
-  <div class="flex flex-wrap space-x-1">
-    <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-    <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
-  </div>
+    <div class="flex flex-wrap space-x-1">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
 </div>
 
 # ModernBERT Decoder
 
-ModernBERT Decoder has the same architecture as [ModernBERT](https://huggingface.co/papers/2412.13663) but it is trained from scratch with a causal language modeling objective from the [Ettin paper](https://huggingface.co/papers/2507.11412). This allows for using the same architecture to compare encoders and decoders. This model is the decoder architecture implementation of ModernBERT, designed for autoregressive text generation tasks.
-
-ModernBERT Decoder uses sliding window attention and rotary positional embeddings for efficiency and to handle longer sequences.
-
-You can find all the original ModernBERT Decoder checkpoints under the [jhu-clsp](https://huggingface.co/collections/jhu-clsp/encoders-vs-decoders-the-ettin-suite-686303e16142257eed8e6aeb) collection.
-
-> [!TIP]
-> This model was contributed by [orionw](https://huggingface.co/orionweller).
->
-> Click on the ModernBERT Decoder models in the right sidebar for more examples of how to apply ModernBERT Decoder to different text generation tasks.
-
-The example below demonstrates how to use ModernBERT Decoder for text generation with [`Pipeline`], [`AutoModel`] (with and without quantization), and from the command line.
+ModernBERT Decoder shares the same architecture as ModernBERT but it's trained from scratch according to [Seq vs Seq: An Open Suite of Paired Encoders and Decoders](https://huggingface.co/papers/2507.11412). The paper introduces the Ettin suite, a set of paired encoder-only and decoder-only language models ranging from 17 million to 1 billion parameters, trained on up to 2 trillion tokens using identical training recipes. These models achieve state-of-the-art performance in their respective categories, surpassing ModernBERT for encoder tasks and Llama 3.2 and SmolLM2 for decoder tasks. Encoder-only models perform best on classification and retrieval tasks, while decoders excel at generative tasks, and attempts to adapt one architecture to the other's task via continued training are less effective. All training data, checkpoints, and artifacts are open-sourced to facilitate reproducibility and further research.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -45,22 +33,8 @@ The example below demonstrates how to use ModernBERT Decoder for text generation
 import torch
 from transformers import pipeline
 
-generator = pipeline(
-    task="text-generation",
-    model="jhu-clsp/ettin-decoder-17m",
-    dtype=torch.float16,
-    device=0
-)
-generator("The future of artificial intelligence is", max_length=50, num_return_sequences=1)
-
-# For sequence classification
-classifier = pipeline(
-    task="text-classification",
-    model="jhu-clsp/ettin-decoder-17m",
-    dtype=torch.float16,
-    device=0
-)
-classifier("This movie is really great!")
+pipeline = pipeline(task="text-generation", model="jhu-clsp/ettin-decoder-17m", dtype="auto",)
+pipeline("Plants create energy through a process known as photosynthesis.")
 ```
 
 </hfoption>
@@ -71,93 +45,11 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("jhu-clsp/ettin-decoder-17m")
-model = AutoModelForCausalLM.from_pretrained(
-    "jhu-clsp/ettin-decoder-17m",
-    dtype=torch.float16,
-    device_map="auto",
-)
+model = AutoModelForCausalLM.from_pretrained("jhu-clsp/ettin-decoder-17m", dtype="auto",)
 
-prompt = "The future of artificial intelligence is"
-inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-
-with torch.no_grad():
-    outputs = model.generate(
-        **inputs,
-        max_length=50,
-        num_return_sequences=1,
-        temperature=0.7,
-        do_sample=True,
-        pad_token_id=tokenizer.eos_token_id
-    )
-
-generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
-print(f"Generated text: {generated_text}")
-
-# For sequence classification
-from transformers import AutoModelForSequenceClassification
-
-classifier_model = AutoModelForSequenceClassification.from_pretrained(
-    "jhu-clsp/ettin-decoder-17m",
-    dtype=torch.float16,
-    device_map="auto",
-    num_labels=2
-)
-
-text = "This movie is really great!"
-inputs = tokenizer(text, return_tensors="pt").to(classifier_model.device)
-
-with torch.no_grad():
-    outputs = classifier_model(**inputs)
-    predictions = torch.nn.functional.softmax(outputs.logits, dim=-1)
-    predicted_class = torch.argmax(predictions, dim=-1)
-
-print(f"Predicted class: {predicted_class.item()}")
-print(f"Prediction probabilities: {predictions}")
-```
-
-</hfoption>
-
-<hfoption id="AutoModel (w/quantization)">
-
-```py
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-
-quantization_config = BitsAndBytesConfig(
-    load_in_8bit=True,
-)
-
-tokenizer = AutoTokenizer.from_pretrained("jhu-clsp/ettin-decoder-1b")
-model = AutoModelForCausalLM.from_pretrained(
-    "jhu-clsp/ettin-decoder-1b",
-    dtype=torch.float16,
-    device_map="auto",
-    quantization_config=quantization_config
-)
-
-prompt = "The future of artificial intelligence is"
-inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-
-with torch.no_grad():
-    outputs = model.generate(
-        **inputs,
-        max_length=50,
-        num_return_sequences=1,
-        temperature=0.7,
-        do_sample=True,
-        pad_token_id=tokenizer.eos_token_id
-    )
-
-generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
-print(f"Generated text: {generated_text}")
-```
-
-</hfoption>
-
-<hfoption id="transformers CLI">
-
-```bash
-echo "The future of artificial intelligence is" | transformers run --task text-generation --model jhu-clsp/ettin-decoder-17m --device 0
+inputs = tokenizer("Plants create energy through a process known as photosynthesis.", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
+print(tokenizer.decode(outputs[0]))
 ```
 
 </hfoption>

@@ -13,45 +13,43 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-01-05 and added to Hugging Face Transformers on 2021-02-26.*
+*This model was released on 2021-01-05 and added to Hugging Face Transformers on 2021-02-26 and contributed by [kssteven](https://huggingface.co/kssteven).*
 
 # I-BERT
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[I-BERT](https://huggingface.co/papers/2101.01321) is a quantized version of RoBERTa that performs inference using only integer arithmetic, enabling efficient utilization of integer-only hardware like Turing Tensor Cores and ARM processors. By approximating nonlinear operations such as GELU, Softmax, and Layer Normalization with lightweight integer-only methods, I-BERT achieves end-to-end integer-only inference without floating-point calculations. Evaluations on GLUE tasks with RoBERTa-Base and RoBERTa-Large demonstrate that I-BERT maintains accuracy comparable to full-precision models while achieving a 2.4 to 4.0x speedup for INT8 inference on a T4 GPU.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The I-BERT model was proposed in [I-BERT: Integer-only BERT Quantization](https://huggingface.co/papers/2101.01321) by
-Sehoon Kim, Amir Gholami, Zhewei Yao, Michael W. Mahoney and Kurt Keutzer. It's a quantized version of RoBERTa running
-inference up to four times faster.
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the paper is the following:
+pipeline = pipeline(task="fill-mask", model="kssteven/ibert-roberta-base", dtype="auto")
+pipeline("Plants create <mask>> through a process known as photosynthesis.")
+```
 
-*Transformer based models, like BERT and RoBERTa, have achieved state-of-the-art results in many Natural Language
-Processing tasks. However, their memory footprint, inference latency, and power consumption are prohibitive for
-efficient inference at the edge, and even at the data center. While quantization can be a viable solution for this,
-previous work on quantizing Transformer based models use floating-point arithmetic during inference, which cannot
-efficiently utilize integer-only logical units such as the recent Turing Tensor Cores, or traditional integer-only ARM
-processors. In this work, we propose I-BERT, a novel quantization scheme for Transformer based models that quantizes
-the entire inference with integer-only arithmetic. Based on lightweight integer-only approximation methods for
-nonlinear operations, e.g., GELU, Softmax, and Layer Normalization, I-BERT performs an end-to-end integer-only BERT
-inference without any floating point calculation. We evaluate our approach on GLUE downstream tasks using
-RoBERTa-Base/Large. We show that for both cases, I-BERT achieves similar (and slightly higher) accuracy as compared to
-the full-precision baseline. Furthermore, our preliminary implementation of I-BERT shows a speedup of 2.4 - 4.0x for
-INT8 inference on a T4 GPU system as compared to FP32 inference. The framework has been developed in PyTorch and has
-been open-sourced.*
+</hfoption>
+<hfoption id="AutoModel">
 
-This model was contributed by [kssteven](https://huggingface.co/kssteven). The original code can be found [here](https://github.com/kssteven418/I-BERT).
+```py
+import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-## Resources
+model = AutoModelForMaskedLM.from_pretrained("kssteven/ibert-roberta-base", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("kssteven/ibert-roberta-base")
 
-- [Text classification task guide](../tasks/sequence_classification)
-- [Token classification task guide](../tasks/token_classification)
-- [Question answering task guide](../tasks/question_answering)
-- [Masked language modeling task guide](../tasks/masked_language_modeling)
-- [Multiple choice task guide](../tasks/masked_language_modeling)
+inputs = tokenizer("Plants create <mask>> through a process known as photosynthesis.", return_tensors="pt")
+outputs = model(**inputs)
+mask_token_id = tokenizer.mask_token_id
+mask_position = (inputs.input_ids == tokenizer.mask_token_id).nonzero(as_tuple=True)[1]
+predicted_word = tokenizer.decode(outputs.logits[0, mask_position].argmax(dim=-1))
+print(f"Predicted word: {predicted_word}")
+```
+
+</hfoption>
+</hfoptions>
 
 ## IBertConfig
 
@@ -86,3 +84,4 @@ This model was contributed by [kssteven](https://huggingface.co/kssteven). The o
 
 [[autodoc]] IBertForQuestionAnswering
     - forward
+

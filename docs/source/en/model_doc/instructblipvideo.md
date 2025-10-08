@@ -9,38 +9,71 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
-*This model was released on 2023-05-11 and added to Hugging Face Transformers on 2024-06-25.*
+*This model was released on 2023-05-11 and added to Hugging Face Transformers on 2024-06-25 and contributed by [RaushanTurganbay](https://huggingface.co/RaushanTurganbay).*
 
 # InstructBlipVideo
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[InstructBLIPVideo](https://huggingface.co/papers/2305.06500) extends InstructBLIP to handle video inputs while maintaining the same architecture and checkpoints. It leverages instruction tuning on a variety of datasets, introducing instruction-aware visual feature extraction to enhance performance. This results in state-of-the-art zero-shot performance across multiple datasets and superior accuracy on fine-tuned tasks compared to BLIP-2 and Flamingo.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="InstructBlipVideoForConditionalGeneration">
 
-The InstructBLIPVideo is an extension of the models proposed in [InstructBLIP: Towards General-purpose Vision-Language Models with Instruction Tuning](https://huggingface.co/papers/2305.06500) by Wenliang Dai, Junnan Li, Dongxu Li, Anthony Meng Huat Tiong, Junqi Zhao, Weisheng Wang, Boyang Li, Pascale Fung, Steven Hoi.
-InstructBLIPVideo uses the same architecture as [InstructBLIP](instructblip) and works with the same checkpoints as [InstructBLIP](instructblip). The only difference is the ability to process videos.
+```py
+import torch
+import av
+import numpy as np
+from transformers import InstructBlipVideoProcessor, InstructBlipVideoForConditionalGeneration
+from huggingface_hub import hf_hub_download
 
-The abstract from the paper is the following:
+def read_video_pyav(container, indices):
+    '''
+    Decode the video with PyAV decoder.
+    Args:
+        container (`av.container.input.InputContainer`): PyAV container.
+        indices (`list[int]`): List of frame indices to decode.
+    Returns:
+        result (np.ndarray): np array of decoded frames of shape (num_frames, height, width, 3).
+    '''
+    frames = []
+    container.seek(0)
+    start_index = indices[0]
+    end_index = indices[-1]
+    for i, frame in enumerate(container.decode(video=0)):
+        if i > end_index:
+            break
+        if i >= start_index and i in indices:
+            frames.append(frame)
+    return np.stack([x.to_ndarray(format="rgb24") for x in frames])
 
-*General-purpose language models that can solve various language-domain tasks have emerged driven by the pre-training and instruction-tuning pipeline. However, building general-purpose vision-language models is challenging due to the increased task discrepancy introduced by the additional visual input. Although vision-language pre-training has been widely studied, vision-language instruction tuning remains relatively less explored. In this paper, we conduct a systematic and comprehensive study on vision-language instruction tuning based on the pre-trained BLIP-2 models. We gather a wide variety of 26 publicly available datasets, transform them into instruction tuning format and categorize them into two clusters for held-in instruction tuning and held-out zero-shot evaluation. Additionally, we introduce instruction-aware visual feature extraction, a crucial method that enables the model to extract informative features tailored to the given instruction. The resulting InstructBLIP models achieve state-of-the-art zero-shot performance across all 13 held-out datasets, substantially outperforming BLIP-2 and the larger Flamingo. Our models also lead to state-of-the-art performance when finetuned on individual downstream tasks (e.g., 90.7% accuracy on ScienceQA IMG). Furthermore, we qualitatively demonstrate the advantages of InstructBLIP over concurrent multimodal models.*
+model = InstructBlipVideoForConditionalGeneration.from_pretrained("Salesforce/instructblip-vicuna-7b", device_map="auto")
+processor = InstructBlipVideoProcessor.from_pretrained("Salesforce/instructblip-vicuna-7b")
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/instructblip_architecture.jpg"
-alt="drawing" width="600"/>
+file_path = hf_hub_download(
+      repo_id="nielsr/video-demo", filename="eating_spaghetti.mp4", repo_type="dataset"
+)
+container = av.open(file_path)
 
-<small> InstructBLIPVideo architecture. Taken from the <a href="https://huggingface.co/papers/2305.06500">original paper.</a> </small>
+total_frames = container.streams.video[0].frames
+indices = np.arange(0, total_frames, total_frames / 4).astype(int)
+clip = read_video_pyav(container, indices)
 
-This model was contributed by [RaushanTurganbay](https://huggingface.co/RaushanTurganbay).
-The original code can be found [here](https://github.com/salesforce/LAVIS/tree/main/projects/instructblip).
+prompt = "What is happening in the video?"
+inputs = processor(text=prompt, images=clip, return_tensors="pt").to(model.device)
 
-## Usage tips
+outputs = model.generate(
+    **inputs,
+    do_sample=False,
+    num_beams=5,
+    max_length=256,
+    repetition_penalty=1.5,
+    length_penalty=1.0,
+)
+generated_text = processor.batch_decode(outputs, skip_special_tokens=True)[0].strip()
+print(generated_text)
+```
 
-- The model was trained by sampling 4 frames per video, so it's recommended to sample 4 frames
-
-> [!NOTE]
-> BLIP models after release v4.46 will raise warnings about adding `processor.num_query_tokens = {{num_query_tokens}}` and expand model embeddings layer to add special `<image>` token. It is strongly recommended to add the attributes to the processor if you own the model checkpoint, or open a PR if it is not owned by you. Adding these attributes means that BLIP will add the number of query tokens required per image and expand the text with as many `<image>` placeholders as there will be query tokens. Usually it is around 500 tokens per image, so make sure that the text is not truncated as otherwise there will be failure when merging the embeddings.
-The attributes can be obtained from model config, as `model.config.num_query_tokens` and model embeddings expansion can be done by following [this link](https://gist.github.com/zucchini-nlp/e9f20b054fa322f84ac9311d9ab67042).
+</hfoption>
+</hfoptions>
 
 ## InstructBlipVideoConfig
 
@@ -58,9 +91,9 @@ The attributes can be obtained from model config, as `model.config.num_query_tok
 
 [[autodoc]] InstructBlipVideoProcessor
 
-## InstructBlipVideoVideoProcessor
+## InstructBlipVideoImageProcessor
 
-[[autodoc]] InstructBlipVideoVideoProcessor
+[[autodoc]] InstructBlipVideoImageProcessor
     - preprocess
 
 ## InstructBlipVideoVisionModel
@@ -73,13 +106,18 @@ The attributes can be obtained from model config, as `model.config.num_query_tok
 [[autodoc]] InstructBlipVideoQFormerModel
     - forward
 
-## InstructBlipVideoModel
-
-[[autodoc]] InstructBlipVideoModel
-    - forward
-
 ## InstructBlipVideoForConditionalGeneration
 
 [[autodoc]] InstructBlipVideoForConditionalGeneration
     - forward
     - generate
+
+## InstructBlipVideoModel
+
+[[autodoc]] InstructBlipVideoModel
+    - forward
+
+## InstructBlipVideoVideoProcessor
+
+[[autodoc]] InstructBlipVideoVideoProcessor
+

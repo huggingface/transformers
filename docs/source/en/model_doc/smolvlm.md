@@ -13,65 +13,35 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-02-20 and added to Hugging Face Transformers on 2025-02-20.*
+*This model was released on 2025-04-07 and added to Hugging Face Transformers on 2025-02-20 and contributed by [orrzohar](https://huggingface.co/orrzohar).*
 
 # SmolVLM
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
 </div>
 
-## Overview
+[SmolVLM2](https://huggingface.co/papers/2504.05299) is a series of compact vision-language models designed for efficient on-device inference, emphasizing low GPU memory usage without sacrificing performance. The models optimize architecture, tokenization, and training data to reduce computational overhead, enabling substantial gains on image and video tasks. SmolVLM-256M, the smallest model, uses under 1GB of GPU memory yet outperforms a model 300 times its size, while the largest 2.2B-parameter model rivals state-of-the-art VLMs using twice the memory. These models demonstrate that careful design and data curation can deliver high multimodal performance with minimal resource requirements.
 
-[SmolVLM2](https://huggingface.co/papers/2504.05299) ([blog post](https://huggingface.co/blog/smolvlm2)) is an adaptation of the Idefics3 model with two main differences:
+<hfoptions id="usage">
+<hfoption id="AutoModel">
 
-- It uses SmolLM2 for the text model.
-- It supports multi-image and video inputs
-
-## Usage tips
-
-Input images are processed either by upsampling (if resizing is enabled) or at their original resolution. The resizing behavior depends on two parameters: do_resize and size.
-
-Videos should not be upsampled.
-
-If `do_resize` is set to `True`, the model resizes images so that the longest edge is 4*512 pixels by default.
-The default resizing behavior can be customized by passing a dictionary to the `size` parameter. For example, `{"longest_edge": 4 * 512}` is the default, but you can change it to a different value if needed.
-
-Here's how to control resizing and set a custom size:
-
-```python
-image_processor = SmolVLMImageProcessor(do_resize=True, size={"longest_edge": 2 * 512}, max_image_size=512)
-```
-
-Additionally, the `max_image_size` parameter, which controls the size of each square patch the image is decomposed into, is set to 512 by default but can be adjusted as needed. After resizing (if applicable), the image processor decomposes the images into square patches based on the `max_image_size` parameter.
-
-This model was contributed by [orrzohar](https://huggingface.co/orrzohar).
-
-## Usage example
-
-### Single Media inference
-
-The model can accept both images and videos as input, but you should use only one of the modalities at a time. Here's an example code for that.
-
-```python
+```py
 import torch
 from transformers import AutoProcessor, AutoModelForImageTextToText
 
 processor = AutoProcessor.from_pretrained("HuggingFaceTB/SmolVLM2-256M-Video-Instruct")
-model = AutoModelForImageTextToText.from_pretrained(
-    "HuggingFaceTB/SmolVLM2-256M-Video-Instruct",
-    dtype=torch.bfloat16,
-    device_map="auto"
-)
+model = AutoModelForImageTextToText.from_pretrained("HuggingFaceTB/SmolVLM2-256M-Video-Instruct", dtype="auto")
 
 conversation = [
     {
         "role": "user",
         "content":[
-            {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
-            {"type": "text", "text": "Describe this image."}
+            {"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"},
+            {"type": "text", "text": "Describe the weather in this image."}
         ]
     }
 ]
@@ -82,94 +52,15 @@ inputs = processor.apply_chat_template(
     tokenize=True,
     return_dict=True,
     return_tensors="pt",
-).to(model.device, dtype=torch.bfloat16)
+)
 
 output_ids = model.generate(**inputs, max_new_tokens=128)
 generated_texts = processor.batch_decode(output_ids, skip_special_tokens=True)
 print(generated_texts)
-
-
-# Video
-conversation = [
-    {
-        "role": "user",
-        "content": [
-            {"type": "video", "path": "/path/to/video.mp4"},
-            {"type": "text", "text": "Describe this video in detail"}
-        ]
-    },
-]
-
-inputs = processor.apply_chat_template(
-    conversation,
-    add_generation_prompt=True,
-    tokenize=True,
-    return_dict=True,
-    return_tensors="pt",
-).to(model.device, dtype=torch.bfloat16)
-
-generated_ids = model.generate(**inputs, do_sample=False, max_new_tokens=100)
-generated_texts = processor.batch_decode(generated_ids, skip_special_tokens=True)
-print(generated_texts[0])
 ```
 
-### Batch Mixed Media Inference
-
-The model can batch inputs composed of several images/videos and text. Here is an example.
-
-```python
-import torch
-from transformers import AutoProcessor, AutoModelForImageTextToText
-
-processor = AutoProcessor.from_pretrained("HuggingFaceTB/SmolVLM2-256M-Video-Instruct")
-model = AutoModelForImageTextToText.from_pretrained(
-    "HuggingFaceTB/SmolVLM2-256M-Video-Instruct",
-    dtype=torch.bfloat16,
-    device_map="auto"
-)
-
-# Conversation for the first image
-conversation1 = [
-    {
-        "role": "user",
-        "content": [
-            {"type": "image", "path": "/path/to/image.jpg"},
-            {"type": "text", "text": "Describe this image."}
-        ]
-    }
-]
-
-# Conversation with two images
-conversation2 = [
-    {
-        "role": "user",
-        "content": [
-            {"type": "image", "path": "/path/to/image.jpg"},
-            {"type": "image", "path": "/path/to/image.jpg"},
-            {"type": "text", "text": "What is written in the pictures?"}
-        ]
-    }
-]
-
-# Conversation with pure text
-conversation3 = [
-    {"role": "user","content": "who are you?"}
-]
-
-
-conversations = [conversation1, conversation2, conversation3]
-inputs = processor.apply_chat_template(
-    conversations,
-    add_generation_prompt=True,
-    tokenize=True,
-    return_dict=True,
-    return_tensors="pt",
-).to(model.device, dtype=torch.bfloat16)
-
-generated_ids = model.generate(**inputs, do_sample=False, max_new_tokens=100)
-generated_texts = processor.batch_decode(generated_ids, skip_special_tokens=True)
-print(generated_texts[0])
-```
+</hfoption>
+</hfoptions>
 
 ## SmolVLMConfig
 
@@ -203,12 +94,10 @@ print(generated_texts[0])
 [[autodoc]] SmolVLMImageProcessorFast
     - preprocess
 
-## SmolVLMVideoProcessor
-
-[[autodoc]] SmolVLMVideoProcessor
-    - preprocess
-
 ## SmolVLMProcessor
 
 [[autodoc]] SmolVLMProcessor
     - __call__
+
+## SmolVLMVideoProcessor
+[[autodoc]] SmolVLMVideoProcessor

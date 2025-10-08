@@ -13,94 +13,34 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-06-17 and added to Hugging Face Transformers on 2025-06-25.*
+*This model was released on 2025-06-17 and added to Hugging Face Transformers on 2025-06-25 and contributed by [eustlb](https://huggingface.co/eustlb).*
 
 # Kyutai Speech-To-Text
 
-## Overview
+[Kyutai STT](https://huggingface.co/papers/2509.08753) is a decoder-only framework for streaming, multimodal sequence-to-sequence learning that aligns input and output streams in advance rather than learning alignment during training. By introducing controlled delays between already time-aligned streams, DSM enables real-time generation for tasks like automatic speech recognition (ASR) and text-to-speech (TTS) using the same underlying model. This approach allows efficient streaming inference with arbitrary sequence lengths and multimodal inputs while maintaining low latency. Experiments show DSM achieves state-of-the-art performance on both ASR and TTS, rivaling even non-streaming (offline) models.
 
-[Kyutai STT](https://kyutai.org/next/stt) is a speech-to-text model architecture based on the [Mimi codec](https://huggingface.co/docs/transformers/en/model_doc/mimi), which encodes audio into discrete tokens in a streaming fashion, and a [Moshi-like](https://huggingface.co/docs/transformers/en/model_doc/moshi) autoregressive decoder. Kyutai's lab has released two model checkpoints:
+<hfoptions id="usage">
+<hfoption id="KyutaiSpeechToTextForConditionalGeneration">
 
-- [kyutai/stt-1b-en_fr](https://huggingface.co/kyutai/stt-1b-en_fr): a 1B-parameter model capable of transcribing both English and French
-- [kyutai/stt-2.6b-en](https://huggingface.co/kyutai/stt-2.6b-en): a 2.6B-parameter model focused solely on English, optimized for maximum transcription accuracy
-
-<div class="flex justify-center">
-    <img src="https://huggingface.co/datasets/eustlb/documentation-images/resolve/main/kyutai_stt.png"/>
-</div>
-
-## Usage Tips
-
-### Inference
-
-```python
+```py
 import torch
 from datasets import load_dataset, Audio
 from transformers import KyutaiSpeechToTextProcessor, KyutaiSpeechToTextForConditionalGeneration
 from accelerate import Accelerator
 
-# 1. load the model and the processor
-torch_device = Accelerator().device
-model_id = "kyutai/stt-2.6b-en-trfs"
+processor = KyutaiSpeechToTextProcessor.from_pretrained("kyutai/stt-2.6b-en-trfs")
+model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained("kyutai/stt-2.6b-en-trfs", dtype="auto")
 
-processor = KyutaiSpeechToTextProcessor.from_pretrained(model_id)
-model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(model_id, device_map=torch_device, dtype="auto")
-
-# 2. load audio samples
-ds = load_dataset(
-    "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
-)
+ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 ds = ds.cast_column("audio", Audio(sampling_rate=24000))
 
-# 3. prepare the model inputs
-inputs = processor(
-    ds[0]["audio"]["array"],
-)
-inputs.to(model.device)
-
-# 4. infer the model
+inputs = processor(ds[0]["audio"]["array"],)
 output_tokens = model.generate(**inputs)
-
-# 5. decode the generated tokens
-print(processor.batch_decode(output_tokens, skip_special_tokens=True))
+print(f"Transcription: {processor.batch_decode(output_tokens, skip_special_tokens=True)}")
 ```
 
-### Batched Inference
-
-```python
-import torch
-from datasets import load_dataset, Audio
-from transformers import KyutaiSpeechToTextProcessor, KyutaiSpeechToTextForConditionalGeneration
-from accelerate import Accelerator
-
-# 1. load the model and the processor
-torch_device = Accelerator().device
-model_id = "kyutai/stt-2.6b-en-trfs"
-
-processor = KyutaiSpeechToTextProcessor.from_pretrained(model_id)
-model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(model_id, device_map=torch_device, dtype="auto")
-
-# 2. load audio samples
-ds = load_dataset(
-    "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
-)
-ds = ds.cast_column("audio", Audio(sampling_rate=24000))
-
-# 3. prepare the model inputs
-audio_arrays = [ds[i]["audio"]["array"] for i in range(4)]
-inputs = processor(audio_arrays, return_tensors="pt", padding=True)
-inputs = inputs.to(model.device)
-
-# 4. infer the model
-output_tokens = model.generate(**inputs)
-
-# 5. decode the generated tokens
-decoded_outputs = processor.batch_decode(output_tokens, skip_special_tokens=True)
-for output in decoded_outputs:
-    print(output)
-```
-
-This model was contributed by [Eustache Le Bihan](https://huggingface.co/eustlb).
-The original code can be found [here](https://github.com/kyutai-labs/moshi).
+</hfoption>
+</hfoptions>
 
 ## KyutaiSpeechToTextConfig
 

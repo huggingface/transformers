@@ -13,23 +13,37 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-12-17 and added to Hugging Face Transformers on 2024-12-17.*
+*This model was released on 2023-11-28 and added to Hugging Face Transformers on 2024-12-17.*
 
 # Falcon3
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[Falcon3](https://huggingface.co/papers/2311.16867) introduces decoder-only language models with 7B, 40B, and 180B parameters, trained primarily on high-quality web data. Falcon-180B was trained on 3.5 trillion tokens, representing the largest openly documented pretraining run to date, and achieves performance close to PaLM-2-Large while being more cost-efficient. It surpasses models such as PaLM, Chinchilla, LLaMA 2, and Inflection-1, placing it among the top three language models globally alongside GPT-4 and PaLM-2-Large. The project also details its custom distributed training system capable of scaling to 4,096 A100 GPUs on AWS, and openly releases both the models and a 600B-token dataset extract under a permissive license to support open research.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-[Falcon3](https://falconllm.tii.ae/falcon3/index.html) represents a natural evolution from previous releases, emphasizing expanding the models' science, math, and code capabilities. This iteration includes five base models: Falcon3-1B-Base, Falcon3-3B-Base, Falcon3-Mamba-7B-Base, Falcon3-7B-Base, and Falcon3-10B-Base. In developing these models, we incorporated several key innovations aimed at improving the models' performances while reducing training costs:
+```py
+import torch
+from transformers import pipeline
 
-One pre-training: We conducted a single large-scale pretraining run on the 7B model, using 2048 H100 GPU chips, leveraging 14 trillion tokens featuring web, code, STEM, and curated high-quality and multilingual data.
-Depth up-scaling for improved reasoning: Building on recent studies on the effects of model depth, we upscaled the 7B model to a 10B parameters model by duplicating the redundant layers and continuing pre-training with 2TT of high-quality data. This yielded Falcon3-10B-Base which achieves state-of-the-art zero-shot and few-shot performance for models under 13B parameters.
-Knowledge distillation for better tiny models: To provide compact and efficient alternatives, we developed Falcon3-1B-Base and Falcon3-3B-Base by leveraging pruning and knowledge distillation techniques, using less than 100GT of curated high-quality data, thereby redefining pre-training efficiency.
+pipeline = pipeline("text-generation", model="tiiuae/Falcon3-1B-Base", dtype="auto")
+pipeline("Plants create energy through a process known as photosynthesis.")
+```
 
-## Resources
+</hfoption>
+<hfoption id="AutoModel">
 
-- [Blog post](https://huggingface.co/blog/falcon3)
-- [Models on Huggingface](https://huggingface.co/collections/tiiuae/falcon3-67605ae03578be86e4e87026)
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model = AutoModelForCausalLM.from_pretrained("tiiuae/Falcon3-1B-Base", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("tiiuae/Falcon3-1B-Base")
+
+inputs = tokenizer("Plants create energy through a process known as photosynthesis.", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
+print(tokenizer.decode(outputs[0]))
+```
+
+</hfoption>
+</hfoptions>

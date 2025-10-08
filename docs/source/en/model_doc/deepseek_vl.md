@@ -17,7 +17,6 @@ rendered properly in your Markdown viewer.
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
@@ -25,14 +24,7 @@ rendered properly in your Markdown viewer.
 
 # DeepseekVL
 
-[Deepseek-VL](https://huggingface.co/papers/2403.05525) was introduced by the DeepSeek AI team. It is a vision-language model (VLM) designed to process both text and images for generating contextually relevant responses. The model leverages [LLaMA](./llama) as its text encoder, while [SigLip](./siglip) is used for encoding images.
-
-You can find all the original Deepseek-VL checkpoints under the [DeepSeek-community](https://huggingface.co/deepseek-community) organization.
-
-> [!TIP]
-> Click on the Deepseek-VL models in the right sidebar for more examples of how to apply Deepseek-VL to different vision and language tasks.
-
-The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
+[Deepseek-VL](https://huggingface.co/papers/2403.05525) is an open-source vision-language model optimized for real-world multimodal understanding. It employs a hybrid vision encoder capable of efficiently processing high-resolution images (1024×1024) while minimizing computational cost, enabling rich semantic and detail capture across diverse tasks. The model is trained on a large, diverse dataset that includes real-world content like web screenshots, PDFs, charts, and OCR data, with instruction tuning guided by a taxonomy of practical user scenarios. By integrating language model pretraining from the start to balance vision–language learning, DeepSeek-VL (available in 1.3B and 7B versions) achieves state-of-the-art performance on vision-language benchmarks while retaining strong language capabilities.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -41,166 +33,50 @@ The example below demonstrates how to generate text based on an image with [`Pip
 import torch
 from transformers import pipeline
 
-pipe = pipeline(
-    task="image-text-to-text",
-    model="deepseek-community/deepseek-vl-1.3b-chat",
-    device=0,
-    dtype=torch.float16
-)
-
+pipeline = pipeline(task="image-text-to-text", model="deepseek-community/deepseek-vl-1.3b-chat", dtype="auto")
 messages = [
-    {
-        "role": "user",
-        "content": [
-            {
-                "type": "image",
-                "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
-            },
-            { "type": "text", "text": "Describe this image."},
-        ]
-    }
+    {"role": "user",
+     "content": [
+       {"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"},
+        {"type": "text", "text": "What is shown in this image?"},
+    ]},
 ]
-
-pipe(text=messages, max_new_tokens=20, return_full_text=False)
+pipeline(text=messages, max_new_tokens=300, return_full_text=False)
 ```
 
 </hfoption>
-
 <hfoption id="AutoModel">
 
 ```py
 import torch
-from transformers import DeepseekVLForConditionalGeneration, AutoProcessor
-
-model = DeepseekVLForConditionalGeneration.from_pretrained(
-    "deepseek-community/deepseek-vl-1.3b-chat",
-    dtype=torch.float16,
-    device_map="auto",
-    attn_implementation="sdpa"
-)
+from transformers import AutoProcessor, AutoModelForImageTextToText
 
 processor = AutoProcessor.from_pretrained("deepseek-community/deepseek-vl-1.3b-chat")
+model = AutoModelForImageTextToText.from_pretrained("deepseek-community/deepseek-vl-1.3b-chat", dtype="auto")
 
 messages = [
-    {
-        "role":"user",
-        "content":[
-            {
-                "type":"image",
-                "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
-            },
-            {
-                "type":"text",
-                "text":"Describe this image."
-            }
-        ]
-    }
-
+    {"role": "user",
+     "content": [
+       {"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"},
+        {"type": "text", "text": "What is shown in this image?"},
+    ]},
 ]
 
 inputs = processor.apply_chat_template(
-    messages,
-    add_generation_prompt=True,
-    tokenize=True,
-    return_dict=True,
-    return_tensors="pt"
-).to(model.device, dtype=model.dtype)
-
-generated_ids = model.generate(**inputs, max_new_tokens=128)
-generated_ids_trimmed = [
-    out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
-]
-output_text = processor.batch_decode(
-    generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
+    messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
 )
 
-print(output_text)
+outputs = model.generate(
+    **inputs,
+    max_new_tokens=300,
+    do_sample=True,
+    temperature=0.3,
+)
+print(processor.tokenizer.decode(outputs[0][inputs.input_ids.shape[1]:], skip_special_tokens=True))
 ```
 
 </hfoption>
 </hfoptions>
-
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
-
-The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.
-
-```python
-import torch
-from transformers import TorchAoConfig, DeepseekVLForConditionalGeneration, AutoProcessor
-
-quantization_config = TorchAoConfig(
-    "int4_weight_only",
-    group_size=128
-)
-
-model = DeepseekVLForConditionalGeneration.from_pretrained(
-    "deepseek-community/deepseek-vl-1.3b-chat",
-    dtype=torch.bfloat16,
-    device_map="auto",
-    quantization_config=quantization_config
-)
-```
-
-### Notes
-
-- Do inference with multiple images in a single conversation.
-
-    ```py
-    import torch
-    from transformers import DeepseekVLForConditionalGeneration, AutoProcessor
-
-    model = DeepseekVLForConditionalGeneration.from_pretrained(
-        "deepseek-community/deepseek-vl-1.3b-chat",
-        dtype=torch.float16,
-        device_map="auto",
-        attn_implementation="sdpa"
-    )
-
-    processor = AutoProcessor.from_pretrained("deepseek-community/deepseek-vl-1.3b-chat")
-
-    messages = [
-        [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": "What’s the difference between"},
-                    {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
-                    {"type": "text", "text": " and "},
-                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"}
-                ]
-            }
-        ],
-        [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image", "url": "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.jpg"},
-                    {"type": "text", "text": "What do you see in this image?"}
-                ]
-            }
-        ]
-    ]
-
-    inputs = processor.apply_chat_template(
-        messages,
-        add_generation_prompt=True,
-        padding=True,
-        truncation=True,
-        tokenize=True,
-        return_dict=True,
-        return_tensors="pt"
-    ).to(model.device, dtype=model.dtype)
-
-    generated_ids = model.generate(**inputs, max_new_tokens=128)
-    generated_ids_trimmed = [
-        out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
-    ]
-    output_text = processor.batch_decode(
-        generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
-    )
-
-    print(output_text)
-    ```
 
 ## DeepseekVLConfig
 

@@ -13,76 +13,54 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-04-17 and added to Hugging Face Transformers on 2024-06-22.*
+*This model was released on 2023-04-17 and added to Hugging Face Transformers on 2024-06-22 and contributed by [rafaelpadilla](https://huggingface.co/rafaelpadilla) and [SangbumChoi](https://github.com/SangbumChoi).*
 
 # RT-DETR
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[RT-DETR](https://huggingface.co/papers/2304.08069) is a real-time end-to-end object detection model that leverages the transformer architecture to achieve high accuracy and speed. It addresses the computational cost and inference delay issues associated with traditional DETR models by eliminating the need for non-maximum suppression (NMS). RT-DETR features an efficient hybrid encoder for multi-scale feature processing and an IoU-aware query selection mechanism to enhance object query initialization. The model supports flexible speed adjustment through varying decoder layers without retraining. RT-DETR-L and RT-DETR-X achieve 53.0% and 54.8% AP on COCO val2017 with 114 FPS and 74 FPS on a T4 GPU, respectively, outperforming YOLO models in both speed and accuracy. RT-DETR-R50 also surpasses DINO-Deformable-DETR-R50 in accuracy and FPS.
 
-## Overview
-
-The RT-DETR model was proposed in [DETRs Beat YOLOs on Real-time Object Detection](https://huggingface.co/papers/2304.08069) by Wenyu Lv, Yian Zhao, Shangliang Xu, Jinman Wei, Guanzhong Wang, Cheng Cui, Yuning Du, Qingqing Dang, Yi Liu.
-
-RT-DETR is an object detection model that stands for "Real-Time DEtection Transformer." This model is designed to perform object detection tasks with a focus on achieving real-time performance while maintaining high accuracy. Leveraging the transformer architecture, which has gained significant popularity in various fields of deep learning, RT-DETR processes images to identify and locate multiple objects within them.
-
-The abstract from the paper is the following:
-
-*Recently, end-to-end transformer-based detectors (DETRs) have achieved remarkable performance. However, the issue of the high computational cost of DETRs has not been effectively addressed, limiting their practical application and preventing them from fully exploiting the benefits of no post-processing, such as non-maximum suppression (NMS). In this paper, we first analyze the influence of NMS in modern real-time object detectors on inference speed, and establish an end-to-end speed benchmark. To avoid the inference delay caused by NMS, we propose a Real-Time DEtection TRansformer (RT-DETR), the first real-time end-to-end object detector to our best knowledge. Specifically, we design an efficient hybrid encoder to efficiently process multi-scale features by decoupling the intra-scale interaction and cross-scale fusion, and propose IoU-aware query selection to improve the initialization of object queries. In addition, our proposed detector supports flexibly adjustment of the inference speed by using different decoder layers without the need for retraining, which facilitates the practical application of real-time object detectors. Our RT-DETR-L achieves 53.0% AP on COCO val2017 and 114 FPS on T4 GPU, while RT-DETR-X achieves 54.8% AP and 74 FPS, outperforming all YOLO detectors of the same scale in both speed and accuracy. Furthermore, our RT-DETR-R50 achieves 53.1% AP and 108 FPS, outperforming DINO-Deformable-DETR-R50 by 2.2% AP in accuracy and by about 21 times in FPS.*
-
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/rt_detr_overview.png"
-alt="drawing" width="600"/>
-
-<small> RT-DETR performance relative to YOLO models. Taken from the <a href="https://huggingface.co/papers/2304.08069">original paper.</a> </small>
-
-The model version was contributed by [rafaelpadilla](https://huggingface.co/rafaelpadilla) and [sangbumchoi](https://github.com/SangbumChoi). The original code can be found [here](https://github.com/lyuwenyu/RT-DETR/).
-
-## Usage tips
-
-Initially, an image is processed using a pre-trained convolutional neural network, specifically a Resnet-D variant as referenced in the original code. This network extracts features from the final three layers of the architecture. Following this, a hybrid encoder is employed to convert the multi-scale features into a sequential array of image features. Then, a decoder, equipped with auxiliary prediction heads is used to refine the object queries. This process facilitates the direct generation of bounding boxes, eliminating the need for any additional post-processing to acquire the logits and coordinates for the bounding boxes. The model is meant to be used on images resized to a size 640x640 with the corresponding ImageProcessor. Reshaping to other sizes will generally degrade performance.
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
 ```py
->>> import torch
->>> import requests
+import torch
+from transformers import pipeline
 
->>> from PIL import Image
->>> from transformers import RTDetrForObjectDetection, RTDetrImageProcessor
-
->>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
->>> image = Image.open(requests.get(url, stream=True).raw)
-
->>> image_processor = RTDetrImageProcessor.from_pretrained("PekingU/rtdetr_r50vd")
->>> model = RTDetrForObjectDetection.from_pretrained("PekingU/rtdetr_r50vd")
-
->>> inputs = image_processor(images=image, return_tensors="pt")
-
->>> with torch.no_grad():
-...     outputs = model(**inputs)
-
->>> results = image_processor.post_process_object_detection(outputs, target_sizes=torch.tensor([(image.height, image.width)]), threshold=0.3)
-
->>> for result in results:
-...     for score, label_id, box in zip(result["scores"], result["labels"], result["boxes"]):
-...         score, label = score.item(), label_id.item()
-...         box = [round(i, 2) for i in box.tolist()]
-...         print(f"{model.config.id2label[label]}: {score:.2f} {box}")
-sofa: 0.97 [0.14, 0.38, 640.13, 476.21]
-cat: 0.96 [343.38, 24.28, 640.14, 371.5]
-cat: 0.96 [13.23, 54.18, 318.98, 472.22]
-remote: 0.95 [40.11, 73.44, 175.96, 118.48]
-remote: 0.92 [333.73, 76.58, 369.97, 186.99]
+pipeline = pipeline(task="object-detection", model="PekingU/rtdetr_r50vd", dtype="auto")
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
 ```
 
-## Resources
+</hfoption>
+<hfoption id="AutoModel">
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with RT-DETR.
+```py
+import torch
+import requests
+from PIL import Image
+from transformers import AutoImageProcessor, AutoModelForObjectDetection
 
-<PipelineTag pipeline="object-detection"/>
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
 
-- Scripts for finetuning [`RTDetrForObjectDetection`] with [`Trainer`] or [Accelerate](https://huggingface.co/docs/accelerate/index) can be found [here](https://github.com/huggingface/transformers/tree/main/examples/pytorch/object-detection).
-- See also: [Object detection task guide](../tasks/object_detection).
-- Notebooks regarding inference and fine-tuning RT-DETR on a custom dataset can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/RT-DETR). 🌎
+image_processor = AutoImageProcessor.from_pretrained("PekingU/rtdetr_r50vd")
+model = AutoModelForObjectDetection.from_pretrained("PekingU/rtdetr_r50vd", dtype="auto")
+
+inputs = image_processor(images=image, return_tensors="pt")
+outputs = model(**inputs)
+target_sizes = torch.tensor([image.size[::-1]])
+results = image_processor.post_process_object_detection(outputs, threshold=0.5, target_sizes=target_sizes)[
+    0
+]
+for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
+    box = [round(i, 2) for i in box.tolist()]
+    print(
+        f"Detected {model.config.id2label[label.item()]} with confidence "
+        f"{round(score.item(), 3)} at location {box}"
+    )
+```
+
+</hfoption>
+</hfoptions>
 
 ## RTDetrConfig
 
@@ -118,3 +96,4 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] RTDetrResNetBackbone
     - forward
+

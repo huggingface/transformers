@@ -13,32 +13,39 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-06-24 and added to Hugging Face Transformers on 2023-05-30.*
+*This model was released on 2021-06-24 and added to Hugging Face Transformers on 2023-05-30 and contributed by [elisim](https://huggingface.co/elisim) and [kashif](https://huggingface.co/kashif).*
 
 # Autoformer
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[Autoformer: Decomposition Transformers with Auto-Correlation for Long-Term Series Forecasting](https://huggingface.co/papers/2106.13008) addresses the challenge of long-term time series forecasting by introducing a novel decomposition architecture. Autoformer integrates an Auto-Correlation mechanism that progressively decomposes trend and seasonal components, enhancing the model's ability to capture intricate temporal patterns. This approach surpasses traditional self-attention methods in both efficiency and accuracy, achieving state-of-the-art results with a 38% relative improvement across six benchmarks in diverse applications including energy, traffic, economics, weather, and disease forecasting.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="AutoformerForPrediction">
 
-The Autoformer model was proposed in [Autoformer: Decomposition Transformers with Auto-Correlation for Long-Term Series Forecasting](https://huggingface.co/papers/2106.13008) by Haixu Wu, Jiehui Xu, Jianmin Wang, Mingsheng Long.
+```py
+import torch
+from huggingface_hub import hf_hub_download
+from transformers import AutoformerForPrediction
 
-This model augments the Transformer as a deep decomposition architecture, which can progressively decompose the trend and seasonal components during the forecasting process.
+file = hf_hub_download(
+    repo_id="hf-internal-testing/tourism-monthly-batch", filename="train-batch.pt", repo_type="dataset"
+)
+batch = torch.load(file)
 
-The abstract from the paper is the following:
+model = AutoformerForPrediction.from_pretrained("huggingface/autoformer-tourism-monthly", dtype="auto")
+outputs = model.generate(
+    past_values=batch["past_values"],
+    past_time_features=batch["past_time_features"],
+    past_observed_mask=batch["past_observed_mask"],
+    static_categorical_features=batch["static_categorical_features"],
+    future_time_features=batch["future_time_features"],
+)
 
-*Extending the forecasting time is a critical demand for real applications, such as extreme weather early warning and long-term energy consumption planning. This paper studies the long-term forecasting problem of time series. Prior Transformer-based models adopt various self-attention mechanisms to discover the long-range dependencies. However, intricate temporal patterns of the long-term future prohibit the model from finding reliable dependencies. Also, Transformers have to adopt the sparse versions of point-wise self-attentions for long series efficiency, resulting in the information utilization bottleneck. Going beyond Transformers, we design Autoformer as a novel decomposition architecture with an Auto-Correlation mechanism. We break with the pre-processing convention of series decomposition and renovate it as a basic inner block of deep models. This design empowers Autoformer with progressive decomposition capacities for complex time series. Further, inspired by the stochastic process theory, we design the Auto-Correlation mechanism based on the series periodicity, which conducts the dependencies discovery and representation aggregation at the sub-series level. Auto-Correlation outperforms self-attention in both efficiency and accuracy. In long-term forecasting, Autoformer yields state-of-the-art accuracy, with a 38% relative improvement on six benchmarks, covering five practical applications: energy, traffic, economics, weather and disease.*
+mean_prediction = outputs.sequences.mean(dim=1)
+```
 
-This model was contributed by [elisim](https://huggingface.co/elisim) and [kashif](https://huggingface.co/kashif).
-The original code can be found [here](https://github.com/thuml/Autoformer).
-
-## Resources
-
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
-
-- Check out the Autoformer blog-post in HuggingFace blog: [Yes, Transformers are Effective for Time Series Forecasting (+ Autoformer)](https://huggingface.co/blog/autoformer)
+</hfoption>
+</hfoptions>
 
 ## AutoformerConfig
 
@@ -53,3 +60,4 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] AutoformerForPrediction
     - forward
+

@@ -13,43 +13,56 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-12-02 and added to Hugging Face Transformers on 2023-01-16.*
+*This model was released on 2021-12-02 and added to Hugging Face Transformers on 2023-01-16 and contributed by [shivi](https://huggingface.co/shivi) and [adirik](https://huggingface.co/adirik).*
 
 # Mask2Former
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[Mask2Former](https://huggingface.co/papers/2112.01527) is a unified framework for panoptic, instance, and semantic segmentation. It employs masked attention to extract localized features by constraining cross-attention within predicted mask regions, leading to significant performance improvements over specialized architectures. Mask2Former achieves state-of-the-art results, including 57.8 PQ on COCO for panoptic segmentation, 50.1 AP on COCO for instance segmentation, and 57.7 mIoU on ADE20K for semantic segmentation.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The Mask2Former model was proposed in [Masked-attention Mask Transformer for Universal Image Segmentation](https://huggingface.co/papers/2112.01527) by Bowen Cheng, Ishan Misra, Alexander G. Schwing, Alexander Kirillov, Rohit Girdhar. Mask2Former is a unified framework for panoptic, instance and semantic segmentation and features significant performance and efficiency improvements over [MaskFormer](maskformer).
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the paper is the following:
+pipeline = pipeline(task="image-segmentation", model="facebook/mask2former-swin-large-coco-panoptic", dtype="auto")
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
+```
 
-*Image segmentation groups pixels with different semantics, e.g., category or instance membership. Each choice
-of semantics defines a task. While only the semantics of each task differ, current research focuses on designing specialized architectures for each task. We present Masked-attention Mask Transformer (Mask2Former), a new architecture capable of addressing any image segmentation task (panoptic, instance or semantic). Its key components include masked attention, which extracts localized features by constraining cross-attention within predicted mask regions. In addition to reducing the research effort by at least three times, it outperforms the best specialized architectures by a significant margin on four popular datasets. Most notably, Mask2Former sets a new state-of-the-art for panoptic segmentation (57.8 PQ on COCO), instance segmentation (50.1 AP on COCO) and semantic segmentation (57.7 mIoU on ADE20K).*
+</hfoption>
+<hfoption id="AutoModel">
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/mask2former_architecture.jpg" alt="drawing" width="600"/>
+```py
+import torch
+import requests
+import matplotlib.pyplot as plt
+from PIL import Image
+from transformers import AutoModelForUniversalSegmentation, AutoImageProcessor
 
-<small> Mask2Former architecture. Taken from the <a href="https://huggingface.co/papers/2112.01527">original paper.</a> </small>
 
-This model was contributed by [Shivalika Singh](https://huggingface.co/shivi) and [Alara Dirik](https://huggingface.co/adirik). The original code can be found [here](https://github.com/facebookresearch/Mask2Former).
+processor = AutoImageProcessor.from_pretrained("facebook/mask2former-swin-large-coco-panoptic")
+model = AutoModelForUniversalSegmentation.from_pretrained("facebook/mask2former-swin-large-coco-panoptic", dtype="auto")
 
-## Usage tips
+image = Image.open(requests.get("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg", stream=True).raw)
+inputs = processor(images=image, return_tensors="pt",)
 
-- Mask2Former uses the same preprocessing and postprocessing steps as [MaskFormer](maskformer). Use [`Mask2FormerImageProcessor`] or [`AutoImageProcessor`] to prepare images and optional targets for the model.
-- To get the final segmentation, depending on the task, you can call [`~Mask2FormerImageProcessor.post_process_semantic_segmentation`] or [`~Mask2FormerImageProcessor.post_process_instance_segmentation`] or [`~Mask2FormerImageProcessor.post_process_panoptic_segmentation`]. All three tasks can be solved using [`Mask2FormerForUniversalSegmentation`] output, panoptic segmentation accepts an optional `label_ids_to_fuse` argument to fuse instances of the target object/s (e.g. sky) together.
+with torch.inference_mode():
+    outputs = model(**inputs)
 
-## Resources
+target_sizes = [(image.height, image.width)]
+outputs = processor.post_process_panoptic_segmentation(
+    outputs,
+    target_sizes=target_sizes,
+)
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with Mask2Former.
+plt.imshow(outputs[0]["segmentation"])
+plt.axis("off")
+plt.show()
+```
 
-- Demo notebooks regarding inference + fine-tuning Mask2Former on custom data can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/Mask2Former).
-- Scripts for finetuning [`Mask2Former`] with [`Trainer`] or [Accelerate](https://huggingface.co/docs/accelerate/index) can be found [here](https://github.com/huggingface/transformers/tree/main/examples/pytorch/instance-segmentation).
-
-If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we will review it.
-The resource should ideally demonstrate something new instead of duplicating an existing resource.
+</hfoption>
+</hfoptions>
 
 ## Mask2FormerConfig
 
@@ -87,3 +100,4 @@ The resource should ideally demonstrate something new instead of duplicating an 
     - post_process_semantic_segmentation
     - post_process_instance_segmentation
     - post_process_panoptic_segmentation
+

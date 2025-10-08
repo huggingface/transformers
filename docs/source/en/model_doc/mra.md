@@ -13,24 +13,43 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-07-21 and added to Hugging Face Transformers on 2023-07-10.*
+*This model was released on 2022-07-21 and added to Hugging Face Transformers on 2023-07-10 and contributed by [novice03](https://huggingface.co/novice03).*
 
 # MRA
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[MRA](https://huggingface.co/papers/2207.10284) revisits classical Multiresolution Analysis (MRA) concepts, particularly Wavelets, to approximate the self-attention matrix in Transformers. By leveraging empirical feedback and design choices that consider modern hardware and implementation challenges, the MRA-based approach achieves excellent performance across various criteria. Experiments show that this multi-resolution scheme outperforms most efficient self-attention methods and is effective for both short and long sequences.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The MRA model was proposed in [Multi Resolution Analysis (MRA) for Approximate Self-Attention](https://huggingface.co/papers/2207.10284) by Zhanpeng Zeng, Sourav Pal, Jeffery Kline, Glenn M Fung, and Vikas Singh.
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the paper is the following:
+pipeline = pipeline(task="fill-mask", model="uw-madison/mra-base-512-4", dtype="auto")
+pipeline("Plants create <mask> through a process known as photosynthesis.")
+```
 
-*Transformers have emerged as a preferred model for many tasks in natural language processing and vision. Recent efforts on training and deploying Transformers more efficiently have identified many strategies to approximate the self-attention matrix, a key module in a Transformer architecture. Effective ideas include various prespecified sparsity patterns, low-rank basis expansions and combinations thereof. In this paper, we revisit classical Multiresolution Analysis (MRA) concepts such as Wavelets, whose potential value in this setting remains underexplored thus far. We show that simple approximations based on empirical feedback and design choices informed by modern hardware and implementation challenges, eventually yield a MRA-based approach for self-attention with an excellent performance profile across most criteria of interest. We undertake an extensive set of experiments and demonstrate that this multi-resolution scheme outperforms most efficient self-attention proposals and is favorable for both short and long sequences. Code is available at https://github.com/mlpen/mra-attention.*
+</hfoption>
+<hfoption id="AutoModel">
 
-This model was contributed by [novice03](https://huggingface.co/novice03).
-The original code can be found [here](https://github.com/mlpen/mra-attention).
+```py
+import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer
+
+model = AutoModelForMaskedLM.from_pretrained("uw-madison/mra-base-512-4", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("uw-madison/mra-base-512-4")
+
+inputs = tokenizer("Plants create <mask> through a process known as photosynthesis.", return_tensors="pt")
+outputs = model(**inputs)
+mask_token_id = tokenizer.mask_token_id
+mask_position = (inputs.input_ids == tokenizer.mask_token_id).nonzero(as_tuple=True)[1]
+predicted_word = tokenizer.decode(outputs.logits[0, mask_position].argmax(dim=-1))
+print(f"Predicted word: {predicted_word}")
+```
+
+</hfoption>
+</hfoptions>
 
 ## MraConfig
 
@@ -65,3 +84,4 @@ The original code can be found [here](https://github.com/mlpen/mra-attention).
 
 [[autodoc]] MraForQuestionAnswering
     - forward
+

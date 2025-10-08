@@ -13,48 +13,63 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-01-19 and added to Hugging Face Transformers on 2022-03-22.*
+*This model was released on 2022-01-19 and added to Hugging Face Transformers on 2022-03-22 and contributed by [nielsr](https://huggingface.co/nielsr).*
 
 # GLPN
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[GLPN](https://huggingface.co/papers/2201.07436) combines SegFormer's hierarchical mix-Transformer with a lightweight decoder for monocular depth estimation. The decoder integrates global context and local connectivity through a selective feature fusion module, enhancing fine detail recovery. This approach achieves state-of-the-art performance on the NYU Depth V2 dataset with improved generalization and robustness, while maintaining lower computational complexity compared to previous decoders.
 
-<Tip>
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-This is a recently introduced model so the API hasn't been tested extensively. There may be some bugs or slight
-breaking changes to fix it in the future. If you see something strange, file a [Github Issue](https://github.com/huggingface/transformers/issues/new?assignees=&labels=&template=bug-report.md&title).
+```py
+import torch
+from transformers import pipeline
 
-</Tip>
+pipeline = pipeline(task="depth-estimation", model="vinvino02/glpn-kitti", dtype="auto")
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
+```
 
-## Overview
+</hfoption>
+<hfoption id="AutoModel">
 
-The GLPN model was proposed in [Global-Local Path Networks for Monocular Depth Estimation with Vertical CutDepth](https://huggingface.co/papers/2201.07436)  by Doyeon Kim, Woonghyun Ga, Pyungwhan Ahn, Donggyu Joo, Sehwan Chun, Junmo Kim.
-GLPN combines [SegFormer](segformer)'s hierarchical mix-Transformer with a lightweight decoder for monocular depth estimation. The proposed decoder shows better performance than the previously proposed decoders, with considerably
-less computational complexity.
+```python
+import torch
+import requests
+import numpy as np
+from PIL import Image
+from transformers import AutoImageProcessor, AutoModelForDepthEstimation
 
-The abstract from the paper is the following:
+image_processor = AutoImageProcessor.from_pretrained("vinvino02/glpn-kitti")
+model = AutoModelForDepthEstimation.from_pretrained("vinvino02/glpn-kitti", dtype="auto")
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
+inputs = image_processor(images=image, return_tensors="pt")
 
-*Depth estimation from a single image is an important task that can be applied to various fields in computer vision, and has grown rapidly with the development of convolutional neural networks. In this paper, we propose a novel structure and training strategy for monocular depth estimation to further improve the prediction accuracy of the network. We deploy a hierarchical transformer encoder to capture and convey the global context, and design a lightweight yet powerful decoder to generate an estimated depth map while considering local connectivity. By constructing connected paths between multi-scale local features and the global decoding stream with our proposed selective feature fusion module, the network can integrate both representations and recover fine details. In addition, the proposed decoder shows better performance than the previously proposed decoders, with considerably less computational complexity. Furthermore, we improve the depth-specific augmentation method by utilizing an important observation in depth estimation to enhance the model. Our network achieves state-of-the-art performance over the challenging depth dataset NYU Depth V2. Extensive experiments have been conducted to validate and show the effectiveness of the proposed approach. Finally, our model shows better generalisation ability and robustness than other comparative models.*
+with torch.no_grad():
+    outputs = model(**inputs)
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/glpn_architecture.jpg"
-alt="drawing" width="600"/>
+post_processed_output = image_processor.post_process_depth_estimation(
+    outputs,
+    target_sizes=[(image.height, image.width)],
+)
+predicted_depth = post_processed_output[0]["predicted_depth"]
+depth = (predicted_depth - predicted_depth.min()) / (predicted_depth.max() - predicted_depth.min())
+depth = depth.detach().cpu().numpy() * 255
+Image.fromarray(depth.astype("uint8"))
+```
 
-<small> Summary of the approach. Taken from the <a href="https://huggingface.co/papers/2201.07436" target="_blank">original paper</a>. </small>
-
-This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/vinvino02/GLPDepth).
-
-## Resources
-
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with GLPN.
-
-- Demo notebooks for [`GLPNForDepthEstimation`] can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/GLPN).
-- [Monocular depth estimation task guide](../tasks/monocular_depth_estimation)
+</hfoption>
+</hfoptions>
 
 ## GLPNConfig
 
 [[autodoc]] GLPNConfig
+
+## GLPNFeatureExtractor
+
+[[autodoc]] GLPNFeatureExtractor
+    - __call__
 
 ## GLPNImageProcessor
 
@@ -75,3 +90,4 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] GLPNForDepthEstimation
     - forward
+

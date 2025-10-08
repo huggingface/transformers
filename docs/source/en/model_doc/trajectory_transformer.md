@@ -13,48 +13,42 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-06-03 and added to Hugging Face Transformers on 2023-06-20.*
+*This model was released on 2021-06-03 and added to Hugging Face Transformers on 2023-06-20 and contributed by [CarlCochet](https://huggingface.co/CarlCochet).*
 
 # Trajectory Transformer
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[Trajectory Transformer](https://huggingface.co/papers/2106.02039) explores reinforcement learning (RL) as a sequence modeling problem, utilizing a Transformer architecture to model distributions over trajectories and beam search for planning. This approach simplifies design decisions and is effective across various RL tasks, including long-horizon dynamics prediction, imitation learning, goal-conditioned RL, and offline RL. Combining this method with existing model-free algorithms results in a state-of-the-art planner for sparse-reward, long-horizon tasks.
 
-<Tip warning={true}>
+<hfoptions id="usage">
+<hfoption id="TrajectoryTransformerModel">
 
-This model is in maintenance mode only, so we won't accept any new PRs changing its code.
+```py
+import torch
+from transformers import TrajectoryTransformerModel
 
-If you run into any issues running this model, please reinstall the last version that supported this model: v4.30.0.
-You can do so by running the following command: `pip install -U transformers==4.30.0`.
+model = TrajectoryTransformerModel.from_pretrained("CarlCochet/trajectory-transformer-halfcheetah-medium-v2", dtype="auto")
+model.eval()
 
-</Tip>
+observations_dim, action_dim, batch_size = 17, 6, 256
+seq_length = observations_dim + action_dim + 1
 
-## Overview
+trajectories = torch.LongTensor([np.random.permutation(self.seq_length) for _ in range(batch_size)]).to(
+    device
+)
+targets = torch.LongTensor([np.random.permutation(self.seq_length) for _ in range(batch_size)]).to(device)
 
-The Trajectory Transformer model was proposed in [Offline Reinforcement Learning as One Big Sequence Modeling Problem](https://huggingface.co/papers/2106.02039)  by Michael Janner, Qiyang Li, Sergey Levine.
+outputs = model(
+    trajectories,
+    targets=targets,
+    use_cache=True,
+    output_attentions=True,
+    output_hidden_states=True,
+    return_dict=True,
+)
+```
 
-The abstract from the paper is the following:
-
-*Reinforcement learning (RL) is typically concerned with estimating stationary policies or single-step models,
-leveraging the Markov property to factorize problems in time. However, we can also view RL as a generic sequence
-modeling problem, with the goal being to produce a sequence of actions that leads to a sequence of high rewards.
-Viewed in this way, it is tempting to consider whether high-capacity sequence prediction models that work well
-in other domains, such as natural-language processing, can also provide effective solutions to the RL problem.
-To this end, we explore how RL can be tackled with the tools of sequence modeling, using a Transformer architecture
-to model distributions over trajectories and repurposing beam search as a planning algorithm. Framing RL as sequence
-modeling problem simplifies a range of design decisions, allowing us to dispense with many of the components common
-in offline RL algorithms. We demonstrate the flexibility of this approach across long-horizon dynamics prediction,
-imitation learning, goal-conditioned RL, and offline RL. Further, we show that this approach can be combined with
-existing model-free algorithms to yield a state-of-the-art planner in sparse-reward, long-horizon tasks.*
-
-This model was contributed by [CarlCochet](https://huggingface.co/CarlCochet). The original code can be found [here](https://github.com/jannerm/trajectory-transformer).
-
-## Usage tips
-
-This Transformer is used for deep reinforcement learning. To use it, you need to create sequences from
-actions, states and rewards from all previous timesteps. This model will treat all these elements together
-as one big sequence (a trajectory).
+</hfoption>
+</hfoptions>
 
 ## TrajectoryTransformerConfig
 
@@ -64,3 +58,4 @@ as one big sequence (a trajectory).
 
 [[autodoc]] TrajectoryTransformerModel
     - forward
+

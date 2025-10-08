@@ -13,50 +13,43 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-09-23 and added to Hugging Face Transformers on 2025-09-15.*
+*This model was released on 2025-09-23 and added to Hugging Face Transformers on 2025-10-07.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">    </div>
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
 </div>
 
 # Qwen3-VL
 
-[Qwen3-VL](https://huggingface.co/papers/2502.13923) is a multimodal vision-language model series, encompassing both dense and MoE variants, as well as Instruct and Thinking versions. Building upon its predecessors, Qwen3-VL delivers significant improvements in visual understanding while maintaining strong pure text capabilities. Key architectural advancements include: enhanced MRope with interleaved layout for better spatial-temporal modeling, DeepStack integration to effectively leverage multi-level features from the Vision Transformer (ViT), and improved video understanding through text-based time alignment—evolving from T-RoPE to text timestamp alignment for more precise temporal grounding. These innovations collectively enable Qwen3-VL to achieve superior performance in complex multimodal tasks.
-
-Model usage
+[Qwen3-V](https://huggingface.co/papers/2502.13923) is a large language model series featuring both dense and Mixture-of-Expert (MoE) architectures, with sizes ranging from 0.6 to 235 billion parameters. It introduces a unified framework combining “thinking mode” for complex reasoning and “non-thinking mode” for fast, context-driven responses, along with a thinking budget mechanism that adaptively allocates computational resources based on task complexity. Qwen3 leverages knowledge from larger flagship models to reduce resource requirements for smaller models while maintaining competitive performance, achieving state-of-the-art results in code generation, mathematical reasoning, and agent tasks. Additionally, it significantly expands multilingual support from 29 to 119 languages and is fully open-sourced under Apache 2.0 for community use.
 
 <hfoptions id="usage">
-<hfoption id="AutoModel">
+<hfoption id="Qwen3VLForConditionalGeneration">
 
 ```py
 import torch
 from transformers import Qwen3VLForConditionalGeneration, AutoProcessor
 
-model = Qwen3VLForConditionalGeneration.from_pretrained(
-    "Qwen/Qwen3-VL",
-    dtype=torch.float16,
-    device_map="auto",
-    attn_implementation="sdpa"
-)
+model = Qwen3VLForConditionalGeneration.from_pretrained("Qwen/Qwen3-VL", dtype="auto")
 processor = AutoProcessor.from_pretrained("Qwen/Qwen3-VL")
+
 messages = [
     {
-        "role":"user",
-        "content":[
-            {
-                "type":"image",
-                "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
-            },
-            {
-                "type":"text",
-                "text":"Describe this image."
-            }
-        ]
-    }
-
+        "role": "system",
+        "content": [
+            {"type": "text", "text": "You are a meterologist."}
+        ],
+    },
+    {
+        "role": "user",
+        "content": [
+            {"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"},
+            {"type": "text", "text": "Describe the weather in this image."},
+        ],
+    },
 ]
 
 inputs = processor.apply_chat_template(

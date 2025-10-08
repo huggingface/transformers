@@ -1,4 +1,5 @@
-<!--Copyright 2024 The HuggingFace Team. All rights reserved.
+<!--Copyright 2025 The HuggingFace Team. All rights reserved.
+
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
 
@@ -8,121 +9,49 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
+
 -->
-*This model was released on 2024-12-13 and added to Hugging Face Transformers on 2024-12-13.*
+*This model was released on {release_date} and added to Hugging Face Transformers on 2024-12-13.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
-        <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
     </div>
 </div>
 
-# Cohere 2
+# Command R7B
 
-[Cohere Command R7B](https://cohere.com/blog/command-r7b) is an open weights research release of a 7B billion parameter model. It is a multilingual model trained on 23 languages and has a context window of 128k. The model features three layers with sliding window attention and ROPE for efficient local context modeling and relative positional encoding. A fourth layer uses global attention without positional embeddings, enabling unrestricted token interactions across the entire sequence.
-
-This model is optimized for speed, cost-performance, and compute resources.
-
-You can find all the original Command-R checkpoints under the [Command Models](https://huggingface.co/collections/CohereForAI/command-models-67652b401665205e17b192ad) collection.
-
-> [!TIP]
-> Click on the Cohere models in the right sidebar for more examples of how to apply Cohere to different language tasks.
-
-The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModel`] class, and from the command line.
+[Command R7B](https://cohere.com/blog/command-r7b) is Cohere’s smallest model in the R series, optimized for speed, efficiency, and high-quality outputs on commodity GPUs and edge devices. It has 7 billion parameters and is fine-tuned for retrieval-augmented generation (RAG), enabling strong grounding in enterprise data while maintaining low latency. The model is designed to balance cost and performance, making it accessible for real-world applications like search, summarization, and knowledge management. R7B continues the R-series focus on practical deployment, emphasizing scalability and adaptability for business use cases
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```python
+```py
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(
-    task="text-generation",
-    model="CohereLabs/c4ai-command-r7b-12-2024",
-    dtype=torch.float16,
-    device_map=0
-)
-
-messages = [
-    {"role": "user", "content": "Hello, can you please help me book a hotel in Japan?"},
-]
-pipeline(messages)
+pipeline = pipeline(task="text-generation", model="CohereLabs/c4ai-command-r7b-12-2024", dtype="auto")
+pipeline("Plants create energy through a process known as photosynthesis.")
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
-```python
+```py
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
+model = AutoModelForCausalLM.from_pretrained("CohereLabs/c4ai-command-r7b-12-2024", dtype="auto")
 tokenizer = AutoTokenizer.from_pretrained("CohereLabs/c4ai-command-r7b-12-2024")
-model = AutoModelForCausalLM.from_pretrained(
-    "CohereLabs/c4ai-command-r7b-12-2024",
-    dtype=torch.float16,
-    device_map="auto",
-    attn_implementation="sdpa"
-)
 
-# format message with the Command-R chat template
-messages = [{"role": "user", "content": "Hello, can you please help me book a hotel in Japan?"}]
-input_ids = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt").to(model.device)
-output = model.generate(
-    input_ids,
-    max_new_tokens=100,
-    do_sample=True,
-    temperature=0.3,
-    cache_implementation="static",
-)
-print(tokenizer.decode(output[0], skip_special_tokens=True))
-```
+messages = [{"role": "user", "content": "How do plants generate energy?"}]
+input_ids = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt")
 
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-# pip install -U flash-attn --no-build-isolation
-transformers chat CohereLabs/c4ai-command-r7b-12-2024 --dtype auto --attn_implementation flash_attention_2
-```
-
-</hfoption>
-</hfoptions>
-
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview.md) overview for more available quantization backends.
-
-The example below uses [bitsandbytes](../quantization/bitsandbytes.md) to quantize the weights to 4-bits.
-
-```python
-import torch
-from transformers import BitsAndBytesConfig, AutoTokenizer, AutoModelForCausalLM
-
-bnb_config = BitsAndBytesConfig(load_in_4bit=True)
-tokenizer = AutoTokenizer.from_pretrained("CohereLabs/c4ai-command-r7b-12-2024")
-model = AutoModelForCausalLM.from_pretrained(
-    "CohereLabs/c4ai-command-r7b-12-2024",
-    dtype=torch.float16,
-    device_map="auto",
-    quantization_config=bnb_config,
-    attn_implementation="sdpa"
-)
-
-# format message with the Command-R chat template
-messages = [{"role": "user", "content": "Hello, can you please help me book a hotel in Japan?"}]
-input_ids = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt").to(model.device)
-output = model.generate(
-    input_ids,
-    max_new_tokens=100,
-    do_sample=True,
-    temperature=0.3,
-    cache_implementation="static",
-)
-print(tokenizer.decode(output[0], skip_special_tokens=True))
+outputs = model.generate(input_ids, max_new_tokens=100, do_sample=True, temperature=0.3,)
+print(tokenizer.decode(outputs[0]))
 ```
 
 ## Cohere2Config
@@ -138,3 +67,4 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 [[autodoc]] Cohere2ForCausalLM
     - forward
+

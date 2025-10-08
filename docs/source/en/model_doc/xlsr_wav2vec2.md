@@ -17,40 +17,40 @@ rendered properly in your Markdown viewer.
 
 # XLSR-Wav2Vec2
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[XLSR-Wav2Vec2](https://huggingface.co/papers/2006.13979) learns cross-lingual speech representations by pretraining a single model from raw speech waveforms across multiple languages. Built on wav2vec 2.0, it solves a contrastive task over masked latent speech representations and jointly learns a quantization of the latents shared across languages. Fine-tuned on labeled data, XLSR significantly outperforms monolingual pretraining, reducing phoneme error rate by 72% on CommonVoice and improving word error rate by 16% on BABEL. The model demonstrates shared latent discrete speech representations across languages, with increased sharing among related languages. XLSR-53, pretrained in 53 languages, is released to catalyze research in low-resource speech understanding.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The XLSR-Wav2Vec2 model was proposed in [Unsupervised Cross-Lingual Representation Learning For Speech Recognition](https://huggingface.co/papers/2006.13979) by Alexis Conneau, Alexei Baevski, Ronan Collobert, Abdelrahman Mohamed, Michael
-Auli.
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the paper is the following:
+pipeline = pipeline(task="automatic-speech-recognition", model="facebook/wav2vec2-xls-r-300m", dtype="auto")
+pipeline("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac")
+```
 
-*This paper presents XLSR which learns cross-lingual speech representations by pretraining a single model from the raw
-waveform of speech in multiple languages. We build on wav2vec 2.0 which is trained by solving a contrastive task over
-masked latent speech representations and jointly learns a quantization of the latents shared across languages. The
-resulting model is fine-tuned on labeled data and experiments show that cross-lingual pretraining significantly
-outperforms monolingual pretraining. On the CommonVoice benchmark, XLSR shows a relative phoneme error rate reduction
-of 72% compared to the best known results. On BABEL, our approach improves word error rate by 16% relative compared to
-a comparable system. Our approach enables a single multilingual speech recognition model which is competitive to strong
-individual models. Analysis shows that the latent discrete speech representations are shared across languages with
-increased sharing for related languages. We hope to catalyze research in low-resource speech understanding by releasing
-XLSR-53, a large model pretrained in 53 languages.*
+</hfoption>
+<hfoption id="AutoModel">
 
-The original code can be found [here](https://github.com/pytorch/fairseq/tree/master/fairseq/models/wav2vec).
+```py
+import torch
+from datasets import load_dataset
+from transformers import AutoProcessor, AutoModelForCTC
 
-Note: Meta (FAIR) released a new version of [Wav2Vec2-BERT 2.0](https://huggingface.co/docs/transformers/en/model_doc/wav2vec2-bert) - it's pretrained on 4.5M hours of audio. We especially recommend using it for fine-tuning tasks, e.g. as per [this guide](https://huggingface.co/blog/fine-tune-w2v2-bert).
+dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation").sort("id")
+sampling_rate = dataset.features["audio"].sampling_rate
 
-## Usage tips
+processor = AutoProcessor.from_pretrained("facebook/wav2vec2-xls-r-300m")
+model = AutoModelForCTC.from_pretrained("facebook/wav2vec2-xls-r-300m", dtype="auto")
 
-- XLSR-Wav2Vec2 is a speech model that accepts a float array corresponding to the raw waveform of the speech signal.
-- XLSR-Wav2Vec2 model was trained using connectionist temporal classification (CTC) so the model output has to be
-  decoded using [`Wav2Vec2CTCTokenizer`].
+inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
+with torch.no_grad():
+    logits = model(**inputs).logits
+predicted_ids = torch.argmax(logits, dim=-1)
+print(f"Transcription: {processor.batch_decode(predicted_ids)[0]}")
+```
 
-<Tip>
+</hfoption>
+</hfoptions>
 
-XLSR-Wav2Vec2's architecture is based on the Wav2Vec2 model, so one can refer to [Wav2Vec2's documentation page](wav2vec2).
-
-</Tip>

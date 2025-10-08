@@ -13,16 +13,23 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+
 *This model was released on 2024-12-27 and added to Hugging Face Transformers on 2025-03-28.*
+
+```py
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model = AutoModelForCausalLM.from_pretrained("deepseek-ai/DeepSeek-V3-Base")
+tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V3-Base")
+
+inputs = tokenizer("Hello, my name is", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
+print(tokenizer.decode(outputs[0]))
+```
 
 # DeepSeek-V3
 
-## Overview
-
-The DeepSeek-V3 model was proposed in [DeepSeek-V3 Technical Report](https://huggingface.co/papers/2412.19437) by DeepSeek-AI Team.
-
-The abstract from the paper is the following:
-We present DeepSeek-V3, a strong Mixture-of-Experts (MoE) language model with 671B total parameters with 37B activated for each token. To achieve efficient inference and cost-effective training, DeepSeek-V3 adopts Multi-head Latent Attention (MLA) and DeepSeekMoE architectures, which were thoroughly validated in DeepSeek-V2. Furthermore, DeepSeek-V3 pioneers an auxiliary-loss-free strategy for load balancing and sets a multi-token prediction training objective for stronger performance. We pre-train DeepSeek-V3 on 14.8 trillion diverse and high-quality tokens, followed by Supervised Fine-Tuning and Reinforcement Learning stages to fully harness its capabilities. Comprehensive evaluations reveal that DeepSeek-V3 outperforms other open-source models and achieves performance comparable to leading closed-source models. Despite its excellent performance, DeepSeek-V3 requires only 2.788M H800 GPU hours for its full training. In addition, its training process is remarkably stable. Throughout the entire training process, we did not experience any irrecoverable loss spikes or perform any rollbacks. The model checkpoints are available at https://github.com/deepseek-ai/DeepSeek-V3.
+[DeepSeek-V3](https://huggingface.co/papers/2412.19437) is a Mixture-of-Experts (MoE) language model with 671B total parameters, 37B of which are activated per token. It employs Multi-head Latent Attention (MLA) and DeepSeekMoE architectures for efficient inference and cost-effective training. DeepSeek-V3 introduces an auxiliary-loss-free strategy for load balancing and a multi-token prediction training objective to enhance performance. Pre-trained on 14.8 trillion diverse tokens, the model undergoes Supervised Fine-Tuning and Reinforcement Learning. Evaluations show that DeepSeek-V3 outperforms other open-source models and matches leading closed-source models. Training requires 2.788M H800 GPU hours and is notably stable without any irrecoverable loss spikes.
 
 ## Limitations and call for contribution!
 
@@ -52,7 +59,6 @@ chat = [
   {"role": "assistant", "content": "I'm doing great. How can I help you today?"},
   {"role": "user", "content": "I'd like to show off how chat templating works!"},
 ]
-
 
 model = AutoModelForCausalLM.from_pretrained("deepseek-r1", device_map="auto", dtype=torch.bfloat16)
 inputs = tokenizer.apply_chat_template(chat, tokenize=True, add_generation_prompt=True, return_tensors="pt").to(model.device)
@@ -197,3 +203,4 @@ error, it means NCCL was probably not loaded.
 
 [[autodoc]] DeepseekV3ForTokenClassification
     - forward
+

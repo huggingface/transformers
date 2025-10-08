@@ -13,78 +13,52 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-04-14 and added to Hugging Face Transformers on 2023-06-20.*
+*This model was released on 2022-04-14 and added to Hugging Face Transformers on 2023-06-20 and contributed by [alihassanijr](https://huggingface.co/alihassanijr).*
+
+> [!WARNING]
+> This model is in maintenance mode only, we don’t accept any new PRs changing its code. If you run into any issues running this model, please reinstall the last version that supported this model: v4.40.2. You can do so by running the following command: pip install -U transformers==4.40.2.
 
 # Neighborhood Attention Transformer
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[Neighborhood Attention Transformer](https://huggingface.co/papers/2204.07143) is a hierarchical vision transformer utilizing Neighborhood Attention, a sliding-window self-attention mechanism. This approach localizes self-attention to neighboring pixels, achieving linear time and space complexity. NATTEN, a Python package with efficient C++ and CUDA kernels, enhances NA's performance, making it up to 40% faster and using 25% less memory compared to Swin Transformer's Window Self Attention. NAT demonstrates competitive results in image classification, object detection, and semantic segmentation, outperforming similar-sized Swin models by 1.9% on ImageNet, 1.0% on MS-COCO, and 2.6% on ADE20K.
 
-<Tip warning={true}>
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-This model is in maintenance mode only, we don't accept any new PRs changing its code.
-If you run into any issues running this model, please reinstall the last version that supported this model: v4.40.2.
-You can do so by running the following command: `pip install -U transformers==4.40.2`.
+```py
+import torch
+from transformers import pipeline
 
-</Tip>
+pipeline = pipeline(task="image-classification", model="shi-labs/nat-mini-in1k-224", dtype="auto")
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
+```
 
-## Overview
+</hfoption>
+<hfoption id="AutoModel">
 
-NAT was proposed in [Neighborhood Attention Transformer](https://huggingface.co/papers/2204.07143)
-by Ali Hassani, Steven Walton, Jiachen Li, Shen Li, and Humphrey Shi.
+```python
+import torch
+import requests
+from PIL import Image
+from transformers import AutoImageProcessor, AutoModelForImageClassification
 
-It is a hierarchical vision transformer based on Neighborhood Attention, a sliding-window self attention pattern.
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
 
-The abstract from the paper is the following:
+image_processor = AutoImageProcessor.from_pretrained("shi-labs/nat-mini-in1k-224")
+model = AutoModelForImageClassification.from_pretrained("shi-labs/nat-mini-in1k-224", dtype="auto")
 
-*We present Neighborhood Attention (NA), the first efficient and scalable sliding-window attention mechanism for vision.
-NA is a pixel-wise operation, localizing self attention (SA) to the nearest neighboring pixels, and therefore enjoys a
-linear time and space complexity compared to the quadratic complexity of SA. The sliding-window pattern allows NA's
-receptive field to grow without needing extra pixel shifts, and preserves translational equivariance, unlike
-Swin Transformer's Window Self Attention (WSA). We develop NATTEN (Neighborhood Attention Extension), a Python package
-with efficient C++ and CUDA kernels, which allows NA to run up to 40% faster than Swin's WSA while using up to 25% less
-memory. We further present Neighborhood Attention Transformer (NAT), a new hierarchical transformer design based on NA
-that boosts image classification and downstream vision performance. Experimental results on NAT are competitive;
-NAT-Tiny reaches 83.2% top-1 accuracy on ImageNet, 51.4% mAP on MS-COCO and 48.4% mIoU on ADE20K, which is 1.9%
-ImageNet accuracy, 1.0% COCO mAP, and 2.6% ADE20K mIoU improvement over a Swin model with similar size.*
+inputs = image_processor(image, return_tensors="pt")
 
-<img
-src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/neighborhood-attention-pattern.jpg"
-alt="drawing" width="600"/>
+with torch.no_grad():
+    logits = model(**inputs).logits
 
-<small> Neighborhood Attention compared to other attention patterns.
-Taken from the <a href="https://huggingface.co/papers/2204.07143">original paper</a>.</small>
+predicted_label = logits.argmax(-1).item()
+print(model.config.id2label[predicted_label])
+```
 
-This model was contributed by [Ali Hassani](https://huggingface.co/alihassanijr).
-The original code can be found [here](https://github.com/SHI-Labs/Neighborhood-Attention-Transformer).
-
-## Usage tips
-
-- One can use the [`AutoImageProcessor`] API to prepare images for the model.
-- NAT can be used as a *backbone*. When `output_hidden_states = True`,
-it will output both `hidden_states` and `reshaped_hidden_states`.
-The `reshaped_hidden_states` have a shape of `(batch, num_channels, height, width)` rather than
-`(batch_size, height, width, num_channels)`.
-
-Notes:
-
-- NAT depends on [NATTEN](https://github.com/SHI-Labs/NATTEN/)'s implementation of Neighborhood Attention.
-You can install it with pre-built wheels for Linux by referring to [shi-labs.com/natten](https://shi-labs.com/natten),
-or build on your system by running `pip install natten`.
-Note that the latter will likely take time to compile. NATTEN does not support Windows devices yet.
-- Patch size of 4 is only supported at the moment.
-
-## Resources
-
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with NAT.
-
-<PipelineTag pipeline="image-classification"/>
-
-- [`NatForImageClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
-- See also: [Image classification task guide](../tasks/image_classification)
-
-If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+</hfoption>
+</hfoptions>
 
 ## NatConfig
 
@@ -99,3 +73,4 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] NatForImageClassification
     - forward
+

@@ -13,46 +13,45 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2020-12-31 and added to Hugging Face Transformers on 2023-06-20.*
+*This model was released on 2020-12-31 and added to Hugging Face Transformers on 2023-06-20 and contributed by [susnato](https://huggingface.co/susnato).*
+
+> [!WARNING]
+> This model is in maintenance mode only, we don’t accept any new PRs changing its code. If you run into any issues running this model, please reinstall the last version that supported this model: v4.40.2. You can do so by running the following command: pip install -U transformers==4.40.2.
 
 # ErnieM
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[ERNIE-M: Enhanced Multilingual Representation by Aligning Cross-lingual Semantics with Monolingual Corpora](https://huggingface.co/papers/2012.15674) proposes a new training method called ERNIE-M to improve cross-lingual model performance, especially for low-resource languages. By integrating back-translation into the pre-training process, ERNIE-M generates pseudo-parallel sentence pairs from monolingual corpora to learn semantic alignments between different languages. This approach enhances semantic modeling in cross-lingual models, leading to state-of-the-art results in various downstream tasks.
 
-<Tip warning={true}>
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-This model is in maintenance mode only, we don't accept any new PRs changing its code.
-If you run into any issues running this model, please reinstall the last version that supported this model: v4.40.2.
-You can do so by running the following command: `pip install -U transformers==4.40.2`.
+```py
+import torch
+from transformers import pipeline
 
-</Tip>
+pipeline = pipeline(task="text-classification", model="susnato/ernie-m-base_pytorch", dtype="auto")
+pipeline("Plants are amazing because they can create energy from the sun.")
+```
 
-## Overview
+</hfoption>
+<hfoption id="AutoModel">
 
-The ErnieM model was proposed in [ERNIE-M: Enhanced Multilingual Representation by Aligning
-Cross-lingual Semantics with Monolingual Corpora](https://huggingface.co/papers/2012.15674)  by Xuan Ouyang, Shuohuan Wang, Chao Pang, Yu Sun,
-Hao Tian, Hua Wu, Haifeng Wang.
+```py
+import torch
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-The abstract from the paper is the following:
+model = AutoModelForSequenceClassification.from_pretrained("susnato/ernie-m-base_pytorch", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("susnato/ernie-m-base_pytorch")
 
-*Recent studies have demonstrated that pre-trained cross-lingual models achieve impressive performance in downstream cross-lingual tasks. This improvement benefits from learning a large amount of monolingual and parallel corpora. Although it is generally acknowledged that parallel corpora are critical for improving the model performance, existing methods are often constrained by the size of parallel corpora, especially for lowresource languages. In this paper, we propose ERNIE-M, a new training method that encourages the model to align the representation of multiple languages with monolingual corpora, to overcome the constraint that the parallel corpus size places on the model performance. Our key insight is to integrate back-translation into the pre-training process. We generate pseudo-parallel sentence pairs on a monolingual corpus to enable the learning of semantic alignments between different languages, thereby enhancing the semantic modeling of cross-lingual models. Experimental results show that ERNIE-M outperforms existing cross-lingual models and delivers new state-of-the-art results in various cross-lingual downstream tasks.*
-This model was contributed by [Susnato Dhar](https://huggingface.co/susnato). The original code can be found [here](https://github.com/PaddlePaddle/PaddleNLP/tree/develop/paddlenlp/transformers/ernie_m).
+inputs = tokenizer("Plants are amazing because they can create energy from the sun.", return_tensors="pt")
+outputs = model(**inputs)
+predicted_class_id = outputs.logits.argmax(dim=-1).item()
+label = model.config.id2label[predicted_class_id]
+print(f"Predicted label: {label}")
+```
 
-## Usage tips
-
-- Ernie-M is a BERT-like model so it is a stacked Transformer Encoder.
-- Instead of using MaskedLM for pretraining (like BERT) the authors used two novel techniques: `Cross-attention Masked Language Modeling` and `Back-translation Masked Language Modeling`. For now these two LMHead objectives are not implemented here.
-- It is a multilingual language model.
-- Next Sentence Prediction was not used in pretraining process.
-
-## Resources
-
-- [Text classification task guide](../tasks/sequence_classification)
-- [Token classification task guide](../tasks/token_classification)
-- [Question answering task guide](../tasks/question_answering)
-- [Multiple choice task guide](../tasks/multiple_choice)
+</hfoption>
+</hfoptions>
 
 ## ErnieMConfig
 
@@ -95,3 +94,4 @@ This model was contributed by [Susnato Dhar](https://huggingface.co/susnato). Th
 
 [[autodoc]] ErnieMForInformationExtraction
     - forward
+

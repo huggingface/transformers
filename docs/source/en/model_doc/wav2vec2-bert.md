@@ -13,46 +13,46 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-11-30 and added to Hugging Face Transformers on 2024-01-18.*
+*This model was released on 2023-04-17 and added to Hugging Face Transformers on 2024-01-18 and contributed by [ylacombe](https://huggingface.co/ylacombe).*
 
 # Wav2Vec2-BERT
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[Wav2Vec2-BERT](https://huggingface.co/papers/2304.08485) is part of the Seamless family of models developed by Meta AI. It was pre-trained on 4.5M hours of unlabeled audio data across over 143 languages and requires fine-tuning for tasks like Automatic Speech Recognition (ASR) or Audio Classification. The model is foundational for SeamlessM4T v2, which includes an updated UnitY2 framework and additional aligned data. SeamlessExpressive and SeamlessStreaming are built on this foundation, with SeamlessExpressive focusing on preserving vocal styles and prosody, and SeamlessStreaming enabling low-latency, simultaneous speech-to-speech/text translation. The models are evaluated using both automatic and human metrics, and safety measures like red-teaming, toxicity detection, and watermarking are implemented. Seamless, combining elements from SeamlessExpressive and SeamlessStreaming, is the first publicly available system for real-time expressive cross-lingual communication.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The [Wav2Vec2-BERT](https://huggingface.co/papers/2312.05187) model was proposed in [Seamless: Multilingual Expressive and Streaming Speech Translation](https://ai.meta.com/research/publications/seamless-multilingual-expressive-and-streaming-speech-translation/) by the Seamless Communication team from Meta AI.
+```py
+import torch
+from transformers import pipeline
 
-This model was pre-trained on 4.5M hours of unlabeled audio data covering more than 143 languages. It requires finetuning to be used for downstream tasks such as Automatic Speech Recognition (ASR), or Audio Classification.
+pipeline = pipeline(task="automatic-speech-recognition", model="hf-audio/wav2vec2-bert-CV16-en", dtype="auto")
+pipeline("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac")
+```
 
-The official results of the model can be found in Section 3.2.1 of the paper.
+</hfoption>
+<hfoption id="AutoModel">
 
-The abstract from the paper is the following:
+```py
+import torch
+from datasets import load_dataset
+from transformers import AutoProcessor, AutoModelForCTC
 
-*Recent advancements in automatic speech translation have dramatically expanded language coverage, improved multimodal capabilities, and enabled a wide range of tasks and functionalities. That said, large-scale automatic speech translation systems today lack key features that help machine-mediated communication feel seamless when compared to human-to-human dialogue. In this work, we introduce a family of models that enable end-to-end expressive and multilingual translations in a streaming fashion. First, we contribute an improved version of the massively multilingual and multimodal SeamlessM4T model—SeamlessM4T v2. This newer model, incorporating an updated UnitY2 framework, was trained on more low-resource language data. The expanded version of SeamlessAlign adds 114,800 hours of automatically aligned data for a total of 76 languages. SeamlessM4T v2 provides the foundation on which our two newest models, SeamlessExpressive and SeamlessStreaming, are initiated. SeamlessExpressive enables translation that preserves vocal styles and prosody. Compared to previous efforts in expressive speech research, our work addresses certain underexplored aspects of prosody, such as speech rate and pauses, while also preserving the style of one's voice. As for SeamlessStreaming, our model leverages the Efficient Monotonic Multihead Attention (EMMA) mechanism to generate low-latency target translations without waiting for complete source utterances. As the first of its kind, SeamlessStreaming enables simultaneous speech-to-speech/text translation for multiple source and target languages. To understand the performance of these models, we combined novel and modified versions of existing automatic metrics to evaluate prosody, latency, and robustness. For human evaluations, we adapted existing protocols tailored for measuring the most relevant attributes in the preservation of meaning, naturalness, and expressivity. To ensure that our models can be used safely and responsibly, we implemented the first known red-teaming effort for multimodal machine translation, a system for the detection and mitigation of added toxicity, a systematic evaluation of gender bias, and an inaudible localized watermarking mechanism designed to dampen the impact of deepfakes. Consequently, we bring major components from SeamlessExpressive and SeamlessStreaming together to form Seamless, the first publicly available system that unlocks expressive cross-lingual communication in real-time. In sum, Seamless gives us a pivotal look at the technical foundation needed to turn the Universal Speech Translator from a science fiction concept into a real-world technology. Finally, contributions in this work—including models, code, and a watermark detector—are publicly released and accessible at the link below.*
+dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation").sort("id")
+sampling_rate = dataset.features["audio"].sampling_rate
 
-This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The original code can be found [here](https://github.com/facebookresearch/seamless_communication).
+processor = AutoProcessor.from_pretrained("hf-audio/wav2vec2-bert-CV16-en")
+model = AutoModelForCTC.from_pretrained("hf-audio/wav2vec2-bert-CV16-en", dtype="auto")
 
-## Usage tips
+inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
+with torch.no_grad():
+    logits = model(**inputs).logits
+predicted_ids = torch.argmax(logits, dim=-1)
+print(f"Transcription: {processor.batch_decode(predicted_ids)[0]}")
+```
 
-- Wav2Vec2-BERT follows the same architecture as Wav2Vec2-Conformer, but employs a causal depthwise convolutional layer and uses as input a mel-spectrogram representation of the audio instead of the raw waveform.
-- Wav2Vec2-BERT can use either no relative position embeddings, Shaw-like position embeddings, Transformer-XL-like position embeddings, or
-  rotary position embeddings by setting the correct `config.position_embeddings_type`.
-- Wav2Vec2-BERT also introduces a Conformer-based adapter network instead of a simple convolutional network.
-
-## Resources
-
-<PipelineTag pipeline="automatic-speech-recognition"/>
-
-- [`Wav2Vec2BertForCTC`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/speech-recognition).
-- You can also adapt these notebooks on [how to finetune a speech recognition model in English](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/speech_recognition.ipynb), and [how to finetune a speech recognition model in any language](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multi_lingual_speech_recognition.ipynb).
-
-<PipelineTag pipeline="audio-classification"/>
-
-- [`Wav2Vec2BertForSequenceClassification`] can be used by adapting this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/audio-classification).
-- See also: [Audio classification task guide](../tasks/audio_classification)
+</hfoption>
+</hfoptions>
 
 ## Wav2Vec2BertConfig
 
@@ -92,3 +92,4 @@ This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The o
 
 [[autodoc]] Wav2Vec2BertForXVector
     - forward
+

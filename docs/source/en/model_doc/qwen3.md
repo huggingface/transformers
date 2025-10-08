@@ -19,15 +19,36 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-[Qwen3](https://huggingface.co/papers/2505.09388) refers to the dense model architecture Qwen3-32B which was released with its mixture of experts variant [Qwen3MoE](qwen3_moe) ([blog post](https://qwenlm.github.io/blog/qwen3/)).
+[Qwen3](https://huggingface.co/papers/2505.09388) is the latest iteration of the Qwen large language model family, featuring both dense and Mixture-of-Expert (MoE) architectures with 0.6 to 235 billion parameters. It introduces a unified framework combining thinking mode for complex reasoning and non-thinking mode for fast, context-driven responses, with a dynamic thinking budget to balance computational cost and performance. Qwen3 leverages knowledge from flagship models to efficiently build smaller models without sacrificing capability and achieves state-of-the-art performance across tasks like code generation, mathematical reasoning, and agent tasks. Compared to Qwen2.5, it expands multilingual support from 29 to 119 languages, and all models are publicly available under Apache 2.0.
 
-### Model Details
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-To be released with the official model launch.
+```py
+import torch
+from transformers import pipeline
 
-## Usage tips
+pipeline = pipeline(task="text-generation", model="Qwen/Qwen3-8B", dtype="auto",)
+pipeline("Plants create energy through a process known as photosynthesis.")
+```
 
-To be released with the official model launch.
+</hfoption>
+<hfoption id="AutoModel">
+
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-8B")
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-8B", dtype="auto",)
+
+inputs = tokenizer("Plants create energy through a process known as photosynthesis.", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
+print(tokenizer.decode(outputs[0]))
+```
+
+</hfoption>
+</hfoptions>
 
 ## Qwen3Config
 

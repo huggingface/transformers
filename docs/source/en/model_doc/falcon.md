@@ -13,11 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-11-28 and added to Hugging Face Transformers on 2023-07-11.*
+*This model was released on 2023-06-01 and added to Hugging Face Transformers on 2023-07-11.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
@@ -25,14 +24,7 @@ rendered properly in your Markdown viewer.
 
 # Falcon
 
-[Falcon](https://huggingface.co/papers/2311.16867) is a family of large language models, available in 7B, 40B, and 180B parameters, as pretrained and instruction tuned variants. This model focuses on scaling pretraining over three categories, performance, data, and hardware. Falcon uses multigroup attention to significantly reduce inference memory requirements and rotary positional embeddings (RoPE). These models are pretrained on [RefinedWeb](https://huggingface.co/datasets/tiiuae/falcon-refinedweb), a high-quality and deduplicated 5T token dataset.
-
-You can find all the original Falcon checkpoints under the [Falcon](https://huggingface.co/collections/tiiuae/falcon-64fb432660017eeec9837b5a) collection.
-
-> [!TIP]
-> Click on the Falcon models in the right sidebar for more examples of how to apply Falcon to different language tasks.
-
-The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`], and from the command line.
+[Falcon](https://huggingface.co/papers/2306.01116) challenges the assumption that curated datasets are essential for training high-performing language models. The authors demonstrate that carefully filtered and deduplicated web data alone can produce models that surpass state-of-the-art systems trained on curated datasets like The Pile. They extract five trillion tokens from CommonCrawl, showing that high-quality web data is still abundant at scale. To support the community, they release the RefinedWeb dataset (600B tokens) along with models of 1.3B and 7.5B parameters trained on it.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -41,18 +33,8 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(
-    task="text-generation",
-    model="tiiuae/falcon-7b-instruct",
-    dtype=torch.bfloat16,
-    device=0
-)
-pipeline(
-    "Write a short poem about coding",
-    max_length=100,
-    do_sample=True,
-    temperature=0.7
-)
+pipeline = pipeline("text-generation", model="tiiuae/falcon-rw-1b", dtype="auto")
+pipeline("Plants create energy through a process known as photosynthesis.")
 ```
 
 </hfoption>
@@ -60,68 +42,18 @@ pipeline(
 
 ```py
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained("tiiuae/falcon-7b-instruct")
-model = AutoModelForCausalLM.from_pretrained(
-    "tiiuae/falcon-7b-instruct",
-    dtype=torch.bfloat16,
-    device_map="auto",
-    attn_implementation="sdpa",
-)
+model = AutoModelForCausalLM.from_pretrained("tiiuae/falcon-rw-1b", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("tiiuae/falcon-rw-1b")
 
-input_ids = tokenizer("Write a short poem about coding", return_tensors="pt").to(model.device)
-
-output = model.generate(**input_ids)
-print(tokenizer.decode(output[0], skip_special_tokens=True))
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-# pip install -U flash-attn --no-build-isolation
-transformers chat tiiuae/falcon-7b-instruct --dtype auto --attn_implementation flash_attention_2 --device 0
+inputs = tokenizer("Plants create energy through a process known as photosynthesis.", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
+print(tokenizer.decode(outputs[0]))
 ```
 
 </hfoption>
 </hfoptions>
-
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
-
-The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 4-bits.
-
-```python
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
-
-quantization_config = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_compute_dtype=torch.bfloat16,
-    bnb_4bit_quant_type="nf4",
-    bnb_4bit_use_double_quant=True,
-)
-
-tokenizer = AutoTokenizer.from_pretrained("tiiuae/falcon-7b")
-model = AutoModelForCausalLM.from_pretrained(
-    "tiiuae/falcon-7b",
-    dtype=torch.bfloat16,
-    device_map="auto",
-    quantization_config=quantization_config,
-)
-
-inputs = tokenizer("In quantum physics, entanglement means", return_tensors="pt").to(model.device)
-outputs = model.generate(**inputs, max_new_tokens=100)
-print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-```
-
-## Notes
-
-- If you're upgrading from an older custom code checkpoint, remember to convert it to the official Transformers format for better stability and performance using the conversion script located in the [Falcon model directory](https://github.com/huggingface/transformers/tree/main/src/transformers/models/falcon).
-
-   ```bash
-   python convert_custom_code_checkpoint.py --checkpoint_dir my_model
-   ```
 
 ## FalconConfig
 
@@ -152,3 +84,8 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 
 [[autodoc]] FalconForQuestionAnswering
     - forward
+
+## FalconMambaCache
+
+[[autodoc]] FalconMambaCache
+

@@ -17,7 +17,6 @@ rendered properly in your Markdown viewer.
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
@@ -25,12 +24,7 @@ rendered properly in your Markdown viewer.
 
 # SmolLM3
 
-[SmolLM3](https://huggingface.co/blog/smollm3) is a fully open, compact language model designed for efficient deployment while maintaining strong performance. It uses a Transformer decoder architecture with Grouped Query Attention (GQA) to reduce the kv cache, and no RoPE, enabling improved performance on long-context tasks. It is trained using a multi-stage training approach on high-quality public datasets across web, code, and math domains. The model is multilingual and supports very large context lengths. The instruct variant is optimized for reasoning and tool use.
-
-> [!TIP]
-> Click on the SmolLM3 models in the right sidebar for more examples of how to apply SmolLM3 to different language tasks.
-
-The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`], and from the command line using the instruction-tuned models.
+[SmolLM3](https://huggingface.co/blog/smollm3) is a transformer-decoder model based on the Llama architecture, optimized for efficiency and long-context performance. It replaces standard multi-head attention with 4-group Grouped Query Attention (GQA), reducing KV cache size without performance loss, and implements NoPE by removing rotary position embeddings from every fourth layer to enhance long-context capabilities. Training incorporates intra-document masking to prevent cross-document attention and removes weight decay from embedding layers for greater stability. The model was trained on 100B tokens from FineWeb-Edu using a global batch size of 2.36M tokens, sequence length of 4096, AdamW optimizer, and a WSD scheduler over 384 H100 GPUs for 24 days.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -39,19 +33,13 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 import torch
 from transformers import pipeline
 
-pipe = pipeline(
-    task="text-generation",
-    model="HuggingFaceTB/SmolLM3-3B",
-    dtype=torch.bfloat16,
-    device_map=0
-)
+pipeline = pipeline(task="text-generation", model="HuggingFaceTB/SmolLM3-3B", dtype="auto")
 
 messages = [
-    {"role": "system", "content": "You are a helpful assistant."},
-    {"role": "user", "content": "Tell me about yourself."},
+    {"role": "system", "content": "You are a plant biologist."},
+    {"role": "user", "content": "How do plants create energy?"},
 ]
-outputs = pipe(messages, max_new_tokens=256, do_sample=True, temperature=0.7, top_k=50, top_p=0.95)
-print(outputs[0]["generated_text"][-1]['content'])
+pipeline(messages, max_new_tokens=256, do_sample=True, temperature=0.7, top_k=50, top_p=0.95)
 ```
 
 </hfoption>
@@ -61,26 +49,19 @@ print(outputs[0]["generated_text"][-1]['content'])
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model = AutoModelForCausalLM.from_pretrained(
-    "HuggingFaceTB/SmolLM3-3B",
-    dtype=torch.bfloat16,
-    device_map="auto",
-    attn_implementation="sdpa"
-)
+model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM3-3B", dtype="auto")
 tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM3-3B")
 
-prompt = "Give me a short introduction to large language models."
 messages = [
     {"role": "system", "content": "You are a helpful assistant."},
-    {"role": "user", "content": prompt}
+    {"role": "user", "content": "How do plants create energy?"}
 ]
 text = tokenizer.apply_chat_template(
     messages,
     tokenize=False,
     add_generation_prompt=True
 )
-model_inputs = tokenizer([text], return_tensors="pt").to(model.device)
-
+model_inputs = tokenizer([text], return_tensors="pt")
 generated_ids = model.generate(
     model_inputs.input_ids,
     cache_implementation="static",
@@ -99,49 +80,7 @@ print(response)
 ```
 
 </hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-# pip install -U flash-attn --no-build-isolation
-transformers chat HuggingFaceTB/SmolLM3-3B --dtype auto --attn_implementation flash_attention_2 --device 0
-```
-
-</hfoption>
 </hfoptions>
-
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
-
-The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize the weights to 4-bits.
-
-```python
-# pip install -U flash-attn --no-build-isolation
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
-
-quantization_config = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_compute_dtype=torch.bfloat16,
-    bnb_4bit_quant_type="nf4",
-    bnb_4bit_use_double_quant=True,
-)
-
-tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM3-3B")
-model = AutoModelForCausalLM.from_pretrained(
-    "HuggingFaceTB/SmolLM3-3B",
-    dtype=torch.bfloat16,
-    device_map="auto",
-    quantization_config=quantization_config,
-    attn_implementation="flash_attention_2"
-)
-
-inputs = tokenizer("Gravity is the force", return_tensors="pt").to(model.device)
-outputs = model.generate(**inputs, max_new_tokens=100)
-print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-```
-
-## Notes
-
-- Ensure your Transformers library version is up-to-date. SmolLM3 requires Transformers>=4.53.0 for full support.
 
 ## SmolLM3Config
 

@@ -13,61 +13,41 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-12-18 and added to Hugging Face Transformers on 2022-11-08.*
+*This model was released on 2021-12-18 and added to Hugging Face Transformers on 2022-11-08 and contributed by [nielsr](https://huggingface.co/nielsr).*
 
 # CLIPSeg
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[CLIPSeg](https://huggingface.co/papers/2112.10003) extends the CLIP model with a transformer-based decoder to enable zero-shot and one-shot image segmentation using arbitrary text or image prompts. This unified model can handle referring expression segmentation, zero-shot segmentation, and one-shot segmentation tasks. Trained on an extended PhraseCut dataset, CLIPSeg generates binary segmentation maps based on free-text or image queries, demonstrating adaptability to various binary segmentation tasks involving affordances or properties.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="CLIPSegModel">
 
-The CLIPSeg model was proposed in [Image Segmentation Using Text and Image Prompts](https://huggingface.co/papers/2112.10003) by Timo Lüddecke
-and Alexander Ecker. CLIPSeg adds a minimal decoder on top of a frozen [CLIP](clip) model for zero-shot and one-shot image segmentation.
+```py
+import torch
+from transformers import AutoProcessor, CLIPSegModel
+from transformers.image_utils import load_image
 
-The abstract from the paper is the following:
+processor = AutoProcessor.from_pretrained("CIDAS/clipseg-rd64-refined")
+model = CLIPSegModel.from_pretrained("CIDAS/clipseg-rd64-refined", dtype="auto")
 
-*Image segmentation is usually addressed by training a
-model for a fixed set of object classes. Incorporating additional classes or more complex queries later is expensive
-as it requires re-training the model on a dataset that encompasses these expressions. Here we propose a system
-that can generate image segmentations based on arbitrary
-prompts at test time. A prompt can be either a text or an
-image. This approach enables us to create a unified model
-(trained once) for three common segmentation tasks, which
-come with distinct challenges: referring expression segmentation, zero-shot segmentation and one-shot segmentation.
-We build upon the CLIP model as a backbone which we extend with a transformer-based decoder that enables dense
-prediction. After training on an extended version of the
-PhraseCut dataset, our system generates a binary segmentation map for an image based on a free-text prompt or on
-an additional image expressing the query. We analyze different variants of the latter image-based prompts in detail.
-This novel hybrid input allows for dynamic adaptation not
-only to the three segmentation tasks mentioned above, but
-to any binary segmentation task where a text or image query
-can be formulated. Finally, we find our system to adapt well
-to generalized queries involving affordances or properties*
+image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
+texts = ["a photo of a cat", "a photo of a dog"]
+inputs = processor(
+    text=texts, images=image, return_tensors="pt", padding=True
+)
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/clipseg_architecture.png"
-alt="drawing" width="600"/>
+with torch.inference_mode():
+    outputs = model(**inputs)
+logits_per_image = outputs.logits_per_image 
+probs = logits_per_image.softmax(dim=1)
 
-<small> CLIPSeg overview. Taken from the <a href="https://huggingface.co/papers/2112.10003">original paper.</a> </small>
+print("Text-image similarity probabilities:")
+for i, (text, prob) in enumerate(zip(texts, probs[0])):
+    print(f"'{text}' -> {prob.item():.4f} ({prob.item()*100:.1f}%)")
+```
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr).
-The original code can be found [here](https://github.com/timojl/clipseg).
-
-## Usage tips
-
-- [`CLIPSegForImageSegmentation`] adds a decoder on top of [`CLIPSegModel`]. The latter is identical to [`CLIPModel`].
-- [`CLIPSegForImageSegmentation`] can generate image segmentations based on arbitrary prompts at test time. A prompt can be either a text
-(provided to the model as `input_ids`) or an image (provided to the model as `conditional_pixel_values`). One can also provide custom
-conditional embeddings (provided to the model as `conditional_embeddings`).
-
-## Resources
-
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with CLIPSeg. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
-
-<PipelineTag pipeline="image-segmentation"/>
-
-- A notebook that illustrates [zero-shot image segmentation with CLIPSeg](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/CLIPSeg/Zero_shot_image_segmentation_with_CLIPSeg.ipynb).
+</hfoption>
+</hfoptions>
 
 ## CLIPSegConfig
 
@@ -106,3 +86,4 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] CLIPSegForImageSegmentation
     - forward
+

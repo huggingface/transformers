@@ -13,32 +13,39 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-12-08 and added to Hugging Face Transformers on 2022-05-11.*
+*This model was released on 2021-12-08 and added to Hugging Face Transformers on 2022-05-11 and contributed by [aps](https://huggingface.co/aps).*
 
 # FLAVA
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[FLAVA: A Foundational Language And Vision Alignment Model](https://huggingface.co/papers/2112.04482) aims to develop a unified foundation model capable of handling vision, language, and vision-and-language multimodal tasks. Unlike existing models that are typically either cross-modal or multi-modal but not both, FLAVA targets all modalities simultaneously. Demonstrating strong results across 35 diverse tasks, FLAVA serves as a comprehensive vision and language foundation model.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="FlavaModel">
 
-The FLAVA model was proposed in [FLAVA: A Foundational Language And Vision Alignment Model](https://huggingface.co/papers/2112.04482) by Amanpreet Singh, Ronghang Hu, Vedanuj Goswami, Guillaume Couairon, Wojciech Galuba, Marcus Rohrbach, and Douwe Kiela and is accepted at CVPR 2022.
+```py
+import torch
+import requests
+from PIL import Image
+from transformers import AutoProcessor, FlavaModel
 
-The paper aims at creating a single unified foundation model which can work across vision, language
-as well as vision-and-language multimodal tasks.
+model = FlavaModel.from_pretrained("facebook/flava-full", dtype="auto")
+processor = AutoProcessor.from_pretrained("facebook/flava-full")
 
-The abstract from the paper is the following:
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
 
-*State-of-the-art vision and vision-and-language models rely on large-scale visio-linguistic pretraining for obtaining good performance on a variety
-of downstream tasks. Generally, such models are often either cross-modal (contrastive) or multi-modal
-(with earlier fusion) but not both; and they often only target specific modalities or tasks. A promising
-direction would be to use a single holistic universal model, as a "foundation", that targets all modalities
-at once -- a true vision and language foundation model should be good at vision tasks, language tasks, and
-cross- and multi-modal vision and language tasks. We introduce FLAVA as such a model and demonstrate
-impressive performance on a wide range of 35 tasks spanning these target modalities.*
+inputs = processor(
+  text=["a photo of a cat", "a photo of a dog"], images=[image, image], return_tensors="pt", padding="max_length", max_length=77
+)
 
-This model was contributed by [aps](https://huggingface.co/aps). The original code can be found [here](https://github.com/facebookresearch/multimodal/tree/main/examples/flava).
+outputs = model(**inputs)
+image_embeddings = outputs.image_embeddings
+text_embeddings = outputs.text_embeddings
+multimodal_embeddings = outputs.multimodal_embeddings
+```
+
+</hfoption>
+</hfoptions>
 
 ## FlavaConfig
 
@@ -63,6 +70,10 @@ This model was contributed by [aps](https://huggingface.co/aps). The original co
 ## FlavaProcessor
 
 [[autodoc]] FlavaProcessor
+
+## FlavaFeatureExtractor
+
+[[autodoc]] FlavaFeatureExtractor
 
 ## FlavaImageProcessor
 
@@ -107,3 +118,4 @@ This model was contributed by [aps](https://huggingface.co/aps). The original co
 
 [[autodoc]] FlavaMultimodalModel
     - forward
+

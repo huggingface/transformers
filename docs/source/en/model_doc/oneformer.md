@@ -13,48 +13,59 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-11-10 and added to Hugging Face Transformers on 2023-01-19.*
+*This model was released on 2022-11-10 and added to Hugging Face Transformers on 2023-01-19 and contributed by [praeclarumjj3](https://huggingface.co/praeclarumjj3).*
 
 # OneFormer
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[OneFormer: One Transformer to Rule Universal Image Segmentation](https://huggingface.co/papers/2211.06220) is a universal image segmentation framework capable of performing semantic, instance, and panoptic segmentation tasks after being trained on a single panoptic dataset. It employs a task token to condition the model on the specific task during inference, enabling task-dynamic behavior. The model uses a task-conditioned joint training strategy and a query-text contrastive loss to enhance inter-task and inter-class distinctions. OneFormer outperforms specialized Mask2Former models across all three segmentation tasks on datasets like ADE20k, CityScapes, and COCO, even with fewer resources. Enhanced performance is also observed with new ConvNeXt and DiNAT backbones.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The OneFormer model was proposed in [OneFormer: One Transformer to Rule Universal Image Segmentation](https://huggingface.co/papers/2211.06220) by Jitesh Jain, Jiachen Li, MangTik Chiu, Ali Hassani, Nikita Orlov, Humphrey Shi. OneFormer is a universal image segmentation framework that can be trained on a single panoptic dataset to perform semantic, instance, and panoptic segmentation tasks. OneFormer uses a task token to condition the model on the task in focus, making the architecture task-guided for training, and task-dynamic for inference.
+```py
+import torch
+from transformers import pipeline
 
-<img width="600" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/oneformer_teaser.png"/>
+pipeline = pipeline(task="image-segmentation", model="shi-labs/oneformer_ade20k_swin_tiny", dtype="auto")
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
+```
 
-The abstract from the paper is the following:
+</hfoption>
+<hfoption id="AutoModel">
 
-*Universal Image Segmentation is not a new concept. Past attempts to unify image segmentation in the last decades include scene parsing, panoptic segmentation, and, more recently, new panoptic architectures. However, such panoptic architectures do not truly unify image segmentation because they need to be trained individually on the semantic, instance, or panoptic segmentation to achieve the best performance. Ideally, a truly universal framework should be trained only once and achieve SOTA performance across all three image segmentation tasks. To that end, we propose OneFormer, a universal image segmentation framework that unifies segmentation with a multi-task train-once design. We first propose a task-conditioned joint training strategy that enables training on ground truths of each domain (semantic, instance, and panoptic segmentation) within a single multi-task training process. Secondly, we introduce a task token to condition our model on the task at hand, making our model task-dynamic to support multi-task training and inference. Thirdly, we propose using a query-text contrastive loss during training to establish better inter-task and inter-class distinctions. Notably, our single OneFormer model outperforms specialized Mask2Former models across all three segmentation tasks on ADE20k, CityScapes, and COCO, despite the latter being trained on each of the three tasks individually with three times the resources. With new ConvNeXt and DiNAT backbones, we observe even more performance improvement. We believe OneFormer is a significant step towards making image segmentation more universal and accessible.*
+```py
+import requests
+import torch
+import matplotlib.pyplot as plt
+import numpy as np
+from transformers import OneFormerProcessor, AutoModelForUniversalSegmentation
+from PIL import Image
 
-The figure below illustrates the architecture of OneFormer. Taken from the [original paper](https://huggingface.co/papers/2211.06220).
+processor = OneFormerProcessor.from_pretrained("shi-labs/oneformer_ade20k_swin_tiny")
+model = AutoModelForUniversalSegmentation.from_pretrained("shi-labs/oneformer_ade20k_swin_tiny", dtype="auto")
 
-<img width="600" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/oneformer_architecture.png"/>
+url = ("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
+image = Image.open(requests.get(url, stream=True).raw)
 
-This model was contributed by [Jitesh Jain](https://huggingface.co/praeclarumjj3). The original code can be found [here](https://github.com/SHI-Labs/OneFormer).
+inputs = processor(image, ["panoptic"], return_tensors="pt")
 
-## Usage tips
+with torch.no_grad():
+    outputs = model(**inputs)
+class_queries_logits = outputs.class_queries_logits
+masks_queries_logits = outputs.masks_queries_logits
 
-- OneFormer requires two inputs during inference: *image* and *task token*.
-- During training, OneFormer only uses panoptic annotations.
-- If you want to train the model in a distributed environment across multiple nodes, then one should update the
-  `get_num_masks` function inside in the `OneFormerLoss` class of `modeling_oneformer.py`. When training on multiple nodes, this should be
-  set to the average number of target masks across all nodes, as can be seen in the original implementation [here](https://github.com/SHI-Labs/OneFormer/blob/33ebb56ed34f970a30ae103e786c0cb64c653d9a/oneformer/modeling/criterion.py#L287).
-- One can use [`OneFormerProcessor`] to prepare input images and task inputs for the model and optional targets for the model. [`OneFormerProcessor`] wraps [`OneFormerImageProcessor`] and [`CLIPTokenizer`] into a single instance to both prepare the images and encode the task inputs.
-- To get the final segmentation, depending on the task, you can call [`~OneFormerProcessor.post_process_semantic_segmentation`] or [`~OneFormerImageProcessor.post_process_instance_segmentation`] or [`~OneFormerImageProcessor.post_process_panoptic_segmentation`]. All three tasks can be solved using [`OneFormerForUniversalSegmentation`] output, panoptic segmentation accepts an optional `label_ids_to_fuse` argument to fuse instances of the target object/s (e.g. sky) together.
+predicted_panoptic_map = processor.post_process_panoptic_segmentation(
+    outputs, target_sizes=[(image.height, image.width)]
+)[0]["segmentation"]
 
-## Resources
+plt.figure(figsize=(8, 6))
+plt.imshow(predicted_panoptic_map, cmap='tab20')
+plt.axis('off')
+plt.show()
+```
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with OneFormer.
-
-- Demo notebooks regarding inference + fine-tuning on custom data can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/OneFormer).
-
-If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we will review it.
-The resource should ideally demonstrate something new instead of duplicating an existing resource.
+</hfoption>
+</hfoptions>
 
 ## OneFormer specific outputs
 
@@ -70,6 +81,7 @@ The resource should ideally demonstrate something new instead of duplicating an 
 
 [[autodoc]] OneFormerImageProcessor
     - preprocess
+    - encode_inputs
     - post_process_semantic_segmentation
     - post_process_instance_segmentation
     - post_process_panoptic_segmentation
@@ -95,3 +107,5 @@ The resource should ideally demonstrate something new instead of duplicating an 
 
 [[autodoc]] OneFormerForUniversalSegmentation
     - forward
+    
+

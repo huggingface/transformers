@@ -16,13 +16,15 @@ rendered properly in your Markdown viewer.
 
 # TimmWrapper
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+Helper class to load timm models in Transformers.
 
-## Overview
+```py
+import torch
+from transformers import pipeline
 
-Helper class to enable loading timm models to be used with the transformers library and its autoclasses.
+pipeline = pipeline(task="image-classification", model="timm/resnet50.a1_in1k", dtype="auto")
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/beignets-task-guide.png")
+```
 
 ```python
 >>> import torch
@@ -50,17 +52,6 @@ Helper class to enable loading timm models to be used with the transformers libr
 >>> # Get top 5 predictions
 >>> top5_probabilities, top5_class_indices = torch.topk(logits.softmax(dim=1) * 100, k=5)
 ```
-
-## Resources
-
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with TimmWrapper.
-
-<PipelineTag pipeline="image-classification"/>
-
-- [Collection of Example Notebook](https://github.com/ariG23498/timm-wrapper-examples) 🌎
-
-> [!TIP]
-> For a more detailed overview please read the [official blog post](https://huggingface.co/blog/timm-transformers) on the timm integration.
 
 ## TimmWrapperConfig
 

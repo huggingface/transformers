@@ -13,22 +13,18 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2019-10-29 and added to Hugging Face Transformers on 2020-11-16.*
+*This model was released on 2019-10-29 and added to Hugging Face Transformers on 2020-11-16 and contributed by [sshleifer](https://huggingface.co/sshleifer).*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-    <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-    <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
 </div>
 
 # BART
 
-[BART](https://huggingface.co/papers/1910.13461) is a sequence-to-sequence model that combines the pretraining objectives from BERT and GPT. It's pretrained by corrupting text in different ways like deleting words, shuffling sentences, or masking tokens and learning how to fix it. The encoder encodes the corrupted document and the corrupted text is fixed by the decoder. As it learns to recover the original text, BART gets really good at both understanding and generating language.
-
-You can find all the original BART checkpoints under the [AI at Meta](https://huggingface.co/facebook?search_models=bart) organization.
-
-The example below demonstrates how to predict the `[MASK]` token with [`Pipeline`], [`AutoModel`], and from the command line.
+[BART](https://huggingface.co/papers/1910.13461) is a Transformer-based sequence-to-sequence model trained as a denoising autoencoder: text is corrupted with noise and the model learns to reconstruct the original. Its architecture combines a bidirectional encoder like BERT with a left-to-right decoder like GPT, making it a general framework for many pretraining approaches. Using techniques like sentence shuffling and span in-filling, BART achieves strong results on both generation and comprehension tasks, matching RoBERTa on GLUE and SQuAD while setting new state-of-the-art results in summarization, dialogue, and question answering. It also boosts machine translation performance and allows ablation experiments that replicate and compare other pretraining schemes.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -37,14 +33,8 @@ The example below demonstrates how to predict the `[MASK]` token with [`Pipeline
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(
-    task="fill-mask",
-    model="facebook/bart-large",
-    dtype=torch.float16,
-    device=0
-)
-pipeline("Plants create <mask> through a process known as photosynthesis.")
-
+pipeline = pipeline(task="summarization", model="facebook/bart-large-cnn", dtype="auto")
+pipeline("The tower is 324 metres (1,063 ft) tall, about the same height as an 81-storey building, and the tallest structure in Paris. Its base is square, measuring 125 metres (410 ft) on each side. During its construction, the Eiffel Tower surpassed the Washington Monument to become the tallest man-made structure in the world, a title it held for 41 years until the Chrysler Building in New York City was finished in 1930.")
 ```
 
 </hfoption>
@@ -52,48 +42,21 @@ pipeline("Plants create <mask> through a process known as photosynthesis.")
 
 ```py
 import torch
-from transformers import AutoModelForMaskedLM, AutoTokenizer
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained(
-    "facebook/bart-large",
-)
-model = AutoModelForMaskedLM.from_pretrained(
-    "facebook/bart-large",
-    dtype=torch.float16,
-    device_map="auto",
-    attn_implementation="sdpa"
-)
-inputs = tokenizer("Plants create <mask> through a process known as photosynthesis.", return_tensors="pt").to(model.device)
+model = AutoModelForSeq2SeqLM.from_pretrained("facebook/bart-large-cnn", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("facebook/bart-large-cnn")
 
-with torch.no_grad():
-    outputs = model(**inputs)
-    predictions = outputs.logits
-
-masked_index = torch.where(inputs['input_ids'] == tokenizer.mask_token_id)[1]
-predicted_token_id = predictions[0, masked_index].argmax(dim=-1)
-predicted_token = tokenizer.decode(predicted_token_id)
-
-print(f"The predicted token is: {predicted_token}")
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Plants create <mask> through a process known as photosynthesis." | transformers run --task fill-mask --model facebook/bart-large --device 0
+text="""
+The tower is 324 metres (1,063 ft) tall, about the same height as an 81-storey building, and the tallest structure in Paris. Its base is square, measuring 125 metres (410 ft) on each side. During its construction, the Eiffel Tower surpassed the Washington Monument to become the tallest man-made structure in the world, a title it held for 41 years until the Chrysler Building in New York City was finished in 1930.
+"""
+inputs = tokenizer(text, return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
+print(tokenizer.decode(outputs[0]))
 ```
 
 </hfoption>
 </hfoptions>
-
-## Notes
-
-- Inputs should be padded on the right because BERT uses absolute position embeddings.
-- The [facebook/bart-large-cnn](https://huggingface.co/facebook/bart-large-cnn) checkpoint doesn't include `mask_token_id` which means it can't perform mask-filling tasks.
-- BART doesn't use `token_type_ids` for sequence classification. Use [`BartTokenizer`] or [`~PreTrainedTokenizerBase.encode`] to get the proper splitting.
-- The forward pass of [`BartModel`] creates the `decoder_input_ids` if they're not passed. This can be different from other model APIs, but it is a useful feature for mask-filling tasks.
-- Model predictions are intended to be identical to the original implementation when `forced_bos_token_id=0`. This only works if the text passed to `fairseq.encode` begins with a space.
-- [`~GenerationMixin.generate`] should be used for conditional generation tasks like summarization.
 
 ## BartConfig
 
@@ -134,3 +97,4 @@ echo -e "Plants create <mask> through a process known as photosynthesis." | tran
 
 [[autodoc]] BartForCausalLM
     - forward
+
