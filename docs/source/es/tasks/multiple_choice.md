@@ -102,8 +102,6 @@ El [`DataCollatorForMultipleChoice`] aplanará todas las entradas del modelo, le
 
 ## Entrenamiento
 
-<frameworkcontent>
-<pt>
 Carga el modelo BERT con [`AutoModelForMultipleChoice`]:
 
 ```py
@@ -146,62 +144,3 @@ En este punto, solo quedan tres pasos:
 
 >>> trainer.train()
 ```
-</pt>
-<tf>
-Para realizar el fine-tuning de un modelo en TensorFlow, primero convierte tus datasets al formato `tf.data.Dataset` con el método [`~TFPreTrainedModel.prepare_tf_dataset`].
-
-```py
->>> data_collator = DataCollatorForMultipleChoice(tokenizer=tokenizer)
->>> tf_train_set = model.prepare_tf_dataset(
-...     tokenized_swag["train"],
-...     shuffle=True,
-...     batch_size=batch_size,
-...     collate_fn=data_collator,
-... )
-
->>> tf_validation_set = model.prepare_tf_dataset(
-...     tokenized_swag["validation"],
-...     shuffle=False,
-...     batch_size=batch_size,
-...     collate_fn=data_collator,
-... )
-```
-
-<Tip>
-
-Para familiarizarte con el fine-tuning con Keras, ¡mira el tutorial básico [aquí](training#finetune-with-keras)!
-
-</Tip>
-
-Prepara una función de optimización, un programa para la tasa de aprendizaje y algunos hiperparámetros de entrenamiento:
-
-```py
->>> from transformers import create_optimizer
-
->>> batch_size = 16
->>> num_train_epochs = 2
->>> total_train_steps = (len(tokenized_swag["train"]) // batch_size) * num_train_epochs
->>> optimizer, schedule = create_optimizer(init_lr=5e-5, num_warmup_steps=0, num_train_steps=total_train_steps)
-```
-
-Carga el modelo BERT con [`TFAutoModelForMultipleChoice`]:
-
-```py
->>> from transformers import TFAutoModelForMultipleChoice
-
->>> model = TFAutoModelForMultipleChoice.from_pretrained("google-bert/bert-base-uncased")
-```
-
-Configura el modelo para entrenarlo con [`compile`](https://keras.io/api/models/model_training_apis/#compile-method):
-
-```py
->>> model.compile(optimizer=optimizer)
-```
-
-Invoca el método [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) para realizar el fine-tuning del modelo:
-
-```py
->>> model.fit(x=tf_train_set, validation_data=tf_validation_set, epochs=2)
-```
-</tf>
-</frameworkcontent>

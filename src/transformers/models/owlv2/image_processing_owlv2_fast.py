@@ -22,52 +22,18 @@
 import warnings
 from typing import TYPE_CHECKING, Optional, Union
 
-from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature, DefaultFastImageProcessorKwargs
+import torch
+from torchvision.transforms.v2 import functional as F
+
+from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature
 from ...image_transforms import center_to_corners_format, group_images_by_shape, reorder_images
-from ...image_utils import (
-    OPENAI_CLIP_MEAN,
-    OPENAI_CLIP_STD,
-    ChannelDimension,
-    ImageInput,
-    PILImageResampling,
-    SizeDict,
-)
-from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
-)
-
-
-if is_torch_available():
-    import torch
-
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-elif is_torchvision_available():
-    from torchvision.transforms import functional as F
+from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ChannelDimension, PILImageResampling, SizeDict
+from ...utils import TensorType, auto_docstring
+from .image_processing_owlv2 import _scale_boxes, box_iou
 
 
 if TYPE_CHECKING:
     from .modeling_owlv2 import Owlv2ObjectDetectionOutput
-
-
-if is_torch_available():
-    from .image_processing_owlv2 import _scale_boxes, box_iou
-
-
-class Owlv2FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    r"""
-    do_pad (`bool`, *optional*, defaults to `True`):
-        Controls whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess`
-        method. If `True`, padding will be applied to the bottom and right of the image with grey pixels.
-    """
-
-    do_pad: Optional[bool]
 
 
 @auto_docstring
@@ -86,7 +52,6 @@ class Owlv2ImageProcessorFast(BaseImageProcessorFast):
     model_input_names = ["pixel_values"]
     rescale_factor = 1 / 255
     do_pad = True
-    valid_kwargs = Owlv2FastImageProcessorKwargs
 
     def post_process(self, outputs, target_sizes):
         """
@@ -104,7 +69,6 @@ class Owlv2ImageProcessorFast(BaseImageProcessorFast):
             `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
-        # TODO: (amy) add support for other frameworks
         warnings.warn(
             "`post_process` is deprecated and will be removed in v5 of Transformers, please use"
             " `post_process_object_detection` instead, with `threshold=0.` for equivalent results.",
@@ -264,13 +228,6 @@ class Owlv2ImageProcessorFast(BaseImageProcessorFast):
 
         return results
 
-    def __init__(self, **kwargs: Unpack[Owlv2FastImageProcessorKwargs]):
-        super().__init__(**kwargs)
-
-    @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[Owlv2FastImageProcessorKwargs]):
-        return super().preprocess(images, **kwargs)
-
     def _pad_images(self, images: "torch.Tensor", constant_value: float = 0.5) -> "torch.Tensor":
         """
         Pad an image with zeros to the given size.
@@ -289,7 +246,12 @@ class Owlv2ImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         disable_grouping: Optional[bool],
         constant_value: float = 0.5,
+        **kwargs,
     ) -> list["torch.Tensor"]:
+        """
+        Unlike the Base class `self.pad` where all images are padded to the maximum image size,
+        Owlv2 pads an image to square.
+        """
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
@@ -389,7 +351,7 @@ class Owlv2ImageProcessorFast(BaseImageProcessorFast):
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
         if do_pad:
-            processed_images = self.pad(processed_images, disable_grouping=disable_grouping)
+            processed_images = self.pad(processed_images, constant_value=0.5, disable_grouping=disable_grouping)
 
         grouped_images, grouped_images_index = group_images_by_shape(
             processed_images, disable_grouping=disable_grouping

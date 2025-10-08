@@ -42,14 +42,12 @@ NLP tasks in the settings of few-shot (even zero-shot) learning.*
 This model was contributed by [canwenxu](https://huggingface.co/canwenxu). The original implementation can be found
 here: https://github.com/TsinghuaAI/CPM-Generate
 
-
 <Tip>
 
 CPM's architecture is the same as GPT-2, except for tokenization method. Refer to [GPT-2 documentation](gpt2) for
 API reference information.
 
 </Tip>
-
 
 ## CpmTokenizer
 

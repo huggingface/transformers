@@ -34,7 +34,6 @@ alt="drawing" width="600"/>
 
 <small> GOT-OCR2 training stages. Taken from the <a href="https://huggingface.co/papers/2409.01704">original paper.</a> </small>
 
-
 Tips:
 
 GOT-OCR2 works on a wide range of tasks, including plain document OCR, scene text OCR, formatted document OCR, and even OCR for tables, charts, mathematical formulas, geometric shapes, molecular formulas and sheet music. While this implementation of the model will only output plain text, the outputs can be further processed to render the desired format, with packages like `pdftex`, `mathpix`, `matplotlib`, `tikz`, `verovio` or `pyecharts`.
@@ -128,7 +127,6 @@ GOT-OCR2 can also generate formatted text, such as markdown or LaTeX. Here is an
 
 Although it might be reasonable in most cases to use a “for loop” for multi-page processing, some text data with formatting across several pages make it necessary to process all pages at once. GOT introduces a multi-page OCR (without “for loop”) feature, where multiple pages can be processed by the model at once, with the output being one continuous text.
 Here is an example of how to process multiple pages at once:
-
 
 ```python
 >>> import torch
@@ -254,6 +252,7 @@ Here is an example of how to process sheet music:
 >>> with open("output.svg", "w") as f:
 >>>     f.write(svg)
 ```
+
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/sheet_music.svg"
 alt="drawing" width="600"/>
 
@@ -285,4 +284,3 @@ alt="drawing" width="600"/>
 
 [[autodoc]] GotOcr2ForConditionalGeneration
     - forward
-

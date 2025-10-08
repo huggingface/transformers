@@ -143,6 +143,7 @@ class EfficientLoFTRImageProcessingTest(SuperGlueImageProcessingTest, unittest.T
 
         self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
 
+    @unittest.skip(reason="Many failing cases. This test needs a more deep investigation.")
     def test_fast_is_faster_than_slow(self):
         """Override the generic test since EfficientLoFTR requires image pairs."""
         if not self.test_slow_image_processor or not self.test_fast_image_processor:

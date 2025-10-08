@@ -22,7 +22,7 @@ from collections import OrderedDict
 from collections.abc import Callable, Iterator, KeysView, ValuesView
 from typing import Any, TypeVar, Union
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...utils import CONFIG_NAME, logging
 
@@ -65,6 +65,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("blip-2", "Blip2Config"),
         ("blip_2_qformer", "Blip2QFormerConfig"),
         ("bloom", "BloomConfig"),
+        ("blt", "BltConfig"),
         ("bridgetower", "BridgeTowerConfig"),
         ("bros", "BrosConfig"),
         ("camembert", "CamembertConfig"),
@@ -126,6 +127,9 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("dots1", "Dots1Config"),
         ("dpr", "DPRConfig"),
         ("dpt", "DPTConfig"),
+        ("edgetam", "EdgeTamConfig"),
+        ("edgetam_video", "EdgeTamVideoConfig"),
+        ("edgetam_vision_model", "EdgeTamVisionConfig"),
         ("efficientformer", "EfficientFormerConfig"),
         ("efficientloftr", "EfficientLoFTRConfig"),
         ("efficientnet", "EfficientNetConfig"),
@@ -148,6 +152,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("fastspeech2_conformer_with_hifigan", "FastSpeech2ConformerWithHifiGanConfig"),
         ("flaubert", "FlaubertConfig"),
         ("flava", "FlavaConfig"),
+        ("flex_olmo", "FlexOlmoConfig"),
         ("florence2", "Florence2Config"),
         ("fnet", "FNetConfig"),
         ("focalnet", "FocalNetConfig"),
@@ -221,6 +226,8 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("led", "LEDConfig"),
         ("levit", "LevitConfig"),
         ("lfm2", "Lfm2Config"),
+        ("lfm2_moe", "Lfm2MoeConfig"),
+        ("lfm2_vl", "Lfm2VlConfig"),
         ("lightglue", "LightGlueConfig"),
         ("lilt", "LiltConfig"),
         ("llama", "LlamaConfig"),
@@ -230,6 +237,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("llava_next", "LlavaNextConfig"),
         ("llava_next_video", "LlavaNextVideoConfig"),
         ("llava_onevision", "LlavaOnevisionConfig"),
+        ("longcat_flash", "LongcatFlashConfig"),
         ("longformer", "LongformerConfig"),
         ("longt5", "LongT5Config"),
         ("luke", "LukeConfig"),
@@ -281,6 +289,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("nystromformer", "NystromformerConfig"),
         ("olmo", "OlmoConfig"),
         ("olmo2", "Olmo2Config"),
+        ("olmo3", "Olmo3Config"),
         ("olmoe", "OlmoeConfig"),
         ("omdet-turbo", "OmDetTurboConfig"),
         ("oneformer", "OneFormerConfig"),
@@ -291,6 +300,8 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("owlv2", "Owlv2Config"),
         ("owlvit", "OwlViTConfig"),
         ("paligemma", "PaliGemmaConfig"),
+        ("parakeet_ctc", "ParakeetCTCConfig"),
+        ("parakeet_encoder", "ParakeetEncoderConfig"),
         ("patchtsmixer", "PatchTSMixerConfig"),
         ("patchtst", "PatchTSTConfig"),
         ("pegasus", "PegasusConfig"),
@@ -325,6 +336,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("qwen3", "Qwen3Config"),
         ("qwen3_moe", "Qwen3MoeConfig"),
         ("qwen3_next", "Qwen3NextConfig"),
+        ("qwen3_omni_moe", "Qwen3OmniMoeConfig"),
         ("qwen3_vl", "Qwen3VLConfig"),
         ("qwen3_vl_moe", "Qwen3VLMoeConfig"),
         ("qwen3_vl_moe_text", "Qwen3VLMoeTextConfig"),
@@ -363,6 +375,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("shieldgemma2", "ShieldGemma2Config"),
         ("siglip", "SiglipConfig"),
         ("siglip2", "Siglip2Config"),
+        ("siglip2_vision_model", "Siglip2VisionConfig"),
         ("siglip_vision_model", "SiglipVisionConfig"),
         ("smollm3", "SmolLM3Config"),
         ("smolvlm", "SmolVLMConfig"),
@@ -485,6 +498,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("blip-2", "BLIP-2"),
         ("blip_2_qformer", "BLIP-2 QFormer"),
         ("bloom", "BLOOM"),
+        ("blt", "Blt"),
         ("bort", "BORT"),
         ("bridgetower", "BridgeTower"),
         ("bros", "BROS"),
@@ -553,6 +567,9 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("dots1", "dots1"),
         ("dpr", "DPR"),
         ("dpt", "DPT"),
+        ("edgetam", "EdgeTAM"),
+        ("edgetam_video", "EdgeTamVideo"),
+        ("edgetam_vision_model", "EdgeTamVisionModel"),
         ("efficientformer", "EfficientFormer"),
         ("efficientloftr", "EfficientLoFTR"),
         ("efficientnet", "EfficientNet"),
@@ -578,6 +595,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("flan-ul2", "FLAN-UL2"),
         ("flaubert", "FlauBERT"),
         ("flava", "FLAVA"),
+        ("flex_olmo", "FlexOlmo"),
         ("florence2", "Florence2"),
         ("fnet", "FNet"),
         ("focalnet", "FocalNet"),
@@ -653,6 +671,8 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("led", "LED"),
         ("levit", "LeViT"),
         ("lfm2", "Lfm2"),
+        ("lfm2_moe", "Lfm2Moe"),
+        ("lfm2_vl", "Lfm2Vl"),
         ("lightglue", "LightGlue"),
         ("lilt", "LiLT"),
         ("llama", "LLaMA"),
@@ -664,6 +684,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("llava_next", "LLaVA-NeXT"),
         ("llava_next_video", "LLaVa-NeXT-Video"),
         ("llava_onevision", "LLaVA-Onevision"),
+        ("longcat_flash", "LongCatFlash"),
         ("longformer", "Longformer"),
         ("longt5", "LongT5"),
         ("luke", "LUKE"),
@@ -723,6 +744,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("nystromformer", "Nyströmformer"),
         ("olmo", "OLMo"),
         ("olmo2", "OLMo2"),
+        ("olmo3", "Olmo3"),
         ("olmoe", "OLMoE"),
         ("omdet-turbo", "OmDet-Turbo"),
         ("oneformer", "OneFormer"),
@@ -733,6 +755,9 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("owlv2", "OWLv2"),
         ("owlvit", "OWL-ViT"),
         ("paligemma", "PaliGemma"),
+        ("parakeet", "Parakeet"),
+        ("parakeet_ctc", "Parakeet"),
+        ("parakeet_encoder", "ParakeetEncoder"),
         ("patchtsmixer", "PatchTSMixer"),
         ("patchtst", "PatchTST"),
         ("pegasus", "Pegasus"),
@@ -768,6 +793,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("qwen3", "Qwen3"),
         ("qwen3_moe", "Qwen3MoE"),
         ("qwen3_next", "Qwen3Next"),
+        ("qwen3_omni_moe", "Qwen3OmniMoE"),
         ("qwen3_vl", "Qwen3VL"),
         ("qwen3_vl_moe", "Qwen3VLMoe"),
         ("qwen3_vl_moe_text", "Qwen3VLMoe"),
@@ -952,6 +978,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("glm4v_moe_text", "glm4v_moe"),
         ("idefics3_vision", "idefics3"),
         ("siglip_vision_model", "siglip"),
+        ("siglip2_vision_model", "siglip2"),
         ("aimv2_vision_model", "aimv2"),
         ("smolvlm_vision", "smolvlm"),
         ("chinese_clip_vision_model", "chinese_clip"),
@@ -964,12 +991,15 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("qwen3_vl_moe_text", "qwen3_vl_moe"),
         ("sam_vision_model", "sam"),
         ("sam2_vision_model", "sam2"),
+        ("edgetam_vision_model", "edgetam"),
         ("sam2_hiera_det_model", "sam2"),
         ("sam_hq_vision_model", "sam_hq"),
         ("llama4_text", "llama4"),
         ("blip_2_qformer", "blip_2"),
         ("fastspeech2_conformer_with_hifigan", "fastspeech2_conformer"),
         ("perception_encoder", "perception_lm"),
+        ("parakeet_encoder", "parakeet"),
+        ("parakeet_ctc", "parakeet"),
     ]
 )
 
@@ -1003,7 +1033,7 @@ def config_class_to_model_type(config) -> Union[str, None]:
     return None
 
 
-class _LazyConfigMapping(OrderedDict[str, type[PretrainedConfig]]):
+class _LazyConfigMapping(OrderedDict[str, type[PreTrainedConfig]]):
     """
     A dictionary that lazily load its values when they are requested.
     """
@@ -1013,7 +1043,7 @@ class _LazyConfigMapping(OrderedDict[str, type[PretrainedConfig]]):
         self._extra_content = {}
         self._modules = {}
 
-    def __getitem__(self, key: str) -> type[PretrainedConfig]:
+    def __getitem__(self, key: str) -> type[PreTrainedConfig]:
         if key in self._extra_content:
             return self._extra_content[key]
         if key not in self._mapping:
@@ -1033,10 +1063,10 @@ class _LazyConfigMapping(OrderedDict[str, type[PretrainedConfig]]):
     def keys(self) -> list[str]:
         return list(self._mapping.keys()) + list(self._extra_content.keys())
 
-    def values(self) -> list[type[PretrainedConfig]]:
+    def values(self) -> list[type[PreTrainedConfig]]:
         return [self[k] for k in self._mapping] + list(self._extra_content.values())
 
-    def items(self) -> list[tuple[str, type[PretrainedConfig]]]:
+    def items(self) -> list[tuple[str, type[PreTrainedConfig]]]:
         return [(k, self[k]) for k in self._mapping] + list(self._extra_content.items())
 
     def __iter__(self) -> Iterator[str]:
@@ -1045,7 +1075,7 @@ class _LazyConfigMapping(OrderedDict[str, type[PretrainedConfig]]):
     def __contains__(self, item: object) -> bool:
         return item in self._mapping or item in self._extra_content
 
-    def register(self, key: str, value: type[PretrainedConfig], exist_ok=False) -> None:
+    def register(self, key: str, value: type[PreTrainedConfig], exist_ok=False) -> None:
         """
         Register a new configuration in this mapping.
         """
@@ -1191,7 +1221,7 @@ class AutoConfig:
         )
 
     @classmethod
-    def for_model(cls, model_type: str, *args, **kwargs) -> PretrainedConfig:
+    def for_model(cls, model_type: str, *args, **kwargs) -> PreTrainedConfig:
         if model_type in CONFIG_MAPPING:
             config_class = CONFIG_MAPPING[model_type]
             return config_class(*args, **kwargs)
@@ -1217,7 +1247,7 @@ class AutoConfig:
                     - A string, the *model id* of a pretrained model configuration hosted inside a model repo on
                       huggingface.co.
                     - A path to a *directory* containing a configuration file saved using the
-                      [`~PretrainedConfig.save_pretrained`] method, or the [`~PreTrainedModel.save_pretrained`] method,
+                      [`~PreTrainedConfig.save_pretrained`] method, or the [`~PreTrainedModel.save_pretrained`] method,
                       e.g., `./my_model_directory/`.
                     - A path or url to a saved configuration JSON *file*, e.g.,
                       `./my_model_directory/configuration.json`.
@@ -1227,9 +1257,6 @@ class AutoConfig:
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force the (re-)download the model weights and configuration files and override the
                 cached versions if they exist.
-            resume_download:
-                Deprecated and ignored. All downloads are now resumed by default when possible.
-                Will be removed in v5 of Transformers.
             proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
@@ -1301,7 +1328,7 @@ class AutoConfig:
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         code_revision = kwargs.pop("code_revision", None)
 
-        config_dict, unused_kwargs = PretrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
+        config_dict, unused_kwargs = PreTrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
         has_remote_code = "auto_map" in config_dict and "AutoConfig" in config_dict["auto_map"]
         has_local_code = "model_type" in config_dict and config_dict["model_type"] in CONFIG_MAPPING
         if has_remote_code:
@@ -1362,9 +1389,9 @@ class AutoConfig:
 
         Args:
             model_type (`str`): The model type like "bert" or "gpt".
-            config ([`PretrainedConfig`]): The config to register.
+            config ([`PreTrainedConfig`]): The config to register.
         """
-        if issubclass(config, PretrainedConfig) and config.model_type != model_type:
+        if issubclass(config, PreTrainedConfig) and config.model_type != model_type:
             raise ValueError(
                 "The config you are passing has a `model_type` attribute that is not consistent with the model type "
                 f"you passed (config has {config.model_type} and you passed {model_type}. Fix one of those so they "

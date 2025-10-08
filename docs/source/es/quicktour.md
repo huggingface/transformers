@@ -66,20 +66,10 @@ En el siguiente ejemplo, usarás el [`pipeline`] para análisis de sentimiento.
 
 Instala las siguientes dependencias si aún no lo has hecho:
 
-<frameworkcontent>
-<pt>
 
 ```bash
 pip install torch
 ```
-</pt>
-<tf>
-
-```bash
-pip install tensorflow
-```
-</tf>
-</frameworkcontent>
 
 Importa [`pipeline`] y especifica la tarea que deseas completar:
 
@@ -148,8 +138,6 @@ El [`pipeline`] puede acomodarse a cualquier modelo del [Model Hub](https://hugg
 >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
 ```
 
-<frameworkcontent>
-<pt>
 Usa [`AutoModelForSequenceClassification`] y ['AutoTokenizer'] para cargar un modelo preentrenado y un tokenizador asociado (más en un `AutoClass` debajo):
 
 ```py
@@ -159,20 +147,7 @@ Usa [`AutoModelForSequenceClassification`] y ['AutoTokenizer'] para cargar un mo
 >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
 ```
 
-</pt>
 
-<tf>
-Usa [`TFAutoModelForSequenceClassification`] y ['AutoTokenizer'] para cargar un modelo preentrenado y un tokenizador asociado (más en un `TFAutoClass` debajo):
-
-```py
->>> from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
-
->>> model = TFAutoModelForSequenceClassification.from_pretrained(model_name)
->>> tokenizer = AutoTokenizer.from_pretrained(model_name)
-```
-
-</tf>
-</frameworkcontent>
 
 Después puedes especificar el modelo y el tokenizador en el [`pipeline`], y aplicar el `classifier` en tu texto objetivo:
 
@@ -224,8 +199,6 @@ El tokenizador devolverá un diccionario conteniendo:
 
 Como con el [`pipeline`], el tokenizador aceptará una lista de inputs. Además, el tokenizador también puede rellenar (pad, en inglés) y truncar el texto para devolver un lote (batch, en inglés) de longitud uniforme:
 
-<frameworkcontent>
-<pt>
 
 ```py
 >>> pt_batch = tokenizer(
@@ -236,27 +209,11 @@ Como con el [`pipeline`], el tokenizador aceptará una lista de inputs. Además,
 ...     return_tensors="pt",
 ... )
 ```
-</pt>
-<tf>
-
-```py
->>> tf_batch = tokenizer(
-...     ["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."],
-...     padding=True,
-...     truncation=True,
-...     max_length=512,
-...     return_tensors="tf",
-... )
-```
-</tf>
-</frameworkcontent>
 
 Lee el tutorial de [preprocessing](./preprocessing) para más detalles acerca de la tokenización.
 
 ### AutoModel
 
-<frameworkcontent>
-<pt>
 🤗 Transformers provee una forma simple y unificada de cargar tus instancias preentrenadas. Esto significa que puedes cargar un [`AutoModel`] como cargarías un [`AutoTokenizer`]. La única diferencia es seleccionar el [`AutoModel`] correcto para la tarea. Ya que estás clasificando texto, o secuencias, carga [`AutoModelForSequenceClassification`]:
 
 ```py
@@ -288,41 +245,6 @@ El modelo producirá las activaciones finales en el atributo `logits`. Aplica la
 tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
         [0.2084, 0.1826, 0.1969, 0.1755, 0.2365]], grad_fn=<SoftmaxBackward0>)
 ```
-</pt>
-<tf>
-🤗 Transformers provee una forma simple y unificada de cargar tus instancias preentrenadas. Esto significa que puedes cargar un [`TFAutoModel`] como cargarías un [`AutoTokenizer`]. La única diferencia es seleccionar el [`TFAutoModel`] correcto para la tarea. Ya que estás clasificando texto, o secuencias, carga [`TFAutoModelForSequenceClassification`]:
-
-```py
->>> from transformers import TFAutoModelForSequenceClassification
-
->>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
->>> tf_model = TFAutoModelForSequenceClassification.from_pretrained(model_name)
-```
-
-<Tip>
-  Ve el [task summary](./task_summary) para revisar qué clase del [`AutoModel`]
-  deberías usar para cada tarea.
-</Tip>
-
-Ahora puedes pasar tu lote preprocesado de inputs directamente al modelo pasando las llaves del diccionario directamente a los tensores:
-
-```py
->>> tf_outputs = tf_model(tf_batch)
-```
-
-El modelo producirá las activaciones finales en el atributo `logits`. Aplica la función softmax a `logits` para obtener las probabilidades:
-
-```py
->>> import tensorflow as tf
-
->>> tf_predictions = tf.nn.softmax(tf_outputs.logits, axis=-1)
->>> print(tf.math.round(tf_predictions * 10**4) / 10**4)
-tf.Tensor(
-[[0.0021 0.0018 0.0116 0.2121 0.7725]
- [0.2084 0.1826 0.1969 0.1755  0.2365]], shape=(2, 5), dtype=float32)
-```
-</tf>
-</frameworkcontent>
 
 <Tip>
 
@@ -342,8 +264,6 @@ Los outputs del modelo también se comportan como tuplas o diccionarios (e.g., p
 
 ### Guarda un modelo
 
-<frameworkcontent>
-<pt>
 Una vez que se haya hecho fine-tuning a tu modelo puedes guardarlo con tu tokenizador usando [`PreTrainedModel.save_pretrained`]:
 
 ```py
@@ -358,29 +278,10 @@ Cuando quieras usar el modelo otra vez cárgalo con [`PreTrainedModel.from_pretr
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained("./pt_save_pretrained")
 ```
 
-</pt>
 
-<tf>
-Una vez que se haya hecho fine-tuning a tu modelo puedes guardarlo con tu tokenizador usando [`TFPreTrainedModel.save_pretrained`]:
-
-```py
->>> tf_save_directory = "./tf_save_pretrained"
->>> tokenizer.save_pretrained(tf_save_directory)  # doctest: +IGNORE_RESULT
->>> tf_model.save_pretrained(tf_save_directory)
-```
-
-Cuando quieras usar el modelo otra vez cárgalo con [`TFPreTrainedModel.from_pretrained`]:
-
-```py
->>> tf_model = TFAutoModelForSequenceClassification.from_pretrained("./tf_save_pretrained")
-```
-</tf>
-</frameworkcontent>
 
 Una característica particularmente interesante de 🤗 Transformers es la habilidad de guardar el modelo y cargarlo como un modelo de PyTorch o TensorFlow. El parámetro `from_pt` o `from_tf` puede convertir el modelo de un framework al otro:
 
-<frameworkcontent>
-<pt>
 
 ```py
 >>> from transformers import AutoModel
@@ -388,14 +289,3 @@ Una característica particularmente interesante de 🤗 Transformers es la habil
 >>> tokenizer = AutoTokenizer.from_pretrained(pt_save_directory)
 >>> pt_model = AutoModelForSequenceClassification.from_pretrained(pt_save_directory, from_pt=True)
 ```
-</pt>
-<tf>
-
-```py
->>> from transformers import TFAutoModel
-
->>> tokenizer = AutoTokenizer.from_pretrained(tf_save_directory)
->>> tf_model = TFAutoModelForSequenceClassification.from_pretrained(tf_save_directory, from_tf=True)
-```
-</tf>
-</frameworkcontent>

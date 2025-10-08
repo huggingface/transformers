@@ -19,32 +19,21 @@ from collections import defaultdict
 from functools import lru_cache
 from typing import Optional, Union
 
+import torch
+from torchvision.transforms.v2 import functional as F
+
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
 )
-
-
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
 
 
 def get_factors(dividend: int) -> set[int]:
@@ -319,8 +308,8 @@ def get_best_fit(
     return optimal_canvas
 
 
-class Llama4ImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
+class Llama4ImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
     max_patches (`int`, *optional*, defaults to 16):
         The maximum number of patches to be extracted from the image.
         Can be overridden by the `max_patches` parameter in the `preprocess` method.
@@ -331,8 +320,8 @@ class Llama4ImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         but never upsample, unless the image is smaller than the patch size.
     """
 
-    max_patches: Optional[int]
-    resize_to_max_canvas: Optional[bool]
+    max_patches: int
+    resize_to_max_canvas: bool
 
 
 @auto_docstring

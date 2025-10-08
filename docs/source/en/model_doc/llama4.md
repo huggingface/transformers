@@ -17,7 +17,6 @@ rendered properly in your Markdown viewer.
 
 # Llama4
 
-
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
@@ -28,9 +27,11 @@ rendered properly in your Markdown viewer.
 
 [Llama 4](https://ai.meta.com/blog/llama-4-multimodal-intelligence/), developed by Meta, introduces a new auto-regressive Mixture-of-Experts (MoE) architecture.
 This generation includes two models:
+
 - The highly capable Llama 4 Maverick with 17B active parameters out of ~400B total, with 128 experts.
 - The efficient Llama 4 Scout also  has 17B active parameters out of ~109B total, using just 16 experts.
 -
+
 Both models leverage early fusion for native multimodality, enabling them to process text and image inputs.
 Maverick and Scout are both trained on up to 40 trillion tokens on data encompassing 200 languages
 (with specific fine-tuning support for 12 languages including Arabic, Spanish, German, and Hindi).
@@ -52,7 +53,6 @@ You can find all the original Llama checkpoints under the [meta-llama](https://h
 The examples below demonstrates how to generate with [`Pipeline`] or the [`AutoModel`]. We additionally add an example
 showcasing how to toggle the right attributes to enable very long-context generations, as some flavors of Llama 4
 have context lengths going up to 10 million tokens.
-
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -255,7 +255,6 @@ Updating the default attention function can significantly improve compute perfor
 As of release, the Llama 4 model supports the following attention methods: `eager`, `flex_attention`, `sdpa`. We recommend using `flex_attention` for best results.
 Switching attention mechanism is done at the model initialization step:
 
-
 <hfoptions id="Attention">
 <hfoption id="Flex Attention">
 
@@ -278,6 +277,7 @@ model = Llama4ForConditionalGeneration.from_pretrained(
     dtype=torch.bfloat16,
 )
 ```
+
 </hfoption>
 <hfoption id="SDPA">
 The `sdpa` attention method is generally more compute-efficient than the `eager` method.
@@ -293,6 +293,7 @@ model = Llama4ForConditionalGeneration.from_pretrained(
     dtype=torch.bfloat16,
 )
 ```
+
 </hfoption>
 <hfoption id="Eager">
 The `eager` attention method is set by default, so no need for anything different when loading the model:
@@ -307,9 +308,9 @@ model = Llama4ForConditionalGeneration.from_pretrained(
     dtype=torch.bfloat16,
 )
 ```
+
 </hfoption>
 </hfoptions>
-
 
 ### Quantization
 
@@ -317,8 +318,6 @@ Quantization reduces the memory burden of large models by representing the weigh
 At time of release, both FBGEMM and LLM-Compressor are supported; more quantization methods will be supported in the days that follow the release.
 
 See below for examples using both:
-
-
 
 Here is an example loading an BF16 model in FP8 using the FBGEMM approach:
 
@@ -378,6 +377,7 @@ outputs = model.generate(**inputs.to(model.device), max_new_tokens=100)
 outputs = tokenizer.batch_decode(outputs[:, inputs["input_ids"].shape[-1]:])
 print(outputs[0])
 ```
+
 </hfoption>
 </hfoptions>
 
@@ -423,24 +423,24 @@ model = Llama4ForConditionalGeneration.from_pretrained(
 ## Llama4ForConditionalGeneration
 
 [[autodoc]] Llama4ForConditionalGeneration
-- forward
+    - forward
 
 ## Llama4ForCausalLM
 
 [[autodoc]] Llama4ForCausalLM
-- forward
+    - forward
 
 ## Llama4TextModel
 
 [[autodoc]] Llama4TextModel
-- forward
+    - forward
 
 ## Llama4ForCausalLM
 
 [[autodoc]] Llama4ForCausalLM
-- forward
+    - forward
 
 ## Llama4VisionModel
 
 [[autodoc]] Llama4VisionModel
-- forward
+    - forward

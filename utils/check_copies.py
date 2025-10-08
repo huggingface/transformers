@@ -504,7 +504,7 @@ def find_code_and_splits(object_name: str, base_path: str, buffer: Optional[dict
         code (`str`):
             The object's code.
         code_splits (`List[Tuple[str, int, int]]`):
-            `code` splitted into blocks. See `split_code_into_blocks`.
+            `code` split into blocks. See `split_code_into_blocks`.
     """
     if buffer is None:
         buffer = {}
@@ -797,8 +797,7 @@ def is_copy_consistent(
         orig_idx = -1
         observed_code = ""
         for name, code in observed_code_blocks.items():
-            if code.endswith("\n"):
-                code = code[:-1]
+            code = code.removesuffix("\n")
             for code_line in code.split("\n"):
                 orig_idx += 1
                 if code_line.strip() and not name.startswith(("_ignored_existing_block_", "_ignored_new_block_")):
