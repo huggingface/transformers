@@ -100,8 +100,6 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
             Number of selected experts.
         num_experts (`int`, *optional*, defaults to 60):
             Number of routed experts.
-        norm_topk_prob (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the topk probabilities.
         router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
             The aux loss factor for the total loss.
         mlp_only_layers (`List[int]`, *optional*, defaults to `[]`):

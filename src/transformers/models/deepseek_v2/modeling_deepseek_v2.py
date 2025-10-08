@@ -36,12 +36,9 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update, standardize_rope_params
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs
 from .configuration_deepseek_v2 import DeepseekV2Config
-
-
-logger = logging.get_logger(__name__)
 
 
 class DeepseekV2Experts(nn.ModuleList):
@@ -345,7 +342,6 @@ class DeepseekV2Attention(nn.Module):
         )
 
         self.scaling = self.qk_head_dim ** (-0.5)
-        self.rotary_emb = DeepseekV2RotaryEmbedding(config=config)
 
     def forward(
         self,
@@ -378,17 +374,6 @@ class DeepseekV2Attention(nn.Module):
         k_nope, value_states = torch.split(k_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
 
         k_pe = k_pe.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
-
-        if position_embeddings is None:
-            position_embeddings = self.rotary_emb(hidden_states, position_ids)
-        else:
-            logger.warning_once(
-                "The attention layers in this model are transitioning to computing the RoPE embeddings internally "
-                "through `position_ids` (2D tensor with the indexes of the tokens). Suing pre-computed"
-                "`position_embeddings` (Tuple of tensors, containing cos and sin) is deprecated and will be "
-                "removed in v4.60.0. Make sure to pass `position_ids` instead."
-            )
-
         q_pe, k_pe = apply_rotary_emb(q_pe, k_pe, position_embeddings.to(q_pe.device))
 
         k_pe = k_pe.expand(*k_nope.shape[:-1], -1)

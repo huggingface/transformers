@@ -59,9 +59,6 @@ class PhimoeRotaryEmbedding(nn.Module):
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = inv_freq
-        self.rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "default":
-            self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -946,7 +943,7 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
         # It will cause downside of slower at this single token position, however, better than current failure.
         if (
             past_key_values
-            and self.config.rope_parameters["rope_type"] != "default"
+            and hasattr(self.config, "original_max_position_embeddings")
             and input_ids.shape[1] >= self.config.original_max_position_embeddings + 1
         ):
             past_length = cache_position[0]
