@@ -102,11 +102,6 @@ print(model.config.id2label[predicted_label])
 
 [[autodoc]] VideoMAEConfig
 
-## VideoMAEFeatureExtractor
-
-[[autodoc]] VideoMAEFeatureExtractor
-    - __call__
-
 ## VideoMAEImageProcessor
 
 [[autodoc]] VideoMAEImageProcessor

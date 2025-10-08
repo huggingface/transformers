@@ -49,11 +49,6 @@ print("Predicted answer:", model.config.id2label[idx])
 
 [[autodoc]] ViltConfig
 
-## ViltFeatureExtractor
-
-[[autodoc]] ViltFeatureExtractor
-    - __call__
-
 ## ViltImageProcessor
 
 [[autodoc]] ViltImageProcessor

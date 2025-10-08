@@ -84,15 +84,6 @@ for score, label, box in zip(results["scores"], results["labels"], results["boxe
     - post_process_instance_segmentation
     - post_process_panoptic_segmentation
 
-## DetrFeatureExtractor
-
-[[autodoc]] DetrFeatureExtractor
-    - __call__
-    - post_process_object_detection
-    - post_process_semantic_segmentation
-    - post_process_instance_segmentation
-    - post_process_panoptic_segmentation
-
 ## DETR specific outputs
 
 [[autodoc]] models.detr.modeling_detr.DetrModelOutput

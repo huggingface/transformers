@@ -61,11 +61,6 @@ print(model.config.id2label[predicted_label])
 
 [[autodoc]] PoolFormerConfig
 
-## PoolFormerFeatureExtractor
-
-[[autodoc]] PoolFormerFeatureExtractor
-    - __call__
-
 ## PoolFormerImageProcessor
 
 [[autodoc]] PoolFormerImageProcessor

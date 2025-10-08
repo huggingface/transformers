@@ -62,11 +62,6 @@ print(f"\nPredicted answer: '{predicted_answer}' (tokens {predicted_start_idx}-{
 
 [[autodoc]] LayoutLMv3Config
 
-## LayoutLMv3FeatureExtractor
-
-[[autodoc]] LayoutLMv3FeatureExtractor
-    - __call__
-
 ## LayoutLMv3ImageProcessor
 
 [[autodoc]] LayoutLMv3ImageProcessor

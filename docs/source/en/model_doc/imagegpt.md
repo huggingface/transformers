@@ -60,11 +60,6 @@ print(model.config.id2label[predicted_label])
 
 [[autodoc]] ImageGPTConfig
 
-## ImageGPTFeatureExtractor
-
-[[autodoc]] ImageGPTFeatureExtractor
-    - __call__
-
 ## ImageGPTImageProcessor
 
 [[autodoc]] ImageGPTImageProcessor

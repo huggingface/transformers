@@ -52,11 +52,6 @@ print(processor.tokenizer.decode(predicted_answer_tokens))
 
 [[autodoc]] LayoutLMv2Config
 
-## LayoutLMv2FeatureExtractor
-
-[[autodoc]] LayoutLMv2FeatureExtractor
-    - __call__
-
 ## LayoutLMv2ImageProcessor
 
 [[autodoc]] LayoutLMv2ImageProcessor

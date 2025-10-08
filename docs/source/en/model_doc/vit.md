@@ -68,11 +68,6 @@ print(model.config.id2label[predicted_label])
 
 [[autodoc]] ViTConfig
 
-## ViTFeatureExtractor
-
-[[autodoc]] ViTFeatureExtractor
-    - __call__
-
 ## ViTImageProcessor
 
 [[autodoc]] ViTImageProcessor

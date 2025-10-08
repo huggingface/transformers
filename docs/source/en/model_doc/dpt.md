@@ -66,12 +66,6 @@ Image.fromarray(depth.astype("uint8"))
 
 [[autodoc]] DPTConfig
 
-## DPTFeatureExtractor
-
-[[autodoc]] DPTFeatureExtractor
-    - __call__
-    - post_process_semantic_segmentation
-
 ## DPTImageProcessor
 
 [[autodoc]] DPTImageProcessor

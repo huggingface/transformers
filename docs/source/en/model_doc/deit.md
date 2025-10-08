@@ -68,11 +68,6 @@ print(model.config.id2label[predicted_label])
 
 [[autodoc]] DeiTConfig
 
-## DeiTFeatureExtractor
-
-[[autodoc]] DeiTFeatureExtractor
-    - __call__
-
 ## DeiTImageProcessor
 
 [[autodoc]] DeiTImageProcessor

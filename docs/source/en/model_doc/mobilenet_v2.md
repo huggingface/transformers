@@ -61,12 +61,6 @@ print(model.config.id2label[predicted_label])
 
 [[autodoc]] MobileNetV2Config
 
-## MobileNetV2FeatureExtractor
-
-[[autodoc]] MobileNetV2FeatureExtractor
-    - preprocess
-    - post_process_semantic_segmentation
-
 ## MobileNetV2ImageProcessor
 
 [[autodoc]] MobileNetV2ImageProcessor
