@@ -122,8 +122,9 @@ class SafeRegex(ThreadSafe):
     """Proxy module that exposes ``regex`` through a shared lock."""
 
     # We must proxy the shared regex lock to any objects returned here since
-    # compiled patterns expose methods (e.g. pattern.match) that must also be
-    # serialized.
+    # compiled patterns expose methods that may call regex itself. Also,
+    # non-cached compiled pattern is also unsafe for threaded execution as unit
+    # tests have shown (segfault): test_safe_crash.py
 
     def compile(self, *args, **kwargs):
         pattern = self._hf_safe_module.compile(*args, **kwargs)
