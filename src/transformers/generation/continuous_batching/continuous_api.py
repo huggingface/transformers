@@ -610,11 +610,12 @@ class ContinuousBatchingManager:
             max_queue_size: Maximum size of the request queue (0 = unlimited)
             streaming: Whether to stream tokens as they are generated
         """
-        attn_implementation = f"paged|{model.config._attn_implementation}"
-        if attn_implementation not in ALL_ATTENTION_FUNCTIONS:  # when its a kernel
-            load_and_register_kernel(attn_implementation, paged_attention_forward)
+        if "paged|" not in model.config._attn_implementation:
+            attn_implementation = f"paged|{model.config._attn_implementation}"
+            if attn_implementation not in ALL_ATTENTION_FUNCTIONS._global_mapping:  # when its a kernel
+                load_and_register_kernel(attn_implementation, paged_attention_forward)
 
-        model.config._attn_implementation = attn_implementation
+            model.config._attn_implementation = attn_implementation
         self.model = model.eval()
         generation_config = model.generation_config if generation_config is None else generation_config
         self.generation_config = generation_config

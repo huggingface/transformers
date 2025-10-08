@@ -183,6 +183,14 @@ def load_and_register_kernel(attn_implementation: str, attention_wrapper: Option
     from ..modeling_utils import ALL_ATTENTION_FUNCTIONS
 
     actual_attn_name = attn_implementation.split("|")[1] if "|" in attn_implementation else attn_implementation
+    if not is_kernel(actual_attn_name):
+        return
+    if not _kernels_available:
+        raise ImportError(
+            "`kernels` is either not installed or uses an incompatible version. "
+            "Please install the latest version with `pip install -U kernels`."
+        )
+
     # Extract repo_id and kernel_name from the string
     if ":" in actual_attn_name:
         repo_id, kernel_name = actual_attn_name.split(":")
