@@ -68,12 +68,6 @@ plt.show()
 
 [[autodoc]] SegformerConfig
 
-## SegformerFeatureExtractor
-
-[[autodoc]] SegformerFeatureExtractor
-    - __call__
-    - post_process_semantic_segmentation
-
 ## SegformerImageProcessor
 
 [[autodoc]] SegformerImageProcessor

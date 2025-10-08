@@ -61,11 +61,6 @@ print(model.config.id2label[predicted_label])
 
 [[autodoc]] LevitConfig
 
-## LevitFeatureExtractor
-
-[[autodoc]] LevitFeatureExtractor
-    - __call__
-
 ## LevitImageProcessor
 
   [[autodoc]] LevitImageProcessor
