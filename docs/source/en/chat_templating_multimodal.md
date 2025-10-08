@@ -21,9 +21,9 @@ Multimodal chat models accept inputs like images, audio or video, in addition to
 In the same way the [Tokenizer](./fast_tokenizer) class handles chat templates and tokenization for text-only models,
 the [Processor](./processors) class handles preprocessing, tokenization and chat templates for multimodal models. Their [`~ProcessorMixin.apply_chat_template`] methods are almost identical.
 
-This guide covers chatting with image and video models at a lower level using the [`~ProcessorMixin.apply_chat_template`] and [`~GenerationMixin.generate`] methods,
-and is intended for more advanced users. If you just want to quickly get started chatting with a VLM, check out the "Including images in chats" section
-in the [Chat basics](./conversations) guide.
+This guide will show you how to chat with multimodal models with the high-level [`ImageTextToTextPipeline`] and at a lower level using the [`~ProcessorMixin.apply_chat_template`] and [`~GenerationMixin.generate`] methods.
+
+## ImageTextToTextPipeline
 
 [`ImageTextToTextPipeline`] is a high-level image and text generation class with a “chat mode”. Chat mode is enabled when a conversational model is detected and the chat prompt is [properly formatted](./llm_tutorial#wrong-prompt-format).
 
