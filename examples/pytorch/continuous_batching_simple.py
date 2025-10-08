@@ -41,7 +41,7 @@ if __name__ == "__main__":
     model = AutoModelForCausalLM.from_pretrained(
         MODEL_ID,
         attn_implementation=args.attn,
-        device_map="auto",
+        device_map="cuda",
         dtype=torch.bfloat16,
     )
     model = model.eval()

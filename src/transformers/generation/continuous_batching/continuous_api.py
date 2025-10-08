@@ -27,9 +27,7 @@ from tqdm import tqdm
 
 from ...configuration_utils import PreTrainedConfig
 from ...generation.configuration_utils import GenerationConfig
-from ...integrations.flash_paged import paged_attention_forward
 from ...integrations.hub_kernels import load_and_register_kernel
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...utils.logging import logging
 from ...utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
 from .cache import PagedAttentionCache
@@ -245,8 +243,8 @@ class ContinuousBatchProcessor:
 
     def return_attention_mask(self) -> bool:
         return self.config._attn_implementation in [
-            "eager",
-            "sdpa",
+            "paged|eager",
+            "paged|sdpa",
         ]  # we set `is_causal` to True in paged call
 
     @traced
@@ -610,11 +608,17 @@ class ContinuousBatchingManager:
             max_queue_size: Maximum size of the request queue (0 = unlimited)
             streaming: Whether to stream tokens as they are generated
         """
-        attn_implementation = f"paged|{model.config._attn_implementation}"
-        if attn_implementation not in ALL_ATTENTION_FUNCTIONS:  # only happens if the attn impl is a kernel
-            load_and_register_kernel(attn_implementation, paged_attention_forward)
+        if "paged|" not in model.config._attn_implementation:
+            attn_implementation = f"paged|{model.config._attn_implementation}"
 
-        model.set_attn_implementation(attn_implementation)
+            from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+
+            if attn_implementation not in ALL_ATTENTION_FUNCTIONS._global_mapping:  # when its a kernel
+                from ...integrations.flash_paged import paged_attention_forward
+
+                load_and_register_kernel(attn_implementation, paged_attention_forward)
+
+            model.config._attn_implementation = attn_implementation
         self.model = model.eval()
         generation_config = model.generation_config if generation_config is None else generation_config
         self.generation_config = generation_config
