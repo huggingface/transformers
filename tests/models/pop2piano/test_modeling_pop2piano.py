@@ -490,7 +490,7 @@ class Pop2PianoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         {"automatic-speech-recognition": Pop2PianoForConditionalGeneration} if is_torch_available() else {}
     )
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = True
     is_encoder_decoder = True
 

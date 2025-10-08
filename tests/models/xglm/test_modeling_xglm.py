@@ -284,7 +284,6 @@ class XGLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     )
     fx_compatible = True
     test_missing_keys = False
-    test_pruning = False
 
     def setUp(self):
         self.model_tester = XGLMModelTester(self)
