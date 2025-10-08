@@ -2688,27 +2688,10 @@ class GenerationMixin(ContinuousMixin):
         """
         # init values
         pad_token_id = generation_config._pad_token_tensor
-        output_attentions = generation_config.output_attentions
-        output_hidden_states = generation_config.output_hidden_states
-        output_scores = generation_config.output_scores
-        output_logits = generation_config.output_logits
-        return_dict_in_generate = generation_config.return_dict_in_generate
         has_eos_stopping_criteria = any(hasattr(criteria, "eos_token_id") for criteria in stopping_criteria)
         do_sample = generation_config.do_sample
 
-        # init attention / hidden states / scores tuples
-        scores = () if (return_dict_in_generate and output_scores) else None
-        raw_logits = () if (return_dict_in_generate and output_logits) else None
-        decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
-        cross_attentions = () if (return_dict_in_generate and output_attentions) else None
-        decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
-
-        # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
-        if return_dict_in_generate and self.config.is_encoder_decoder:
-            encoder_attentions = model_kwargs["encoder_outputs"].get("attentions") if output_attentions else None
-            encoder_hidden_states = (
-                model_kwargs["encoder_outputs"].get("hidden_states") if output_hidden_states else None
-            )
+        generate_output = self._init_optional_generate_output(generation_config, model_kwargs)
 
         # keep track of which sequences are already finished
         batch_size, cur_len = input_ids.shape[:2]
@@ -2764,24 +2747,12 @@ class GenerationMixin(ContinuousMixin):
             next_token_scores = logits_processor(input_ids, next_token_logits)
 
             # Store scores, attentions and hidden_states when required
-            if return_dict_in_generate:
-                if output_scores:
-                    scores += (next_token_scores,)
-                if output_logits:
-                    raw_logits += (next_token_logits,)
-                if output_attentions:
-                    decoder_attentions += (
-                        (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (outputs.attentions,)
-                    )
-                    if self.config.is_encoder_decoder:
-                        cross_attentions += (outputs.cross_attentions,)
-
-                if output_hidden_states:
-                    decoder_hidden_states += (
-                        (outputs.decoder_hidden_states,)
-                        if self.config.is_encoder_decoder
-                        else (outputs.hidden_states,)
-                    )
+            self._accumulate_optional_generate_output(
+                generate_output,
+                score_tensors=next_token_scores,
+                logits_tensors=next_token_logits,
+                **outputs,
+            )
 
             # token selection
             if do_sample:
@@ -2800,7 +2771,7 @@ class GenerationMixin(ContinuousMixin):
             if streamer is not None:
                 streamer.put(next_tokens.cpu())
 
-            unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
+            unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, generate_output["scores"])
             this_peer_finished = unfinished_sequences.max() == 0
             cur_len += 1
 
@@ -2811,30 +2782,9 @@ class GenerationMixin(ContinuousMixin):
         if streamer is not None:
             streamer.end()
 
-        if return_dict_in_generate:
-            if self.config.is_encoder_decoder:
-                return GenerateEncoderDecoderOutput(
-                    sequences=input_ids,
-                    scores=scores,
-                    logits=raw_logits,
-                    encoder_attentions=encoder_attentions,
-                    encoder_hidden_states=encoder_hidden_states,
-                    decoder_attentions=decoder_attentions,
-                    cross_attentions=cross_attentions,
-                    decoder_hidden_states=decoder_hidden_states,
-                    past_key_values=model_kwargs.get("past_key_values"),
-                )
-            else:
-                return GenerateDecoderOnlyOutput(
-                    sequences=input_ids,
-                    scores=scores,
-                    logits=raw_logits,
-                    attentions=decoder_attentions,
-                    hidden_states=decoder_hidden_states,
-                    past_key_values=model_kwargs.get("past_key_values"),
-                )
-        else:
-            return input_ids
+        return self._finalize_generate_output(
+            generate_output, input_ids, model_kwargs, GenerateDecoderOnlyOutput, GenerateEncoderDecoderOutput
+        )
 
     @staticmethod
     def _flatten_beam_dim(tensor: torch.Tensor) -> torch.Tensor:
@@ -3117,17 +3067,14 @@ class GenerationMixin(ContinuousMixin):
         # 1. init beam_search values
         pad_token_id = generation_config._pad_token_tensor
         eos_token_id = generation_config._eos_token_tensor
-        output_attentions = generation_config.output_attentions
-        output_hidden_states = generation_config.output_hidden_states
-        output_scores = generation_config.output_scores
-        output_logits = generation_config.output_logits
-        return_dict_in_generate = generation_config.return_dict_in_generate
         do_sample = generation_config.do_sample
         early_stopping = generation_config.early_stopping
         length_penalty = generation_config.length_penalty
         max_length = generation_config.max_length
         num_beams = generation_config.num_beams
         num_return_sequences = generation_config.num_return_sequences
+
+        generate_output = self._init_optional_generate_output(generation_config, model_kwargs)
 
         batch_size_unflattened, cur_len = input_ids.shape[:2]
         batch_size = batch_size_unflattened // num_beams
@@ -3165,22 +3112,7 @@ class GenerationMixin(ContinuousMixin):
                 "#35802 *after the PR got merged*, and add a comment there if your questions are not yet answered."
             )
 
-        # 2. init output tuples
-        all_scores = () if (return_dict_in_generate and output_scores) else None
-        raw_logits = () if (return_dict_in_generate and output_logits) else None
-        beam_indices = () if (return_dict_in_generate and output_logits) else None
-        decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
-        cross_attentions = () if (return_dict_in_generate and output_attentions) else None
-        decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
-
-        # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
-        if return_dict_in_generate and self.config.is_encoder_decoder:
-            encoder_attentions = model_kwargs["encoder_outputs"].get("attentions") if output_attentions else None
-            encoder_hidden_states = (
-                model_kwargs["encoder_outputs"].get("hidden_states") if output_hidden_states else None
-            )
-
-        # 3. init running tensors and static-shaped placeholders
+        # 2. init running tensors and static-shaped placeholders
 
         # per batch, beam-item holding current token in loop and completed sequences
         output_fill_value = pad_token_id or eos_token_id[0] if eos_token_id is not None else -1
@@ -3217,12 +3149,11 @@ class GenerationMixin(ContinuousMixin):
         )
         beam_indices = running_beam_indices.detach().clone()
 
-        # 4. run the generation loop
+        # 3. run the generation loop
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             # a. Forward current tokens, obtain the logits
             flat_running_sequences = self._flatten_beam_dim(running_sequences[:, :, :cur_len])
             model_inputs = self.prepare_inputs_for_generation(flat_running_sequences, **model_kwargs)
-
             model_outputs = self(**model_inputs, return_dict=True)
 
             # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
@@ -3243,27 +3174,12 @@ class GenerationMixin(ContinuousMixin):
             log_probs = logits_processor(flat_running_sequences, log_probs)
 
             # Store logits, attentions and hidden_states when required
-            if return_dict_in_generate:
-                if output_logits:
-                    raw_logits += (logits.clone(),)
-                if return_dict_in_generate and output_scores:
-                    all_scores += (log_probs.clone(),)
-
-                if output_attentions:
-                    decoder_attentions += (
-                        (model_outputs.decoder_attentions,)
-                        if self.config.is_encoder_decoder
-                        else (model_outputs.attentions,)
-                    )
-                    if self.config.is_encoder_decoder:
-                        cross_attentions += (model_outputs.cross_attentions,)
-
-                if output_hidden_states:
-                    decoder_hidden_states += (
-                        (model_outputs.decoder_hidden_states,)
-                        if self.config.is_encoder_decoder
-                        else (model_outputs.hidden_states,)
-                    )
+            self._accumulate_optional_generate_output(
+                generate_output,
+                score_tensors=log_probs.clone(),
+                logits_tensors=logits.clone(),
+                **model_outputs,
+            )
 
             # This is needed to properly delete logits which may be very large for first iteration
             # Otherwise a reference to outputs is kept which keeps the logits alive in the next iteration
@@ -3291,7 +3207,7 @@ class GenerationMixin(ContinuousMixin):
             # d. Check which running sequences have finished
             next_token_hits_stopping_criteria = stopping_criteria(
                 self._flatten_beam_dim(topk_running_sequences[:, :, : cur_len + 1]),  # remove unfilled token indexes
-                all_scores,
+                generate_output["scores"],
             )
             next_token_hits_stopping_criteria = self._unflatten_beam_dim(
                 next_token_hits_stopping_criteria, batch_size, beams_to_keep
@@ -3371,37 +3287,15 @@ class GenerationMixin(ContinuousMixin):
         sequences = sequences[:, :output_length]
         beam_indices = beam_indices[:, :max_generated_length]
 
-        if return_dict_in_generate:
-            if not output_scores:
-                beam_scores = None
-
-            if self.config.is_encoder_decoder:
-                return GenerateBeamEncoderDecoderOutput(
-                    sequences=sequences,
-                    sequences_scores=beam_scores,
-                    scores=all_scores,
-                    logits=raw_logits,
-                    beam_indices=beam_indices,
-                    encoder_attentions=encoder_attentions,
-                    encoder_hidden_states=encoder_hidden_states,
-                    decoder_attentions=decoder_attentions,
-                    cross_attentions=cross_attentions,
-                    decoder_hidden_states=decoder_hidden_states,
-                    past_key_values=model_kwargs.get("past_key_values"),
-                )
-            else:
-                return GenerateBeamDecoderOnlyOutput(
-                    sequences=sequences,
-                    sequences_scores=beam_scores,
-                    scores=all_scores,
-                    logits=raw_logits,
-                    beam_indices=beam_indices,
-                    attentions=decoder_attentions,
-                    hidden_states=decoder_hidden_states,
-                    past_key_values=model_kwargs.get("past_key_values"),
-                )
-        else:
-            return sequences
+        return self._finalize_generate_output(
+            generate_output,
+            sequences,
+            model_kwargs,
+            decoder_only_cls=GenerateBeamDecoderOnlyOutput,
+            encoder_decoder_cls=GenerateBeamEncoderDecoderOutput,
+            sequences_scores=(beam_scores if generation_config.output_scores else None),
+            beam_indices=beam_indices,
+        )
 
     def _assisted_decoding(
         self,
@@ -3482,25 +3376,8 @@ class GenerationMixin(ContinuousMixin):
         )
         # init values
         do_sample = generation_config.do_sample
-        output_attentions = generation_config.output_attentions
-        output_hidden_states = generation_config.output_hidden_states
-        output_scores = generation_config.output_scores
-        output_logits = generation_config.output_logits
-        return_dict_in_generate = generation_config.return_dict_in_generate
 
-        # init attention / hidden states / scores tuples
-        scores = () if (return_dict_in_generate and output_scores) else None
-        raw_logits = () if (return_dict_in_generate and output_logits) else None
-        decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
-        cross_attentions = () if (return_dict_in_generate and output_attentions) else None
-        decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
-
-        # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
-        if return_dict_in_generate and self.config.is_encoder_decoder:
-            encoder_attentions = model_kwargs["encoder_outputs"].get("attentions") if output_attentions else None
-            encoder_hidden_states = (
-                model_kwargs["encoder_outputs"].get("hidden_states") if output_hidden_states else None
-            )
+        generate_output = self._init_optional_generate_output(generation_config, model_kwargs)
 
         # keep track of which sequences are already finished
         batch_size, cur_len = input_ids.shape[:2]
@@ -3547,7 +3424,6 @@ class GenerationMixin(ContinuousMixin):
                 model_inputs["logits_to_keep"] = candidate_length + 1
 
             # 2.2. Run a forward pass on the candidate sequence
-
             outputs = self(**model_inputs)
 
             # 2.3. Process the new logits
@@ -3619,46 +3495,73 @@ class GenerationMixin(ContinuousMixin):
 
             # Store scores, attentions and hidden_states when required
             # Assistant: modified to append one tuple element per token, as in the other generation methods.
-            if return_dict_in_generate:
-                newly_added_length = n_matches + 1
-                if output_scores:
-                    scores += tuple(new_logits[:, i, :] for i in range(newly_added_length))
-                if output_logits:
-                    raw_logits += tuple(next_token_logits[:, i, :] for i in range(newly_added_length))
+            # ... after computing new_logits, next_token_logits, and valid_tokens
+            newly_added = int(n_matches + 1)  # avoid tensor in-place operations
+            decoder_attention_chunks = cross_attention_chunks = decoder_hidden_state_chunks = None
 
-                newly_added_length = new_cur_len if is_first_iteration else newly_added_length
-                if output_attentions:
-                    if self.config.is_encoder_decoder:
-                        cross_attentions = _split_model_outputs(
-                            cross_attentions, outputs.cross_attentions, cur_len, newly_added_length
-                        )
-                        decoder_attentions = _split_model_outputs(
-                            decoder_attentions,
-                            outputs.decoder_attentions,
-                            cur_len,
-                            newly_added_length,
-                            is_decoder_attention=True,
-                        )
-                    # some (V)LLMs have hard requirement on SDPA and thus never return attn
-                    elif outputs.attentions[0] is not None:
-                        decoder_attentions = _split_model_outputs(
-                            decoder_attentions,
+            if generate_output["output_attentions"]:
+                if self.config.is_encoder_decoder:
+                    cross_attention_chunks = _split_model_outputs(
+                        outputs.cross_attentions,
+                        cur_len,
+                        newly_added,
+                        is_decoder_attention=False,
+                        include_prompt_block=is_first_iteration,
+                    )
+                    decoder_attention_chunks = _split_model_outputs(
+                        outputs.decoder_attentions,
+                        cur_len,
+                        newly_added,
+                        is_decoder_attention=True,
+                        include_prompt_block=is_first_iteration,
+                    )
+                else:
+                    if outputs.attentions[0] is not None:
+                        decoder_attention_chunks = _split_model_outputs(
                             outputs.attentions,
                             cur_len,
-                            newly_added_length,
+                            newly_added,
                             is_decoder_attention=True,
-                        )
-                if output_hidden_states:
-                    if self.config.is_encoder_decoder:
-                        decoder_hidden_states = _split_model_outputs(
-                            decoder_hidden_states, outputs.decoder_hidden_states, cur_len, newly_added_length
-                        )
-                    else:
-                        decoder_hidden_states = _split_model_outputs(
-                            decoder_hidden_states, outputs.hidden_states, cur_len, newly_added_length
+                            include_prompt_block=is_first_iteration,
                         )
 
-            unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
+            if generate_output["output_hidden_states"]:
+                if self.config.is_encoder_decoder:
+                    decoder_hidden_state_chunks = _split_model_outputs(
+                        outputs.decoder_hidden_states,
+                        cur_len,
+                        newly_added,
+                        is_decoder_attention=False,
+                        include_prompt_block=is_first_iteration,
+                    )
+                else:
+                    decoder_hidden_state_chunks = _split_model_outputs(
+                        outputs.hidden_states,
+                        cur_len,
+                        newly_added,
+                        is_decoder_attention=False,
+                        include_prompt_block=is_first_iteration,
+                    )
+
+            score_tensors = (
+                tuple(new_logits[:, i, :] for i in range(newly_added)) if generate_output["output_scores"] else None
+            )
+            logits_tensors = (
+                tuple(next_token_logits[:, i, :] for i in range(newly_added))
+                if generate_output["output_logits"]
+                else None
+            )
+
+            self._accumulate_optional_generate_output(
+                generate_output,
+                score_tensors=score_tensors,
+                logits_tensors=logits_tensors,
+                decoder_attentions_chunks=decoder_attention_chunks,
+                cross_attentions_chunks=cross_attention_chunks,
+                decoder_hidden_states_chunks=decoder_hidden_state_chunks,
+            )
+
+            unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, generate_output["scores"])
             this_peer_finished = unfinished_sequences.max() == 0
             is_first_iteration = False
 
@@ -3672,30 +3575,14 @@ class GenerationMixin(ContinuousMixin):
             candidate_generator.assistant_model.generation_config.num_assistant_tokens = (
                 candidate_generator.num_assistant_tokens
             )
-        if return_dict_in_generate:
-            if self.config.is_encoder_decoder:
-                return GenerateEncoderDecoderOutput(
-                    sequences=input_ids,
-                    scores=scores,
-                    logits=raw_logits,
-                    encoder_attentions=encoder_attentions,
-                    encoder_hidden_states=encoder_hidden_states,
-                    decoder_attentions=decoder_attentions,
-                    cross_attentions=cross_attentions,
-                    decoder_hidden_states=decoder_hidden_states,
-                    past_key_values=model_kwargs.get("past_key_values"),
-                )
-            else:
-                return GenerateDecoderOnlyOutput(
-                    sequences=input_ids,
-                    scores=scores,
-                    logits=raw_logits,
-                    attentions=decoder_attentions,
-                    hidden_states=decoder_hidden_states,
-                    past_key_values=model_kwargs.get("past_key_values"),
-                )
-        else:
-            return input_ids
+
+        return self._finalize_generate_output(
+            generate_output,
+            input_ids,
+            model_kwargs,
+            decoder_only_cls=GenerateDecoderOnlyOutput,
+            encoder_decoder_cls=GenerateEncoderDecoderOutput,
+        )
 
     def _prefill_chunking(self, input_ids: torch.LongTensor, generation_config: GenerationConfig, **model_kwargs):
         # Even if we are not compiling the forward, flex is always compiled when used. With chunk prefill, we may
@@ -3740,6 +3627,223 @@ class GenerationMixin(ContinuousMixin):
         _ = model_kwargs.pop("position_ids", None)
 
         return model_kwargs
+
+    def _init_optional_generate_output(
+        self, generation_config: GenerationConfig, model_kwargs: dict[str, Any]
+    ) -> dict[str, Any]:
+        """
+        Initialize optional generation output dictionary based on configuration flags.
+
+        Args:
+            generation_config (`GenerationConfig`):
+                The generation configuration object containing flags like `output_attentions`,
+                `output_hidden_states`, `output_scores`, `output_logits`, and `return_dict_in_generate`.
+            model_kwargs (`dict[str, Any]`):
+                Model-specific keyword arguments, potentially containing encoder outputs for
+                encoder-decoder models.
+
+        Returns:
+            `dict[str, Any]`: A dictionary containing:
+                - Configuration flags (output_attentions, output_hidden_states, etc.)
+                - Empty tuples or None for various output types based on configuration
+                - Encoder outputs (if applicable for encoder-decoder models)
+        """
+        output_attentions = generation_config.output_attentions
+        output_hidden_states = generation_config.output_hidden_states
+        output_scores = generation_config.output_scores
+        output_logits = generation_config.output_logits
+        return_dict_in_generate = generation_config.return_dict_in_generate
+
+        scores = () if (return_dict_in_generate and output_scores) else None
+        raw_logits = () if (return_dict_in_generate and output_logits) else None
+        decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
+        cross_attentions = () if (return_dict_in_generate and output_attentions) else None
+        decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
+
+        if return_dict_in_generate and self.config.is_encoder_decoder:
+            enc_out = model_kwargs["encoder_outputs"]
+            encoder_attentions = enc_out.get("attentions") if output_attentions else None
+            encoder_hidden_states = enc_out.get("hidden_states") if output_hidden_states else None
+        else:
+            encoder_attentions = None
+            encoder_hidden_states = None
+
+        return {
+            "output_attentions": output_attentions,
+            "output_hidden_states": output_hidden_states,
+            "output_scores": output_scores,
+            "output_logits": output_logits,
+            "return_dict_in_generate": return_dict_in_generate,
+            "scores": scores,
+            "raw_logits": raw_logits,
+            "decoder_attentions": decoder_attentions,
+            "cross_attentions": cross_attentions,
+            "decoder_hidden_states": decoder_hidden_states,
+            "encoder_attentions": encoder_attentions,
+            "encoder_hidden_states": encoder_hidden_states,
+        }
+
+    def _accumulate_optional_generate_output(
+        self,
+        generate_output: dict[str, Any],
+        score_tensors: Optional[Union[torch.Tensor, tuple[torch.Tensor, ...]]] = None,
+        logits_tensors: Optional[Union[torch.Tensor, tuple[torch.Tensor, ...]]] = None,
+        # standard path: unpack a ModelOutput with **outputs
+        attentions: Optional[tuple[torch.FloatTensor, ...]] = None,
+        decoder_attentions: Optional[tuple[torch.FloatTensor, ...]] = None,
+        cross_attentions: Optional[tuple[torch.FloatTensor, ...]] = None,
+        hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None,
+        decoder_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None,
+        # assisted path: pre-split, token-wise chunks
+        decoder_attentions_chunks: Optional[tuple[Any, ...]] = None,
+        cross_attentions_chunks: Optional[tuple[Any, ...]] = None,
+        decoder_hidden_states_chunks: Optional[tuple[Any, ...]] = None,
+        **kwargs: Any,
+    ) -> None:
+        """
+        Accumulate optional generation outputs into the generate_output dictionary.
+
+        Args:
+            generate_output (`dict[str, Any]`):
+                Dictionary containing generation configuration flags and accumulated outputs.
+            score_tensors (`Optional[Union[torch.Tensor, tuple[torch.Tensor, ...]]]`, *optional*):
+                Processed prediction scores to accumulate. Can be a single tensor or tuple of tensors.
+            logits_tensors (`Optional[Union[torch.Tensor, tuple[torch.Tensor, ...]]]`, *optional*):
+                Unprocessed prediction logits to accumulate. Can be a single tensor or tuple of tensors.
+            attentions (`Optional[tuple[torch.FloatTensor, ...]]`, *optional*):
+                Attention weights for decoder-only models (standard path).
+            decoder_attentions (`Optional[tuple[torch.FloatTensor, ...]]`, *optional*):
+                Decoder attention weights for encoder-decoder models (standard path).
+            cross_attentions (`Optional[tuple[torch.FloatTensor, ...]]`, *optional*):
+                Cross attention weights for encoder-decoder models (standard path).
+            hidden_states (`Optional[tuple[torch.FloatTensor, ...]]`, *optional*):
+                Hidden states for decoder-only models (standard path).
+            decoder_hidden_states (`Optional[tuple[torch.FloatTensor, ...]]`, *optional*):
+                Decoder hidden states for encoder-decoder models (standard path).
+            decoder_attentions_chunks (`Optional[tuple[Any, ...]]`, *optional*):
+                Pre-split decoder attention chunks (assisted generation path).
+            cross_attentions_chunks (`Optional[tuple[Any, ...]]`, *optional*):
+                Pre-split cross attention chunks (assisted generation path).
+            decoder_hidden_states_chunks (`Optional[tuple[Any, ...]]`, *optional*):
+                Pre-split decoder hidden state chunks (assisted generation path).
+            **kwargs (`Any`):
+                Additional keyword arguments (unused but accepted for flexibility).
+        """
+        if not generate_output["return_dict_in_generate"]:
+            return
+
+        # Normalize scores/logits to tuples (inline, no helper)
+        if generate_output["output_scores"] and score_tensors is not None:
+            if isinstance(score_tensors, (tuple, list)):
+                generate_output["scores"] = generate_output["scores"] + tuple(score_tensors)
+            else:
+                generate_output["scores"] = generate_output["scores"] + (score_tensors,)
+
+        if generate_output["output_logits"] and logits_tensors is not None:
+            if isinstance(logits_tensors, (tuple, list)):
+                generate_output["raw_logits"] = generate_output["raw_logits"] + tuple(logits_tensors)
+            else:
+                generate_output["raw_logits"] = generate_output["raw_logits"] + (logits_tensors,)
+
+        # Assisted path: append pre-split chunks (many per step)
+        if generate_output["output_attentions"]:
+            if decoder_attentions_chunks is not None:
+                generate_output["decoder_attentions"] = generate_output["decoder_attentions"] + tuple(
+                    decoder_attentions_chunks
+                )
+            if self.config.is_encoder_decoder and cross_attentions_chunks is not None:
+                generate_output["cross_attentions"] = generate_output["cross_attentions"] + tuple(
+                    cross_attentions_chunks
+                )
+
+        if generate_output["output_hidden_states"] and decoder_hidden_states_chunks is not None:
+            generate_output["decoder_hidden_states"] = generate_output["decoder_hidden_states"] + tuple(
+                decoder_hidden_states_chunks
+            )
+
+        # Standard path: single-step append from ModelOutput (**outputs)
+        # Prefer decoder_* keys when present; fall back to decoder-only keys.
+        if generate_output["output_attentions"]:
+            if self.config.is_encoder_decoder:
+                if decoder_attentions is not None:
+                    generate_output["decoder_attentions"] = generate_output["decoder_attentions"] + (
+                        decoder_attentions,
+                    )
+                if cross_attentions is not None:
+                    generate_output["cross_attentions"] = generate_output["cross_attentions"] + (cross_attentions,)
+            else:
+                if attentions is not None:
+                    generate_output["decoder_attentions"] = generate_output["decoder_attentions"] + (attentions,)
+
+        if generate_output["output_hidden_states"]:
+            if self.config.is_encoder_decoder:
+                if decoder_hidden_states is not None:
+                    generate_output["decoder_hidden_states"] = generate_output["decoder_hidden_states"] + (
+                        decoder_hidden_states,
+                    )
+            else:
+                if hidden_states is not None:
+                    generate_output["decoder_hidden_states"] = generate_output["decoder_hidden_states"] + (
+                        hidden_states,
+                    )
+
+    def _finalize_generate_output(
+        self,
+        generate_output: dict[str, Any],
+        sequences: torch.Tensor,
+        model_kwargs: dict[str, Any],
+        decoder_only_cls: type[ModelOutput],
+        encoder_decoder_cls: type[ModelOutput],
+        **kwargs: Any,  # method-specific extras, e.g., beam_indices, sequences_scores
+    ) -> Union[torch.Tensor, GenerateOutput]:
+        """
+        Finalize the generation output based on configuration and model architecture.
+
+        Args:
+            generate_output (`dict[str, Any]`):
+                Dictionary containing generation configuration flags and accumulated outputs.
+            sequences (`torch.Tensor`):
+                The generated token sequences.
+            model_kwargs (`dict[str, Any]`):
+                Model keyword arguments, potentially containing cached key-values.
+            decoder_only_cls (`type[ModelOutput]`):
+                The output class to use for decoder-only models (e.g., `GenerateDecoderOnlyOutput`).
+            encoder_decoder_cls (`type[ModelOutput]`):
+                The output class to use for encoder-decoder models (e.g., `GenerateEncoderDecoderOutput`).
+            **kwargs (`Any`):
+                Additional method-specific outputs to include in the final result, such as
+                `beam_indices` for beam search or `sequences_scores` for scoring.
+
+        Returns:
+            `Union[torch.LongTensor, ModelOutput]`:
+                If `return_dict_in_generate=False`, returns the sequences tensor directly.
+        """
+        if not generate_output["return_dict_in_generate"]:
+            return sequences
+
+        if self.config.is_encoder_decoder:
+            return encoder_decoder_cls(
+                sequences=sequences,
+                scores=generate_output["scores"],
+                logits=generate_output["raw_logits"],
+                encoder_attentions=generate_output["encoder_attentions"],
+                encoder_hidden_states=generate_output["encoder_hidden_states"],
+                decoder_attentions=generate_output["decoder_attentions"],
+                cross_attentions=generate_output["cross_attentions"],
+                decoder_hidden_states=generate_output["decoder_hidden_states"],
+                past_key_values=model_kwargs.get("past_key_values"),
+                **kwargs,
+            )
+        else:
+            return decoder_only_cls(
+                sequences=sequences,
+                scores=generate_output["scores"],
+                logits=generate_output["raw_logits"],
+                attentions=generate_output["decoder_attentions"],
+                hidden_states=generate_output["decoder_hidden_states"],
+                past_key_values=model_kwargs.get("past_key_values"),
+                **kwargs,
+            )
 
 
 def _speculative_sampling(
@@ -3798,22 +3902,27 @@ def _speculative_sampling(
     return valid_tokens, n_matches
 
 
-def _split_model_outputs(outputs, new_outputs, cur_len, added_len, is_decoder_attention=False):
+def _split_model_outputs(
+    new_outputs,
+    cur_len: int,
+    added_len: int,
+    is_decoder_attention: bool = False,
+    include_prompt_block: bool = False,
+):
     """
     Given the (decoder/cross attentions)/(decoder hidden states) for multiple generated tokens, splits it into a tuple
     where each member corresponds to a single generated token.
     """
-    # Retrocompatibility: in our generation functions, the first iteration includes the attention/hidden states for the
-    # prompt.
-    if len(outputs) == 0:
-        new_tuple = ()
-        for layer in new_outputs:
-            last_dim_size = cur_len if is_decoder_attention else layer.shape[-1]
-            new_tuple += (layer[..., :cur_len, :last_dim_size],)
-        outputs += (new_tuple,)
+    outputs = ()
+    if include_prompt_block:
+        prompt_block = ()
+        for layer_tensor in new_outputs:
+            last_dim_size = cur_len if is_decoder_attention else layer_tensor.shape[-1]
+            prompt_block += (layer_tensor[..., :cur_len, :last_dim_size],)
+        outputs += (prompt_block,)
         # The first iteration contains the prompt + 1 generated token, let's update the length variables accordingly
         cur_len += 1
-        added_len -= cur_len
+        added_len -= 1
 
     for i in range(added_len):
         new_tuple = ()
