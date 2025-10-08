@@ -84,8 +84,6 @@ class CwmConfig(LlamaConfig):
             Whether to tie weight embeddings
         rope_theta (`float`, *optional*, defaults to 1000000.0):
             The base period of the RoPE embeddings.
-        attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         pretraining_tp (`int`, *optional*, defaults to 1):
@@ -124,7 +122,6 @@ class CwmConfig(LlamaConfig):
         bos_token_id: int = 128000,
         tie_word_embeddings: bool = False,
         rope_theta: float = 1_000_000.0,
-        attention_bias: bool = False,
         attention_dropout: float = 0.0,
         pretraining_tp: int = 1,
         mlp_bias: bool = False,
@@ -171,13 +168,16 @@ class CwmConfig(LlamaConfig):
             bos_token_id=bos_token_id,
             tie_word_embeddings=tie_word_embeddings,
             rope_theta=rope_theta,
-            attention_bias=attention_bias,
+            attention_bias=False,
             attention_dropout=attention_dropout,
             rope_scaling=rope_scaling,
             pretraining_tp=pretraining_tp,
             mlp_bias=mlp_bias,
             **kwargs,
         )
+
+        # CWM models don't use attention bias, remove it from config
+        del self.attention_bias
 
         self.sliding_window = int(sliding_window) if sliding_window else None
         self.layer_types = list(layer_types)
@@ -186,15 +186,9 @@ class CwmConfig(LlamaConfig):
 class CwmAttention(Qwen2Attention):
     def __init__(self, config: CwmConfig, layer_idx: int):
         super().__init__(config=config, layer_idx=layer_idx)
-        self.q_proj = torch.nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.k_proj = torch.nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.v_proj = torch.nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
+        self.q_proj = torch.nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
+        self.k_proj = torch.nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
+        self.v_proj = torch.nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
 
 
 class CwmDecoderLayer(LlamaDecoderLayer):

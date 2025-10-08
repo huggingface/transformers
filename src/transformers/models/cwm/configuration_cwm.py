@@ -73,8 +73,6 @@ class CwmConfig(PretrainedConfig):
             Whether to tie weight embeddings
         rope_theta (`float`, *optional*, defaults to 1000000.0):
             The base period of the RoPE embeddings.
-        attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         pretraining_tp (`int`, *optional*, defaults to 1):
@@ -129,7 +127,6 @@ class CwmConfig(PretrainedConfig):
         bos_token_id: int = 128000,
         tie_word_embeddings: bool = False,
         rope_theta: float = 1_000_000.0,
-        attention_bias: bool = False,
         attention_dropout: float = 0.0,
         pretraining_tp: int = 1,
         mlp_bias: bool = False,
@@ -183,7 +180,6 @@ class CwmConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
-        self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
