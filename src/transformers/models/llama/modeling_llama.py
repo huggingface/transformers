@@ -182,7 +182,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        if attention_mask.dtype==torch.bool:
+        if attention_mask.dtype == torch.bool:
             casual_mask = torch.zeros_like(attention_mask, dtype=torch.float)
             causal_mask = casual_mask.masked_fill(~attention_mask, float("-inf"))
             casual_mask = causal_mask[:, :, :, : key_states.shape[-2]]
