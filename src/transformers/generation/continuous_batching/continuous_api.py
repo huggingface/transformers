@@ -19,13 +19,13 @@ from dataclasses import dataclass
 from functools import partial
 from itertools import count
 from time import perf_counter
-from typing import Optional, Union
+from typing import Generator, Optional, Union
 
 import torch
 from torch import nn
 from tqdm import tqdm
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PretrainedConfig
 from ...generation.configuration_utils import GenerationConfig
 from ...generation.logits_process import LogitsProcessor
 from ...integrations.hub_kernels import load_and_register_attn_kernel
@@ -36,30 +36,45 @@ from .requests import GenerationOutput, RequestState, RequestStatus, get_device_
 from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
 
 
-# These constants are used to determine the number of intervals to pad the queries and keys/values for cuda graphs. As
-# we increase the number of intervals, we decrease the amount of padding needed, but we also increase the number of
-# graphs created. Since they take space in the GPU, we need to balance the two.
+"""
+To enable cuda graphs, we need the dimensions of all tensors to be static, which is counter-intuitive for CB. In CB, as
+generation goes on, there are two dimensions that change:
+- the number of queries tokens (Q), which can vary from batch to batch
+- the number of keys/values tokens (KV), which grows as the cache does
+
+To solve this, we pad those dimensions using fixed intervals. The size of the intervals is controlled by the variables
+below: NUM_X_CUDA_GRAPHS means that we create at most NUM_X_CUDA_GRAPHS graphs for the X dimension. So if the maximum
+number of queries tokens is 1000, and NUM_Q_CUDA_GRAPHS is 4, we will pad the number of queries token using intervals of
+1000 / 4 = 250 tokens, ie. to 250, 500, 750 or 1000 queries tokens.
+
+More intervals means more granularity and thus less padding. But since each graph takes up space on the GPU and time to
+create, we don't want to many graphs. And since the size of the KV dimension is the number of queries tokens plus the
+number of tokens cached, dimension of KV is usually much larger than the the dimension of Q. So we have more granularity
+for the KV dimension than the query dimension.
+"""
 NUM_Q_CUDA_GRAPHS = 4
 NUM_KV_CUDA_GRAPHS = 8
 
 
-def pad_by_intervals(size: int, max_value: int, intervals: int) -> int:
-    for i in range(intervals):
-        padded_size = (i + 1) * max_value / intervals
-        padded_size = min(int(padded_size), max_value)
+def pad_by_intervals(size: int, max_value: int, nb_intervals: int) -> int:
+    """Return the smallest multiple of (max_value) // (nb_intervals) greater than (size)."""
+    for i in range(nb_intervals):
+        padded_size = (i + 1) * (max_value // nb_intervals)
+        padded_size = min(padded_size, max_value)
         if padded_size >= size:
             return padded_size
     return max_value
 
 
 def attn_mask_is_needed(config: PretrainedConfig) -> bool:
+    """Checks if attention mask is needed for the given (config)."""
     return config._attn_implementation in ["paged|eager", "paged|sdpa"]
 
 
 def build_attention_mask(
     attention_mask: torch.Tensor,
-    cumulative_seqlens_q: torch.Tensor,
-    cumulative_seqlens_k: torch.Tensor,
+    cumulative_seqlens_q: list[int],
+    cumulative_seqlens_k: list[int],
     sliding_window: int = 1,
 ) -> None:
     """Builds an attention mask inplace using the cumulative seqlens of the query and key. If given a sliding window, it
@@ -162,7 +177,7 @@ class ContinuousBatchProcessor:
     def __init__(
         self,
         cache: PagedAttentionCache,
-        config: PreTrainedConfig,
+        config: PretrainedConfig,
         generation_config: GenerationConfig,
         input_queue: queue.Queue,
         output_queue: queue.Queue,
@@ -186,7 +201,8 @@ class ContinuousBatchProcessor:
             model_dtype: Data type for model inputs/outputs
             scheduler: The [`Scheduler`] to use
             manual_eviction: Whether to manually evict blocks from the cache
-            use_cuda_graph: Whether to use cuda graphs
+            use_cuda_graph: Whether to use cuda graphs or not during CB. Check the docstring at the top of the file for
+                more details.
         """
         self.cache = cache
         self.config = config
@@ -211,14 +227,16 @@ class ContinuousBatchProcessor:
         self.metrics = ContinuousBatchProcessorMetrics(cache.max_batch_tokens)
 
         # Setup static tensors
-        self.actual_query_length = 0
-        self.actual_key_length = 0
-        self.actual_batch_size = 0
+        self.actual_query_length = 0  # This is the actual number of queries tokens in the batch
+        self.actual_key_length = 0  # This is the actual number of keys/values tokens in the batch
+        self.actual_batch_size = 0  # This is the actual number of requests in the batch
         self.actual_index_sizes = [(0, 0) for _ in range(cache.num_groups)]
         self.setup_static_tensors(cache.num_groups)
 
     @traced(standalone=True)
     def setup_static_tensors(self, num_groups: int) -> None:
+        """Setup the static tensors that are used for storage during the generation step. No other tensor will be
+        allowed for the inputs or the outputs of the generation step."""
         num_pages = self.cache.num_blocks * self.cache.block_size
         self.tensor_metadata = {"dtype": torch.int32, "device": self.model_device}
 
@@ -294,11 +312,16 @@ class ContinuousBatchProcessor:
             self.write_index_storage[i][:q_len].fill_(-2)  # -1 is used to let the cache where new states go
             self.read_index_storage[i][: q_len + k_len].fill_(-2)  # same
 
-    def get_model_kwargs(self, queries_size: int = 0, read_index_padded_size: int = 0) -> PagedAttentionArgs:
-        """Get model keyword arguments for the current batch."""
+    def get_model_kwargs(self, padded_q_size: int = 0, padded_kv_cache_size: int = 0) -> PagedAttentionArgs:
+        """Get model keyword arguments for the current batch, eventually padding the query dimension to (padded_q_size)
+        and the keys/values dimension to (padded_kv_cache_size). The padding is only useful if we want static shapes,
+        like when using cuda graphs AND only activated if both Q and KV are padded."""
         # Compute the slice to return, with the given padding if we are using cuda graphs
-        q_len = queries_size if self._graphs is not None else self.actual_query_length
-        b_size = queries_size if self._graphs is not None else self.actual_batch_size
+        use_padding = padded_q_size > 0 and padded_kv_cache_size > 0
+        q_len = padded_q_size if use_padding else self.actual_query_length
+        b_size = padded_q_size if use_padding else self.actual_batch_size
+        # If there is padding, the size of the KV is the nb of padded Q tokens + the size padded of the padded KV cache
+        padded_kv_size = padded_q_size + padded_kv_cache_size
 
         # Prepare the kwargs, the attributes that are either tensors or dict of tensors are initialized to empty dicts
         kwargs = {
@@ -318,8 +341,8 @@ class ContinuousBatchProcessor:
 
         # For the attributes that are lists of tensors, we construct list of tensor references
         for i, (read_index_size, write_index_size) in enumerate(self.actual_index_sizes):
-            read_index_size = read_index_size if self._graphs is None else read_index_padded_size + queries_size
-            write_index_size = write_index_size if self._graphs is None else queries_size
+            read_index_size = padded_kv_size if use_padding else read_index_size
+            write_index_size = padded_q_size if use_padding else write_index_size
             kwargs["read_index"].append(self.read_index_storage[i][:read_index_size])
             kwargs["write_index"].append(self.write_index_storage[i][:write_index_size])
 
@@ -330,14 +353,14 @@ class ContinuousBatchProcessor:
                 kwargs["cu_seq_lens_k"][layer_type] = seqlens_k[: b_size + 1]
                 kwargs["max_seqlen_k"][layer_type] = self.max_seqlen_k[layer_type]
                 if self.attention_mask is not None:
-                    k_len = seqlens_k[b_size] if self._graphs is None else read_index_padded_size + queries_size
+                    k_len = padded_kv_size if use_padding else seqlens_k[b_size]
                     kwargs["attention_mask"][layer_type] = self.attention_mask[layer_type][..., :q_len, :k_len]
         else:
             layer_type = layer_types[0]
             kwargs["cu_seq_lens_k"] = self.cumulative_seqlens_k[layer_type][: b_size + 1]
             kwargs["max_seqlen_k"] = self.max_seqlen_k[layer_type]
             if self.attention_mask is not None:
-                k_len = self.cumulative_seqlens_k[layer_type][b_size] if self._graphs is None else read_index_padded_size + queries_size
+                k_len = padded_kv_size if use_padding else self.cumulative_seqlens_k[layer_type][b_size]
                 kwargs["attention_mask"] = self.attention_mask[layer_type][..., :q_len, :k_len]
 
         if self.attention_mask is None:
@@ -610,6 +633,7 @@ class ContinuousBatchProcessor:
 
         # Get the batch data and the associated graph
         batch_data = self.get_model_kwargs(padded_q, padded_read_index_size)
+
         graph = self._graphs.get((padded_q, padded_read_index_size))
 
         # If we have a graph that fits, we replay it
@@ -872,7 +896,7 @@ class ContinuousBatchingManager:
             if result is not None:
                 yield result
 
-    def request_id_iter(self, request_id: str) -> None:
+    def request_id_iter(self, request_id: str) -> Generator[GenerationOutput]:
         """Iterate over results matching a specific request id as they become available."""
         request_cancelled = False
         while self._generation_thread is not None and self._generation_thread.is_alive() and not request_cancelled:
@@ -1107,13 +1131,3 @@ class ContinuousMixin:
         finally:
             manager.stop(block=True, timeout=5.0)
         return results
-
-
-"""
-ROADMAP:
-make slice inputs the default
-make .update graphable (add padding)
-enable cuda graphs for flash attention
-
-further reformat / cleanup
-"""
