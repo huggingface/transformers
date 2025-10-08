@@ -16,55 +16,53 @@ rendered properly in your Markdown viewer.
 
 # Philosophy
 
-🤗 Transformers is an opinionated library built for:
+🤗 Transformers is a PyTorch-first library for people who want models that are faithful to their papers, easy to use, and easy to hack.
 
-- machine learning researchers and educators seeking to use, study or extend large-scale Transformers models.
-- hands-on practitioners who want to fine-tune those models or serve them in production, or both.
-- engineers who just want to download a pretrained model and use it to solve a given machine learning task.
+A longer, in-depth article with examples, visualisations and timelines is available [here as our canonical reference](https://huggingface.co/spaces/transformers-community/Transformers-tenets).
 
-The library was designed with two strong goals in mind:
+> Note: our philosophy has evolved through practice. What follows is the current, stable set of principles.
 
-1. Be as easy and fast to use as possible:
+## Who this library is for
 
-- We strongly limited the number of user-facing abstractions to learn, in fact, there are almost no abstractions,
-    just three standard classes required to use each model: [configuration](main_classes/configuration),
-    [models](main_classes/model), and a preprocessing class ([tokenizer](main_classes/tokenizer) for NLP, [image processor](main_classes/image_processor) for vision, [feature extractor](main_classes/feature_extractor) for audio, and [processor](main_classes/processors) for multimodal inputs).
+- Researchers and educators exploring or extending model architectures.
+- Practitioners fine-tuning, evaluating, or serving models.
+- Engineers who want a pretrained model that “just works” with a predictable API.
+
+## What you can expect
+
+- Three core classes required to use each model: [configuration](main_classes/configuration),
+    [models](main_classes/model), and a preprocessing class ([tokenizer](main_classes/tokenizer) for NLP, [image processor](main_classes/image_processor) for images, [video processors](main_classes/video_processor) for videos, [feature extractor](main_classes/feature_extractor) for audio, and [processor](main_classes/processors) for multimodal inputs).
+
 - All of these classes can be initialized in a simple and unified way from pretrained instances by using a common
     `from_pretrained()` method which downloads (if needed), caches and
-    loads the related class instance and associated data (configurations' hyperparameters, tokenizers' vocabulary,
+    loads the related class instance and associated data (configurations' hyperparameters, tokenizers' vocabulary, processors' parameters
     and models' weights) from a pretrained checkpoint provided on [Hugging Face Hub](https://huggingface.co/models) or your own saved checkpoint.
 - On top of those three base classes, the library provides two APIs: [`pipeline`] for quickly
     using a model for inference on a given task and [`Trainer`] to quickly train or fine-tune a PyTorch model.
-- As a consequence, this library is NOT a modular toolbox of building blocks for neural nets. If you want to
-    extend or build upon the library, just use regular Python or PyTorch and inherit from the base
-    classes of the library to reuse functionalities like model loading and saving. If you'd like to learn more about our coding philosophy for models, check out our [Repeat Yourself](https://huggingface.co/blog/transformers-design-philosophy) blog post.
 
-2. Provide state-of-the-art models with performances as close as possible to the original models:
 
-- We provide at least one example for each architecture which reproduces a result provided by the official authors
-    of said architecture.
-- The code is usually as close to the original code base as possible which means some PyTorch code may be not as
-    *pytorchic* as it could be as a result of being converted from other Deep Learning frameworks.
+## Core tenets
 
-A few other goals:
+These tenets solidified over time, and are more detailed in  [our new philosophy blog post.](https://huggingface.co/spaces/transformers-community/Transformers-tenets) They should guide maintainers decisions when reviewing PRs and contributions to the library.
 
-- Expose the models' internals as consistently as possible:
+- **Source of Truth.** Implementations must be faithful to official results and intended behavior.
+- **One Model, One File.** Core inference/training logic is visible top-to-bottom in the model file users read.
+- **Code is the Product.** Optimize for reading and diff-ing; prefer explicit names over clever indirection.
+- **Standardize, Don’t Abstract.** Keep model-specific behavior in the model; use shared interfaces only for generic infra.
+- **DRY\*** (Repeat when it helps users). End-user modeling files remain self-contained; infra is factored out.
+- **Minimal User API.** Few codepaths, predictable kwargs, stable methods.
+- **Backwards Compatibility.** Public surfaces should not break; old Hub artifacts have to keep working.
+- **Consistent Public Surface.** Naming, outputs, and optional diagnostics are aligned and tested.
 
-  - We give access, using a single API, to the full hidden-states and attention weights.
-  - The preprocessing classes and base model APIs are standardized to easily switch between models.
+## Main classes
 
-- Incorporate a subjective selection of promising tools for fine-tuning and investigating these models:
+- [**Configuration classes**](main_classes/configuration) store the hyperparameters required to build a model (such as the number of layers and hidden size). You don't always need to instantiate these yourself. In particular, if you are using a pretrained model without any modification, creating the model will automatically take care of instantiating the configuration (which is part of the model).
+- **Model classes** are PyTorch models ([torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module)), wrapped by at least a [PreTrainedModel](https://huggingface.co/docs/transformers/v4.57.0/en/main_classes/model#transformers.PreTrainedModel).
 
-  - A simple and consistent way to add new tokens to the vocabulary and embeddings for fine-tuning.
-  - Simple ways to mask and prune Transformer heads.
+- **Modular transformers.** Contributors write a small `modular_*.py` shard that declares reuse from existing components. The library auto-expands this into the visible `modeling_*.py` file that users read/debug. Maintainers review the shard; users hack the expanded file. This preserves “One Model, One File” without boilerplate drift. See [the contributing documentation](https://huggingface.co/docs/transformers/en/modular_transformers) for more information.
 
-## Main concepts
+- **Preprocessing classes** convert the raw data into a format accepted by the model. A [tokenizer](main_classes/tokenizer) stores the vocabulary for each model and provide methods for encoding and decoding strings in a list of token embedding indices to be fed to a model. [Image processors](main_classes/image_processor) preprocess vision inputs, [video processors](https://huggingface.co/docs/transformers/en/main_classes/video_processor) preprocess videos inputs, [feature extractors](main_classes/feature_extractor) preprocess audio inputs, and a [processor](main_classes/processors) handles multimodal inputs.
 
-The library is built around three types of classes for each model:
-
-- **Model classes** are be PyTorch models ([torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module)).
-- **Configuration classes** store the hyperparameters required to build a model (such as the number of layers and hidden size). You don't always need to instantiate these yourself. In particular, if you are using a pretrained model without any modification, creating the model will automatically take care of instantiating the configuration (which is part of the model).
-- **Preprocessing classes** convert the raw data into a format accepted by the model. A [tokenizer](main_classes/tokenizer) stores the vocabulary for each model and provide methods for encoding and decoding strings in a list of token embedding indices to be fed to a model. [Image processors](main_classes/image_processor) preprocess vision inputs, [feature extractors](main_classes/feature_extractor) preprocess audio inputs, and a [processor](main_classes/processors) handles multimodal inputs.
 
 All these classes can be instantiated from pretrained instances, saved locally, and shared on the Hub with three methods:
 
