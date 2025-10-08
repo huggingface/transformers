@@ -60,8 +60,8 @@ def pack_data_dir(tok, data_dir: Path, max_tokens, save_path):
     save_path.mkdir(exist_ok=True)
     for split in ["train"]:
         src_path, tgt_path = data_dir / f"{split}.source", data_dir / f"{split}.target"
-        src_docs = [x.rstrip() for x in Path(src_path).open().readlines()]
-        tgt_docs = [x.rstrip() for x in Path(tgt_path).open().readlines()]
+        src_docs = [x.rstrip() for x in Path(src_path).open()]
+        tgt_docs = [x.rstrip() for x in Path(tgt_path).open()]
         packed_src, packed_tgt = pack_examples(tok, src_docs, tgt_docs, max_tokens)
         print(f"packed {split} split from {len(src_docs)} examples -> {len(packed_src)}.")
         Path(save_path / f"{split}.source").open("w").write("\n".join(packed_src))

@@ -205,7 +205,7 @@ def run_generate():
             return
         tgt_file = Path(args.data_dir).joinpath(args.type_path + ".target")
         with open(tgt_file) as f:
-            labels = [x.rstrip() for x in f.readlines()][: len(preds)]
+            labels = [x.rstrip() for x in f][: len(preds)]
 
         # Calculate metrics, save metrics,  and save _generations.txt
         calc_bleu = "translation" in args.task
