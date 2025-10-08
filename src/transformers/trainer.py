@@ -216,13 +216,13 @@ if is_accelerate_available():
         DataLoaderConfiguration,
         DistributedDataParallelKwargs,
         DistributedType,
-        clear_device_cache,
         load_fsdp_model,
         load_fsdp_optimizer,
         release_memory,
         save_fsdp_model,
         save_fsdp_optimizer,
     )
+    from accelerate.utils.memory import clear_device_cache
 
     if is_deepspeed_available():
         from accelerate.utils import DeepSpeedSchedulerWrapper
