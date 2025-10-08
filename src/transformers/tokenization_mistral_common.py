@@ -171,6 +171,7 @@ class MistralCommonTokenizer(PushToHubMixin):
     Supports the following methods from the `PreTrainedTokenizerBase` class:
 
     - [`~MistralCommonTokenizer.get_vocab`]: Returns the vocabulary as a dictionary of token to index.
+        This is a lossy conversion for Tekkenizer as some decoding errors are collapsed into the same token.
     - [`~MistralCommonTokenizer.encode`]: Encode a string to a list of integers.
     - [`~MistralCommonTokenizer.decode`]: Decode a list of integers to a string.
     - [`~MistralCommonTokenizer.batch_decode`]: Decode a batch of list of integers to a list of strings.
@@ -353,9 +354,8 @@ class MistralCommonTokenizer(PushToHubMixin):
             `Dict[str, int]`: The vocabulary.
         """
         if self._cache_get_vocab is None:
-            self._cache_get_vocab = {
-                token: idx for idx, token in enumerate(self.tokenizer.instruct_tokenizer.tokenizer.vocab())
-            }
+            # We reverse the order to make sure that the first token is the one to be returned when there are multiple tokens with the same string representation.
+            self._cache_get_vocab = {self.convert_ids_to_tokens(i, skip_special_tokens=False): i for i in range(self.vocab_size, -1, -1)}
         return self._cache_get_vocab
 
     def __len__(self):
