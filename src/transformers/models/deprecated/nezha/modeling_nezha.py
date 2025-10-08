@@ -362,12 +362,12 @@ class NezhaLayer(GradientCheckpointingLayer):
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        self_attn_past_key_value = past_key_values[:2] if past_key_values is not None else None
+        self_attn_past_key_values = past_key_values[:2] if past_key_values is not None else None
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask,
             output_attentions=output_attentions,
-            past_key_values=self_attn_past_key_value,
+            past_key_values=self_attn_past_key_values,
         )
         attention_output = self_attention_outputs[0]
 
@@ -387,13 +387,13 @@ class NezhaLayer(GradientCheckpointingLayer):
                 )
 
             # cross_attn cached key/values tuple is at positions 3,4 of past_key_values tuple
-            cross_attn_past_key_value = past_key_values[-2:] if past_key_values is not None else None
+            cross_attn_past_key_values = past_key_values[-2:] if past_key_values is not None else None
             cross_attention_outputs = self.crossattention(
                 attention_output,
                 attention_mask,
                 encoder_hidden_states,
                 encoder_attention_mask,
-                cross_attn_past_key_value,
+                cross_attn_past_key_values,
                 output_attentions,
             )
             attention_output = cross_attention_outputs[0]
