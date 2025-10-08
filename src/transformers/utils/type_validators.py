@@ -1,8 +1,5 @@
 from collections.abc import Sequence
-from dataclasses import MISSING, field, make_dataclass
-from typing import Annotated, ForwardRef, Optional, TypedDict, Union, get_args, get_origin
-
-from huggingface_hub.dataclasses import strict
+from typing import Optional, Union
 
 from ..tokenization_utils_base import PaddingStrategy, TruncationStrategy
 from ..video_utils import VideoMetadataType
@@ -12,92 +9,6 @@ from .import_utils import is_vision_available
 
 if is_vision_available():
     from ..image_utils import PILImageResampling
-
-
-def unpack_annotated_type(type):
-    if get_origin(type) is Annotated:
-        base, *meta = get_args(type)
-        return base, meta[0]
-    return type, field(default=MISSING)
-
-
-def get_type_hints_from_typed_dict(obj: type[TypedDict]):
-    """
-    Same as `typing.get_type_hints` but does not perform evaluation
-    on the ForwardRefs. Evaluating might fails if the package is not imported
-    or installed, therefore we will have our own "guarded" type validations.
-    All `ForwardRef` will be ignored by the hub validator
-    """
-    raw_annots = obj.__dict__.get("__annotations__", {})
-    type_hints = {}
-    for name, value in raw_annots.items():
-        if value is None:
-            value = type(None)
-        if isinstance(value, str):
-            value = ForwardRef(value, is_argument=False)
-        type_hints[name] = value
-    return type_hints
-
-
-# Minimalistic version of pydantic.TypeAdapter tailored for `TypedDict`
-class TypedDictAdapter:
-    """
-    A utility class used to convert a TypedDict object to dataclass and attach
-    a hub validator on top based on TypedDict annotations.
-
-    We don't want to replace `TypedDict` by dataclasses in the codebase because
-    with dataclasses we will lose typing hints that `Unpack[TypedDict]` gives.
-    So this utility is a sweet spot to keep the balance between DevX and strong
-    typing`validation.
-
-    Args:
-        type: The TypedDict object that needs to be validated.
-    """
-
-    def __init__(
-        self,
-        type: type[TypedDict],
-    ):
-        self.type = type
-        self.dataclass = self.create_dataclass()
-        self.dataclass = strict(self.dataclass)
-
-    def validate_fields(self, **kwargs):
-        # If not all kwargs are set, dataclass raises an error in python <= 3.9
-        # In newer python we can bypass by creating a dataclass with `kw_only=True`
-        for field in self.fields:
-            if field[0] not in kwargs:
-                kwargs[field[0]] = None
-        self.dataclass(**kwargs)
-
-    def create_dataclass(self):
-        """
-        Creates a dataclass object dynamically from `TypedDict`, so that
-        we can use strict type validation from typing hints with `TypedDict`.
-
-        Example:
-
-        @as_validated_field
-        def padding_validator(value: Union[bool, str, PaddingStrategy] = None):
-            if value is None:
-                return
-            if not isinstance(value, (bool, str, PaddingStrategy)):
-                raise ValueError(f"Value must be one of '[bool, string, PaddingStrategy]'")
-            if isinstance(value, str) and value not in ["longest", "max_length", "do_not_pad"]:
-                raise ValueError(f'Value for padding must be one of `["longest", "max_length", "do_not_pad"]`')
-
-        class TokenizerKwargs(TypedDict, total=False):
-            text: str
-            padding: Annotated[Union[bool, str, PaddingStrategy], padding_validator()]
-
-        # Now we can create a dataclass and warp it with hub validators for type constraints
-        # The dataclass can also be used as a simple config class for easier kwarg management
-        dataclass = dataclass_from_typed_dict(TokenizerKwargs)
-        """
-        hints = get_type_hints_from_typed_dict(self.type)
-        fields = [(k, *unpack_annotated_type(v)) for k, v in hints.items()]
-        self.fields = fields
-        return make_dataclass(self.type.__name__ + "Config", fields)
 
 
 def positive_any_number(value: Optional[Union[int, float]] = None):
