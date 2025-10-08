@@ -27,7 +27,6 @@ from tqdm import tqdm
 
 from ...configuration_utils import PreTrainedConfig
 from ...generation.configuration_utils import GenerationConfig
-from ...integrations.hub_kernels import load_and_register_kernel
 from ...utils.logging import logging
 from ...utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
 from .cache import PagedAttentionCache
@@ -609,6 +608,8 @@ class ContinuousBatchingManager:
         """
         self.model = model.eval()
         if "paged|" not in model.config._attn_implementation:
+            from ...integrations.hub_kernels import load_and_register_kernel
+
             attn_implementation = "paged|" + self.model.config._attn_implementation
             load_and_register_kernel(attn_implementation)
             model.set_attn_implementation(attn_implementation)
