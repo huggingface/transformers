@@ -34,6 +34,7 @@ if is_mistral_common_available():
     from mistral_common.exceptions import InvalidMessageStructureException
     from mistral_common.protocol.instruct.request import ChatCompletionRequest
     from mistral_common.protocol.transcription.request import TranscriptionRequest
+    from mistral_common.tokens.tokenizers.base import SpecialTokenPolicy
     from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
     from mistral_common.tokens.tokenizers.utils import list_local_hf_repo_files
 
@@ -1928,3 +1929,16 @@ class TestMistralCommonTokenizer(unittest.TestCase):
                         for i, ids in enumerate(expected_tokens)
                     ],
                 )
+
+    def test_get_vocab(self):
+        vocab = self.tokenizer.get_vocab()
+        # loss of some tokens due to conversion
+        self.assertNotEqual(len(vocab), len(self.tokenizer))
+        for token, id_token in vocab.items():
+            # Issue during conversion
+            if id_token == 0 and token != "<unk>":
+                continue
+            self.assertEqual(self.tokenizer.convert_tokens_to_ids(token), id_token)
+            self.assertEqual(
+                self.ref_tokenizer.decode([id_token], special_token_policy=SpecialTokenPolicy.KEEP), token
+            )

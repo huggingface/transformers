@@ -355,9 +355,12 @@ class MistralCommonTokenizer(PushToHubMixin):
         """
         if self._cache_get_vocab is None:
             # We reverse the order to make sure that the first token is the one to be returned when there are multiple tokens with the same string representation.
-            self._cache_get_vocab = {
-                self.convert_ids_to_tokens(i, skip_special_tokens=False): i for i in range(self.vocab_size, -1, -1)
-            }
+            vocab = self.tokenizer.instruct_tokenizer.tokenizer.vocab()
+            self._cache_get_vocab = {token: self._piece_to_id(token) for token in vocab}
+            # Order the dict.
+            self._cache_get_vocab = dict(
+                sorted(((k, v) for k, v in self._cache_get_vocab.items()), key=lambda x: x[1])
+            )
         return self._cache_get_vocab
 
     def __len__(self):
@@ -576,7 +579,6 @@ class MistralCommonTokenizer(PushToHubMixin):
             piece_str = piece_bytes.decode("utf-8")
             if piece_str in tekken_tokenizer._special_tokens_reverse_vocab:
                 return tekken_tokenizer._special_tokens_reverse_vocab[piece_str]
-            logger.warning("Failed to convert token %s to id, replacing with <unk>", piece_bytes)
             return tekken_tokenizer.unk_id
 
     def _piece_to_id(self, piece: str) -> int:
