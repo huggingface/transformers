@@ -4176,6 +4176,31 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         return init_contexts
 
+    def set_use_kernel(use_kernels, kernel_config):
+        if use_kernels:
+            if not is_kernels_available():
+                raise ValueError(
+                    "Kernels are not available. To use kernels, please install kernels using `pip install kernels`"
+                )
+            from kernels import use_kernel_mapping
+
+            if kernel_config is not None and isinstance(kernel_config, KernelConfig):
+                # This will make sure the mapping is valid, and the layers are registered in the model
+                kernel_config.sanitize_kernel_mapping(self)
+
+                # This will create a compatible mapping for the model with the kernels library
+                kernel_config.create_compatible_mapping(self)
+
+                # This is a context manager to override the default kernel mapping
+                # We are calling kernelize inside this context manager using the use_kernels setter
+                with use_kernel_mapping(kernel_config.kernel_mapping):
+                    self.use_kernels = True
+            # We use the default kernel mapping in .integrations.hub_kernels
+            else:
+                self.use_kernels = True
+        else:
+            self.use_kernels = False
+
     @classmethod
     @restore_default_dtype
     def from_pretrained(
@@ -4622,41 +4647,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             weights_only=weights_only,
         )
 
-<<<<<<< HEAD
         model.tie_weights()  # make sure token embedding weights are still tied if needed
         model.eval()  # Set model in evaluation mode to deactivate DropOut modules by default
         if use_kernels:  # check if using kernels
-            model.use_kernels = True
-=======
-        # make sure token embedding weights are still tied if needed
-        model.tie_weights()
-
-        # Set model in evaluation mode to deactivate DropOut modules by default
-        model.eval()
-
-        # check if using kernels
-        if use_kernels:
-            if not is_kernels_available():
-                raise ValueError(
-                    "Kernels are not available. To use kernels, please install kernels using `pip install kernels`"
-                )
-            from kernels import use_kernel_mapping
-
-            if kernel_config is not None and isinstance(kernel_config, KernelConfig):
-                # This will make sure the mapping is valid, and the layers are registered in the model
-                kernel_config.sanitize_kernel_mapping(model)
-
-                # This will create a compatible mapping for the model with the kernels library
-                kernel_config.create_compatible_mapping(model)
-
-                # This is a context manager to override the default kernel mapping
-                # We are calling kernelize inside this context manager using the use_kernels setter
-                with use_kernel_mapping(kernel_config.kernel_mapping):
-                    model.use_kernels = True
-            # We use the default kernel mapping in .integrations.hub_kernels
-            else:
-                model.use_kernels = True
->>>>>>> e064dc05c2dda50262179ad20eb8cc5ea484d24c
+            model.set_use_kernels(use_kernels, kernel_config)
 
         # If it is a model with generation capabilities, attempt to load generation files (generation config,
         # custom generate function)
@@ -4912,7 +4906,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         disk_only_shard_files = []
         # Prepare parameters offloading if needed TODO: split this in a separate function
         if device_map is not None and "disk" in device_map.values():
-            disk_offload_index = accelerate_disk_offload(
+            disk_offload_index, disk_only_shard_files = accelerate_disk_offload(
                 disk_offload_folder,
                 checkpoint_files,
                 device_map,
