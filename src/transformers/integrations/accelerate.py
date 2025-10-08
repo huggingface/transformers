@@ -20,7 +20,9 @@ The `init_empty_weights` and `init_on_device` functions were copied from `accele
 `find_tied_parameters` was copied from `accelerate.utils.modeling.py`
 """
 
+import collections
 import inspect
+import os
 from contextlib import contextmanager
 
 from ..utils import is_accelerate_available, is_torch_available, logging
@@ -272,6 +274,31 @@ def accelerate_dispatch(model, hf_quantizer, device_map, offload_folder, offload
 
     if not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
         dispatch_model(model, **device_map_kwargs)
+
+
+def get_disk_only_shard_files(device_map, weight_map):
+    """
+    Returns the list of shard files containing only weights offloaded to disk.
+    """
+    files_content = collections.defaultdict(list)
+    for weight_name, filename in weight_map.items():
+        while len(weight_name) > 0 and weight_name not in device_map:
+            weight_name = ".".join(weight_name.split(".")[:-1])
+        files_content[filename].append(device_map[weight_name])
+
+    return [fname for fname, devices in files_content.items() if set(devices) == {"disk"}]
+
+
+def expand_device_map(device_map, param_names):
+    """
+    Expand a device map to return the correspondence parameter name to device.
+    """
+    new_device_map = {}
+    for module, device in device_map.items():
+        new_device_map.update(
+            {p: device for p in param_names if p == module or p.startswith(f"{module}.") or module == ""}
+        )
+    return new_device_map
 
 
 def accelerate_disk_offload(

@@ -79,7 +79,6 @@ class AqlmHfQuantizer(HfQuantizer):
         )
         model.config.quantization_config = self.quantization_config
 
-
     @property
     def is_trainable(self) -> bool:
         aqlm_supports_training = version.parse(importlib.metadata.version("aqlm")) >= version.parse("1.0.2")

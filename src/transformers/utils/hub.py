@@ -86,6 +86,7 @@ class DownloadKwargs(TypedDict, total=False):
     subfolder: str
     commit_hash: Optional[str]
 
+
 _is_offline_mode = huggingface_hub.constants.HF_HUB_OFFLINE
 
 

@@ -83,7 +83,6 @@ from .safetensors_conversion import auto_conversion
 from .utils import (
     ADAPTER_SAFE_WEIGHTS_NAME,
     ADAPTER_WEIGHTS_NAME,
-    CONFIG_NAME,
     DUMMY_INPUTS,
     SAFE_WEIGHTS_INDEX_NAME,
     SAFE_WEIGHTS_NAME,
@@ -95,7 +94,6 @@ from .utils import (
     check_torch_load_is_safe,
     copy_func,
     download_url,
-    extract_commit_hash,
     has_file,
     is_accelerate_available,
     is_bitsandbytes_available,
@@ -122,11 +120,11 @@ from .utils.import_utils import (
     is_torch_fx_proxy,
     is_torchdynamo_compiling,
 )
-from .utils.quantization_config import BitsAndBytesConfig, QuantizationMethod
+from .utils.quantization_config import QuantizationMethod
 
 
 if is_accelerate_available():
-    from accelerate import dispatch_model, infer_auto_device_map
+    from accelerate import infer_auto_device_map
     from accelerate.hooks import add_hook_to_module
     from accelerate.utils import (
         check_tied_parameters_on_same_device,
@@ -142,7 +140,7 @@ if is_accelerate_available():
         from accelerate.utils.modeling import get_state_dict_from_offload
 
 if is_peft_available():
-    from .utils import find_adapter_config_file
+    pass
 
 _torch_distributed_available = torch.distributed.is_available()
 _is_dtensor_available = _torch_distributed_available and is_torch_greater_or_equal("2.5")
@@ -4625,7 +4623,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Regex to keep a fixed dtype
         keep_in_fp32_regex = get_keep_in_fp32_regex(model, hf_quantizer, dtype)
-        if hf_quantizer is not None: # replace module with quantized modules (does not touch weights)
+        if hf_quantizer is not None:  # replace module with quantized modules (does not touch weights)
             hf_quantizer.preprocess_model(
                 model=model,
                 device_map=device_map,
@@ -4664,9 +4662,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             weights_only=weights_only,
         )
 
-        model.tie_weights() # make sure token embedding weights are still tied if needed
-        model.eval() # Set model in evaluation mode to deactivate DropOut modules by default
-        if use_kernels: # check if using kernels
+        model.tie_weights()  # make sure token embedding weights are still tied if needed
+        model.eval()  # Set model in evaluation mode to deactivate DropOut modules by default
+        if use_kernels:  # check if using kernels
             model.use_kernels = True
 
         # If it is a model with generation capabilities, attempt to load generation files (generation config,
@@ -4690,10 +4688,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if hf_quantizer is not None:
             model.hf_quantizer = hf_quantizer
-            hf_quantizer.postprocess_model(model, config=config) # usually a no-op
+            hf_quantizer.postprocess_model(model, config=config)  # usually a no-op
 
         if _adapter_model_path is not None:
-            adapter_kwargs["key_mapping"] = key_mapping # TODO: Dynamic weight loader for adapters
+            adapter_kwargs["key_mapping"] = key_mapping  # TODO: Dynamic weight loader for adapters
             model.load_adapter(
                 _adapter_model_path,
                 adapter_name=adapter_name,
@@ -5535,19 +5533,6 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
             byte_count = max(0, byte_count - unused_memory)
         # Allocate memory
         _ = torch.empty(byte_count // factor, dtype=torch.float16, device=device, requires_grad=False)
-
-
-def get_disk_only_shard_files(device_map, weight_map):
-    """
-    Returns the list of shard files containing only weights offloaded to disk.
-    """
-    files_content = collections.defaultdict(list)
-    for weight_name, filename in weight_map.items():
-        while len(weight_name) > 0 and weight_name not in device_map:
-            weight_name = ".".join(weight_name.split(".")[:-1])
-        files_content[filename].append(device_map[weight_name])
-
-    return [fname for fname, devices in files_content.items() if set(devices) == {"disk"}]
 
 
 class AttentionInterface(GeneralInterface):

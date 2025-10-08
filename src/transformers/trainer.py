@@ -107,7 +107,6 @@ from .trainer_pt_utils import (
 )
 from .trainer_utils import (
     PREFIX_CHECKPOINT_DIR,
-    load_sharded_checkpoint,
     BestRun,
     EvalLoopOutput,
     EvalPrediction,
@@ -125,6 +124,7 @@ from .trainer_utils import (
     find_executable_batch_size,
     get_last_checkpoint,
     has_length,
+    load_sharded_checkpoint,
     neftune_post_forward_hook,
     number_of_arguments,
     seed_worker,
