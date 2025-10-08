@@ -398,7 +398,7 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     )
     fx_compatible = False
     test_missing_keys = False
-    test_pruning = False
+
     test_torchscript = False
     multi_query = True
 

@@ -561,7 +561,7 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         else {}
     )
     fx_compatible = True
-    test_pruning = False
+
     test_resize_embeddings = True
     is_encoder_decoder = True
     # The small MT5 model needs higher percentages for CPU/MP tests
@@ -1002,7 +1002,7 @@ class MT5EncoderOnlyModelTester:
 # Copied from tests.models.t5.test_modeling_t5.T5EncoderOnlyModelTest with T5->MT5
 class MT5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MT5EncoderModel, MT5ForTokenClassification) if is_torch_available() else ()
-    test_pruning = False
+
     test_resize_embeddings = False
     pipeline_model_mapping = (
         {
