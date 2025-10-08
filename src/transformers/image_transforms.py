@@ -797,6 +797,30 @@ def flip_channel_order(
     return image
 
 
+def split_to_tiles(images: "torch.Tensor", num_tiles_height: int, num_tiles_width: int) -> "torch.Tensor":
+    # Split image into number of required tiles (width x height)
+    batch_size, num_channels, height, width = images.size()
+    images = images.view(
+        batch_size,
+        num_channels,
+        num_tiles_height,
+        height // num_tiles_height,
+        num_tiles_width,
+        width // num_tiles_width,
+    )
+    # Permute dimensions to reorder the axes
+    image = images.permute(0, 2, 4, 1, 3, 5).contiguous()
+    # Reshape into the desired output shape (batch_size * 4, num_channels, width/2, height/2)
+    image = image.view(
+        batch_size,
+        num_tiles_width * num_tiles_height,
+        num_channels,
+        height // num_tiles_height,
+        width // num_tiles_width,
+    )
+    return image
+
+
 def _cast_tensor_to_float(x):
     if x.is_floating_point():
         return x
@@ -807,15 +831,21 @@ def _group_images_by_shape(nested_images, *paired_inputs, is_nested: bool = Fals
     """Helper function to flatten a single level of nested image and batch structures and group by shape."""
     grouped_images = defaultdict(list)
     grouped_images_index = {}
-    nested_images = [nested_images] if not is_nested else nested_images
-    paired_inputs_lists = []
     paired_grouped_values = [defaultdict(list) for _ in paired_inputs]
+
+    # Normalize inputs to consistent nested structure
+    normalized_images = [nested_images] if not is_nested else nested_images
+    normalized_paired = []
     for paired_input in paired_inputs:
-        paired_inputs_lists.append([paired_input]) if not is_nested else paired_inputs_lists.append(paired_input)
-    for i, (sublist, *paired_sublists) in enumerate(zip(nested_images, *paired_inputs_lists)):
+        normalized_paired.append([paired_input] if not is_nested else paired_input)
+
+    # Process each image and group by shape
+    for i, (sublist, *paired_sublists) in enumerate(zip(normalized_images, *normalized_paired)):
         for j, (image, *paired_values) in enumerate(zip(sublist, *paired_sublists)):
             key = (i, j) if is_nested else j
             shape = image.shape[1:]
+
+            # Add to grouped structures
             grouped_images[shape].append(image)
             for paired_index, paired_value in enumerate(paired_values):
                 paired_grouped_values[paired_index][shape].append(paired_value)
@@ -850,10 +880,33 @@ def _reconstruct_nested_structure(indices, processed_images):
     return result
 
 
+def _disable_grouping_output_nested(images, *paired_inputs):
+    """Build the disable_grouping output tuple for a single-level nested structure."""
+    outer_range = range(len(images))
+    inner_ranges = [range(len(images[i])) for i in outer_range]
+
+    # Precompute all (i, j) pairs
+    ij_pairs = [(i, j) for i in outer_range for j in inner_ranges[i]]
+
+    images_dict = {(i, j): images[i][j].unsqueeze(0) for (i, j) in ij_pairs}
+    paired_dicts = [{(i, j): paired_list[i][j].unsqueeze(0) for (i, j) in ij_pairs} for paired_list in paired_inputs]
+    index_map = {(i, j): ((i, j), 0) for (i, j) in ij_pairs}
+    return images_dict, *paired_dicts, index_map
+
+
+def _disable_grouping_output_flat(images, *paired_inputs):
+    """Build the disable_grouping output tuple for a flat list structure."""
+    idx_range = range(len(images))
+    images_dict = {i: images[i].unsqueeze(0) for i in idx_range}
+    paired_dicts = [{i: paired_list[i].unsqueeze(0) for i in idx_range} for paired_list in paired_inputs]
+    index_map = {i: (i, 0) for i in idx_range}
+    return images_dict, *paired_dicts, index_map
+
+
 def group_images_by_shape(
     images: Union[list["torch.Tensor"], "torch.Tensor"],
     *paired_inputs,
-    disable_grouping: bool,
+    disable_grouping: Optional[bool],
     is_nested: bool = False,
 ) -> tuple[dict, ...]:
     """
@@ -892,24 +945,9 @@ def group_images_by_shape(
 
     if disable_grouping:
         if is_nested:
-            return (
-                {(i, j): images[i][j].unsqueeze(0) for i in range(len(images)) for j in range(len(images[i]))},
-                *[
-                    {
-                        (i, j): paired_list[i][j].unsqueeze(0)
-                        for i in range(len(paired_list))
-                        for j in range(len(paired_list[i]))
-                    }
-                    for paired_list in paired_inputs
-                ],
-                {(i, j): ((i, j), 0) for i in range(len(images)) for j in range(len(images[i]))},
-            )
+            return _disable_grouping_output_nested(images, *paired_inputs)
         else:
-            return (
-                {i: images[i].unsqueeze(0) for i in range(len(images))},
-                *[{i: paired_list[i].unsqueeze(0) for i in range(len(paired_list))} for paired_list in paired_inputs],
-                {i: (i, 0) for i in range(len(images))},
-            )
+            return _disable_grouping_output_flat(images, *paired_inputs)
 
     # Handle single level nested structure
     grouped_images, *paired_grouped_values, grouped_images_index = _group_images_by_shape(

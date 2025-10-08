@@ -28,6 +28,7 @@ from ...image_processing_utils_fast import (
     group_images_by_shape,
     reorder_images,
 )
+from ...image_transforms import split_to_tiles
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -58,37 +59,6 @@ def _validate_mllama_preprocess_arguments(do_resize, size, do_pad, max_image_til
     if max_image_tiles is None or max_image_tiles <= 0:
         raise ValueError(f"MllamaImageProcessor `max_image_tiles` must be a positive integer, got {max_image_tiles}.")
     _validate_size(size)
-
-
-def split_to_tiles(image: "torch.Tensor", num_tiles_height: int, num_tiles_width: int) -> "torch.Tensor":
-    """
-    Split an image into a specified number of tiles along its width and height dimensions.
-
-    Args:
-        image (`torch.Tensor`):
-            Input image with shape (num_channels, height, width).
-        num_tiles_height (`int`):
-            Number of tiles to split the image into along its height.
-        num_tiles_width (`int`):
-            Number of tiles to split the image into along its width.
-
-    Returns:
-        `torch.Tensor`:
-            Array of image tiles with shape (num_tiles_width * num_tiles_height, num_channels, tile_height, tile_width).
-    """
-    batch_size, num_channels, height, width = image.shape
-    tile_height = height // num_tiles_height
-    tile_width = width // num_tiles_width
-
-    image = image.reshape(batch_size, num_channels, num_tiles_height, tile_height, num_tiles_width, tile_width)
-
-    # Permute to (batch_size, num_tiles_height, num_tiles_width, num_channels, tile_height, tile_width)
-    image = image.permute(0, 2, 4, 1, 3, 5)
-
-    # Reshape into the desired output shape (num_tiles_width * num_tiles_height, num_channels, tile_height, tile_width)
-    image = image.reshape(batch_size, num_tiles_width * num_tiles_height, num_channels, tile_height, tile_width)
-
-    return image.contiguous()
 
 
 def build_aspect_ratio_mask(aspect_ratios: list[tuple[int, int]], max_image_tiles: int) -> "torch.Tensor":
@@ -124,7 +94,7 @@ def build_aspect_ratio_mask(aspect_ratios: list[tuple[int, int]], max_image_tile
     return aspect_ratio_mask
 
 
-def pack_images(
+def pad_batches_and_tiles(
     batch_images: list[list["torch.Tensor"]],
     max_image_tiles: int,
 ) -> tuple["torch.Tensor", list[list[int]]]:
@@ -234,16 +204,6 @@ def convert_to_rgb(image: ImageInput) -> ImageInput:
 
 @auto_docstring
 class MllamaImageProcessorFast(BaseImageProcessorFast):
-    # This generated class can be used as a starting point for the fast image processor.
-    # if the image processor is only used for simple augmentations, such as resizing, center cropping, rescaling, or normalizing,
-    # only the default values should be set in the class.
-    # If the image processor requires more complex augmentations, methods from BaseImageProcessorFast can be overridden.
-    # In most cases, only the `_preprocess` method should be overridden.
-
-    # For an example of a fast image processor requiring more complex augmentations, see `LlavaNextImageProcessorFast`.
-
-    # Default values should be checked against the slow image processor
-    # None values left after checking can be removed
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
@@ -269,18 +229,6 @@ class MllamaImageProcessorFast(BaseImageProcessorFast):
         """
         images = self.fetch_images(images)
         return make_nested_list_of_images(images, expected_ndims=expected_ndims)
-
-    def _validate_preprocess_kwargs(self, **kwargs):
-        """
-        validate the kwargs for the preprocess method.
-        """
-        super()._validate_preprocess_kwargs(**kwargs)
-        _validate_mllama_preprocess_arguments(
-            do_resize=kwargs.get("do_resize"),
-            size=kwargs.get("size"),
-            do_pad=kwargs.get("do_pad"),
-            max_image_tiles=kwargs.get("max_image_tiles"),
-        )
 
     def convert_to_rgb(
         self,
@@ -392,17 +340,13 @@ class MllamaImageProcessorFast(BaseImageProcessorFast):
     def _preprocess(
         self,
         images: list["torch.Tensor"],
-        do_resize: bool,
         size: SizeDict,
         interpolation: Optional["F.InterpolationMode"],
-        do_center_crop: bool,
-        crop_size: SizeDict,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
-        do_pad: Optional[bool],
         max_image_tiles: Optional[int],
         return_tensors: Optional[Union[str, TensorType]],
         disable_grouping: Optional[bool],
@@ -412,53 +356,39 @@ class MllamaImageProcessorFast(BaseImageProcessorFast):
         grouped_images, grouped_images_index = group_images_by_shape(
             images, is_nested=True, disable_grouping=disable_grouping
         )
-        resized_images_grouped = {}
+        split_images_grouped = {}
         aspect_ratio_grouped = {}
         for shape, stacked_images in grouped_images.items():
-            # do_resize=False is not supported, validated
             stacked_images, aspect_ratio = self.resize(
                 image=stacked_images, size=size, interpolation=interpolation, max_image_tiles=max_image_tiles
             )
-            # do_pad=False is not supported, validated
             stacked_images = self.pad(
                 image=stacked_images,
                 size=size,
                 aspect_ratio=aspect_ratio,
             )
             num_tiles_height, num_tiles_width = aspect_ratio
-            aspect_ratio_grouped[shape] = [(num_tiles_height, num_tiles_width)] * len(stacked_images)
-            resized_images_grouped[shape] = stacked_images
-
-        aspect_ratios = reorder_images(aspect_ratio_grouped, grouped_images_index, is_nested=True)
-        resized_images = reorder_images(resized_images_grouped, grouped_images_index, is_nested=True)
-
-        # Group images by size for further processing
-        # Needed in case do_resize is False, or resize returns images with different sizes
-        grouped_images, grouped_aspect_ratios, grouped_images_index = group_images_by_shape(
-            resized_images, aspect_ratios, is_nested=True, disable_grouping=disable_grouping
-        )
-        processed_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
-            if do_center_crop:
-                stacked_images = self.center_crop(stacked_images, crop_size)
-            # Fused rescale and normalize
-            stacked_images = self.rescale_and_normalize(
-                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
-            )
+            aspect_ratio_grouped[shape] = [aspect_ratio] * len(stacked_images)
             # same aspect ratio for all images in the batch
-            num_tiles_height, num_tiles_width = grouped_aspect_ratios[shape][0]
-            stacked_images = split_to_tiles(stacked_images, num_tiles_height, num_tiles_width)
-            processed_images_grouped[shape] = stacked_images
+            split_images = split_to_tiles(stacked_images, num_tiles_height, num_tiles_width)
 
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index, is_nested=True)
-        processed_images, num_tiles = pack_images(processed_images, max_image_tiles)
+            # Fused rescale and normalize
+            split_images = self.rescale_and_normalize(
+                split_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            split_images_grouped[shape] = split_images
+
+        split_images = reorder_images(split_images_grouped, grouped_images_index, is_nested=True)
+        aspect_ratios = reorder_images(aspect_ratio_grouped, grouped_images_index, is_nested=True)
+
+        split_images, num_tiles = pad_batches_and_tiles(split_images, max_image_tiles)
 
         aspect_ratio_ids = convert_aspect_ratios_to_ids(aspect_ratios, max_image_tiles=max_image_tiles)
         aspect_ratio_mask = build_aspect_ratio_mask(aspect_ratios, max_image_tiles=max_image_tiles)
 
         encoded_inputs = BatchFeature(
             data={
-                "pixel_values": processed_images,
+                "pixel_values": split_images,
                 "aspect_ratio_ids": aspect_ratio_ids,
                 "aspect_ratio_mask": aspect_ratio_mask,
             },
