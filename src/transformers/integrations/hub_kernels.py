@@ -13,7 +13,7 @@
 # limitations under the License.
 import re
 from functools import partial
-from typing import Optional, Union
+from typing import Callable, Optional, Union
 
 from ..modeling_flash_attention_utils import lazy_import_flash_attention
 from .flash_attention import flash_attention_forward
@@ -168,9 +168,22 @@ def is_kernel(attn_implementation: Optional[str]) -> bool:
     )
 
 
-def load_and_register_kernel(attn_implementation: str) -> None:
-    """Load and register the kernel associated to `attn_implementation`."""
-    if not is_kernel(attn_implementation):
+def load_and_register_kernel(attn_implementation: str, attention_wrapper: Optional[Callable] = None) -> None:
+    """
+    Load and register the kernel associated to `attn_implementation`.
+
+    Args:
+        attn_implementation: A string, usually a kernel repo like "kernels-community/flash-mla".
+        attn_wrapper: a callable for the wrapper around the attention implementation. In `transformers` we
+            have a wrapper around the `flash_attn_var_len` call, and the same goes for `sdpa` and `eager`.
+            They just prepare the arguments properly. This is mostly used for continious batching, where we
+            want the `paged` wrapper, which calls the paged cache.
+    """
+    from ..masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
+    from ..modeling_utils import ALL_ATTENTION_FUNCTIONS
+
+    actual_attn_name = attn_implementation.split("|")[1] if "|" in attn_implementation else attn_implementation
+    if not is_kernel(actual_attn_name):
         return
     if not _kernels_available:
         raise ImportError(
@@ -178,17 +191,6 @@ def load_and_register_kernel(attn_implementation: str) -> None:
             "Please install the latest version with `pip install -U kernels`."
         )
 
-    # Need to be imported here as otherwise we have a circular import in `modeling_utils`
-    from ..masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
-    from ..modeling_utils import ALL_ATTENTION_FUNCTIONS
-
-    attention_wrapper = None
-    # FIXME: @ArthurZucker this is dirty, did not want to do a lof of extra work
-    actual_attn_name = attn_implementation
-    if "|" in attn_implementation:
-        attention_wrapper, actual_attn_name = attn_implementation.split("|")
-        # `transformers` has wrapper for sdpa, paged, flash, flex etc.
-        attention_wrapper = ALL_ATTENTION_FUNCTIONS.get(attention_wrapper)
     # Extract repo_id and kernel_name from the string
     if ":" in actual_attn_name:
         repo_id, kernel_name = actual_attn_name.split(":")

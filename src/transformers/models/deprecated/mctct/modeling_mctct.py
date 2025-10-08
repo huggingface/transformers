@@ -28,7 +28,7 @@ from ....modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ....modeling_layers import GradientCheckpointingLayer
 from ....modeling_outputs import BaseModelOutput, CausalLMOutput
 from ....modeling_utils import PreTrainedModel
-from ....pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ....pytorch_utils import apply_chunking_to_forward
 from ....utils import logging
 from .configuration_mctct import MCTCTConfig
 
@@ -298,25 +298,6 @@ class MCTCTAttention(nn.Module):
         super().__init__()
         self.self = MCTCTSelfAttention(config)
         self.output = MCTCTSelfOutput(config)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.self.query = prune_linear_layer(self.self.query, index)
-        self.self.key = prune_linear_layer(self.self.key, index)
-        self.self.value = prune_linear_layer(self.self.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
-        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
         self,

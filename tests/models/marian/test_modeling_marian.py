@@ -230,7 +230,7 @@ class MarianModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     )
     is_encoder_decoder = True
     fx_compatible = True
-    test_pruning = False
+
     test_missing_keys = False
 
     def setUp(self):
@@ -804,7 +804,7 @@ class MarianStandaloneDecoderModelTester:
 @require_torch
 class MarianStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (MarianDecoder, MarianForCausalLM) if is_torch_available() else ()
-    test_pruning = False
+
     is_encoder_decoder = False
 
     def setUp(

@@ -201,7 +201,7 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
         else ()
     )
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = True
     _is_composite = True
 

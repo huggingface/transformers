@@ -878,26 +878,6 @@ class Cache:
         """Return whether the layers of the cache are sliding window"""
         return [getattr(layer, "is_sliding", False) for layer in self.layers]
 
-    def __getitem__(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Support for backwards-compatible `past_key_values` indexing, e.g. `past_key_values[0][0].shape[2]` to get the
-        sequence length.
-        """
-        if layer_idx < len(self.layers):
-            return self.layers[layer_idx].keys, self.layers[layer_idx].values
-        else:
-            raise KeyError(
-                f"Cache only has {len(self.layers)} layers, attempted to access layer with index {layer_idx}"
-            )
-
-    def __iter__(self):
-        """
-        Support for backwards-compatible `past_key_values` iteration, e.g. `for x in past_key_values:` to iterate over
-        keys and values
-        """
-        for layer_idx in range(len(self)):
-            yield (self.layers[layer_idx].keys, self.layers[layer_idx].values)
-
     def __len__(self):
         """
         This value corresponds to the number of layers in the model.
@@ -1001,31 +981,6 @@ class DynamicCache(Cache):
             )
         else:
             super().__init__(layers=layers, offloading=offloading, offload_only_non_sliding=offload_only_non_sliding)
-
-    def to_legacy_cache(self) -> tuple[tuple[torch.Tensor, torch.Tensor]]:
-        """
-        Converts the `Cache` instance into the its equivalent in the legacy cache format. Used for
-        backward compatibility.
-        """
-        legacy_cache = ()
-        for layer in self.layers:
-            legacy_cache += ((layer.keys, layer.values),)
-        return legacy_cache
-
-    @classmethod
-    def from_legacy_cache(cls, past_key_values: tuple[tuple[torch.Tensor, torch.Tensor]]) -> "DynamicCache":
-        """
-        Converts a cache in the legacy cache format into an equivalent `Cache`. Used for
-        backward compatibility.
-        """
-        cache = cls()
-        if past_key_values is None:
-            logger.warning_once("past_key_values should not be None in from_legacy_cache()")
-        if past_key_values is not None:
-            for layer_idx in range(len(past_key_values)):
-                key_states, value_states = past_key_values[layer_idx]
-                cache.update(key_states, value_states, layer_idx)
-        return cache
 
 
 class StaticCache(Cache):
@@ -1228,70 +1183,12 @@ class EncoderDecoderCache(Cache):
             f"{self.cross_attention_cache})"
         )
 
-    def __iter__(self):
-        """
-        Support for backwards-compatible `past_key_values` iteration, e.g. `for x in past_key_values:` to iterate over
-        keys and values
-        """
-        for layer_idx in range(len(self)):
-            yield (
-                self.self_attention_cache.layers[layer_idx].keys,
-                self.self_attention_cache.layers[layer_idx].values,
-                self.cross_attention_cache.layers[layer_idx].keys,
-                self.cross_attention_cache.layers[layer_idx].values,
-            )
-
-    def __getitem__(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Support for backwards-compatible `past_key_values` indexing, e.g. `past_key_values[0][0].shape[2]` to get the
-        sequence length.
-        """
-        if layer_idx < len(self):
-            return (
-                self.self_attention_cache.layers[layer_idx].keys,
-                self.self_attention_cache.layers[layer_idx].values,
-                self.cross_attention_cache.layers[layer_idx].keys,
-                self.cross_attention_cache.layers[layer_idx].values,
-            )
-        else:
-            raise KeyError(f"Cache only has {len(self)} layers, attempted to access layer with index {layer_idx}")
-
     def __len__(self):
         """
         Support for backwards-compatible `past_key_values` length, e.g. `len(past_key_values)`. This value corresponds
         to the number of layers in the model.
         """
         return len(self.self_attention_cache)
-
-    def to_legacy_cache(self) -> tuple[tuple[torch.Tensor]]:
-        """Converts the `EncoderDecoderCache` instance into its equivalent in the legacy cache format."""
-        legacy_cache = ()
-        if len(self.cross_attention_cache) > 0:
-            for self_attn, cross_attn in zip(
-                self.self_attention_cache.to_legacy_cache(), self.cross_attention_cache.to_legacy_cache()
-            ):
-                legacy_cache += (self_attn + cross_attn,)
-        else:
-            legacy_cache = self.self_attention_cache.to_legacy_cache()
-        return legacy_cache
-
-    @classmethod
-    def from_legacy_cache(
-        cls, past_key_values: Optional[Iterable[tuple[torch.FloatTensor, ...]]]
-    ) -> "EncoderDecoderCache":
-        """Converts a cache in the legacy cache format into an equivalent `EncoderDecoderCache`."""
-        cache = cls(DynamicCache(), DynamicCache())
-        if past_key_values is None:
-            logger.warning_once("past_key_values should not be None in from_legacy_cache()")
-        else:
-            for layer_idx, key_value_states in enumerate(past_key_values):
-                key_states, value_states = key_value_states[:2]
-                cache.self_attention_cache.update(key_states, value_states, layer_idx)
-                if len(key_value_states) > 2:
-                    key_states, value_states = key_value_states[2:]
-                    cache.cross_attention_cache.update(key_states, value_states, layer_idx)
-                    cache.is_updated[layer_idx] = True
-        return cache
 
     def get_seq_length(self, layer_idx: int = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""

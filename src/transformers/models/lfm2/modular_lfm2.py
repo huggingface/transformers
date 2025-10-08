@@ -207,9 +207,6 @@ class Lfm2HybridConvCache:
     def __len__(self) -> int:
         return len(self.key_cache)
 
-    def __getitem__(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
-        return self.key_cache[layer_idx], self.value_cache[layer_idx]
-
     def reset(self):
         for layer_idx in range(len(self.conv_cache)):
             # In-place ops prevent breaking the static address
