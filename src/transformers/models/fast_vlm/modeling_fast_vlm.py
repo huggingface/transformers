@@ -176,7 +176,7 @@ class FastVlmModel(FastVlmPreTrainedModel):
                 vision_feature_layer if isinstance(vision_feature_layer, Iterable) else [vision_feature_layer]
             )
         ):
-            raise ValueError(f"Only negative layer values are supported. Got {vision_feature_layer}")
+            raise ValueError(f"Only negative vision feature layer values are supported. Got {vision_feature_layer}")
 
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
         # this is not memory-efficient at all
@@ -194,11 +194,11 @@ class FastVlmModel(FastVlmPreTrainedModel):
             hs_pool = []
             for layer_idx in vision_feature_layer:
                 if layer_idx == -1:
-                    selected_image_feature = image_outputs.last_hidden_state
+                    partial_image_feature = image_outputs.last_hidden_state
                 else:
-                    selected_image_feature = image_outputs.hidden_states[layer_idx + 1]
-                selected_image_feature = adaptive_avg_pool2d(selected_image_feature, (desired_shape, desired_shape))
-                hs_pool.append(selected_image_feature)
+                    partial_image_feature = image_outputs.hidden_states[layer_idx + 1]
+                partial_image_feature = adaptive_avg_pool2d(partial_image_feature, (desired_shape, desired_shape))
+                hs_pool.append(partial_image_feature)
             selected_image_feature = torch.cat(hs_pool, dim=-3)
 
         selected_image_feature = selected_image_feature.flatten(2).permute(0, 2, 1)
@@ -248,7 +248,7 @@ class FastVlmModel(FastVlmPreTrainedModel):
     ) -> Union[tuple, FastVlmModelOutputWithPast]:
         r"""
         vision_feature_select_strategy (`str`, *optional*):
-            The feature selection strategy used to select the vision feature from the vision backbone. Can only be `"full"`.
+            The feature selection strategy used to select the vision feature from the vision backbone. Only "full" supported.
 
         vision_feature_layer (`Union[int, list[int], NoneType]`, *optional*):
             The index of the layer to select the vision feature. If multiple indices are provided, the vision feature of the
@@ -332,7 +332,7 @@ class FastVlmCausalLMOutputWithPast(ModelOutput):
 
 @auto_docstring(
     custom_intro="""
-    The FAST_VLM model which consists of a vision backbone and a language model.
+    The FastVlm model which consists of a vision backbone and a language model.
     """
 )
 class FastVlmForConditionalGeneration(FastVlmPreTrainedModel, GenerationMixin):
@@ -412,7 +412,7 @@ class FastVlmForConditionalGeneration(FastVlmPreTrainedModel, GenerationMixin):
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         vision_feature_select_strategy (`str`, *optional*):
-            The feature selection strategy used to select the vision feature from the vision backbone. Can only be `"full"`.
+            The feature selection strategy used to select the vision feature from the vision backbone. Only "full" supported.
 
         vision_feature_layer (`Union[int, list[int], NoneType]`, *optional*):
             The index of the layer to select the vision feature. If multiple indices are provided, the vision feature of the
