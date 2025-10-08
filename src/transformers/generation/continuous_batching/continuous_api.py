@@ -614,7 +614,7 @@ class ContinuousBatchingManager:
         if attn_implementation not in ALL_ATTENTION_FUNCTIONS:  # when its a kernel
             load_and_register_kernel(attn_implementation, paged_attention_forward)
 
-        model.set_attn_implementation(attn_implementation)
+        model.config._attn_implementation = attn_implementation
         self.model = model.eval()
         generation_config = model.generation_config if generation_config is None else generation_config
         self.generation_config = generation_config

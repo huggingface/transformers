@@ -2654,7 +2654,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             else attn_implementation.get("", self.config._attn_implementation)
         )
 
-        if requested_implementation != self.config._attn_implementation or use_paged:
+        if requested_implementation != self.config._attn_implementation:
             # In this case, raise
             if not self._can_set_attn_implementation():
                 logger.warning(
