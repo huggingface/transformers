@@ -20,8 +20,8 @@ rendered properly in your Markdown viewer.
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<!-- <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white"> -->
+<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
 ## Overview
@@ -189,7 +189,7 @@ import os
 os.environ["TIMM_FUSED_ATTN"] = "0"
 ```
 
-In addition, the layer norm used by Apple doesn't use the standard LayerNorm class form Torch and therefore our logits diverge. To get exactly the same values, one needs to manually change timm/layers/norm.py:
+In addition, the layer norm used by Apple doesn't use the standard LayerNorm class form Torch and therefore our logits diverge. To get exactly the same values, one needs to manually change `timm/layers/norm.py`:
 
 ```
 class LayerNorm2d(nn.LayerNorm):
@@ -209,9 +209,9 @@ class LayerNorm2d(nn.LayerNorm):
 ```
 Please note, that this is only needed in oder to get the exact same numerical values on the output of the model. It's not necessary to make this change to use FastVLM.
 
-<!-- ### Using Flash Attention 2
+### Using Flash Attention 2
 
-Flash Attention 2 is an even faster, optimized version of the previous optimization, please refer to the [Flash Attention 2 section of performance docs](https://huggingface.co/docs/transformers/perf_infer_gpu_one). -->
+Flash Attention 2 is an even faster, optimized version of the previous optimization, please refer to the [Flash Attention 2 section of performance docs](https://huggingface.co/docs/transformers/perf_infer_gpu_one).
 
 ## Resources
 

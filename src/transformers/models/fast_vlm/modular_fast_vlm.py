@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import math
+from collections.abc import Iterable
 from typing import Optional, Union
 
 import torch
@@ -95,7 +96,7 @@ class FastVlmConfig(LlavaConfig):
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
         self.image_seq_length = image_seq_length
-        if math.isqrt(image_seq_length).pow(2) != image_seq_length:
+        if math.isqrt(image_seq_length) ** 2 != image_seq_length:
             raise ValueError(f"Inavalid image_seq_length: {image_seq_length}. It needs to be a perfect square.")
 
         if vision_feature_select_strategy != "full":
@@ -104,8 +105,11 @@ class FastVlmConfig(LlavaConfig):
                 f"Got: {vision_feature_select_strategy}"
             )
 
-        if (isinstance(vision_feature_layer, int) and vision_feature_layer >= 0) or any(
-            layer >= 0 for layer in vision_feature_layer
+        if any(
+            layer >= 0
+            for layer in (
+                vision_feature_layer if isinstance(vision_feature_layer, Iterable) else [vision_feature_layer]
+            )
         ):
             raise ValueError(f"Only negative layer values are supported. Got {vision_feature_layer}")
 
@@ -156,7 +160,7 @@ class FastVlmMultiModalProjector(LlavaMultiModalProjector):
         #  different layers have different hidden sizes that are concatenated
         total_hidden_size = 0
         for layer in layers:
-            total_hidden_size += config.vision_feature_layer // (2).pow(-layer - 1)
+            total_hidden_size += config.vision_config.hidden_size // (2 ** (-layer - 1))
         self.linear_1 = nn.Linear(
             total_hidden_size,
             config.text_config.hidden_size,
@@ -173,6 +177,14 @@ class FastVlmPreTrainedModel(LlavaPreTrainedModel):
 
 
 class FastVlmModel(LlavaModel):
+    _checkpoint_conversion_mapping = {}
+
+    def __init__(self, config: FastVlmConfig):
+        # Timm models don't support this way of setting attention mode so we set the vision config to eager while keeping the language part
+        # the same as the user requested
+        config.vision_config._attn_implementation = "eager"
+        super().__init__(config)
+
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -209,8 +221,11 @@ class FastVlmModel(LlavaModel):
                 f"Unexpected select feature strategy: {vision_feature_select_strategy}, Only 'full' is supported in FastVLM."
             )
 
-        if (isinstance(vision_feature_layer, int) and vision_feature_layer >= 0) or any(
-            layer >= 0 for layer in vision_feature_layer
+        if any(
+            layer >= 0
+            for layer in (
+                vision_feature_layer if isinstance(vision_feature_layer, Iterable) else [vision_feature_layer]
+            )
         ):
             raise ValueError(f"Only negative layer values are supported. Got {vision_feature_layer}")
 
@@ -235,7 +250,7 @@ class FastVlmModel(LlavaModel):
                     selected_image_feature = image_outputs.hidden_states[layer_idx + 1]
                 selected_image_feature = adaptive_avg_pool2d(selected_image_feature, (desired_shape, desired_shape))
                 hs_pool.append(selected_image_feature)
-            selected_image_feature = torch.cat(hs_pool, dim=-1)
+            selected_image_feature = torch.cat(hs_pool, dim=-3)
 
         selected_image_feature = selected_image_feature.flatten(2).permute(0, 2, 1)
         image_features = self.multi_modal_projector(selected_image_feature)
