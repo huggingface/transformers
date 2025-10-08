@@ -2575,19 +2575,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 raise e
         else:
             applicable_attn_implementation = self.get_correct_attn_implementation(
-                applicable_attn_implementation, is_init_check, use_paged
+                applicable_attn_implementation, is_init_check
             )
             # preload flash attention here to allow compile with fullgraph
             if applicable_attn_implementation.startswith("flash_attention"):
                 lazy_import_flash_attention(applicable_attn_implementation, force_import=True)
         return applicable_attn_implementation
 
-    def get_correct_attn_implementation(
-        self, requested_attention: Optional[str], is_init_check: bool = False, use_paged=False
-    ) -> str:
+    def get_correct_attn_implementation(self, requested_attention: Optional[str], is_init_check: bool = False) -> str:
         applicable_attention = "sdpa" if requested_attention is None else requested_attention
-        if use_paged:
-            applicable_attention = "paged|" + applicable_attention
         if applicable_attention not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
             message = (
                 f'Specified `attn_implementation="{applicable_attention}"` is not supported. The only possible arguments are '
@@ -2654,7 +2650,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             else attn_implementation.get("", self.config._attn_implementation)
         )
 
-        if requested_implementation != self.config._attn_implementation or use_paged:
+        if requested_implementation != self.config._attn_implementation:
             # In this case, raise
             if not self._can_set_attn_implementation():
                 logger.warning(
