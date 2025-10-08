@@ -49,7 +49,7 @@ class Sam2FastImageProcessorKwargs(ImagesKwargs, total=False):
         The size `{"height": int, "width": int}` to resize the segmentation maps to.
     """
 
-    mask_size: Optional[dict[str, int]]
+    mask_size: dict[str, int]
 
 
 def _compute_stability_score(masks: "torch.Tensor", mask_threshold: float, stability_score_offset: int):

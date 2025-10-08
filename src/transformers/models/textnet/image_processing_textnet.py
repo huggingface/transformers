@@ -50,7 +50,7 @@ if is_vision_available():
 
 
 class TextNetImageProcessorKwargs(ImagesKwargs, total=False):
-    size_divisor: Optional[int]
+    size_divisor: int
 
 
 class TextNetImageProcessor(BaseImageProcessor):

@@ -320,8 +320,8 @@ class Llama4ImageProcessorKwargs(ImagesKwargs, total=False):
         but never upsample, unless the image is smaller than the patch size.
     """
 
-    max_patches: Optional[int]
-    resize_to_max_canvas: Optional[bool]
+    max_patches: int
+    resize_to_max_canvas: bool
 
 
 @auto_docstring

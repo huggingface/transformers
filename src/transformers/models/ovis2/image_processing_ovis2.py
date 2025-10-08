@@ -61,10 +61,10 @@ class Ovis2ImageProcessorKwargs(ImagesKwargs, total=False):
         `preprocess` method.
     """
 
-    crop_to_patches: Optional[bool]
-    min_patches: Optional[int]
-    max_patches: Optional[int]
-    use_covering_area_grid: Optional[bool]
+    crop_to_patches: bool
+    min_patches: int
+    max_patches: int
+    use_covering_area_grid: bool
 
 
 # Similar to image_processing_mllama.get_all_supported_aspect_ratios

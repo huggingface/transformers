@@ -60,8 +60,8 @@ class DonutImageProcessorKwargs(ImagesKwargs, total=False):
         Whether to align the long axis of the image with the long axis of `size` by rotating by 90 degrees.
     """
 
-    do_thumbnail: Optional[bool]
-    do_align_long_axis: Optional[bool]
+    do_thumbnail: bool
+    do_align_long_axis: bool
 
 
 @requires(backends=("vision",))

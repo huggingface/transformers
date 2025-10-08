@@ -52,7 +52,7 @@ class SuperPointImageProcessorKwargs(ImagesKwargs, total=False):
         Whether to convert the image to grayscale. Can be overridden by `do_grayscale` in the `preprocess` method.
     """
 
-    do_grayscale: Optional[bool] = True
+    do_grayscale: bool
 
 
 def is_grayscale(

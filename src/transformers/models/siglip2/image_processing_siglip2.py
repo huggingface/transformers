@@ -57,8 +57,8 @@ class Siglip2ImageProcessorKwargs(ImagesKwargs, total=False):
         and then padded in "patch" dimension to match this number exactly.
     """
 
-    patch_size: Optional[int]
-    max_num_patches: Optional[int]
+    patch_size: int
+    max_num_patches: int
 
 
 @lru_cache(maxsize=256)

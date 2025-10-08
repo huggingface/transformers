@@ -56,7 +56,7 @@ class ImageGPTImageProcessorKwargs(ImagesKwargs, total=False):
     """
 
     clusters: Optional[Union[np.ndarray, list[list[int]], "torch.Tensor"]]
-    do_color_quantize: Optional[bool]
+    do_color_quantize: bool
 
 
 def squared_euclidean_distance(a, b):

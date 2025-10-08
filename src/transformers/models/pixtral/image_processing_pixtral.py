@@ -56,7 +56,7 @@ class PixtralImageProcessorKwargs(ImagesKwargs, total=False):
         Size of the patches in the model, used to calculate the output image size. Can be overridden by `patch_size` in the `preprocess` method.
     """
 
-    patch_size: Optional[Union[dict[str, int], int]]
+    patch_size: Union[dict[str, int], int]
 
 
 # Adapted from function in image_transforms.py to ensure any transparent pixels are converted to white.

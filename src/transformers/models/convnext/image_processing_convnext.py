@@ -57,7 +57,7 @@ class ConvNextImageProcessorKwargs(ImagesKwargs, total=False):
         overridden by `crop_pct` in the`preprocess` method.
     """
 
-    crop_pct: Optional[float]
+    crop_pct: float
 
 
 @requires(backends=("vision",))

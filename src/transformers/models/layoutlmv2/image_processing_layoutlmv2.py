@@ -66,7 +66,7 @@ class LayoutLMv2ImageProcessorKwargs(ImagesKwargs, total=False):
         `preprocess` method.
     """
 
-    apply_ocr: Optional[bool]
+    apply_ocr: bool
     ocr_lang: Optional[str]
     tesseract_config: Optional[str]
 

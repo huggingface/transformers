@@ -56,7 +56,7 @@ class MllamaImageProcessorKwargs(ImagesKwargs, total=False):
         The maximum number of tiles allowed.
     """
 
-    max_image_tiles: Optional[int]
+    max_image_tiles: int
 
 
 @lru_cache(maxsize=10)

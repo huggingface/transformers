@@ -66,7 +66,7 @@ class EomtImageProcessorKwargs(ImagesKwargs, total=False):
         denoted with 0 (background) will be replaced with `ignore_index`.
     """
 
-    do_split_image: Optional[bool]
+    do_split_image: bool
     ignore_index: Optional[int]
 
 

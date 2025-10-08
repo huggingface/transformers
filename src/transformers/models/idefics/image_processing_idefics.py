@@ -47,7 +47,7 @@ class IdeficsImageProcessorKwargs(ImagesKwargs, total=False):
     """
 
     transform: Optional[Callable]
-    image_size: Optional[dict[str, int]]
+    image_size: dict[str, int]
 
 
 def convert_to_rgb(image):

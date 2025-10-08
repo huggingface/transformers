@@ -62,9 +62,9 @@ class GotOcr2ImageProcessorKwargs(ImagesKwargs, total=False):
         set to `True`. Can be overridden by the `max_patches` parameter in the `preprocess` method.
     """
 
-    crop_to_patches: Optional[bool]
-    min_patches: Optional[int]
-    max_patches: Optional[int]
+    crop_to_patches: bool
+    min_patches: int
+    max_patches: int
 
 
 # Similar to image_processing_mllama.get_all_supported_aspect_ratios

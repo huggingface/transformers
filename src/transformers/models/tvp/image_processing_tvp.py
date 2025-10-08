@@ -60,7 +60,7 @@ class TvpImageProcessorKwargs(ImagesKwargs, total=False):
         Padding mode to use — `'constant'`, `'edge'`, `'reflect'`, or `'symmetric'`.
     """
 
-    do_flip_channel_order: Optional[bool]
+    do_flip_channel_order: bool
     constant_values: Optional[Union[float, list[float]]]
     pad_mode: Optional[str]
 

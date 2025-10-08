@@ -91,7 +91,7 @@ def get_resize_output_image_size(
 
 
 class SmolVLMVideoProcessorInitKwargs(VideosKwargs, total=False):
-    max_image_size: Optional[dict[str, int]]
+    max_image_size: dict[str, int]
 
 
 class SmolVLMVideoProcessor(BaseVideoProcessor):

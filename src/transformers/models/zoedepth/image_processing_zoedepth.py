@@ -77,8 +77,8 @@ class ZoeDepthImageProcessorKwargs(ImagesKwargs, total=False):
         Can be overridden by `ensure_multiple_of` in `preprocess`.
     """
 
-    keep_aspect_ratio: Optional[bool]
-    ensure_multiple_of: Optional[int]
+    keep_aspect_ratio: bool
+    ensure_multiple_of: int
 
 
 def get_resize_output_image_size(

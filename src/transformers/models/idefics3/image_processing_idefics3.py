@@ -59,9 +59,9 @@ class Idefics3ImageProcessorKwargs(ImagesKwargs, total=False):
         Whether to return the row and column information of the images.
     """
 
-    do_image_splitting: Optional[bool]
-    max_image_size: Optional[dict[str, int]]
-    return_row_col_info: Optional[bool]
+    do_image_splitting: bool
+    max_image_size: dict[str, int]
+    return_row_col_info: bool
 
 
 def _resize_output_size_rescale_to_max_len(

@@ -14,7 +14,7 @@
 # limitations under the License.
 import math
 from functools import lru_cache
-from typing import Optional, Union
+from typing import Union
 
 import torch
 from torchvision.transforms.v2 import functional as F
@@ -175,18 +175,18 @@ class Lfm2VlImageProcessorKwargs(ImagesKwargs, total=False):
         The downsampling factor for images used when resizing the image.
     """
 
-    downsample_factor: Optional[int]
-    do_image_splitting: Optional[bool]
-    min_tiles: Optional[int]
-    max_tiles: Optional[int]
-    use_thumbnail: Optional[bool]
-    min_image_tokens: Optional[int]
-    max_image_tokens: Optional[int]
-    encoder_patch_size: Optional[int]
-    tile_size: Optional[int]
-    max_pixels_tolerance: Optional[float]
-    do_pad: Optional[bool]
-    return_row_col_info: Optional[bool]
+    downsample_factor: int
+    do_image_splitting: bool
+    min_tiles: int
+    max_tiles: int
+    use_thumbnail: bool
+    min_image_tokens: int
+    max_image_tokens: int
+    encoder_patch_size: int
+    tile_size: int
+    max_pixels_tolerance: float
+    do_pad: bool
+    return_row_col_info: bool
 
 
 @auto_docstring

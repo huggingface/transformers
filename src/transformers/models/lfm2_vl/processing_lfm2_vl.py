@@ -18,7 +18,6 @@ from typing import Optional, Union
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import (
-    ImagesKwargs,
     ProcessingKwargs,
     ProcessorMixin,
     TextKwargs,
@@ -31,30 +30,12 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class Lfm2VlImagesKwargs(ImagesKwargs, total=False):
-    downsample_factor: Optional[int]
-    do_image_splitting: Optional[bool]
-    min_tiles: Optional[int]
-    max_tiles: Optional[int]
-    use_thumbnail: Optional[bool]
-    min_image_tokens: Optional[int]
-    max_image_tokens: Optional[int]
-    encoder_patch_size: Optional[int]
-    tile_size: Optional[int]
-    max_pixels_tolerance: Optional[float]
-    patch_size: Optional[int]
-    do_pad: Optional[bool]
-    return_row_col_info: Optional[bool]
-
-
 class Lfm2VlTextKwargs(TextKwargs, total=False):
     use_image_special_tokens: Optional[bool]
 
 
 class Lfm2VlProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: Lfm2VlImagesKwargs
     text_kwargs: Lfm2VlTextKwargs
-
     _defaults = {
         "images_kwargs": {
             "return_row_col_info": True,

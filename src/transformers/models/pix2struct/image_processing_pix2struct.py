@@ -57,7 +57,7 @@ class Pix2StructImageProcessorKwargs(ImagesKwargs, total=False):
         Text to render as a header. Only has an effect if `image_processor.is_vqa` is `True`.
     """
 
-    max_patches: Optional[int]
+    max_patches: int
     header_text: Optional[Union[list[str], str]]
 
 

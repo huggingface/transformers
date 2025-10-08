@@ -57,9 +57,9 @@ class Glm4vImageProcessorKwargs(ImagesKwargs, total=False):
         The merge size of the vision encoder to llm encoder.
     """
 
-    patch_size: Optional[int]
-    temporal_patch_size: Optional[int]
-    merge_size: Optional[int]
+    patch_size: int
+    temporal_patch_size: int
+    merge_size: int
 
 
 def smart_resize(

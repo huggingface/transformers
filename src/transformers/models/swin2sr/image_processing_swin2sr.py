@@ -39,7 +39,7 @@ logger = logging.get_logger(__name__)
 
 
 class Swin2SRImageProcessorKwargs(ImagesKwargs, total=False):
-    size_divisor: Optional[int]
+    size_divisor: int
 
 
 class Swin2SRImageProcessor(BaseImageProcessor):

@@ -85,7 +85,7 @@ class OneFormerImageProcessorKwargs(ImagesKwargs, total=False):
     num_text: Optional[int]
     num_labels: Optional[int]
     ignore_index: Optional[int]
-    do_reduce_labels: Optional[bool]
+    do_reduce_labels: bool
 
 
 # Copied from transformers.models.detr.image_processing_detr.max_across_indices

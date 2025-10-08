@@ -64,10 +64,10 @@ class PromptDepthAnythingImageProcessorKwargs(ImagesKwargs, total=False):
         Scale factor to convert the prompt depth to meters.
     """
 
-    keep_aspect_ratio: Optional[bool]
-    ensure_multiple_of: Optional[int]
-    size_divisor: Optional[int]
-    prompt_scale_to_meter: Optional[float]
+    keep_aspect_ratio: bool
+    ensure_multiple_of: int
+    size_divisor: int
+    prompt_scale_to_meter: float
 
 
 def _constrain_to_multiple_of(val, multiple, min_val=0, max_val=None):

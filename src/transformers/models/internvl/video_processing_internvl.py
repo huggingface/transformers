@@ -28,7 +28,7 @@ from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 
 
 class InternVLVideoProcessorInitKwargs(VideosKwargs, total=False):
-    initial_shift: Optional[Union[bool, float, int]]
+    initial_shift: Union[bool, float, int]
 
 
 class InternVLVideoProcessor(BaseVideoProcessor):

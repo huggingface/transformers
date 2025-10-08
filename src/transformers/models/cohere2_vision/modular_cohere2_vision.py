@@ -316,9 +316,9 @@ class Cohere2VisionFastImageProcessorKwargs(ImagesKwargs, total=False):
         set to `True`. Can be overridden by the `max_patches` parameter in the `preprocess` method.
     """
 
-    crop_to_patches: Optional[bool]
-    min_patches: Optional[int]
-    max_patches: Optional[int]
+    crop_to_patches: bool
+    min_patches: int
+    max_patches: int
 
 
 @auto_docstring

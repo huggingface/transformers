@@ -54,8 +54,8 @@ class PerceptionLMImageProcessorKwargs(ImagesKwargs, total=False):
     """
 
     vision_input_type: Optional[str]
-    tile_size: Optional[int]
-    max_num_tiles: Optional[int]
+    tile_size: int
+    max_num_tiles: int
 
 
 @auto_docstring

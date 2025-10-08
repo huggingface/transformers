@@ -66,7 +66,7 @@ class LlavaOnevisionImageProcessorKwargs(ImagesKwargs, total=False):
         method.
     """
 
-    image_grid_pinpoints: Optional[list[list[int]]]
+    image_grid_pinpoints: list[list[int]]
 
 
 # Copied from transformers.models.llava_next.image_processing_llava_next.divide_to_patches

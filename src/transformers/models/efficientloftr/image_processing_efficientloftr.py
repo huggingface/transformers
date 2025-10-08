@@ -56,7 +56,7 @@ class EfficientLoFTRImageProcessorKwargs(ImagesKwargs, total=False):
         Whether to convert the image to grayscale. Can be overridden by `do_grayscale` in the `preprocess` method.
     """
 
-    do_grayscale: Optional[bool] = True
+    do_grayscale: bool
 
 
 # Copied from transformers.models.superpoint.image_processing_superpoint.is_grayscale

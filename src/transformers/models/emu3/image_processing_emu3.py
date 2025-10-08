@@ -48,8 +48,8 @@ logger = logging.get_logger(__name__)
 
 
 class Emu3ImageProcessorKwargs(ImagesKwargs, total=False):
-    ratio: Optional[str]
-    image_area: Optional[int]
+    ratio: str
+    image_area: int
 
 
 def smart_resize(

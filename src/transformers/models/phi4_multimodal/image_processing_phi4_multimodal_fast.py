@@ -43,8 +43,8 @@ class Phi4MultimodalImageProcessorKwargs(ImagesKwargs, total=False):
         The maximum number of crops per image.
     """
 
-    patch_size: Optional[int]
-    dynamic_hd: Optional[int]
+    patch_size: int
+    dynamic_hd: int
 
 
 @auto_docstring

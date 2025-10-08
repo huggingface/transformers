@@ -63,8 +63,8 @@ class MobileVitImageProcessorKwargs(ImagesKwargs, total=False):
         ADE20k). The background label will be replaced by 255.
     """
 
-    do_flip_channel_order: Optional[bool]
-    do_reduce_labels: Optional[bool]
+    do_flip_channel_order: bool
+    do_reduce_labels: bool
 
 
 @requires(backends=("vision",))

@@ -78,10 +78,10 @@ class DPTImageProcessorKwargs(ImagesKwargs, total=False):
         ADE20k). The background label will be replaced by 255.
     """
 
-    ensure_multiple_of: Optional[int]
-    size_divisor: Optional[int]
-    keep_aspect_ratio: Optional[bool]
-    do_reduce_labels: Optional[bool]
+    ensure_multiple_of: int
+    size_divisor: int
+    keep_aspect_ratio: bool
+    do_reduce_labels: bool
 
 
 def get_resize_output_image_size(

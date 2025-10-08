@@ -67,7 +67,7 @@ class LlavaNextImageProcessorKwargs(ImagesKwargs, total=False):
         method.
     """
 
-    image_grid_pinpoints: Optional[list[list[int]]]
+    image_grid_pinpoints: list[list[int]]
 
 
 def divide_to_patches(image: np.ndarray, patch_size: int, input_data_format) -> list[np.ndarray]:

@@ -14,7 +14,6 @@
 """
 Processing saving/loading class for common processors.
 """
-# from __future__ import annotations
 
 import bisect
 import copy

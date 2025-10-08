@@ -80,9 +80,9 @@ class MaskFormerImageProcessorKwargs(ImagesKwargs, total=False):
         The number of labels in the segmentation map.
     """
 
-    size_divisor: Optional[int]
+    size_divisor: int
     ignore_index: Optional[int]
-    do_reduce_labels: Optional[bool]
+    do_reduce_labels: bool
     num_labels: Optional[int]
 
 

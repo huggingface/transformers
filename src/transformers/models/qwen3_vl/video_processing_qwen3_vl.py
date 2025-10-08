@@ -65,11 +65,11 @@ def smart_resize(
 
 
 class Qwen3VLVideoProcessorInitKwargs(VideosKwargs, total=False):
-    patch_size: Optional[int]
-    temporal_patch_size: Optional[int]
-    merge_size: Optional[int]
-    min_frames: Optional[int]
-    max_frames: Optional[int]
+    patch_size: int
+    temporal_patch_size: int
+    merge_size: int
+    min_frames: int
+    max_frames: int
 
 
 @add_start_docstrings(

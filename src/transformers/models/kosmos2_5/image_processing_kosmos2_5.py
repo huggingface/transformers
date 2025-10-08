@@ -55,8 +55,8 @@ class Kosmos2_5ImageProcessorKwargs(ImagesKwargs, total=False):
         [KOSMOS 2.5 paper](https://huggingface.co/papers/2309.11419).
     """
 
-    patch_size: Optional[dict[str, int]]
-    max_patches: Optional[int]
+    patch_size: dict[str, int]
+    max_patches: int
 
 
 # Copied from transformers.models.pix2struct.image_processing_pix2struct.torch_extract_patches
