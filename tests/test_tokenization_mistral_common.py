@@ -85,13 +85,6 @@ class TestMistralCommonTokenizer(unittest.TestCase):
 
         # Define SPM tokenizer to test the private methods that handle SPM and Tekken differencies.
         cls.spm_repo_id = "mistralai/Mistral-7B-Instruct-v0.3"
-        cls.spm_local_files_only = len(list_local_hf_repo_files(cls.repo_id, revision=None)) > 0
-        cls.spm_tokenizer: MistralCommonTokenizer = AutoTokenizer.from_pretrained(
-            cls.spm_repo_id,
-            tokenizer_type="mistral",
-            local_files_only=cls.spm_local_files_only,
-            revision=None,
-        )
 
         # cls.tokenizer_audio: MistralCommonTokenizer = AutoTokenizer.from_pretrained(
         #     "hf-internal-testing/namesspace-mistralai-repo_name-Voxtral-Mini-3B-2507"
@@ -153,9 +146,13 @@ class TestMistralCommonTokenizer(unittest.TestCase):
             return tekken_tokenizer.unk_id
 
     def test_spm_vs_tekken_is_control_token(self):
-        self.assertTrue(self.spm_tokenizer._is_control_token(1))
-        self.assertTrue(self.spm_tokenizer._is_control_token(768))
-        self.assertFalse(self.spm_tokenizer._is_control_token(999))
+        spm_tokenizer: MistralCommonTokenizer = AutoTokenizer.from_pretrained(
+            self.spm_repo_id,
+            tokenizer_type="mistral",
+        )
+        self.assertTrue(spm_tokenizer._is_control_token(1))
+        self.assertTrue(spm_tokenizer._is_control_token(768))
+        self.assertFalse(spm_tokenizer._is_control_token(999))
 
         self.assertTrue(self.tokenizer._is_control_token(0))
         self.assertTrue(self.tokenizer._is_control_token(768))
@@ -163,8 +160,12 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         self.assertFalse(self.tokenizer._is_control_token(1000))
 
     def test_spm_vs_tekken_piece_to_id(self):
-        self.assertEqual(self.spm_tokenizer._piece_to_id("<s>"), 1)
-        self.assertEqual(self.spm_tokenizer._piece_to_id("h"), 29484)
+        spm_tokenizer: MistralCommonTokenizer = AutoTokenizer.from_pretrained(
+            self.spm_repo_id,
+            tokenizer_type="mistral",
+        )
+        self.assertEqual(spm_tokenizer._piece_to_id("<s>"), 1)
+        self.assertEqual(spm_tokenizer._piece_to_id("h"), 29484)
 
         self.assertEqual(self.tokenizer._piece_to_id("<s>"), 1)
         self.assertEqual(self._ref_piece_to_id("<s>"), 1)
