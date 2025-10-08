@@ -256,7 +256,7 @@ class PeftAdapterMixin:
             else:
                 new_key = key
 
-            if key_mapping:
+            if key_mapping: #TODO dynamic weight loader for adapters
                 for pattern, replacement in key_mapping.items():
                     new_key, n_replace = re.subn(pattern, replacement, new_key)
                     # Early exit of the loop
@@ -628,7 +628,7 @@ def maybe_load_adapters(
     download_kwargs: DownloadKwargs,
     **adapter_kwargs,
 ):
-    if not is_peft_available():
+    if pretrained_model_name_or_path is None or  not is_peft_available(): 
         return None
 
     token = download_kwargs.get("token")

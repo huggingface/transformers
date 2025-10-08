@@ -4625,7 +4625,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Regex to keep a fixed dtype
         keep_in_fp32_regex = get_keep_in_fp32_regex(model, hf_quantizer, dtype)
-        if hf_quantizer is not None:
+        if hf_quantizer is not None: # replace module with quantized modules (does not touch weights)
             hf_quantizer.preprocess_model(
                 model=model,
                 device_map=device_map,
@@ -4635,7 +4635,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 use_kernels=use_kernels,
             )
 
-        if _torch_distributed_available and device_mesh is not None:  # add hooks to nn.Modules
+        if _torch_distributed_available and device_mesh is not None:  # add hooks to nn.Modules: no weights
             model = distribute_model(model, distributed_config, device_mesh, tp_size)
 
         # Prepare the full device map
@@ -4690,7 +4690,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if hf_quantizer is not None:
             model.hf_quantizer = hf_quantizer
-            hf_quantizer.postprocess_model(model, config=config)
+            hf_quantizer.postprocess_model(model, config=config) # usually a no-op
 
         if _adapter_model_path is not None:
             adapter_kwargs["key_mapping"] = key_mapping # TODO: Dynamic weight loader for adapters
