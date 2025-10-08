@@ -363,7 +363,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     )
     is_encoder_decoder = True
     fx_compatible = False
-    test_pruning = False
+
     test_missing_keys = False
     # Needs higher percentages after model tester's vocab_size is changed to 200 (PR #21222)
     # `0.5` is for `test_disk_offload` (which also works for `test_model_parallelism`)
@@ -3274,7 +3274,7 @@ class WhisperEncoderModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (WhisperForAudioClassification,) if is_torch_available() else ()
     is_encoder_decoder = False
     fx_compatible = False
-    test_pruning = False
+
     test_missing_keys = False
 
     def setUp(self):
@@ -3542,7 +3542,7 @@ class WhisperStandaloneDecoderModelTester:
 class WhisperStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (WhisperDecoder, WhisperForCausalLM) if is_torch_available() else ()
     fx_comptatible = False
-    test_pruning = False
+
     is_encoder_decoder = False
     test_missing_keys = False
 
