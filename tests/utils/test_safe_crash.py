@@ -17,6 +17,8 @@
 import os
 import subprocess
 import sys
+import textwrap
+from typing import Tuple
 
 import pytest
 
@@ -27,40 +29,48 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-@pytest.mark.xfail(strict=False, reason="Raw regex crashes under PYTHON_GIL=0")
-def test_raw_regex_thread_safety_crashes_under_gil0():
-    script = r"""
-import threading
-import regex
+def _thread_stress_script(*, imports: str, setup_code: str) -> str:
+    setup_block = textwrap.indent(
+        textwrap.dedent(setup_code).strip(),
+        " " * 8,
+    )
+    return textwrap.dedent(
+        f"""
+        import threading
+        {imports}
 
-pattern_text = r"(?P<prefix>test)(?P<number>\d+)"
-ready_group = threading.Barrier(33)
-run_event = threading.Event()
+        pattern_text = r"(?P<prefix>test)(?P<number>\\d+)"
+        text_to_match = "test123"
+        ready_group = threading.Barrier(33)
+        run_event = threading.Event()
+
+{setup_block}
+
+        def worker():
+            ready_group.wait()
+            run_event.wait()
+            for _ in range(100):
+                match = match_once()
+                assert match is not None
+                assert match.group("prefix") == "test"
+                assert match.group("number") == "123"
+
+        threads = [threading.Thread(target=worker) for _ in range(32)]
+        for thread in threads:
+            thread.start()
+
+        ready_group.wait()
+        run_event.set()
+
+        for thread in threads:
+            thread.join()
+        """
+    )
 
 
-def worker():
-    ready_group.wait()
-    run_event.wait()
-    for _ in range(100):
-        match = regex.match(pattern_text, "test123")
-        assert match is not None
-        assert match.group("prefix") == "test"
-        assert match.group("number") == "123"
-
-
-threads = [threading.Thread(target=worker) for _ in range(32)]
-for thread in threads:
-    thread.start()
-
-ready_group.wait()
-run_event.set()
-
-for thread in threads:
-    thread.join()
-"""
-
+def _run_thread_stress_script(label: str, script: str) -> Tuple[subprocess.CompletedProcess, str]:
     env = dict(os.environ, PYTHON_GIL="0")
-    result = subprocess.run(
+    result = subprocess.run(  # noqa: PLW1510 intentionally check return code manually
         [sys.executable, "-c", script],
         env=env,
         capture_output=True,
@@ -70,14 +80,27 @@ for thread in threads:
     stdout = result.stdout.strip()
     stderr = result.stderr.strip()
     message_parts = [
-        "raw regex subprocess run",
+        f"{label} subprocess run",
         f"return code: {result.returncode}",
     ]
     if stdout:
         message_parts.append(f"stdout:\n{stdout}")
     if stderr:
         message_parts.append(f"stderr:\n{stderr}")
-    message = "\n".join(message_parts)
+    return result, "\n".join(message_parts)
+
+
+@pytest.mark.xfail(strict=False, reason="Raw regex crashes under PYTHON_GIL=0")
+def test_raw_regex_thread_safety_crashes_under_gil0():
+    script = _thread_stress_script(
+        imports="import regex",
+        setup_code="""
+        def match_once():
+            return regex.match(pattern_text, text_to_match)
+        """,
+    )
+
+    result, message = _run_thread_stress_script("raw regex", script)
 
     if result.returncode == 0:
         pytest.fail("raw regex unexpectedly behaved thread-safely\n" + message)
@@ -90,3 +113,50 @@ for thread in threads:
         sys.stderr.flush()
 
     pytest.fail(message)
+
+
+@pytest.mark.parametrize(
+    "label, imports, setup_code",
+    (
+        (
+            "stdlib re",
+            "import re",
+            """
+            def match_once():
+                return re.match(pattern_text, text_to_match)
+            """,
+        ),
+        (
+            "pcre2",
+            "import pcre2",
+            """
+            compiled = pcre2.compile(pattern_text, jit=False)
+
+            def match_once():
+                return compiled.match(text_to_match)
+            """,
+        ),
+        (
+            "pcre2 (jit)",
+            "import pcre2",
+            """
+            compiled = pcre2.compile(pattern_text, jit=True)
+
+            def match_once():
+                return compiled.match(text_to_match)
+            """,
+        ),
+    ),
+)
+
+# re.match is thread safe even with internal caching compiled regex
+# pcre does not have caching so it is thread safe
+def test_threaded_engine_regressions(label: str, imports: str, setup_code: str):
+    if "pcre2" in imports:
+        pytest.importorskip("pcre2")
+
+    script = _thread_stress_script(imports=imports, setup_code=setup_code)
+    result, message = _run_thread_stress_script(label, script)
+
+    if result.returncode != 0:
+        pytest.fail(f"{label} thread stress failed, return code = {result}\n " + message)
