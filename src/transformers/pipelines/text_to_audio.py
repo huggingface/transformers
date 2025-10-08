@@ -81,7 +81,7 @@ class TextToAudioPipeline(Pipeline):
     """
 
     # Introducing the processor at load time for new behaviour
-    _load_processor = True
+    _load_processor = False
 
     _pipeline_calls_generate = True
     _load_image_processor = False
