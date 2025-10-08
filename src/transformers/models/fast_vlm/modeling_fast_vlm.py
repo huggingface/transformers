@@ -66,6 +66,21 @@ class FastVlmMultiModalProjector(nn.Module):
         return hidden_states
 
 
+@auto_docstring
+class FastVlmPreTrainedModel(PreTrainedModel):
+    config: FastVlmConfig
+    base_model_prefix = ""
+    supports_gradient_checkpointing = True
+    _skip_keys_device_placement = "past_key_values"
+
+    _supports_flash_attn = True
+    _supports_sdpa = True
+
+    _can_compile_fullgraph = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
+
+
 @dataclass
 @auto_docstring(
     custom_intro="""
@@ -86,21 +101,6 @@ class FastVlmModelOutputWithPast(BaseModelOutputWithPast):
     """
 
     image_hidden_states: Optional[torch.FloatTensor] = None
-
-
-@auto_docstring
-class FastVlmPreTrainedModel(PreTrainedModel):
-    config: FastVlmConfig
-    base_model_prefix = ""
-    supports_gradient_checkpointing = True
-    _skip_keys_device_placement = "past_key_values"
-
-    _supports_flash_attn = True
-    _supports_sdpa = True
-
-    _can_compile_fullgraph = True
-    _supports_flex_attn = True
-    _supports_attention_backend = True
 
 
 @auto_docstring(
@@ -168,7 +168,7 @@ class FastVlmModel(FastVlmPreTrainedModel):
             )
 
         if (isinstance(vision_feature_layer, int) and vision_feature_layer >= 0) or any(
-            [layer >= 0 for layer in vision_feature_layer]
+            layer >= 0 for layer in vision_feature_layer
         ):
             raise ValueError(f"Only negative layer values are supported. Got {vision_feature_layer}")
 

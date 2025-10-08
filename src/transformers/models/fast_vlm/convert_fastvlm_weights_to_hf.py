@@ -14,26 +14,28 @@
 import argparse
 import glob
 import os
+import re
 
+import requests
 import torch
 from huggingface_hub import snapshot_download
+from PIL import Image
 from safetensors import safe_open
-import re
 
 from transformers import (
     AddedToken,
     AutoConfig,
     AutoTokenizer,
+    CLIPImageProcessor,
     FastVlmConfig,
     FastVlmForConditionalGeneration,
     LlavaProcessor,
-    CLIPImageProcessor,
 )
 
-from PIL import Image
-import requests
 
-os.environ["TIMM_FUSED_ATTN"] = "0" # to avoid logits diverging, needed because the original implementation uses regular (not fused) atteniton
+os.environ["TIMM_FUSED_ATTN"] = (
+    "0"  # to avoid logits diverging, needed because the original implementation uses regular (not fused) atteniton
+)
 
 KEYS_TO_MODIFY_MAPPING = {
     "model.vision_tower.vision_tower.model": "model.vision_tower.timm_model",
@@ -51,6 +53,7 @@ KEYS_TO_MODIFY_MAPPING = {
     "lkb_reparam": "reparam_conv",
 }
 
+
 def map_to_stage(number):
     number = int(number)
     if number == 0:
@@ -63,6 +66,7 @@ def map_to_stage(number):
         return 3
     if number in {8, 9, 10}:
         return 4
+
 
 def load_original_state_dict(model_id):
     directory_path = snapshot_download(repo_id=model_id, allow_patterns=["*.safetensors"])
@@ -77,6 +81,7 @@ def load_original_state_dict(model_id):
     if "model.vision_tower.vision_tower.model.head.proj" in original_state_dict:
         del original_state_dict["model.vision_tower.vision_tower.model.head.proj"]
     return original_state_dict
+
 
 def convert_state_dict_to_hf(state_dict):
     new_state_dict = {}
@@ -136,18 +141,19 @@ def convert_fastvlm_to_hf(text_model_id, vision_model_id, output_hub_path, old_s
 
     tokenizer = AutoTokenizer.from_pretrained(
         text_model_id,
-        chat_template="{% for message in messages %}{% if loop.first and messages[0]['role'] != 'system' %}{{ '<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n' }}{% endif %}{{'<|im_start|>' + message['role'] + '\n'}}{# Render all images first #}{% for content in message['content'] | selectattr('type', 'equalto', 'image') %}{{ '<image>' }}{% endfor %}{# Render all text next #}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{{ '\n' + content['text'] }}{% endfor %}{{'<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}"
+        chat_template="{% for message in messages %}{% if loop.first and messages[0]['role'] != 'system' %}{{ '<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n' }}{% endif %}{{'<|im_start|>' + message['role'] + '\n'}}{# Render all images first #}{% for content in message['content'] | selectattr('type', 'equalto', 'image') %}{{ '<image>' }}{% endfor %}{# Render all text next #}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{{ '\n' + content['text'] }}{% endfor %}{{'<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}",
     )
 
     tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
-    image_processor = CLIPImageProcessor(crop_size={"height": 1024,
-                                                    "width": 1024},
-                                                  image_mean=[0.0, 0.0, 0.0],
-                                                  image_std=[1.0, 1.0, 1.0],
-                                                  size={"shortest_edge": 1024})
-    
+    image_processor = CLIPImageProcessor(
+        crop_size={"height": 1024, "width": 1024},
+        image_mean=[0.0, 0.0, 0.0],
+        image_std=[1.0, 1.0, 1.0],
+        size={"shortest_edge": 1024},
+    )
+
     processor = LlavaProcessor(tokenizer=tokenizer, image_processor=image_processor)
-    processor.patch_size = 64 # effective patch size (2^6)
+    processor.patch_size = 64  # effective patch size (2^6)
 
     model = FastVlmForConditionalGeneration(config)
 
@@ -174,20 +180,12 @@ def convert_fastvlm_to_hf(text_model_id, vision_model_id, output_hub_path, old_s
         dim=0,
     )
 
-    conversation = [
-        {
-        "role": "user",
-        "content": [
-            {"type": "text", "text": "What are these?"},
-            {"type": "image"}
-            ]
-        }
-    ]
+    conversation = [{"role": "user", "content": [{"type": "text", "text": "What are these?"}, {"type": "image"}]}]
     prompt = tokenizer.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
 
     image_file = "http://images.cocodataset.org/val2017/000000039769.jpg"
     raw_image = Image.open(requests.get(image_file, stream=True).raw)
-    inputs = processor(images=raw_image, text=prompt, return_tensors='pt').to("cuda")
+    inputs = processor(images=raw_image, text=prompt, return_tensors="pt").to("cuda")
     inputs = {k: (v.to(torch.bfloat16) if v.dtype == torch.float32 else v) for k, v in inputs.items()}
 
     model = model.cuda()
@@ -199,10 +197,10 @@ def convert_fastvlm_to_hf(text_model_id, vision_model_id, output_hub_path, old_s
     # otherwise numerical errors accumulate
     if output_hub_path == "KamilaMila/FastVLM-0.5B":
         expected_shape = torch.Size([1, 280, 152000])
-        expected_slice = torch.tensor([ 4.1250,  9.6875, 11.1875], device="cuda")
+        expected_slice = torch.tensor([4.1250, 9.6875, 11.1875], device="cuda")
     elif output_hub_path == "KamilaMila/FastVLM-1.5B":
         expected_shape = torch.Size([1, 280, 152000])
-        expected_slice = torch.tensor([ 3.3750, 11.5000, 11.8125], device="cuda")
+        expected_slice = torch.tensor([3.3750, 11.5000, 11.8125], device="cuda")
     elif output_hub_path == "KamilaMila/FastVLM-7B":
         expected_shape = torch.Size([1, 280, 152128])
         expected_slice = torch.tensor([3.8281, 9.0625, 7.9062], device="cuda")
@@ -214,6 +212,7 @@ def convert_fastvlm_to_hf(text_model_id, vision_model_id, output_hub_path, old_s
     model.push_to_hub(output_hub_path)
     processor.push_to_hub(output_hub_path)
     print("Successfully pushed to hub!")
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -242,6 +241,7 @@ def main():
     )
     args = parser.parse_args()
     convert_fastvlm_to_hf(args.text_model_id, args.vision_model_id, args.output_hub_path, args.old_state_dict_id)
+
 
 if __name__ == "__main__":
     main()
