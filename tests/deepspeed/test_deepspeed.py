@@ -755,7 +755,6 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
                 per_device_train_batch_size=4,
                 gradient_accumulation_steps=4,
             )
-            yes_grad_accum_trainer.model_accepts_loss_kwargs = False
             yes_grad_accum_result = yes_grad_accum_trainer.train()
             yes_grad_accum_loss = yes_grad_accum_result.training_loss
             yes_grad_accum_a = yes_grad_accum_trainer.model.a.item()
