@@ -23,7 +23,7 @@ from dataclasses import dataclass, is_dataclass
 from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
 from .. import __version__
-from ..configuration_utils import PretrainedConfig
+from ..configuration_utils import PreTrainedConfig
 from ..utils import (
     GENERATION_CONFIG_NAME,
     ExplicitEnum,
@@ -805,9 +805,6 @@ class GenerationConfig(PushToHubMixin):
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force to (re-)download the configuration files and override the cached versions if
                 they exist.
-            resume_download:
-                Deprecated and ignored. All downloads are now resumed by default when possible.
-                Will be removed in v5 of Transformers.
             proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -871,7 +868,6 @@ class GenerationConfig(PushToHubMixin):
         ```"""
         config_file_name = config_file_name if config_file_name is not None else GENERATION_CONFIG_NAME
 
-        resume_download = kwargs.pop("resume_download", None)
         proxies = kwargs.pop("proxies", None)
         use_auth_token = kwargs.pop("use_auth_token", None)
         subfolder = kwargs.pop("subfolder", "")
@@ -915,7 +911,6 @@ class GenerationConfig(PushToHubMixin):
                     cache_dir=cache_dir,
                     force_download=force_download,
                     proxies=proxies,
-                    resume_download=resume_download,
                     local_files_only=local_files_only,
                     token=token,
                     user_agent=user_agent,
@@ -1115,13 +1110,13 @@ class GenerationConfig(PushToHubMixin):
             writer.write(self.to_json_string(use_diff=use_diff))
 
     @classmethod
-    def from_model_config(cls, model_config: PretrainedConfig) -> "GenerationConfig":
+    def from_model_config(cls, model_config: PreTrainedConfig) -> "GenerationConfig":
         """
-        Instantiates a [`GenerationConfig`] from a [`PretrainedConfig`]. This function is useful to convert legacy
-        [`PretrainedConfig`] objects, which may contain generation parameters, into a stand-alone [`GenerationConfig`].
+        Instantiates a [`GenerationConfig`] from a [`PreTrainedConfig`]. This function is useful to convert legacy
+        [`PreTrainedConfig`] objects, which may contain generation parameters, into a stand-alone [`GenerationConfig`].
 
         Args:
-            model_config (`PretrainedConfig`):
+            model_config (`PreTrainedConfig`):
                 The model config that will be used to instantiate the generation config.
 
         Returns:

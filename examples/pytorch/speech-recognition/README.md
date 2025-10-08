@@ -66,7 +66,7 @@ The following command shows how to fine-tune [XLSR-Wav2Vec2](https://huggingface
 
 ```bash
 python run_speech_recognition_ctc.py \
-	--dataset_name="common_voice" \
+	--dataset_name="mozilla-foundation/common_voice_17_0" \
 	--model_name_or_path="facebook/wav2vec2-large-xlsr-53" \
 	--dataset_config_name="tr" \
 	--output_dir="./wav2vec2-common_voice-tr-demo" \
@@ -102,7 +102,7 @@ The following command shows how to fine-tune [XLSR-Wav2Vec2](https://huggingface
 ```bash
 torchrun \
 	--nproc_per_node 8 run_speech_recognition_ctc.py \
-	--dataset_name="common_voice" \
+	--dataset_name="mozilla-foundation/common_voice_17_0" \
 	--model_name_or_path="facebook/wav2vec2-large-xlsr-53" \
 	--dataset_config_name="tr" \
 	--output_dir="./wav2vec2-common_voice-tr-demo-dist" \
@@ -149,7 +149,7 @@ However, the `--shuffle_buffer_size` argument controls how many examples we can 
 ```bash
 **torchrun \
 	--nproc_per_node 4 run_speech_recognition_ctc_streaming.py \
-	--dataset_name="common_voice" \
+	--dataset_name="mozilla-foundation/common_voice_17_0" \
 	--model_name_or_path="facebook/wav2vec2-xls-r-300m" \
 	--tokenizer_name_or_path="anton-l/wav2vec2-tokenizer-turkish" \
 	--dataset_config_name="tr" \
@@ -314,7 +314,7 @@ below 27%.
 For an example run, you can have a look at [`patrickvonplaten/wav2vec2-common_voice-tr-mms-demo`](https://huggingface.co/patrickvonplaten/wav2vec2-common_voice-tr-mms-demo).
 
 
-If you'd like to train another adapter model with the same base model, you can simply re-use the same `--output_dir`,
+If you'd like to train another adapter model with the same base model, you can simply reuse the same `--output_dir`,
 but make sure to pass the `--output_dir` folder also to `--tokenizer_name_or_path` so that the vocabulary is not 
 overwritten but **extended**. Assuming you would like to train adapter weights on Swedish in addition to Turkish and save 
 the adapter weights in the same model repo, you can run:

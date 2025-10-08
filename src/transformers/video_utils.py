@@ -22,8 +22,8 @@ from io import BytesIO
 from typing import Callable, NewType, Optional, Union
 from urllib.parse import urlparse
 
+import httpx
 import numpy as np
-import requests
 
 from .image_transforms import PaddingMode, to_channel_dimension_format
 from .image_utils import ChannelDimension, infer_channel_dimension_format, is_valid_image
@@ -74,7 +74,7 @@ VideoInput = Union[
     Path,
     list[Path],
     list[list[Path]],
-]  # noqa
+]
 
 
 @dataclass
@@ -196,7 +196,9 @@ def make_batched_videos(videos) -> list[Union[np.ndarray, "torch.Tensor", "URL",
         return convert_pil_frames_to_video([videos])
     # only one frame passed, thus we unsqueeze time dim
     elif is_valid_image(videos):
-        return [np.array(videos)[None, ...]]
+        if isinstance(videos, PIL.Image.Image):
+            videos = np.array(videos)
+        return [videos[None, ...]]
     elif not isinstance(videos, list):
         raise ValueError(
             f"Invalid video input. Expected either a list of video frames or an input of 4 or 5 dimensions, but got"
@@ -683,7 +685,7 @@ def load_video(
         bytes_obj = buffer.getvalue()
         file_obj = BytesIO(bytes_obj)
     elif video.startswith("http://") or video.startswith("https://"):
-        file_obj = BytesIO(requests.get(video).content)
+        file_obj = BytesIO(httpx.get(video, follow_redirects=True).content)
     elif os.path.isfile(video):
         file_obj = video
     else:
@@ -692,7 +694,7 @@ def load_video(
     # can also load with decord, but not cv2/torchvision
     # both will fail in case of url links
     video_is_url = video.startswith("http://") or video.startswith("https://")
-    if video_is_url and backend in ["opencv"]:
+    if video_is_url and backend == "opencv":
         raise ValueError("If you are trying to load a video from URL, you cannot use 'opencv' as backend")
 
     if (

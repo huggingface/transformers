@@ -17,11 +17,11 @@
 from typing import Optional, Union
 
 import torch
+from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -36,24 +36,8 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_v2_available,
 )
-
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
-
-
-class JanusFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    r"""
-    min_size (`int`, *optional*, defaults to 14):
-        The minimum allowed size for the resized image. Ensures that neither the height nor width
-        falls below this value after resizing.
-    """
-
-    min_size: int
+from .image_processing_janus import JanusImageProcessorKwargs
 
 
 @auto_docstring
@@ -67,9 +51,9 @@ class JanusImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     do_pad = True
-    valid_kwargs = JanusFastImageProcessorKwargs
+    valid_kwargs = JanusImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[JanusFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[JanusImageProcessorKwargs]):
         if kwargs.get("image_mean") is None:
             background_color = (127, 127, 127)
         else:

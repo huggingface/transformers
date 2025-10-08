@@ -21,7 +21,7 @@ import torch.nn.init as init
 from torch import nn
 
 from ...activations import ACT2CLS
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...image_transforms import corners_to_center_format
 from ...utils import is_torchdynamo_compiling, logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
@@ -48,13 +48,13 @@ logger = logging.get_logger(__name__)
 
 # TODO: Attribute map assignment logic should be fixed in modular
 # as well as super() call parsing because otherwise we cannot re-write args after initialization
-class DFineConfig(PretrainedConfig):
+class DFineConfig(PreTrainedConfig):
     """
     This is the configuration class to store the configuration of a [`DFineModel`]. It is used to instantiate a D-FINE
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of D-FINE-X-COCO "[ustc-community/dfine-xlarge-coco"](https://huggingface.co/ustc-community/dfine-xlarge-coco").
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         initializer_range (`float`, *optional*, defaults to 0.01):
@@ -432,12 +432,12 @@ class DFineConfig(PretrainedConfig):
         )
 
     @classmethod
-    def from_backbone_configs(cls, backbone_config: PretrainedConfig, **kwargs):
+    def from_backbone_configs(cls, backbone_config: PreTrainedConfig, **kwargs):
         """Instantiate a [`DFineConfig`] (or a derived class) from a pre-trained backbone model configuration and DETR model
         configuration.
 
             Args:
-                backbone_config ([`PretrainedConfig`]):
+                backbone_config ([`PreTrainedConfig`]):
                     The backbone configuration.
 
             Returns:

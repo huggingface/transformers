@@ -22,7 +22,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import (
@@ -67,8 +67,8 @@ class Phi4MultimodalVisionConfig(SiglipVisionConfig):
     configuration with the defaults will yield a similar configuration to that of the vision encoder of
     [microsoft/Phi-4-multimodal-instruct](https://huggingface.co/microsoft/Phi-4-multimodal-instruct) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 1152):
@@ -145,15 +145,15 @@ class Phi4MultimodalVisionConfig(SiglipVisionConfig):
         self.feature_layer = feature_layer
 
 
-class Phi4MultimodalAudioConfig(PretrainedConfig):
+class Phi4MultimodalAudioConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Phi4MultimodalAudioModel`]. It is used to instantiate a
     Phi4Multimodal audio encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the audio encoder of
     [microsoft/Phi-4-multimodal-instruct](https://huggingface.co/microsoft/Phi-4-multimodal-instruct) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 1024):
@@ -273,7 +273,7 @@ class Phi4MultimodalAudioConfig(PretrainedConfig):
         if time_reduction % 2 != 0:
             raise ValueError("`time_reduction` should be a multiple of 2!")
         length = input_size
-        for _ in range(int(math.log(time_reduction, 2))):
+        for _ in range(int(math.log2(time_reduction))):
             length = math.floor((length - 1) / 2 + 1)
         self.nemo_final_size = length
 
@@ -285,8 +285,8 @@ class Phi4MultimodalConfig(Phi3Config):
     with the defaults will yield a similar configuration to that of the
     [microsoft/Phi-4-multimodal-instruct](https://huggingface.co/microsoft/Phi-4-multimodal-instruct) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 200064):
@@ -672,7 +672,7 @@ class Phi4MultimodalVisionModel(Phi4MultimodalVisionPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.embeddings.patch_embedding
 
-    @check_model_inputs
+    @check_model_inputs(tie_last_hidden_states=False)
     def forward(
         self,
         pixel_values,
@@ -1028,7 +1028,7 @@ class Phi4MultimodalAudioNemoConvSubsampling(torch.nn.Module):
     def __init__(self, config: Phi4MultimodalAudioConfig):
         super().__init__()
         self.subsampling_factor = config.time_reduction
-        self.sampling_num = int(math.log(self.subsampling_factor, 2))
+        self.sampling_num = int(math.log2(self.subsampling_factor))
         self.act_fn = ACT2FN[config.nemo_activation]
         conv_channels = config.nemo_conv_channels
 
@@ -1472,7 +1472,7 @@ class Phi4MultimodalModel(Phi3Model):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs()
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

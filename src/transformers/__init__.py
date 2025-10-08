@@ -59,7 +59,7 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 _import_structure = {
     "audio_utils": [],
     "commands": [],
-    "configuration_utils": ["PretrainedConfig"],
+    "configuration_utils": ["PreTrainedConfig", "PretrainedConfig"],
     "convert_slow_tokenizers_checkpoints_to_fast": [],
     "data": [
         "DataProcessor",
@@ -225,7 +225,6 @@ _import_structure = {
         "is_py3nvml_available",
         "is_pyctcdecode_available",
         "is_sacremoses_available",
-        "is_safetensors_available",
         "is_scipy_available",
         "is_sentencepiece_available",
         "is_sklearn_available",
@@ -266,6 +265,7 @@ _import_structure = {
         "VptqConfig",
     ],
     "video_utils": [],
+    "utils.kernel_config": ["KernelConfig"],
 }
 
 # tokenizers-backed objects
@@ -370,7 +370,6 @@ else:
         "OffloadedStaticCache",
         "QuantizedCache",
         "QuantoQuantizedCache",
-        "SinkCache",
         "SlidingWindowCache",
         "StaticCache",
     ]
@@ -390,12 +389,7 @@ else:
             "AlternatingCodebooksLogitsProcessor",
             "BayesianDetectorConfig",
             "BayesianDetectorModel",
-            "BeamScorer",
             "ClassifierFreeGuidanceLogitsProcessor",
-            "ConstrainedBeamSearchScorer",
-            "Constraint",
-            "ConstraintListState",
-            "DisjunctiveConstraint",
             "EncoderNoRepeatNGramLogitsProcessor",
             "EncoderRepetitionPenaltyLogitsProcessor",
             "EosTokenCriteria",
@@ -416,7 +410,6 @@ else:
             "MinPLogitsWarper",
             "NoBadWordsLogitsProcessor",
             "NoRepeatNGramLogitsProcessor",
-            "PhrasalConstraint",
             "PrefixConstrainedLogitsProcessor",
             "RepetitionPenaltyLogitsProcessor",
             "SequenceBiasLogitsProcessor",
@@ -473,7 +466,6 @@ else:
         "prune_layer",
         "infer_device",
     ]
-    _import_structure["sagemaker"] = []
     _import_structure["time_series_utils"] = []
     _import_structure["trainer"] = ["Trainer"]
     _import_structure["trainer_pt_utils"] = ["torch_distributed_zero_first"]
@@ -496,12 +488,12 @@ if TYPE_CHECKING:
     from .cache_utils import QuantizedCache as QuantizedCache
     from .cache_utils import QuantoQuantizedCache as QuantoQuantizedCache
     from .cache_utils import QuantoQuantizedLayer as QuantoQuantizedLayer
-    from .cache_utils import SinkCache as SinkCache
     from .cache_utils import SlidingWindowCache as SlidingWindowCache
     from .cache_utils import SlidingWindowLayer as SlidingWindowLayer
     from .cache_utils import StaticCache as StaticCache
     from .cache_utils import StaticLayer as StaticLayer
     from .cache_utils import StaticSlidingWindowLayer as StaticSlidingWindowLayer
+    from .configuration_utils import PreTrainedConfig as PreTrainedConfig
     from .configuration_utils import PretrainedConfig as PretrainedConfig
     from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS as SLOW_TO_FAST_CONVERTERS
     from .convert_slow_tokenizer import convert_slow_tokenizer as convert_slow_tokenizer
@@ -559,13 +551,8 @@ if TYPE_CHECKING:
     from .generation import AsyncTextIteratorStreamer as AsyncTextIteratorStreamer
     from .generation import BayesianDetectorConfig as BayesianDetectorConfig
     from .generation import BayesianDetectorModel as BayesianDetectorModel
-    from .generation import BeamScorer as BeamScorer
     from .generation import ClassifierFreeGuidanceLogitsProcessor as ClassifierFreeGuidanceLogitsProcessor
     from .generation import CompileConfig as CompileConfig
-    from .generation import ConstrainedBeamSearchScorer as ConstrainedBeamSearchScorer
-    from .generation import Constraint as Constraint
-    from .generation import ConstraintListState as ConstraintListState
-    from .generation import DisjunctiveConstraint as DisjunctiveConstraint
     from .generation import EncoderNoRepeatNGramLogitsProcessor as EncoderNoRepeatNGramLogitsProcessor
     from .generation import EncoderRepetitionPenaltyLogitsProcessor as EncoderRepetitionPenaltyLogitsProcessor
     from .generation import EosTokenCriteria as EosTokenCriteria
@@ -587,7 +574,6 @@ if TYPE_CHECKING:
     from .generation import MinPLogitsWarper as MinPLogitsWarper
     from .generation import NoBadWordsLogitsProcessor as NoBadWordsLogitsProcessor
     from .generation import NoRepeatNGramLogitsProcessor as NoRepeatNGramLogitsProcessor
-    from .generation import PhrasalConstraint as PhrasalConstraint
     from .generation import PrefixConstrainedLogitsProcessor as PrefixConstrainedLogitsProcessor
     from .generation import RepetitionPenaltyLogitsProcessor as RepetitionPenaltyLogitsProcessor
     from .generation import SequenceBiasLogitsProcessor as SequenceBiasLogitsProcessor
@@ -763,7 +749,6 @@ if TYPE_CHECKING:
     from .utils import is_py3nvml_available as is_py3nvml_available
     from .utils import is_pyctcdecode_available as is_pyctcdecode_available
     from .utils import is_sacremoses_available as is_sacremoses_available
-    from .utils import is_safetensors_available as is_safetensors_available
     from .utils import is_sklearn_available as is_sklearn_available
     from .utils import is_torch_hpu_available as is_torch_hpu_available
     from .utils import is_torch_mlu_available as is_torch_mlu_available
@@ -772,7 +757,7 @@ if TYPE_CHECKING:
     from .utils import is_torch_npu_available as is_torch_npu_available
     from .utils import is_torch_xla_available as is_torch_xla_available
     from .utils import is_torch_xpu_available as is_torch_xpu_available
-    from .utils import logging as logging
+    from .utils.kernel_config import KernelConfig as KernelConfig
 
     # bitsandbytes config
     from .utils.quantization_config import AqlmConfig as AqlmConfig
@@ -794,7 +779,6 @@ if TYPE_CHECKING:
     from .utils.quantization_config import TorchAoConfig as TorchAoConfig
     from .utils.quantization_config import VptqConfig as VptqConfig
     from .video_processing_utils import BaseVideoProcessor as BaseVideoProcessor
-
 else:
     import sys
 

@@ -23,7 +23,7 @@ import torch.nn.functional as F
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...modeling_outputs import Seq2SeqLMOutput, Seq2SeqModelOutput
@@ -45,14 +45,14 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-class Florence2VisionConfig(PretrainedConfig):
+class Florence2VisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Florence2VisionModel`]. It is used to instantiate a Florence2VisionModel
     according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Florence2VisionModel architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         in_channels (`int`, *optional*, defaults to 3):
@@ -153,7 +153,7 @@ class Florence2VisionConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
 
-class Florence2Config(PretrainedConfig):
+class Florence2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Florence2ForConditionalGeneration`]. It is used to instantiate an
     Florence-2 model according to the specified arguments, defining the model architecture.
@@ -161,8 +161,8 @@ class Florence2Config(PretrainedConfig):
     Instantiating a configuration with the defaults will yield a similar configuration to that of the Florence-2
     [microsoft/Florence-2-base](https://huggingface.co/microsoft/Florence-2-base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`dict`, *optional*):
@@ -1545,11 +1545,8 @@ class Florence2Model(LlavaModel):
         input_ids: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
-        decoder_head_mask: Optional[torch.Tensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         encoder_outputs: Optional[list[torch.FloatTensor]] = None,
         past_key_values: Optional[Cache] = None,
@@ -1583,7 +1580,6 @@ class Florence2Model(LlavaModel):
 
             encoder_outputs = self.language_model.encoder(
                 attention_mask=attention_mask,
-                head_mask=head_mask,
                 inputs_embeds=inputs_embeds,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
@@ -1600,8 +1596,6 @@ class Florence2Model(LlavaModel):
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_outputs[0],
             encoder_attention_mask=attention_mask,
-            head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
             inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
@@ -1652,9 +1646,6 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
         attention_mask: Optional[torch.Tensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        decoder_head_mask: Optional[torch.Tensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[list[torch.FloatTensor]] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -1717,9 +1708,6 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
             decoder_input_ids=decoder_input_ids,
             encoder_outputs=encoder_outputs,
             decoder_attention_mask=decoder_attention_mask,
-            head_mask=head_mask,
-            decoder_head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,

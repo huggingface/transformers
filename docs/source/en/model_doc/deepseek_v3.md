@@ -64,7 +64,7 @@ print(time.time()-start)
 
 This generated:
 
-``````
+``````text
 <｜Assistant｜><think>
 Okay, the user wants to demonstrate how chat templating works. Let me break down what that means. Chat templating is about structuring the conversation data, especially for models that need specific input formats. Maybe they're referring to something like how messages are formatted with roles (user, assistant, system) in APIs like OpenAI.
 
@@ -138,7 +138,7 @@ Applying the template to our `messages` list would produce:
 
 This tells the model:  
 1. The conversation history (user/assistant turns).  
-2. The model’s turn to generate a response (`<|assistant|>` at the end).  
+2. The model's turn to generate a response (`<|assistant|>` at the end).  
 
 ---
 

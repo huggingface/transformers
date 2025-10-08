@@ -15,7 +15,7 @@ import warnings
 from io import BytesIO
 from typing import Any, Optional, Union, overload
 
-import requests
+import httpx
 
 from ..utils import (
     add_end_docstrings,
@@ -142,7 +142,7 @@ class VideoClassificationPipeline(Pipeline):
             num_frames = self.model.config.num_frames
 
         if video.startswith("http://") or video.startswith("https://"):
-            video = BytesIO(requests.get(video).content)
+            video = BytesIO(httpx.get(video, follow_redirects=True).content)
 
         container = av.open(video)
 

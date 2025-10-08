@@ -126,7 +126,6 @@ class MllamaForCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
 
     all_model_classes = (MllamaForCausalLM,) if is_torch_available() else ()
     test_pruning = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = MllamaText2TextModelTester(self)
@@ -281,7 +280,6 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     )
     pipeline_model_mapping = {"image-text-to-text": MllamaForConditionalGeneration} if is_torch_available() else ()
     test_pruning = False
-    test_head_masking = False
     test_torchscript = False
     _is_composite = True
 

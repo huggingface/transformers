@@ -41,7 +41,6 @@ from ....utils import (
     logging,
     replace_return_docstrings,
 )
-from ....utils.deprecation import deprecate_kwarg
 from .configuration_mega import MegaConfig
 
 
@@ -1172,7 +1171,6 @@ class MegaBlock(nn.Module):
         else:
             self.cross_attn = None
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

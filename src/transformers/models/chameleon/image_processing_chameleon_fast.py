@@ -19,16 +19,12 @@ from typing import Optional
 import numpy as np
 import PIL
 import torch
+from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
-from ...utils import auto_docstring, is_torchvision_v2_available, logging
+from ...utils import auto_docstring, logging
 
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
 
 logger = logging.get_logger(__name__)
 

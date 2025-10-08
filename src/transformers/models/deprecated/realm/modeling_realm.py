@@ -34,7 +34,6 @@ from ....modeling_outputs import (
 from ....modeling_utils import PreTrainedModel
 from ....pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ....utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
-from ....utils.deprecation import deprecate_kwarg
 from .configuration_realm import RealmConfig
 
 
@@ -139,12 +138,10 @@ class RealmSelfAttention(nn.Module):
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -225,10 +222,6 @@ class RealmSelfAttention(nn.Module):
         # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
 
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
-
         context_layer = torch.matmul(attention_probs, value_layer)
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
@@ -288,12 +281,10 @@ class RealmAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -302,7 +293,6 @@ class RealmAttention(nn.Module):
         self_outputs = self.self(
             hidden_states,
             attention_mask,
-            head_mask,
             encoder_hidden_states,
             encoder_attention_mask,
             past_key_values,
@@ -357,12 +347,10 @@ class RealmLayer(GradientCheckpointingLayer):
         self.intermediate = RealmIntermediate(config)
         self.output = RealmOutput(config)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -373,7 +361,6 @@ class RealmLayer(GradientCheckpointingLayer):
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask,
-            head_mask,
             output_attentions=output_attentions,
             past_key_values=self_attn_past_key_value,
         )
@@ -399,7 +386,6 @@ class RealmLayer(GradientCheckpointingLayer):
             cross_attention_outputs = self.crossattention(
                 attention_output,
                 attention_mask,
-                head_mask,
                 encoder_hidden_states,
                 encoder_attention_mask,
                 cross_attn_past_key_value,
@@ -440,7 +426,6 @@ class RealmEncoder(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -465,12 +450,9 @@ class RealmEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-
             layer_outputs = layer_module(
                 hidden_states,
                 attention_mask,
-                layer_head_mask,
                 encoder_hidden_states,
                 encoder_attention_mask,
                 past_key_values[i] if past_key_values is not None else None,
@@ -807,12 +789,6 @@ REALM_INPUTS_DOCSTRING = r"""
             config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
         inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
@@ -903,7 +879,6 @@ class RealmBertModel(RealmPreTrainedModel):
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
-        head_mask=None,
         inputs_embeds=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
@@ -966,13 +941,6 @@ class RealmBertModel(RealmPreTrainedModel):
         else:
             encoder_extended_attention_mask = None
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
         embedding_output = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
@@ -983,7 +951,6 @@ class RealmBertModel(RealmPreTrainedModel):
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
-            head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_extended_attention_mask,
             past_key_values=past_key_values,
@@ -1036,7 +1003,6 @@ class RealmEmbedder(RealmPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1068,7 +1034,6 @@ class RealmEmbedder(RealmPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1122,7 +1087,6 @@ class RealmScorer(RealmPreTrainedModel):
         candidate_attention_mask: Optional[torch.FloatTensor] = None,
         candidate_token_type_ids: Optional[torch.LongTensor] = None,
         candidate_inputs_embeds: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1196,7 +1160,6 @@ class RealmScorer(RealmPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1213,7 +1176,6 @@ class RealmScorer(RealmPreTrainedModel):
             attention_mask=flattened_attention_mask,
             token_type_ids=flattened_token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=candidate_inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1274,7 +1236,6 @@ class RealmKnowledgeAugEncoder(RealmPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         relevance_score: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -1336,7 +1297,6 @@ class RealmKnowledgeAugEncoder(RealmPreTrainedModel):
             attention_mask=flattened_attention_mask,
             token_type_ids=flattened_token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1411,7 +1371,6 @@ class RealmReader(RealmPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         relevance_score: Optional[torch.FloatTensor] = None,
         block_mask: Optional[torch.BoolTensor] = None,
@@ -1454,7 +1413,6 @@ class RealmReader(RealmPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,

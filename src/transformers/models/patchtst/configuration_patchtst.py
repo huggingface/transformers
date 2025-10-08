@@ -16,21 +16,21 @@
 
 from typing import Optional, Union
 
-from transformers.configuration_utils import PretrainedConfig
+from transformers.configuration_utils import PreTrainedConfig
 from transformers.utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class PatchTSTConfig(PretrainedConfig):
+class PatchTSTConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`PatchTSTModel`]. It is used to instantiate an
     PatchTST model according to the specified arguments, defining the model architecture.
     [ibm/patchtst](https://huggingface.co/ibm/patchtst) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         num_input_channels (`int`, *optional*, defaults to 1):

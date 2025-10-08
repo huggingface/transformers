@@ -28,7 +28,7 @@ from pathlib import Path
 from check_config_docstrings import get_checkpoint_from_config_class
 from datasets import load_dataset
 from get_test_info import get_model_to_tester_mapping, get_tester_classes_for_model
-from huggingface_hub import Repository, create_repo, hf_api, upload_folder
+from huggingface_hub import Repository, create_repo, hf_api, upload_folder  # TODO: remove Repository
 
 from transformers import (
     CONFIG_MAPPING,
@@ -389,7 +389,7 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
             # This is to avoid `T5EncoderOnlyModelTest` is used instead of `T5ModelTest`, which has
             # `is_encoder_decoder=False` and causes some pipeline tests failing (also failures in `Optimum` CI).
             # TODO: More fine grained control of the desired tester class.
-            model_tester_class = sorted(tester_classes, key=lambda x: (len(x.__name__), x.__name__))[0]
+            model_tester_class = min(tester_classes, key=lambda x: (len(x.__name__), x.__name__))
     except ModuleNotFoundError:
         error = f"Tiny config not created for {model_type} - cannot find the testing module from the model name."
         raise ValueError(error)
@@ -1047,8 +1047,8 @@ def build(config_class, models_to_create, output_dir):
     """Create all models for a certain model type.
 
     Args:
-        config_class (`PretrainedConfig`):
-            A subclass of `PretrainedConfig` that is used to determine `models_to_create`.
+        config_class (`PreTrainedConfig`):
+            A subclass of `PreTrainedConfig` that is used to determine `models_to_create`.
         models_to_create (`dict`):
             A dictionary containing the processor/model classes that we want to create the instances. These models are
             of the same model type which is associated to `config_class`.

@@ -146,7 +146,6 @@ class IJepaForImageClassification(IJepaPreTrainedModel, ViTForImageClassificatio
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         interpolate_pos_encoding: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -160,7 +159,6 @@ class IJepaForImageClassification(IJepaPreTrainedModel, ViTForImageClassificatio
 
         outputs: BaseModelOutputWithPooling = self.ijepa(
             pixel_values,
-            head_mask=head_mask,
             interpolate_pos_encoding=interpolate_pos_encoding,
             **kwargs,
         )
