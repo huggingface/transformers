@@ -2207,7 +2207,7 @@ class GenerationTesterMixin:
         prompt_length = getattr(self.model_tester, "encoder_seq_length", prompt_length)
         prompt_length = getattr(self.model_tester, "text_seq_length", prompt_length)
 
-        config = config.text_config if hasattr(config, "text_config") else config
+        config = config.get_text_config(decoder=True)
 
         generated_length = (
             output.sequences.shape[1] - 1 if config.is_encoder_decoder else output.sequences.shape[1] - prompt_length
@@ -2294,7 +2294,8 @@ class GenerationTesterMixin:
                 seq_length=cache_length,
                 config=config,
             )
-        else:
+        # xlnet has a weird list cache, which is returned even with `use_cache=False`...
+        elif "xlnet" not in config.__class__.__name__.lower():
             self.assertTrue(cache is None)
 
     def _check_scores(self, batch_size, scores, generated_length, config):
@@ -2408,6 +2409,9 @@ class GenerationTesterMixin:
             # For cross attention cache, the seq_length depends on the model, so we remove that dim
             self._check_past_key_values_for_generate(batch_size, past_key_values.cross_attention_cache, None, config)
             return
+
+        # Use the correct config
+        config = config.get_text_config(decoder=True)
 
         # (batch, kv heads, seq_length, head_dim)
         num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)

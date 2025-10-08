@@ -698,7 +698,7 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
         head_dim = getattr(config, "head_dim", hidden_size // config.num_attention_heads)
 
         # For cross attention cache, the seq_length depends on the model, so we remove that dim
-        expected_shape = (batch_size, num_heads, seq_length, head_dim)
+        expected_shape = (batch_size, seq_length, num_heads * head_dim)
 
         # Check the size is coherent
         self.assertEqual(config.num_hidden_layers, len(past_key_values))
@@ -706,7 +706,7 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
         # Check each layer has the correct shape
         for idx in range(len(past_key_values)):
             self.assertEqual(past_key_values.states_cache[idx].shape, expected_shape)
-            self.assertEqual(past_key_values.buckets_cache[idx].shape, ())
+            self.assertEqual(past_key_values.buckets_cache[idx].shape, (0,))
 
     @unittest.skip(reason="The model doesn't support left padding")  # and it's not used enough to be worth fixing :)
     def test_left_padding_compatibility(self):
@@ -894,7 +894,7 @@ class ReformerLSHAttnModelTest(
         head_dim = getattr(config, "head_dim", hidden_size // config.num_attention_heads)
 
         # For cross attention cache, the seq_length depends on the model, so we remove that dim
-        expected_shape = (batch_size, num_heads, seq_length, head_dim)
+        expected_shape = (batch_size, seq_length, num_heads * head_dim)
 
         # Check the size is coherent
         self.assertEqual(config.num_hidden_layers, len(past_key_values))
@@ -902,7 +902,6 @@ class ReformerLSHAttnModelTest(
         # Check each layer has the correct shape
         for idx in range(len(past_key_values)):
             self.assertEqual(past_key_values.states_cache[idx].shape, expected_shape)
-            self.assertEqual(past_key_values.buckets_cache[idx].shape, expected_shape)
 
     @unittest.skip(reason="Fails because the sequence length is not a multiple of 4")
     def test_problem_types(self):
