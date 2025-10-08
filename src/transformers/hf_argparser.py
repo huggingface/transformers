@@ -176,9 +176,12 @@ class HfArgumentParser(ArgumentParser):
                     f" Problem encountered in field '{field.name}'."
                 )
             if type(None) not in field.type.__args__:
-                # filter `str` in Union
-                field.type = field.type.__args__[0] if field.type.__args__[1] is str else field.type.__args__[1]
-                origin_type = getattr(field.type, "__origin__", field.type)
+                if len(field.type.__args__) > 2:
+                    origin_type = str
+                else:
+                    # filter `str` in Union
+                    field.type = field.type.__args__[0] if field.type.__args__[1] is str else field.type.__args__[1]
+                    origin_type = getattr(field.type, "__origin__", field.type)
             elif bool not in field.type.__args__:
                 # filter `NoneType` in Union (except for `Union[bool, NoneType]`)
                 field.type = (
