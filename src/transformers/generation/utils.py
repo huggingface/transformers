@@ -1753,11 +1753,9 @@ class GenerationMixin(ContinuousMixin):
                     if key == "cache_implementation" and model_generation_config.cache_implementation == "hybrid":
                         continue
                     global_default_value = getattr(global_default_generation_config, key, None)
-                    has_custom_gen_config_value = hasattr(generation_config, key)
                     custom_gen_config_value = getattr(generation_config, key, None)
                     if (
-                        (not has_custom_gen_config_value)
-                        and custom_gen_config_value == global_default_value
+                        custom_gen_config_value == global_default_value
                         and model_gen_config_value != global_default_value
                     ):
                         modified_values[key] = model_gen_config_value
