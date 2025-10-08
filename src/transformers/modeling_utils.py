@@ -2520,7 +2520,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         return True
 
     def _check_and_adjust_attn_implementation(
-        self, attn_implementation: Optional[str], is_init_check: bool = False, use_paged=False
+        self, attn_implementation: Optional[str], is_init_check: bool = False
     ) -> str:
         """
         Check that the `attn_implementation` exists and is supported by the models, and try to get the kernel from hub if
@@ -2556,7 +2556,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if is_kernel(applicable_attn_implementation):
             try:
-                load_and_register_kernel(applicable_attn_implementation, use_paged)
+                load_and_register_kernel(applicable_attn_implementation)
                 # log that we used kernel fallback if successful
                 if attn_implementation.startswith("flash_attention"):
                     logger.warning_once(
@@ -2575,16 +2575,19 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 raise e
         else:
             applicable_attn_implementation = self.get_correct_attn_implementation(
-                applicable_attn_implementation, is_init_check
+                applicable_attn_implementation, is_init_check, use_paged
             )
             # preload flash attention here to allow compile with fullgraph
             if applicable_attn_implementation.startswith("flash_attention"):
                 lazy_import_flash_attention(applicable_attn_implementation, force_import=True)
         return applicable_attn_implementation
 
-    def get_correct_attn_implementation(self, requested_attention: Optional[str], is_init_check: bool = False) -> str:
+    def get_correct_attn_implementation(
+        self, requested_attention: Optional[str], is_init_check: bool = False, use_paged=False
+    ) -> str:
         applicable_attention = "sdpa" if requested_attention is None else requested_attention
-
+        if use_paged:
+            applicable_attention = "paged|" + applicable_attention
         if applicable_attention not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
             message = (
                 f'Specified `attn_implementation="{applicable_attention}"` is not supported. The only possible arguments are '
@@ -2635,7 +2638,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # If no attention layer, assume `True`. Most probably a multimodal model or inherits from existing models
             return True
 
-    def set_attn_implementation(self, attn_implementation: Union[str, dict], use_paged=False):
+    def set_attn_implementation(self, attn_implementation: Union[str, dict]):
         """
         Set the requested `attn_implementation` for this model.
 
@@ -2661,7 +2664,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 )
             else:
                 requested_implementation = self._check_and_adjust_attn_implementation(
-                    requested_implementation, is_init_check=False, use_paged=use_paged
+                    requested_implementation, is_init_check=False
                 )
                 # Apply the change (on the internal attr, to avoid setting it recursively)
                 self.config._attn_implementation_internal = requested_implementation

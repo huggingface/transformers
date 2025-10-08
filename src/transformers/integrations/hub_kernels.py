@@ -168,19 +168,21 @@ def is_kernel(attn_implementation: Optional[str]) -> bool:
     )
 
 
-def load_and_register_kernel(attn_implementation: str, use_paged=False) -> None:
-    """Load and register the kernel associated to `attn_implementation`."""
+def load_and_register_kernel(attn_implementation: str, att_wrapper=None) -> None:
+    """
+    Load and register the kernel associated to `attn_implementation`.
+
+    Args:
+        attn_implementation: A string, usually a kernel repo like "kernels-community/flash-mla".
+        attn_wrapper: a callable for the wrapper around the attention implementation. In `transformers` we
+            have a wrapper around the `flash_attn_var_len` call, and the same goes for `sdpa` and `eager`.
+            They just prepare the arguments properly. This is mostly used for continious batching, where we
+            want the `paged` wrapper, which calls the paged cache.
+    """
     from ..masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
     from ..modeling_utils import ALL_ATTENTION_FUNCTIONS
 
-    attention_wrapper = None
-    # FIXME: @ArthurZucker this is dirty, did not want to do a lof of extra work
-    actual_attn_name = attn_implementation
-    if use_paged:
-        attention_wrapper = f"paged|{attn_implementation}"
-        # `transformers` has wrapper for sdpa, paged, flash, flex etc.
-        attention_wrapper = ALL_ATTENTION_FUNCTIONS.get(attention_wrapper)
-
+    actual_attn_name = attn_implementation.split("|")[1] if "|" in attn_implementation else attn_implementation
     # Extract repo_id and kernel_name from the string
     if ":" in actual_attn_name:
         repo_id, kernel_name = actual_attn_name.split(":")
@@ -201,7 +203,7 @@ def load_and_register_kernel(attn_implementation: str, use_paged=False) -> None:
         raise ValueError(f"An error occurred while trying to load from '{repo_id}': {e}.")
     # correctly wrap the kernel
     if hasattr(kernel, "flash_attn_varlen_func"):
-        if attention_wrapper is None:
+        if att_wrapper is not None:
             attention_wrapper = flash_attention_forward
         kernel_function = partial(attention_wrapper, implementation=kernel)
         lazy_import_flash_attention(kernel, force_import=True)

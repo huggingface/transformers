@@ -27,6 +27,9 @@ from tqdm import tqdm
 
 from ...configuration_utils import PreTrainedConfig
 from ...generation.configuration_utils import GenerationConfig
+from ...integrations.flash_paged import paged_attention_forward
+from ...integrations.hub_kernels import load_and_register_kernel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...utils.logging import logging
 from ...utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
 from .cache import PagedAttentionCache
@@ -607,7 +610,12 @@ class ContinuousBatchingManager:
             max_queue_size: Maximum size of the request queue (0 = unlimited)
             streaming: Whether to stream tokens as they are generated
         """
-        model.set_attn_implementation(model.config._attn_implementation, use_paged=True)
+        attn_implementation = f"paged|{model.config._attn_implementation}"
+        attn_wrapper = ALL_ATTENTION_FUNCTIONS.get(attn_implementation, None)
+        if attn_wrapper is None:
+            load_and_register_kernel(attn_wrapper, paged_attention_forward)
+
+        model.set_attn_implementation(attn_implementation)
         self.model = model.eval()
         generation_config = model.generation_config if generation_config is None else generation_config
         self.generation_config = generation_config
