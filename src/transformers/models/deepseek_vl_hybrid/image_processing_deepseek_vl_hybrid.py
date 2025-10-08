@@ -69,11 +69,11 @@ class DeepseekVLHybridImageProcessorKwargs(ImagesKwargs, total=False):
         number of channels in the image. Can be overridden by the `high_res_image_std` parameter in the `preprocess` method.
     """
 
-    min_size: Optional[int]
-    high_res_size: Optional[dict]
-    high_res_resample: Optional[Union["PILImageResampling", int]]
-    high_res_image_mean: Optional[Union[float, list[float], tuple[float, ...]]]
-    high_res_image_std: Optional[Union[float, list[float], tuple[float, ...]]]
+    min_size: int
+    high_res_size: dict
+    high_res_resample: Union["PILImageResampling", int]
+    high_res_image_mean: Union[float, list[float], tuple[float, ...]]
+    high_res_image_std: Union[float, list[float], tuple[float, ...]]
 
 
 class DeepseekVLHybridImageProcessor(BaseImageProcessor):

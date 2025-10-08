@@ -31,9 +31,9 @@ from ..auto import AutoTokenizer
 
 
 class AriaImagesKwargs(ImagesKwargs, total=False):
-    split_image: Optional[bool]
-    max_image_size: Optional[int]
-    min_image_size: Optional[int]
+    split_image: bool
+    max_image_size: int
+    min_image_size: int
 
 
 class AriaProcessorKwargs(ProcessingKwargs, total=False):
