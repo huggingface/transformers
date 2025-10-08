@@ -3524,7 +3524,7 @@ class GenerationMixin(ContinuousMixin):
             # Store scores, attentions and hidden_states when required
             # Assistant: modified to append one tuple element per token, as in the other generation methods.
             # ... after computing new_logits, next_token_logits, and valid_tokens
-            newly_added = n_matches + 1
+            newly_added = int(n_matches + 1)  # avoid tensor in-place operations
             decoder_attention_chunks = cross_attention_chunks = decoder_hidden_state_chunks = None
 
             if generate_output["output_attentions"]:
@@ -3948,6 +3948,9 @@ def _split_model_outputs(
             last_dim_size = cur_len if is_decoder_attention else layer_tensor.shape[-1]
             prompt_block += (layer_tensor[..., :cur_len, :last_dim_size],)
         outputs += (prompt_block,)
+        # The first iteration contains the prompt + 1 generated token, let's update the length variables accordingly
+        cur_len += 1
+        added_len -= 1
 
     for i in range(added_len):
         new_tuple = ()
