@@ -50,6 +50,7 @@ class FastVlmMultiModalProjector(nn.Module):
         total_hidden_size = 0
         for layer in layers:
             total_hidden_size += config.vision_config.hidden_size // (2 ** (-layer - 1))
+
         self.linear_1 = nn.Linear(
             total_hidden_size,
             config.text_config.hidden_size,
@@ -351,12 +352,7 @@ class FastVlmCausalLMOutputWithPast(ModelOutput):
     """
 )
 class FastVlmForConditionalGeneration(FastVlmPreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {
-        "^language_model.model": "model.language_model",
-        "^vision_tower": "model.vision_tower",
-        "^multi_modal_projector": "model.multi_modal_projector",
-        "^language_model.lm_head": "lm_head",
-    }
+    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: FastVlmConfig):
@@ -449,14 +445,16 @@ class FastVlmForConditionalGeneration(FastVlmPreTrainedModel, GenerationMixin):
         >>> import requests
         >>> from transformers import AutoProcessor, FastVlmForConditionalGeneration
 
-        >>> model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-7B")
-        >>> processor = AutoProcessor.from_pretrained("KamilaMila/FastVLM-7B")
+        >>> device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        >>> model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B").to(device)
+        >>> processor = AutoProcessor.from_pretrained("KamilaMila/FastVLM-0.5B")
 
         >>> prompt = "<|im_start|>user\n<image>\nWhat's the content of the image?<|im_end|>\n<|im_start|>assistant\n"
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> inputs = processor(images=image, text=prompt, return_tensors="pt")
+        >>> inputs = processor(images=image, text=prompt, return_tensors="pt").to(device)
 
         >>> # Generate
         >>> generated_ids = model.generate(**inputs, max_new_tokens=15)

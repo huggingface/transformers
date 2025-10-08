@@ -161,6 +161,7 @@ class FastVlmMultiModalProjector(LlavaMultiModalProjector):
         total_hidden_size = 0
         for layer in layers:
             total_hidden_size += config.vision_config.hidden_size // (2 ** (-layer - 1))
+            
         self.linear_1 = nn.Linear(
             total_hidden_size,
             config.text_config.hidden_size,
@@ -270,6 +271,7 @@ class FastVlmModel(LlavaModel):
 
 
 class FastVlmForConditionalGeneration(LlavaForConditionalGeneration):
+    _checkpoint_conversion_mapping = {}
     def forward(self, **super_kwargs):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -290,19 +292,22 @@ class FastVlmForConditionalGeneration(LlavaForConditionalGeneration):
         >>> from PIL import Image
         >>> import requests
         >>> from transformers import AutoProcessor, FastVlmForConditionalGeneration
+        >>> import torch
 
-        >>> model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-7B")
-        >>> processor = AutoProcessor.from_pretrained("KamilaMila/FastVLM-7B")
+        >>> device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        >>> model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B").to(device)
+        >>> processor = AutoProcessor.from_pretrained("KamilaMila/FastVLM-0.5B")
 
         >>> prompt = "<|im_start|>user\n<image>\nWhat's the content of the image?<|im_end|>\n<|im_start|>assistant\n"
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> inputs = processor(images=image, text=prompt, return_tensors="pt")
+        >>> inputs = processor(images=image, text=prompt, return_tensors="pt").to(device)
 
         >>> # Generate
         >>> generated_ids = model.generate(**inputs, max_new_tokens=15)
-        >>> processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        >>> print(processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0])
         ```"""
         super().forward(**super_kwargs)
 
