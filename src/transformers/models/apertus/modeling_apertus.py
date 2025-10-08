@@ -35,7 +35,6 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update, sta
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
 from .configuration_apertus import ApertusConfig
 
@@ -254,7 +253,6 @@ class ApertusAttention(nn.Module):
         self.q_norm = ApertusRMSNorm(self.head_dim, config.rms_norm_eps)
         self.k_norm = ApertusRMSNorm(self.head_dim, config.rms_norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -311,7 +309,6 @@ class ApertusDecoderLayer(GradientCheckpointingLayer):
         self.attention_layernorm = ApertusRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.feedforward_layernorm = ApertusRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

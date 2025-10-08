@@ -29,7 +29,6 @@ from ...modeling_rope_utils import RopeParameters, rope_config_validation, stand
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.deprecation import deprecate_kwarg
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
     Gemma2Attention,
@@ -361,7 +360,6 @@ class Gemma3Attention(Gemma2Attention):
         self.q_norm = Gemma3RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
         self.k_norm = Gemma3RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -424,14 +422,9 @@ class Gemma3DecoderLayer(GradientCheckpointingLayer):
         self.pre_feedforward_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("position_embeddings_global", version="4.60.0", new_name="position_embeddings")
-    @deprecate_kwarg("position_embeddings_local", version="4.60.0", new_name="position_embeddings")
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings_global: torch.Tensor = None,
-        position_embeddings_local: torch.Tensor = None,
         position_embeddings: torch.Tensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -444,13 +437,6 @@ class Gemma3DecoderLayer(GradientCheckpointingLayer):
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
-
-        # apply global RoPE to non-sliding layer only
-        if position_embeddings is None:
-            if self.self_attn.is_sliding:
-                position_embeddings = position_embeddings_local
-            else:
-                position_embeddings = position_embeddings_global
 
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,

@@ -24,7 +24,6 @@ from ...cache_utils import Cache
 from ...modeling_rope_utils import RopeParameters, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import logging
-from ...utils.deprecation import deprecate_kwarg
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
@@ -359,7 +358,6 @@ class DeepseekV2Attention(nn.Module):
         self.scaling = self.qk_head_dim ** (-0.5)
         self.rotary_emb = DeepseekV2RotaryEmbedding(config=config)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

@@ -204,7 +204,7 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         if is_torch_available()
         else {}
     )
-    test_pruning = False
+
     fx_compatible = False
 
     def setUp(self):
@@ -257,7 +257,7 @@ class ChameleonVision2SeqModelTest(ModelTesterMixin, GenerationTesterMixin, unit
         if is_torch_available()
         else {}
     )
-    test_pruning = False
+
     fx_compatible = False
 
     def setUp(self):

@@ -39,7 +39,6 @@ config_common_kwargs = {
     "output_attentions": True,
     "torchscript": True,
     "dtype": "float16",
-    "pruned_heads": {"a": 1},
     "tie_word_embeddings": False,
     "is_decoder": True,
     "cross_attention_hidden_size": 128,
