@@ -200,7 +200,6 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
         else {}
     )
 
-    test_pruning = False
     test_resize_embeddings = False
 
     def setUp(self):

@@ -192,7 +192,6 @@ class InternVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         if is_torch_available()
         else {}
     )
-    test_pruning = False
 
     def setUp(self):
         self.model_tester = InternVLVisionText2TextModelTester(self)

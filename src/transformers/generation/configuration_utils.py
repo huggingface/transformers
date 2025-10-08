@@ -151,8 +151,6 @@ class GenerationConfig(PushToHubMixin):
             our [cache documentation](https://huggingface.co/docs/transformers/en/kv_cache) for further information.
         cache_config (`dict`, *optional*, default to `None`):
             Arguments used in the key-value cache class can be passed in `cache_config`.
-        return_legacy_cache (`bool`, *optional*, default to `True`):
-            Whether to return the legacy or new format of the cache when `DynamicCache` is used by default.
 
         > Parameters for manipulation of the model output logits
 
@@ -349,7 +347,6 @@ class GenerationConfig(PushToHubMixin):
         self.cache_implementation = kwargs.pop("cache_implementation", None)
         self.cache_config = kwargs.pop("cache_config", None)
 
-        self.return_legacy_cache = kwargs.pop("return_legacy_cache", None)
         self.prefill_chunk_size = kwargs.pop("prefill_chunk_size", None)
 
         # Parameters for manipulation of the model output logits
@@ -634,7 +631,7 @@ class GenerationConfig(PushToHubMixin):
                 "You have set `use_cache` to `False`, but {cache_arg} is set to {cache_arg_value}. {cache_arg} will "
                 "have no effect."
             )
-            for arg_name in ("cache_implementation", "cache_config", "return_legacy_cache"):
+            for arg_name in ("cache_implementation", "cache_config"):
                 if getattr(self, arg_name) is not None:
                     minor_issues[arg_name] = no_cache_warning.format(
                         cache_arg=arg_name, cache_arg_value=getattr(self, arg_name)
