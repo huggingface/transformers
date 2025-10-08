@@ -168,7 +168,7 @@ def is_kernel(attn_implementation: Optional[str]) -> bool:
     )
 
 
-def load_and_register_kernel(attn_implementation: str, att_wrapper=None) -> None:
+def load_and_register_kernel(attn_implementation: str, attention_wrapper=None) -> None:
     """
     Load and register the kernel associated to `attn_implementation`.
 
@@ -203,7 +203,7 @@ def load_and_register_kernel(attn_implementation: str, att_wrapper=None) -> None
         raise ValueError(f"An error occurred while trying to load from '{repo_id}': {e}.")
     # correctly wrap the kernel
     if hasattr(kernel, "flash_attn_varlen_func"):
-        if att_wrapper is not None:
+        if attention_wrapper is not None:
             attention_wrapper = flash_attention_forward
         kernel_function = partial(attention_wrapper, implementation=kernel)
         lazy_import_flash_attention(kernel, force_import=True)
