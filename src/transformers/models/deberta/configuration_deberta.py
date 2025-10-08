@@ -18,7 +18,7 @@ from collections import OrderedDict
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Union
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
 
@@ -30,15 +30,15 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-class DebertaConfig(PretrainedConfig):
+class DebertaConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DebertaModel`] or a [`TFDebertaModel`]. It is
     used to instantiate a DeBERTa model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the DeBERTa
     [microsoft/deberta-base](https://huggingface.co/microsoft/deberta-base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Arguments:
         vocab_size (`int`, *optional*, defaults to 50265):

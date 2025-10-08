@@ -21,17 +21,11 @@ import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 
-class MllamaImagesKwargs(ImagesKwargs, total=False):
-    max_image_tiles: Optional[int]
-
-
 class MllamaProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: MllamaImagesKwargs
-
     _defaults = {
         "image_kwargs": {
             "max_image_tiles": 4,
@@ -225,8 +219,6 @@ class MllamaProcessor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[MllamaProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -267,10 +259,8 @@ class MllamaProcessor(ProcessorMixin):
             **kwargs,
         )
 
-        text_kwargs = output_kwargs["text_kwargs"]
-        text_kwargs["return_tensors"] = None
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         images_kwargs = output_kwargs["images_kwargs"]
-        common_kwargs = output_kwargs["common_kwargs"]
 
         data = {}
         if text is not None:
@@ -280,8 +270,7 @@ class MllamaProcessor(ProcessorMixin):
                 raise ValueError("Invalid input text. Please provide a string, or a list of strings")
             n_images_in_text = [t.count(self.image_token) for t in text]
             text = [build_string_from_input(text_item, self.bos_token, self.image_token) for text_item in text]
-            _ = text_kwargs.pop("padding_side", None)  # hack until padding-side is an accepted kwarg by tokenizers
-            encoding = self.tokenizer(text, **text_kwargs)
+            encoding = self.tokenizer(text, **output_kwargs["text_kwargs"])
             self._check_special_mm_tokens(text, encoding, modalities=["image"])
             n_images_in_ids = [token_ids.count(self.image_token_id) for token_ids in encoding["input_ids"]]
             data.update(encoding)
@@ -334,10 +323,7 @@ class MllamaProcessor(ProcessorMixin):
             )
             data["cross_attention_mask"] = cross_attention_mask
 
-        return_tensors = common_kwargs.pop("return_tensors", None)
-        batch_feature = BatchFeature(data=data, tensor_type=return_tensors)
-
-        return batch_feature
+        return BatchFeature(data=data, tensor_type=return_tensors)
 
     def post_process_image_text_to_text(
         self, generated_outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False, **kwargs

@@ -70,7 +70,6 @@ class BigBirdModelTester:
         rescale_embeddings=False,
         block_size=8,
         num_rand_blocks=3,
-        position_embedding_type="absolute",
         scope=None,
     ):
         self.parent = parent
@@ -101,7 +100,6 @@ class BigBirdModelTester:
         self.rescale_embeddings = rescale_embeddings
         self.block_size = block_size
         self.num_rand_blocks = num_rand_blocks
-        self.position_embedding_type = position_embedding_type
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -145,7 +143,6 @@ class BigBirdModelTester:
             rescale_embeddings=self.rescale_embeddings,
             block_size=self.block_size,
             num_random_blocks=self.num_rand_blocks,
-            position_embedding_type=self.position_embedding_type,
         )
 
     def prepare_config_and_inputs_for_decoder(self):

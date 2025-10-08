@@ -26,10 +26,7 @@ from torchvision.ops.boxes import batched_nms
 from torchvision.transforms.v2 import functional as F_t
 
 from ...image_processing_utils import BatchFeature, get_size_dict
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
-)
+from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -41,19 +38,7 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import auto_docstring
-
-
-class SamFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    r"""
-    mask_size (`dict[str, int]`, *optional*):
-        The size `{"longest_edge": int}` to resize the segmentation maps to.
-    mask_pad_size (`dict[str, int]`, *optional*):
-        The size `{"height": int, "width": int}` to pad the segmentation maps to. Must be larger than any segmentation
-        map size provided for preprocessing.
-    """
-
-    mask_size: Optional[dict[str, int]]
-    mask_pad_size: Optional[dict[str, int]]
+from .image_processing_sam import SamImageProcessorKwargs
 
 
 @auto_docstring
@@ -68,13 +53,13 @@ class SamImageProcessorFast(BaseImageProcessorFast):
     do_normalize = True
     do_convert_rgb = True
 
-    valid_kwargs = SamFastImageProcessorKwargs
+    valid_kwargs = SamImageProcessorKwargs
 
     do_pad = True
     pad_size = {"height": 1024, "width": 1024}
     mask_pad_size = {"height": 256, "width": 256}
 
-    def __init__(self, **kwargs: Unpack[SamFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[SamImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     def _get_preprocess_shape(self, old_shape: tuple[int, int], longest_edge: int):
@@ -172,7 +157,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         self,
         images: ImageInput,
         segmentation_maps: Optional[ImageInput] = None,
-        **kwargs: Unpack[SamFastImageProcessorKwargs],
+        **kwargs: Unpack[SamImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
         segmentation_maps (`ImageInput`, *optional*):
@@ -187,7 +172,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         device: Optional[Union[str, "torch.device"]] = None,
-        **kwargs: Unpack[SamFastImageProcessorKwargs],
+        **kwargs: Unpack[SamImageProcessorKwargs],
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.
@@ -405,7 +390,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
             if isinstance(masks[i], np.ndarray):
                 masks[i] = torch.from_numpy(masks[i])
             elif not isinstance(masks[i], torch.Tensor):
-                raise ValueError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
+                raise TypeError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
             interpolated_mask = F.interpolate(masks[i], target_image_size, mode="bilinear", align_corners=False)
             interpolated_mask = interpolated_mask[..., : reshaped_input_sizes[i][0], : reshaped_input_sizes[i][1]]
             interpolated_mask = F.interpolate(interpolated_mask, original_size, mode="bilinear", align_corners=False)

@@ -19,7 +19,7 @@ import torch
 import torch.nn as nn
 
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -39,7 +39,6 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import OutputRecorder, check_model_inputs
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
@@ -66,8 +65,8 @@ class T5GemmaModuleConfig(Gemma2Config):
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the T5GemmaModule-7B.
     e.g. [google/t5_gemma_module-7b](https://huggingface.co/google/t5_gemma_module-7b)
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 256000):
@@ -197,7 +196,7 @@ class T5GemmaModuleConfig(Gemma2Config):
         del self.use_bidirectional_attention
 
 
-class T5GemmaConfig(PretrainedConfig):
+class T5GemmaConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`T5GemmaModel`]. It is used to instantiate an T5Gemma
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -208,8 +207,8 @@ class T5GemmaConfig(PretrainedConfig):
     >>> t5gemma_config = T5GemmaConfig.from_pretrained("google/t5gemma-2b-2b-prefixlm-it")
     >>> model = T5GemmaModel(t5gemma_config)
     ```
-    Configuration objects inherit from [PretrainedConfig] and can be used to control the model outputs. Read the
-    documentation from [PretrainedConfig] for more information.
+    Configuration objects inherit from [PreTrainedConfig] and can be used to control the model outputs. Read the
+    documentation from [PreTrainedConfig] for more information.
     Args:
         encoder (`Union[T5GemmaModuleConfig, dict]`, optional, *optional*):
             Configuration for the encoder.
@@ -228,7 +227,7 @@ class T5GemmaConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 256000):
             Vocabulary size of the T5Gemma model (the same as Gemma 2).
         kwargs (additional keyword arguments, optional, *optional*):
-            Will be passed to the PretrainedConfig base class.
+            Will be passed to the PreTrainedConfig base class.
     """
 
     model_type = "t5gemma"
@@ -384,7 +383,6 @@ class T5GemmaCrossAttention(Gemma2Attention):
             config.cross_attention_hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
         )
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -524,7 +522,6 @@ class T5GemmaDecoderLayer(T5GemmaEncoderLayer):
         self.pre_cross_attn_layernorm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_cross_attn_layernorm = T5GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -700,7 +697,7 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs()
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -784,7 +781,7 @@ class T5GemmaDecoder(T5GemmaEncoder):
 
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs()
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
