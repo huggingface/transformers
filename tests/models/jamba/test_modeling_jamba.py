@@ -342,24 +342,21 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     )
     test_pruning = False
 
-    def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
-        self.assertIsInstance(decoder_past_key_values, HybridMambaAttentionDynamicCache)
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+        self.assertIsInstance(past_key_values, HybridMambaAttentionDynamicCache)
 
-        # (batch, head, seq_length, head_features)
-        expected_shape = (
-            batch_size,
-            config.num_key_value_heads if hasattr(config, "num_key_value_heads") else config.num_attention_heads,
-            cache_length,
-            config.hidden_size // config.num_attention_heads,
-        )
+        # (batch, kv heads, seq_length, head_dim)
+        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
+        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        expected_shape = (batch_size, num_heads, seq_length, head_dim)
 
         self.assertListEqual(
-            [key_tensor.shape for key_tensor in decoder_past_key_values.key_cache],
-            [expected_shape] * len(decoder_past_key_values.key_cache),
+            [key_tensor.shape for key_tensor in past_key_values.key_cache],
+            [expected_shape] * len(past_key_values.key_cache),
         )
         self.assertListEqual(
-            [value_cache.shape for value_cache in decoder_past_key_values.value_cache],
-            [expected_shape] * len(decoder_past_key_values.value_cache),
+            [value_cache.shape for value_cache in past_key_values.value_cache],
+            [expected_shape] * len(past_key_values.value_cache),
         )
 
     def _check_caches_are_equal(
@@ -550,10 +547,6 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 _ = model(dummy_input)
                 # with attention mask
                 _ = model(dummy_input, attention_mask=dummy_attention_mask)
-
-    @unittest.skip("Jamba has a non standard cache format (mamba cache)")
-    def test_past_key_values_format(self):
-        pass
 
     @unittest.skip("Jamba has a non standard cache which is not compatible with dp/ddp")
     def test_multi_gpu_data_parallel_forward(self):

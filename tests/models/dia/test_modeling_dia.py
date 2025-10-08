@@ -377,29 +377,25 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             [encoder_expected_shape] * len(hidden_states),
         )
 
-    def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
-        self.assertIsInstance(decoder_past_key_values, (tuple, Cache))
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+        self.assertIsInstance(past_key_values, Cache)
 
         # we need the decoder config here
         config = config.decoder_config
 
-        # (batch, head, seq_length, head_features)
-        expected_shape = (
-            batch_size,
-            config.num_key_value_heads if hasattr(config, "num_key_value_heads") else config.num_attention_heads,
-            cache_length,
-            config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads,
-        )
+        # (batch, kv heads, seq_length, head_dim)
+        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
+        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        expected_shape = (batch_size, num_heads, seq_length, head_dim)
 
-        if isinstance(decoder_past_key_values, Cache):
-            self.assertListEqual(
-                [layer.keys.shape for layer in decoder_past_key_values.layers],
-                [expected_shape] * len(decoder_past_key_values.layers),
-            )
-            self.assertListEqual(
-                [layer.values.shape for layer in decoder_past_key_values.layers],
-                [expected_shape] * len(decoder_past_key_values.layers),
-            )
+        self.assertListEqual(
+            [layer.keys.shape for layer in past_key_values.layers],
+            [expected_shape] * len(past_key_values.layers),
+        )
+        self.assertListEqual(
+            [layer.values.shape for layer in past_key_values.layers],
+            [expected_shape] * len(past_key_values.layers),
+        )
 
     def _check_scores(self, batch_size, scores, generated_length, config):
         # Special case where Dia keeps score in a 2D mesh of (bsz * channels, vocab)

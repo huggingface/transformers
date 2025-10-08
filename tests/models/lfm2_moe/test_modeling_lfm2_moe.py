@@ -71,24 +71,21 @@ class Lfm2MoeModelTest(CausalLMModelTest, unittest.TestCase):
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = Lfm2MoeForCausalLM if is_torch_available() else None
 
-    def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
-        self.assertIsInstance(decoder_past_key_values, Lfm2MoeHybridConvCache)
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+        self.assertIsInstance(past_key_values, Lfm2MoeHybridConvCache)
 
-        # (batch, head, seq_length, head_features)
-        attention_shape = (
-            batch_size,
-            config.num_key_value_heads if hasattr(config, "num_key_value_heads") else config.num_attention_heads,
-            cache_length,
-            config.hidden_size // config.num_attention_heads,
-        )
+        # (batch, kv heads, seq_length, head_dim)
+        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
+        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        attention_shape = (batch_size, num_heads, seq_length, head_dim)
         conv_shape = (batch_size, config.hidden_size, config.conv_L_cache)
 
         for i in range(config.num_hidden_layers):
             if config.layer_types[i] == "full_attention":
-                self.assertEqual(decoder_past_key_values.key_cache[i].shape, attention_shape)
-                self.assertEqual(decoder_past_key_values.value_cache[i].shape, attention_shape)
+                self.assertEqual(past_key_values.key_cache[i].shape, attention_shape)
+                self.assertEqual(past_key_values.value_cache[i].shape, attention_shape)
             else:
-                self.assertEqual(decoder_past_key_values.conv_cache[i], conv_shape)
+                self.assertEqual(past_key_values.conv_cache[i], conv_shape)
 
     def _check_caches_are_equal(self, cache1: Lfm2MoeHybridConvCache, cache2: Lfm2MoeHybridConvCache):
         if not isinstance(cache1, Lfm2MoeHybridConvCache) or not isinstance(cache2, Lfm2MoeHybridConvCache):

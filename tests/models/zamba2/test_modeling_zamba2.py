@@ -314,24 +314,21 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     )
     test_pruning = False
 
-    def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
-        self.assertIsInstance(decoder_past_key_values, Zamba2HybridDynamicCache)
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+        self.assertIsInstance(past_key_values, Zamba2HybridDynamicCache)
 
-        # (batch, head, seq_length, head_features)
-        expected_shape = (
-            batch_size,
-            config.num_key_value_heads if hasattr(config, "num_key_value_heads") else config.num_attention_heads,
-            cache_length,
-            config.hidden_size // config.num_attention_heads,
-        )
+        # (batch, kv heads, seq_length, head_dim)
+        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
+        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        expected_shape = (batch_size, num_heads, seq_length, head_dim)
 
         self.assertListEqual(
-            [key_tensor.shape for key_tensor in decoder_past_key_values.key_cache],
-            [expected_shape] * len(decoder_past_key_values.key_cache),
+            [key_tensor.shape for key_tensor in past_key_values.key_cache],
+            [expected_shape] * len(past_key_values.key_cache),
         )
         self.assertListEqual(
-            [value_cache.shape for value_cache in decoder_past_key_values.value_cache],
-            [expected_shape] * len(decoder_past_key_values.value_cache),
+            [value_cache.shape for value_cache in past_key_values.value_cache],
+            [expected_shape] * len(past_key_values.value_cache),
         )
 
     def _check_caches_are_equal(self, cache1: Zamba2HybridDynamicCache, cache2: Zamba2HybridDynamicCache):
@@ -355,23 +352,6 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     @unittest.skip("position_ids cannot be used to pad due to Mamba2 layers")
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass
-
-    def test_past_key_values_format(self):
-        """
-        Overwriting to pass the expected cache shapes (Zamba2 has cache shape = [batch_size, 0] for mamba layers)
-        """
-        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        batch_size, seq_length = inputs["input_ids"].shape
-        per_head_embed_dim = config.attention_head_dim  # note: this one is not a common attribute name
-        self_attention_cache_shape = (batch_size, config.num_key_value_heads, seq_length, per_head_embed_dim)
-        # build the full cache shapes, including mamba layers
-        all_cache_shapes = []
-        for i in range(config.num_hidden_layers):
-            if config.layers_block_type[i] == "mamba":
-                all_cache_shapes.append([torch.Size([batch_size, 0]), torch.Size([batch_size, 0])])
-            else:
-                all_cache_shapes.append([self_attention_cache_shape, self_attention_cache_shape])
-        super().test_past_key_values_format(custom_all_cache_shapes=all_cache_shapes)
 
     @unittest.skip(reason="Zamba2 has hybrid cache.")
     def test_generate_continue_from_inputs_embeds(self):

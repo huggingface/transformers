@@ -196,10 +196,6 @@ class Lfm2VlModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
     def test_attention_outputs(self):
         pass
 
-    @unittest.skip("Lfm2 backbone has a special cache format as it alternates between attention and conv layers")
-    def test_past_key_values_format(self):
-        pass
-
     @unittest.skip(
         "Lfm2 backbone has a special cache format which is not compatible with compile as it has static address for conv cache"
     )
