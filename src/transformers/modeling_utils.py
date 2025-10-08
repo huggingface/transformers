@@ -4176,7 +4176,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         return init_contexts
 
-    def set_use_kernel(use_kernels, kernel_config):
+    def set_use_kernel(self, use_kernels, kernel_config):
         if use_kernels:
             if not is_kernels_available():
                 raise ValueError(
