@@ -19,7 +19,7 @@ if _missing:
         "\nInstall with: pip install -U " + " ".join(_missing)
     )
 
-# Optional: enforce minimal hub version used by current transformers mainline
+# enforce minimal hub version used by current transformers mainline
 try:
     import huggingface_hub as _hub
     try:
