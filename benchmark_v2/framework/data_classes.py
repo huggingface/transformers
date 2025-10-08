@@ -32,7 +32,6 @@ class BenchmarkResult:
     """Result from a series of benchmark runs."""
 
     def __init__(self) -> None:
-        self.wall_time_start = []
         self.e2e_latency = []
         self.dt_tokens = []
         self.decoded_outputs = []
@@ -40,13 +39,11 @@ class BenchmarkResult:
 
     def accumulate(
         self,
-        wall_time_0: float,
         e2e_latency: float,
         dt_tokens: list[float],
         decoded_output: str,
         gpu_metrics: Optional[GPURawMetrics],
     ) -> None:
-        self.wall_time_start.append(wall_time_0)
         self.e2e_latency.append(e2e_latency)
         self.dt_tokens.append(dt_tokens)
         self.decoded_outputs.append(decoded_output)
@@ -59,7 +56,6 @@ class BenchmarkResult:
         else:
             gpu_metrics = [gm.to_dict() for gm in self.gpu_metrics]
         return {
-            "wall_time_start": self.wall_time_start,
             "e2e_latency": self.e2e_latency,
             "dt_tokens": self.dt_tokens,
             "decoded_outputs": self.decoded_outputs,
@@ -70,14 +66,13 @@ class BenchmarkResult:
     def from_dict(cls, data: dict[str, Union[None, int, float]]) -> "BenchmarkResult":
         # Handle GPU metrics, which is saved as None if it contains only None values
         if data["gpu_metrics"] is None:
-            gpu_metrics = [None for _ in range(len(data["wall_time_start"]))]
+            gpu_metrics = [None for _ in range(len(data["e2e_latency"]))]
         else:
             gpu_metrics = [GPURawMetrics.from_dict(gm) for gm in data["gpu_metrics"]]
         # Create a new instance and accumulate the data
         new_instance = cls()
-        for i in range(len(data["wall_time_start"])):
+        for i in range(len(data["e2e_latency"])):
             new_instance.accumulate(
-                wall_time_start=data["wall_time_start"][i],
                 e2e_latency=data["e2e_latency"][i],
                 dt_tokens=data["dt_tokens"][i],
                 decoded_output=data["decoded_output"][i],

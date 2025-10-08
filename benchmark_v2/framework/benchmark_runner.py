@@ -2,6 +2,7 @@ import gc
 import json
 import logging
 import os
+import pathlib
 import re
 import time
 from contextlib import nullcontext
@@ -62,6 +63,15 @@ def compact_json_numeric_arrays(data: dict):
         return f"[{compact_content}]"
 
     return re.sub(pattern, replace_numeric_array, json.dumps(data, indent=4, default=str), flags=re.DOTALL)
+
+
+def get_git_revision() -> str:
+    base_path = pathlib.Path(__file__).parent.parent.parent
+    git_dir = base_path / '.git'
+    with (git_dir / 'HEAD').open('r') as head:
+        ref = head.readline().split(' ')[-1].strip()
+    with (git_dir / ref).open('r') as git_hash:
+        return git_hash.readline().strip()
 
 
 def get_sdpa_backend(backend_name: Optional[str]) -> Optional[torch.nn.attention.SDPBackend]:
@@ -140,7 +150,7 @@ class BenchmarkRunner:
         # Those stay constant for the whole run
         self.logger = logger
         self.output_dir = output_dir
-        self.commit_id = commit_id
+        self.commit_id = get_git_revision() if commit_id is None else commit_id
         os.makedirs(self.output_dir, exist_ok=True)
         self.profile_dir = None
         # Attributes that are reset for each model
@@ -204,7 +214,7 @@ class BenchmarkRunner:
 
             # Quick validation: try one measurement first to see if this scenario works
             flush_memory()
-            wall_time_0, e2e_latency, dt_tokens, decoded_output, gpu_metrics = self.time_generate(
+            e2e_latency, dt_tokens, decoded_output, gpu_metrics = self.time_generate(
                 max_new_tokens=1, gpu_monitor=None
             )
             if e2e_latency < 0:
@@ -221,11 +231,11 @@ class BenchmarkRunner:
             result = BenchmarkResult()
             self.logger.info(f"Benchmarking with {config.measurement_iterations} iterations.")
             for _ in trange(config.measurement_iterations):
-                wall_time_0, e2e_latency, dt_tokens, decoded_output, gpu_metrics = self.time_generate(
+                e2e_latency, dt_tokens, decoded_output, gpu_metrics = self.time_generate(
                     max_new_tokens=config.num_tokens_to_generate,
                     gpu_monitor=(GPUMonitor(logger=self.logger) if config.gpu_monitoring else None),
                 )
-                result.accumulate(wall_time_0, e2e_latency, dt_tokens, decoded_output, gpu_metrics)
+                result.accumulate(e2e_latency, dt_tokens, decoded_output, gpu_metrics)
             self.logger.info("Benchmarking done. Cleaning up.")
 
             # Profile if needed
@@ -242,7 +252,7 @@ class BenchmarkRunner:
         self,
         max_new_tokens: int,
         gpu_monitor: Optional[GPUMonitor] = None,
-    ) -> tuple[float, float, list[float], str, Optional[GPURawMetrics]]:
+    ) -> tuple[float, list[float], str, Optional[GPURawMetrics]]:
         """Time the latency of a call to model.generate() with the given (inputs) and (max_new_tokens)."""
         # Prepare gpu monitoring if needed
         if gpu_monitor is not None:
@@ -270,7 +280,7 @@ class BenchmarkRunner:
         # Compute intermediate quantities
         e2e_latency = wall_time_1 - wall_time_0
         dt_tokens = [t - wall_time_0 for t in streamer.timestamps[1:]]
-        return wall_time_0, e2e_latency, dt_tokens, decoded_output, gpu_metrics
+        return e2e_latency, dt_tokens, decoded_output, gpu_metrics
 
     def profile_generate(self, num_tokens_to_profile: int, config_name: str) -> None:
         """Profile the latency of a call to model.generate() with the given (inputs) and (max_new_tokens)."""
