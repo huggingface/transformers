@@ -13,47 +13,54 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-01-19 and added to Hugging Face Transformers on 2021-10-26.*
+*This model was released on 2021-01-19 and added to Hugging Face Transformers on 2021-10-26 and contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten).*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
+
 
 # UniSpeech
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[UniSpeech](https://huggingface.co/papers/2101.07597) proposes a unified pre-training method that leverages both labeled and unlabeled data to learn speech representations. It employs multi-task learning, combining supervised phonetic CTC learning with phonetically-aware contrastive self-supervised learning. This approach enhances the capture of phonetic structures and improves generalization across languages and domains. Evaluations on the CommonVoice corpus show UniSpeech outperforms self-supervised pretraining and supervised transfer learning in speech recognition, reducing phone error rates by up to 13.4% and 17.8% respectively. Additionally, UniSpeech demonstrates strong transferability in domain-shift speech recognition tasks, achieving a 6% reduction in word error rates compared to previous methods.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The UniSpeech model was proposed in [UniSpeech: Unified Speech Representation Learning with Labeled and Unlabeled Data](https://huggingface.co/papers/2101.07597) by Chengyi Wang, Yu Wu, Yao Qian, Kenichi Kumatani, Shujie Liu, Furu Wei, Michael
-Zeng, Xuedong Huang .
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the paper is the following:
+pipeline = pipeline(task="automatic-speech-recognition", model="microsoft/unispeech-large-1500h-cv", dtype="auto")
+pipeline("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac")
+```
 
-*In this paper, we propose a unified pre-training approach called UniSpeech to learn speech representations with both
-unlabeled and labeled data, in which supervised phonetic CTC learning and phonetically-aware contrastive
-self-supervised learning are conducted in a multi-task learning manner. The resultant representations can capture
-information more correlated with phonetic structures and improve the generalization across languages and domains. We
-evaluate the effectiveness of UniSpeech for cross-lingual representation learning on public CommonVoice corpus. The
-results show that UniSpeech outperforms self-supervised pretraining and supervised transfer learning for speech
-recognition by a maximum of 13.4% and 17.8% relative phone error rate reductions respectively (averaged over all
-testing languages). The transferability of UniSpeech is also demonstrated on a domain-shift speech recognition task,
-i.e., a relative word error rate reduction of 6% against the previous approach.*
+</hfoption>
+<hfoption id="AutoModel">
 
-This model was contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten). The Authors' code can be
-found [here](https://github.com/microsoft/UniSpeech/tree/main/UniSpeech).
+```py
+import torch
+from datasets import load_dataset
+from transformers import AutoProcessor, AutoModelForCTC
 
-## Usage tips
+dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation").sort("id")
+sampling_rate = dataset.features["audio"].sampling_rate
 
-- UniSpeech is a speech model that accepts a float array corresponding to the raw waveform of the speech signal. Please
-  use [`Wav2Vec2Processor`] for the feature extraction.
-- UniSpeech model can be fine-tuned using connectionist temporal classification (CTC) so the model output has to be
-  decoded using [`Wav2Vec2CTCTokenizer`].
+processor = AutoProcessor.from_pretrained("microsoft/unispeech-large-1500h-cv")
+model = AutoModelForCTC.from_pretrained("microsoft/unispeech-large-1500h-cv", dtype="auto")
 
-## Resources
+inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
+with torch.no_grad():
+    logits = model(**inputs).logits
+predicted_ids = torch.argmax(logits, dim=-1)
+print(f"Transcription: {processor.batch_decode(predicted_ids)[0]}")
+```
 
-- [Audio classification task guide](../tasks/audio_classification)
-- [Automatic speech recognition task guide](../tasks/asr)
+</hfoption>
+</hfoptions>
 
 ## UniSpeechConfig
 
@@ -82,3 +89,4 @@ found [here](https://github.com/microsoft/UniSpeech/tree/main/UniSpeech).
 
 [[autodoc]] UniSpeechForPreTraining
     - forward
+

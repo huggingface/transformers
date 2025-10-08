@@ -1,4 +1,4 @@
-<!--Copyright 2025 The HuggingFace Team. All rights reserved.
+<!--Copyright 2024 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -13,11 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-01-19 and added to Hugging Face Transformers on 2024-12-05.*
+*This model was released on 2023-01-19 and added to Hugging Face Transformers on 2024-12-05 and contributed by [jmtzt](https://huggingface.co/jmtzt).*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
@@ -25,17 +24,7 @@ rendered properly in your Markdown viewer.
 
 # I-JEPA
 
-[I-JEPA](https://huggingface.co/papers/2301.08243) is a self-supervised learning method that learns semantic image representations by predicting parts of an image from other parts of the image. It compares the abstract representations of the image (rather than pixel level comparisons), which avoids the typical pitfalls of data augmentation bias and pixel-level details that don't capture semantic meaning.
-
-You can find the original I-JEPA checkpoints under the [AI at Meta](https://huggingface.co/facebook/models?search=ijepa) organization.
-> [!TIP]
-> This model was contributed by [jmtzt](https://huggingface.co/jmtzt).
-
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/ijepa_architecture.jpg">
-
-> Click on the I-JEPA models in the right sidebar for more examples of how to apply I-JEPA to different image representation and classification tasks.
-
-The example below demonstrates how to extract image features with [`Pipeline`] or the [`AutoModel`] class.
+[I-JEPA](https://huggingface.co/papers/2301.08243) is a self-supervised learning method that predicts representations of various target blocks in an image based on a single context block. This approach emphasizes learning semantic features without using hand-crafted data transformations or focusing on pixel-level details. Key to I-JEPA's design is a masking strategy that involves selecting large-scale target blocks and using a spatially distributed context block. When integrated with Vision Transformers, I-JEPA scales effectively, enabling the training of a ViT-Huge/14 on ImageNet in under 72 hours using 16 A100 GPUs, achieving strong performance across tasks like linear classification, object counting, and depth prediction.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -43,89 +32,37 @@ The example below demonstrates how to extract image features with [`Pipeline`] o
 ```py
 import torch
 from transformers import pipeline
-feature_extractor = pipeline(
-    task="image-feature-extraction",
-    model="facebook/ijepa_vith14_1k",
-    device=0,
-    dtype=torch.bfloat16
-)
-features = feature_extractor("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg", return_tensors=True)  
 
-print(f"Feature shape: {features.shape}")
-
+pipeline = pipeline(task="image-classification", model="facebook/ijepa_vitg16_22k", dtype="auto")
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import requests
+```python
 import torch
+import requests
 from PIL import Image
-from torch.nn.functional import cosine_similarity
-from transformers import AutoModel, AutoProcessor  
+from transformers import AutoImageProcessor, AutoModelForImageClassification
 
-url_1 = "http://images.cocodataset.org/val2017/000000039769.jpg"  
-url_2 = "http://images.cocodataset.org/val2017/000000219578.jpg"
-image_1 = Image.open(requests.get(url_1, stream=True).raw)
-image_2 = Image.open(requests.get(url_2, stream=True).raw)
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
 
-processor = AutoProcessor.from_pretrained("facebook/ijepa_vith14_1k")  
-model = AutoModel.from_pretrained("facebook/ijepa_vith14_1k", dtype="auto", attn_implementation="sdpa")  
+image_processor = AutoImageProcessor.from_pretrained("facebook/ijepa_vitg16_22k")
+model = AutoModelForImageClassification.from_pretrained("facebook/ijepa_vitg16_22k", dtype="auto")
 
+inputs = image_processor(image, return_tensors="pt")
 
-def infer(image):  
-    inputs = processor(image, return_tensors="pt")  
-    outputs = model(**inputs)  
-    return outputs.last_hidden_state.mean(dim=1)  
+with torch.no_grad():
+    logits = model(**inputs).logits
 
-
-embed_1 = infer(image_1)  
-embed_2 = infer(image_2)  
-
-similarity = cosine_similarity(embed_1, embed_2)  
-print(similarity)
+predicted_label = logits.argmax(-1).item()
+print(model.config.id2label[predicted_label])
 ```
 
 </hfoption>
 </hfoptions>
-
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
-The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 4-bits.
-
-```py
-import torch
-from transformers import BitsAndBytesConfig, AutoModel, AutoProcessor
-from datasets import load_dataset
-
-quantization_config = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_quant_type="nf4",
-    bnb_4bit_compute_dtype=torch.bfloat16,
-    bnb_4bit_use_double_quant=True,
-)
-
-url_1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
-url_2 = "http://images.cocodataset.org/val2017/000000219578.jpg"
-image_1 = Image.open(requests.get(url_1, stream=True).raw)
-image_2 = Image.open(requests.get(url_2, stream=True).raw)
-
-processor = AutoProcessor.from_pretrained("facebook/ijepa_vitg16_22k")
-model = AutoModel.from_pretrained("facebook/ijepa_vitg16_22k", quantization_config=quantization_config, dtype="auto", attn_implementation="sdpa")
-
-
-def infer(image):
-    inputs = processor(image, return_tensors="pt")
-    outputs = model(**inputs)
-    return outputs.last_hidden_state.mean(dim=1)
-
-
-embed_1 = infer(image_1)
-embed_2 = infer(image_2)
-
-similarity = cosine_similarity(embed_1, embed_2)
-print(similarity)
-```
 
 ## IJepaConfig
 
@@ -140,3 +77,4 @@ print(similarity)
 
 [[autodoc]] IJepaForImageClassification
     - forward
+

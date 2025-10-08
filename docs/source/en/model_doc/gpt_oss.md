@@ -13,11 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-08-05 and added to Hugging Face Transformers on 2025-08-05.*
+
+*This model was released on 2025-08-05 and added to Hugging Face Transformers on 2025-08-05 and contributed by [<INSERT YOUR HF USERNAME HERE>](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
@@ -25,23 +25,36 @@ rendered properly in your Markdown viewer.
 
 # GptOss
 
-## Overview
+[GptOss](https://huggingface.co/papers/2508.10925) are open-weight reasoning models built on a mixture-of-experts transformer for improved accuracy and lower inference cost. Training combines large-scale distillation with reinforcement learning, and the models are optimized for agentic tasks like web research, Python execution, and integration with external developer tools. They use a rendered chat format to improve instruction following and role clarity, and demonstrate strong performance across benchmarks in math, coding, and safety. All components—model weights, inference systems, tool environments, and tokenizers are released under Apache 2.0 for broad accessibility.
 
-The GptOss model was proposed in [blog post](https://openai.com/index/introducing-gpt-oss/) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The abstract from the paper is the following:
+```py
+import torch
+from transformers import pipeline
 
-*<INSERT PAPER ABSTRACT HERE>*
+pipeline = pipeline(task="text-generation", model="openai/gpt-oss-20b", dtype="auto",)
+pipeline("Plants create energy through a process known as photosynthesis.")
+```
 
-Tips:
+</hfoption>
+<hfoption id="AutoModel">
 
-- **Attention Sinks with Flex Attention**: When using flex attention, attention sinks require special handling. Unlike with standard attention implementations where sinks can be added directly to attention scores, flex attention `score_mod` function operates on individual score elements rather than the full attention matrix. Therefore, attention sinks renormalization have to be applied after the flex attention computations by renormalizing the outputs using the log-sum-exp (LSE) values returned by flex attention.
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-<INSERT TIPS ABOUT MODEL HERE>
+tokenizer = AutoTokenizer.from_pretrained("openai/gpt-oss-20b")
+model = AutoModelForCausalLM.from_pretrained("openai/gpt-oss-20b", dtype="auto",)
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+inputs = tokenizer("Plants create energy through a process known as photosynthesis.", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
+print(tokenizer.decode(outputs[0]))
+```
+
+</hfoption>
+</hfoptions>
 
 ## GptOssConfig
 
@@ -66,3 +79,4 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] GptOssForTokenClassification
     - forward
+

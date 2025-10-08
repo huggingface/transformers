@@ -23,6 +23,17 @@ The GLM family welcomes new members [GLM-4-0414](https://huggingface.co/papers/2
 
 The **GLM-4-32B-0414** series models, featuring 32 billion parameters. Its performance is comparable to OpenAI's GPT
 series and DeepSeek's V3/R1 series. It also supports very user-friendly local deployment features. GLM-4-32B-Base-0414
+```py
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model = AutoModelForCausalLM.from_pretrained("THUDM/glm-4-9b")
+tokenizer = AutoTokenizer.from_pretrained("THUDM/glm-4-9b")
+
+inputs = tokenizer("Hello, my name is", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
+print(tokenizer.decode(outputs[0]))
+```
+
 was pre-trained on 15T of high-quality data, including substantial reasoning-type synthetic data. This lays the
 foundation for subsequent reinforcement learning extensions. In the post-training stage, we employed human preference
 alignment for dialogue scenarios. Additionally, using techniques like rejection sampling and reinforcement learning, we

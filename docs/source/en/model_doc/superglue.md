@@ -11,47 +11,29 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2019-11-26 and added to Hugging Face Transformers on 2025-01-20.*
+*This model was released on 2019-11-26 and added to Hugging Face Transformers on 2025-01-20 and contributed by [stevenbucaille](https://huggingface.co/stevenbucaille).*
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white" >
-    </div>
-</div>
+
 
 # SuperGlue
 
-[SuperGlue](https://huggingface.co/papers/1911.11763) is a neural network that matches two sets of local features by jointly finding correspondences and rejecting non-matchable points. Assignments are estimated by solving a differentiable optimal transport problem, whose costs are predicted by a graph neural network. SuperGlue introduces a flexible context aggregation mechanism based on attention, enabling it to reason about the underlying 3D scene and feature assignments jointly. Paired with the [SuperPoint model](https://huggingface.co/magic-leap-community/superpoint), it can be used to match two images and estimate the pose between them. This model is useful for tasks such as image matching, homography estimation, etc.
+[SuperGlue](https://huggingface.co/papers/1911.11763) matches two sets of local features by jointly finding correspondences and rejecting non-matchable points using a differentiable optimal transport problem. It employs a graph neural network to predict costs and a flexible context aggregation mechanism based on attention to reason about the 3D scene and feature assignments. SuperGlue learns priors over geometric transformations and 3D world regularities through end-to-end training from image pairs, outperforming traditional heuristics and achieving state-of-the-art results in pose estimation. The model operates in real-time on modern GPUs and can be integrated into SfM or SLAM systems.
 
-You can find all the original SuperGlue checkpoints under the [Magic Leap Community](https://huggingface.co/magic-leap-community) organization.
+## How to use
 
-> [!TIP]
-> This model was contributed by [stevenbucaille](https://huggingface.co/stevenbucaille).
->
-> Click on the SuperGlue models in the right sidebar for more examples of how to apply SuperGlue to different computer vision tasks.
-
-The example below demonstrates how to match keypoints between two images with [`Pipeline`] or the [`AutoModel`] class.
-
-<hfoptions id="usage">
-<hfoption id="Pipeline">
+Here is a quick example of using the model. Since this model is an image matching model, it requires pairs of images to be matched. 
+The raw outputs contain the list of keypoints detected by the keypoint detector as well as the list of matches with their corresponding 
+matching scores.
 
 ```py
+import torch
 from transformers import pipeline
 
-keypoint_matcher = pipeline(task="keypoint-matching", model="magic-leap-community/superglue_outdoor")
-
-url_0 = "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_98169888_3347710852.jpg"
-url_1 = "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_26757027_6717084061.jpg"
-
-results = keypoint_matcher([url_0, url_1], threshold=0.9)
-print(results[0])
-# {'keypoint_image_0': {'x': ..., 'y': ...}, 'keypoint_image_1': {'x': ..., 'y': ...}, 'score': ...}
+pipeline = pipeline(task="keypoint-matching", model="magic-leap-community/superglue_outdoor", dtype="auto")
+pipeline(["path/to/image1.png", "path/to/image2.png"])
 ```
 
-</hfoption>
-<hfoption id="AutoModel">
-
-```py
+```python
 from transformers import AutoImageProcessor, AutoModel
 import torch
 from PIL import Image
@@ -60,7 +42,7 @@ import requests
 url_image1 = "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_98169888_3347710852.jpg"
 image1 = Image.open(requests.get(url_image1, stream=True).raw)
 url_image2 = "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_26757027_6717084061.jpg"
-image2 = Image.open(requests.get(url_image2, stream=True).raw)
+image_2 = Image.open(requests.get(url_image2, stream=True).raw)
 
 images = [image1, image2]
 
@@ -68,73 +50,69 @@ processor = AutoImageProcessor.from_pretrained("magic-leap-community/superglue_o
 model = AutoModel.from_pretrained("magic-leap-community/superglue_outdoor")
 
 inputs = processor(images, return_tensors="pt")
-with torch.inference_mode():
+with torch.no_grad():
     outputs = model(**inputs)
-
-# Post-process to get keypoints and matches
-image_sizes = [[(image.height, image.width) for image in images]]
-processed_outputs = processor.post_process_keypoint_matching(outputs, image_sizes, threshold=0.2)
 ```
 
-</hfoption>
-</hfoptions>
+You can use the `post_process_keypoint_matching` method from the `SuperGlueImageProcessor` to get the keypoints and matches in a more readable format:
 
-## Notes
+```python
+image_sizes = [[(image.height, image.width) for image in images]]
+outputs = processor.post_process_keypoint_matching(outputs, image_sizes, threshold=0.2)
+for i, output in enumerate(outputs):
+    print("For the image pair", i)
+    for keypoint0, keypoint1, matching_score in zip(
+            output["keypoints0"], output["keypoints1"], output["matching_scores"]
+    ):
+        print(
+            f"Keypoint at coordinate {keypoint0.numpy()} in the first image matches with keypoint at coordinate {keypoint1.numpy()} in the second image with a score of {matching_score}."
+        )
 
-- SuperGlue performs feature matching between two images simultaneously, requiring pairs of images as input.
+```
 
-    ```python
-    from transformers import AutoImageProcessor, AutoModel
-    import torch
-    from PIL import Image
-    import requests
+From the outputs, you can visualize the matches between the two images using the following code:
+```python
+import matplotlib.pyplot as plt
+import numpy as np
 
-    processor = AutoImageProcessor.from_pretrained("magic-leap-community/superglue_outdoor")
-    model = AutoModel.from_pretrained("magic-leap-community/superglue_outdoor")
+# Create side by side image
+merged_image = np.zeros((max(image1.height, image2.height), image1.width + image2.width, 3))
+merged_image[: image1.height, : image1.width] = np.array(image1) / 255.0
+merged_image[: image2.height, image1.width :] = np.array(image2) / 255.0
+plt.imshow(merged_image)
+plt.axis("off")
 
-    # SuperGlue requires pairs of images
-    images = [image1, image2]
-    inputs = processor(images, return_tensors="pt")
-    with torch.inference_mode():
-        outputs = model(**inputs)
+# Retrieve the keypoints and matches
+output = outputs[0]
+keypoints0 = output["keypoints0"]
+keypoints1 = output["keypoints1"]
+matching_scores = output["matching_scores"]
+keypoints0_x, keypoints0_y = keypoints0[:, 0].numpy(), keypoints0[:, 1].numpy()
+keypoints1_x, keypoints1_y = keypoints1[:, 0].numpy(), keypoints1[:, 1].numpy()
 
-    # Extract matching information
-    keypoints0 = outputs.keypoints0  # Keypoints in first image
-    keypoints1 = outputs.keypoints1  # Keypoints in second image
-    matches = outputs.matches        # Matching indices
-    matching_scores = outputs.matching_scores  # Confidence scores
-    ```
+# Plot the matches
+for keypoint0_x, keypoint0_y, keypoint1_x, keypoint1_y, matching_score in zip(
+        keypoints0_x, keypoints0_y, keypoints1_x, keypoints1_y, matching_scores
+):
+    plt.plot(
+        [keypoint0_x, keypoint1_x + image1.width],
+        [keypoint0_y, keypoint1_y],
+        color=plt.get_cmap("RdYlGn")(matching_score.item()),
+        alpha=0.9,
+        linewidth=0.5,
+    )
+    plt.scatter(keypoint0_x, keypoint0_y, c="black", s=2)
+    plt.scatter(keypoint1_x + image1.width, keypoint1_y, c="black", s=2)
 
-- The model outputs matching indices, keypoints, and confidence scores for each match.
-- For better visualization and analysis, use the [`SuperGlueImageProcessor.post_process_keypoint_matching`] method to get matches in a more readable format.
+# Save the plot
+plt.savefig("matched_image.png", dpi=300, bbox_inches='tight')
+plt.close()
+```
 
-    ```py
-    # Process outputs for visualization
-    image_sizes = [[(image.height, image.width) for image in images]]
-    processed_outputs = processor.post_process_keypoint_matching(outputs, image_sizes, threshold=0.2)
+![image/png](https://cdn-uploads.huggingface.co/production/uploads/632885ba1558dac67c440aa8/01ZYaLB1NL5XdA8u7yCo4.png)
 
-    for i, output in enumerate(processed_outputs):
-        print(f"For the image pair {i}")
-        for keypoint0, keypoint1, matching_score in zip(
-                output["keypoints0"], output["keypoints1"], output["matching_scores"]
-        ):
-            print(f"Keypoint at {keypoint0.numpy()} matches with keypoint at {keypoint1.numpy()} with score {matching_score}")
-    ```
-
-- Visualize the matches between the images using the built-in plotting functionality.
-
-    ```py
-    # Easy visualization using the built-in plotting method
-    processor.visualize_keypoint_matching(images, processed_outputs)
-    ```
-
-<div class="flex justify-center">
-    <img src="https://cdn-uploads.huggingface.co/production/uploads/632885ba1558dac67c440aa8/01ZYaLB1NL5XdA8u7yCo4.png">
-</div>
-
-## Resources
-
-- Refer to the [original SuperGlue repository](https://github.com/magicleap/SuperGluePretrainedNetwork) for more examples and implementation details.
+This model was contributed by [stevenbucaille](https://huggingface.co/stevenbucaille).
+The original code can be found [here](https://github.com/magicleap/SuperGluePretrainedNetwork).
 
 ## SuperGlueConfig
 
@@ -143,9 +121,8 @@ processed_outputs = processor.post_process_keypoint_matching(outputs, image_size
 ## SuperGlueImageProcessor
 
 [[autodoc]] SuperGlueImageProcessor
-    - preprocess
-    - post_process_keypoint_matching
-    - visualize_keypoint_matching
+
+- preprocess
 
 ## SuperGlueImageProcessorFast
 
@@ -157,4 +134,7 @@ processed_outputs = processor.post_process_keypoint_matching(outputs, image_size
 ## SuperGlueForKeypointMatching
 
 [[autodoc]] SuperGlueForKeypointMatching
-    - forward
+
+- forward
+- post_process_keypoint_matching
+

@@ -6,45 +6,56 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
-*This model was released on 2023-09-28 and added to Hugging Face Transformers on 2024-12-24.*
+*This model was released on 2023-09-28 and added to Hugging Face Transformers on 2024-12-24 and contributed by [nielsr](https://huggingface.co/nielsr).*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # DINOv2 with Registers
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[DINOv2 with Registers](https://huggingface.co/papers/2309.16588) addresses artifacts in feature maps of Vision Transformers (ViTs) by introducing additional "register" tokens during pre-training. This solution eliminates artifacts, enhances interpretability of attention maps, and improves performance for both supervised and self-supervised models. The model achieves state-of-the-art results in self-supervised visual tasks and enables better object discovery with larger models.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The DINOv2 with Registers model was proposed in [Vision Transformers Need Registers](https://huggingface.co/papers/2309.16588) by Timothée Darcet, Maxime Oquab, Julien Mairal, Piotr Bojanowski.
+```py
+import torch
+from transformers import pipeline
 
-The [Vision Transformer](vit) (ViT) is a transformer encoder model (BERT-like) originally introduced to do supervised image classification on ImageNet.
+pipeline = pipeline(task="image-classification", model="facebook/dinov2-with-registers-base", dtype="auto")
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
+```
 
-Next, people figured out ways to make ViT work really well on self-supervised image feature extraction (i.e. learning meaningful features, also called embeddings) on images without requiring any labels. Some example papers here include [DINOv2](dinov2) and [MAE](vit_mae).
+</hfoption>
+<hfoption id="AutoModel">
 
-The authors of DINOv2 noticed that ViTs have artifacts in attention maps. It's due to the model using some image patches as “registers”. The authors propose a fix: just add some new tokens (called "register" tokens), which you only use during pre-training (and throw away afterwards). This results in:
+```python
+import torch
+import requests
+from PIL import Image
+from transformers import AutoImageProcessor, AutoModelForImageClassification
 
-- no artifacts
-- interpretable attention maps
-- and improved performances.
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
 
-The abstract from the paper is the following:
+image_processor = AutoImageProcessor.from_pretrained("facebook/dinov2-with-registers-base")
+model = AutoModelForImageClassification.from_pretrained("facebook/dinov2-with-registers-base", dtype="auto")
 
-*Transformers have recently emerged as a powerful tool for learning visual representations. In this paper, we identify and characterize artifacts in feature maps of both supervised and self-supervised ViT networks. The artifacts correspond to high-norm tokens appearing during inference primarily in low-informative background areas of images, that are repurposed for internal computations. We propose a simple yet effective solution based on providing additional tokens to the input sequence of the Vision Transformer to fill that role. We show that this solution fixes that problem entirely for both supervised and self-supervised models, sets a new state of the art for self-supervised visual models on dense visual prediction tasks, enables object discovery methods with larger models, and most importantly leads to smoother feature maps and attention maps for downstream visual processing.*
+inputs = image_processor(image, return_tensors="pt")
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/dinov2_with_registers_visualization.png"
-alt="drawing" width="600"/>
+with torch.no_grad():
+    logits = model(**inputs).logits
 
-<small> Visualization of attention maps of various models trained with vs. without registers. Taken from the <a href="https://huggingface.co/papers/2309.16588">original paper</a>. </small>
+predicted_label = logits.argmax(-1).item()
+print(model.config.id2label[predicted_label])
+```
 
-Tips:
-
-- Usage of DINOv2 with Registers is identical to DINOv2 without, you'll just get better performance.
-
-This model was contributed by [nielsr](https://huggingface.co/nielsr).
-The original code can be found [here](https://github.com/facebookresearch/dinov2).
+</hfoption>
+</hfoptions>
 
 ## Dinov2WithRegistersConfig
 
@@ -59,3 +70,4 @@ The original code can be found [here](https://github.com/facebookresearch/dinov2
 
 [[autodoc]] Dinov2WithRegistersForImageClassification
     - forward
+

@@ -13,164 +13,50 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2019-11-05 and added to Hugging Face Transformers on 2020-11-16.*
+*This model was released on 2019-11-05 and added to Hugging Face Transformers on 2020-11-16 and contributed by [stefan-it](https://huggingface.co/stefan-it).*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
 </div>
 
 # XLM-RoBERTa
 
-[XLM-RoBERTa](https://huggingface.co/papers/1911.02116) is a large multilingual masked language model trained on 2.5TB of filtered CommonCrawl data across 100 languages. It shows that scaling the model provides strong performance gains on high-resource and low-resource languages. The model uses the [RoBERTa](./roberta) pretraining objectives on the [XLM](./xlm) model.
-
-You can find all the original XLM-RoBERTa checkpoints under the [Facebook AI community](https://huggingface.co/FacebookAI) organization.
-
-> [!TIP]
-> Click on the XLM-RoBERTa models in the right sidebar for more examples of how to apply XLM-RoBERTa to different cross-lingual tasks like classification, translation, and question answering.
-
-The example below demonstrates how to predict the `<mask>` token with [`Pipeline`], [`AutoModel`], and from the command line.
+[XLM-R](https://huggingface.co/papers/1911.02116) is a Transformer-based masked language model trained on over two terabytes of filtered CommonCrawl data across one hundred languages. It outperforms multilingual BERT (mBERT) on various cross-lingual benchmarks, showing improvements such as +13.8% average accuracy on XNLI, +12.3% average F1 score on MLQA, and +2.1% average F1 score on NER. XLM-R particularly excels in low-resource languages, enhancing XNLI accuracy by 11.8% for Swahili and 9.2% for Urdu compared to the previous XLM model. The model demonstrates the feasibility of multilingual modeling without compromising per-language performance, competing effectively with strong monolingual models on GLUE and XNLI benchmarks.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```python
+```py
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(
-    task="fill-mask",
-    model="FacebookAI/xlm-roberta-base",
-    dtype=torch.float16,
-    device=0
-)
-# Example in French
-pipeline("Bonjour, je suis un modèle <mask>.")
+pipeline = pipeline(task="fill-mask", model="FacebookAI/xlm-roberta-base", dtype="auto")
+pipeline("Les plantes créent <mask> grâce à un processus appelé photosynthèse.")
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
-```python
-from transformers import AutoModelForMaskedLM, AutoTokenizer
+```py
 import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained(
-    "FacebookAI/xlm-roberta-base"
-)
-model = AutoModelForMaskedLM.from_pretrained(
-    "FacebookAI/xlm-roberta-base",
-    dtype=torch.float16,
-    device_map="auto",
-    attn_implementation="sdpa"
-)
+model = AutoModelForMaskedLM.from_pretrained("FacebookAI/xlm-roberta-base", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("FacebookAI/xlm-roberta-base")
 
-# Prepare input
-inputs = tokenizer("Bonjour, je suis un modèle <mask>.", return_tensors="pt").to(model.device)
-
-with torch.no_grad():
-    outputs = model(**inputs)
-    predictions = outputs.logits
-
-masked_index = torch.where(inputs['input_ids'] == tokenizer.mask_token_id)[1]
-predicted_token_id = predictions[0, masked_index].argmax(dim=-1)
-predicted_token = tokenizer.decode(predicted_token_id)
-
-print(f"The predicted token is: {predicted_token}")
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Plants create <mask> through a process known as photosynthesis." | transformers run --task fill-mask --model FacebookAI/xlm-roberta-base --device 0
+inputs = tokenizer("Les plantes créent <mask> grâce à un processus appelé photosynthèse.", return_tensors="pt")
+outputs = model(**inputs)
+mask_token_id = tokenizer.mask_token_id
+mask_position = (inputs.input_ids == tokenizer.mask_token_id).nonzero(as_tuple=True)[1]
+predicted_word = tokenizer.decode(outputs.logits[0, mask_position].argmax(dim=-1))
+print(f"Predicted word: {predicted_word}")
 ```
 
 </hfoption>
 </hfoptions>
 
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [quantization guide](../quantization) overview for more available quantization backends.
-
-The example below uses [bitsandbytes](../quantization/bitsandbytes) the quantive the weights to 4 bits
-
-```python
-import torch
-from transformers import AutoModelForMaskedLM, AutoTokenizer, BitsAndBytesConfig
-
-quantization_config = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_compute_dtype=torch.bfloat16
-    bnb_4bit_quant_type="nf4",  # or "fp4" for float 4-bit quantization
-    bnb_4bit_use_double_quant=True,  # use double quantization for better performance
-)
-tokenizer = AutoTokenizer.from_pretrained("facebook/xlm-roberta-large")
-model = AutoModelForMaskedLM.from_pretrained(
-    "facebook/xlm-roberta-large",
-    dtype=torch.float16,
-    device_map="auto",
-    attn_implementation="flash_attention_2",
-    quantization_config=quantization_config
-)
-
-inputs = tokenizer("Bonjour, je suis un modèle <mask>.", return_tensors="pt").to(model.device)
-outputs = model.generate(**inputs, max_new_tokens=100)
-print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-```
-
-## Notes
-
-- Unlike some XLM models, XLM-RoBERTa doesn't require `lang` tensors to understand what language is being used. It automatically determines the language from the input IDs
-
-## Resources
-
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with XLM-RoBERTa. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
-
-<PipelineTag pipeline="text-classification"/>
-
-- A blog post on how to [finetune XLM RoBERTa for multiclass classification with Habana Gaudi on AWS](https://www.philschmid.de/habana-distributed-training)
-- [`XLMRobertaForSequenceClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification.ipynb)..
-- [Text classification](https://huggingface.co/docs/transformers/tasks/sequence_classification) chapter of the 🤗 Hugging Face Task Guides.
-- [Text classification task guide](../tasks/sequence_classification)
-
-<PipelineTag pipeline="token-classification"/>
-
-- [`XLMRobertaForTokenClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/token-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification.ipynb).
-- [Token classification](https://huggingface.co/course/chapter7/2?fw=pt) chapter of the 🤗 Hugging Face Course.
-- [Token classification task guide](../tasks/token_classification)
-
-<PipelineTag pipeline="text-generation"/>
-
-- [`XLMRobertaForCausalLM`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb).
-- [Causal language modeling](https://huggingface.co/docs/transformers/tasks/language_modeling) chapter of the 🤗 Hugging Face Task Guides.
-- [Causal language modeling task guide](../tasks/language_modeling)
-
-<PipelineTag pipeline="fill-mask"/>
-
-- [`XLMRobertaForMaskedLM`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling#robertabertdistilbert-and-masked-language-modeling) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb).
-- [Masked language modeling](https://huggingface.co/course/chapter7/3?fw=pt) chapter of the 🤗 Hugging Face Course.
-- [Masked language modeling](../tasks/masked_language_modeling)
-
-<PipelineTag pipeline="question-answering"/>
-
-- [`XLMRobertaForQuestionAnswering`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb).
-- [Question answering](https://huggingface.co/course/chapter7/7?fw=pt) chapter of the 🤗 Hugging Face Course.
-- [Question answering task guide](../tasks/question_answering)
-
-**Multiple choice**
-
-- [`XLMRobertaForMultipleChoice`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/multiple-choice) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice.ipynb).
-- [Multiple choice task guide](../tasks/multiple_choice)
-
-🚀 Deploy
-
-- A blog post on how to [Deploy Serverless XLM RoBERTa on AWS Lambda](https://www.philschmid.de/multilingual-serverless-xlm-roberta-with-huggingface).
-
-<Tip>
-
-This implementation is the same as RoBERTa. Refer to the [documentation of RoBERTa](roberta) for usage examples as well as the information relative to the inputs and outputs.
-</Tip>
 
 ## XLMRobertaConfig
 
@@ -222,3 +108,4 @@ This implementation is the same as RoBERTa. Refer to the [documentation of RoBER
 
 [[autodoc]] XLMRobertaForQuestionAnswering
     - forward
+

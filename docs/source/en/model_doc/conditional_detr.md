@@ -13,33 +13,54 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-08-13 and added to Hugging Face Transformers on 2022-09-22.*
+*This model was released on 2021-08-13 and added to Hugging Face Transformers on 2022-09-22 and contributed by [DepuMeng](https://huggingface.co/DepuMeng).*
 
 # Conditional DETR
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[Conditional DETR](https://huggingface.co/papers/2108.06152) addresses slow training convergence in DETR by introducing a conditional cross-attention mechanism. This mechanism allows the decoder to learn a conditional spatial query, enabling each cross-attention head to focus on distinct regions such as object extremities or internal regions. This approach reduces reliance on high-quality content embeddings, simplifying training and achieving up to 10× faster convergence for stronger backbones.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The Conditional DETR model was proposed in [Conditional DETR for Fast Training Convergence](https://huggingface.co/papers/2108.06152) by Depu Meng, Xiaokang Chen, Zejia Fan, Gang Zeng, Houqiang Li, Yuhui Yuan, Lei Sun, Jingdong Wang. Conditional DETR presents a conditional cross-attention mechanism for fast DETR training. Conditional DETR converges 6.7× to 10× faster than DETR.
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the paper is the following:
+pipeline = pipeline(task="object-detection", model="microsoft/conditional-detr-resnet-50", dtype="auto")
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
+```
 
-*The recently-developed DETR approach applies the transformer encoder and decoder architecture to object detection and achieves promising performance. In this paper, we handle the critical issue, slow training convergence, and present a conditional cross-attention mechanism for fast DETR training. Our approach is motivated by that the cross-attention in DETR relies highly on the content embeddings for localizing the four extremities and predicting the box, which increases the need for high-quality content embeddings and thus the training difficulty. Our approach, named conditional DETR, learns a conditional spatial query from the decoder embedding for decoder multi-head cross-attention. The benefit is that through the conditional spatial query, each cross-attention head is able to attend to a band containing a distinct region, e.g., one object extremity or a region inside the object box. This narrows down the spatial range for localizing the distinct regions for object classification and box regression, thus relaxing the dependence on the content embeddings and easing the training. Empirical results show that conditional DETR converges 6.7× faster for the backbones R50 and R101 and 10× faster for stronger backbones DC5-R50 and DC5-R101. Code is available at https://github.com/Atten4Vis/ConditionalDETR.*
+</hfoption>
+<hfoption id="AutoModel">
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/conditional_detr_curve.jpg"
-alt="drawing" width="600"/>
+```py
+import torch
+import requests
+from PIL import Image
+from transformers import AutoImageProcessor, AutoModelForObjectDetection
 
-<small> Conditional DETR shows much faster convergence compared to the original DETR. Taken from the <a href="https://huggingface.co/papers/2108.06152">original paper</a>.</small>
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
 
-This model was contributed by [DepuMeng](https://huggingface.co/DepuMeng). The original code can be found [here](https://github.com/Atten4Vis/ConditionalDETR).
+image_processor = AutoImageProcessor.from_pretrained("microsoft/conditional-detr-resnet-50")
+model = AutoModelForObjectDetection.from_pretrained("microsoft/conditional-detr-resnet-50", dtype="auto")
 
-## Resources
+inputs = image_processor(images=image, return_tensors="pt")
+outputs = model(**inputs)
+target_sizes = torch.tensor([image.size[::-1]])
+results = image_processor.post_process_object_detection(outputs, threshold=0.5, target_sizes=target_sizes)[
+    0
+]
+for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
+    box = [round(i, 2) for i in box.tolist()]
+    print(
+        f"Detected {model.config.id2label[label.item()]} with confidence "
+        f"{round(score.item(), 3)} at location {box}"
+    )
+```
 
-- Scripts for finetuning [`ConditionalDetrForObjectDetection`] with [`Trainer`] or [Accelerate](https://huggingface.co/docs/accelerate/index) can be found [here](https://github.com/huggingface/transformers/tree/main/examples/pytorch/object-detection).
-- See also: [Object detection task guide](../tasks/object_detection).
+</hfoption>
+</hfoptions>
 
 ## ConditionalDetrConfig
 
@@ -49,11 +70,24 @@ This model was contributed by [DepuMeng](https://huggingface.co/DepuMeng). The o
 
 [[autodoc]] ConditionalDetrImageProcessor
     - preprocess
+    - post_process_object_detection
+    - post_process_instance_segmentation
+    - post_process_semantic_segmentation
+    - post_process_panoptic_segmentation
 
 ## ConditionalDetrImageProcessorFast
 
 [[autodoc]] ConditionalDetrImageProcessorFast
     - preprocess
+    - post_process_object_detection
+    - post_process_instance_segmentation
+    - post_process_semantic_segmentation
+    - post_process_panoptic_segmentation
+
+## ConditionalDetrFeatureExtractor
+
+[[autodoc]] ConditionalDetrFeatureExtractor
+    - __call__
     - post_process_object_detection
     - post_process_instance_segmentation
     - post_process_semantic_segmentation
@@ -73,3 +107,4 @@ This model was contributed by [DepuMeng](https://huggingface.co/DepuMeng). The o
 
 [[autodoc]] ConditionalDetrForSegmentation
     - forward
+

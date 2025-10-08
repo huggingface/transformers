@@ -13,35 +13,35 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-04-16 and added to Hugging Face Transformers on 2025-04-11.*
+*This model was released on 2025-04-16 and added to Hugging Face Transformers on 2025-04-11 and contributed by [abrooks9944](https://huggingface.co/abrooks9944), [Avihu](https://huggingface.co/Avihu), and [gsaon](https://huggingface.co/gsaon).*
 
 # Granite Speech
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[GraniteSpeech](https://huggingface.co/papers/2505.08699) is a family of compact speech language models (2B and 8B parameters) derived from Granite-3.3-Instruct and optimized for English automatic speech recognition (ASR) and speech translation (AST). The models integrate a Conformer acoustic encoder with block attention and self-conditioning trained using connectionist temporal classification (CTC), a windowed query-transformer adapter for temporal downsampling and alignment to the LLM’s text space, and LoRA adapters for fine-tuning. Granite-speech operates in two modes: a speech mode (ASR/AST with encoder and adapters) and a text mode (standard Granite-3.3-Instruct). Despite being trained only on open data, it surpasses larger proprietary ASR models and achieves competitive AST performance across several languages.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="GraniteSpeechForConditionalGeneration">
 
-The [Granite Speech](https://huggingface.co/papers/2505.08699) model ([blog post](https://www.ibm.com/new/announcements/ibm-granite-3-3-speech-recognition-refined-reasoning-rag-loras)) is a multimodal language model, consisting of a speech encoder, speech projector, large language model, and LoRA adapter(s). More details regarding each component for the current (Granite 3.2 Speech) model architecture may be found below.
+```py
+import torch
+from datasets import load_dataset
+from transformers import AutoProcessor, GraniteSpeechForConditionalGeneration
 
-1. Speech Encoder: A [Conformer](https://huggingface.co/papers/2005.08100) encoder trained with Connectionist Temporal Classification (CTC) on character-level targets on ASR corpora. The encoder uses block-attention and self-conditioned CTC from the middle layer.
+dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation").sort("id")
+sampling_rate = dataset.features["audio"].sampling_rate
 
-2. Speech Projector: A query transformer (q-former) operating on the outputs of the last encoder block. The encoder and projector temporally downsample the audio features to be merged into the multimodal embeddings to be processed by the llm.
+processor = AutoProcessor.from_pretrained("ibm-granite/granite-speech-3.3-2b")
+model = GraniteSpeechForConditionalGeneration.from_pretrained("ibm-granite/granite-speech-3.3-2b", dtype="auto")
 
-3. Large Language Model: The Granite Speech model leverages Granite LLMs, which were originally proposed in [this paper](https://huggingface.co/papers/2408.13359).
+inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
+with torch.no_grad():
+    logits = model(**inputs).logits
+predicted_ids = torch.argmax(logits, dim=-1)
+print(f"Transcription: {processor.batch_decode(predicted_ids)[0]}")
+```
 
-4. LoRA adapter(s): The Granite Speech model contains a modality specific LoRA, which will be enabled when audio features are provided, and disabled otherwise.
-
-Note that most of the aforementioned components are implemented generically to enable compatibility and potential integration with other model architectures in transformers.
-
-This model was contributed by [Alexander Brooks](https://huggingface.co/abrooks9944), [Avihu Dekel](https://huggingface.co/Avihu), and [George Saon](https://huggingface.co/gsaon).
-
-## Usage tips
-
-- This model bundles its own LoRA adapter, which will be automatically loaded and enabled/disabled as needed during inference calls. Be sure to install [PEFT](https://github.com/huggingface/peft) to ensure the LoRA is correctly applied!
-
-<!-- TODO (@alex-jw-brooks) Add an example here once the model compatible with the transformers implementation is released -->
+</hfoption>
+</hfoptions>
 
 ## GraniteSpeechConfig
 
