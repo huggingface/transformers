@@ -750,13 +750,6 @@ class FlaubertModel(FlaubertPreTrainedModel):
             self.ffns.append(TransformerFFN(self.dim, self.hidden_dim, self.dim, config=config))
             self.layer_norm2.append(nn.LayerNorm(self.dim, eps=config.layer_norm_eps))
 
-        if hasattr(config, "pruned_heads"):
-            pruned_heads = config.pruned_heads.copy().items()
-            config.pruned_heads = {}
-            for layer, heads in pruned_heads:
-                if self.attentions[int(layer)].n_heads == config.n_heads:
-                    self.prune_heads({int(layer): list(map(int, heads))})
-
         # Initialize weights and apply final processing
         self.post_init()
 

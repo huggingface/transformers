@@ -352,13 +352,7 @@ class T5Attention(nn.Module):
                 causal_mask = mask[:, :, :, : key_states.shape[-2]]
                 position_bias = position_bias + causal_mask
 
-        if self.pruned_heads:
-            mask = torch.ones(position_bias.shape[1])
-            mask[list(self.pruned_heads)] = 0
-            position_bias_masked = position_bias[:, mask.bool()]
-        else:
-            position_bias_masked = position_bias
-
+        position_bias_masked = position_bias
         scores += position_bias_masked
 
         # (batch_size, n_heads, seq_length, key_length)
