@@ -311,6 +311,7 @@ def accelerate_disk_offload(
     dtype,
     reverse_key_renaming_mapping,
 ):
+    disk_only_shard_files = []
     if disk_offload_folder is not None:
         os.makedirs(disk_offload_folder, exist_ok=True)
     is_offloaded_safetensors = checkpoint_files is not None and checkpoint_files[0].endswith(".safetensors")
@@ -347,4 +348,4 @@ def accelerate_disk_offload(
         }
     else:
         disk_offload_index = {}
-    return disk_offload_index
+    return disk_offload_index, disk_only_shard_files
