@@ -1856,8 +1856,6 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
 
             layer_outputs = decoder_layer(
                 hidden_states,
-                None,
-                None,
                 position_embeddings[decoder_layer.attention_type],
                 per_layer_input,
                 attention_mask=causal_mask,
