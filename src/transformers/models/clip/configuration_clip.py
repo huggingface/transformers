@@ -229,7 +229,7 @@ class CLIPConfig(PretrainedConfig):
             Dictionary of configuration options used to initialize [`CLIPVisionConfig`].
         projection_dim (`int`, *optional*, defaults to 512):
             Dimensionality of text and vision projection layers.
-        logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
+        logit_scale_init_value (`float | int`, *optional*, defaults to 2.6592):
             The initial value of the *logit_scale* parameter. Default is used as per the original CLIP implementation.
         kwargs (*optional*):
             Dictionary of keyword arguments.
@@ -264,7 +264,7 @@ class CLIPConfig(PretrainedConfig):
     text_config: Optional[Union[dict, CLIPTextConfig]] = None
     vision_config: Optional[Union[dict, CLIPVisionConfig]] = None
     projection_dim: Optional[int] = 512
-    logit_scale_init_value: Optional[float] = 2.6592
+    logit_scale_init_value: Optional[float | int] = 2.6592
     initializer_factor: Optional[float] = 1.0
 
     def __post_init__(self, **kwargs):

@@ -216,7 +216,7 @@ class CLIPVisionModelTest(CLIPModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = CLIPVisionModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=CLIPVisionConfig, has_text_modality=False, hidden_size=32)
+        self.config_tester = ConfigTester(self, config_class=CLIPVisionConfig, has_text_modality=False, hidden_size=48)
 
     def test_config(self):
         self.config_tester.run_common_tests()

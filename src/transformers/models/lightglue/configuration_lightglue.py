@@ -135,8 +135,9 @@ class LightGlueConfig(PretrainedConfig):
                     keypoint_detector_config["_name_or_path"], trust_remote_code=self.trust_remote_code
                 )
             else:
+                keypoint_detector_config["attn_implementation"] = "eager"
                 keypoint_detector_config = CONFIG_MAPPING[keypoint_detector_config["model_type"]](
-                    **keypoint_detector_config, attn_implementation="eager"
+                    **keypoint_detector_config
                 )
 
         if keypoint_detector_config is None:

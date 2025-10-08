@@ -814,7 +814,7 @@ class PretrainedConfig(PushToHubMixin):
 
                 # To authorize passing a custom subconfig as kwarg in models that have nested configs.
                 # We need to update only custom kwarg values instead and keep other attributes in subconfig.
-                if not isinstance(cls.sub_configs, property): # TODO: remove after merging another PR 
+                if not isinstance(cls.sub_configs, property):  # TODO: remove after merging another PR
                     if key in cls.sub_configs and isinstance(value, dict) and isinstance(config_dict.get(key), dict):
                         config_dict[key].update(value)
                     else:
