@@ -337,7 +337,7 @@ class PreTrainedSentencePieceTokenizer(PreTrainedTokenizerBase):
         self._decode_use_source_tokenizer = False
 
     @property
-    def vocab_size(self):
+    def vocab_size(self) -> int:
         """Returns vocab size"""
         return self.sp_model.get_piece_size()
 

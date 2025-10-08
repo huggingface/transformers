@@ -24,12 +24,11 @@ from collections.abc import Iterable
 from typing import Any, Optional, Union
 
 import tokenizers.pre_tokenizers as pre_tokenizers_fast
-from tokenizers import processors
+from tokenizers import AddedToken, processors
 from tokenizers import Encoding as EncodingFast
 from tokenizers import Tokenizer as TokenizerFast
 from tokenizers.decoders import Decoder as DecoderFast
 from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, WordPieceTrainer
-from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers
 
 from .convert_slow_tokenizer import convert_slow_tokenizer
 from .integrations.ggml import convert_gguf_tokenizer
@@ -40,11 +39,9 @@ from .tokenization_utils_base import (
     AddedToken,
     BatchEncoding,
     PreTokenizedInput,
-    PreTokenizedInputPair,
     PreTrainedTokenizerBase,
     SpecialTokensMixin,
     TextInput,
-    TextInputPair,
     TruncationStrategy,
 )
 from .utils import PaddingStrategy, add_end_docstrings, logging

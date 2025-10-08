@@ -1381,6 +1381,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
     def __len__(self) -> int:
         raise NotImplementedError()
 
+    @property
+    def vocab_size(self) -> int:
+        """
+        `int`: Size of the base vocabulary (without the added tokens).
+        """
+        raise NotImplementedError()
+
     def get_vocab(self) -> dict[str, int]:
         """
         Returns the vocabulary as a dictionary of token to index.
@@ -1393,290 +1400,39 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         """
         raise NotImplementedError()
 
-    def apply_chat_template(
-        self,
-        conversation: Union[list[dict[str, str]], list[list[dict[str, str]]]],
-        tools: Optional[list[Union[dict, Callable]]] = None,
-        documents: Optional[list[dict[str, str]]] = None,
-        chat_template: Optional[str] = None,
-        add_generation_prompt: bool = False,
-        continue_final_message: bool = False,
-        tokenize: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: bool = False,
-        max_length: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_dict: bool = False,
-        return_assistant_tokens_mask: bool = False,
-        tokenizer_kwargs: Optional[dict[str, Any]] = None,
-        **kwargs,
-    ) -> Union[str, list[int], list[str], list[list[int]], BatchEncoding]:
+    def convert_tokens_to_ids(self, tokens: Union[str, list[str]]) -> Union[int, list[int]]:
         """
-        Converts a list of dictionaries with `"role"` and `"content"` keys to a list of token
-        ids. This method is intended for use with chat models, and will read the tokenizer's chat_template attribute to
-        determine the format and control tokens to use when converting.
+        Converts a token string (or a sequence of tokens) in a single integer id (or a sequence of ids), using the
+        vocabulary.
 
         Args:
-            conversation (Union[list[dict[str, str]], list[list[dict[str, str]]]]): A list of dicts
-                with "role" and "content" keys, representing the chat history so far.
-            tools (`list[Union[Dict, Callable]]`, *optional*):
-                A list of tools (callable functions) that will be accessible to the model. If the template does not
-                support function calling, this argument will have no effect. Each tool should be passed as a JSON Schema,
-                giving the name, description and argument types for the tool. See our
-                [tool use guide](https://huggingface.co/docs/transformers/en/chat_extras#passing-tools)
-                for more information.
-            documents (`list[dict[str, str]]`, *optional*):
-                A list of dicts representing documents that will be accessible to the model if it is performing RAG
-                (retrieval-augmented generation). If the template does not support RAG, this argument will have no
-                effect. We recommend that each document should be a dict containing "title" and "text" keys.
-            chat_template (`str`, *optional*):
-                A Jinja template to use for this conversion. It is usually not necessary to pass anything to this
-                argument, as the model's template will be used by default.
-            add_generation_prompt (bool, *optional*):
-                If this is set, a prompt with the token(s) that indicate
-                the start of an assistant message will be appended to the formatted output. This is useful when you want to generate a response from the model.
-                Note that this argument will be passed to the chat template, and so it must be supported in the
-                template for this argument to have any effect.
-            continue_final_message (bool, *optional*):
-                If this is set, the chat will be formatted so that the final
-                message in the chat is open-ended, without any EOS tokens. The model will continue this message
-                rather than starting a new one. This allows you to "prefill" part of
-                the model's response for it. Cannot be used at the same time as `add_generation_prompt`.
-            tokenize (`bool`, defaults to `True`):
-                Whether to tokenize the output. If `False`, the output will be a string.
-            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
-                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
-                 index) among:
-
-                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-                  sequence if provided).
-                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
-                  acceptable input length for the model if that argument is not provided.
-                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
-                  lengths).
-            truncation (`bool`, defaults to `False`):
-                Whether to truncate sequences at the maximum length. Has no effect if tokenize is `False`.
-            max_length (`int`, *optional*):
-                Maximum length (in tokens) to use for padding or truncation. Has no effect if tokenize is `False`. If
-                not specified, the tokenizer's `max_length` attribute will be used as a default.
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Has no effect if tokenize is `False`. Acceptable
-                values are:
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-            return_dict (`bool`, defaults to `False`):
-                Whether to return a dictionary with named outputs. Has no effect if tokenize is `False`.
-            tokenizer_kwargs (`dict[str: Any]`, *optional*): Additional kwargs to pass to the tokenizer.
-            return_assistant_tokens_mask (`bool`, defaults to `False`):
-                Whether to return a mask of the assistant generated tokens. For tokens generated by the assistant,
-                the mask will contain 1. For user and system tokens, the mask will contain 0.
-                This functionality is only available for chat templates that support it via the `{% generation %}` keyword.
-            **kwargs: Additional kwargs to pass to the template renderer. Will be accessible by the chat template.
+            tokens (`str` or `list[str]`): One or several token(s) to convert to token id(s).
 
         Returns:
-            `Union[list[int], Dict]`: A list of token ids representing the tokenized chat so far, including control tokens. This
-            output is ready to pass to the model, either directly or via methods like `generate()`. If `return_dict` is
-            set, will return a dict of tokenizer outputs instead.
+            `int` or `list[int]`: The token id or list of token ids.
         """
+        raise NotImplementedError()
 
-        if return_dict and not tokenize:
-            raise ValueError(
-                "`return_dict=True` is incompatible with `tokenize=False`, because there is no dict "
-                "of tokenizer outputs to return."
-            )
-
-        if return_assistant_tokens_mask and not return_dict:
-            raise ValueError("`return_assistant_tokens_mask=True` is incompatible with `return_dict=False`")
-
-        if tokenizer_kwargs is None:
-            tokenizer_kwargs = {}
-
-        chat_template = self.get_chat_template(chat_template, tools)
-
-        if isinstance(conversation, (list, tuple)) and (
-            isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "messages")
-        ):
-            conversations = conversation
-            is_batched = True
-        else:
-            conversations = [conversation]
-            is_batched = False
-
-        if continue_final_message:
-            if add_generation_prompt:
-                raise ValueError(
-                    "continue_final_message and add_generation_prompt are not compatible. Use continue_final_message when you want the model to continue the final message, and add_generation_prompt when you want to add a header that will prompt it to start a new assistant message instead."
-                )
-            if return_assistant_tokens_mask:
-                raise ValueError("continue_final_message is not compatible with return_assistant_tokens_mask.")
-
-        template_kwargs = {**self.special_tokens_map, **kwargs}  # kwargs overwrite special tokens if both are present
-        rendered_chat, generation_indices = render_jinja_template(
-            conversations=conversations,
-            tools=tools,
-            documents=documents,
-            chat_template=chat_template,
-            return_assistant_tokens_mask=return_assistant_tokens_mask,
-            continue_final_message=continue_final_message,
-            add_generation_prompt=add_generation_prompt,
-            **template_kwargs,
-        )
-
-        if not is_batched:
-            rendered_chat = rendered_chat[0]
-
-        if tokenize:
-            out = self(
-                rendered_chat,
-                padding=padding,
-                truncation=truncation,
-                max_length=max_length,
-                add_special_tokens=False,
-                return_tensors=return_tensors,
-                **tokenizer_kwargs,
-            )
-            if return_dict:
-                if return_assistant_tokens_mask:
-                    assistant_masks = []
-                    if is_batched or return_tensors:
-                        input_ids = out["input_ids"]
-                    else:
-                        input_ids = [out["input_ids"]]
-                    for i in range(len(input_ids)):
-                        current_mask = [0] * len(input_ids[i])
-                        for assistant_start_char, assistant_end_char in generation_indices[i]:
-                            start_token = out.char_to_token(i, assistant_start_char)
-                            end_token = out.char_to_token(i, assistant_end_char - 1)
-                            if start_token is None:
-                                # start_token is out of bounds maybe due to truncation.
-                                break
-                            for token_id in range(start_token, end_token + 1 if end_token else len(input_ids[i])):
-                                current_mask[token_id] = 1
-                        assistant_masks.append(current_mask)
-
-                    if not is_batched and not return_tensors:
-                        assistant_masks = assistant_masks[0]
-
-                    out["assistant_masks"] = assistant_masks
-
-                    if return_tensors:
-                        out.convert_to_tensors(tensor_type=return_tensors)
-
-                return out
-            else:
-                return out["input_ids"]
-        else:
-            return rendered_chat
-
-    def encode_message_with_chat_template(
-        self,
-        message: dict[str, str],
-        conversation_history: Optional[list[dict[str, str]]] = None,
-        **kwargs,
-    ) -> list[int]:
+    def convert_ids_to_tokens(
+        self, ids: Union[int, list[int]], skip_special_tokens: bool = False
+    ) -> Union[str, list[str]]:
         """
-        Tokenize a single message. This method is a convenience wrapper around `apply_chat_template` that allows you
-        to tokenize messages one by one. This is useful for things like token-by-token streaming.
-        This method is not guaranteed to be perfect. For some models, it may be impossible to robustly tokenize
-        single messages. For example, if the chat template adds tokens after each message, but also has a prefix that
-        is added to the entire chat, it will be impossible to distinguish a chat-start-token from a message-start-token.
-        In these cases, this method will do its best to find the correct tokenization, but it may not be perfect.
-        **Note:** This method does not support `add_generation_prompt`. If you want to add a generation prompt,
-        you should do it separately after tokenizing the conversation.
-        Args:
-            message (`dict`):
-                A dictionary with "role" and "content" keys, representing the message to tokenize.
-            conversation_history (`list[dict]`, *optional*):
-                A list of dicts with "role" and "content" keys, representing the chat history so far. If you are
-                tokenizing messages one by one, you should pass the previous messages in the conversation here.
-            **kwargs:
-                Additional kwargs to pass to the `apply_chat_template` method.
-        Returns:
-            `list[int]`: A list of token ids representing the tokenized message.
-        """
-        if "add_generation_prompt" in kwargs:
-            raise ValueError(
-                "`encode_message_with_chat_template` does not support `add_generation_prompt`. Please add the generation prompt "
-                "separately."
-            )
-
-        if conversation_history is None or len(conversation_history) == 0:
-            return self.apply_chat_template([message], add_generation_prompt=False, tokenize=True, **kwargs)
-
-        conversation = conversation_history + [message]
-        tokens = self.apply_chat_template(conversation, add_generation_prompt=False, tokenize=True, **kwargs)
-
-        prefix_tokens = self.apply_chat_template(
-            conversation_history, add_generation_prompt=False, tokenize=True, **kwargs
-        )
-        # It's possible that the prefix tokens are not a prefix of the full list of tokens.
-        # For example, if the prefix is `<s>User: Hi` and the full conversation is `<s>User: Hi</s><s>Assistant: Hello`.
-        # In this case, we can't simply find the prefix, so we have to do something a bit more subtle.
-        # We look for the first place where the tokens differ, and that's our split point.
-        # This is not perfect, but it's the best we can do without a token-level API.
-        # To make this more robust, we could do a diff and find the longest common subsequence, but this is
-        # a good first approximation.
-        # This is particularly important for models like Llama3 that have changed their chat template to include
-        # EOS tokens after user messages.
-        min_len = min(len(prefix_tokens), len(tokens))
-        for i in range(min_len):
-            if prefix_tokens[i] != tokens[i]:
-                return tokens[i:]
-        return tokens[min_len:]
-
-    def get_chat_template(self, chat_template: Optional[str] = None, tools: Optional[list[dict]] = None) -> str:
-        """
-        Retrieve the chat template string used for tokenizing chat messages. This template is used
-        internally by the `apply_chat_template` method and can also be used externally to retrieve the model's chat
-        template for better generation tracking.
+        Converts a single index or a sequence of indices in a token or a sequence of tokens, using the vocabulary and
+        added tokens.
 
         Args:
-            chat_template (`str`, *optional*):
-                A Jinja template or the name of a template to use for this conversion.
-                It is usually not necessary to pass anything to this argument,
-                as the model's template will be used by default.
-            tools (`list[Dict]`, *optional*):
-                A list of tools (callable functions) that will be accessible to the model. If the template does not
-                support function calling, this argument will have no effect. Each tool should be passed as a JSON Schema,
-                giving the name, description and argument types for the tool. See our
-                [chat templating guide](https://huggingface.co/docs/transformers/main/en/chat_templating#automated-function-conversion-for-tool-use)
-                for more information.
+            ids (`int` or `list[int]`):
+                The token id (or token ids) to convert to tokens.
+            skip_special_tokens (`bool`, *optional*, defaults to `False`):
+                Whether or not to remove special tokens in the decoding.
 
         Returns:
-            `str`: The chat template string.
+            `str` or `list[str]`: The decoded token(s).
         """
-        # First, handle the cases when the model has a dict of multiple templates
-        if isinstance(self.chat_template, dict):
-            template_dict = self.chat_template
-            if chat_template is not None and chat_template in template_dict:
-                # The user can pass the name of a template to the chat template argument instead of an entire template
-                chat_template = template_dict[chat_template]
-            elif chat_template is None:
-                if tools is not None and "tool_use" in template_dict:
-                    chat_template = template_dict["tool_use"]
-                elif "default" in template_dict:
-                    chat_template = template_dict["default"]
-                else:
-                    raise ValueError(
-                        "This model has multiple chat templates with no default specified! Please either pass a chat "
-                        "template or the name of the template you wish to use to the `chat_template` argument. Available "
-                        f"template names are {sorted(template_dict.keys())}."
-                    )
+        raise NotImplementedError()
 
-        elif chat_template is None:
-            # These are the cases when the model has a single template
-            # priority: `chat_template` argument > `tokenizer.chat_template`
-            if self.chat_template is not None:
-                chat_template = self.chat_template
-            else:
-                raise ValueError(
-                    "Cannot use chat template functions because tokenizer.chat_template is not set and no template "
-                    "argument was passed! For information about writing templates and setting the "
-                    "tokenizer.chat_template attribute, please see the documentation at "
-                    "https://huggingface.co/docs/transformers/main/en/chat_templating"
-                )
 
-        return chat_template
+
 
     @classmethod
     def from_pretrained(
@@ -2212,60 +1968,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             return {k: cls.convert_added_tokens(v, save=save, add_type_field=add_type_field) for k, v in obj.items()}
         return obj
 
-    def save_chat_templates(
-        self,
-        save_directory: Union[str, os.PathLike],
-        tokenizer_config: dict,
-        filename_prefix: Optional[str],
-        save_jinja_files: bool,
-    ):
-        """
-        Writes chat templates out to the save directory if we're using the new format, and removes them from
-        the tokenizer config if present. If we're using the legacy format, it doesn't write any files, and instead
-        writes the templates to the tokenizer config in the correct format.
-        """
-        chat_template_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + CHAT_TEMPLATE_FILE
-        )
-        chat_template_dir = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + CHAT_TEMPLATE_DIR
-        )
-
-        saved_raw_chat_template_files = []
-        if save_jinja_files and isinstance(self.chat_template, str):
-            # New format for single templates is to save them as chat_template.jinja
-            with open(chat_template_file, "w", encoding="utf-8") as f:
-                f.write(self.chat_template)
-            logger.info(f"chat template saved in {chat_template_file}")
-            saved_raw_chat_template_files.append(chat_template_file)
-            if "chat_template" in tokenizer_config:
-                tokenizer_config.pop("chat_template")  # To ensure it doesn't somehow end up in the config too
-        elif save_jinja_files and isinstance(self.chat_template, dict):
-            # New format for multiple templates is to save the default as chat_template.jinja
-            # and the other templates in the chat_templates/ directory
-            for template_name, template in self.chat_template.items():
-                if template_name == "default":
-                    with open(chat_template_file, "w", encoding="utf-8") as f:
-                        f.write(self.chat_template["default"])
-                    logger.info(f"chat template saved in {chat_template_file}")
-                    saved_raw_chat_template_files.append(chat_template_file)
-                else:
-                    Path(chat_template_dir).mkdir(exist_ok=True)
-                    template_filepath = os.path.join(chat_template_dir, f"{template_name}.jinja")
-                    with open(template_filepath, "w", encoding="utf-8") as f:
-                        f.write(template)
-                    logger.info(f"chat template saved in {template_filepath}")
-                    saved_raw_chat_template_files.append(template_filepath)
-            if "chat_template" in tokenizer_config:
-                tokenizer_config.pop("chat_template")  # To ensure it doesn't somehow end up in the config too
-        elif isinstance(self.chat_template, dict):
-            # Legacy format for multiple templates:
-            # chat template dicts are saved to the config as lists of dicts with fixed key names.
-            tokenizer_config["chat_template"] = [{"name": k, "template": v} for k, v in self.chat_template.items()]
-        elif self.chat_template is not None:
-            # Legacy format for single templates: Just make them a key in tokenizer_config.json
-            tokenizer_config["chat_template"] = self.chat_template
-        return tokenizer_config, saved_raw_chat_template_files
 
     def save_pretrained(
         self,
@@ -3142,6 +2844,346 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             raise ValueError(f"{auto_class} is not a valid auto class.")
 
         cls._auto_class = auto_class
+
+    def apply_chat_template(
+        self,
+        conversation: Union[list[dict[str, str]], list[list[dict[str, str]]]],
+        tools: Optional[list[Union[dict, Callable]]] = None,
+        documents: Optional[list[dict[str, str]]] = None,
+        chat_template: Optional[str] = None,
+        add_generation_prompt: bool = False,
+        continue_final_message: bool = False,
+        tokenize: bool = True,
+        padding: Union[bool, str, PaddingStrategy] = False,
+        truncation: bool = False,
+        max_length: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        return_dict: bool = False,
+        return_assistant_tokens_mask: bool = False,
+        tokenizer_kwargs: Optional[dict[str, Any]] = None,
+        **kwargs,
+    ) -> Union[str, list[int], list[str], list[list[int]], BatchEncoding]:
+        """
+        Converts a list of dictionaries with `"role"` and `"content"` keys to a list of token
+        ids. This method is intended for use with chat models, and will read the tokenizer's chat_template attribute to
+        determine the format and control tokens to use when converting.
+
+        Args:
+            conversation (Union[list[dict[str, str]], list[list[dict[str, str]]]]): A list of dicts
+                with "role" and "content" keys, representing the chat history so far.
+            tools (`list[Union[Dict, Callable]]`, *optional*):
+                A list of tools (callable functions) that will be accessible to the model. If the template does not
+                support function calling, this argument will have no effect. Each tool should be passed as a JSON Schema,
+                giving the name, description and argument types for the tool. See our
+                [tool use guide](https://huggingface.co/docs/transformers/en/chat_extras#passing-tools)
+                for more information.
+            documents (`list[dict[str, str]]`, *optional*):
+                A list of dicts representing documents that will be accessible to the model if it is performing RAG
+                (retrieval-augmented generation). If the template does not support RAG, this argument will have no
+                effect. We recommend that each document should be a dict containing "title" and "text" keys.
+            chat_template (`str`, *optional*):
+                A Jinja template to use for this conversion. It is usually not necessary to pass anything to this
+                argument, as the model's template will be used by default.
+            add_generation_prompt (bool, *optional*):
+                If this is set, a prompt with the token(s) that indicate
+                the start of an assistant message will be appended to the formatted output. This is useful when you want to generate a response from the model.
+                Note that this argument will be passed to the chat template, and so it must be supported in the
+                template for this argument to have any effect.
+            continue_final_message (bool, *optional*):
+                If this is set, the chat will be formatted so that the final
+                message in the chat is open-ended, without any EOS tokens. The model will continue this message
+                rather than starting a new one. This allows you to "prefill" part of
+                the model's response for it. Cannot be used at the same time as `add_generation_prompt`.
+            tokenize (`bool`, defaults to `True`):
+                Whether to tokenize the output. If `False`, the output will be a string.
+            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
+                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
+                 index) among:
+
+                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+                  sequence if provided).
+                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+                  acceptable input length for the model if that argument is not provided.
+                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+                  lengths).
+            truncation (`bool`, defaults to `False`):
+                Whether to truncate sequences at the maximum length. Has no effect if tokenize is `False`.
+            max_length (`int`, *optional*):
+                Maximum length (in tokens) to use for padding or truncation. Has no effect if tokenize is `False`. If
+                not specified, the tokenizer's `max_length` attribute will be used as a default.
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors of a particular framework. Has no effect if tokenize is `False`. Acceptable
+                values are:
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return NumPy `np.ndarray` objects.
+            return_dict (`bool`, defaults to `False`):
+                Whether to return a dictionary with named outputs. Has no effect if tokenize is `False`.
+            tokenizer_kwargs (`dict[str: Any]`, *optional*): Additional kwargs to pass to the tokenizer.
+            return_assistant_tokens_mask (`bool`, defaults to `False`):
+                Whether to return a mask of the assistant generated tokens. For tokens generated by the assistant,
+                the mask will contain 1. For user and system tokens, the mask will contain 0.
+                This functionality is only available for chat templates that support it via the `{% generation %}` keyword.
+            **kwargs: Additional kwargs to pass to the template renderer. Will be accessible by the chat template.
+
+        Returns:
+            `Union[list[int], Dict]`: A list of token ids representing the tokenized chat so far, including control tokens. This
+            output is ready to pass to the model, either directly or via methods like `generate()`. If `return_dict` is
+            set, will return a dict of tokenizer outputs instead.
+        """
+
+        if return_dict and not tokenize:
+            raise ValueError(
+                "`return_dict=True` is incompatible with `tokenize=False`, because there is no dict "
+                "of tokenizer outputs to return."
+            )
+
+        if return_assistant_tokens_mask and not return_dict:
+            raise ValueError("`return_assistant_tokens_mask=True` is incompatible with `return_dict=False`")
+
+        if tokenizer_kwargs is None:
+            tokenizer_kwargs = {}
+
+        chat_template = self.get_chat_template(chat_template, tools)
+
+        if isinstance(conversation, (list, tuple)) and (
+            isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "messages")
+        ):
+            conversations = conversation
+            is_batched = True
+        else:
+            conversations = [conversation]
+            is_batched = False
+
+        if continue_final_message:
+            if add_generation_prompt:
+                raise ValueError(
+                    "continue_final_message and add_generation_prompt are not compatible. Use continue_final_message when you want the model to continue the final message, and add_generation_prompt when you want to add a header that will prompt it to start a new assistant message instead."
+                )
+            if return_assistant_tokens_mask:
+                raise ValueError("continue_final_message is not compatible with return_assistant_tokens_mask.")
+
+        template_kwargs = {**self.special_tokens_map, **kwargs}  # kwargs overwrite special tokens if both are present
+        rendered_chat, generation_indices = render_jinja_template(
+            conversations=conversations,
+            tools=tools,
+            documents=documents,
+            chat_template=chat_template,
+            return_assistant_tokens_mask=return_assistant_tokens_mask,
+            continue_final_message=continue_final_message,
+            add_generation_prompt=add_generation_prompt,
+            **template_kwargs,
+        )
+
+        if not is_batched:
+            rendered_chat = rendered_chat[0]
+
+        if tokenize:
+            out = self(
+                rendered_chat,
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                add_special_tokens=False,
+                return_tensors=return_tensors,
+                **tokenizer_kwargs,
+            )
+            if return_dict:
+                if return_assistant_tokens_mask:
+                    assistant_masks = []
+                    if is_batched or return_tensors:
+                        input_ids = out["input_ids"]
+                    else:
+                        input_ids = [out["input_ids"]]
+                    for i in range(len(input_ids)):
+                        current_mask = [0] * len(input_ids[i])
+                        for assistant_start_char, assistant_end_char in generation_indices[i]:
+                            start_token = out.char_to_token(i, assistant_start_char)
+                            end_token = out.char_to_token(i, assistant_end_char - 1)
+                            if start_token is None:
+                                # start_token is out of bounds maybe due to truncation.
+                                break
+                            for token_id in range(start_token, end_token + 1 if end_token else len(input_ids[i])):
+                                current_mask[token_id] = 1
+                        assistant_masks.append(current_mask)
+
+                    if not is_batched and not return_tensors:
+                        assistant_masks = assistant_masks[0]
+
+                    out["assistant_masks"] = assistant_masks
+
+                    if return_tensors:
+                        out.convert_to_tensors(tensor_type=return_tensors)
+
+                return out
+            else:
+                return out["input_ids"]
+        else:
+            return rendered_chat
+
+    def encode_message_with_chat_template(
+        self,
+        message: dict[str, str],
+        conversation_history: Optional[list[dict[str, str]]] = None,
+        **kwargs,
+    ) -> list[int]:
+        """
+        Tokenize a single message. This method is a convenience wrapper around `apply_chat_template` that allows you
+        to tokenize messages one by one. This is useful for things like token-by-token streaming.
+        This method is not guaranteed to be perfect. For some models, it may be impossible to robustly tokenize
+        single messages. For example, if the chat template adds tokens after each message, but also has a prefix that
+        is added to the entire chat, it will be impossible to distinguish a chat-start-token from a message-start-token.
+        In these cases, this method will do its best to find the correct tokenization, but it may not be perfect.
+        **Note:** This method does not support `add_generation_prompt`. If you want to add a generation prompt,
+        you should do it separately after tokenizing the conversation.
+        Args:
+            message (`dict`):
+                A dictionary with "role" and "content" keys, representing the message to tokenize.
+            conversation_history (`list[dict]`, *optional*):
+                A list of dicts with "role" and "content" keys, representing the chat history so far. If you are
+                tokenizing messages one by one, you should pass the previous messages in the conversation here.
+            **kwargs:
+                Additional kwargs to pass to the `apply_chat_template` method.
+        Returns:
+            `list[int]`: A list of token ids representing the tokenized message.
+        """
+        if "add_generation_prompt" in kwargs:
+            raise ValueError(
+                "`encode_message_with_chat_template` does not support `add_generation_prompt`. Please add the generation prompt "
+                "separately."
+            )
+
+        if conversation_history is None or len(conversation_history) == 0:
+            return self.apply_chat_template([message], add_generation_prompt=False, tokenize=True, **kwargs)
+
+        conversation = conversation_history + [message]
+        tokens = self.apply_chat_template(conversation, add_generation_prompt=False, tokenize=True, **kwargs)
+
+        prefix_tokens = self.apply_chat_template(
+            conversation_history, add_generation_prompt=False, tokenize=True, **kwargs
+        )
+        # It's possible that the prefix tokens are not a prefix of the full list of tokens.
+        # For example, if the prefix is `<s>User: Hi` and the full conversation is `<s>User: Hi</s><s>Assistant: Hello`.
+        # In this case, we can't simply find the prefix, so we have to do something a bit more subtle.
+        # We look for the first place where the tokens differ, and that's our split point.
+        # This is not perfect, but it's the best we can do without a token-level API.
+        # To make this more robust, we could do a diff and find the longest common subsequence, but this is
+        # a good first approximation.
+        # This is particularly important for models like Llama3 that have changed their chat template to include
+        # EOS tokens after user messages.
+        min_len = min(len(prefix_tokens), len(tokens))
+        for i in range(min_len):
+            if prefix_tokens[i] != tokens[i]:
+                return tokens[i:]
+        return tokens[min_len:]
+
+    def get_chat_template(self, chat_template: Optional[str] = None, tools: Optional[list[dict]] = None) -> str:
+        """
+        Retrieve the chat template string used for tokenizing chat messages. This template is used
+        internally by the `apply_chat_template` method and can also be used externally to retrieve the model's chat
+        template for better generation tracking.
+
+        Args:
+            chat_template (`str`, *optional*):
+                A Jinja template or the name of a template to use for this conversion.
+                It is usually not necessary to pass anything to this argument,
+                as the model's template will be used by default.
+            tools (`list[Dict]`, *optional*):
+                A list of tools (callable functions) that will be accessible to the model. If the template does not
+                support function calling, this argument will have no effect. Each tool should be passed as a JSON Schema,
+                giving the name, description and argument types for the tool. See our
+                [chat templating guide](https://huggingface.co/docs/transformers/main/en/chat_templating#automated-function-conversion-for-tool-use)
+                for more information.
+
+        Returns:
+            `str`: The chat template string.
+        """
+        # First, handle the cases when the model has a dict of multiple templates
+        if isinstance(self.chat_template, dict):
+            template_dict = self.chat_template
+            if chat_template is not None and chat_template in template_dict:
+                # The user can pass the name of a template to the chat template argument instead of an entire template
+                chat_template = template_dict[chat_template]
+            elif chat_template is None:
+                if tools is not None and "tool_use" in template_dict:
+                    chat_template = template_dict["tool_use"]
+                elif "default" in template_dict:
+                    chat_template = template_dict["default"]
+                else:
+                    raise ValueError(
+                        "This model has multiple chat templates with no default specified! Please either pass a chat "
+                        "template or the name of the template you wish to use to the `chat_template` argument. Available "
+                        f"template names are {sorted(template_dict.keys())}."
+                    )
+
+        elif chat_template is None:
+            # These are the cases when the model has a single template
+            # priority: `chat_template` argument > `tokenizer.chat_template`
+            if self.chat_template is not None:
+                chat_template = self.chat_template
+            else:
+                raise ValueError(
+                    "Cannot use chat template functions because tokenizer.chat_template is not set and no template "
+                    "argument was passed! For information about writing templates and setting the "
+                    "tokenizer.chat_template attribute, please see the documentation at "
+                    "https://huggingface.co/docs/transformers/main/en/chat_templating"
+                )
+
+        return chat_template
+
+    def save_chat_templates(
+        self,
+        save_directory: Union[str, os.PathLike],
+        tokenizer_config: dict,
+        filename_prefix: Optional[str],
+        save_jinja_files: bool,
+    ):
+        """
+        Writes chat templates out to the save directory if we're using the new format, and removes them from
+        the tokenizer config if present. If we're using the legacy format, it doesn't write any files, and instead
+        writes the templates to the tokenizer config in the correct format.
+        """
+        chat_template_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + CHAT_TEMPLATE_FILE
+        )
+        chat_template_dir = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + CHAT_TEMPLATE_DIR
+        )
+
+        saved_raw_chat_template_files = []
+        if save_jinja_files and isinstance(self.chat_template, str):
+            # New format for single templates is to save them as chat_template.jinja
+            with open(chat_template_file, "w", encoding="utf-8") as f:
+                f.write(self.chat_template)
+            logger.info(f"chat template saved in {chat_template_file}")
+            saved_raw_chat_template_files.append(chat_template_file)
+            if "chat_template" in tokenizer_config:
+                tokenizer_config.pop("chat_template")  # To ensure it doesn't somehow end up in the config too
+        elif save_jinja_files and isinstance(self.chat_template, dict):
+            # New format for multiple templates is to save the default as chat_template.jinja
+            # and the other templates in the chat_templates/ directory
+            for template_name, template in self.chat_template.items():
+                if template_name == "default":
+                    with open(chat_template_file, "w", encoding="utf-8") as f:
+                        f.write(self.chat_template["default"])
+                    logger.info(f"chat template saved in {chat_template_file}")
+                    saved_raw_chat_template_files.append(chat_template_file)
+                else:
+                    Path(chat_template_dir).mkdir(exist_ok=True)
+                    template_filepath = os.path.join(chat_template_dir, f"{template_name}.jinja")
+                    with open(template_filepath, "w", encoding="utf-8") as f:
+                        f.write(template)
+                    logger.info(f"chat template saved in {template_filepath}")
+                    saved_raw_chat_template_files.append(template_filepath)
+            if "chat_template" in tokenizer_config:
+                tokenizer_config.pop("chat_template")  # To ensure it doesn't somehow end up in the config too
+        elif isinstance(self.chat_template, dict):
+            # Legacy format for multiple templates:
+            # chat template dicts are saved to the config as lists of dicts with fixed key names.
+            tokenizer_config["chat_template"] = [{"name": k, "template": v} for k, v in self.chat_template.items()]
+        elif self.chat_template is not None:
+            # Legacy format for single templates: Just make them a key in tokenizer_config.json
+            tokenizer_config["chat_template"] = self.chat_template
+        return tokenizer_config, saved_raw_chat_template_files
 
 
 def get_fast_tokenizer_file(tokenization_files: list[str]) -> str:

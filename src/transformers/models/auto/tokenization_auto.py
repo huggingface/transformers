@@ -1217,10 +1217,10 @@ class AutoTokenizer:
             raise ValueError("You passed a slow tokenizer in the `fast_tokenizer_class`.")
 
         if (
-                slow_tokenizer_class is not None
-                and fast_tokenizer_class is not None
-                and issubclass(fast_tokenizer_class, PreTrainedTokenizerFast)
-                and fast_tokenizer_class.slow_tokenizer_class != slow_tokenizer_class
+            slow_tokenizer_class is not None
+            and fast_tokenizer_class is not None
+            and issubclass(fast_tokenizer_class, PreTrainedTokenizerFast)
+            and fast_tokenizer_class.slow_tokenizer_class != slow_tokenizer_class
         ):
             raise ValueError(
                 "The fast tokenizer class you are passing has a `slow_tokenizer_class` attribute that is not "
