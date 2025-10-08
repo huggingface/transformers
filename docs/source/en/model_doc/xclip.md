@@ -13,42 +13,92 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-08-04 and added to Hugging Face Transformers on 2023-06-20.*
+*This model was released on 2022-08-04 and added to Hugging Face Transformers on 2023-06-20 and contributed by [nielsr](https://huggingface.co/nielsr).*
 
 # X-CLIP
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[X-CLIP](https://huggingface.co/papers/2208.02816) extends CLIP for video recognition by incorporating a cross-frame attention mechanism and a video-specific prompt generator. This approach captures long-range dependencies across frames and leverages video content for generating discriminative textual prompts. Experiments show that X-CLIP achieves high accuracy in fully-supervised, zero-shot, and few-shot video recognition tasks, outperforming existing methods with fewer computational resources.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="AutoModel">
 
-The X-CLIP model was proposed in [Expanding Language-Image Pretrained Models for General Video Recognition](https://huggingface.co/papers/2208.02816) by Bolin Ni, Houwen Peng, Minghao Chen, Songyang Zhang, Gaofeng Meng, Jianlong Fu, Shiming Xiang, Haibin Ling.
-X-CLIP is a minimal extension of [CLIP](clip) for video. The model consists of a text encoder, a cross-frame vision encoder, a multi-frame integration Transformer, and a video-specific prompt generator.
+```py
+import av
+import torch
+import numpy as np
+from transformers import AutoProcessor, AutoModel
+from huggingface_hub import hf_hub_download
 
-The abstract from the paper is the following:
+def read_video_pyav(container, indices):
+    '''
+    Decode the video with PyAV decoder.
+    Args:
+        container (`av.container.input.InputContainer`): PyAV container.
+        indices (`list[int]`): List of frame indices to decode.
+    Returns:
+        result (np.ndarray): np array of decoded frames of shape (num_frames, height, width, 3).
+    '''
+    frames = []
+    container.seek(0)
+    start_index = indices[0]
+    end_index = indices[-1]
+    for i, frame in enumerate(container.decode(video=0)):
+        if i > end_index:
+            break
+        if i >= start_index and i in indices:
+            frames.append(frame)
+    return np.stack([x.to_ndarray(format="rgb24") for x in frames])
 
-*Contrastive language-image pretraining has shown great success in learning visual-textual joint representation from web-scale data, demonstrating remarkable "zero-shot" generalization ability for various image tasks. However, how to effectively expand such new language-image pretraining methods to video domains is still an open problem. In this work, we present a simple yet effective approach that adapts the pretrained language-image models to video recognition directly, instead of pretraining a new model from scratch. More concretely, to capture the long-range dependencies of frames along the temporal dimension, we propose a cross-frame attention mechanism that explicitly exchanges information across frames. Such module is lightweight and can be plugged into pretrained language-image models seamlessly. Moreover, we propose a video-specific prompting scheme, which leverages video content information for generating discriminative textual prompts. Extensive experiments demonstrate that our approach is effective and can be generalized to different video recognition scenarios. In particular, under fully-supervised settings, our approach achieves a top-1 accuracy of 87.1% on Kinectics-400, while using 12 times fewer FLOPs compared with Swin-L and ViViT-H. In zero-shot experiments, our approach surpasses the current state-of-the-art methods by +7.6% and +14.9% in terms of top-1 accuracy under two popular protocols. In few-shot scenarios, our approach outperforms previous best methods by +32.1% and +23.1% when the labeled data is extremely limited.*
 
-Tips:
+def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
+    '''
+    Sample a given number of frame indices from the video.
+    Args:
+        clip_len (`int`): Total number of frames to sample.
+        frame_sample_rate (`int`): Sample every n-th frame.
+        seg_len (`int`): Maximum allowed index of sample's last frame.
+    Returns:
+        indices (`list[int]`): List of sampled frame indices
+    '''
+    converted_len = int(clip_len * frame_sample_rate)
+    end_idx = np.random.randint(converted_len, seg_len)
+    start_idx = end_idx - converted_len
+    indices = np.linspace(start_idx, end_idx, num=clip_len)
+    indices = np.clip(indices, start_idx, end_idx - 1).astype(np.int64)
+    return indices
 
-- Usage of X-CLIP is identical to [CLIP](clip).
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/xclip_architecture.png"
-alt="drawing" width="600"/>
+file_path = hf_hub_download(
+    repo_id="nielsr/video-demo", filename="eating_spaghetti.mp4", repo_type="dataset"
+)
+container = av.open(file_path)
 
-<small> X-CLIP architecture. Taken from the <a href="https://huggingface.co/papers/2208.02816">original paper.</a> </small>
+indices = sample_frame_indices(clip_len=8, frame_sample_rate=1, seg_len=container.streams.video[0].frames)
+video = read_video_pyav(container, indices)
+text_labels = ["playing sports", "eating spaghetti", "go shopping"]
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr).
-The original code can be found [here](https://github.com/microsoft/VideoX/tree/master/X-CLIP).
 
-## Resources
+processor = AutoProcessor.from_pretrained("microsoft/xclip-base-patch32")
+model = AutoModel.from_pretrained("microsoft/xclip-base-patch32", dtype="auto")
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with X-CLIP.
+inputs = processor(
+    text=text_labels,
+    videos=list(video),
+    return_tensors="pt",
+    padding=True,
+)
 
-- Demo notebooks for X-CLIP can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/X-CLIP).
+with torch.no_grad():
+    outputs = model(**inputs)
 
-If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+logits_per_video = outputs.logits_per_video
+probs = logits_per_video.softmax(dim=1)
+for i, (label, prob) in enumerate(zip(text_labels, probs[0])):
+    print(f"{label}: {prob:.4f}")
+```
+
+</hfoption>
+</hfoptions>
 
 ## XCLIPProcessor
 
@@ -82,3 +132,4 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] XCLIPVisionModel
     - forward
+

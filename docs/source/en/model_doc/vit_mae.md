@@ -13,11 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-11-11 and added to Hugging Face Transformers on 2022-01-18.*
+*This model was released on 2021-11-11 and added to Hugging Face Transformers on 2022-01-18 and contributed by [nielsr](https://huggingface.co/nielsr).*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
@@ -25,29 +24,16 @@ rendered properly in your Markdown viewer.
 
 # ViTMAE
 
-[ViTMAE](https://huggingface.co/papers/2111.06377) is a self-supervised vision model that is pretrained by masking large portions of an image (~75%). An encoder processes the visible image patches and a decoder reconstructs the missing pixels from the encoded patches and mask tokens. After pretraining, the encoder can be reused for downstream tasks like image classification or object detection — often outperforming models trained with supervised learning.
-
-<img src="https://user-images.githubusercontent.com/11435359/146857310-f258c86c-fde6-48e8-9cee-badd2b21bd2c.png"
-alt="drawing" width="600"/>
-
-You can find all the original ViTMAE checkpoints under the [AI at Meta](https://huggingface.co/facebook?search_models=vit-mae) organization.
-
-> [!TIP]
-> Click on the ViTMAE models in the right sidebar for more examples of how to apply ViTMAE to vision tasks.
-
-The example below demonstrates how to reconstruct the missing pixels with the [`ViTMAEForPreTraining`] class.
+[ViTMAE](https://huggingface.co/papers/2111.06377v2) demonstrates that masked autoencoders (MAE) are effective self-supervised learners for computer vision. The model uses an asymmetric encoder-decoder architecture, where the encoder processes only the visible patches without mask tokens, and the decoder reconstructs the image from the latent representation and mask tokens. Masking up to 75% of the input image creates a meaningful self-supervisory task, enabling efficient and effective training of large models. This approach leads to high accuracy, with a vanilla ViT-Huge model achieving 87.8% on ImageNet-1K, surpassing supervised pre-training in downstream tasks.
 
 <hfoptions id="usage">
-<hfoption id="AutoModel">
+<hfoption id="ViTMAEForPreTraining">
 
-```python
+```py
 import torch
 import requests
 from PIL import Image
-from transformers import ViTImageProcessor, ViTMAEForPreTraining
-from accelerate import Accelerator
-
-device = Accelerator().device
+from transformers import infer_device, ViTImageProcessor, ViTMAEForPreTraining
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
@@ -56,7 +42,7 @@ processor = ViTImageProcessor.from_pretrained("facebook/vit-mae-base")
 inputs = processor(image, return_tensors="pt")
 inputs = {k: v.to(device) for k, v in inputs.items()}
 
-model = ViTMAEForPreTraining.from_pretrained("facebook/vit-mae-base", attn_implementation="sdpa").to(device)
+model = ViTMAEForPreTraining.from_pretrained("facebook/vit-mae-base", dtype="auto")
 with torch.no_grad():
     outputs = model(**inputs)
 
@@ -65,15 +51,6 @@ reconstruction = outputs.logits
 
 </hfoption>
 </hfoptions>
-
-## Notes
-
-- ViTMAE is typically used in two stages. Self-supervised pretraining with [`ViTMAEForPreTraining`], and then discarding the decoder and fine-tuning the encoder. After fine-tuning, the weights can be plugged into a model like [`ViTForImageClassification`].
-- Use [`ViTImageProcessor`] for input preparation.
-
-## Resources
-
-- Refer to this [notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/ViTMAE/ViT_MAE_visualization_demo.ipynb) to learn how to visualize the reconstructed pixels from [`ViTMAEForPreTraining`].
 
 ## ViTMAEConfig
 
@@ -88,3 +65,4 @@ reconstruction = outputs.logits
 
 [[autodoc]] transformers.ViTMAEForPreTraining
     - forward
+

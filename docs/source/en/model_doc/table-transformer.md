@@ -13,49 +13,55 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-09-30 and added to Hugging Face Transformers on 2022-10-18.*
+*This model was released on 2021-09-30 and added to Hugging Face Transformers on 2022-10-18 and contributed by [nielsr](https://huggingface.co/nielsr).*
 
 # Table Transformer
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[Table Transformer](https://huggingface.co/papers/2110.00061) introduces PubTables-1M, a dataset with nearly one million tables from scientific articles, addressing ground truth inconsistency through a canonicalization procedure. The dataset supports multiple input modalities and detailed header and location information. Two DETR-based models, one for table detection and another for table structure recognition, achieve excellent results across detection, structure recognition, and functional analysis tasks without task-specific customization.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The Table Transformer model was proposed in [PubTables-1M: Towards comprehensive table extraction from unstructured documents](https://huggingface.co/papers/2110.00061) by
-Brandon Smock, Rohith Pesala, Robin Abraham. The authors introduce a new dataset, PubTables-1M, to benchmark progress in table extraction from unstructured documents,
-as well as table structure recognition and functional analysis. The authors train 2 [DETR](detr) models, one for table detection and one for table structure recognition, dubbed Table Transformers.
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the paper is the following:
+pipeline = pipeline(task="object-detection", model="microsoft/table-transformer-detection", dtype="auto")
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/table-transformer-example.png")
+```
 
-*Recently, significant progress has been made applying machine learning to the problem of table structure inference and extraction from unstructured documents.
-However, one of the greatest challenges remains the creation of datasets with complete, unambiguous ground truth at scale. To address this, we develop a new, more
-comprehensive dataset for table extraction, called PubTables-1M. PubTables-1M contains nearly one million tables from scientific articles, supports multiple input
-modalities, and contains detailed header and location information for table structures, making it useful for a wide variety of modeling approaches. It also addresses a significant
-source of ground truth inconsistency observed in prior datasets called oversegmentation, using a novel canonicalization procedure. We demonstrate that these improvements lead to a
-significant increase in training performance and a more reliable estimate of model performance at evaluation for table structure recognition. Further, we show that transformer-based
-object detection models trained on PubTables-1M produce excellent results for all three tasks of detection, structure recognition, and functional analysis without the need for any
-special customization for these tasks.*
+</hfoption>
+<hfoption id="AutoModel">
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/table_transformer_architecture.jpeg"
-alt="drawing" width="600"/>
+```py
+import torch
+import requests
+from PIL import Image
+from transformers import AutoImageProcessor, AutoModelForObjectDetection
 
-<small> Table detection and table structure recognition clarified. Taken from the <a href="https://huggingface.co/papers/2110.00061">original paper</a>. </small>
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/table-transformer-example.png"
+image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
-The authors released 2 models, one for [table detection](https://huggingface.co/microsoft/table-transformer-detection) in
-documents, one for [table structure recognition](https://huggingface.co/microsoft/table-transformer-structure-recognition)
-(the task of recognizing the individual rows, columns etc. in a table).
+image_processor = AutoImageProcessor.from_pretrained("microsoft/table-transformer-detection")
+model = AutoModelForObjectDetection.from_pretrained("microsoft/table-transformer-detection", dtype="auto")
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be
-found [here](https://github.com/microsoft/table-transformer).
+inputs = image_processor(images=image, return_tensors="pt")
+outputs = model(**inputs)
+target_sizes = torch.tensor([image.size[::-1]])
+results = image_processor.post_process_object_detection(outputs, threshold=0.5, target_sizes=target_sizes)[
+    0
+]
+for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
+    box = [round(i, 2) for i in box.tolist()]
+    print(
+        f"Detected {model.config.id2label[label.item()]} with confidence "
+        f"{round(score.item(), 3)} at location {box}"
+    )
+```
 
-## Resources
+</hfoption>
+</hfoptions>
 
-<PipelineTag pipeline="object-detection"/>
-
-- A demo notebook for the Table Transformer can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/Table%20Transformer).
-- It turns out padding of images is quite important for detection. An interesting Github thread with replies from the authors can be found [here](https://github.com/microsoft/table-transformer/issues/68).
 
 ## TableTransformerConfig
 
@@ -70,3 +76,4 @@ found [here](https://github.com/microsoft/table-transformer).
 
 [[autodoc]] TableTransformerForObjectDetection
     - forward
+

@@ -13,50 +13,43 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-05-09 and added to Hugging Face Transformers on 2021-09-20.*
+*This model was released on 2021-05-09 and added to Hugging Face Transformers on 2021-09-20 and contributed by [gchhablani](https://huggingface.co/gchhablani).*
 
 # FNet
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[FNet: Mixing Tokens with Fourier Transforms](https://huggingface.co/papers/2105.03824) demonstrates that Transformer encoders can be significantly accelerated by replacing self-attention layers with simple linear mixers or even an unparameterized Fourier Transform. This FNet approach achieves 92–97% of BERT’s accuracy on the GLUE benchmark while training 80% faster on GPUs and 70% faster on TPUs at standard input lengths. On longer sequences, FNet maintains competitive accuracy compared to efficient Transformers while being faster across most sequence lengths. Additionally, FNet has a smaller memory footprint, making it especially efficient for smaller models, which can outperform Transformer counterparts under the same speed and accuracy constraints.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The FNet model was proposed in [FNet: Mixing Tokens with Fourier Transforms](https://huggingface.co/papers/2105.03824) by
-James Lee-Thorp, Joshua Ainslie, Ilya Eckstein, Santiago Ontanon. The model replaces the self-attention layer in a BERT
-model with a fourier transform which returns only the real parts of the transform. The model is significantly faster
-than the BERT model because it has fewer parameters and is more memory efficient. The model achieves about 92-97%
-accuracy of BERT counterparts on GLUE benchmark, and trains much faster than the BERT model. The abstract from the
-paper is the following:
+```py
+import torch
+from transformers import pipeline
 
-*We show that Transformer encoder architectures can be sped up, with limited accuracy costs, by replacing the
-self-attention sublayers with simple linear transformations that "mix" input tokens. These linear mixers, along with
-standard nonlinearities in feed-forward layers, prove competent at modeling semantic relationships in several text
-classification tasks. Most surprisingly, we find that replacing the self-attention sublayer in a Transformer encoder
-with a standard, unparameterized Fourier Transform achieves 92-97% of the accuracy of BERT counterparts on the GLUE
-benchmark, but trains 80% faster on GPUs and 70% faster on TPUs at standard 512 input lengths. At longer input lengths,
-our FNet model is significantly faster: when compared to the "efficient" Transformers on the Long Range Arena
-benchmark, FNet matches the accuracy of the most accurate models, while outpacing the fastest models across all
-sequence lengths on GPUs (and across relatively shorter lengths on TPUs). Finally, FNet has a light memory footprint
-and is particularly efficient at smaller model sizes; for a fixed speed and accuracy budget, small FNet models
-outperform Transformer counterparts.*
+pipeline = pipeline(task="fill-mask", model="google/fnet-base", dtype="auto")
+pipeline("Plants create [MASK] through a process known as photosynthesis.")
+```
 
-This model was contributed by [gchhablani](https://huggingface.co/gchhablani). The original code can be found [here](https://github.com/google-research/google-research/tree/master/f_net).
+</hfoption>
+<hfoption id="AutoModel">
 
-## Usage tips
+```py
+import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-The model was trained without an attention mask as it is based on Fourier Transform. The model was trained with
-maximum sequence length 512 which includes pad tokens. Hence, it is highly recommended to use the same maximum
-sequence length for fine-tuning and inference.
+model = AutoModelForMaskedLM.from_pretrained("google/fnet-base", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("google/fnet-base")
 
-## Resources
+inputs = tokenizer("Plants create [MASK] through a process known as photosynthesis.", return_tensors="pt")
+outputs = model(**inputs)
+mask_token_id = tokenizer.mask_token_id
+mask_position = (inputs.input_ids == tokenizer.mask_token_id).nonzero(as_tuple=True)[1]
+predicted_word = tokenizer.decode(outputs.logits[0, mask_position].argmax(dim=-1))
+print(f"Predicted word: {predicted_word}")
+```
 
-- [Text classification task guide](../tasks/sequence_classification)
-- [Token classification task guide](../tasks/token_classification)
-- [Question answering task guide](../tasks/question_answering)
-- [Masked language modeling task guide](../tasks/masked_language_modeling)
-- [Multiple choice task guide](../tasks/multiple_choice)
+</hfoption>
+</hfoptions>
 
 ## FNetConfig
 

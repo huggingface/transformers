@@ -13,22 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-11-18 and added to Hugging Face Transformers on 2022-07-27.*
-
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
+*This model was released on 2021-11-18 and added to Hugging Face Transformers on 2022-07-27 and contributed by [nandwalritik](https://huggingface.co/nandwalritik).*
 
 # Swin Transformer V2
 
-[Swin Transformer V2](https://huggingface.co/papers/2111.09883) is a 3B parameter model that focuses on how to scale a vision model to billions of parameters. It introduces techniques like residual-post-norm combined with cosine attention for improved training stability, log-spaced continuous position bias to better handle varying image resolutions between pre-training and fine-tuning, and a new pre-training method (SimMIM) to reduce the need for large amounts of labeled data. These improvements enable efficiently training very large models (up to 3 billion parameters) capable of processing high-resolution images.
-
-You can find official Swin Transformer V2 checkpoints under the [Microsoft](https://huggingface.co/microsoft?search_models=swinv2) organization.
-
-> [!TIP]
-> Click on the Swin Transformer V2 models in the right sidebar for more examples of how to apply Swin Transformer V2 to vision tasks.
+[Swin Transformer V2](https://huggingface.co/papers/2111.09883) addresses training instability, resolution gaps, and data hunger in large vision models. It introduces a residual-post-norm method with cosine attention, a log-spaced continuous position bias, and a self-supervised pre-training method called SimMIM. These techniques enabled the training of a 3 billion-parameter model capable of handling 1,536×1,536 resolution images, setting new benchmarks in ImageNet-V2 classification, COCO detection, ADE20K segmentation, and Kinetics-400 action classification. The training process is more efficient, using 40 times less labeled data and time compared to similar models.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -37,52 +26,36 @@ You can find official Swin Transformer V2 checkpoints under the [Microsoft](http
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(
-    task="image-classification",
-    model="microsoft/swinv2-tiny-patch4-window8-256",
-    dtype=torch.float16,
-    device=0
-)
+pipeline = pipeline(task="image-classification", model="microsoft/swinv2-tiny-patch4-window8-256", dtype="auto")
 pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
 ```
 
 </hfoption>
-
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
 import requests
 from PIL import Image
-from transformers import AutoModelForImageClassification, AutoImageProcessor
-
-image_processor = AutoImageProcessor.from_pretrained(
-    "microsoft/swinv2-tiny-patch4-window8-256",
-)
-model = AutoModelForImageClassification.from_pretrained(
-    "microsoft/swinv2-tiny-patch4-window8-256",
-    device_map="auto"
-)
+from transformers import AutoImageProcessor, AutoModelForImageClassification
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
-inputs = image_processor(image, return_tensors="pt").to(model.device)
+
+image_processor = AutoImageProcessor.from_pretrained("microsoft/swinv2-tiny-patch4-window8-256")
+model = AutoModelForImageClassification.from_pretrained("microsoft/swinv2-tiny-patch4-window8-256", dtype="auto")
+
+inputs = image_processor(image, return_tensors="pt")
 
 with torch.no_grad():
-  logits = model(**inputs).logits
+    logits = model(**inputs).logits
 
-predicted_class_id = logits.argmax(dim=-1).item()
-predicted_class_label = model.config.id2label[predicted_class_id]
-print(f"The predicted class label is: {predicted_class_label}")
+predicted_label = logits.argmax(-1).item()
+print(model.config.id2label[predicted_label])
 ```
 
 </hfoption>
 </hfoptions>
-
-## Notes
-
-- Swin Transformer V2 can pad the inputs for any input height and width divisible by `32`.
-- Swin Transformer V2 can be used as a [backbone](../backbones). When `output_hidden_states = True`, it outputs both `hidden_states` and `reshaped_hidden_states`. The `reshaped_hidden_states` have a shape of `(batch, num_channels, height, width)` rather than `(batch_size, sequence_length, num_channels)`.
 
 ## Swinv2Config
 
@@ -102,3 +75,4 @@ print(f"The predicted class label is: {predicted_class_label}")
 
 [[autodoc]] transformers.Swinv2ForImageClassification
     - forward
+

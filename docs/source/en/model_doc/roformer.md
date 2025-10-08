@@ -13,77 +13,43 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-04-20 and added to Hugging Face Transformers on 2021-05-20.*
-
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-           <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
+*This model was released on 2021-04-20 and added to Hugging Face Transformers on 2021-05-20 and contributed by [junnyu](https://huggingface.co/junnyu).*
 
 # RoFormer
 
-[RoFormer](https://huggingface.co/papers/2104.09864) introduces Rotary Position Embedding (RoPE) to encode token positions by rotating the inputs in 2D space. This allows a model to track absolute positions and model relative relationships. RoPE can scale to longer sequences, account for the natural decay of token dependencies, and works with the more efficient linear self-attention.
-
-You can find all the RoFormer checkpoints on the [Hub](https://huggingface.co/models?search=roformer).
-
-> [!TIP]
-> Click on the RoFormer models in the right sidebar for more examples of how to apply RoFormer to different language tasks.
-
-The example below demonstrates how to predict the `[MASK]` token with [`Pipeline`], [`AutoModel`], and from the command line.
+[RoFormer: Enhanced Transformer with Rotary Position Embedding](https://huggingface.co/papers/2104.09864v1) proposes Rotary Position Embedding (RoPE) to encode positional information in transformer-based language models. RoPE uses a rotation matrix to encode absolute positions and naturally integrates relative position dependencies into self-attention. Key benefits include flexibility for varying sequence lengths, decreasing inter-token dependencies with distance, and enabling relative position encoding in linear self-attention. RoFormer demonstrates superior performance on long texts, with theoretical analysis and preliminary results on Chinese data provided.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
 ```py
-# uncomment to install rjieba which is needed for the tokenizer
-# !pip install rjieba
 import torch
 from transformers import pipeline
 
-pipe = pipeline(
-    task="fill-mask",
-    model="junnyu/roformer_chinese_base",
-    dtype=torch.float16,
-    device=0
-)
-output = pipe("水在零度时会[MASK]")
-print(output)
+pipeline = pipeline(task="fill-mask", model="junnyu/roformer_chinese_base", dtype="auto")
+pipeline("植物通过[MASK]合作用产生能量")
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
 ```py
-# uncomment to install rjieba which is needed for the tokenizer
-# !pip install rjieba
 import torch
 from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-model = AutoModelForMaskedLM.from_pretrained(
-    "junnyu/roformer_chinese_base", dtype=torch.float16
-)
+model = AutoModelForMaskedLM.from_pretrained("junnyu/roformer_chinese_base", dtype="auto")
 tokenizer = AutoTokenizer.from_pretrained("junnyu/roformer_chinese_base")
 
-input_ids = tokenizer("水在零度时会[MASK]", return_tensors="pt").to(model.device)
-outputs = model(**input_ids)
-decoded = tokenizer.batch_decode(outputs.logits.argmax(-1), skip_special_tokens=True)
-print(decoded)
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "水在零度时会[MASK]" | transformers run --task fill-mask --model junnyu/roformer_chinese_base --device 0
+inputs = tokenizer("植物通过[MASK]合作用产生能量", return_tensors="pt")
+outputs = model(**inputs)
+mask_token_id = tokenizer.mask_token_id
+mask_position = (inputs.input_ids == tokenizer.mask_token_id).nonzero(as_tuple=True)[1]
+predicted_word = tokenizer.decode(outputs.logits[0, mask_position].argmax(dim=-1))
+print(f"Predicted word: {predicted_word}")
 ```
 
 </hfoption>
 </hfoptions>
-
-## Notes
-
-- The current RoFormer implementation is an encoder-only model. The original code can be found in the [ZhuiyiTechnology/roformer](https://github.com/ZhuiyiTechnology/roformer) repository.
 
 ## RoFormerConfig
 
@@ -136,3 +102,4 @@ echo -e "水在零度时会[MASK]" | transformers run --task fill-mask --model j
 
 [[autodoc]] RoFormerForQuestionAnswering
     - forward
+

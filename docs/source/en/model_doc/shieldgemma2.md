@@ -14,77 +14,34 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-04-01 and added to Hugging Face Transformers on 2025-03-20.*
+*This model was released on 2025-04-01 and added to Hugging Face Transformers on 2025-03-20 and contributed by [RyanMullins](https://huggingface.co/RyanMullins).*
 
 # ShieldGemma 2
 
-## Overview
+[ShieldGemma 2](https://huggingface.co/papers/2504.01081) is a 4-billion-parameter image content moderation model built on Gemma 3, designed to detect risks in sexually explicit, violent, and dangerous content for both synthetic and natural images. It demonstrates state-of-the-art performance on internal and external benchmarks, outperforming LlavaGuard, GPT-4o mini, and the base Gemma 3 model. The model leverages a novel adversarial data generation pipeline to produce diverse and robust training examples. ShieldGemma 2 is released as an open tool to support multimodal safety and responsible AI development.
 
-The ShieldGemma 2 model was proposed in a [technical report](https://huggingface.co/papers/2504.01081) by Google. ShieldGemma 2, built on [Gemma 3](https://ai.google.dev/gemma/docs/core/model_card_3), is a 4 billion (4B) parameter model that checks the safety of both synthetic and natural images against key categories to help you build robust datasets and models. With this addition to the Gemma family of models, researchers and developers can now easily minimize the risk of harmful content in their models across key areas of harm as defined below:
+<hfoptions id="usage">
+<hfoption id="ShieldGemma2ForImageClassification">
 
-- No Sexually Explicit content: The image shall not contain content that depicts explicit or graphic sexual acts (e.g., pornography, erotic nudity, depictions of rape or sexual assault).
-- No Dangerous Content: The image shall not contain content that facilitates or encourages activities that could cause real-world harm (e.g., building firearms and explosive devices, promotion of terrorism, instructions for suicide).
-- No Violence/Gore content: The image shall not contain content that depicts shocking, sensational, or gratuitous violence (e.g., excessive blood and gore, gratuitous violence against animals, extreme injury or moment of death).
-
-We recommend using ShieldGemma 2 as an input filter to vision language models, or as an output filter of image generation systems. To train a robust image safety model, we curated training datasets of natural and synthetic images and instruction-tuned Gemma 3 to demonstrate strong performance.
-
-This model was contributed by [Ryan Mullins](https://huggingface.co/RyanMullins).
-
-## Usage Example
-
-- ShieldGemma 2 provides a Processor that accepts a list of `images` and an optional list of `policies` as input, and constructs a batch of prompts as the product of these two lists using the provided chat template.
-- You can extend ShieldGemma's built-in in policies with the `custom_policies` argument to the Processor. Using the same key as one of the built-in policies will overwrite that policy with your custom definition.
-- ShieldGemma 2 does not support the image cropping capabilities used by Gemma 3.
-
-### Classification against Built-in Policies
-
-```python
-from PIL import Image
+```py
+import torch
 import requests
+from PIL import Image
 from transformers import AutoProcessor, ShieldGemma2ForImageClassification
 
-model_id = "google/shieldgemma-2-4b-it"
-model = ShieldGemma2ForImageClassification.from_pretrained(model_id, device_map="auto")
-processor = AutoProcessor.from_pretrained(model_id)
+model = ShieldGemma2ForImageClassification.from_pretrained("google/shieldgemma-2-4b-it", dtype="auto")
+processor = AutoProcessor.from_pretrained("google/shieldgemma-2-4b-it")
 
-url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg"
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
-
 inputs = processor(images=[image], return_tensors="pt").to(model.device)
 
 output = model(**inputs)
 print(output.probabilities)
 ```
 
-### Classification against Custom Policies
-
-```python
-from PIL import Image
-import requests
-from transformers import AutoProcessor, ShieldGemma2ForImageClassification
-
-model_id = "google/shieldgemma-2-4b-it"
-model = ShieldGemma2ForImageClassification.from_pretrained(model_id, device_map="auto")
-processor = AutoProcessor.from_pretrained(model_id)
-
-url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg"
-image = Image.open(requests.get(url, stream=True).raw)
-
-custom_policies = {
-    "key_a": "descrition_a",
-    "key_b": "descrition_b",
-}
-
-inputs = processor(
-    images=[image],
-    custom_policies=custom_policies,
-    policies=["dangerous", "key_a", "key_b"],
-    return_tensors="pt",
-).to(model.device)
-
-output = model(**inputs)
-print(output.probabilities)
-```
+</hfoption>
+</hfoptions>
 
 ## ShieldGemma2Processor
 

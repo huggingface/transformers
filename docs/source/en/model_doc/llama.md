@@ -13,11 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-02-27 and added to Hugging Face Transformers on 2023-03-16.*
+*This model was released on 2023-02-27 and added to Hugging Face Transformers on 2023-03-16 and contributed by [zphang](https://huggingface.co/zphang) and [BlackSamorez](https://huggingface.co/BlackSamorez).*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
@@ -26,14 +25,7 @@ rendered properly in your Markdown viewer.
 
 # Llama
 
-[Llama](https://huggingface.co/papers/2302.13971) is a family of large language models ranging from 7B to 65B parameters. These models are focused on efficient inference (important for serving language models) by training a smaller model on more tokens rather than training a larger model on fewer tokens. The Llama model is based on the GPT architecture, but it uses pre-normalization to improve training stability, replaces ReLU with SwiGLU to improve performance, and replaces absolute positional embeddings with rotary positional embeddings (RoPE) to better handle longer sequence lengths.
-
-You can find all the original Llama checkpoints under the [Huggy Llama](https://huggingface.co/huggyllama) organization.
-
-> [!TIP]
-> Click on the Llama models in the right sidebar for more examples of how to apply Llama to different language tasks.
-
-The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModel`], and from the command line.
+[LLaMA: Open and Efficient Foundation Language Models](https://huggingface.co/papers/2302.13971) presents a series of foundation language models sized from 7B to 65B parameters. Trained on trillions of tokens, LLaMA demonstrates the capability to achieve state-of-the-art results using only publicly available datasets. Specifically, LLaMA-13B surpasses GPT-3 (175B) on most benchmarks, while LLaMA-65B competes with top models like Chinchilla-70B and PaLM-540B. All models are released to the research community.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -42,13 +34,8 @@ The example below demonstrates how to generate text with [`Pipeline`] or the [`A
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(
-    task="text-generation",
-    model="huggyllama/llama-7b",
-    dtype=torch.float16,
-    device=0
-)
-pipeline("Plants create energy through a process known as")
+pipeline = pipeline(task="text-generation", model="huggyllama/llama-7b", dtype="auto",)
+pipeline("Plants create energy through a process known as photosynthesis.")
 ```
 
 </hfoption>
@@ -58,71 +45,16 @@ pipeline("Plants create energy through a process known as")
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained(
-    "huggyllama/llama-7b",
-)
-model = AutoModelForCausalLM.from_pretrained(
-    "huggyllama/llama-7b",
-    dtype=torch.float16,
-    device_map="auto",
-    attn_implementation="sdpa"
-)
-input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)
+tokenizer = AutoTokenizer.from_pretrained("huggyllama/llama-7b")
+model = AutoModelForCausalLM.from_pretrained("huggyllama/llama-7b", dtype="auto",)
 
-output = model.generate(**input_ids, cache_implementation="static")
-print(tokenizer.decode(output[0], skip_special_tokens=True))
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Plants create energy through a process known as" | transformers run --task text-generation --model huggyllama/llama-7b --device 0
+inputs = tokenizer("Plants create energy through a process known as photosynthesis.", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
+print(tokenizer.decode(outputs[0]))
 ```
 
 </hfoption>
 </hfoptions>
-
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
-
-The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.
-
-```py
-# pip install torchao
-import torch
-from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
-
-quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
-model = AutoModelForCausalLM.from_pretrained(
-    "huggyllama/llama-30b",
-    dtype=torch.bfloat16,
-    device_map="auto",
-    quantization_config=quantization_config
-)
-
-tokenizer = AutoTokenizer.from_pretrained("huggyllama/llama-30b")
-input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)
-
-output = model.generate(**input_ids, cache_implementation="static")
-print(tokenizer.decode(output[0], skip_special_tokens=True))
-```
-
-Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139) to better understand what tokens the model can and cannot attend to.
-
-```py
-from transformers.utils.attention_visualizer import AttentionMaskVisualizer
-
-visualizer = AttentionMaskVisualizer("huggyllama/llama-7b")
-visualizer("Plants create energy through a process known as")
-```
-
-<div class="flex justify-center">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/llama-attn-mask.png"/>
-</div>
-
-## Notes
-
-- The tokenizer is a byte-pair encoding model based on [SentencePiece](https://github.com/google/sentencepiece). During decoding, if the first token is the start of the word (for example, "Banana"), the tokenizer doesn't prepend the prefix space to the string.
 
 ## LlamaConfig
 
@@ -169,3 +101,4 @@ visualizer("Plants create energy through a process known as")
 
 [[autodoc]] LlamaForTokenClassification
     - forward
+

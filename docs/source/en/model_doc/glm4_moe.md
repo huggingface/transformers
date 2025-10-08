@@ -15,6 +15,14 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2025-07-28 and added to Hugging Face Transformers on 2025-07-21.*
 
+```py
+import torch
+from transformers import pipeline
+
+pipeline = pipeline(task="text-generation", model="meta-glm4_moe/Glm4Moe-2-7b-hf", dtype="auto")
+pipeline("The future of artificial intelligence is")
+```
+
 # Glm4Moe
 
 ## Overview

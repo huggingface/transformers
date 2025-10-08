@@ -13,35 +13,37 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-11-12 and added to Hugging Face Transformers on 2023-01-04.*
-
-<div style="float: right;">
-  <div class="flex flex-wrap space-x-1">
-    <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+*This model was released on 2022-11-12 and added to Hugging Face Transformers on 2023-01-04 and contributed by [jongjyh](https://huggingface.co/jongjyh).*
 
 # AltCLIP
 
-[AltCLIP](https://huggingface.co/papers/2211.06679) replaces the [CLIP](./clip) text encoder with a multilingual XLM-R encoder and aligns image and text representations with teacher learning and contrastive learning.
+[AltCLIP](https://huggingface.co/papers/2211.06679v2) alters the text encoder in CLIP by replacing it with a pretrained multilingual text encoder XLM-R. This modification enables the model to achieve state-of-the-art performance on tasks such as ImageNet-CN, Flicker30k-CN, and COCO-CN, while maintaining performance close to CLIP on other tasks. The approach involves a two-stage training schema with teacher learning and contrastive learning to align language and image representations, extending CLIP's capabilities to multilingual understanding.
 
-You can find all the original AltCLIP checkpoints under the [AltClip](https://huggingface.co/collections/BAAI/alt-clip-diffusion-66987a97de8525205f1221bf) collection.
-
-> [!TIP]
-> Click on the AltCLIP models in the right sidebar for more examples of how to apply AltCLIP to different tasks.
-
-The examples below demonstrates how to calculate similarity scores between an image and one or more captions with the [`AutoModel`] class.
+This model was contributed by [jongjyh](https://huggingface.co/jongjyh).
 
 <hfoptions id="usage">
+<hfoption id="Pipeline">
+
+```py
+import torch
+from transformers import pipeline
+
+pipeline = pipeline(task="zero-shot-image-classification", model="kakaobrain/align-base", dtype="auto")
+candidate_labels = ["a photo of a dog", "a photo of a cat", "a photo of a person"]
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg", candidate_labels=candidate_labels)
+```
+
+</hfoption>
 <hfoption id="AutoModel">
 
-```python
+```py
 import torch
 import requests
 from PIL import Image
-from transformers import AltCLIPModel, AltCLIPProcessor
+from transformers import AltCLIPModel, AutoProcessor
 
-model = AltCLIPModel.from_pretrained("BAAI/AltCLIP", dtype=torch.bfloat16)
-processor = AltCLIPProcessor.from_pretrained("BAAI/AltCLIP")
+model = AltCLIPModel.from_pretrained("BAAI/AltCLIP", dtype="auto")
+processor = AutoProcessor.from_pretrained("BAAI/AltCLIP")
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
@@ -49,8 +51,8 @@ image = Image.open(requests.get(url, stream=True).raw)
 inputs = processor(text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True)
 
 outputs = model(**inputs)
-logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
-probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
+logits_per_image = outputs.logits_per_image
+probs = logits_per_image.softmax(dim=1)
 
 labels = ["a photo of a cat", "a photo of a dog"]
 for label, prob in zip(labels, probs[0]):
@@ -60,48 +62,10 @@ for label, prob in zip(labels, probs[0]):
 </hfoption>
 </hfoptions>
 
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
-
-The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.
-
-```python
-# !pip install torchao
-import torch
-import requests
-from PIL import Image
-from transformers import AltCLIPModel, AltCLIPProcessor, TorchAoConfig
-
-model = AltCLIPModel.from_pretrained(
-    "BAAI/AltCLIP",
-    quantization_config=TorchAoConfig("int4_weight_only", group_size=128),
-    dtype=torch.bfloat16,
-)
-
-processor = AltCLIPProcessor.from_pretrained("BAAI/AltCLIP")
-
-url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
-image = Image.open(requests.get(url, stream=True).raw)
-
-inputs = processor(text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True)
-
-outputs = model(**inputs)
-logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
-probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
-
-labels = ["a photo of a cat", "a photo of a dog"]
-for label, prob in zip(labels, probs[0]):
-    print(f"{label}: {prob.item():.4f}")
-```
-
-## Notes
-
-- AltCLIP uses bidirectional attention instead of causal attention and it uses the `[CLS]` token in XLM-R to represent a text embedding.
-- Use [`CLIPImageProcessor`] to resize (or rescale) and normalize images for the model.
-- [`AltCLIPProcessor`] combines [`CLIPImageProcessor`] and [`XLMRobertaTokenizer`] into a single instance to encode text and prepare images.
-
 ## AltCLIPConfig
 
 [[autodoc]] AltCLIPConfig
+    - from_text_vision_configs
 
 ## AltCLIPTextConfig
 
@@ -111,18 +75,24 @@ for label, prob in zip(labels, probs[0]):
 
 [[autodoc]] AltCLIPVisionConfig
 
+## AltCLIPProcessor
+
+[[autodoc]] AltCLIPProcessor
+
 ## AltCLIPModel
 
 [[autodoc]] AltCLIPModel
+    - forward
+    - get_text_features
+    - get_image_features
 
 ## AltCLIPTextModel
 
 [[autodoc]] AltCLIPTextModel
+    - forward
 
 ## AltCLIPVisionModel
 
 [[autodoc]] AltCLIPVisionModel
+    - forward
 
-## AltCLIPProcessor
-
-[[autodoc]] AltCLIPProcessor

@@ -13,26 +13,18 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-10-21 and added to Hugging Face Transformers on 2025-01-10.*
+*This model was released on 2024-10-21 and added to Hugging Face Transformers on 2025-01-10 and contributed by [eustlb](https://huggingface.co/eustlb).*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-          <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-          <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-          <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
 </div>
 
 # Moonshine
 
-[Moonshine](https://huggingface.co/papers/2410.15608) is an encoder-decoder speech recognition model optimized for real-time transcription and recognizing voice command. Instead of using traditional absolute position embeddings, Moonshine uses Rotary Position Embedding (RoPE) to handle speech with varying lengths without using padding. This improves efficiency during inference, making it ideal for resource-constrained devices.
-
-You can find all the original Moonshine checkpoints under the [Useful Sensors](https://huggingface.co/UsefulSensors) organization.
-
-> [!TIP]
-> Click on the Moonshine models in the right sidebar for more examples of how to apply Moonshine to different speech recognition tasks.
-
-The example below demonstrates how to transcribe speech into text with [`Pipeline`] or the [`AutoModel`] class.
+[Moonshine](https://huggingface.co/papers/2410.15608) is a family of speech recognition models designed for live transcription and voice command processing. Utilizing an encoder-decoder transformer architecture, Moonshine incorporates Rotary Position Embedding (RoPE) instead of traditional absolute position embeddings, enabling it to process audio inputs of any length without zero-padding. This approach enhances inference efficiency. Compared to OpenAI's Whisper tiny-en, Moonshine Tiny achieves a 5x reduction in compute requirements for transcribing a 10-second speech segment without increasing word error rates. Key architectural improvements include the use of SwiGLU activation in the decoder layers and the adoption of RoPE for flexible audio handling.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -41,47 +33,27 @@ The example below demonstrates how to transcribe speech into text with [`Pipelin
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(
-    task="automatic-speech-recognition",
-    model="UsefulSensors/moonshine-base",
-    dtype=torch.float16,
-    device=0
-)
-pipeline("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac")
+pipeline = pipeline(task="automatic-speech-recognition", model="UsefulSensors/moonshine-base", dtype="auto")
+pipeline("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac")
 ```
 
 </hfoption>
-<hfoption id="AutoModel">
+<hfoption id="MoonshineForConditionalGeneration">
 
 ```py
-# pip install datasets
 import torch
 from datasets import load_dataset
 from transformers import AutoProcessor, MoonshineForConditionalGeneration
 
-processor = AutoProcessor.from_pretrained(
-    "UsefulSensors/moonshine-base",
-)
-model = MoonshineForConditionalGeneration.from_pretrained(
-    "UsefulSensors/moonshine-base",
-    dtype=torch.float16,
-    device_map="auto",
-    attn_implementation="sdpa"
-)
+dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation").sort("id")
+sampling_rate = dataset.features["audio"].sampling_rate
 
-ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", split="validation")
-audio_sample = ds[0]["audio"]
+processor = AutoProcessor.from_pretrained("UsefulSensors/moonshine-base")
+model = MoonshineForConditionalGeneration.from_pretrained("UsefulSensors/moonshine-base", dtype="auto")
 
-input_features = processor(
-    audio_sample["array"],
-    sampling_rate=audio_sample["sampling_rate"],
-    return_tensors="pt"
-)
-input_features = input_features.to(model.device, dtype=torch.float16)
-
-predicted_ids = model.generate(**input_features, cache_implementation="static")
-transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True)
-transcription[0]
+inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
+predicted_ids = model.generate(**inputs)
+print(f"Transcription: {processor.batch_decode(predicted_ids)[0]}")
 ```
 
 </hfoption>
