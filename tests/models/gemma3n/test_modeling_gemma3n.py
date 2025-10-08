@@ -31,7 +31,6 @@ from transformers import (
     Gemma3nAudioConfig,
     Gemma3nAudioFeatureExtractor,
     Gemma3nConfig,
-    GenerationConfig,
     StaticCache,
     is_torch_available,
 )
