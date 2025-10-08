@@ -287,7 +287,6 @@ class CausalLMModelTester:
 
 @require_torch
 class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin):
-    test_pruning = False
     model_tester_class = None
     all_model_classes = None
     pipeline_model_mapping = None

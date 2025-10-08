@@ -830,14 +830,5 @@ class Speech2Text2ForCausalLM(Speech2Text2PreTrainedModel):
             "use_cache": use_cache,
         }
 
-    @staticmethod
-    def _reorder_cache(past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past
-
 
 __all__ = ["Speech2Text2ForCausalLM", "Speech2Text2PreTrainedModel"]

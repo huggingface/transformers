@@ -72,6 +72,7 @@ ENV_VARS_TRUE_AND_AUTO_VALUES = ENV_VARS_TRUE_VALUES.union({"AUTO"})
 USE_TORCH_XLA = os.environ.get("USE_TORCH_XLA", "1").upper()
 
 ACCELERATE_MIN_VERSION = "1.1.0"
+BITSANDBYTES_MIN_VERSION = "0.46.1"
 SCHEDULEFREE_MIN_VERSION = "1.2.6"
 FSDP_MIN_VERSION = "1.12.0"
 GGUF_MIN_VERSION = "0.10.0"
@@ -814,27 +815,9 @@ def is_ipex_available(min_version: str = "") -> bool:
 
 
 @lru_cache
-def is_bitsandbytes_available(check_library_only: bool = False) -> bool:
+def is_bitsandbytes_available(min_version: str = BITSANDBYTES_MIN_VERSION) -> bool:
     is_available, bitsandbytes_version = _is_package_available("bitsandbytes", return_version=True)
-    if check_library_only or not is_available:
-        return is_available
-
-    # `bitsandbytes` versions older than 0.43.1 eagerly require CUDA at import time,
-    # so those versions of the library are practically only available when CUDA is too.
-    if version.parse(bitsandbytes_version) < version.parse("0.43.1"):
-        return is_torch_cuda_available() and is_available
-    # Newer versions of `bitsandbytes` can be imported on systems without CUDA.
-    return is_torch_available() and is_available
-
-
-@lru_cache
-def is_bitsandbytes_multi_backend_available() -> bool:
-    if not is_bitsandbytes_available():
-        return False
-
-    import bitsandbytes as bnb
-
-    return "multi_backend" in getattr(bnb, "features", set())
+    return is_available and version.parse(bitsandbytes_version) >= version.parse(min_version)
 
 
 @lru_cache

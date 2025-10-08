@@ -49,7 +49,7 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
-class GotOcr2ImageProcessorKwargs(ImagesKwargs):
+class GotOcr2ImageProcessorKwargs(ImagesKwargs, total=False):
     """
     crop_to_patches (`bool`, *optional*, defaults to `False`):
         Whether to crop the image to patches. Can be overridden by the `crop_to_patches` parameter in the
@@ -62,9 +62,9 @@ class GotOcr2ImageProcessorKwargs(ImagesKwargs):
         set to `True`. Can be overridden by the `max_patches` parameter in the `preprocess` method.
     """
 
-    crop_to_patches: Optional[bool]
-    min_patches: Optional[int]
-    max_patches: Optional[int]
+    crop_to_patches: bool
+    min_patches: int
+    max_patches: int
 
 
 # Similar to image_processing_mllama.get_all_supported_aspect_ratios

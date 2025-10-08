@@ -430,7 +430,7 @@ class TapasModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_pruning = False
+
     test_resize_embeddings = True
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):

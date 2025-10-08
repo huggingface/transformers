@@ -194,7 +194,7 @@ class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     all_model_classes = (InformerModel, InformerForPrediction) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": InformerModel} if is_torch_available() else {}
     is_encoder_decoder = True
-    test_pruning = False
+
     test_missing_keys = False
     test_torchscript = False
     test_inputs_embeds = False

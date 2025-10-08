@@ -270,7 +270,6 @@ class BrosModelTester:
 
 @require_torch
 class BrosModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    test_pruning = False
     test_torchscript = False
     test_mismatched_shapes = False
 
