@@ -107,7 +107,8 @@ class FastVlmConfig(LlavaConfig):
                                                   vocab_size=152128,
                                                   intermediate_size=18944,
                                                   num_attention_heads=28,
-                                                  num_key_value_heads=4)
+                                                  num_key_value_heads=4,
+                                                  num_hidden_layers=28)
 
         self.text_config = text_config
         self.multimodal_projector_bias = multimodal_projector_bias
