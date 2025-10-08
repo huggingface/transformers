@@ -67,8 +67,6 @@ print(model.config.id2label[predicted_label])
 
 [[autodoc]] models.beit.modeling_beit.BeitModelOutputWithPooling
 
-[[autodoc]] models.beit.modeling_flax_beit.FlaxBeitModelOutputWithPooling
-
 ## BeitConfig
 
 [[autodoc]] BeitConfig
