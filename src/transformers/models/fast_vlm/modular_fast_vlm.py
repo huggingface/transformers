@@ -103,7 +103,11 @@ class FastVlmConfig(LlavaConfig):
             text_config["model_type"] = text_config.get("model_type", "qwen2")
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
-            text_config = CONFIG_MAPPING["qwen2"]()
+            text_config = CONFIG_MAPPING["qwen2"](hidden_size=3584,
+                                                  vocab_size=152128,
+                                                  intermediate_size=18944,
+                                                  num_attention_heads=28,
+                                                  num_key_value_heads=4)
 
         self.text_config = text_config
         self.multimodal_projector_bias = multimodal_projector_bias
