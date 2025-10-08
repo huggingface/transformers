@@ -48,7 +48,7 @@ transformers chat -h
 
 The chat is implemented on top of the [AutoClass](./model_doc/auto), using tooling from [text generation](./llm_tutorial) and [chat](./chat_templating). It uses the `transformers serve` CLI under the hood ([docs](./serving.md#serve-cli)).
 
-## Using pipelines to chat
+## TextGenerationPipeline
 
 [`TextGenerationPipeline`] is a high-level text generation class with a "chat mode". Chat mode is enabled when a conversational model is detected and the chat prompt is [properly formatted](./llm_tutorial#wrong-prompt-format).
 
@@ -68,7 +68,7 @@ Create the [`TextGenerationPipeline`] and pass `chat` to it. For large models, s
 import torch
 from transformers import pipeline
 
-pipe = pipeline(task="text-generation", model="HuggingFaceTB/SmolLM2-1.7B-Instruct", dtype="auto", device_map="auto")
+pipeline = pipeline(task="text-generation", model="HuggingFaceTB/SmolLM2-1.7B-Instruct", dtype="auto", device_map="auto")
 response = pipeline(chat, max_new_tokens=512)
 print(response[0]["generated_text"][-1]["content"])
 ```
@@ -85,91 +85,16 @@ chat = response[0]["generated_text"]
 chat.append(
     {"role": "user", "content": "Woah! But can it be reconciled with quantum mechanics?"}
 )
-response = pipe(chat, max_new_tokens=512)
+response = pipeline(chat, max_new_tokens=512)
 print(response[0]["generated_text"][-1]["content"])
 ```
 
 By repeating this process, you can continue the conversation as long as you like, at least until the model runs out of context window
 or you run out of memory.
 
-## Including images in chats
-
-Some models, known as vision-language models (VLMs), can accept images as part of the chat input. When loading a VLM, you
-should use the `ImageTextToTextPipeline`, which you can load by setting the `task` argument of `pipeline` to `image-text-to-text`. It works very similarly to
-the `TextGenerationPipeline` above, but we can add `image` keys to our messages:
-
-```py
-messages = [
-    {
-        "role": "system",
-        "content": [{"type": "text", "text": "You are a friendly chatbot who always responds in the style of a pirate"}],
-    },
-    {
-      "role": "user",
-      "content": [
-            {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
-            {"type": "text", "text": "What are these?"},
-        ],
-    },
-]
-```
-
-Now we just create our pipeline and get a response as before, using the `image-text-to-text` task:
-
-```py
-import torch
-from transformers import pipeline
-
-pipe = pipeline("image-text-to-text", model="Qwen/Qwen2.5-VL-3B-Instruct", device_map="auto", dtype="auto")
-out = pipe(messages, max_new_tokens=128)
-print(out[0]['generated_text'][-1]['content'])
-```
-
-And as above, you can continue the conversation by appending your reply to the `messages` list. It's okay for
-some messages to VLMs to be text-only - you don't need to include an image every time!
-
-## Chatting with "reasoning" models
-
-"Reasoning" models, also known as "chain of thought" models, have recently exploded
-in popularity. Many high-profile recent model releases, such as [Deepseek-R1](https://huggingface.co/deepseek-ai/DeepSeek-R1-0528) 
-and [gpt-oss](https://huggingface.co/openai/gpt-oss-20b) are reasoning models.
-These models write a step-by-step reasoning process before their final answer, allowing them to "think deeply" 
-before answering.
-
-Chatting with a reasoning model is exactly the same as any other text chat model, but you should be aware that its
-response will include a "thinking" block as well as the "content" block. Let's see an example:
-
-```python
-from transformers import pipeline
-
-chat = [
-    {
-        "role": "user",
-        "content": "How many Rs are there in the word 'strawberry'?"
-    }
-]
-
-pipe = pipeline(task="text-generation", model="HuggingFaceTB/SmolLM3-3B", dtype="auto", device_map="auto")
-# max_new_tokens should be high for reasoning models, because they need space to write their thoughts!
-out = pipe(chat, max_new_tokens=1024)
-
-print(out[0]['generated_text'][-1])
-```
-
-(TODO Merge the response schema PR to SmolLM-3B so this actually works!)
-
-Note that the returned message contains both `content` and `thinking` blocks. You should usually append the entire
-message dict to the chat history. Although some models discard the `thinking` trace of previous messages, most
-chat templates can handle dropping it correctly. You should generally include it unless you're certain it isn't needed!
-
-> [!TIP]
-Parsing a message into `content` and `thinking` depends on the [response parsing](./chat_response_parsing) feature. Some
-models may not have a response schema yet, and so this will not work for them. In these cases, you will have to manually
-separate the thinking trace from the rest of the model output. We're working hard on adding response parsing support to new models!
-
 ## Performance and memory usage
 
-Transformers load models in full `float32` precision by default, and for a 8B model, this requires ~32GB of memory! Use the `dtype="auto"` argument, which generally uses `bfloat16` for models that were trained with it, to reduce your memory usage.
+Transformers load models in full `float32` precision by default, and for a 8B model, this requires ~32GB of memory! Use the `torch_dtype="auto"` argument, which generally uses `bfloat16` for models that were trained with it, to reduce your memory usage.
 
 > [!TIP]
 > Refer to the [Quantization](./quantization/overview) docs for more information about the different quantization backends available.
