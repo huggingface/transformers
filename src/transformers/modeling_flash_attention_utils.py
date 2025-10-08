@@ -80,6 +80,9 @@ def _lazy_imports(implementation: Optional[str], attention_wrapper: Optional[Cal
 
     pad_input, unpad_input = _pad_input, _unpad_input
 
+    is_paged = "|" in implementation
+    implementation = implementation.split("|")[1] if is_paged else implementation
+
     if (implementation == "flash_attention_2" and is_fa2) or (implementation is None and is_fa2 and not is_fa3):
         from flash_attn import flash_attn_func, flash_attn_varlen_func
         from flash_attn.bert_padding import pad_input, unpad_input
@@ -95,7 +98,10 @@ def _lazy_imports(implementation: Optional[str], attention_wrapper: Optional[Cal
         else:
             from .integrations.hub_kernels import load_and_register_kernel
 
-            kernel = load_and_register_kernel(implementation, attention_wrapper)
+            # We want to explicitly register the name with `|paged` if found
+            kernel_implementation = f"paged|{implementation}" if is_paged else implementation
+            kernel = load_and_register_kernel(kernel_implementation, attention_wrapper)
+
             flash_attn_func = getattr(kernel, "flash_attn_func", None)
             flash_attn_varlen_func = getattr(kernel, "flash_attn_varlen_func", None)
             if flash_attn_varlen_func is None or flash_attn_func is None:
@@ -150,9 +156,14 @@ def lazy_import_flash_attention(implementation: Optional[str], attention_wrapper
 
 
 def paged_lazy_import_flash_attention(implementation: Optional[str]):
+    """
+    Same as `lazy_import_flash_attention` but explicitly wrapping it with the paged implementation.
+    """
     from .integrations.flash_paged import paged_attention_forward
 
-    (_, flash_attn_varlen_func, _, _), _ = lazy_import_flash_attention(implementation, attention_wrapper=paged_attention_forward)
+    (_, flash_attn_varlen_func, _, _), _ = lazy_import_flash_attention(
+        implementation, attention_wrapper=paged_attention_forward
+    )
     return flash_attn_varlen_func
 
 

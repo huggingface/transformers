@@ -56,6 +56,7 @@ def paged_attention_forward(
         max_seqlen_k = max_seqlen_k[layer_type]
 
     custom_kwargs = {"s_aux": kwargs.get("s_aux")} if "s_aux" in kwargs else {}
+
     attn_output = flash_attn_varlen_func(
         q.transpose(1, 2).squeeze(0).contiguous(),
         k.contiguous(),

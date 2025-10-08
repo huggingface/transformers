@@ -167,7 +167,9 @@ def is_kernel(attn_implementation: Optional[str]) -> bool:
     )
 
 
-def load_and_register_kernel(attn_implementation: str, attention_wrapper: Optional[Callable] = None) -> Optional[ModuleType]:
+def load_and_register_kernel(
+    attn_implementation: str, attention_wrapper: Optional[Callable] = None
+) -> Optional[ModuleType]:
     """
     Load and register the kernel associated to `attn_implementation`.
 
