@@ -84,7 +84,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         )
 
         # Define SPM tokenizer to test the private methods that handle SPM and Tekken differencies.
-        cls.spm_repo_id = "mistralai/Mistral-7B-Instruct-v0.3"
+        cls.spm_repo_id = "mistralai/Ministral-8B-Instruct-2410"
 
         # cls.tokenizer_audio: MistralCommonTokenizer = AutoTokenizer.from_pretrained(
         #     "hf-internal-testing/namesspace-mistralai-repo_name-Voxtral-Mini-3B-2507"
@@ -158,7 +158,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
         spm_tokenizer = self._get_spm_tokenizer()
         self.assertTrue(spm_tokenizer._is_control_token(1))
         self.assertTrue(spm_tokenizer._is_control_token(768))
-        self.assertFalse(spm_tokenizer._is_control_token(999))
+        self.assertFalse(spm_tokenizer._is_control_token(2000))
 
         self.assertTrue(self.tokenizer._is_control_token(0))
         self.assertTrue(self.tokenizer._is_control_token(768))
@@ -168,7 +168,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
     def test_spm_vs_tekken_piece_to_id(self):
         spm_tokenizer = self._get_spm_tokenizer()
         self.assertEqual(spm_tokenizer._piece_to_id("<s>"), 1)
-        self.assertEqual(spm_tokenizer._piece_to_id("h"), 29484)
+        self.assertEqual(spm_tokenizer._piece_to_id("h"), 1104)
 
         self.assertEqual(self.tokenizer._piece_to_id("<s>"), 1)
         self.assertEqual(self._ref_piece_to_id("<s>"), 1)
