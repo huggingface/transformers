@@ -98,7 +98,7 @@ def _lazy_imports(implementation: Optional[str], attention_wrapper: Optional[Cal
         else:
             from .integrations.hub_kernels import load_and_register_kernel
 
-            # We want to explicitly register the name with `|paged` if found
+            # We want to explicitly register the name with `paged|` if found
             kernel_implementation = f"paged|{implementation}" if is_paged else implementation
             kernel = load_and_register_kernel(kernel_implementation, attention_wrapper)
 
