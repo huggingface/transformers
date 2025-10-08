@@ -611,7 +611,7 @@ class ContinuousBatchingManager:
             streaming: Whether to stream tokens as they are generated
         """
         attn_implementation = f"paged|{model.config._attn_implementation}"
-        if attn_implementation not in ALL_ATTENTION_FUNCTIONS:  # when its a kernel
+        if attn_implementation not in ALL_ATTENTION_FUNCTIONS:  # only happens if the attn impl is a kernel
             load_and_register_kernel(attn_implementation, paged_attention_forward)
 
         model.set_attn_implementation(attn_implementation)
