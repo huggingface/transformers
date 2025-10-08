@@ -117,6 +117,7 @@ class FastVlmConfig(PretrainedConfig):
                 intermediate_size=18944,
                 num_attention_heads=28,
                 num_key_value_heads=4,
+                num_hidden_layers=28,
             )
 
         self.text_config = text_config
