@@ -307,12 +307,12 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
         # (batch, kv heads, seq_length, head_dim)
         num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
-        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        head_dim = getattr(config, "attention_head_dim")
         attention_shape = (batch_size, num_heads, seq_length, head_dim)
 
         intermediate_size = config.mamba_expand * config.hidden_size
         conv_shape = (batch_size, intermediate_size, config.mamba_d_conv)
-        ssm_shape = (batch_size, intermediate_size // config.n_mamba_heads, config.mamba_d_state)
+        ssm_shape = (batch_size, config.n_mamba_heads, intermediate_size // config.n_mamba_heads, config.mamba_d_state)
 
         self.assertTrue(config.num_hidden_layers, len(past_key_values))
 
