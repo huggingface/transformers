@@ -2207,7 +2207,7 @@ class GenerationTesterMixin:
         prompt_length = getattr(self.model_tester, "encoder_seq_length", prompt_length)
         prompt_length = getattr(self.model_tester, "text_seq_length", prompt_length)
 
-        config = config.get_text_config(decoder=True)
+        config = config.text_config if hasattr(config, "text_config") else config
 
         generated_length = (
             output.sequences.shape[1] - 1 if config.is_encoder_decoder else output.sequences.shape[1] - prompt_length
