@@ -47,7 +47,7 @@ from ...video_utils import VideoInput
 logger = logging.get_logger(__name__)
 
 
-class Glm4vImageProcessorKwargs(ImagesKwargs):
+class Glm4vImageProcessorKwargs(ImagesKwargs, total=False):
     """
     patch_size (`int`, *optional*, defaults to 14):
         The spatial patch size of the vision encoder.
@@ -57,9 +57,9 @@ class Glm4vImageProcessorKwargs(ImagesKwargs):
         The merge size of the vision encoder to llm encoder.
     """
 
-    patch_size: Optional[int]
-    temporal_patch_size: Optional[int]
-    merge_size: Optional[int]
+    patch_size: int
+    temporal_patch_size: int
+    merge_size: int
 
 
 def smart_resize(
