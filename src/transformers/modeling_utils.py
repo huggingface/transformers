@@ -4424,7 +4424,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         state_dict = kwargs.pop("state_dict", None)
         proxies = kwargs.pop("proxies", None)
         output_loading_info = kwargs.pop("output_loading_info", False)
-        use_auth_token = kwargs.pop("use_auth_token", None)
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
         dtype = kwargs.pop("dtype", None)
@@ -4433,8 +4432,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         max_memory = kwargs.pop("max_memory", None)
         offload_folder = kwargs.pop("offload_folder", None)
         offload_buffers = kwargs.pop("offload_buffers", False)
-        load_in_8bit = kwargs.pop("load_in_8bit", False)
-        load_in_4bit = kwargs.pop("load_in_4bit", False)
         quantization_config = kwargs.pop("quantization_config", None)
         subfolder = kwargs.pop("subfolder", "")
         commit_hash = kwargs.pop("_commit_hash", None)
@@ -4472,6 +4469,16 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if torch_dtype is not None:
             dtype = dtype if dtype is not None else torch_dtype
 
+        download_kwargs = {
+            "cache_dir": cache_dir,
+            "force_download": force_download,
+            "proxies": proxies,
+            "local_files_only": local_files_only,
+            "token": token,
+            "revision": revision,
+        }
+        download_kwargs_with_commit = {**download_kwargs, "commit_hash": commit_hash}
+
         if state_dict is not None and (pretrained_model_name_or_path is not None or gguf_file is not None):
             raise ValueError(
                 "`state_dict` cannot be passed together with a model name or a `gguf_file`. Use one of the two loading strategies."
@@ -4492,14 +4499,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if gguf_file is not None and not is_accelerate_available():
             raise ValueError("accelerate is required when loading a GGUF file `pip install accelerate`.")
 
+        adapter_download_kwargs = download_kwargs_with_commit.copy()
+        adapter_download_kwargs.pop("revision", None)
         _adapter_model_path = maybe_load_adapters(
             pretrained_model_name_or_path,
-            cache_dir=cache_dir,
-            force_download=force_download,
-            proxies=proxies,
-            local_files_only=local_files_only,
-            commit_hash=commit_hash,
-            token=token,
+            **adapter_download_kwargs,
             **adapter_kwargs,
         )
 
@@ -4518,24 +4522,23 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             config_path = config if config is not None else pretrained_model_name_or_path
             config, model_kwargs = cls.config_class.from_pretrained(
                 config_path,
-                cache_dir=cache_dir,
                 return_unused_kwargs=True,
-                force_download=force_download,
-                proxies=proxies,
-                local_files_only=local_files_only,
-                token=token,
-                revision=revision,
                 subfolder=subfolder,
                 gguf_file=gguf_file,
                 _from_auto=from_auto_class,
                 _from_pipeline=from_pipeline,
+                **download_kwargs,
                 **kwargs,
             )
             if "gguf_file" in model_kwargs:
                 model_kwargs.pop("gguf_file")
+            commit_hash = model_kwargs.pop("_commit_hash", commit_hash)
         else:
             config = copy.deepcopy(config)
             model_kwargs = kwargs
+            commit_hash = getattr(config, "_commit_hash", commit_hash)
+
+        download_kwargs_with_commit["commit_hash"] = commit_hash
 
         # Because some composite configs call super().__init__ before instantiating the sub-configs, we need this call
         # to correctly redispatch recursively if the kwarg is provided
@@ -4576,16 +4579,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             variant=variant,
             gguf_file=gguf_file,
             use_safetensors=use_safetensors,
-            cache_dir=cache_dir,
-            force_download=force_download,
-            proxies=proxies,
-            local_files_only=local_files_only,
-            token=token,
             user_agent=user_agent,
-            revision=revision,
-            commit_hash=commit_hash,
             is_remote_code=cls._auto_class is not None,
             transformers_explicit_filename=transformers_explicit_filename,
+            **download_kwargs_with_commit,
         )
 
         is_quantized = hf_quantizer is not None
@@ -4676,14 +4673,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             from_auto_class,
             from_pipeline,
             pretrained_model_name_or_path,
-            cache_dir,
-            force_download,
-            proxies,
-            local_files_only,
-            token,
-            revision,
-            subfolder,
-            trust_remote_code,
+            **download_kwargs,
+            subfolder=subfolder,
+            trust_remote_code=trust_remote_code,
             **kwargs,
         )
 

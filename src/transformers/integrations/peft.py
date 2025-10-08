@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import importlib
+import importlib.metadata
 import inspect
 import json
 import os
@@ -620,12 +620,12 @@ class PeftAdapterMixin:
 
 def maybe_load_adapters(
     pretrained_model_name_or_path,
-    cache_dir,
-    force_download,
-    proxies,
-    local_files_only,
-    commit_hash,
-    token,
+    cache_dir=None,
+    force_download=None,
+    proxies=None,
+    local_files_only=None,
+    commit_hash=None,
+    token=None,
     **adapter_kwargs,
 ):
     if token is not None and adapter_kwargs is not None and "token" not in adapter_kwargs:
