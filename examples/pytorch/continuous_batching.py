@@ -184,9 +184,7 @@ if __name__ == "__main__":
     parser.add_argument("--num-blocks", "-n", type=int, default=None)
     parser.add_argument("--max-batch-tokens", "-b", type=int, default=None)
 
-    parser.add_argument(
-        "--attn", type=str, default="paged_attention|kernels-community/flash-attn", help="Attention implementation"
-    )
+    parser.add_argument("--attn", type=str, default="kernels-community/flash-attn", help="Attention implementation")
     parser.add_argument("--matmul-precision", "-mp", type=str, default="high")  # set to "none" to disable
     parser.add_argument("--no-slice-inputs", action="store_true")  # slicing is enabled by default because much faster
     parser.add_argument("--use-cuda-graph", "-cg", action="store_true")

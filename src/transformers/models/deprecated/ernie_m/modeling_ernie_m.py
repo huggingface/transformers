@@ -34,7 +34,6 @@ from ....modeling_outputs import (
 from ....modeling_utils import PreTrainedModel
 from ....pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ....utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
-from ....utils.deprecation import deprecate_kwarg
 from .configuration_ernie_m import ErnieMConfig
 
 
@@ -119,7 +118,6 @@ class ErnieMSelfAttention(nn.Module):
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -242,7 +240,6 @@ class ErnieMAttention(nn.Module):
         self.self_attn.all_head_size = self.self_attn.attention_head_size * self.self_attn.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -285,7 +282,6 @@ class ErnieMEncoderLayer(nn.Module):
         else:
             self.activation = config.hidden_act
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
