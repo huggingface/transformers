@@ -256,6 +256,21 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             self, config_class=Mamba2Config, n_embd=37, common_properties=["hidden_size", "num_hidden_layers"]
         )
 
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+        self.assertIsInstance(past_key_values, Mamba2Cache)
+
+        intermediate_size = config.expand * config.hidden_size
+        conv_shape = (
+            config.num_hidden_layers,
+            batch_size,
+            intermediate_size + 2 * config.n_groups * config.state_size,
+            config.conv_kernel,
+        )
+        ssm_shape = (config.num_hidden_layers, batch_size, config.num_heads, config.head_dim, config.state_size)
+
+        self.assertEqual(past_key_values.conv_states.shape, conv_shape)
+        self.assertEqual(past_key_values.ssm_states.shape, ssm_shape)
+
     def test_mamba2_caching(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba2_caching(*config_and_inputs)
