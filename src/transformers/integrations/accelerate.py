@@ -272,3 +272,52 @@ def accelerate_dispatch(model, hf_quantizer, device_map, offload_folder, offload
 
     if not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
         dispatch_model(model, **device_map_kwargs)
+
+
+def accelerate_disk_offload(
+    disk_offload_folder,
+    checkpoint_files,
+    device_map,
+    checkpoint_keys,
+    key_renaming_mapping,
+    sharded_metadata,
+    dtype,
+    reverse_key_renaming_mapping,
+):
+    if disk_offload_folder is not None:
+        os.makedirs(disk_offload_folder, exist_ok=True)
+    is_offloaded_safetensors = checkpoint_files is not None and checkpoint_files[0].endswith(".safetensors")
+    if disk_offload_folder is None and not is_offloaded_safetensors:
+        raise ValueError(
+            "The current `device_map` had weights offloaded to the disk. Please provide an `offload_folder`"
+            " for them. Alternatively, make sure you have `safetensors` installed if the model you are using"
+            " offers the weights in this format."
+        )
+    if is_offloaded_safetensors:
+        param_device_map = expand_device_map(device_map, checkpoint_keys)
+        str_dtype = str(dtype).replace("torch.", "") if dtype is not None else "float32"
+        if sharded_metadata is None:
+            weight_map = dict.fromkeys(checkpoint_keys, checkpoint_files[0])
+        else:
+            folder = os.path.sep.join(checkpoint_files[0].split(os.path.sep)[:-1])
+            # Fix the weight map keys according to the key mapping
+            weight_map = {
+                key_renaming_mapping[k]: v
+                for k, v in sharded_metadata["weight_map"].items()
+                if k in key_renaming_mapping
+            }
+            weight_map = {k: os.path.join(folder, v) for k, v in weight_map.items()}
+            # Find potential checkpoints containing only offloaded weights
+            disk_only_shard_files = get_disk_only_shard_files(device_map, weight_map)
+        disk_offload_index = {
+            name: {
+                "safetensors_file": file,
+                "weight_name": reverse_key_renaming_mapping[name],
+                "dtype": str_dtype,
+            }
+            for name, file in weight_map.items()
+            if param_device_map[name] == "disk"
+        }
+    else:
+        disk_offload_index = {}
+    return disk_offload_index
