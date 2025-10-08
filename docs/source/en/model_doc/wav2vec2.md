@@ -109,10 +109,6 @@ print(f"Transcription: {processor.batch_decode(predicted_ids)[0]}")
 
 [[autodoc]] models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForPreTrainingOutput
 
-[[autodoc]] models.wav2vec2.modeling_flax_wav2vec2.FlaxWav2Vec2BaseModelOutput
-
-[[autodoc]] models.wav2vec2.modeling_flax_wav2vec2.FlaxWav2Vec2ForPreTrainingOutput
-
 ## Wav2Vec2Model
 
 [[autodoc]] Wav2Vec2Model

@@ -111,10 +111,6 @@ for label, score in zip(candidate_labels, probs):
 [[autodoc]] CLIPImageProcessorFast
     - preprocess
 
-## CLIPFeatureExtractor
-
-[[autodoc]] CLIPFeatureExtractor
-
 ## CLIPProcessor
 
 [[autodoc]] CLIPProcessor

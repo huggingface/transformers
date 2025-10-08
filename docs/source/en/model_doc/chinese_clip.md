@@ -72,10 +72,6 @@ for i, (text, prob) in enumerate(zip(texts, probs[0])):
 [[autodoc]] ChineseCLIPImageProcessorFast
     - preprocess
 
-## ChineseCLIPFeatureExtractor
-
-[[autodoc]] ChineseCLIPFeatureExtractor
-
 ## ChineseCLIPProcessor
 
 [[autodoc]] ChineseCLIPProcessor
