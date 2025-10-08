@@ -4517,6 +4517,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if gguf_file is not None and not is_accelerate_available():
             raise ValueError("accelerate is required when loading a GGUF file `pip install accelerate`.")
 
+        if adapter_kwargs is None:
+            adapter_kwargs = {}
+
         adapter_download_kwargs = download_kwargs_with_commit.copy()
         _adapter_model_path = maybe_load_adapters(
             pretrained_model_name_or_path,
@@ -4535,6 +4538,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Load config if we don't provide a configuration
         if not isinstance(config, PreTrainedConfig):
             config_path = config if config is not None else pretrained_model_name_or_path
+            config_download_kwargs = {key: value for key, value in download_kwargs.items() if key != "subfolder"}
             config, model_kwargs = cls.config_class.from_pretrained(
                 config_path,
                 return_unused_kwargs=True,
@@ -4542,7 +4546,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 gguf_file=gguf_file,
                 _from_auto=from_auto_class,
                 _from_pipeline=from_pipeline,
-                **download_kwargs,
+                **config_download_kwargs,
                 **kwargs,
             )
             if "gguf_file" in model_kwargs:
@@ -4671,15 +4675,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # If it is a model with generation capabilities, attempt to load generation files (generation config,
         # custom generate function)
-        model.adjust_generation_function(
-            generation_config,
-            from_auto_class,
-            from_pipeline,
-            pretrained_model_name_or_path,
-            **download_kwargs,
-            trust_remote_code=trust_remote_code,
-            **kwargs,
-        )
+        adjust_generation_fn = getattr(model, "adjust_generation_function", None)
+        if callable(adjust_generation_fn):
+            adjust_generation_fn(
+                generation_config,
+                from_auto_class,
+                from_pipeline,
+                pretrained_model_name_or_path,
+                **download_kwargs,
+                trust_remote_code=trust_remote_code,
+                **kwargs,
+            )
 
         # for device_map="auto" : dispatch model with hooks on all devices if necessary (not needed with a tp_plan, so we skip it as it slightly
         # harm performances).
