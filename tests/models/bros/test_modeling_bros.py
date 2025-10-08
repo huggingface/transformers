@@ -323,7 +323,7 @@ class BrosModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     dtype=torch.bool,
                     device=torch_device,
                 )
-            elif model_class.__name__ in ["BrosSpadeEEForTokenClassification"]:
+            elif model_class.__name__ == "BrosSpadeEEForTokenClassification":
                 inputs_dict["initial_token_labels"] = torch.zeros(
                     (self.model_tester.batch_size, self.model_tester.seq_length),
                     dtype=torch.long,
@@ -352,12 +352,6 @@ class BrosModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @require_torch_multi_gpu
     def test_multi_gpu_data_parallel_forward(self):
         super().test_multi_gpu_data_parallel_forward()
-
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

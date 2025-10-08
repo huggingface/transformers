@@ -100,7 +100,7 @@ result
 
 **Output**:
 
-```
+```text
 Here is a Python function that transforms bytes to Giga bytes:\n\n```python\ndef bytes_to_giga_bytes(bytes):\n    return bytes / 1024 / 1024 / 1024\n```\n\nThis function takes a single
 ```
 
@@ -119,7 +119,7 @@ bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
 
 **Output**:
 
-```bash
+```text
 29.0260648727417
 ```
 
@@ -208,7 +208,7 @@ result
 
 **Output**:
 
-```
+```text
 Here is a Python function that transforms bytes to Giga bytes:\n\n```python\ndef bytes_to_giga_bytes(bytes):\n    return bytes / 1024 / 1024 / 1024\n```\n\nThis function takes a single
 ```
 
@@ -220,7 +220,7 @@ bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
 
 **Output**:
 
-```
+```text
 15.219234466552734
 ```
 
@@ -251,7 +251,7 @@ result
 
 **Output**:
 
-```
+```text
 Here is a Python function that transforms bytes to Giga bytes:\n\n```\ndef bytes_to_gigabytes(bytes):\n    return bytes / 1024 / 1024 / 1024\n```\n\nThis function takes a single argument
 ```
 
@@ -263,7 +263,7 @@ bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
 
 **Output**:
 
-```
+```text
 9.543574333190918
 ```
 
@@ -337,169 +337,6 @@ Looking at the formula, one would intuitively say that Flash Attention must be m
 Essentially, Flash Attention makes sure that all intermediate write and read operations can be done using the fast *on-chip* SRAM memory instead of having to access the slower VRAM memory to compute the output vector \\( \mathbf{O} \\) .
 
 In practice, there is currently absolutely no reason to **not** use Flash Attention if available. The algorithm gives mathematically the same outputs, and is both faster and more memory-efficient.
-
-Let's look at a practical example.
-
-Our OctoCoder model now gets a significantly longer input prompt which includes a so-called *system prompt*. System prompts are used to steer the LLM into a better assistant that is tailored to the users' task.
-In the following, we use a system prompt that will make OctoCoder a better coding assistant.
-
-```python
-system_prompt = """Below are a series of dialogues between various people and an AI technical assistant.
-The assistant tries to be helpful, polite, honest, sophisticated, emotionally aware, and humble but knowledgeable.
-The assistant is happy to help with code questions and will do their best to understand exactly what is needed.
-It also tries to avoid giving false or misleading information, and it caveats when it isn't entirely sure about the right answer.
-That said, the assistant is practical really does its best, and doesn't let caution get too much in the way of being useful.
-
-The Starcoder models are a series of 15.5B parameter models trained on 80+ programming languages from The Stack (v1.2) (excluding opt-out requests).
-The model uses Multi Query Attention, was trained using the Fill-in-the-Middle objective, and with 8,192 tokens context window for a trillion tokens of heavily deduplicated data.
-
------
-
-Question: Write a function that takes two lists and returns a list that has alternating elements from each input list.
-
-Answer: Sure. Here is a function that does that.
-
-def alternating(list1, list2):
-   results = []
-   for i in range(len(list1)):
-       results.append(list1[i])
-       results.append(list2[i])
-   return results
-
-Question: Can you write some test cases for this function?
-
-Answer: Sure, here are some tests.
-
-assert alternating([10, 20, 30], [1, 2, 3]) == [10, 1, 20, 2, 30, 3]
-assert alternating([True, False], [4, 5]) == [True, 4, False, 5]
-assert alternating([], []) == []
-
-Question: Modify the function so that it returns all input elements when the lists have uneven length. The elements from the longer list should be at the end.
-
-Answer: Here is the modified function.
-
-def alternating(list1, list2):
-   results = []
-   for i in range(min(len(list1), len(list2))):
-       results.append(list1[i])
-       results.append(list2[i])
-   if len(list1) > len(list2):
-       results.extend(list1[i+1:])
-   else:
-       results.extend(list2[i+1:])
-   return results
-
------
-"""
-```
-
-For demonstration purposes, we duplicate the system prompt by ten so that the input length is long enough to observe Flash Attention's memory savings.
-We append the original text prompt `"Question: Please write a function in Python that transforms bytes to Giga bytes.\n\nAnswer: Here"`
-
-```python
-long_prompt = 10 * system_prompt + prompt
-```
-
-We instantiate our model again in bfloat16 precision.
-
-```python
-model = AutoModelForCausalLM.from_pretrained("bigcode/octocoder", dtype=torch.bfloat16, device_map="auto")
-tokenizer = AutoTokenizer.from_pretrained("bigcode/octocoder")
-
-pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
-```
-
-Let's now run the model just like before *without Flash Attention* and measure the peak GPU memory requirement and inference time.
-
-```python
-import time
-
-start_time = time.time()
-result = pipe(long_prompt, max_new_tokens=60)[0]["generated_text"][len(long_prompt):]
-
-print(f"Generated in {time.time() - start_time} seconds.")
-result
-```
-
-**Output**:
-
-```
-Generated in 10.96854019165039 seconds.
-Sure. Here is a function that does that.\n\ndef bytes_to_giga(bytes):\n   return bytes / 1024 / 1024 / 1024\n\nAnswer: Sure. Here is a function that does that.\n\ndef
-````
-
-We're getting the same output as before, however this time, the model repeats the answer multiple times until it's 60 tokens cut-off. This is not surprising as we've repeated the system prompt ten times for demonstration purposes and thus cued the model to repeat itself.
-
-**Note** that the system prompt should not be repeated ten times in real-world applications - one time is enough!
-
-Let's measure the peak GPU memory requirement.
-
-```python
-bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
-```
-
-**Output**:
-
-```bash
-37.668193340301514
-```
-
-As we can see the peak GPU memory requirement is now significantly higher than in the beginning, which is largely due to the longer input sequence. Also the generation takes a little over a minute now.
-
-We call `flush()` to free GPU memory for our next experiment.
-
-```python
-flush()
-```
-
-For comparison, let's run the same function, but enable Flash Attention instead.
-To do so, we convert the model to [BetterTransformer](https://huggingface.co/docs/optimum/bettertransformer/overview) and by doing so enabling PyTorch's [SDPA self-attention](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention) which in turn is able to use Flash Attention.
-
-```python
-model.to_bettertransformer()
-```
-
-Now we run the exact same code snippet as before and under the hood Transformers will make use of Flash Attention.
-
-```py
-start_time = time.time()
-with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
-    result = pipe(long_prompt, max_new_tokens=60)[0]["generated_text"][len(long_prompt):]
-
-print(f"Generated in {time.time() - start_time} seconds.")
-result
-```
-
-**Output**:
-
-```
-Generated in 3.0211617946624756 seconds.
- Sure. Here is a function that does that.\n\ndef bytes_to_giga(bytes):\n   return bytes / 1024 / 1024 / 1024\n\nAnswer: Sure. Here is a function that does that.\n\ndef
-```
-
-We're getting the exact same result as before, but can observe a very significant speed-up thanks to Flash Attention.
-
-Let's measure the memory consumption one last time.
-
-```python
-bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
-```
-
-**Output**:
-
-```
-32.617331981658936
-```
-
-And we're almost back to our original 29GB peak GPU memory from the beginning.
-
-We can observe that we only use roughly 100MB more GPU memory when passing a very long input sequence with Flash Attention compared to passing a short input sequence as done in the beginning.
-
-```py
-flush()
-```
-
-For more information on how to use Flash Attention, please have a look at [this doc page](https://huggingface.co/docs/transformers/en/perf_infer_gpu_one#flashattention-2).
 
 ## 3. Architectural Innovations
 
@@ -618,7 +455,7 @@ generated_text
 
 **Output**:
 
-```
+```text
 shape of input_ids torch.Size([1, 21])
 shape of input_ids torch.Size([1, 22])
 shape of input_ids torch.Size([1, 23])
@@ -656,7 +493,7 @@ generated_text
 
 **Output**:
 
-```
+```text
 shape of input_ids torch.Size([1, 1])
 length of key-value cache 20
 shape of input_ids torch.Size([1, 1])
@@ -690,7 +527,7 @@ Note that, despite our advice to use key-value caches, your LLM output may be sl
 
 The key-value cache is especially useful for applications such as chat where multiple passes of auto-regressive decoding are required. Let's look at an example.
 
-```
+```text
 User: How many people live in France?
 Assistant: Roughly 75 million people live in France
 User: And how many are in Germany?
@@ -728,7 +565,7 @@ tokenizer.batch_decode(generation_output.sequences)[0][len(prompt):]
 
 **Output**:
 
-```
+```text
  is a modified version of the function that returns Mega bytes instead.
 
 def bytes_to_megabytes(bytes):
@@ -750,7 +587,7 @@ config = model.config
 
 **Output**:
 
-```
+```text
 7864320000
 ```
 

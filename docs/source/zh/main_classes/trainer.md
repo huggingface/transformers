@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 在实例化你的 [`Trainer`] 之前，创建一个 [`TrainingArguments`]，以便在训练期间访问所有定制点。
 
-这个 API 支持在多个 GPU/TPU 上进行分布式训练，支持 [NVIDIA Apex](https://github.com/NVIDIA/apex) 的混合精度和 PyTorch 的原生 AMP。
+这个 API 支持在多个 GPU/TPU 上进行分布式训练，支持 PyTorch 的原生 AMP。
 
 [`Trainer`] 包含基本的训练循环，支持上述功能。如果需要自定义训练，你可以继承 `Trainer` 并覆盖以下方法：
 

@@ -369,7 +369,6 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
 
         if scores.dim() == 3:
             if self.logits_indices is not None and self.cu_seq_lens_q is not None:
-                batch_size, seq_len, vocab_size = scores.shape
                 last_positions = self.logits_indices
                 last_scores = scores[0, last_positions, :]
 
@@ -1916,7 +1915,7 @@ class SuppressTokensLogitsProcessor(LogitsProcessor):
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
-        suppress_token_mask = isin_mps_friendly(vocab_tensor, self.suppress_tokens)
+        suppress_token_mask = isin_mps_friendly(vocab_tensor, self.suppress_tokens.to(scores.device))
         scores = torch.where(suppress_token_mask, -float("inf"), scores)
         return scores
 
@@ -2289,7 +2288,7 @@ class UnbatchedClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
         model,
         unconditional_ids: Optional[torch.LongTensor] = None,
         unconditional_attention_mask: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = True,
+        use_cache: bool = True,
     ):
         self.guidance_scale = guidance_scale
         self.model = model

@@ -161,7 +161,6 @@ class SamVisionModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     test_torchscript = False
     test_torch_exportable = True
 
@@ -517,7 +516,6 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     test_torchscript = False
     _is_composite = True
 

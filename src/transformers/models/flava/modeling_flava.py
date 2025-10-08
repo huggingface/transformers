@@ -378,7 +378,6 @@ class FlavaTextEmbeddings(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
         self.register_buffer(
             "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
         )
@@ -411,11 +410,11 @@ class FlavaTextEmbeddings(nn.Module):
 
         inputs_embeds = self.word_embeddings(input_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
-
         embeddings = inputs_embeds + token_type_embeddings
-        if self.position_embedding_type == "absolute":
-            position_embeddings = self.position_embeddings(position_ids)
-            embeddings += position_embeddings
+
+        position_embeddings = self.position_embeddings(position_ids)
+        embeddings += position_embeddings
+
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
@@ -444,7 +443,6 @@ class FlavaSelfAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
         batch_size, seq_length, _ = hidden_states.shape
@@ -478,10 +476,6 @@ class FlavaSelfAttention(nn.Module):
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
 
         context_layer = torch.matmul(attention_probs, value_layer)
 
@@ -541,11 +535,10 @@ class FlavaAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
         self_outputs = self.attention(
-            hidden_states, attention_mask=attention_mask, head_mask=head_mask, output_attentions=output_attentions
+            hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
         )
 
         attention_output = self.output(self_outputs[0], hidden_states)
@@ -606,13 +599,11 @@ class FlavaLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in ViT, layernorm is applied before self-attention
             attention_mask=attention_mask,
-            head_mask=head_mask,
             output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
@@ -644,7 +635,6 @@ class FlavaEncoder(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
@@ -656,9 +646,7 @@ class FlavaEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-
-            layer_outputs = layer_module(hidden_states, attention_mask, layer_head_mask, output_attentions)
+            layer_outputs = layer_module(hidden_states, attention_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
 
@@ -768,7 +756,6 @@ class FlavaImageModel(FlavaPreTrainedModel):
         bool_masked_pos: Optional[torch.BoolTensor] = None,
         interpolate_pos_encoding: Optional[bool] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -786,13 +773,6 @@ class FlavaImageModel(FlavaPreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
         embedding_output = self.embeddings(
             pixel_values, bool_masked_pos=bool_masked_pos, interpolate_pos_encoding=interpolate_pos_encoding
         )
@@ -800,7 +780,6 @@ class FlavaImageModel(FlavaPreTrainedModel):
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -863,7 +842,6 @@ class FlavaTextModel(FlavaPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -894,12 +872,6 @@ class FlavaTextModel(FlavaPreTrainedModel):
         if attention_mask is None:
             attention_mask = torch.ones(input_shape, device=input_ids.device)
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
         extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
             attention_mask, input_shape, input_ids.device
         )
@@ -913,7 +885,6 @@ class FlavaTextModel(FlavaPreTrainedModel):
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -971,7 +942,6 @@ class FlavaMultimodalModel(FlavaPreTrainedModel):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -996,12 +966,6 @@ class FlavaMultimodalModel(FlavaPreTrainedModel):
         if attention_mask is None:
             attention_mask = torch.ones((batch_size, seq_length), device=hidden_states.device)
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
         extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
             attention_mask, (batch_size, seq_length), hidden_states.device
         )
@@ -1009,7 +973,6 @@ class FlavaMultimodalModel(FlavaPreTrainedModel):
         encoder_outputs = self.encoder(
             hidden_states,
             attention_mask=extended_attention_mask,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1136,7 +1099,6 @@ class FlavaModel(FlavaPreTrainedModel):
         bool_masked_pos: Optional[torch.BoolTensor] = None,
         interpolate_pos_encoding: Optional[bool] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
     ) -> torch.FloatTensor:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, image_num_patches)`):
@@ -1169,7 +1131,6 @@ class FlavaModel(FlavaPreTrainedModel):
             pixel_values=pixel_values,
             bool_masked_pos=bool_masked_pos,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             interpolate_pos_encoding=interpolate_pos_encoding,
         )
         pooled_output = image_outputs.last_hidden_state

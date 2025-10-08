@@ -109,7 +109,7 @@ class DiaGenerationMixin(GenerationMixin):
         return merged_processors
 
     def _prepare_generation_config(
-        self, generation_config: Optional[GenerationConfig], use_model_defaults: Optional[bool] = None, **kwargs: dict
+        self, generation_config: Optional[GenerationConfig], use_model_defaults: Optional[bool] = None, **kwargs: Any
     ) -> tuple[GenerationConfig, dict]:
         generation_config, model_kwargs = super()._prepare_generation_config(
             generation_config, use_model_defaults, **kwargs

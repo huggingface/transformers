@@ -16,7 +16,7 @@
 
 from typing import Optional
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto import CONFIG_MAPPING
@@ -25,7 +25,7 @@ from ..auto import CONFIG_MAPPING
 logger = logging.get_logger(__name__)
 
 
-class OneFormerConfig(PretrainedConfig):
+class OneFormerConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`OneFormerModel`]. It is used to instantiate a
     OneFormer model according to the specified arguments, defining the model architecture. Instantiating a
@@ -33,11 +33,11 @@ class OneFormerConfig(PretrainedConfig):
     [shi-labs/oneformer_ade20k_swin_tiny](https://huggingface.co/shi-labs/oneformer_ade20k_swin_tiny) architecture
     trained on [ADE20k-150](https://huggingface.co/datasets/scene_parse_150).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        backbone_config (`PretrainedConfig`, *optional*, defaults to `SwinConfig`):
+        backbone_config (`PreTrainedConfig`, *optional*, defaults to `SwinConfig`):
             The configuration of the backbone model.
         backbone (`str`, *optional*):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this

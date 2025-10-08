@@ -17,7 +17,6 @@ Speech processor class for Wav2Vec2
 """
 
 import warnings
-from contextlib import contextmanager
 from typing import Optional, Union
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
@@ -50,8 +49,6 @@ class Wav2Vec2Processor(ProcessorMixin):
 
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
-        self.current_processor = self.feature_extractor
-        self._in_target_context_manager = False
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
@@ -76,8 +73,6 @@ class Wav2Vec2Processor(ProcessorMixin):
         self,
         audio: Optional[AudioInput] = None,
         text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
-        images=None,
-        videos=None,
         **kwargs: Unpack[Wav2Vec2ProcessorKwargs],
     ):
         """
@@ -106,14 +101,6 @@ class Wav2Vec2Processor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        # For backward compatibility
-        if self._in_target_context_manager:
-            return self.current_processor(
-                audio,
-                **output_kwargs["audio_kwargs"],
-                **output_kwargs["text_kwargs"],
-                **output_kwargs["common_kwargs"],
-            )
 
         if audio is not None:
             inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
@@ -142,10 +129,6 @@ class Wav2Vec2Processor(ProcessorMixin):
         Returns:
             This method returns the results of each `pad` method. If both are used, the output is a dictionary containing the results of both.
         """
-        # For backward compatibility
-        if self._in_target_context_manager:
-            return self.current_processor.pad(*args, **kwargs)
-
         input_features = kwargs.pop("input_features", None)
         labels = kwargs.pop("labels", None)
         if len(args) > 0:
@@ -170,23 +153,6 @@ class Wav2Vec2Processor(ProcessorMixin):
         # The processor doesn't return text ids and the model seems to not need them
         feature_extractor_input_names = self.feature_extractor.model_input_names
         return feature_extractor_input_names + ["labels"]
-
-    @contextmanager
-    def as_target_processor(self):
-        """
-        Temporarily sets the tokenizer for processing the input. Useful for encoding the labels when fine-tuning
-        Wav2Vec2.
-        """
-        warnings.warn(
-            "`as_target_processor` is deprecated and will be removed in v5 of Transformers. You can process your "
-            "labels by using the argument `text` of the regular `__call__` method (either in the same call as "
-            "your audio inputs, or in a separate call."
-        )
-        self._in_target_context_manager = True
-        self.current_processor = self.tokenizer
-        yield
-        self.current_processor = self.feature_extractor
-        self._in_target_context_manager = False
 
 
 __all__ = ["Wav2Vec2Processor"]

@@ -69,6 +69,7 @@ print(tokenizer.decode(outputs[0]))
 ## Model card
 
 The model cards can be found at:
+
 * [Zamba-7B](https://huggingface.co/Zyphra/Zamba-7B-v1)
 
 ## Issues

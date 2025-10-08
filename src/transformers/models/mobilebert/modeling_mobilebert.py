@@ -145,7 +145,7 @@ class MobileBertEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.bart.modeling_bart.eager_attention_forward
+# Copied from transformers.models.bert.modeling_bert.eager_attention_forward
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -154,22 +154,21 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: Optional[float] = None,
     dropout: float = 0.0,
-    head_mask: Optional[torch.Tensor] = None,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
     if scaling is None:
         scaling = query.size(-1) ** -0.5
 
+    # Take the dot product between "query" and "key" to get the raw attention scores.
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
     if attention_mask is not None:
+        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-    if head_mask is not None:
-        attn_weights = attn_weights * head_mask.view(1, -1, 1, 1)
-
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
@@ -200,7 +199,6 @@ class MobileBertSelfAttention(nn.Module):
         key_tensor: torch.Tensor,
         value_tensor: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         input_shape = query_tensor.shape[:-1]
@@ -223,7 +221,6 @@ class MobileBertSelfAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.dropout.p,
             scaling=self.scaling,
-            head_mask=head_mask,
             **kwargs,
         )
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
@@ -279,7 +276,6 @@ class MobileBertAttention(nn.Module):
         value_tensor: torch.Tensor,
         layer_input: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         attention_output, attn_weights = self.self(
@@ -287,7 +283,6 @@ class MobileBertAttention(nn.Module):
             key_tensor,
             value_tensor,
             attention_mask,
-            head_mask,
             **kwargs,
         )
         # Run a linear projection of `hidden_size` then add a residual
@@ -439,7 +434,6 @@ class MobileBertLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         if self.use_bottleneck:
@@ -453,7 +447,6 @@ class MobileBertLayer(GradientCheckpointingLayer):
             value_tensor,
             layer_input,
             attention_mask,
-            head_mask,
             **kwargs,
         )
         attention_output = self_attention_output
@@ -476,14 +469,12 @@ class MobileBertEncoder(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BaseModelOutput]:
         for i, layer_module in enumerate(self.layer):
             hidden_states = layer_module(
                 hidden_states,
                 attention_mask,
-                head_mask[i],
                 **kwargs,
             )
         return BaseModelOutput(last_hidden_state=hidden_states)
@@ -662,7 +653,7 @@ class MobileBertModel(MobileBertPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
@@ -670,7 +661,6 @@ class MobileBertModel(MobileBertPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BaseModelOutputWithPooling]:
@@ -689,17 +679,9 @@ class MobileBertModel(MobileBertPreTrainedModel):
             embedding_output,
         )
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             **kwargs,
         )
         sequence_output = encoder_outputs[0]
@@ -720,8 +702,6 @@ class MobileBertModel(MobileBertPreTrainedModel):
             if "flash" in self.config._attn_implementation:
                 attention_mask = attention_mask if 0 in attention_mask else None
             elif self.config._attn_implementation == "sdpa":
-                # output_attentions=True & head_mask can not be supported when using SDPA, fall back to
-                # the manual implementation that requires a 4D causal mask in all cases.
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
                 attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
             elif self.config._attn_implementation == "flex_attention":
@@ -774,7 +754,6 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         next_sentence_label: Optional[torch.LongTensor] = None,
@@ -813,7 +792,6 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             return_dict=True,
             **kwargs,
@@ -872,7 +850,6 @@ class MobileBertForMaskedLM(MobileBertPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -888,7 +865,6 @@ class MobileBertForMaskedLM(MobileBertPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             return_dict=True,
             **kwargs,
@@ -943,7 +919,6 @@ class MobileBertForNextSentencePrediction(MobileBertPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -987,7 +962,6 @@ class MobileBertForNextSentencePrediction(MobileBertPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             return_dict=True,
             **kwargs,
@@ -1040,7 +1014,6 @@ class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1056,7 +1029,6 @@ class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             return_dict=True,
             **kwargs,
@@ -1119,7 +1091,6 @@ class MobileBertForQuestionAnswering(MobileBertPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         start_positions: Optional[torch.Tensor] = None,
         end_positions: Optional[torch.Tensor] = None,
@@ -1130,7 +1101,6 @@ class MobileBertForQuestionAnswering(MobileBertPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             return_dict=True,
             **kwargs,
@@ -1193,7 +1163,6 @@ class MobileBertForMultipleChoice(MobileBertPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1245,7 +1214,6 @@ class MobileBertForMultipleChoice(MobileBertPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             return_dict=True,
             **kwargs,
@@ -1295,7 +1263,6 @@ class MobileBertForTokenClassification(MobileBertPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1309,7 +1276,6 @@ class MobileBertForTokenClassification(MobileBertPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             return_dict=True,
             **kwargs,
