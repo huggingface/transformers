@@ -569,7 +569,7 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
         else {}
     )
     fx_compatible = True
-    test_pruning = False
+
     test_resize_embeddings = True
     is_encoder_decoder = True
     # The small T5 model needs higher percentages for CPU/MP tests
@@ -1008,7 +1008,7 @@ class T5EncoderOnlyModelTester:
 
 class T5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (T5EncoderModel, T5ForTokenClassification) if is_torch_available() else ()
-    test_pruning = False
+
     test_resize_embeddings = False
     pipeline_model_mapping = (
         {

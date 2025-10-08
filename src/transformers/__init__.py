@@ -462,7 +462,6 @@ else:
     _import_structure["pytorch_utils"] = [
         "Conv1D",
         "apply_chunking_to_forward",
-        "prune_layer",
         "infer_device",
     ]
     _import_structure["time_series_utils"] = []
@@ -693,7 +692,6 @@ if TYPE_CHECKING:
     from .processing_utils import ProcessorMixin as ProcessorMixin
     from .pytorch_utils import Conv1D as Conv1D
     from .pytorch_utils import apply_chunking_to_forward as apply_chunking_to_forward
-    from .pytorch_utils import prune_layer as prune_layer
 
     # Tokenization
     from .tokenization_utils import PreTrainedTokenizer as PreTrainedTokenizer
@@ -707,8 +705,6 @@ if TYPE_CHECKING:
 
     # Trainer
     from .trainer import Trainer as Trainer
-
-    # Trainer
     from .trainer_callback import DefaultFlowCallback as DefaultFlowCallback
     from .trainer_callback import EarlyStoppingCallback as EarlyStoppingCallback
     from .trainer_callback import PrinterCallback as PrinterCallback
@@ -757,7 +753,7 @@ if TYPE_CHECKING:
     from .utils import is_torch_xpu_available as is_torch_xpu_available
     from .utils.kernel_config import KernelConfig as KernelConfig
 
-    # bitsandbytes config
+    # Quantization config
     from .utils.quantization_config import AqlmConfig as AqlmConfig
     from .utils.quantization_config import AutoRoundConfig as AutoRoundConfig
     from .utils.quantization_config import AwqConfig as AwqConfig

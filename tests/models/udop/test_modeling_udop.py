@@ -274,7 +274,7 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         else {}
     )
     fx_compatible = False
-    test_pruning = False
+
     test_torchscript = False
     test_resize_embeddings = True
     is_encoder_decoder = True
@@ -545,7 +545,7 @@ class UdopEncoderOnlyModelTester:
 
 class UdopEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (UdopEncoderModel,) if is_torch_available() else ()
-    test_pruning = False
+
     test_torchscript = False
     test_resize_embeddings = False
 
