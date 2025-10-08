@@ -4631,10 +4631,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 device_map=device_map,
                 keep_in_fp32_modules=model._keep_in_fp32_modules,
                 config=config,
+                checkpoint_files=checkpoint_files,
                 use_kernels=use_kernels,
             )
 
-        if _torch_distributed_available and device_mesh is not None:  # accelerate device_map auto hooks
+        if _torch_distributed_available and device_mesh is not None:  # add hooks to nn.Modules
             model = distribute_model(model, distributed_config, device_mesh, tp_size)
 
         # Prepare the full device map
@@ -4663,14 +4664,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             weights_only=weights_only,
         )
 
-        # make sure token embedding weights are still tied if needed
-        model.tie_weights()
-
-        # Set model in evaluation mode to deactivate DropOut modules by default
-        model.eval()
-
-        # check if using kernels
-        if use_kernels:
+        model.tie_weights() # make sure token embedding weights are still tied if needed
+        model.eval() # Set model in evaluation mode to deactivate DropOut modules by default
+        if use_kernels: # check if using kernels
             model.use_kernels = True
 
         # If it is a model with generation capabilities, attempt to load generation files (generation config,
@@ -4697,7 +4693,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             hf_quantizer.postprocess_model(model, config=config)
 
         if _adapter_model_path is not None:
-            adapter_kwargs["key_mapping"] = key_mapping
+            adapter_kwargs["key_mapping"] = key_mapping # TODO: Dynamic weight loader for adapters
             model.load_adapter(
                 _adapter_model_path,
                 adapter_name=adapter_name,
@@ -4856,7 +4852,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             QuantizationMethod.QUARK,
         }
 
-        # Get all the keys of the state dicts that we have to initialize the model
+        # Get all the keys of the state dicts that we have to initialize the model with
         if sharded_metadata is not None:
             original_checkpoint_keys = sharded_metadata["all_checkpoint_keys"]
         elif state_dict is not None:

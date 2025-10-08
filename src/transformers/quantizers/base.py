@@ -206,7 +206,7 @@ class HfQuantizer(ABC):
         "updates the tp plan for the scales"
         return config
 
-    def preprocess_model(self, model: "PreTrainedModel", **kwargs):
+    def preprocess_model(self, model: "PreTrainedModel", config, dtype=None, checkpoint_files=None, **kwargs):
         """
         Setting model attributes and/or converting model before weights loading. At this point
         the model should be initialized on the meta device so you can freely manipulate the skeleton
