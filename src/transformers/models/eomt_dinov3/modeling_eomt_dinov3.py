@@ -641,34 +641,25 @@ class EomtDinov3Loss(nn.Module):
 
 
 class EomtDinov3Embeddings(nn.Module):
+    """
+    Construct the CLS token, mask token, position and patch embeddings.
+    """
+
     def __init__(self, config: EomtDinov3Config) -> None:
         super().__init__()
-
         self.config = config
-        self.patch_size = config.patch_size
-        self.num_prefix_tokens = 1 + config.num_register_tokens
-
-        self.patch_embeddings = nn.Conv2d(
-            config.num_channels,
-            config.hidden_size,
-            kernel_size=config.patch_size,
-            stride=config.patch_size,
-        )
         self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
-        self.register_tokens = nn.Parameter(torch.zeros(1, config.num_register_tokens, config.hidden_size))
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
+        self.register_tokens = nn.Parameter(torch.empty(1, config.num_register_tokens, config.hidden_size))
+        self.patch_embeddings = nn.Conv2d(
+            config.num_channels, config.hidden_size, kernel_size=config.patch_size, stride=config.patch_size
+        )
+
+        self.num_prefix_tokens = 1 + config.num_register_tokens
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        batch_size = pixel_values.shape[0]
-        target_dtype = self.patch_embeddings.weight.dtype
-
-        embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
-        embeddings = embeddings.flatten(2).transpose(1, 2)
-
-        cls_tokens = self.cls_token.expand(batch_size, -1, -1)
-        register_tokens = self.register_tokens.expand(batch_size, -1, -1)
-
-        embeddings = torch.cat([cls_tokens, register_tokens, embeddings], dim=1)
+        embeddings = super().forward(pixel_values)
         embeddings = self.dropout(embeddings)
 
         return embeddings
@@ -1241,8 +1232,8 @@ class EomtDinov3ForUniversalSegmentation(EomtDinov3PreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        position_embeddings = self.rope_embeddings(pixel_values)
         hidden_states = self.embeddings(pixel_values)
+        position_embeddings = self.get_position_embeddings(pixel_values)
 
         for idx, layer_module in enumerate(self.layers):
             if idx == self.num_hidden_layers - self.config.num_blocks:
@@ -1274,7 +1265,10 @@ class EomtDinov3ForUniversalSegmentation(EomtDinov3PreTrainedModel):
                 num_query_tokens = self.config.num_queries
                 encoder_start_tokens = num_query_tokens + self.embeddings.num_prefix_tokens
 
+                # Set attention mask for queries to focus on encoder tokens based on interpolated logits
                 attention_mask[:, :num_query_tokens, encoder_start_tokens:] = interpolated_logits > 0
+
+                # Disable attention mask for random query tokens.
                 attention_mask = self._disable_attention_mask(
                     attention_mask,
                     prob=self.attn_mask_probs[idx - self.num_hidden_layers + self.config.num_blocks],
@@ -1282,6 +1276,8 @@ class EomtDinov3ForUniversalSegmentation(EomtDinov3PreTrainedModel):
                     encoder_start_tokens=encoder_start_tokens,
                     device=attention_mask.device,
                 )
+
+                # Expand attention mask to 4d mask.
                 attention_mask = attention_mask[:, None, ...].expand(-1, self.config.num_attention_heads, -1, -1)
                 attention_mask = attention_mask.float().masked_fill(~attention_mask, -1e9)
 
@@ -1323,12 +1319,16 @@ class EomtDinov3ForUniversalSegmentation(EomtDinov3PreTrainedModel):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
+    def get_position_embeddings(self, pixel_values: Tensor) -> Optional[tuple[Tensor, Tensor]]:
+        return self.rope_embeddings(pixel_values)
+
     def predict(self, logits: torch.Tensor):
         query_tokens = logits[:, : self.config.num_queries, :]
         class_logits = self.class_predictor(query_tokens)
 
         prefix_tokens = logits[:, self.config.num_queries + self.embeddings.num_prefix_tokens :, :]
         prefix_tokens = prefix_tokens.transpose(1, 2)
+
         prefix_tokens = prefix_tokens.reshape(prefix_tokens.shape[0], -1, *self.grid_size)
 
         query_tokens = self.mask_head(query_tokens)
@@ -1341,7 +1341,10 @@ class EomtDinov3ForUniversalSegmentation(EomtDinov3PreTrainedModel):
     @staticmethod
     def _disable_attention_mask(attn_mask, prob, num_query_tokens, encoder_start_tokens, device):
         if prob < 1:
+            # Generate random queries to disable based on the probs
             random_queries = torch.rand(attn_mask.shape[0], num_query_tokens, device=device) > prob
+
+            # Disable attention to the query tokens, considering the prefix tokens
             attn_mask[:, :num_query_tokens, encoder_start_tokens:][random_queries] = 1
 
         return attn_mask

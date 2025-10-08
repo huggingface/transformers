@@ -892,6 +892,7 @@ class EomtLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
     ) -> torch.Tensor:
         hidden_states_norm = self.norm1(hidden_states)
         self_attention_output, _ = self.attention(hidden_states_norm, attention_mask)
@@ -1109,6 +1110,7 @@ class EomtForUniversalSegmentation(EomtPreTrainedModel):
             raise ValueError("You have to specify pixel_values")
 
         hidden_states = self.embeddings(pixel_values)
+        position_embeddings = self.get_position_embeddings(pixel_values)
 
         for idx, layer_module in enumerate(self.layers):
             if idx == self.num_hidden_layers - self.config.num_blocks:
@@ -1156,7 +1158,11 @@ class EomtForUniversalSegmentation(EomtPreTrainedModel):
                 attention_mask = attention_mask[:, None, ...].expand(-1, self.config.num_attention_heads, -1, -1)
                 attention_mask = attention_mask.float().masked_fill(~attention_mask, -1e9)
 
-            hidden_states = layer_module(hidden_states, attention_mask)
+            hidden_states = layer_module(
+                hidden_states,
+                attention_mask=attention_mask,
+                position_embeddings=position_embeddings,
+            )
 
         sequence_output = self.layernorm(hidden_states)
 
@@ -1189,6 +1195,9 @@ class EomtForUniversalSegmentation(EomtPreTrainedModel):
 
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
+
+    def get_position_embeddings(self, pixel_values: Tensor) -> Optional[tuple[Tensor, Tensor]]:
+        return None
 
     def predict(self, logits: torch.Tensor):
         query_tokens = logits[:, : self.config.num_queries, :]

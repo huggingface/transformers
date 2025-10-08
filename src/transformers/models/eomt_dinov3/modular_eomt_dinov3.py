@@ -17,16 +17,14 @@
 from typing import Optional
 
 import torch
-import torch.nn.functional as F
 from torch import Tensor, nn
 
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import check_model_inputs
+from ...utils import auto_docstring
 from ..dinov3_vit.modeling_dinov3_vit import (
     DINOv3ViTAttention,
     DINOv3ViTDropPath,
+    DINOv3ViTEmbeddings,
     DINOv3ViTGatedMLP,
     DINOv3ViTLayer,
     DINOv3ViTLayerScale,
@@ -35,6 +33,7 @@ from ..dinov3_vit.modeling_dinov3_vit import (
 )
 from ..eomt.configuration_eomt import EomtConfig
 from ..eomt.modeling_eomt import (
+    EomtForUniversalSegmentation,
     EomtForUniversalSegmentationOutput,
     EomtHungarianMatcher,
     EomtLayerNorm2d,
@@ -43,7 +42,6 @@ from ..eomt.modeling_eomt import (
     EomtScaleBlock,
     EomtScaleLayer,
 )
-from ..mask2former.modeling_mask2former import Mask2FormerForUniversalSegmentation
 
 
 class EomtDinov3Config(EomtConfig):
@@ -72,7 +70,7 @@ class EomtDinov3Config(EomtConfig):
             The dropout probability for all fully connected layers in the embeddings and encoder.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
         image_size (`int`, *optional*, defaults to 640):
             The size (resolution) of each input image.
@@ -91,7 +89,7 @@ class EomtDinov3Config(EomtConfig):
         num_blocks (`int`, *optional*, defaults to 4):
             Number of feature blocks or stages in the architecture.
         no_object_weight (`float`, *optional*, defaults to 0.1):
-            Loss weight for the 'no object' class in panoptic/instance segmentation.
+            Loss weight for the "no object" class in panoptic/instance segmentation.
         class_weight (`float`, *optional*, defaults to 2.0):
             Loss weight for classification targets.
         mask_weight (`float`, *optional*, defaults to 5.0):
@@ -237,35 +235,15 @@ class EomtDinov3Loss(EomtLoss):
     pass
 
 
-class EomtDinov3Embeddings(nn.Module):
+class EomtDinov3Embeddings(DINOv3ViTEmbeddings):
     def __init__(self, config: EomtDinov3Config) -> None:
-        super().__init__()
+        super().__init__(config)
 
-        self.config = config
-        self.patch_size = config.patch_size
         self.num_prefix_tokens = 1 + config.num_register_tokens
-
-        self.patch_embeddings = nn.Conv2d(
-            config.num_channels,
-            config.hidden_size,
-            kernel_size=config.patch_size,
-            stride=config.patch_size,
-        )
-        self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
-        self.register_tokens = nn.Parameter(torch.zeros(1, config.num_register_tokens, config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        batch_size = pixel_values.shape[0]
-        target_dtype = self.patch_embeddings.weight.dtype
-
-        embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
-        embeddings = embeddings.flatten(2).transpose(1, 2)
-
-        cls_tokens = self.cls_token.expand(batch_size, -1, -1)
-        register_tokens = self.register_tokens.expand(batch_size, -1, -1)
-
-        embeddings = torch.cat([cls_tokens, register_tokens, embeddings], dim=1)
+        embeddings = super().forward(pixel_values)
         embeddings = self.dropout(embeddings)
 
         return embeddings
@@ -357,7 +335,7 @@ class EomtDinov3PreTrainedModel(PreTrainedModel):
     The EoMT-DINOv3 model with head on top for instance/semantic/panoptic segmentation.
     """,
 )
-class EomtDinov3ForUniversalSegmentation(EomtDinov3PreTrainedModel, Mask2FormerForUniversalSegmentation):
+class EomtDinov3ForUniversalSegmentation(EomtDinov3PreTrainedModel, EomtForUniversalSegmentation):
     def __init__(self, config: EomtDinov3Config):
         PreTrainedModel.__init__(self, config)
         self.config = config
@@ -388,139 +366,8 @@ class EomtDinov3ForUniversalSegmentation(EomtDinov3PreTrainedModel, Mask2FormerF
 
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.embeddings.patch_embeddings
-
-    def get_auxiliary_logits(self):
-        raise AttributeError("Note needed for EomtDinov3 model.")
-
-    def predict(self, logits: torch.Tensor):
-        query_tokens = logits[:, : self.config.num_queries, :]
-        class_logits = self.class_predictor(query_tokens)
-
-        prefix_tokens = logits[:, self.config.num_queries + self.embeddings.num_prefix_tokens :, :]
-        prefix_tokens = prefix_tokens.transpose(1, 2)
-        prefix_tokens = prefix_tokens.reshape(prefix_tokens.shape[0], -1, *self.grid_size)
-
-        query_tokens = self.mask_head(query_tokens)
-        prefix_tokens = self.upscale_block(prefix_tokens)
-
-        mask_logits = torch.einsum("bqc, bchw -> bqhw", query_tokens, prefix_tokens)
-
-        return mask_logits, class_logits
-
-    @staticmethod
-    def _disable_attention_mask(attn_mask, prob, num_query_tokens, encoder_start_tokens, device):
-        if prob < 1:
-            random_queries = torch.rand(attn_mask.shape[0], num_query_tokens, device=device) > prob
-            attn_mask[:, :num_query_tokens, encoder_start_tokens:][random_queries] = 1
-
-        return attn_mask
-
-    @check_model_inputs
-    @auto_docstring
-    def forward(
-        self,
-        pixel_values: Tensor,
-        mask_labels: Optional[list[Tensor]] = None,
-        class_labels: Optional[list[Tensor]] = None,
-        patch_offsets: Optional[list[Tensor]] = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> EomtDinov3ForUniversalSegmentationOutput:
-        r"""
-        mask_labels (`list[torch.Tensor]`, *optional*):
-            list of mask labels of shape `(num_labels, height, width)` to be fed to a model
-        class_labels (`list[torch.LongTensor]`, *optional*):
-            list of target class labels of shape `(num_labels, height, width)` to be fed to a model. They identify the
-            labels of `mask_labels`, e.g. the label of `mask_labels[i][j]` if `class_labels[i][j]`.
-        patch_offsets (`list[torch.Tensor]`, *optional*):
-            list of tuples indicating the image index and start and end positions of patches for semantic segmentation.
-        """
-
-        masks_queries_logits_per_layer, class_queries_logits_per_layer = (), ()
-        attention_mask = None
-
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
-
-        position_embeddings = self.rope_embeddings(pixel_values)
-        hidden_states = self.embeddings(pixel_values)
-
-        for idx, layer_module in enumerate(self.layers):
-            if idx == self.num_hidden_layers - self.config.num_blocks:
-                query = self.query.weight[None, :, :].expand(hidden_states.shape[0], -1, -1).to(hidden_states.device)
-                hidden_states = torch.cat((query, hidden_states), dim=1)
-
-            if idx >= self.num_hidden_layers - self.config.num_blocks and (
-                self.training or self.attn_mask_probs[idx - self.num_hidden_layers + self.config.num_blocks] > 0
-            ):
-                norm_hidden_states = self.layernorm(hidden_states)
-                masks_queries_logits, class_queries_logits = self.predict(norm_hidden_states)
-
-                masks_queries_logits_per_layer += (masks_queries_logits,)
-                class_queries_logits_per_layer += (class_queries_logits,)
-
-                attention_mask = torch.ones(
-                    hidden_states.shape[0],
-                    hidden_states.shape[1],
-                    hidden_states.shape[1],
-                    device=hidden_states.device,
-                    dtype=torch.bool,
-                )
-
-                interpolated_logits = F.interpolate(masks_queries_logits, size=self.grid_size, mode="bilinear")
-                interpolated_logits = interpolated_logits.view(
-                    interpolated_logits.size(0), interpolated_logits.size(1), -1
-                )
-
-                num_query_tokens = self.config.num_queries
-                encoder_start_tokens = num_query_tokens + self.embeddings.num_prefix_tokens
-
-                attention_mask[:, :num_query_tokens, encoder_start_tokens:] = interpolated_logits > 0
-                attention_mask = self._disable_attention_mask(
-                    attention_mask,
-                    prob=self.attn_mask_probs[idx - self.num_hidden_layers + self.config.num_blocks],
-                    num_query_tokens=num_query_tokens,
-                    encoder_start_tokens=encoder_start_tokens,
-                    device=attention_mask.device,
-                )
-                attention_mask = attention_mask[:, None, ...].expand(-1, self.config.num_attention_heads, -1, -1)
-                attention_mask = attention_mask.float().masked_fill(~attention_mask, -1e9)
-
-            hidden_states = layer_module(
-                hidden_states,
-                attention_mask=attention_mask,
-                position_embeddings=position_embeddings,
-            )
-
-        sequence_output = self.layernorm(hidden_states)
-
-        masks_queries_logits, class_queries_logits = self.predict(sequence_output)
-        masks_queries_logits_per_layer += (masks_queries_logits,)
-        class_queries_logits_per_layer += (class_queries_logits,)
-
-        loss = None
-        if mask_labels is not None and class_labels is not None:
-            loss = 0.0
-            for masks_queries_logits, class_queries_logits in zip(
-                masks_queries_logits_per_layer, class_queries_logits_per_layer
-            ):
-                loss_dict = self.get_loss_dict(
-                    masks_queries_logits=masks_queries_logits,
-                    class_queries_logits=class_queries_logits,
-                    mask_labels=mask_labels,
-                    class_labels=class_labels,
-                    auxiliary_predictions=None,
-                )
-                loss += self.get_loss(loss_dict)
-
-        return EomtDinov3ForUniversalSegmentationOutput(
-            loss=loss,
-            masks_queries_logits=masks_queries_logits,
-            class_queries_logits=class_queries_logits,
-            last_hidden_state=sequence_output,
-            patch_offsets=patch_offsets,
-        )
+    def get_position_embeddings(self, pixel_values: Tensor) -> Optional[tuple[Tensor, Tensor]]:
+        return self.rope_embeddings(pixel_values)
 
 
 __all__ = [
