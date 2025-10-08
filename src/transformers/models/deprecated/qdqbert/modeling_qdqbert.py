@@ -48,7 +48,6 @@ from ....utils import (
     replace_return_docstrings,
     requires_backends,
 )
-from ....utils.deprecation import deprecate_kwarg
 from .configuration_qdqbert import QDQBertConfig
 
 
@@ -167,7 +166,6 @@ class QDQBertSelfAttention(nn.Module):
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
@@ -311,7 +309,6 @@ class QDQBertAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
@@ -387,7 +384,6 @@ class QDQBertLayer(GradientCheckpointingLayer):
         self.intermediate = QDQBertIntermediate(config)
         self.output = QDQBertOutput(config)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,

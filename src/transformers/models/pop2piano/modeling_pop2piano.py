@@ -33,7 +33,6 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPastAndCross
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import auto_docstring, is_torch_flex_attn_available, is_torch_fx_proxy, is_torchdynamo_compiling, logging
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_pop2piano import Pop2PianoConfig
 
 
@@ -283,7 +282,6 @@ class Pop2PianoAttention(nn.Module):
         values = values.permute([2, 0, 1]).unsqueeze(0)  # shape (1, num_heads, query_length, key_length)
         return values
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
@@ -401,7 +399,6 @@ class Pop2PianoLayerSelfAttention(nn.Module):
         self.layer_norm = Pop2PianoLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
@@ -435,7 +432,6 @@ class Pop2PianoLayerCrossAttention(nn.Module):
         self.layer_norm = Pop2PianoLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
@@ -481,7 +477,6 @@ class Pop2PianoBlock(GradientCheckpointingLayer):
 
         self.layer.append(Pop2PianoLayerFF(config))
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,

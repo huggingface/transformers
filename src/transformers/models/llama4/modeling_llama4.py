@@ -309,7 +309,6 @@ class Llama4TextAttention(nn.Module):
         if self.config.use_qk_norm and self.use_rope:
             self.qk_norm = Llama4TextL2Norm(config.rms_norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -386,7 +385,6 @@ class Llama4TextDecoderLayer(GradientCheckpointingLayer):
         self.input_layernorm = Llama4TextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Llama4TextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

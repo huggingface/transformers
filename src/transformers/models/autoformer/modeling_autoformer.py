@@ -35,7 +35,6 @@ from ...modeling_outputs import BaseModelOutput, ModelOutput, SampleTSPrediction
 from ...modeling_utils import PreTrainedModel
 from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
 from ...utils import auto_docstring, is_torch_flex_attn_available, logging
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_autoformer import AutoformerConfig
 
 
@@ -446,7 +445,6 @@ class AutoformerAttention(nn.Module):
 
         self.autocorrelation_factor = autocorrelation_factor
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -734,7 +732,6 @@ class AutoformerDecoderLayer(GradientCheckpointingLayer):
             bias=False,
         )
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
