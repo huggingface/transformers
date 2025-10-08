@@ -13,44 +13,53 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-09-14 and added to Hugging Face Transformers on 2021-10-15.*
+*This model was released on 2021-09-14 and added to Hugging Face Transformers on 2021-10-15 and contributed by [anton-l](https://huggingface.co/anton-l).*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # SEW
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[SEW](https://huggingface.co/papers/2109.06870) introduces a pre-trained model architecture with significant improvements in both performance and efficiency for automatic speech recognition. Building on wav2vec 2.0, SEW achieves a 1.9x inference speedup and a 13.5% relative reduction in word error rate under a 100h-960h semi-supervised setup on LibriSpeech. Additionally, SEW reduces word error rate by 25-50% across different model sizes while maintaining similar inference times.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-SEW (Squeezed and Efficient Wav2Vec) was proposed in [Performance-Efficiency Trade-offs in Unsupervised Pre-training
-for Speech Recognition](https://huggingface.co/papers/2109.06870) by Felix Wu, Kwangyoun Kim, Jing Pan, Kyu Han, Kilian Q.
-Weinberger, Yoav Artzi.
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the paper is the following:
+pipeline = pipeline(task="automatic-speech-recognition", model="asapp/sew-tiny-100k", dtype="auto")
+pipeline("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac")
+```
 
-*This paper is a study of performance-efficiency trade-offs in pre-trained models for automatic speech recognition
-(ASR). We focus on wav2vec 2.0, and formalize several architecture designs that influence both the model performance
-and its efficiency. Putting together all our observations, we introduce SEW (Squeezed and Efficient Wav2vec), a
-pre-trained model architecture with significant improvements along both performance and efficiency dimensions across a
-variety of training setups. For example, under the 100h-960h semi-supervised setup on LibriSpeech, SEW achieves a 1.9x
-inference speedup compared to wav2vec 2.0, with a 13.5% relative reduction in word error rate. With a similar inference
-time, SEW reduces word error rate by 25-50% across different model sizes.*
+</hfoption>
+<hfoption id="AutoModel">
 
-This model was contributed by [anton-l](https://huggingface.co/anton-l).
+```py
+import torch
+from datasets import load_dataset
+from transformers import AutoProcessor, AutoModelForCTC
 
-## Usage tips
+dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation").sort("id")
+sampling_rate = dataset.features["audio"].sampling_rate
 
-- SEW is a speech model that accepts a float array corresponding to the raw waveform of the speech signal.
-- SEWForCTC is fine-tuned using connectionist temporal classification (CTC) so the model output has to be decoded using
-  [`Wav2Vec2CTCTokenizer`].
+processor = AutoProcessor.from_pretrained("asapp/sew-tiny-100k")
+model = AutoModelForCTC.from_pretrained("asapp/sew-tiny-100k", dtype="auto")
 
-## Resources
+inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
+with torch.no_grad():
+    logits = model(**inputs).logits
+predicted_ids = torch.argmax(logits, dim=-1)
+print(f"Transcription: {processor.batch_decode(predicted_ids)[0]}")
+```
 
-- [Audio classification task guide](../tasks/audio_classification)
-- [Automatic speech recognition task guide](../tasks/asr)
+</hfoption>
+</hfoptions>
 
 ## SEWConfig
 
@@ -70,3 +79,4 @@ This model was contributed by [anton-l](https://huggingface.co/anton-l).
 
 [[autodoc]] SEWForSequenceClassification
     - forward
+

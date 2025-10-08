@@ -13,27 +13,47 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-06-07 and added to Hugging Face Transformers on 2024-05-14.*
+*This model was released on 2023-06-07 and added to Hugging Face Transformers on 2024-05-14 and contributed by [YikangS](https://huggingface.co/YikangS).*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # JetMoe
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[JetMoE](https://huggingface.co/papers/2404.07413) is a large language model trained on 1.25 trillion tokens using 30,000 H100 GPU hours at a cost under $0.1M. It employs a sparsely-gated mixture-of-experts (SMoE) architecture, where both attention and feedforward layers are sparsely activated, resulting in 8B parameters but only 2B active per token—cutting inference compute by about 70% compared to Llama2-7B. Despite its low-cost training, JetMoE-8B outperforms Llama2-7B, and its chat variant surpasses Llama2-13B-Chat. The model was trained entirely on open-source data and code, with full training details and weights publicly released to support open research and collaboration.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-**JetMoe-8B** is an 8B Mixture-of-Experts (MoE) language model developed by [Yikang Shen](https://scholar.google.com.hk/citations?user=qff5rRYAAAAJ) and [MyShell](https://myshell.ai/).
-JetMoe project aims to provide a LLaMA2-level performance and efficient language model with a limited budget.
-To achieve this goal, JetMoe uses a sparsely activated architecture inspired by the [ModuleFormer](https://huggingface.co/papers/2306.04640).
-Each JetMoe block consists of two MoE layers: Mixture of Attention Heads and Mixture of MLP Experts.
-Given the input tokens, it activates a subset of its experts to process them.
-This sparse activation schema enables JetMoe to achieve much better training throughput than similar size dense models.
-The training throughput of JetMoe-8B is around 100B tokens per day on a cluster of 96 H100 GPUs with a straightforward 3-way pipeline parallelism strategy.
+```py
+import torch
+from transformers import pipeline
 
-This model was contributed by [Yikang Shen](https://huggingface.co/YikangS).
+pipeline = pipeline(task="text-generation", model="jetmoe/jetmoe-8b", dtype="auto",)
+pipeline("Plants create energy through a process known as photosynthesis.")
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("jetmoe/jetmoe-8b")
+model = AutoModelForCausalLM.from_pretrained("jetmoe/jetmoe-8b", dtype="auto",)
+
+inputs = tokenizer("Plants create energy through a process known as photosynthesis.", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
+print(tokenizer.decode(outputs[0]))
+```
+
+</hfoption>
+</hfoptions>
 
 ## JetMoeConfig
 

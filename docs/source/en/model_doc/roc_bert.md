@@ -13,26 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-05-27 and added to Hugging Face Transformers on 2022-11-08.*
-
-<div style="float: right;">
-   <div class="flex flex-wrap space-x-1">
-          <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-   </div>
-</div>
+*This model was released on 2022-05-27 and added to Hugging Face Transformers on 2022-11-08 and contributed by [weiweishi](https://huggingface.co/weiweishi).*
 
 # RoCBert
 
-[RoCBert](https://aclanthology.org/2022.acl-long.65.pdf) is a pretrained Chinese [BERT](./bert) model designed against adversarial attacks like typos and synonyms. It is pretrained with a contrastive learning objective to align normal and adversarial text examples. The examples include different semantic, phonetic, and visual features of Chinese. This makes RoCBert more robust against manipulation.
-
-You can find all the original RoCBert checkpoints under the [weiweishi](https://huggingface.co/weiweishi) profile.
-
-> [!TIP]
-> This model was contributed by [weiweishi](https://huggingface.co/weiweishi).
->
-> Click on the RoCBert models in the right sidebar for more examples of how to apply RoCBert to different Chinese language tasks.
-
-The example below demonstrates how to predict the [MASK] token with [`Pipeline`], [`AutoModel`], and from the command line.
+[RoCBert](https://huggingface.co/papers/2022.acl-long.65) is a robust pretrained Chinese BERT model designed to withstand various adversarial attacks such as word perturbation, synonyms, and typos. It employs contrastive learning to maintain label consistency across different adversarial examples. By incorporating multimodal features including semantic, phonetic, and visual information, ROCBERT enhances its robustness against attacks in multiple forms. The model outperforms strong baselines on five Chinese NLU tasks under three blackbox adversarial algorithms while maintaining high performance on clean datasets. Additionally, it excels in toxic content detection under human-made attacks.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -41,13 +26,8 @@ The example below demonstrates how to predict the [MASK] token with [`Pipeline`]
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(
-   task="fill-mask",
-   model="weiweishi/roc-bert-base-zh",
-   dtype=torch.float16,
-   device=0
-)
-pipeline("這家餐廳的拉麵是我[MASK]過的最好的拉麵之")
+pipeline = pipeline(task="fill-mask", model="weiweishi/roc-bert-base-zh", dtype="auto")
+pipeline("植物通过[MASK]合作用产生能量")
 ```
 
 </hfoption>
@@ -57,32 +37,15 @@ pipeline("這家餐廳的拉麵是我[MASK]過的最好的拉麵之")
 import torch
 from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained(
-   "weiweishi/roc-bert-base-zh",
-)
-model = AutoModelForMaskedLM.from_pretrained(
-   "weiweishi/roc-bert-base-zh",
-   dtype=torch.float16,
-   device_map="auto",
-)
-inputs = tokenizer("這家餐廳的拉麵是我[MASK]過的最好的拉麵之", return_tensors="pt").to(model.device)
+model = AutoModelForMaskedLM.from_pretrained("weiweishi/roc-bert-base-zh", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("weiweishi/roc-bert-base-zh")
 
-with torch.no_grad():
-   outputs = model(**inputs)
-   predictions = outputs.logits
-
-masked_index = torch.where(inputs['input_ids'] == tokenizer.mask_token_id)[1]
-predicted_token_id = predictions[0, masked_index].argmax(dim=-1)
-predicted_token = tokenizer.decode(predicted_token_id)
-
-print(f"The predicted token is: {predicted_token}")
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "這家餐廳的拉麵是我[MASK]過的最好的拉麵之" | transformers run --task fill-mask --model weiweishi/roc-bert-base-zh --device 0
+inputs = tokenizer("植物通过[MASK]合作用产生能量", return_tensors="pt")
+outputs = model(**inputs)
+mask_token_id = tokenizer.mask_token_id
+mask_position = (inputs.input_ids == tokenizer.mask_token_id).nonzero(as_tuple=True)[1]
+predicted_word = tokenizer.decode(outputs.logits[0, mask_position].argmax(dim=-1))
+print(f"Predicted word: {predicted_word}")
 ```
 
 </hfoption>
@@ -140,3 +103,4 @@ echo -e "這家餐廳的拉麵是我[MASK]過的最好的拉麵之" | transforme
 
 [[autodoc]] RoCBertForQuestionAnswering
     - forward
+

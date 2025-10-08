@@ -13,48 +13,46 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2019-08-31 and added to Hugging Face Transformers on 2023-06-20.*
+*This model was released on 2019-08-31 and added to Hugging Face Transformers on 2023-06-20 and contributed by [sijunhe](https://huggingface.co/sijunhe).*
+
+> [!WARNING]
+> This model is in maintenance mode only, we don’t accept any new PRs changing its code. If you run into any issues running this model, please reinstall the last version that supported this model: v4.40.2. You can do so by running the following command: pip install -U transformers==4.40.2.
 
 # Nezha
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[NEZHA: Neural ContextualiZed representation for CHinese lAnguage understanding](https://huggingface.co/papers/1909.00204) presents NEZHA, a pre-trained language model for Chinese NLU tasks. NEZHA is based on BERT with enhancements such as Functional Relative Positional Encoding, Whole Word Masking, Mixed Precision Training, and the LAMB Optimizer. Experiments demonstrate that NEZHA achieves top performance on tasks like named entity recognition, sentence matching, sentiment classification, and natural language inference.
 
-<Tip warning={true}>
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-This model is in maintenance mode only, we don't accept any new PRs changing its code.
-If you run into any issues running this model, please reinstall the last version that supported this model: v4.40.2.
-You can do so by running the following command: `pip install -U transformers==4.40.2`.
+```py
+import torch
+from transformers import pipeline
 
-</Tip>
+pipeline = pipeline(task="fill-mask", model="sijunhe/nezha-cn-base", dtype="auto")
+pipeline("植物通过[MASK]合作用产生能量")
+```
 
-## Overview
+</hfoption>
+<hfoption id="AutoModel">
 
-The Nezha model was proposed in [NEZHA: Neural Contextualized Representation for Chinese Language Understanding](https://huggingface.co/papers/1909.00204) by Junqiu Wei et al.
+```py
+import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-The abstract from the paper is the following:
+model = AutoModelForMaskedLM.from_pretrained("sijunhe/nezha-cn-base", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("sijunhe/nezha-cn-base")
 
-*The pre-trained language models have achieved great successes in various natural language understanding (NLU) tasks
-due to its capacity to capture the deep contextualized information in text by pre-training on large-scale corpora.
-In this technical report, we present our practice of pre-training language models named NEZHA (NEural contextualiZed
-representation for CHinese lAnguage understanding) on Chinese corpora and finetuning for the Chinese NLU tasks.
-The current version of NEZHA is based on BERT with a collection of proven improvements, which include Functional
-Relative Positional Encoding as an effective positional encoding scheme, Whole Word Masking strategy,
-Mixed Precision Training and the LAMB Optimizer in training the models. The experimental results show that NEZHA
-achieves the state-of-the-art performances when finetuned on several representative Chinese tasks, including
-named entity recognition (People's Daily NER), sentence matching (LCQMC), Chinese sentiment classification (ChnSenti)
-and natural language inference (XNLI).*
+inputs = tokenizer("植物通过[MASK]合作用产生能量", return_tensors="pt")
+outputs = model(**inputs)
+mask_token_id = tokenizer.mask_token_id
+mask_position = (inputs.input_ids == tokenizer.mask_token_id).nonzero(as_tuple=True)[1]
+predicted_word = tokenizer.decode(outputs.logits[0, mask_position].argmax(dim=-1))
+print(f"Predicted word: {predicted_word}")
+```
 
-This model was contributed by [sijunhe](https://huggingface.co/sijunhe). The original code can be found [here](https://github.com/huawei-noah/Pretrained-Language-Model/tree/master/NEZHA-PyTorch).
-
-## Resources
-
-- [Text classification task guide](../tasks/sequence_classification)
-- [Token classification task guide](../tasks/token_classification)
-- [Question answering task guide](../tasks/question_answering)
-- [Masked language modeling task guide](../tasks/masked_language_modeling)
-- [Multiple choice task guide](../tasks/multiple_choice)
+</hfoption>
+</hfoptions>
 
 ## NezhaConfig
 
@@ -99,3 +97,4 @@ This model was contributed by [sijunhe](https://huggingface.co/sijunhe). The ori
 
 [[autodoc]] NezhaForQuestionAnswering
     - forward
+

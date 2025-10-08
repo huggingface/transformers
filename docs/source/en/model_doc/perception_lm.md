@@ -13,33 +13,59 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-04-17 and added to Hugging Face Transformers on 2025-07-11.*
+
+*This model was released on 2025-04-17 and added to Hugging Face Transformers on 2025-07-11 and contributed by [shumingh](https://huggingface.co/shumingh).*
 
 # PerceptionLM
 
-## Overview
+[PerceptionLM](https://huggingface.co/papers/2504.13180) is a fully open and reproducible vision-language model designed for transparent research in image and video understanding. It features a vision encoder paired with a small-scale LLM decoder. The model addresses the issue of closed-source vision-language models by avoiding distillation from proprietary models. To enhance detailed video understanding, 2.8M human-labeled instances of fine-grained video question-answer pairs and spatio-temporally grounded video captions are released. Additionally, PLM–VideoBench, a suite for evaluating challenging video understanding tasks, is introduced, focusing on reasoning about "what," "where," "when," and "how" in videos. The work is fully reproducible, with data, training recipes, code, and models provided.
 
-The [PerceptionLM](https://huggingface.co/papers/2504.13180) model was proposed in [PerceptionLM: Open-Access Data and Models for Detailed Visual Understanding](https://ai.meta.com/research/publications/perceptionlm-open-access-data-and-models-for-detailed-visual-understanding/) by Jang Hyun Cho et al. It's a fully open, reproducible model for transparent research in image and video understanding. PLM consists of
-a vision encoder with a small scale (<8B parameters) LLM decoder.
+<hfoptions id="usage">
+<hfoption id="AutoModel">
 
-The abstract from the paper is the following:
+```py
+import torch
+from transformers import AutoProcessor, AutoModelForImageTextToText
+from huggingface_hub import hf_hub_download
 
-*Vision-language models are integral to computer vision research, yet many high-performing models
-remain closed-source, obscuring their data, design and training recipe. The research community
-has responded by using distillation from black-box models to label training data, achieving strong
-benchmark results, at the cost of measurable scientific progress. However, without knowing the details
-of the teacher model and its data sources, scientific progress remains difficult to measure. In this
-paper, we study building a Perception Language Model (PLM) in a fully open and reproducible
-framework for transparent research in image and video understanding. We analyze standard training
-pipelines without distillation from proprietary models and explore large-scale synthetic data to identify
-critical data gaps, particularly in detailed video understanding. To bridge these gaps, we release 2.8M
-human-labeled instances of fine-grained video question-answer pairs and spatio-temporally grounded
-video captions. Additionally, we introduce PLM–VideoBench, a suite for evaluating challenging video
-understanding tasks focusing on the ability to reason about “what”, “where”, “when”, and “how” of a
-video. We make our work fully reproducible by providing data, training recipes, code & models.*
+processor = AutoProcessor.from_pretrained("facebook/Perception-LM-1B")
+model = AutoModelForImageTextToText.from_pretrained("facebook/Perception-LM-1B", dtype="auto")
+test_image_file = hf_hub_download(
+            repo_id="shumingh/perception_lm_test_images",
+            filename="14496_0.PNG",
+            repo_type="dataset",
+)
+conversation = [
+    {
+        "role": "user",
+        "content": [
+            {
+                "type": "image",
+                "url": test_image_file,
+            },
+            {"type": "text", "text": "Describe the bar plot in the image."},
+        ],
+    }
+]
 
-This model was contributed by [shumingh](https://huggingface.co/shumingh).
-The original code can be found [here](https://github.com/facebookresearch/perception_models).
+inputs = processor.apply_chat_template(
+    [conversation],
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt",
+)
+inputs = inputs.to(model.device)
+generate_ids = model.generate(**inputs, max_new_tokens=256)
+input_length = inputs["input_ids"].shape[1]
+generate_ids_without_inputs = generate_ids[:, input_length:]
+
+for output in processor.batch_decode(generate_ids_without_inputs, skip_special_tokens=True):
+    print(output)
+```
+
+</hfoption>
+</hfoptions>
 
 ## PerceptionLMConfig
 
@@ -65,3 +91,4 @@ The original code can be found [here](https://github.com/facebookresearch/percep
 
 [[autodoc]] PerceptionLMForConditionalGeneration
     - forward
+

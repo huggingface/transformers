@@ -13,91 +13,46 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-12-15 and added to Hugging Face Transformers on 2022-06-13.*
+*This model was released on 2021-12-15 and added to Hugging Face Transformers on 2022-06-13 and contributed by [stancld](https://huggingface.co/stancld).*
 
 # LongT5
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[LongT5: Efficient Text-To-Text Transformer for Long Sequences](https://huggingface.co/papers/2112.07916) integrates attention mechanisms from long-input transformers and pre-training strategies from summarization models into the T5 architecture. It introduces a new attention mechanism called Transient Global (TGlobal), which combines local and global attention without additional side-inputs. LongT5 achieves state-of-the-art results in summarization tasks and outperforms the original T5 models in question answering tasks.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The LongT5 model was proposed in [LongT5: Efficient Text-To-Text Transformer for Long Sequences](https://huggingface.co/papers/2112.07916)
-by Mandy Guo, Joshua Ainslie, David Uthus, Santiago Ontanon, Jianmo Ni, Yun-Hsuan Sung and Yinfei Yang. It's an
-encoder-decoder transformer pre-trained in a text-to-text denoising generative setting. LongT5 model is an extension of
-T5 model, and it enables using one of the two different efficient attention mechanisms - (1) Local attention, or (2)
-Transient-Global attention.
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the paper is the following:
-
-*Recent work has shown that either (1) increasing the input length or (2) increasing model size can improve the
-performance of Transformer-based neural models. In this paper, we present a new model, called LongT5, with which we
-explore the effects of scaling both the input length and model size at the same time. Specifically, we integrated
-attention ideas from long-input transformers (ETC), and adopted pre-training strategies from summarization pre-training
-(PEGASUS) into the scalable T5 architecture. The result is a new attention mechanism we call {\em Transient Global}
-(TGlobal), which mimics ETC's local/global attention mechanism, but without requiring additional side-inputs. We are
-able to achieve state-of-the-art results on several summarization tasks and outperform the original T5 models on
-question answering tasks.*
-
-This model was contributed by [stancld](https://huggingface.co/stancld).
-The original code can be found [here](https://github.com/google-research/longt5).
-
-## Usage tips
-
-- [`LongT5ForConditionalGeneration`] is an extension of [`T5ForConditionalGeneration`] exchanging the traditional
-encoder *self-attention* layer with efficient either *local* attention or *transient-global* (*tglobal*) attention.
-- Unlike the T5 model, LongT5 does not use a task prefix. Furthermore, it uses a different pre-training objective
-inspired by the pre-training of [`PegasusForConditionalGeneration`].
-- LongT5 model is designed to work efficiently and very well on long-range *sequence-to-sequence* tasks where the
-input sequence exceeds commonly used 512 tokens. It is capable of handling input sequences of a length up to 16,384 tokens.
-- For *Local Attention*, the sparse sliding-window local attention operation allows a given token to attend only `r`
-tokens to the left and right of it (with `r=127` by default). *Local Attention* does not introduce any new parameters
-to the model. The complexity of the mechanism is linear in input sequence length `l`: `O(l*r)`.
-- *Transient Global Attention* is an extension of the *Local Attention*. It, furthermore, allows each input token to
-interact with all other tokens in the layer. This is achieved via splitting an input sequence into blocks of a fixed
-length `k` (with a default `k=16`). Then, a global token for such a block is obtained via summing and normalizing the embeddings of every token
-in the block. Thanks to this, the attention allows each token to attend to both nearby tokens like in Local attention, and
-also every global token like in the case of standard global attention (*transient* represents the fact the global tokens
-are constructed dynamically within each attention operation).  As a consequence, *TGlobal* attention introduces
-a few new parameters -- global relative position biases and a layer normalization for global token's embedding.
-The complexity of this mechanism is `O(l(r + l/k))`.
-- An example showing how to evaluate a fine-tuned LongT5 model on the [pubmed dataset](https://huggingface.co/datasets/scientific_papers) is below.
-
-```python
->>> import evaluate
->>> from datasets import load_dataset
->>> from transformers import AutoTokenizer, LongT5ForConditionalGeneration
-
->>> dataset = load_dataset("scientific_papers", "pubmed", split="validation")
->>> model = (
-...     LongT5ForConditionalGeneration.from_pretrained("Stancld/longt5-tglobal-large-16384-pubmed-3k_steps")
-...     .to("auto")
-...     .half()
-... )
->>> tokenizer = AutoTokenizer.from_pretrained("Stancld/longt5-tglobal-large-16384-pubmed-3k_steps")
-
-
->>> def generate_answers(batch):
-...     inputs_dict = tokenizer(
-...         batch["article"], max_length=16384, padding="max_length", truncation=True, return_tensors="pt"
-...     )
-...     input_ids = inputs_dict.input_ids.to(model.device)
-...     attention_mask = inputs_dict.attention_mask.to(model.device)
-...     output_ids = model.generate(input_ids, attention_mask=attention_mask, max_length=512, num_beams=2)
-...     batch["predicted_abstract"] = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
-...     return batch
-
-
->>> result = dataset.map(generate_answer, batched=True, batch_size=2)
->>> rouge = evaluate.load("rouge")
->>> rouge.compute(predictions=result["predicted_abstract"], references=result["abstract"])
+pipeline = pipeline(task="text2text-generation", model="Stancld/longt5-tglobal-large-16384-pubmed-3k_steps", dtype="auto",)
+pipeline("""
+The statistics of base-pair usage within known recognition sites for a particular DNA-binding protein can be used to estimate the relative protein binding affinities to these sites, as well as to sites containing any other combinations of base-pairs. As has been described elsewhere, the connection between base-pair statistics and binding free energy is made by an equal probability selection assumption; i.e. that all base-pair sequences that provide appropriate binding strength are equally likely to have been chosen as recognition sites in the course of evolution. This is analogous to a statistical-mechanical system where all configurations with the same energy are equally likely to occur. In this communication, we apply the statistical-mechanical selection theory to analyze the base-pair statistics of the known recognition sequences for the cyclic AMP receptor protein (CRP). The theoretical predictions are found to be in reasonable agreement with binding data for those sequences for which experimental binding information is available, thus lending support to the basic assumptions of the selection theory. On the basis of this agreement, we can predict the affinity for CRP binding to any base-pair sequence, albeit with a large statistical uncertainty. When the known recognition sites for CRP are ranked according to predicted binding affinities, we find that the ranking is consistent with the hypothesis that the level of function of these sites parallels their fractional saturation with CRP-cAMP under in-vivo conditions. When applied to the entire genome, the theory predicts the existence of a large number of randomly occurring "pseudosites" with strong binding affinity for CRP. It appears that most CRP molecules are engaged in non-productive binding at non-specific or pseudospecific sites under in-vivo conditions. In this sense, the specificity of the CRP binding site is very low. Relative specificity requirements for polymerases, repressors and activators are compared in light of the results of this and the first paper in this series.
+"""
+)
 ```
 
-## Resources
+</hfoption>
+<hfoption id="AutoModel">
 
-- [Translation task guide](../tasks/translation)
-- [Summarization task guide](../tasks/summarization)
+```py
+import torch
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("Stancld/longt5-tglobal-large-16384-pubmed-3k_steps")
+model = AutoModelForSeq2SeqLM.from_pretrained("Stancld/longt5-tglobal-large-16384-pubmed-3k_steps", dtype="auto",)
+
+text = """
+The statistics of base-pair usage within known recognition sites for a particular DNA-binding protein can be used to estimate the relative protein binding affinities to these sites, as well as to sites containing any other combinations of base-pairs. As has been described elsewhere, the connection between base-pair statistics and binding free energy is made by an equal probability selection assumption; i.e. that all base-pair sequences that provide appropriate binding strength are equally likely to have been chosen as recognition sites in the course of evolution. This is analogous to a statistical-mechanical system where all configurations with the same energy are equally likely to occur. In this communication, we apply the statistical-mechanical selection theory to analyze the base-pair statistics of the known recognition sequences for the cyclic AMP receptor protein (CRP). The theoretical predictions are found to be in reasonable agreement with binding data for those sequences for which experimental binding information is available, thus lending support to the basic assumptions of the selection theory. On the basis of this agreement, we can predict the affinity for CRP binding to any base-pair sequence, albeit with a large statistical uncertainty. When the known recognition sites for CRP are ranked according to predicted binding affinities, we find that the ranking is consistent with the hypothesis that the level of function of these sites parallels their fractional saturation with CRP-cAMP under in-vivo conditions. When applied to the entire genome, the theory predicts the existence of a large number of randomly occurring "pseudosites" with strong binding affinity for CRP. It appears that most CRP molecules are engaged in non-productive binding at non-specific or pseudospecific sites under in-vivo conditions. In this sense, the specificity of the CRP binding site is very low. Relative specificity requirements for polymerases, repressors and activators are compared in light of the results of this and the first paper in this series.
+"""
+inputs = tokenizer(text, return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
+print(tokenizer.decode(outputs[0]))
+```
+
+</hfoption>
+</hfoptions>
 
 ## LongT5Config
 
@@ -117,3 +72,4 @@ The complexity of this mechanism is `O(l(r + l/k))`.
 
 [[autodoc]] LongT5EncoderModel
     - forward
+

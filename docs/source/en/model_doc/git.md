@@ -13,46 +13,35 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-05-27 and added to Hugging Face Transformers on 2023-01-03.*
+*This model was released on 2022-05-27 and added to Hugging Face Transformers on 2023-01-03 and contributed by [nielsr](https://huggingface.co/nielsr).*
 
 # GIT
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[GIT](https://huggingface.co/papers/2205.14100) is a decoder-only Transformer that uses CLIP's vision encoder to condition on visual inputs alongside text. By simplifying the architecture to a single image encoder and text decoder under a unified language modeling task, and by scaling up pre-training data and model size, GIT achieves state-of-the-art results on 12 challenging vision-language benchmarks. Notably, it surpasses human performance on TextCaps. Additionally, GIT introduces a generation-based approach for image classification and scene text recognition, demonstrating strong performance on standard benchmarks.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="AutoModel">
 
-The GIT model was proposed in [GIT: A Generative Image-to-text Transformer for Vision and Language](https://huggingface.co/papers/2205.14100) by
-Jianfeng Wang, Zhengyuan Yang, Xiaowei Hu, Linjie Li, Kevin Lin, Zhe Gan, Zicheng Liu, Ce Liu, Lijuan Wang. GIT is a decoder-only Transformer
-that leverages [CLIP](clip)'s vision encoder to condition the model on vision inputs besides text. The model obtains state-of-the-art results on
-image captioning and visual question answering benchmarks.
+```py
+import torch
+import requests
+from PIL import Image
+from transformers import AutoProcessor, AutoModelForCausalLM
 
-The abstract from the paper is the following:
+processor = AutoProcessor.from_pretrained("microsoft/git-base-coco")
+model = AutoModelForCausalLM.from_pretrained("microsoft/git-base-coco", dtype="auto")
 
-*In this paper, we design and train a Generative Image-to-text Transformer, GIT, to unify vision-language tasks such as image/video captioning and question answering. While generative models provide a consistent network architecture between pre-training and fine-tuning, existing work typically contains complex structures (uni/multi-modal encoder/decoder) and depends on external modules such as object detectors/taggers and optical character recognition (OCR). In GIT, we simplify the architecture as one image encoder and one text decoder under a single language modeling task. We also scale up the pre-training data and the model size to boost the model performance. Without bells and whistles, our GIT establishes new state of the arts on 12 challenging benchmarks with a large margin. For instance, our model surpasses the human performance for the first time on TextCaps (138.2 vs. 125.5 in CIDEr). Furthermore, we present a new scheme of generation-based image classification and scene text recognition, achieving decent performance on standard benchmarks.*
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/git_architecture.jpg"
-alt="drawing" width="600"/>
+pixel_values = processor(images=image, return_tensors="pt").pixel_values
+output_ids = model.generate(pixel_values=pixel_values, max_length=50)
+output = processor.batch_decode(output_ids, skip_special_tokens=True)[0]
+print(output)
+```
 
-<small> GIT architecture. Taken from the <a href="https://huggingface.co/papers/2205.14100" target="_blank">original paper</a>. </small>
-
-This model was contributed by [nielsr](https://huggingface.co/nielsr).
-The original code can be found [here](https://github.com/microsoft/GenerativeImage2Text).
-
-## Usage tips
-
-- GIT is implemented in a very similar way to GPT-2, the only difference being that the model is also conditioned on `pixel_values`.
-
-## Resources
-
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with GIT.
-
-- Demo notebooks regarding inference + fine-tuning GIT on custom data can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/GIT).
-- See also: [Causal language modeling task guide](../tasks/language_modeling)
-
-If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we will review it.
-The resource should ideally demonstrate something new instead of duplicating an existing resource.
+</hfoption>
+</hfoptions>
 
 ## GitVisionConfig
 
@@ -82,3 +71,4 @@ The resource should ideally demonstrate something new instead of duplicating an 
 
 [[autodoc]] GitForCausalLM
     - forward
+

@@ -15,34 +15,39 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2023-05-05 and added to Hugging Face Transformers on 2023-07-25.*
 
+
 # MPT
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[MPT](https://www.databricks.com/blog/mpt-7b) is a 6.7-billion-parameter decoder-style transformer developed by MosaicML, trained from scratch on 1 trillion tokens of text and code over 9.5 days with zero human intervention. It is fully open-source and commercially usable, featuring FlashAttention for fast training and inference, and ALiBi to handle extremely long context lengths up to 84k tokens. MosaicML also released finetuned variants—Instruct, Chat, and StoryWriter-65k+—to demonstrate specialized capabilities. The model was rigorously benchmarked and matches the quality of LLaMA-7B while offering easier deployment, licensing for commercial use, and highly efficient training code.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The MPT model was proposed by the [MosaicML](https://www.mosaicml.com/) team and released with multiple sizes and finetuned variants. The MPT models are a series of open source and commercially usable LLMs pre-trained on 1T tokens.
+```py
+import torch
+from transformers import pipeline
 
-MPT models are GPT-style decoder-only transformers with several improvements: performance-optimized layer implementations, architecture changes that provide greater training stability, and the elimination of context length limits by replacing positional embeddings with ALiBi.
+pipeline = pipeline(task="text-generation", model="mosaicml/mpt-7b", dtype="auto",)
+pipeline("Plants create energy through a process known as photosynthesis.")
+```
 
-- MPT base: MPT base pre-trained models on next token prediction
-- MPT instruct: MPT base models fine-tuned on instruction based tasks
-- MPT storywriter: MPT base models fine-tuned for 2500 steps on 65k-token excerpts of fiction books contained in the books3 corpus, this enables the model to handle very long sequences
+</hfoption>
+<hfoption id="AutoModel">
 
-The original code is available at the  [`llm-foundry`](https://github.com/mosaicml/llm-foundry/tree/main) repository.
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-Read more about it [in the release blogpost](https://www.mosaicml.com/blog/mpt-7b)
+tokenizer = AutoTokenizer.from_pretrained("mosaicml/mpt-7b")
+model = AutoModelForCausalLM.from_pretrained("mosaicml/mpt-7b", dtype="auto",)
 
-## Usage tips
+inputs = tokenizer("Plants create energy through a process known as photosynthesis.", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
+print(tokenizer.decode(outputs[0]))
+```
 
-- Learn more about some techniques behind training of the model [in this section of llm-foundry repository](https://github.com/mosaicml/llm-foundry/blob/main/TUTORIAL.md#faqs)
-- If you want to use the advanced version of the model (triton kernels, direct flash attention integration), you can still use the original model implementation by adding `trust_remote_code=True` when calling `from_pretrained`.
-
-## Resources
-
-- [Fine-tuning Notebook](https://colab.research.google.com/drive/1HCpQkLL7UXW8xJUJJ29X7QAeNJKO0frZ?usp=sharing) on how to fine-tune MPT-7B on a free Google Colab instance to turn the model into a Chatbot.
+</hfoption>
+</hfoptions>
 
 ## MptConfig
 
@@ -73,3 +78,11 @@ Read more about it [in the release blogpost](https://www.mosaicml.com/blog/mpt-7
 
 [[autodoc]] MptForQuestionAnswering
     - forward
+
+```py
+import torch
+from transformers import pipeline
+
+pipeline = pipeline(task="text-generation", model="mosaicml/mpt-7b", dtype="auto")
+pipeline("The future of artificial intelligence is")
+```

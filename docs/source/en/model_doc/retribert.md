@@ -13,31 +13,14 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2020-06-12 and added to Hugging Face Transformers on 2023-06-20.*
+*This model was released on 2020-06-12 and added to Hugging Face Transformers on 2023-06-20 and contributed by [yjernite](https://huggingface.co/yjernite).*
+
+> [!WARNING]
+> This model is in maintenance mode only, so we won't accept any new PRs changing its code. If you run into any issues running this model, please reinstall the last version that supported this model: v4.30.0. You can do so by running the following command: `pip install -U transformers==4.30.0`.
 
 # RetriBERT
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
-
-<Tip warning={true}>
-
-This model is in maintenance mode only, so we won't accept any new PRs changing its code.
-
-If you run into any issues running this model, please reinstall the last version that supported this model: v4.30.0.
-You can do so by running the following command: `pip install -U transformers==4.30.0`.
-
-</Tip>
-
-## Overview
-
-The [RetriBERT](https://huggingface.co/yjernite/retribert-base-uncased/tree/main) model was proposed in the blog post [Explain Anything Like I'm Five: A Model for Open Domain Long Form
-Question Answering](https://yjernite.github.io/lfqa.html). RetriBERT is a small model that uses either a single or
-pair of BERT encoders with lower-dimension projection for dense semantic indexing of text.
-
-This model was contributed by [yjernite](https://huggingface.co/yjernite). Code to train and use the model can be
-found [here](https://github.com/huggingface/transformers/tree/main/examples/research-projects/distillation).
+[RetriBERT](https://yjernite.github.io/lfqa.html) is a compact model designed for dense semantic indexing, utilizing either a single or a pair of BERT encoders with a reduced-dimensional projection layer. This architecture enables efficient retrieval of relevant passages by encoding text into dense vectors. It was developed to facilitate open-domain long-form question answering (LFQA) tasks, particularly when training data is limited. By leveraging the ELI5 dataset, RetriBERT demonstrates how dense retrieval systems can be trained without extensive supervision or task-specific pretraining, making such models more accessible.
 
 ## RetriBertConfig
 

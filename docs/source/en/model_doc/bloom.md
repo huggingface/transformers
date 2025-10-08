@@ -17,46 +17,36 @@ rendered properly in your Markdown viewer.
 
 # BLOOM
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[BLOOM](https://huggingface.co/papers/2211.05100) is a 176-billion parameter open-access large language model built collaboratively by hundreds of researchers to promote wider accessibility of LLM technology. It is a decoder-only Transformer trained on the ROOTS corpus, which includes text from hundreds of sources across 46 natural and 13 programming languages. BLOOM demonstrates competitive performance across diverse benchmarks, with further gains achieved through multitask prompted finetuning. The model and code are publicly released under the Responsible AI License to support open research and applications.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The [BLOOM](https://huggingface.co/papers/2211.05100) model has been proposed with its various versions through the [BigScience Workshop](https://bigscience.huggingface.co/). BigScience is inspired by other open science initiatives where researchers have pooled their time and resources to collectively achieve a higher impact.
-The architecture of BLOOM is essentially similar to GPT3 (auto-regressive model for next token prediction), but has been trained on 46 different languages and 13 programming languages.
-Several smaller versions of the models have been trained on the same dataset. BLOOM is available in the following versions:
+```py
+import torch
+from transformers import pipeline
 
-- [bloom-560m](https://huggingface.co/bigscience/bloom-560m)
-- [bloom-1b1](https://huggingface.co/bigscience/bloom-1b1)
-- [bloom-1b7](https://huggingface.co/bigscience/bloom-1b7)
-- [bloom-3b](https://huggingface.co/bigscience/bloom-3b)
-- [bloom-7b1](https://huggingface.co/bigscience/bloom-7b1)
-- [bloom](https://huggingface.co/bigscience/bloom) (176B parameters)
+pipeline = pipeline(task="text-generation", model="bigscience/bloom-560m", dtype="auto")
+pipeline("Plants create energy through a process known as photosynthesis.")
+```
 
-## Resources
+</hfoption>
+<hfoption id="AutoModel">
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with BLOOM. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-<PipelineTag pipeline="text-generation"/>
+model = AutoModelForCausalLM.from_pretrained("bigscience/bloom-560m")
+tokenizer = AutoTokenizer.from_pretrained("bigscience/bloom-560m")
 
-- [`BloomForCausalLM`] is supported by this [causal language modeling example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling#gpt-2gpt-and-causal-language-modeling) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb).
+inputs = tokenizer("Plants create energy through a process known as photosynthesis.", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
+print(tokenizer.decode(outputs[0]))
+```
 
-See also:
-
-- [Causal language modeling task guide](../tasks/language_modeling)
-- [Text classification task guide](../tasks/sequence_classification)
-- [Token classification task guide](../tasks/token_classification)
-- [Question answering task guide](../tasks/question_answering)
-
-⚡️ Inference
-
-- A blog on [Optimization story: Bloom inference](https://huggingface.co/blog/bloom-inference-optimization).
-- A blog on [Incredibly Fast BLOOM Inference with DeepSpeed and Accelerate](https://huggingface.co/blog/bloom-inference-pytorch-scripts).
-
-⚙️ Training
-
-- A blog on [The Technology Behind BLOOM Training](https://huggingface.co/blog/bloom-megatron-deepspeed).
+</hfoption>
+</hfoptions>
 
 ## BloomConfig
 
@@ -92,3 +82,4 @@ See also:
 
 [[autodoc]] BloomForQuestionAnswering
     - forward
+

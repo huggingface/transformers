@@ -17,45 +17,33 @@ rendered properly in your Markdown viewer.
 
 # DialoGPT
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[DialoGPT](https://huggingface.co/papers/1911.00536) is trained on 147M conversation-like exchanges from Reddit. It achieves human-like performance in single-turn dialogue settings, generating relevant, contentful, and context-consistent responses. The pre-trained model and training pipeline are publicly available for research and development in neural response generation and intelligent open-domain dialogue systems.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-DialoGPT was proposed in [DialoGPT: Large-Scale Generative Pre-training for Conversational Response Generation](https://huggingface.co/papers/1911.00536) by Yizhe Zhang, Siqi Sun, Michel Galley, Yen-Chun Chen, Chris Brockett, Xiang Gao,
-Jianfeng Gao, Jingjing Liu, Bill Dolan. It's a GPT2 Model trained on 147M conversation-like exchanges extracted from
-Reddit.
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the paper is the following:
+pipeline = pipeline(task="text-generation", model="microsoft/DialoGPT-medium", dtype="auto")
+pipeline("Plants create energy through a process known as photosynthesis.")
+```
 
-*We present a large, tunable neural conversational response generation model, DialoGPT (dialogue generative pre-trained
-transformer). Trained on 147M conversation-like exchanges extracted from Reddit comment chains over a period spanning
-from 2005 through 2017, DialoGPT extends the Hugging Face PyTorch transformer to attain a performance close to human
-both in terms of automatic and human evaluation in single-turn dialogue settings. We show that conversational systems
-that leverage DialoGPT generate more relevant, contentful and context-consistent responses than strong baseline
-systems. The pre-trained model and training pipeline are publicly released to facilitate research into neural response
-generation and the development of more intelligent open-domain dialogue systems.*
+</hfoption>
+<hfoption id="AutoModel">
 
-The original code can be found [here](https://github.com/microsoft/DialoGPT).
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-## Usage tips
+model = AutoModelForCausalLM.from_pretrained("microsoft/DialoGPT-medium", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("microsoft/DialoGPT-medium")
 
-- DialoGPT is a model with absolute position embeddings so it's usually advised to pad the inputs on the right rather
-  than the left.
-- DialoGPT was trained with a causal language modeling (CLM) objective on conversational data and is therefore powerful
-  at response generation in open-domain dialogue systems.
-- DialoGPT enables the user to create a chat bot in just 10 lines of code as shown on [DialoGPT's model card](https://huggingface.co/microsoft/DialoGPT-medium).
+inputs = tokenizer("Plants create energy through a process known as photosynthesis.", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=50)
+print(tokenizer.decode(outputs[0]))
+```
 
-Training:
-
-In order to train or fine-tune DialoGPT, one can use causal language modeling training. To cite the official paper: *We
-follow the OpenAI GPT-2 to model a multiturn dialogue session as a long text and frame the generation task as language
-modeling. We first concatenate all dialog turns within a dialogue session into a long text x_1,..., x_N (N is the
-sequence length), ended by the end-of-text token.* For more information please confer to the original paper.
-
-<Tip>
-
-DialoGPT's architecture is based on the GPT2 model, refer to [GPT2's documentation page](gpt2) for API reference and examples.
-
-</Tip>
+</hfoption>
+</hfoptions>

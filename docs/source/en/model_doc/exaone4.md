@@ -15,6 +15,14 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2025-07-15 and added to Hugging Face Transformers on 2025-07-26.*
 
+```py
+import torch
+from transformers import pipeline
+
+pipeline = pipeline(task="text-generation", model="LGAI-EXAONE/EXAONE-4.0-32B", dtype="auto")
+pipeline("The future of artificial intelligence is")
+```
+
 # EXAONE 4
 
 ## Overview
