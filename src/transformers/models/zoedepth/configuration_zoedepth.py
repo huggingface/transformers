@@ -169,8 +169,6 @@ class ZoeDepthConfig(PreTrainedConfig):
         patch_transformer_num_attention_heads=None,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         if readout_type not in ["ignore", "add", "project"]:
             raise ValueError("Readout_type must be one of ['ignore', 'add', 'project']")
 
@@ -233,6 +231,8 @@ class ZoeDepthConfig(PreTrainedConfig):
         self.patch_transformer_hidden_size = patch_transformer_hidden_size
         self.patch_transformer_intermediate_size = patch_transformer_intermediate_size
         self.patch_transformer_num_attention_heads = patch_transformer_num_attention_heads
+
+        super().__init__(**kwargs)
 
 
 __all__ = ["ZOEDEPTH_PRETRAINED_CONFIG_ARCHIVE_MAP", "ZoeDepthConfig"]

@@ -336,22 +336,5 @@ class RTDetrConfig(PreTrainedConfig):
         self.eos_coefficient = eos_coefficient
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
-    @classmethod
-    def from_backbone_configs(cls, backbone_config: PreTrainedConfig, **kwargs):
-        """Instantiate a [`RTDetrConfig`] (or a derived class) from a pre-trained backbone model configuration and DETR model
-        configuration.
-
-            Args:
-                backbone_config ([`PreTrainedConfig`]):
-                    The backbone configuration.
-
-            Returns:
-                [`RTDetrConfig`]: An instance of a configuration object
-        """
-        return cls(
-            backbone_config=backbone_config,
-            **kwargs,
-        )
-
 
 __all__ = ["RTDetrConfig"]

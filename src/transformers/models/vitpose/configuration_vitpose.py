@@ -88,8 +88,6 @@ class VitPoseConfig(PreTrainedConfig):
         use_simple_decoder: bool = True,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         if use_pretrained_backbone:
             logger.info(
                 "`use_pretrained_backbone` is `True`. For the pure inference purpose of VitPose weight do not set this value."
@@ -122,6 +120,8 @@ class VitPoseConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.scale_factor = scale_factor
         self.use_simple_decoder = use_simple_decoder
+
+        super().__init__(**kwargs)
 
 
 __all__ = ["VitPoseConfig"]
