@@ -21,11 +21,11 @@
 
 from typing import Optional
 
-from ...configuration_utils import PretrainedConfig, layer_type_validation
+from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_rope_utils import rope_config_validation
 
 
-class CwmConfig(PretrainedConfig):
+class CwmConfig(PreTrainedConfig):
     """
     Configuration for Code World Model (CWM).
     This is an inherited Llama3-compatible configuration with layer-interleaved
@@ -136,13 +136,6 @@ class CwmConfig(PretrainedConfig):
         layer_types: Optional[list[str]] = None,  # ["full_attention"|"sliding_attention"] per layer
         **kwargs,
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
         if rope_scaling is None:
             rope_scaling = {
                 "factor": 16.0,
@@ -188,6 +181,14 @@ class CwmConfig(PretrainedConfig):
         if self.rope_scaling is not None and "type" in self.rope_scaling:
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self)
+
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
 
         self.sliding_window = int(sliding_window) if sliding_window else None
         self.layer_types = list(layer_types)
