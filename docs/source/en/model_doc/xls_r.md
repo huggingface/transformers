@@ -17,40 +17,40 @@ rendered properly in your Markdown viewer.
 
 # XLS-R
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[XLS-R](https://huggingface.co/papers/2111.09296) is a large-scale model for cross-lingual speech representation learning built on wav2vec 2.0. Trained with up to 2B parameters on nearly half a million hours of speech audio in 128 languages, XLS-R significantly outperforms previous models across various tasks and languages. It achieves state-of-the-art results on CoVoST-2 speech translation, improving BLEU scores by 7.4 on average across 21 translation directions. XLS-R also lowers speech recognition error rates by 14-34% on benchmarks like BABEL, MLS, CommonVoice, and VoxPopuli, and sets a new standard on VoxLingua107 for language identification. Notably, the model demonstrates that cross-lingual pretraining can surpass English-only pretraining for translating English speech into other languages.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The XLS-R model was proposed in [XLS-R: Self-supervised Cross-lingual Speech Representation Learning at Scale](https://huggingface.co/papers/2111.09296) by Arun Babu, Changhan Wang, Andros Tjandra, Kushal Lakhotia, Qiantong Xu, Naman
-Goyal, Kritika Singh, Patrick von Platen, Yatharth Saraf, Juan Pino, Alexei Baevski, Alexis Conneau, Michael Auli.
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the paper is the following:
+pipeline = pipeline(task="automatic-speech-recognition", model="facebook/wav2vec2-xls-r-300m", dtype="auto")
+pipeline("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac")
+```
 
-*This paper presents XLS-R, a large-scale model for cross-lingual speech representation learning based on wav2vec 2.0.
-We train models with up to 2B parameters on nearly half a million hours of publicly available speech audio in 128
-languages, an order of magnitude more public data than the largest known prior work. Our evaluation covers a wide range
-of tasks, domains, data regimes and languages, both high and low-resource. On the CoVoST-2 speech translation
-benchmark, we improve the previous state of the art by an average of 7.4 BLEU over 21 translation directions into
-English. For speech recognition, XLS-R improves over the best known prior work on BABEL, MLS, CommonVoice as well as
-VoxPopuli, lowering error rates by 14-34% relative on average. XLS-R also sets a new state of the art on VoxLingua107
-language identification. Moreover, we show that with sufficient model size, cross-lingual pretraining can outperform
-English-only pretraining when translating English speech into other languages, a setting which favors monolingual
-pretraining. We hope XLS-R can help to improve speech processing tasks for many more languages of the world.*
+</hfoption>
+<hfoption id="AutoModel">
 
-Relevant checkpoints can be found under https://huggingface.co/models?other=xls_r.
+```py
+import torch
+from datasets import load_dataset
+from transformers import AutoProcessor, AutoModelForCTC
 
-The original code can be found [here](https://github.com/pytorch/fairseq/tree/master/fairseq/models/wav2vec).
+dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation").sort("id")
+sampling_rate = dataset.features["audio"].sampling_rate
 
-## Usage tips
+processor = AutoProcessor.from_pretrained("facebook/wav2vec2-xls-r-300m")
+model = AutoModelForCTC.from_pretrained("facebook/wav2vec2-xls-r-300m", dtype="auto")
 
-- XLS-R is a speech model that accepts a float array corresponding to the raw waveform of the speech signal.
-- XLS-R model was trained using connectionist temporal classification (CTC) so the model output has to be decoded using
-  [`Wav2Vec2CTCTokenizer`].
+inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
+with torch.no_grad():
+    logits = model(**inputs).logits
+predicted_ids = torch.argmax(logits, dim=-1)
+print(f"Transcription: {processor.batch_decode(predicted_ids)[0]}")
+```
 
-<Tip>
+</hfoption>
+</hfoptions>
 
-XLS-R's architecture is based on the Wav2Vec2 model, refer to [Wav2Vec2's documentation page](wav2vec2) for API reference.
-
-</Tip>

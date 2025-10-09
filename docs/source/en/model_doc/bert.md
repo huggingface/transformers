@@ -13,25 +13,17 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2018-10-11 and added to Hugging Face Transformers on 2020-11-16.*
+*This model was released on 2018-10-11 and added to Hugging Face Transformers on 2020-11-16 and contributed by [thomwolf](https://huggingface.co/thomwolf).*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
 </div>
 
 # BERT
 
-[BERT](https://huggingface.co/papers/1810.04805) is a bidirectional transformer pretrained on unlabeled text to predict masked tokens in a sentence and to predict whether one sentence follows another. The main idea is that by randomly masking some tokens, the model can train on text to the left and right, giving it a more thorough understanding. BERT is also very versatile because its learned language representations can be adapted for other NLP tasks by fine-tuning an additional layer or head.
-
-You can find all the original BERT checkpoints under the [BERT](https://huggingface.co/collections/google/bert-release-64ff5e7a4be99045d1896dbc) collection.
-
-> [!TIP]
-> Click on the BERT models in the right sidebar for more examples of how to apply BERT to different language tasks.
-
-The example below demonstrates how to predict the `[MASK]` token with [`Pipeline`], [`AutoModel`], and from the command line.
+[BERT](https://huggingface.co/papers/1810.04805) introduces a bidirectional transformer model for language representation, pre-trained using masked language modeling and next sentence prediction. BERT achieves state-of-the-art results across various NLP tasks by fine-tuning with minimal task-specific modifications, significantly improving benchmarks like GLUE, MultiNLI, and SQuAD.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -40,12 +32,7 @@ The example below demonstrates how to predict the `[MASK]` token with [`Pipeline
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(
-    task="fill-mask",
-    model="google-bert/bert-base-uncased",
-    dtype=torch.float16,
-    device=0
-)
+pipeline = pipeline(task="fill-mask", model="google-bert/bert-base-uncased", dtype="auto")
 pipeline("Plants create [MASK] through a process known as photosynthesis.")
 ```
 
@@ -56,41 +43,19 @@ pipeline("Plants create [MASK] through a process known as photosynthesis.")
 import torch
 from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained(
-    "google-bert/bert-base-uncased",
-)
-model = AutoModelForMaskedLM.from_pretrained(
-    "google-bert/bert-base-uncased",
-    dtype=torch.float16,
-    device_map="auto",
-    attn_implementation="sdpa"
-)
-inputs = tokenizer("Plants create [MASK] through a process known as photosynthesis.", return_tensors="pt").to(model.device)
+model = AutoModelForMaskedLM.from_pretrained("google-bert/bert-base-uncased", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
 
-with torch.no_grad():
-    outputs = model(**inputs)
-    predictions = outputs.logits
-
-masked_index = torch.where(inputs['input_ids'] == tokenizer.mask_token_id)[1]
-predicted_token_id = predictions[0, masked_index].argmax(dim=-1)
-predicted_token = tokenizer.decode(predicted_token_id)
-
-print(f"The predicted token is: {predicted_token}")
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Plants create [MASK] through a process known as photosynthesis." | transformers run --task fill-mask --model google-bert/bert-base-uncased --device 0
+inputs = tokenizer("Plants create [MASK] through a process known as photosynthesis.", return_tensors="pt")
+outputs = model(**inputs)
+mask_token_id = tokenizer.mask_token_id
+mask_position = (inputs.input_ids == tokenizer.mask_token_id).nonzero(as_tuple=True)[1]
+predicted_word = tokenizer.decode(outputs.logits[0, mask_position].argmax(dim=-1))
+print(f"Predicted word: {predicted_word}")
 ```
 
 </hfoption>
 </hfoptions>
-
-## Notes
-
-- Inputs should be padded on the right because BERT uses absolute position embeddings.
 
 ## BertConfig
 
@@ -108,6 +73,12 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 ## BertTokenizerFast
 
 [[autodoc]] BertTokenizerFast
+
+## Bert specific outputs
+
+[[autodoc]] models.bert.modeling_bert.BertForPreTrainingOutput
+
+] models.bert.modeling_flax_bert.FlaxBertForPreTrainingOutput
 
 ## BertModel
 
@@ -153,7 +124,3 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 
 [[autodoc]] BertForQuestionAnswering
     - forward
-
-## Bert specific outputs
-
-[[autodoc]] models.bert.modeling_bert.BertForPreTrainingOutput

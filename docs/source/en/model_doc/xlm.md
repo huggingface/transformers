@@ -13,71 +13,39 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2019-01-22 and added to Hugging Face Transformers on 2020-11-16.*
-
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
+*This model was released on 2019-01-22 and added to Hugging Face Transformers on 2020-11-16 and contributed by [thomwolf](https://huggingface.co/thomwolf).*
 
 # XLM
 
-[XLM](https://huggingface.co/papers/1901.07291) demonstrates cross-lingual pretraining with two approaches, unsupervised training on a single language and supervised training on more than one language with a cross-lingual language model objective. The XLM model supports the causal language modeling objective, masked language modeling, and translation language modeling (an extension of the [BERT](./bert)) masked language modeling objective to multiple language inputs).
-
-You can find all the original XLM checkpoints under the [Facebook AI community](https://huggingface.co/FacebookAI?search_models=xlm-mlm) organization.
-
-> [!TIP]
-> Click on the XLM models in the right sidebar for more examples of how to apply XLM to different cross-lingual tasks like classification, translation, and question answering.
-
-The example below demonstrates how to predict the `<mask>` token with [`Pipeline`], [`AutoModel`] and from the command line.
+[XLM](https://huggingface.co/papers/1901.07291) extends generative pretraining to multiple languages, demonstrating the effectiveness of cross-lingual pretraining. It proposes two methods for learning XLMs: an unsupervised method using monolingual data and a supervised method leveraging parallel data with a new cross-lingual language model objective. The model achieves state-of-the-art results in cross-lingual classification, unsupervised, and supervised machine translation. Specifically, it improves accuracy by 4.9% on XNLI, BLEU by 34.3 on WMT'16 German-English, and BLEU by 38.5 on WMT'16 Romanian-English, outperforming previous best approaches.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```python
+```py
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(
-    task="fill-mask",
-    model="facebook/xlm-roberta-xl",
-    dtype=torch.float16,
-    device=0
-)
-pipeline("Bonjour, je suis un modèle <mask>.")
+pipeline = pipeline(task="fill-mask", model="FacebookAI/xlm-roberta-base", dtype="auto")
+pipeline("Les plantes créent <mask> grâce à un processus appelé photosynthèse.")
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
-```python
+```py
 import torch
 from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained(
-    "FacebookAI/xlm-mlm-en-2048",
-)
-model = AutoModelForMaskedLM.from_pretrained(
-    "FacebookAI/xlm-mlm-en-2048",
-    dtype=torch.float16,
-    device_map="auto",
-)
-inputs = tokenizer("Hello, I'm a <mask> model.", return_tensors="pt").to(model.device)
+model = AutoModelForMaskedLM.from_pretrained("FacebookAI/xlm-roberta-base", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("FacebookAI/xlm-roberta-base")
 
-with torch.no_grad():
-    outputs = model(**inputs)
-    predictions = outputs.logits.argmax(dim=-1)
-
-predicted_token = tokenizer.decode(predictions[0][inputs["input_ids"][0] == tokenizer.mask_token_id])
-print(f"Predicted token: {predicted_token}")
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Plants create <mask> through a process known as photosynthesis." | transformers run --task fill-mask --model FacebookAI/xlm-mlm-en-2048 --device 0
+inputs = tokenizer("Les plantes créent <mask> grâce à un processus appelé photosynthèse.", return_tensors="pt")
+outputs = model(**inputs)
+mask_token_id = tokenizer.mask_token_id
+mask_position = (inputs.input_ids == tokenizer.mask_token_id).nonzero(as_tuple=True)[1]
+predicted_word = tokenizer.decode(outputs.logits[0, mask_position].argmax(dim=-1))
+print(f"Predicted word: {predicted_word}")
 ```
 
 </hfoption>
@@ -133,3 +101,4 @@ echo -e "Plants create <mask> through a process known as photosynthesis." | tran
 
 [[autodoc]] XLMForQuestionAnswering
     - forward
+

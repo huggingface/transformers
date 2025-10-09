@@ -13,63 +13,43 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2020-05-01 and added to Hugging Face Transformers on 2020-11-16.*
+*This model was released on 2020-05-01 and added to Hugging Face Transformers on 2020-11-16 and contributed by [rmroczkowski](https://huggingface.co/rmroczkowski).*
 
 # HerBERT
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[HerBERT](https://huggingface.co/papers/2005.00630) is a BERT-based Language Model trained on Polish corpora using only the MLM objective with dynamic masking of whole words. It was introduced alongside a comprehensive multi-task benchmark for Polish language understanding, KLEJ, which includes a diverse set of tasks from named entity recognition, question-answering, textual entailment, and a new sentiment analysis task for e-commerce domain reviews. HerBERT achieves the best average performance and top results in three out of nine tasks in the benchmark.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-The HerBERT model was proposed in [KLEJ: Comprehensive Benchmark for Polish Language Understanding](https://huggingface.co/papers/2005.00630) by Piotr Rybak, Robert Mroczkowski, Janusz Tracz, and
-Ireneusz Gawlik. It is a BERT-based Language Model trained on Polish Corpora using only MLM objective with dynamic
-masking of whole words.
+```py
+import torch
+from transformers import pipeline
 
-The abstract from the paper is the following:
-
-*In recent years, a series of Transformer-based models unlocked major improvements in general natural language
-understanding (NLU) tasks. Such a fast pace of research would not be possible without general NLU benchmarks, which
-allow for a fair comparison of the proposed methods. However, such benchmarks are available only for a handful of
-languages. To alleviate this issue, we introduce a comprehensive multi-task benchmark for the Polish language
-understanding, accompanied by an online leaderboard. It consists of a diverse set of tasks, adopted from existing
-datasets for named entity recognition, question-answering, textual entailment, and others. We also introduce a new
-sentiment analysis task for the e-commerce domain, named Allegro Reviews (AR). To ensure a common evaluation scheme and
-promote models that generalize to different NLU tasks, the benchmark includes datasets from varying domains and
-applications. Additionally, we release HerBERT, a Transformer-based model trained specifically for the Polish language,
-which has the best average performance and obtains the best results for three out of nine tasks. Finally, we provide an
-extensive evaluation, including several standard baselines and recently proposed, multilingual Transformer-based
-models.*
-
-This model was contributed by [rmroczkowski](https://huggingface.co/rmroczkowski). The original code can be found
-[here](https://github.com/allegro/HerBERT).
-
-## Usage example
-
-```python
->>> from transformers import HerbertTokenizer, RobertaModel
-
->>> tokenizer = HerbertTokenizer.from_pretrained("allegro/herbert-klej-cased-tokenizer-v1")
->>> model = RobertaModel.from_pretrained("allegro/herbert-klej-cased-v1")
-
->>> encoded_input = tokenizer.encode("Kto ma lepszą sztukę, ma lepszy rząd – to jasne.", return_tensors="pt")
->>> outputs = model(encoded_input)
-
->>> # HerBERT can also be loaded using AutoTokenizer and AutoModel:
->>> import torch
->>> from transformers import AutoModel, AutoTokenizer
-
->>> tokenizer = AutoTokenizer.from_pretrained("allegro/herbert-klej-cased-tokenizer-v1")
->>> model = AutoModel.from_pretrained("allegro/herbert-klej-cased-v1")
+pipeline = pipeline(task="fill-mask", tokenizer="allegro/herbert-klej-cased-tokenizer-v1", model="allegro/herbert-klej-cased-v1", dtype="auto")
+pipeline("Rośliny tworzą <mask> w procesie zwanym fotosyntezą.")
 ```
 
-<Tip>
+</hfoption>
+<hfoption id="AutoModel">
 
-Herbert implementation is the same as `BERT` except for the tokenization method. Refer to [BERT documentation](bert)
-for API reference and examples.
+```py
+import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-</Tip>
+model = AutoModelForMaskedLM.from_pretrained("allegro/herbert-klej-cased-v1", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("allegro/herbert-klej-cased-tokenizer-v1")
+
+inputs = tokenizer("Rośliny tworzą <mask> w procesie zwanym fotosyntezą.", return_tensors="pt")
+outputs = model(**inputs)
+mask_token_id = tokenizer.mask_token_id
+mask_position = (inputs.input_ids == tokenizer.mask_token_id).nonzero(as_tuple=True)[1]
+predicted_word = tokenizer.decode(outputs.logits[0, mask_position].argmax(dim=-1))
+print(f"Predicted word: {predicted_word}")
+```
+
+</hfoption>
+</hfoptions>
 
 ## HerbertTokenizer
 
@@ -78,3 +58,4 @@ for API reference and examples.
 ## HerbertTokenizerFast
 
 [[autodoc]] HerbertTokenizerFast
+

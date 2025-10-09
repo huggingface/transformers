@@ -9,29 +9,32 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
-*This model was released on 2022-03-30 and added to Hugging Face Transformers on 2023-08-29.*
+*This model was released on 2022-03-30 and added to Hugging Face Transformers on 2023-08-29 and contributed by [nielsr](https://huggingface.co/nielsr).*
 
 # ViTDet
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[ViTDet](https://huggingface.co/papers/2203.16527) explores the use of a plain Vision Transformer (ViT) as a backbone for object detection, eliminating the need for a hierarchical design. Minimal modifications are required for fine-tuning, and the model achieves competitive results using a simple feature pyramid and window attention. Pre-trained as Masked Autoencoders (MAE), ViTDet reaches up to 61.3 AP_box on the COCO dataset with only ImageNet-1K pre-training.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="VitDetModel">
 
-The ViTDet model was proposed in [Exploring Plain Vision Transformer Backbones for Object Detection](https://huggingface.co/papers/2203.16527) by Yanghao Li, Hanzi Mao, Ross Girshick, Kaiming He.
-VitDet leverages the plain [Vision Transformer](vit) for the task of object detection.
+```py
+import torch
+from transformers import VitDetConfig, VitDetModel
 
-The abstract from the paper is the following:
+config = VitDetConfig()
+model = VitDetModel(config)
 
-*We explore the plain, non-hierarchical Vision Transformer (ViT) as a backbone network for object detection. This design enables the original ViT architecture to be fine-tuned for object detection without needing to redesign a hierarchical backbone for pre-training. With minimal adaptations for fine-tuning, our plain-backbone detector can achieve competitive results. Surprisingly, we observe: (i) it is sufficient to build a simple feature pyramid from a single-scale feature map (without the common FPN design) and (ii) it is sufficient to use window attention (without shifting) aided with very few cross-window propagation blocks. With plain ViT backbones pre-trained as Masked Autoencoders (MAE), our detector, named ViTDet, can compete with the previous leading methods that were all based on hierarchical backbones, reaching up to 61.3 AP_box on the COCO dataset using only ImageNet-1K pre-training. We hope our study will draw attention to research on plain-backbone detectors.*
+pixel_values = torch.randn(1, 3, 224, 224)
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr).
-The original code can be found [here](https://github.com/facebookresearch/detectron2/tree/main/projects/ViTDet).
+with torch.no_grad():
+    outputs = model(pixel_values)
 
-Tips:
+last_hidden_states = outputs.last_hidden_state
+```
 
-- At the moment, only the backbone is available.
+</hfoption>
+</hfoptions>
 
 ## VitDetConfig
 
@@ -41,3 +44,4 @@ Tips:
 
 [[autodoc]] VitDetModel
     - forward
+

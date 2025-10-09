@@ -13,25 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-07-01 and added to Hugging Face Transformers on 2025-04-29.*
-
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
+*This model was released on 2024-07-01 and added to Hugging Face Transformers on 2025-04-29 and contributed by [VladOS95-cyber](https://github.com/VladOS95-cyber).*
 
 # HGNet-V2
 
-[HGNetV2](https://github.com/PaddlePaddle/PaddleClas/blob/v2.6.0/docs/zh_CN/models/ImageNet1k/PP-HGNetV2.md) is a next-generation convolutional neural network (CNN) backbone built for optimal accuracy-latency tradeoff on NVIDIA GPUs. Building on the original[HGNet](https://github.com/PaddlePaddle/PaddleClas/blob/v2.6.0/docs/en/models/PP-HGNet_en.md), HGNetV2 delivers high accuracy at fast inference speeds and performs strongly on tasks like image classification, object detection, and segmentation, making it a practical choice for GPU-based computer vision applications.
-
-You can find all the original HGNet V2 models under the [USTC](https://huggingface.co/ustc-community/models?search=hgnet) organization.
-
-> [!TIP]
-> This model was contributed by [VladOS95-cyber](https://github.com/VladOS95-cyber).
-> Click on the HGNet V2 models in the right sidebar for more examples of how to apply HGNet V2 to different computer vision tasks.
-
-The example below demonstrates how to classify an image with [`Pipeline`] or the [`AutoModel`] class.
+[HGNetV2](https://github.com/PaddlePaddle/PaddleClas/blob/v2.6.0/docs/zh_CN/models/ImageNet1k/PP-HGNetV2.md) is a next-generation efficient convolutional neural network proposed by PaddlePaddle, mainly designed for image classification tasks. Its architecture adopts a hierarchical hybrid group convolution (HGConv) design, combined with lightweight attention mechanisms and improved residual connections, to boost accuracy while maintaining computational efficiency. Experimental results show that it outperforms similar lightweight models on ImageNet1K, while also balancing training and inference speed. Overall, PP-HGNetV2 offers both efficiency and practicality, making it well-suited for deployment in resource-constrained environments.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -40,13 +26,8 @@ The example below demonstrates how to classify an image with [`Pipeline`] or the
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(
-    task="image-classification",
-    model="ustc-community/hgnet-v2",
-    dtype=torch.float16,
-    device=0
-)
-pipeline("http://images.cocodataset.org/val2017/000000039769.jpg")
+pipeline = pipeline(task="image-classification", model="ustc-community/hgnet-v2", dtype="auto")
+pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
 ```
 
 </hfoption>
@@ -55,13 +36,13 @@ pipeline("http://images.cocodataset.org/val2017/000000039769.jpg")
 ```py
 import torch
 import requests
-from transformers import HGNetV2ForImageClassification, AutoImageProcessor
 from PIL import Image
+from transformers import AutoModelForImageClassification, AutoImageProcessor
 
-url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
 
-model = HGNetV2ForImageClassification.from_pretrained("ustc-community/hgnet-v2")
+model = AutoModelForImageClassification.from_pretrained("ustc-community/hgnet-v2", dtype="auto")
 processor = AutoImageProcessor.from_pretrained("ustc-community/hgnet-v2")
 
 inputs = processor(images=image, return_tensors="pt")

@@ -13,26 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2020-06-05 and added to Hugging Face Transformers on 2021-02-19.*
-
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-           <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white" >
-    </div>
-</div>
+*This model was released on 2020-06-05 and added to Hugging Face Transformers on 2021-02-19 and contributed by [DeBERTa](https://huggingface.co/DeBERTa).*
 
 # DeBERTa-v2
 
-[DeBERTa-v2](https://huggingface.co/papers/2006.03654) improves on the original [DeBERTa](./deberta) architecture by using a SentencePiece-based tokenizer and a new vocabulary size of 128K. It also adds an additional convolutional layer within the first transformer layer to better learn local dependencies of input tokens. Finally, the position projection and content projection matrices are shared in the attention layer to reduce the number of parameters.
-
-You can find all the original [DeBERTa-v2] checkpoints under the [Microsoft](https://huggingface.co/microsoft?search_models=deberta-v2) organization.
-
-> [!TIP]
-> This model was contributed by [Pengcheng He](https://huggingface.co/DeBERTa).
->
-> Click on the DeBERTa-v2 models in the right sidebar for more examples of how to apply DeBERTa-v2 to different language tasks.
-
-The example below demonstrates how to classify text with [`Pipeline`] or the [`AutoModel`] class.
+[DeBERTa](https://huggingface.co/papers/2006.03654) enhances BERT and RoBERTa with disentangled attention and an improved mask decoder. Disentangled attention uses separate vectors for content and position, while the mask decoder replaces the softmax layer for better pretraining efficiency. DeBERTa v2 introduces a new vocabulary, nGiE for local dependencies, shared position and content projection matrices, bucket-encoded relative positions, and additional model sizes of 900M and 1.5B, achieving superior performance on various NLP tasks.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -41,14 +26,8 @@ The example below demonstrates how to classify text with [`Pipeline`] or the [`A
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(
-    task="text-classification",
-    model="microsoft/deberta-v2-xlarge-mnli",
-    device=0,
-    dtype=torch.float16
-)
-result = pipeline("DeBERTa-v2 is great at understanding context!")
-print(result)
+pipeline = pipeline(task="fill-mask", model="microsoft/deberta-v2-xlarge", dtype="auto")
+pipeline("Plants create [MASK] through a process known as photosynthesis.")
 ```
 
 </hfoption>
@@ -56,67 +35,21 @@ print(result)
 
 ```py
 import torch
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained(
-    "microsoft/deberta-v2-xlarge-mnli"
-)
-model = AutoModelForSequenceClassification.from_pretrained(
-    "microsoft/deberta-v2-xlarge-mnli",
-    dtype=torch.float16,
-    device_map="auto"
-)
+model = AutoModelForMaskedLM.from_pretrained("microsoft/deberta-v2-xlarge", dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained("microsoft/deberta-v2-xlarge")
 
-inputs = tokenizer("DeBERTa-v2 is great at understanding context!", return_tensors="pt").to(model.device)
+inputs = tokenizer("Plants create [MASK] through a process known as photosynthesis.", return_tensors="pt")
 outputs = model(**inputs)
-
-logits = outputs.logits
-predicted_class_id = logits.argmax().item()
-predicted_label = model.config.id2label[predicted_class_id]
-print(f"Predicted label: {predicted_label}")
-
-```
-
-</hfoption>
-
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "DeBERTa-v2 is great at understanding context!" | transformers run --task fill-mask --model microsoft/deberta-v2-xlarge-mnli --device 0
+mask_token_id = tokenizer.mask_token_id
+mask_position = (inputs.input_ids == tokenizer.mask_token_id).nonzero(as_tuple=True)[1]
+predicted_word = tokenizer.decode(outputs.logits[0, mask_position].argmax(dim=-1))
+print(f"Predicted word: {predicted_word}")
 ```
 
 </hfoption>
 </hfoptions>
-
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
-
-The example below uses [bitsandbytes quantization](../quantization/bitsandbytes) to only quantize the weights to 4-bit.
-
-```py
-from transformers import AutoModelForSequenceClassification, AutoTokenizer, BitsAndBytesConfig
-
-model_id = "microsoft/deberta-v2-xlarge-mnli"
-quantization_config = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_quant_type="nf4",
-    bnb_4bit_compute_dtype="float16",
-    bnb_4bit_use_double_quant=True,
-)
-tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForSequenceClassification.from_pretrained(
-    model_id,
-    quantization_config=quantization_config,
-    dtype="float16"
-)
-
-inputs = tokenizer("DeBERTa-v2 is great at understanding context!", return_tensors="pt").to(model.device)
-outputs = model(**inputs)
-logits = outputs.logits
-predicted_class_id = logits.argmax().item()
-predicted_label = model.config.id2label[predicted_class_id]
-print(f"Predicted label: {predicted_label}")
-
-```
 
 ## DebertaV2Config
 
@@ -170,3 +103,4 @@ print(f"Predicted label: {predicted_label}")
 
 [[autodoc]] DebertaV2ForMultipleChoice
     - forward
+

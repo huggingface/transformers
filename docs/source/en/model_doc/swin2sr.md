@@ -13,38 +13,40 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-09-22 and added to Hugging Face Transformers on 2022-12-16.*
+*This model was released on 2022-09-22 and added to Hugging Face Transformers on 2022-12-16 and contributed by [nielsr](https://huggingface.co/nielsr).*
 
 # Swin2SR
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[Swin2SR](https://huggingface.co/papers/2209.11345) enhances SwinIR by integrating Swin Transformer v2 layers, addressing training instability, resolution discrepancies between pre-training and fine-tuning, and data scarcity. This model excels in JPEG compression artifact removal, classical and lightweight image super-resolution, and compressed image super-resolution, achieving top-5 performance in the AIM 2022 Challenge on Super-Resolution of Compressed Image and Video.
 
-## Overview
+<hfoptions id="usage">
+<hfoption id="Swin2SRForImageSuperResolution">
 
-The Swin2SR model was proposed in [Swin2SR: SwinV2 Transformer for Compressed Image Super-Resolution and Restoration](https://huggingface.co/papers/2209.11345) by Marcos V. Conde, Ui-Jin Choi, Maxime Burchi, Radu Timofte.
-Swin2SR improves the [SwinIR](https://github.com/JingyunLiang/SwinIR/) model by incorporating [Swin Transformer v2](swinv2) layers which mitigates issues such as training instability, resolution gaps between pre-training
-and fine-tuning, and hunger on data.
+```py
+import torch
+import numpy as np
+import requests
+from PIL import Image
+from transformers import AutoImageProcessor, Swin2SRForImageSuperResolution
 
-The abstract from the paper is the following:
+processor = AutoImageProcessor.from_pretrained("caidas/swin2SR-classical-sr-x2-64")
+model = Swin2SRForImageSuperResolution.from_pretrained("caidas/swin2SR-classical-sr-x2-64", dtype="auto")
 
-*Compression plays an important role on the efficient transmission and storage of images and videos through band-limited systems such as streaming services, virtual reality or videogames. However, compression unavoidably leads to artifacts and the loss of the original information, which may severely degrade the visual quality. For these reasons, quality enhancement of compressed images has become a popular research topic. While most state-of-the-art image restoration methods are based on convolutional neural networks, other transformers-based methods such as SwinIR, show impressive performance on these tasks.
-In this paper, we explore the novel Swin Transformer V2, to improve SwinIR for image super-resolution, and in particular, the compressed input scenario. Using this method we can tackle the major issues in training transformer vision models, such as training instability, resolution gaps between pre-training and fine-tuning, and hunger on data. We conduct experiments on three representative tasks: JPEG compression artifacts removal, image super-resolution (classical and lightweight), and compressed image super-resolution. Experimental results demonstrate that our method, Swin2SR, can improve the training convergence and performance of SwinIR, and is a top-5 solution at the "AIM 2022 Challenge on Super-Resolution of Compressed Image and Video".*
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
+inputs = processor(image, return_tensors="pt")
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/swin2sr_architecture.png"
-alt="drawing" width="600"/>
+with torch.no_grad():
+    outputs = model(**inputs)
 
-<small> Swin2SR architecture. Taken from the <a href="https://huggingface.co/papers/2209.11345">original paper.</a> </small>
+output = outputs.reconstruction.data.squeeze().float().cpu().clamp_(0, 1).numpy()
+output = np.moveaxis(output, source=0, destination=-1)
+output = (output * 255.0).round().astype(np.uint8)
+Image.fromarray(output)
+```
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr).
-The original code can be found [here](https://github.com/mv-lab/swin2sr).
-
-## Resources
-
-Demo notebooks for Swin2SR can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/Swin2SR).
-
-A demo Space for image super-resolution with SwinSR can be found [here](https://huggingface.co/spaces/jjourney1125/swin2sr).
+</hfoption>
+</hfoptions>
 
 ## Swin2SRImageProcessor
 
@@ -69,3 +71,4 @@ A demo Space for image super-resolution with SwinSR can be found [here](https://
 
 [[autodoc]] Swin2SRForImageSuperResolution
     - forward
+
