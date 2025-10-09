@@ -26,6 +26,7 @@ from torch import nn
 
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
+from ...masking_utils import eager_mask, padding_mask_function
 from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
@@ -125,6 +126,37 @@ class AudioFlamingo3Encoder(WhisperEncoder):
         super().__init__(config)
         self.avg_pooler = nn.AvgPool1d(config.avg_pool_kernel_size, stride=config.avg_pool_stride)
         self.post_init()
+
+    def _build_square_attn_mask(self, mask_1d: torch.Tensor, max_mel_seq_len: int) -> torch.Tensor:
+        """
+        Convert a (B, T_mel) frame-validity mask to Whisper's 4D square mask (B, 1, S, S)
+        with -inf on padded positions.
+
+        S is the sequence length after the conv front-end (conv1: stride=1, conv2: stride=2):
+        S = ceil(T_mel / 2) = (T_mel - 1) // 2 + 1. This equals T_mel // 2 for even T_mel used by the processor.
+        """
+        # Length after the stride-2 conv
+        audio_feat_lengths = ((mask_1d.sum(-1).to(torch.long) - 1) // 2) + 1
+        B = mask_1d.shape[0]
+        # Sequence length after conv2 (stride=2, kernel=3, pad=1)
+        S = (max_mel_seq_len - 1) // 2 + 1
+
+        # 2D padding mask on the downsampled timeline: True => keep, False => pad
+        seq = torch.arange(S, device=mask_1d.device).unsqueeze(0).expand(B, S)
+        padding_mask = seq < audio_feat_lengths.unsqueeze(1)
+
+        # Build 4D float mask (B, 1, S, S) with 0 on valid, -inf on pads
+        mask_fn = padding_mask_function(padding_mask)
+        cache_position = torch.arange(S, device=mask_1d.device)
+        attn_mask = eager_mask(
+            batch_size=B,
+            cache_position=cache_position,
+            kv_length=S,
+            mask_function=mask_fn,
+            dtype=self.conv1.weight.dtype,
+        )
+
+        return attn_mask.to(device=self.conv1.weight.device)
 
     def forward(
         self,
@@ -285,33 +317,20 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
 
         # Replace <sound> token slots with audio features (no length change)
         if input_features is not None and input_ids is not None and input_ids.shape[1] != 1:
-            dev = next(self.audio_tower.parameters()).device
-
             if feature_attention_mask is None:
                 raise ValueError("`feature_attention_mask` is required when `input_features` is provided.")
 
             # Compute pre/post lengths (mel -> conv -> pool)
-            Lmel = feature_attention_mask.sum(-1)  # (#windows,)
+            Lmel = feature_attention_mask.sum(-1).to(dtype=torch.long)  # (#windows,)
 
             pre_lengths = (Lmel - 1) // 2 + 1
             post_lengths = (pre_lengths - 2) // 2 + 1
-            pre_lengths = pre_lengths.to(dtype=torch.long)
-            post_lengths = post_lengths.to(dtype=torch.long)
 
-            # Build 4D encoder mask on pre-pool axis with -inf on pads
+            # Build 4D encoder mask on pre-pool axis with -inf on pads using masking_utils
             _, _, T_mel_max = input_features.shape
-            S_in_max = (T_mel_max - 1) // 2 + 1
-            seq = (
-                torch.arange(S_in_max, dtype=torch.long, device=pre_lengths.device)
-                .unsqueeze(0)
-                .expand(pre_lengths.shape[0], S_in_max)
-            )
-            pad_bool = seq >= pre_lengths.unsqueeze(1)  # (N, S_in_max)
-            enc_mask_bool = pad_bool.view(pre_lengths.shape[0], 1, 1, S_in_max).expand(
-                pre_lengths.shape[0], 1, S_in_max, S_in_max
-            )
-            enc_mask = enc_mask_bool.to(dtype=self.audio_tower.conv1.weight.dtype, device=dev)
-            enc_mask[enc_mask_bool] = float("-inf")
+            # Construct a (B, T_mel_max) boolean validity mask from measured mel lengths
+            mask_1d = torch.arange(T_mel_max, device=input_features.device).unsqueeze(0) < Lmel.unsqueeze(1)
+            enc_mask = self.audio_tower._build_square_attn_mask(mask_1d, T_mel_max)
 
             # Encode audio -> project -> flatten valid frames
             enc_out = self.audio_tower(input_features, attention_mask=enc_mask)
