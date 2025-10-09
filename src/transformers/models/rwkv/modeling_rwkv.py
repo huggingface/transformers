@@ -17,7 +17,6 @@
 
 import math
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Optional, Union
 
 import torch
@@ -30,12 +29,11 @@ from ...utils import (
     ModelOutput,
     auto_docstring,
     is_bitsandbytes_available,
+    is_kernels_available,
     is_ninja_available,
     is_torch_cuda_available,
-    is_kernels_available,
     logging,
 )
-
 from .configuration_rwkv import RwkvConfig
 
 
@@ -51,6 +49,7 @@ def load_wkv_cuda_kernel(context_length):
         raise ImportError("kernels is not installed, please install it with `pip install kernels`")
 
     from kernels import get_kernel
+
     rwkv_cuda_kernel = get_kernel("kernels-community/rwkv")
     rwkv_cuda_kernel.max_seq_length = context_length
 
