@@ -429,7 +429,7 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneratio
         return model_inputs
 
 
-class DeepseekVLHybridImageProcessorKwargs(ImagesKwargs):
+class DeepseekVLHybridImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     min_size (`int`, *optional*, defaults to 14):
         The minimum allowed size for the resized image. Ensures that neither the height nor width
@@ -450,9 +450,9 @@ class DeepseekVLHybridImageProcessorKwargs(ImagesKwargs):
 
     min_size: int
     high_res_size: dict
-    high_res_resample: "PILImageResampling"
-    high_res_image_mean: list[float]
-    high_res_image_std: list[float]
+    high_res_resample: Union["PILImageResampling", int]
+    high_res_image_mean: Union[float, list[float], tuple[float, ...]]
+    high_res_image_std: Union[float, list[float], tuple[float, ...]]
 
 
 class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):

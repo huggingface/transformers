@@ -58,7 +58,7 @@ if is_torchvision_available():
 logger = logging.get_logger(__name__)
 
 
-class SamImageProcessorKwargs(ImagesKwargs):
+class SamImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     mask_size (`dict[str, int]`, *optional*):
         The size `{"longest_edge": int}` to resize the segmentation maps to.
@@ -67,8 +67,8 @@ class SamImageProcessorKwargs(ImagesKwargs):
         map size provided for preprocessing.
     """
 
-    mask_size: Optional[dict[str, int]]
-    mask_pad_size: Optional[dict[str, int]]
+    mask_size: dict[str, int]
+    mask_pad_size: dict[str, int]
 
 
 class SamImageProcessor(BaseImageProcessor):

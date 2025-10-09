@@ -55,7 +55,9 @@ class DiaProcessorKwargs(ProcessingKwargs, total=False):
             "generation": True,
             "sampling_rate": 44100,
         },
-        "common_kwargs": {"return_tensors": "pt"},
+        "common_kwargs": {
+            "return_tensors": "pt",
+        },
     }
 
 
