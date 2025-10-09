@@ -143,7 +143,7 @@ class MistralConfig(PreTrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.sliding_window = sliding_window
-        self.head_dim = head_dim
+        self.head_dim = head_dim if head_dim is not None else hidden_size // num_attention_heads
 
         # for backward compatibility
         if num_key_value_heads is None:

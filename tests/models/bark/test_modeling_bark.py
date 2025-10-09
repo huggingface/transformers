@@ -522,7 +522,6 @@ class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
     is_encoder_decoder = False
     fx_compatible = False
     test_missing_keys = False
-    test_pruning = False
 
     test_resize_embeddings = True
 
@@ -610,7 +609,7 @@ class BarkCoarseModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     is_encoder_decoder = False
     fx_compatible = False
     test_missing_keys = False
-    test_pruning = False
+
     test_resize_embeddings = True
 
     def setUp(self):
@@ -694,7 +693,7 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = False
     fx_compatible = False
     test_missing_keys = False
-    test_pruning = False
+
     # torchscript disabled for now because forward with an int
     test_torchscript = False
 

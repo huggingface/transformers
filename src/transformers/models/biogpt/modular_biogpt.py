@@ -41,7 +41,6 @@ from ...utils import (
     is_torch_flex_attn_available,
     logger,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ..bart.modeling_bart import (
     BartAttention,
     BartDecoderLayer,
@@ -97,7 +96,6 @@ class BioGptDecoderLayer(BartDecoderLayer):
         del self.encoder_attn
         del self.encoder_attn_layer_norm
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -376,13 +374,6 @@ class BioGptModel(BioGptPreTrainedModel):
         # initialize past_key_values
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
-        if use_cache and isinstance(past_key_values, tuple):
-            logger.warning_once(
-                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
-                "You should pass an instance of `DynamicCache` instead, e.g. "
-                "`past_key_values=DynamicCache.from_legacy_cache(past_key_values)`."
-            )
-            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
 
         batch_size, seq_length = inputs_embeds.size()[:-1]
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0

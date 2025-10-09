@@ -110,7 +110,7 @@ class XcodecModelTester:
 class XcodecModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (XcodecModel,) if is_torch_available() else ()
     is_encoder_decoder = True
-    test_pruning = False
+
     test_resize_embeddings = False
     test_torchscript = False
 
