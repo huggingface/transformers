@@ -104,7 +104,6 @@ class UperNetConfig(PreTrainedConfig):
         loss_ignore_index=255,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         if backbone_config is None and backbone is None:
             logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
             backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage1", "stage2", "stage3", "stage4"])
@@ -136,6 +135,8 @@ class UperNetConfig(PreTrainedConfig):
         self.auxiliary_num_convs = auxiliary_num_convs
         self.auxiliary_concat_input = auxiliary_concat_input
         self.loss_ignore_index = loss_ignore_index
+
+        super().__init__(**kwargs)
 
 
 __all__ = ["UperNetConfig"]

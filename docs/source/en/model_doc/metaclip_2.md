@@ -88,7 +88,6 @@ print(f"Most likely label: {most_likely_label} with probability: {probs[0][most_
 ## MetaClip2Config
 
 [[autodoc]] MetaClip2Config
-    - from_text_vision_configs
 
 ## MetaClip2TextConfig
 

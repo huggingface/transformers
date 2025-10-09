@@ -4104,11 +4104,20 @@ class ModelTesterMixin:
                 if isinstance(attribute_value, PreTrainedConfig):
                     check_attn_implementation_setter(attribute_value, attn_implementation)
 
-        config._attn_implementation = "eager"
+        # Check that attention implementation can be passed with init args
+        config_dict = config.to_diff_dict()
+        config_dict.pop("_attn_implementation_internal", None)
+        config_dict.pop("_attn_implementation", None)
+        config_dict["attn_implementation"] = "eager"
+        config = type(config)(**config_dict)
         check_attn_implementation_setter(config, "eager")
 
+        # Check that attention implementation can be set to different value
         config._attn_implementation = "sdpa"
         check_attn_implementation_setter(config, "sdpa")
+
+        config._attn_implementation = "eager"
+        check_attn_implementation_setter(config, "eager")
 
     def test_internal_model_config_and_subconfig_are_same(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
