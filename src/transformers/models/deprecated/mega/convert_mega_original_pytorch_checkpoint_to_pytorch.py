@@ -29,7 +29,7 @@ import argparse
 
 # utilities to import the model weights and config file
 import os
-import pickle as pickle
+import pickle
 
 # PyTorch + new model classes
 import torch
