@@ -24,7 +24,7 @@ from torch import nn
 from transformers.utils.generic import check_model_inputs
 
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig, layer_type_validation
+from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import (
     BaseModelOutputWithPast,

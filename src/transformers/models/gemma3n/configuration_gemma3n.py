@@ -22,7 +22,7 @@
 from collections.abc import Sequence
 from typing import Any, Optional, Union
 
-from ...configuration_utils import PreTrainedConfig, layer_type_validation
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import is_timm_available, logging, requires_backends
 

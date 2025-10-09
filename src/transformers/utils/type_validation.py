@@ -1,7 +1,7 @@
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import MISSING, field, make_dataclass
 from functools import partial
-from typing import Annotated, Callable, ForwardRef, Optional, TypedDict, Union, get_args, get_origin
+from typing import Annotated, ForwardRef, Optional, TypedDict, Union, get_args, get_origin
 
 from huggingface_hub.dataclasses import as_validated_field, strict
 

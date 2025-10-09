@@ -14,7 +14,7 @@
 # limitations under the License.
 """Qwen2 model configuration"""
 
-from ...configuration_utils import PreTrainedConfig, layer_type_validation
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 

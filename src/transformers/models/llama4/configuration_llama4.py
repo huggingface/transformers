@@ -16,7 +16,7 @@
 
 import warnings
 
-from ...configuration_utils import PreTrainedConfig, layer_type_validation
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 

@@ -42,7 +42,7 @@ from transformers.models.qwen2_audio.modeling_qwen2_audio import Qwen2AudioEncod
 from transformers.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLRotaryEmbedding
 
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig, layer_type_validation
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_rope_utils import rope_config_validation
