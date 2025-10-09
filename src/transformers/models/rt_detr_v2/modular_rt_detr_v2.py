@@ -25,7 +25,7 @@ from ...utils import is_torchdynamo_compiling, logging
 from ...utils.backbone_utils import (
     verify_backbone_config_arguments,
 )
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 from ..rt_detr.modeling_rt_detr import (
     RTDetrDecoder,
     RTDetrDecoderLayer,
@@ -196,6 +196,7 @@ class RTDetrV2Config(PreTrainedConfig):
     """
 
     model_type = "rt_detr_v2"
+    sub_configs = {"backbone_config": AutoConfig}
     layer_types = ["basic", "bottleneck"]
     attribute_map = {
         "hidden_size": "d_model",
@@ -268,7 +269,6 @@ class RTDetrV2Config(PreTrainedConfig):
         decoder_method="default",
         **kwargs,
     ):
-        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
         self.initializer_range = initializer_range
         self.initializer_bias_prior_prob = initializer_bias_prior_prob
         self.layer_norm_eps = layer_norm_eps
@@ -368,31 +368,7 @@ class RTDetrV2Config(PreTrainedConfig):
         self.decoder_n_levels = decoder_n_levels
         self.decoder_offset_scale = decoder_offset_scale
         self.decoder_method = decoder_method
-
-    @property
-    def sub_configs(self):
-        return (
-            {"backbone_config": type(self.backbone_config)}
-            if getattr(self, "backbone_config", None) is not None
-            else {}
-        )
-
-    @classmethod
-    def from_backbone_configs(cls, backbone_config: PreTrainedConfig, **kwargs):
-        """Instantiate a [`RTDetrV2Config`] (or a derived class) from a pre-trained backbone model configuration and DETR model
-        configuration.
-
-            Args:
-                backbone_config ([`PreTrainedConfig`]):
-                    The backbone configuration.
-
-            Returns:
-                [`RTDetrV2Config`]: An instance of a configuration object
-        """
-        return cls(
-            backbone_config=backbone_config,
-            **kwargs,
-        )
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
 def multi_scale_deformable_attention_v2(

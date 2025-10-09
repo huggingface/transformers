@@ -19,7 +19,7 @@ import unittest
 import pytest
 from parameterized import parameterized
 
-from transformers import AutoTokenizer, Zamba2Config, is_torch_available
+from transformers import AutoTokenizer, BitsAndBytesConfig, Zamba2Config, is_torch_available
 from transformers.testing_utils import (
     Expectations,
     require_bitsandbytes,
@@ -312,27 +312,46 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         if is_torch_available()
         else {}
     )
-    test_pruning = False
 
-    def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
-        self.assertIsInstance(decoder_past_key_values, Zamba2HybridDynamicCache)
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+        self.assertIsInstance(past_key_values, Zamba2HybridDynamicCache)
 
-        # (batch, head, seq_length, head_features)
-        expected_shape = (
+        # (batch, kv heads, seq_length, head_dim)
+        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
+        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        attention_shape = (batch_size, num_heads, seq_length, head_dim)
+
+        intermediate_size = config.mamba_expand * config.hidden_size
+        conv_shape = (
             batch_size,
-            config.num_key_value_heads if hasattr(config, "num_key_value_heads") else config.num_attention_heads,
-            cache_length,
-            config.hidden_size // config.num_attention_heads,
+            intermediate_size + 2 * config.mamba_ngroups * config.mamba_d_state,
+            config.mamba_d_conv,
         )
+        ssm_shape = (batch_size, config.n_mamba_heads, config.mamba_headdim, config.mamba_d_state)
 
-        self.assertListEqual(
-            [key_tensor.shape for key_tensor in decoder_past_key_values.key_cache],
-            [expected_shape] * len(decoder_past_key_values.key_cache),
-        )
-        self.assertListEqual(
-            [value_cache.shape for value_cache in decoder_past_key_values.value_cache],
-            [expected_shape] * len(decoder_past_key_values.value_cache),
-        )
+        self.assertTrue(config.num_hidden_layers, len(past_key_values))
+
+        for idx in range(len(past_key_values)):
+            if config.layers_block_type[idx] == "mamba":
+                self.assertEqual(past_key_values.conv_states[idx].shape, conv_shape)
+                self.assertEqual(past_key_values.ssm_states[idx].shape, ssm_shape)
+            else:
+                self.assertEqual(past_key_values.key_cache[idx].shape, attention_shape)
+                self.assertEqual(past_key_values.value_cache[idx].shape, attention_shape)
+
+    def _check_caches_are_equal(self, cache1: Zamba2HybridDynamicCache, cache2: Zamba2HybridDynamicCache):
+        if not isinstance(cache1, Zamba2HybridDynamicCache) or not isinstance(cache2, Zamba2HybridDynamicCache):
+            raise ValueError("The wrong cache is being used!")
+
+        if not len(cache1) == len(cache2):
+            raise ValueError("Both caches do not have the same number of layers.")
+
+        num_layers = len(cache1)
+        for idx in range(num_layers):
+            torch.testing.assert_close(cache1.key_cache[idx], cache2.key_cache[idx])
+            torch.testing.assert_close(cache1.value_cache[idx], cache2.value_cache[idx])
+            torch.testing.assert_close(cache1.conv_states[idx], cache2.conv_states[idx])
+            torch.testing.assert_close(cache1.ssm_states[idx], cache2.ssm_states[idx])
 
     def setUp(self):
         self.model_tester = Zamba2ModelTester(self)
@@ -341,23 +360,6 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     @unittest.skip("position_ids cannot be used to pad due to Mamba2 layers")
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass
-
-    def test_past_key_values_format(self):
-        """
-        Overwriting to pass the expected cache shapes (Zamba2 has cache shape = [batch_size, 0] for mamba layers)
-        """
-        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        batch_size, seq_length = inputs["input_ids"].shape
-        per_head_embed_dim = config.attention_head_dim  # note: this one is not a common attribute name
-        self_attention_cache_shape = (batch_size, config.num_key_value_heads, seq_length, per_head_embed_dim)
-        # build the full cache shapes, including mamba layers
-        all_cache_shapes = []
-        for i in range(config.num_hidden_layers):
-            if config.layers_block_type[i] == "mamba":
-                all_cache_shapes.append([torch.Size([batch_size, 0]), torch.Size([batch_size, 0])])
-            else:
-                all_cache_shapes.append([self_attention_cache_shape, self_attention_cache_shape])
-        super().test_past_key_values_format(custom_all_cache_shapes=all_cache_shapes)
 
     @unittest.skip(reason="Zamba2 has hybrid cache.")
     def test_generate_continue_from_inputs_embeds(self):
@@ -483,7 +485,7 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                     tmpdirname,
                     dtype=torch.float16,
                     attn_implementation="flash_attention_2",
-                    load_in_4bit=True,
+                    quantization_config=BitsAndBytesConfig(load_in_4bit=True),
                 )
 
                 for _, param in model.named_parameters():

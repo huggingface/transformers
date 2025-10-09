@@ -237,18 +237,22 @@ class Kosmos2_5Config(PreTrainedConfig):
         latent_query_num=2048,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         if text_config is None:
-            text_config = {}
-            logger.info("text_config is None. Initializing the Kosmos2_5TextConfig with default values.")
+            text_config = Kosmos2_5TextConfig()
+            logger.info("`text_config` is `None`. initializing the `Kosmos2_5TextConfig` with default values.")
+        elif isinstance(text_config, dict):
+            text_config = Kosmos2_5TextConfig(**text_config)
+
         if vision_config is None:
-            vision_config = {}
-            logger.info("vision_config is None. Initializing the Kosmos2_5VisionConfig with default values.")
+            vision_config = Kosmos2_5VisionConfig()
+            logger.info("`vision_config` is `None`. initializing the `Kosmos2_5VisionConfig` with default values.")
+        elif isinstance(vision_config, dict):
+            vision_config = Kosmos2_5VisionConfig(**vision_config)
 
-        self.text_config = Kosmos2_5TextConfig(**text_config)
-        self.vision_config = Kosmos2_5VisionConfig(**vision_config)
-
+        self.text_config = text_config
+        self.vision_config = vision_config
         self.latent_query_num = latent_query_num
+        super().__init__(**kwargs)
 
 
 __all__ = ["Kosmos2_5Config"]

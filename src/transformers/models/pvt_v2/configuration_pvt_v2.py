@@ -16,7 +16,8 @@
 # limitations under the License.
 """Pvt V2 model configuration"""
 
-from typing import Callable, Union
+from collections.abc import Callable
+from typing import Union
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging

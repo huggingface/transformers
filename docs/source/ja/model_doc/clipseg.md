@@ -67,7 +67,6 @@ CLIPSeg の使用を開始するのに役立つ、公式 Hugging Face および�
 ## CLIPSegConfig
 
 [[autodoc]] CLIPSegConfig
-    - from_text_vision_configs
 
 ## CLIPSegTextConfig
 
