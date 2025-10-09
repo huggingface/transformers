@@ -103,13 +103,6 @@ from ..utils import ENV_VARS_TRUE_VALUES, is_torch_xla_available  # noqa: E402
 
 # Integration functions:
 def is_wandb_available():
-    # any value of WANDB_DISABLED disables wandb
-    if os.getenv("WANDB_DISABLED", "").upper() in ENV_VARS_TRUE_VALUES:
-        logger.warning(
-            "Using the `WANDB_DISABLED` environment variable is deprecated and will be removed in v5. Use the "
-            "--report_to flag to control the integrations used for logging result (for instance --report_to none)."
-        )
-        return False
     if importlib.util.find_spec("wandb") is not None:
         import wandb
 
@@ -129,13 +122,6 @@ def is_clearml_available():
 
 
 def is_comet_available():
-    if os.getenv("COMET_MODE", "").upper() == "DISABLED":
-        logger.warning(
-            "Using the `COMET_MODE=DISABLED` environment variable is deprecated and will be removed in v5. Use the "
-            "--report_to flag to control the integrations used for logging result (for instance --report_to none)."
-        )
-        return False
-
     if _is_comet_installed is False:
         return False
 
@@ -557,6 +543,17 @@ def rewrite_logs(d):
     return new_d
 
 
+def default_logdir() -> str:
+    """
+    Same default as PyTorch
+    """
+    import socket
+    from datetime import datetime
+
+    current_time = datetime.now().strftime("%b%d_%H-%M-%S")
+    return os.path.join("runs", current_time + "_" + socket.gethostname())
+
+
 class TensorBoardCallback(TrainerCallback):
     """
     A [`TrainerCallback`] that sends the logs to [TensorBoard](https://www.tensorflow.org/tensorboard).
@@ -564,49 +561,47 @@ class TensorBoardCallback(TrainerCallback):
     Args:
         tb_writer (`SummaryWriter`, *optional*):
             The writer to use. Will instantiate one if not set.
+    Environment:
+        - **TENSORBOARD_LOGGING_DIR** (`str`, *optional*, defaults to `None`):
+            The logging dir to log the results. Default value is os.path.join(args.output_dir, default_logdir())
     """
 
     def __init__(self, tb_writer=None):
-        has_tensorboard = is_tensorboard_available()
-        if not has_tensorboard:
+        if not is_tensorboard_available():
             raise RuntimeError(
                 "TensorBoardCallback requires tensorboard to be installed. Either update your PyTorch version or"
                 " install tensorboardX."
             )
-        if has_tensorboard:
-            try:
-                from torch.utils.tensorboard import SummaryWriter
+        try:
+            from torch.utils.tensorboard import SummaryWriter
+        except ImportError:
+            from tensorboardX import SummaryWriter
 
-                self._SummaryWriter = SummaryWriter
-            except ImportError:
-                try:
-                    from tensorboardX import SummaryWriter
-
-                    self._SummaryWriter = SummaryWriter
-                except ImportError:
-                    self._SummaryWriter = None
-        else:
-            self._SummaryWriter = None
+        self._SummaryWriter = SummaryWriter
         self.tb_writer = tb_writer
+        self.logging_dir = os.getenv("TENSORBOARD_LOGGING_DIR", None)
+        if self.logging_dir is not None:
+            self.logging_dir = os.path.expanduser(self.logging_dir)
 
-    def _init_summary_writer(self, args, log_dir=None):
-        log_dir = log_dir or args.logging_dir
+    def _init_summary_writer(self, args):
         if self._SummaryWriter is not None:
-            self.tb_writer = self._SummaryWriter(log_dir=log_dir)
+            self.tb_writer = self._SummaryWriter(log_dir=self.logging_dir)
 
     def on_train_begin(self, args, state, control, **kwargs):
         if not state.is_world_process_zero:
             return
 
-        log_dir = None
-
         if state.is_hyper_param_search:
             trial_name = state.trial_name
             if trial_name is not None:
-                log_dir = os.path.join(args.logging_dir, trial_name)
+                # overwrite logging dir for trials
+                self.logging_dir = os.path.join(args.output_dir, default_logdir(), trial_name)
+
+        if self.logging_dir is None:
+            self.logging_dir = os.path.join(args.output_dir, default_logdir())
 
         if self.tb_writer is None:
-            self._init_summary_writer(args, log_dir)
+            self._init_summary_writer(args)
 
         if self.tb_writer is not None:
             self.tb_writer.add_text("args", args.to_json_string())
@@ -671,13 +666,6 @@ class WandbLogModel(str, Enum):
     def _missing_(cls, value: Any) -> "WandbLogModel":
         if not isinstance(value, str):
             raise TypeError(f"Expecting to have a string `WANDB_LOG_MODEL` setting, but got {type(value)}")
-        if value.upper() in ENV_VARS_TRUE_VALUES:
-            raise DeprecationWarning(
-                f"Setting `WANDB_LOG_MODEL` as {os.getenv('WANDB_LOG_MODEL')} is deprecated and will be removed in "
-                "version 5 of transformers. Use one of `'end'` or `'checkpoint'` instead."
-            )
-            logger.info(f"Setting `WANDB_LOG_MODEL` from {os.getenv('WANDB_LOG_MODEL')} to `end` instead")
-            return WandbLogModel.END
         logger.warning(
             f"Received unrecognized `WANDB_LOG_MODEL` setting value={value}; so disabling `WANDB_LOG_MODEL`"
         )
@@ -692,24 +680,11 @@ class WandbCallback(TrainerCallback):
     def __init__(self):
         has_wandb = is_wandb_available()
         if not has_wandb:
-            # Check if wandb is actually installed but disabled via WANDB_DISABLED
-            if importlib.util.find_spec("wandb") is not None:
-                # wandb is installed but disabled
-                wandb_disabled = os.getenv("WANDB_DISABLED", "").upper() in ENV_VARS_TRUE_VALUES
-                if wandb_disabled:
-                    raise RuntimeError(
-                        "You specified `report_to='wandb'` but also set the `WANDB_DISABLED` environment variable.\n"
-                        "This disables wandb logging, even though it was explicitly requested.\n\n"
-                        "- To enable wandb logging: unset `WANDB_DISABLED`.\n"
-                        "- To disable logging: use `report_to='none'`.\n\n"
-                        "Note: WANDB_DISABLED is deprecated and will be removed in v5."
-                    )
-            # If wandb is not installed at all, use the original error message
             raise RuntimeError("WandbCallback requires wandb to be installed. Run `pip install wandb`.")
-        if has_wandb:
-            import wandb
 
-            self._wandb = wandb
+        import wandb
+
+        self._wandb = wandb
         self._initialized = False
         self._log_model = WandbLogModel(os.getenv("WANDB_LOG_MODEL", "false"))
 
@@ -727,19 +702,11 @@ class WandbCallback(TrainerCallback):
             to `"end"`, the model will be uploaded at the end of training. If set to `"checkpoint"`, the checkpoint
             will be uploaded every `args.save_steps` . If set to `"false"`, the model will not be uploaded. Use along
             with [`~transformers.TrainingArguments.load_best_model_at_end`] to upload best model.
-
-            <Deprecated version="5.0">
-
-            Setting `WANDB_LOG_MODEL` as `bool` will be deprecated in version 5 of 🤗 Transformers.
-
-            </Deprecated>
         - **WANDB_WATCH** (`str`, *optional* defaults to `"false"`):
             Can be `"gradients"`, `"all"`, `"parameters"`, or `"false"`. Set to `"all"` to log gradients and
             parameters.
         - **WANDB_PROJECT** (`str`, *optional*, defaults to `"huggingface"`):
             Set this to a custom string to store results in a different project.
-        - **WANDB_DISABLED** (`bool`, *optional*, defaults to `False`):
-            Whether to disable wandb entirely. Set `WANDB_DISABLED=true` to disable.
         """
         if self._wandb is None:
             return
@@ -749,9 +716,6 @@ class WandbCallback(TrainerCallback):
         from wandb.sdk.lib.config_util import ConfigError as WandbConfigError
 
         if state.is_world_process_zero:
-            logger.info(
-                'Automatic Weights & Biases logging enabled, to disable set os.environ["WANDB_DISABLED"] = "true"'
-            )
             combined_dict = {**args.to_dict()}
 
             if hasattr(model, "config") and model.config is not None:
@@ -1108,13 +1072,8 @@ class CometCallback(TrainerCallback):
                 * `create`: Always create a new Comet Experiment.
                 * `get`: Always try to append to an Existing Comet Experiment.
                   Requires `COMET_EXPERIMENT_KEY` to be set.
-                * `ONLINE`: **deprecated**, used to create an online
-                  Experiment. Use `COMET_START_ONLINE=1` instead.
-                * `OFFLINE`: **deprecated**, used to created an offline
-                  Experiment. Use `COMET_START_ONLINE=0` instead.
-                * `DISABLED`: **deprecated**, used to disable Comet logging.
-                  Use the `--report_to` flag to control the integrations used
-                  for logging result instead.
+        - **COMET_START_ONLINE** (`bool`, *optional*):
+            Whether to create an online or offline Experiment.
         - **COMET_PROJECT_NAME** (`str`, *optional*):
             Comet project name for experiments.
         - **COMET_LOG_ASSETS** (`str`, *optional*, defaults to `TRUE`):
@@ -1136,12 +1095,7 @@ class CometCallback(TrainerCallback):
 
             if comet_old_mode is not None:
                 comet_old_mode = comet_old_mode.lower()
-
-                if comet_old_mode == "online":
-                    online = True
-                elif comet_old_mode == "offline":
-                    online = False
-                elif comet_old_mode in ("get", "get_or_create", "create"):
+                if comet_old_mode in ("get", "get_or_create", "create"):
                     mode = comet_old_mode
                 elif comet_old_mode:
                     logger.warning("Invalid COMET_MODE env value %r, Comet logging is disabled", comet_old_mode)
@@ -1690,7 +1644,7 @@ class NeptuneCallback(TrainerCallback):
 
     def on_init_end(self, args, state, control, **kwargs):
         self._volatile_checkpoints_dir = None
-        if self._log_checkpoints and (args.overwrite_output_dir or args.save_total_limit is not None):
+        if self._log_checkpoints and args.save_total_limit is not None:
             self._volatile_checkpoints_dir = tempfile.TemporaryDirectory().name
 
         if self._log_checkpoints == "best" and not args.load_best_model_at_end:
