@@ -21,10 +21,10 @@
 
 from typing import Optional
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 
 
-class EomtDinov3Config(PretrainedConfig):
+class EomtDinov3Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`EomtDinov3ForUniversalSegmentation`]. It is used to instantiate an EoMT-DINOv3 model
     according to the specified arguments, defining the model architecture. Instantiating a configuration with the
