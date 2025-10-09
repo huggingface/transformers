@@ -2713,7 +2713,6 @@ class DinoDetrImageProcessor(DetrImageProcessor):
                 - **labels** (`torch.Tensor`): Class labels of the selected predictions.
                 - **boxes** (`torch.Tensor`): Bounding boxes of the selected predictions in absolute coordinates.
         """
-        num_select = num_select
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
 
         prob = out_logits.sigmoid()
