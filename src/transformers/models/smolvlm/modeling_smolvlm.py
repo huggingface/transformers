@@ -579,6 +579,8 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
         block_idx = block_offset.unsqueeze(1) + chunk_idx
 
         image_embeds = torch.zeros_like(inputs_embeds)
+        # Ensure dtype compatibility for quantization
+        image_hidden_states = image_hidden_states.to(dtype=inputs_embeds.dtype)
         image_embeds[image_mask] = image_hidden_states[block_idx[image_mask], local_idx[image_mask], :]
 
         merged_embeds = torch.where(image_mask.unsqueeze(-1), image_embeds, inputs_embeds)
