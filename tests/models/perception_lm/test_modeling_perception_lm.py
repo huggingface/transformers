@@ -177,8 +177,7 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
         if is_torch_available()
         else ()
     )
-    test_pruning = False
-    test_head_masking = False
+
     _is_composite = True
 
     def setUp(self):
@@ -292,10 +291,6 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
 
     @unittest.skip(reason="Timm Eva (PE) weights cannot be fully constructed in _init_weights")
     def test_can_init_all_missing_weights(self):
-        pass
-
-    @unittest.skip(reason="Timm Eva (PE) weights cannot be fully constructed in _init_weights")
-    def test_initialization(self):
         pass
 
     @unittest.skip(

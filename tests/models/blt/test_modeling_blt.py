@@ -46,9 +46,7 @@ from transformers.models.blt.modeling_blt import BltRotaryEmbedding
 
 class BltModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = BltConfig
         base_model_class = BltModel
-        causal_lm_class = BltForCausalLM
 
     def __init__(
         self,
@@ -188,8 +186,7 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
-    test_pruning = False
+
     fx_compatible = False
     model_tester_class = BltModelTester
     rotary_embedding_layer = BltRotaryEmbedding  # Enables RoPE tests if set

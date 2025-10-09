@@ -15,7 +15,7 @@
 
 from typing import Optional
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 
@@ -23,7 +23,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class MllamaVisionConfig(PretrainedConfig):
+class MllamaVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MllamaVisionModel`]. It is used to instantiate an
     Mllama vision model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -31,8 +31,8 @@ class MllamaVisionConfig(PretrainedConfig):
 
     e.g. [meta-llama/Llama-3.2-11B-Vision](https://huggingface.co/meta-llama/Llama-3.2-11B-Vision)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 1280):
@@ -138,7 +138,7 @@ class MllamaVisionConfig(PretrainedConfig):
         return len(self.supported_aspect_ratios)
 
 
-class MllamaTextConfig(PretrainedConfig):
+class MllamaTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MllamaTextModel`]. It is used to instantiate an
     Mllama text model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -146,8 +146,8 @@ class MllamaTextConfig(PretrainedConfig):
 
     e.g. [meta-llama/Llama-3.2-11B-Vision](https://huggingface.co/meta-llama/Llama-3.2-11B-Vision)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 128256):
@@ -296,7 +296,7 @@ class MllamaTextConfig(PretrainedConfig):
         )
 
 
-class MllamaConfig(PretrainedConfig):
+class MllamaConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MllamaForConditionalGeneration`]. It is used to instantiate an
     Mllama model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -304,8 +304,8 @@ class MllamaConfig(PretrainedConfig):
 
     e.g. [meta-llama/Llama-3.2-11B-Vision](https://huggingface.co/meta-llama/Llama-3.2-11B-Vision)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vision_config (`Union[AutoConfig, dict]`, *optional*, defaults to `MllamaVisionConfig`):

@@ -536,7 +536,7 @@ class BltLocalDecoder(BltPreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs()
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -799,7 +799,7 @@ class BltModel(BltPreTrainedModel):
             self.patcher = None
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs()
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -968,7 +968,7 @@ class BltForCausalLM(MllamaForCausalLM):
         cross_attention_states: Optional[torch.LongTensor] = None,  # Keep for compatibility
         cross_attention_mask: Optional[torch.LongTensor] = None,
         full_text_row_masked_out_mask: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,

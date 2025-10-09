@@ -86,19 +86,19 @@ DistilBertConfig {
 }
 ```
 
-事前学習済みモデルの属性は、[`~PretrainedConfig.from_pretrained`] 関数で変更できます：
+事前学習済みモデルの属性は、[`~PreTrainedConfig.from_pretrained`] 関数で変更できます：
 
 ```py
 >>> my_config = DistilBertConfig.from_pretrained("distilbert/distilbert-base-uncased", activation="relu", attention_dropout=0.4)
 ```
 
-Once you are satisfied with your model configuration, you can save it with [`PretrainedConfig.save_pretrained`]. Your configuration file is stored as a JSON file in the specified save directory.
+Once you are satisfied with your model configuration, you can save it with [`PreTrainedConfig.save_pretrained`]. Your configuration file is stored as a JSON file in the specified save directory.
 
 ```py
 >>> my_config.save_pretrained(save_directory="./your_model_save_path")
 ```
 
-設定ファイルを再利用するには、[`~PretrainedConfig.from_pretrained`]を使用してそれをロードします：
+設定ファイルを再利用するには、[`~PreTrainedConfig.from_pretrained`]を使用してそれをロードします：
 
 ```py
 >>> my_config = DistilBertConfig.from_pretrained("./your_model_save_path/config.json")

@@ -40,14 +40,12 @@ from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     ModelOutput,
     auto_docstring,
     is_torch_flex_attn_available,
     is_torchdynamo_compiling,
 )
-from ...utils.deprecation import deprecate_kwarg
 
 
 if is_torch_flex_attn_available():
@@ -467,24 +465,8 @@ class UdopAttention(nn.Module):
 
         if self.has_relative_attention_bias:
             self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
-        self.pruned_heads = set()
-        self.gradient_checkpointing = False
 
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.n_heads, self.key_value_proj_dim, self.pruned_heads
-        )
-        # Prune linear layers
-        self.q = prune_linear_layer(self.q, index)
-        self.k = prune_linear_layer(self.k, index)
-        self.v = prune_linear_layer(self.v, index)
-        self.o = prune_linear_layer(self.o, index, dim=1)
-        # Update hyper params
-        self.n_heads = self.n_heads - len(heads)
-        self.inner_dim = self.key_value_proj_dim * self.n_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
+        self.gradient_checkpointing = False
 
     @staticmethod
     def _relative_position_bucket(relative_position, bidirectional=True, num_buckets=32, max_distance=128):
@@ -554,7 +536,6 @@ class UdopAttention(nn.Module):
         values = values.permute([2, 0, 1]).unsqueeze(0)  # shape (1, num_heads, query_length, key_length)
         return values
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
@@ -562,7 +543,6 @@ class UdopAttention(nn.Module):
         key_value_states=None,
         position_bias=None,
         past_key_values=None,
-        layer_head_mask=None,
         query_length=None,
         use_cache=False,
         output_attentions=False,
@@ -637,22 +617,12 @@ class UdopAttention(nn.Module):
                 causal_mask = mask[:, :, :, : key_states.shape[-2]]
                 position_bias = position_bias + causal_mask
 
-        if self.pruned_heads:
-            mask = torch.ones(position_bias.shape[1])
-            mask[list(self.pruned_heads)] = 0
-            position_bias_masked = position_bias[:, mask.bool()]
-        else:
-            position_bias_masked = position_bias
-
+        position_bias_masked = position_bias
         scores += position_bias_masked
 
         # (batch_size, n_heads, seq_length, key_length)
         attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(scores)
         attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-
-        # Mask heads if we want to
-        if layer_head_mask is not None:
-            attn_weights = attn_weights * layer_head_mask
 
         attn_output = torch.matmul(attn_weights, value_states)
 
@@ -677,13 +647,11 @@ class UdopLayerSelfAttention(nn.Module):
         self.layer_norm = UdopLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
         attention_mask=None,
         position_bias=None,
-        layer_head_mask=None,
         past_key_values=None,
         use_cache=False,
         output_attentions=False,
@@ -694,7 +662,6 @@ class UdopLayerSelfAttention(nn.Module):
             normed_hidden_states,
             mask=attention_mask,
             position_bias=position_bias,
-            layer_head_mask=layer_head_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -713,14 +680,12 @@ class UdopLayerCrossAttention(nn.Module):
         self.layer_norm = UdopLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
         key_value_states,
         attention_mask=None,
         position_bias=None,
-        layer_head_mask=None,
         past_key_values=None,
         use_cache=False,
         query_length=None,
@@ -733,7 +698,6 @@ class UdopLayerCrossAttention(nn.Module):
             mask=attention_mask,
             key_value_states=key_value_states,
             position_bias=position_bias,
-            layer_head_mask=layer_head_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
             query_length=query_length,
@@ -761,7 +725,6 @@ class UdopBlock(GradientCheckpointingLayer):
 
         self.layer.append(UdopLayerFF(config))
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states,
@@ -770,8 +733,6 @@ class UdopBlock(GradientCheckpointingLayer):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         encoder_decoder_position_bias=None,
-        layer_head_mask=None,
-        cross_attn_layer_head_mask=None,
         past_key_values=None,
         use_cache=False,
         output_attentions=False,
@@ -782,7 +743,6 @@ class UdopBlock(GradientCheckpointingLayer):
             hidden_states,
             attention_mask=attention_mask,
             position_bias=position_bias,
-            layer_head_mask=layer_head_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -807,7 +767,6 @@ class UdopBlock(GradientCheckpointingLayer):
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
                 position_bias=encoder_decoder_position_bias,
-                layer_head_mask=cross_attn_layer_head_mask,
                 past_key_values=past_key_values,
                 query_length=cache_position[-1] + 1,
                 use_cache=use_cache,
@@ -1147,8 +1106,6 @@ class UdopStack(UdopPreTrainedModel):
         visual_bbox=None,
         image_embeddings=None,
         position_bias=None,
-        head_mask=None,
-        cross_attn_head_mask=None,
         past_key_values=None,
         use_cache=None,
         output_attentions=None,
@@ -1263,8 +1220,6 @@ class UdopStack(UdopPreTrainedModel):
         else:
             encoder_extended_attention_mask = None
 
-        # Prepare head mask if needed
-        head_mask = self.get_head_mask(head_mask, self.num_layers)
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
         all_cross_attentions = () if (output_attentions and self.is_decoder) else None
@@ -1291,7 +1246,6 @@ class UdopStack(UdopPreTrainedModel):
                 encoder_hidden_states,
                 encoder_extended_attention_mask,
                 encoder_decoder_position_bias,  # as a positional argument for gradient checkpointing
-                layer_head_mask=head_mask[i],
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
@@ -1526,10 +1480,7 @@ class UdopModel(UdopPreTrainedModel):
         inputs_embeds: Optional[Tensor] = None,
         encoder_outputs: Optional[Tensor] = None,
         past_key_values: Optional[Cache] = None,
-        head_mask: Optional[Tensor] = None,
         decoder_inputs_embeds: Optional[Tensor] = None,
-        decoder_head_mask: Optional[Tensor] = None,
-        cross_attn_head_mask: Optional[Tensor] = None,
         use_cache=True,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1557,16 +1508,6 @@ class UdopModel(UdopPreTrainedModel):
         decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
-        decoder_head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules in the decoder. Mask values selected in `[0,
-            1]`:
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-        cross_attn_head_mask (`torch.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in
-            `[0, 1]`:
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
 
         Example:
 
@@ -1610,7 +1551,6 @@ class UdopModel(UdopPreTrainedModel):
                 pixel_values=pixel_values,
                 visual_bbox=visual_bbox,
                 inputs_embeds=inputs_embeds,
-                head_mask=head_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
@@ -1627,8 +1567,6 @@ class UdopModel(UdopPreTrainedModel):
             past_key_values=past_key_values,
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=encoder_attention_mask,
-            head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1722,10 +1660,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         inputs_embeds: Optional[Tensor] = None,
         encoder_outputs: Optional[Tensor] = None,
         past_key_values: Optional[Cache] = None,
-        head_mask: Optional[Tensor] = None,
         decoder_inputs_embeds: Optional[Tensor] = None,
-        decoder_head_mask: Optional[Tensor] = None,
-        cross_attn_head_mask: Optional[Tensor] = None,
         use_cache=True,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1754,16 +1689,6 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
-        decoder_head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules in the decoder. Mask values selected in `[0,
-            1]`:
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-        cross_attn_head_mask (`torch.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in
-            `[0, 1]`:
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the language modeling loss. Indices should be in `[-100, 0, ..., config.vocab_size -
             1]`. All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ...,
@@ -1815,7 +1740,6 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
                 pixel_values=pixel_values,
                 attention_mask=attention_mask,
                 inputs_embeds=inputs_embeds,
-                head_mask=head_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
@@ -1832,8 +1756,6 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=encoder_attention_mask,
-            head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1905,14 +1827,6 @@ class UdopEncoderModel(UdopPreTrainedModel):
     def get_encoder(self):
         return self.encoder
 
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.block[layer].layer[0].SelfAttention.prune_heads(heads)
-
     @auto_docstring
     def forward(
         self,
@@ -1921,7 +1835,6 @@ class UdopEncoderModel(UdopPreTrainedModel):
         attention_mask: Optional[Tensor] = None,
         pixel_values: Optional[Tensor] = None,
         visual_bbox: Optional[dict[str, Any]] = None,
-        head_mask: Optional[Tensor] = None,
         inputs_embeds: Optional[Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1985,7 +1898,6 @@ class UdopEncoderModel(UdopPreTrainedModel):
             pixel_values=pixel_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,

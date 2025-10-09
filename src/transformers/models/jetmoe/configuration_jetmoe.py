@@ -14,14 +14,14 @@
 # limitations under the License.
 """JetMoe model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class JetMoeConfig(PretrainedConfig):
+class JetMoeConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`JetMoeModel`]. It is used to instantiate a
     JetMoe model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -29,8 +29,8 @@ class JetMoeConfig(PretrainedConfig):
 
     [jetmoe/jetmoe-8b](https://huggingface.co/jetmoe/jetmoe-8b)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:

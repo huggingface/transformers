@@ -32,7 +32,7 @@ from transformers.utils import (
 )
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -200,9 +200,7 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
         else {}
     )
 
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = Data2VecVisionModelTester(self)
@@ -291,24 +289,6 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             loss = model(**inputs).loss
             loss.backward()
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                # we skip lambda parameters as these require special initial values
-                # determined by config.layer_scale_init_value
-                if "lambda" in name:
-                    continue
-                if param.requires_grad:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
 
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

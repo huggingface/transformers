@@ -21,22 +21,22 @@ import numpy as np
 
 from transformers import AutoConfig, DacConfig, HubertConfig, WavLMConfig
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class XcodecConfig(PretrainedConfig):
+class XcodecConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`XcodecModel`]. It is used to instantiate a
     Xcodec model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the
     [Manel/X-Codec](https://huggingface.co/Manel/X-Codec) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         target_bandwidths (`List[float]`, *optional*, defaults to `[0.5, 1, 1.5, 2, 4]`):

@@ -21,7 +21,7 @@ import torch
 import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ...cache_utils import Cache, EncoderDecoderCache
+from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...masking_utils import create_causal_mask
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_attention_mask_for_sdpa
 from ...modeling_outputs import (
@@ -111,11 +111,10 @@ class ErnieEmbeddings(BertEmbeddings):
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
-
         embeddings = inputs_embeds + token_type_embeddings
-        if self.position_embedding_type == "absolute":
-            position_embeddings = self.position_embeddings(position_ids)
-            embeddings += position_embeddings
+
+        position_embeddings = self.position_embeddings(position_ids)
+        embeddings = embeddings + position_embeddings
 
         # add `task_type_id` for ERNIE model
         if self.use_task_id:
@@ -203,7 +202,7 @@ class ErnieModel(BertModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
@@ -212,11 +211,10 @@ class ErnieModel(BertModel):
         token_type_ids: Optional[torch.Tensor] = None,
         task_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -240,15 +238,8 @@ class ErnieModel(BertModel):
                 )
                 use_cache = False
 
-        return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):
-            logger.warning_once(
-                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
-                "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
-                "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
-            )
-            return_legacy_cache = True
-            past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
+        if use_cache and past_key_values is None:
+            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -315,17 +306,9 @@ class ErnieModel(BertModel):
                     )
                 encoder_attention_mask = self.invert_attention_mask(encoder_attention_mask)
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
@@ -336,9 +319,6 @@ class ErnieModel(BertModel):
         )
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
-
-        if return_legacy_cache:
-            encoder_outputs.past_key_values = encoder_outputs.past_key_values.to_legacy_cache()
 
         return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
@@ -356,8 +336,6 @@ class ErnieModel(BertModel):
             if "flash" in self.config._attn_implementation:
                 attention_mask = attention_mask if 0 in attention_mask else None
             elif self.config._attn_implementation == "sdpa":
-                # output_attentions=True & head_mask can not be supported when using SDPA, fall back to
-                # the manual implementation that requires a 4D causal mask in all cases.
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
                 attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
             elif self.config._attn_implementation == "flex_attention":
@@ -382,8 +360,6 @@ class ErnieModel(BertModel):
             if "flash" in self.config._attn_implementation:
                 encoder_attention_mask = encoder_attention_mask if 0 in encoder_attention_mask else None
             elif self.config._attn_implementation == "sdpa":
-                # output_attentions=True & cross_attn_head_mask can not be supported when using SDPA, and we fall back on
-                # the manual implementation that requires a 4D causal mask in all cases.
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
                 encoder_attention_mask = _prepare_4d_attention_mask_for_sdpa(
                     encoder_attention_mask,
@@ -422,7 +398,6 @@ class ErnieForPreTraining(BertForPreTraining):
         token_type_ids: Optional[torch.Tensor] = None,
         task_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         next_sentence_label: Optional[torch.Tensor] = None,
@@ -467,7 +442,6 @@ class ErnieForPreTraining(BertForPreTraining):
             token_type_ids=token_type_ids,
             task_type_ids=task_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             return_dict=True,
             **kwargs,
@@ -502,7 +476,6 @@ class ErnieForCausalLM(BertLMHeadModel):
         token_type_ids: Optional[torch.Tensor] = None,
         task_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
@@ -532,7 +505,6 @@ class ErnieForCausalLM(BertLMHeadModel):
             token_type_ids=token_type_ids,
             task_type_ids=task_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
@@ -577,7 +549,6 @@ class ErnieForMaskedLM(BertForMaskedLM):
         token_type_ids: Optional[torch.Tensor] = None,
         task_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
@@ -601,7 +572,6 @@ class ErnieForMaskedLM(BertForMaskedLM):
             token_type_ids=token_type_ids,
             task_type_ids=task_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
@@ -635,7 +605,6 @@ class ErnieForNextSentencePrediction(BertForNextSentencePrediction):
         token_type_ids: Optional[torch.Tensor] = None,
         task_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -686,7 +655,6 @@ class ErnieForNextSentencePrediction(BertForNextSentencePrediction):
             token_type_ids=token_type_ids,
             task_type_ids=task_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             return_dict=True,
             **kwargs,
@@ -719,7 +687,6 @@ class ErnieForSequenceClassification(BertForSequenceClassification):
         token_type_ids: Optional[torch.Tensor] = None,
         task_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -741,7 +708,6 @@ class ErnieForSequenceClassification(BertForSequenceClassification):
             token_type_ids=token_type_ids,
             task_type_ids=task_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             return_dict=True,
             **kwargs,
@@ -793,7 +759,6 @@ class ErnieForMultipleChoice(BertForMultipleChoice):
         token_type_ids: Optional[torch.Tensor] = None,
         task_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -851,7 +816,6 @@ class ErnieForMultipleChoice(BertForMultipleChoice):
             token_type_ids=token_type_ids,
             task_type_ids=task_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             return_dict=True,
             **kwargs,
@@ -886,7 +850,6 @@ class ErnieForTokenClassification(BertForTokenClassification):
         token_type_ids: Optional[torch.Tensor] = None,
         task_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -906,7 +869,6 @@ class ErnieForTokenClassification(BertForTokenClassification):
             token_type_ids=token_type_ids,
             task_type_ids=task_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             return_dict=True,
             **kwargs,
@@ -940,7 +902,6 @@ class ErnieForQuestionAnswering(BertForQuestionAnswering):
         token_type_ids: Optional[torch.Tensor] = None,
         task_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         start_positions: Optional[torch.Tensor] = None,
         end_positions: Optional[torch.Tensor] = None,
@@ -959,7 +920,6 @@ class ErnieForQuestionAnswering(BertForQuestionAnswering):
             token_type_ids=token_type_ids,
             task_type_ids=task_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             return_dict=True,
             **kwargs,

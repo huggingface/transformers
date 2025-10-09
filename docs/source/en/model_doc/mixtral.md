@@ -42,6 +42,7 @@ Mixtral-8x7B is a decoder-only Transformer with the following architectural choi
 - Despite the model having 45 billion parameters, the compute required for a single forward pass is the same as that of a 14 billion parameter model. This is because even though each of the experts have to be loaded in RAM (70B like ram requirement) each token from the hidden states are dispatched twice (top 2 routing) and thus the compute (the operation required at each forward computation) is just 2 X sequence_length.
 
 The following implementation details are shared with Mistral AI's first model [Mistral-7B](mistral):
+
 - Sliding Window Attention - Trained with 8k context length and fixed cache size, with a theoretical attention span of 128K tokens
 - GQA (Grouped Query Attention) - allowing faster inference and lower cache size.
 - Byte-fallback BPE tokenizer - ensures that characters are never mapped to out of vocabulary tokens.
@@ -55,6 +56,7 @@ For more details refer to the [release blog post](https://mistral.ai/news/mixtra
 ## Usage tips
 
 The Mistral team has released 2 checkpoints:
+
 - a base model, [Mixtral-8x7B-v0.1](https://huggingface.co/mistralai/Mixtral-8x7B-v0.1), which has been pre-trained to predict the next token on internet-scale data.
 - an instruction tuned model, [Mixtral-8x7B-Instruct-v0.1](https://huggingface.co/mistralai/Mixtral-8x7B-Instruct-v0.1), which is the base model optimized for chat purposes using supervised fine-tuning (SFT) and direct preference optimization (DPO).
 

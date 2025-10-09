@@ -20,7 +20,7 @@ import pytest
 from packaging import version
 from parameterized import parameterized
 
-from transformers import Olmo3Config, is_torch_available, set_seed
+from transformers import is_torch_available, set_seed
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.testing_utils import (
@@ -47,14 +47,11 @@ if is_torch_available():
 
 class Olmo3ModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = Olmo3Config
         base_model_class = Olmo3Model
-        causal_lm_class = Olmo3ForCausalLM
 
 
 @require_torch
 class Olmo3ModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (Olmo3Model, Olmo3ForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": Olmo3Model,
@@ -63,8 +60,6 @@ class Olmo3ModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
-    test_pruning = False
     fx_compatible = False
     test_torchscript = False
     test_all_params_have_gradient = False

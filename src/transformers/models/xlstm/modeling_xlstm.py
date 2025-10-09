@@ -1293,7 +1293,7 @@ class xLSTMCache:
     Cache for xLSTM model which does not have attention mechanism and key value states.
 
     Arguments:
-        config (`PretrainedConfig):
+        config (`PreTrainedConfig):
             The configuration file defining the shape-related attributes required to initialize the static cache.
         max_batch_size (`int`):
             The batch size with which the model will be used.
@@ -1605,7 +1605,7 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            # move labels to correct device to enable model parallelism
+            # move labels to correct device
             labels = labels.to(logits.device)
             # Shift so that tokens < nstate predict nstate
             shift_logits = logits[..., :-1, :].contiguous()

@@ -56,8 +56,8 @@ class EomtConfig(ViTConfig):
     [tue-mps/coco_panoptic_eomt_large_640](https://huggingface.co/tue-mps/coco_panoptic_eomt_large_640)
     architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 1024):
@@ -297,10 +297,10 @@ class EomtLayer(Dinov2Layer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         hidden_states_norm = self.norm1(hidden_states)
-        self_attention_output, _ = self.attention(hidden_states_norm, head_mask)
+        self_attention_output, _ = self.attention(hidden_states_norm, attention_mask)
         self_attention_output = self.layer_scale1(self_attention_output)
 
         # first residual connection
@@ -492,7 +492,7 @@ class EomtForUniversalSegmentation(Mask2FormerForUniversalSegmentation):
 
         return attn_mask
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
