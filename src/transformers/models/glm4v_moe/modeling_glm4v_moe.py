@@ -946,7 +946,13 @@ class Glm4vMoeTextModel(Glm4vMoePreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-            # the hard coded `3` is for temporal, height and width.
+        if cache_position is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            cache_position = torch.arange(
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            )
+
+        # the hard coded `3` is for temporal, height and width.
         if position_ids is None:
             position_ids = cache_position.view(1, 1, -1).expand(3, inputs_embeds.shape[0], -1)
         elif position_ids.ndim == 2:
