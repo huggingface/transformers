@@ -906,12 +906,6 @@ class TrainingArguments:
             )
         },
     )
-    logging_dir: Optional[str] = field(
-        default=None,
-        metadata={
-            "help": "This argument is deprecated and will be removed in v5.2. Set `TENSORBOARD_LOGGING_DIR` instead"
-        },
-    )
     logging_strategy: Union[IntervalStrategy, str] = field(
         default="steps",
         metadata={"help": "The logging strategy to use."},
@@ -1480,12 +1474,6 @@ class TrainingArguments:
         # see https://github.com/huggingface/transformers/issues/10628
         if self.output_dir is not None:
             self.output_dir = os.path.expanduser(self.output_dir)
-
-        if self.logging_dir is not None:
-            logging.warning(
-                "`logging_dir` is deprecated and will be removed in v5.2. Set `TENSORBOARD_LOGGING_DIR` instead"
-            )
-            os.environ["TENSORBOARD_LOGGING_DIR"] = self.logging_dir
 
         if self.disable_tqdm is None:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
