@@ -93,8 +93,6 @@ class VitMatteConfig(PreTrainedConfig):
         fusion_hidden_sizes: list[int] = [256, 128, 64, 32],
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         if backbone_config is None and backbone is None:
             logger.info("`backbone_config` is `None`. Initializing the config with the default `VitDet` backbone.")
             backbone_config = CONFIG_MAPPING["vitdet"](out_features=["stage4"])
@@ -121,6 +119,8 @@ class VitMatteConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.convstream_hidden_sizes = convstream_hidden_sizes
         self.fusion_hidden_sizes = fusion_hidden_sizes
+
+        super().__init__(**kwargs)
 
 
 __all__ = ["VitMatteConfig"]

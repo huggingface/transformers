@@ -118,10 +118,8 @@ class TimesFmConfig(PreTrainedConfig):
         self.min_timescale = min_timescale
         self.max_timescale = max_timescale
 
-        super().__init__(
-            is_encoder_decoder=self.is_encoder_decoder,
-            **kwargs,
-        )
+        kwargs["is_encoder_decoder"] = self.is_encoder_decoder
+        super().__init__(**kwargs)
 
 
 __all__ = ["TimesFmConfig"]

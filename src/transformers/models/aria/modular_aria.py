@@ -214,11 +214,11 @@ class AriaTextConfig(LlamaConfig):
         pad_token_id=2,
         **super_kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, **super_kwargs)
         self.intermediate_size = intermediate_size
         self.moe_num_experts = moe_num_experts
         self.moe_topk = moe_topk
         self.moe_num_shared_experts = moe_num_shared_experts
+        super().__init__(pad_token_id=pad_token_id, **super_kwargs)
 
 
 class AriaConfig(PreTrainedConfig):
