@@ -56,7 +56,7 @@ if is_pytesseract_available():
 logger = logging.get_logger(__name__)
 
 
-class LayoutLMv3ImageProcessorKwargs(ImagesKwargs):
+class LayoutLMv3ImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     apply_ocr (`bool`, *optional*, defaults to `True`):
         Whether to apply the Tesseract OCR engine to get words + normalized bounding boxes. Can be overridden by
@@ -70,7 +70,7 @@ class LayoutLMv3ImageProcessorKwargs(ImagesKwargs):
         `preprocess` method.
     """
 
-    apply_ocr: Optional[bool]
+    apply_ocr: bool
     ocr_lang: Optional[str]
     tesseract_config: Optional[str]
 

@@ -12,8 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import re
+from collections.abc import Callable
 from types import ModuleType
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 from .flash_attention import flash_attention_forward
 
@@ -40,7 +41,6 @@ try:
         },
         "Llama4TextMoe": {
             "cuda": LayerRepository(
-                # Move to kernels-community/moe once we release.
                 repo_id="kernels-community/moe",
                 layer_name="Llama4TextMoe",
             )
@@ -49,13 +49,11 @@ try:
             "cuda": LayerRepository(
                 repo_id="kernels-community/liger_kernels",
                 layer_name="LigerRMSNorm",
-                # revision="pure-layer-test",
             ),
             "rocm": {
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/liger_kernels",
                     layer_name="LigerRMSNorm",
-                    # revision="pure-layer-test",
                 )
             },
         },

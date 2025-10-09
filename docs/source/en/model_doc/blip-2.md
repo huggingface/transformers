@@ -60,7 +60,6 @@ If you're interested in submitting a resource to be included here, please feel f
 ## Blip2Config
 
 [[autodoc]] Blip2Config
-    - from_vision_qformer_text_configs
 
 ## Blip2VisionConfig
 

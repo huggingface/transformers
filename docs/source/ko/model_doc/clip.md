@@ -199,7 +199,6 @@ CLIP을 시작하는 데 도움이 되는 Hugging Face와 community 자료 목�
 ## CLIPConfig[[transformers.CLIPConfig]]
 
 [[autodoc]] CLIPConfig
-    - from_text_vision_configs
 
 ## CLIPTextConfig[[transformers.CLIPTextConfig]]
 
