@@ -14,8 +14,6 @@
 # limitations under the License.
 """BLIP-2 model configuration"""
 
-from typing import Optional
-
 from ...configuration_utils import PreTrainedConfig
 from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from ...utils import logging

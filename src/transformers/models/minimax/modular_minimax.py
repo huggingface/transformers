@@ -163,7 +163,6 @@ class MiniMaxConfig(MixtralConfig):
         mlp_beta_factor=1,
         **super_kwargs,
     ):
-        super().__init__(**super_kwargs)
         self.layer_types = layer_types
         self.block_size = block_size
         self.full_attn_alpha_factor = full_attn_alpha_factor
@@ -178,6 +177,7 @@ class MiniMaxConfig(MixtralConfig):
                 "full_attention" if bool((i + 1) % 2) else "linear_attention" for i in range(self.num_hidden_layers)
             ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
+        super().__init__(**super_kwargs)
 
 
 class MiniMaxRMSNorm(MixtralRMSNorm):

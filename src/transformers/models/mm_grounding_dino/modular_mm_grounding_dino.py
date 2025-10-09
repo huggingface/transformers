@@ -157,11 +157,11 @@ class MMGroundingDinoConfig(PreTrainedConfig):
     ```"""
 
     model_type = "mm-grounding-dino"
+    sub_configs = {"backbone_config": AutoConfig, "text_config": AutoConfig}
     attribute_map = {
         "hidden_size": "d_model",
         "num_attention_heads": "encoder_attention_heads",
     }
-    sub_configs = {"backbone_config": AutoConfig}
 
     def __init__(
         self,
