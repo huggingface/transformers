@@ -804,10 +804,6 @@ class TrainingArguments:
             "help": "The output directory where the model predictions and checkpoints will be written. Defaults to 'trainer_output' if not provided."
         },
     )
-    overwrite_output_dir: bool = field(
-        default=False,
-        metadata={"help": ("This argument is deprecated and will be removed in v5.")},
-    )
 
     do_train: bool = field(default=False, metadata={"help": "Whether to run training."})
     do_eval: bool = field(default=False, metadata={"help": "Whether to run eval on the dev set."})
