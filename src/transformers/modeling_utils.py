@@ -26,12 +26,13 @@ import sys
 import warnings
 from abc import abstractmethod
 from collections import defaultdict
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from enum import Enum
 from functools import partial, wraps
 from threading import Thread
-from typing import Any, Callable, Optional, TypeVar, Union, get_type_hints
+from typing import Any, Optional, TypeVar, Union, get_type_hints
 from zipfile import is_zipfile
 
 import torch
@@ -60,8 +61,8 @@ from .integrations.eager_paged import eager_paged_attention_forward
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
-from .integrations.hub_kernels import is_kernel, load_and_register_kernel
 from .integrations.peft import maybe_load_adapters
+from .integrations.hub_kernels import is_kernel, load_and_register_attn_kernel
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
 from .integrations.tensor_parallel import (
@@ -1177,13 +1178,13 @@ def _get_dtype(
                 dtype = getattr(torch, dtype)
                 config.dtype = dtype
                 for sub_config_key in config.sub_configs:
-                    sub_config = getattr(config, sub_config_key)
-                    sub_config.dtype = dtype
+                    if (sub_config := getattr(config, sub_config_key)) is not None:
+                        sub_config.dtype = dtype
         elif isinstance(dtype, torch.dtype):
             config.dtype = dtype
             for sub_config_key in config.sub_configs:
-                sub_config = getattr(config, sub_config_key)
-                sub_config.dtype = dtype
+                if (sub_config := getattr(config, sub_config_key)) is not None:
+                    sub_config.dtype = dtype
         elif isinstance(dtype, dict):
             for key, curr_dtype in dtype.items():
                 if hasattr(config, key):
@@ -1208,8 +1209,8 @@ def _get_dtype(
         default_dtype = torch.get_default_dtype()
         config.dtype = default_dtype
         for key in config.sub_configs:
-            value = getattr(config, key)
-            value.dtype = default_dtype
+            if (sub_config := getattr(config, key)) is not None:
+                sub_config.dtype = default_dtype
 
     return config, dtype, dtype_orig
 
@@ -2510,7 +2511,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if is_kernel(applicable_attn_implementation):
             try:
-                load_and_register_kernel(applicable_attn_implementation)
+                load_and_register_attn_kernel(applicable_attn_implementation)
                 # log that we used kernel fallback if successful
                 if attn_implementation.startswith("flash_attention"):
                     logger.warning_once(
@@ -2658,34 +2659,34 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # We need this as some old and badly designed models use subconfigs without declaring the corresponding modules as PreTrainedModel
         for subconfig_key in self.config.sub_configs:
-            subconfig = getattr(self.config, subconfig_key)
-            sub_implementation = (
-                requested_implementation
-                if not isinstance(attn_implementation, dict)
-                else attn_implementation.get(subconfig_key, subconfig._attn_implementation)
-            )
-            # This means we did not perform any check above for this particular subconfig -> set it in the dark if it is registered
-            if (
-                not hasattr(subconfig, "_attn_was_changed")
-                # If it's already the same, then no need to enter here and raise warnings
-                and sub_implementation != subconfig._attn_implementation
-            ):
-                if sub_implementation not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
-                    raise ValueError(
-                        f'Specified `attn_implementation="{sub_implementation}"` is not supported for {subconfig_key}. '
-                        'The only possible arguments are "eager" (manual attention implementation)'
-                        f"or one of the following: {list(ALL_ATTENTION_FUNCTIONS.valid_keys())}"
-                    )
-                subconfig._attn_implementation_internal = sub_implementation
-                logger.warning(
-                    f"We set the attention implementation for the sub-config `{subconfig_key}` to `{sub_implementation}` "
-                    "without finding the associated sub-model. For this reason we could not check if the model supports it. "
-                    "You may encounter undefined behavior."
+            if (subconfig := getattr(self.config, subconfig_key)) is not None:
+                sub_implementation = (
+                    requested_implementation
+                    if not isinstance(attn_implementation, dict)
+                    else attn_implementation.get(subconfig_key, subconfig._attn_implementation)
                 )
-            # Unset the attribute in this case, to avoid issues in the future
-            else:
-                if hasattr(subconfig, "_attn_was_changed"):
-                    del subconfig._attn_was_changed
+                # This means we did not perform any check above for this particular subconfig -> set it in the dark if it is registered
+                if (
+                    not hasattr(subconfig, "_attn_was_changed")
+                    # If it's already the same, then no need to enter here and raise warnings
+                    and sub_implementation != subconfig._attn_implementation
+                ):
+                    if sub_implementation not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
+                        raise ValueError(
+                            f'Specified `attn_implementation="{sub_implementation}"` is not supported for {subconfig_key}. '
+                            'The only possible arguments are "eager" (manual attention implementation)'
+                            f"or one of the following: {list(ALL_ATTENTION_FUNCTIONS.valid_keys())}"
+                        )
+                    subconfig._attn_implementation_internal = sub_implementation
+                    logger.warning(
+                        f"We set the attention implementation for the sub-config `{subconfig_key}` to `{sub_implementation}` "
+                        "without finding the associated sub-model. For this reason we could not check if the model supports it. "
+                        "You may encounter undefined behavior."
+                    )
+                # Unset the attribute in this case, to avoid issues in the future
+                else:
+                    if hasattr(subconfig, "_attn_was_changed"):
+                        del subconfig._attn_was_changed
 
     def enable_input_require_grads(self):
         """
@@ -4363,10 +4364,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 Whether or not to offload the buffers with the model parameters.
             quantization_config (`Union[QuantizationConfigMixin,Dict]`, *optional*):
                 A dictionary of configuration parameters or a QuantizationConfigMixin object for quantization (e.g
-                bitsandbytes, gptq). There may be other quantization-related kwargs, including `load_in_4bit` and
-                `load_in_8bit`, which are parsed by QuantizationConfigParser. Supported only for bitsandbytes
-                quantizations and not preferred. consider inserting all such arguments into quantization_config
-                instead.
+                bitsandbytes, gptq).
             subfolder (`str`, *optional*, defaults to `""`):
                 In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
                 specify the folder name here.

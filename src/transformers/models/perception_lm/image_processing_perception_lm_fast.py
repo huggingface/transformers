@@ -42,7 +42,7 @@ from ...utils import (
 )
 
 
-class PerceptionLMImageProcessorKwargs(ImagesKwargs):
+class PerceptionLMImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     vision_input_type (`str`, *optional*, defaults to `"thumb+tile"`):
         Vision processing strategy. `"thumb+tile"` uses both thumbnails and multiple tiles for
@@ -54,8 +54,8 @@ class PerceptionLMImageProcessorKwargs(ImagesKwargs):
     """
 
     vision_input_type: Optional[str]
-    tile_size: Optional[int]
-    max_num_tiles: Optional[int]
+    tile_size: int
+    max_num_tiles: int
 
 
 @auto_docstring
@@ -68,7 +68,7 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
-    vision_input_type = "thumb+tail"
+    vision_input_type = "thumb+tile"
     tile_size = 448
     max_num_tiles = 36
     size = {"width": 448, "height": 448}  # for backward compatibility in tests

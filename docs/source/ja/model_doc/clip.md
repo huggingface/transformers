@@ -106,7 +106,6 @@ CLIP を使い始めるのに役立つ公式 Hugging Face およびコミュニ�
 ## CLIPConfig
 
 [[autodoc]] CLIPConfig
-    - from_text_vision_configs
 
 ## CLIPTextConfig
 

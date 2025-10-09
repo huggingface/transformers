@@ -163,7 +163,6 @@ class MiniMaxConfig(MixtralConfig):
         mlp_beta_factor=1,
         **super_kwargs,
     ):
-        super().__init__(**super_kwargs)
         self.layer_types = layer_types
         self.block_size = block_size
         self.full_attn_alpha_factor = full_attn_alpha_factor
@@ -173,6 +172,7 @@ class MiniMaxConfig(MixtralConfig):
         self.mlp_alpha_factor = mlp_alpha_factor
         self.mlp_beta_factor = mlp_beta_factor
 
+        super().__init__(**super_kwargs)
         if self.layer_types is None:
             self.layer_types = [
                 "full_attention" if bool((i + 1) % 2) else "linear_attention" for i in range(self.num_hidden_layers)

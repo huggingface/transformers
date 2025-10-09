@@ -386,7 +386,7 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             images=image_input,
             return_tensors="pt",
             do_rescale=True,
-            rescale_factor=-1,
+            rescale_factor=-1.0,
             padding="longest",
             max_length=76,
         )

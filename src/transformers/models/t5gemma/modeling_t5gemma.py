@@ -19,7 +19,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -328,7 +329,7 @@ class T5GemmaCrossAttention(nn.Module):
 
         if past_key_values is not None:
             is_updated = past_key_values.is_updated.get(self.layer_idx)
-            curr_past_key_value = past_key_values.cross_attention_cache
+            curr_past_key_values = past_key_values.cross_attention_cache
 
         if past_key_values is None or not is_updated:
             encoder_input_shape = encoder_hidden_states.shape[:-1]
@@ -337,11 +338,11 @@ class T5GemmaCrossAttention(nn.Module):
             value_states = self.v_proj(encoder_hidden_states).view(encoder_hidden_shape).transpose(1, 2)
 
             if past_key_values is not None:
-                key_states, value_states = curr_past_key_value.update(key_states, value_states, self.layer_idx)
+                key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
                 past_key_values.is_updated[self.layer_idx] = True
         else:
-            key_states = curr_past_key_value.layers[self.layer_idx].keys
-            value_states = curr_past_key_value.layers[self.layer_idx].values
+            key_states = curr_past_key_values.layers[self.layer_idx].keys
+            value_states = curr_past_key_values.layers[self.layer_idx].values
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
