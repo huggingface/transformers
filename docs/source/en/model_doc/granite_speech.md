@@ -53,7 +53,7 @@ from datasets import load_dataset
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 # Load model and processor
-model_name = "ibm-granite/granite-speech-3.3-8b"
+model_id = "ibm-granite/granite-speech-3.3-8b"
 processor = AutoProcessor.from_pretrained(model_name)
 tokenizer = processor.tokenizer
 model = AutoModelForSpeechSeq2Seq.from_pretrained(
