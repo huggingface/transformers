@@ -31,6 +31,7 @@ from safetensors.torch import safe_open
 from transformers import (
     AudioFlamingo3Config,
     AudioFlamingo3ForConditionalGeneration,
+    AudioFlamingo3Processor,
     AutoTokenizer,
     GenerationConfig,
     Qwen2Config,
@@ -52,14 +53,21 @@ def _load_json(p: Path):
 def write_processor(src_root: Path, dst_root: Path):
     llm_dir = src_root / "llm"
 
-    AutoTokenizer.from_pretrained(str(llm_dir)).save_pretrained(
-        str(dst_root), legacy_format=False, save_jinja_files=False
+    chat_template = (
+        "{% if messages[0]['role'] != 'system' %}"
+        "{{ '<|im_start|>system\\nYou are a helpful assistant.<|im_end|>\\n' }}"
+        "{% endif %}{% for message in messages if message['content'] is not none %}"
+        "{{ '<|im_start|>' + message['role'] + '\\n' + message['content'] + '<|im_end|>' + '\\n' }}"
+        "{% endfor %}{% if add_generation_prompt %}"
+        "{{ '<|im_start|>assistant\\n' }}"
+        "{% endif %}"
     )
-    WhisperFeatureExtractor(
-        feature_size=128,
-        return_attention_mask=True,
-        processor_class="AudioFlamingo3Processor",
-    ).save_pretrained(str(dst_root))
+
+    processor = AudioFlamingo3Processor.from_pretrained(
+        feature_extractor=WhisperFeatureExtractor(feature_size=128, return_attention_mask=True),
+        tokenizer=AutoTokenizer.from_pretrained(str(llm_dir), chat_template=chat_template, use_fast=True),
+    )
+    processor.save_pretrained(str(dst_root))
 
     logger.info("processor (tokenizer + preprocessor)")
 
