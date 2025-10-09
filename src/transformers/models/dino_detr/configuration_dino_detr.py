@@ -17,7 +17,7 @@
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -164,6 +164,7 @@ class DinoDetrConfig(PretrainedConfig):
     ```"""
 
     model_type = "deformable_detr"
+    sub_configs = {"backbone_config": AutoConfig}
     attribute_map = {
         "encoder_attention_heads": "num_heads",
     }
