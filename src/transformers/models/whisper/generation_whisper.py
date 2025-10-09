@@ -16,8 +16,8 @@ import copy
 import math
 import warnings
 import zlib
-from collections.abc import Iterator
-from typing import Callable, Optional, Union
+from collections.abc import Callable, Iterator
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -1178,26 +1178,14 @@ class WhisperGenerationMixin(GenerationMixin):
                 if not is_shortform:
                     # we don't save `past_key_values` as this is too costly for longform
                     return None
-                elif isinstance(values, EncoderDecoderCache):
-                    all_past_key_values = []
-                    for layer_idx in range(self.config.decoder_layers):
-                        layer_past_key_values = []
-                        for cache_cls in [values.self_attention_cache, values.cross_attention_cache]:
-                            for v in [cache_cls.layers[layer_idx].keys, cache_cls.layers[layer_idx].values]:
-                                layer_past_key_values.append(v[batch_idx][None].cpu())
-                        all_past_key_values.append(tuple(layer_past_key_values))
-                    return EncoderDecoderCache.from_legacy_cache(tuple(all_past_key_values))
-                else:
-                    all_past_key_values = []
-                    for v in range(len(values)):
-                        layer_past_key_values = []
-                        for w in values[v]:
-                            if len(w) != 0:
-                                layer_past_key_values.append(w[batch_idx][None].cpu())
-                            else:
-                                layer_past_key_values.append(w)
-                        all_past_key_values.append(tuple(layer_past_key_values))
-                    return tuple(all_past_key_values)
+                all_past_key_values = []
+                for layer_idx in range(self.config.decoder_layers):
+                    layer_past_key_values = []
+                    for cache_cls in [values.self_attention_cache, values.cross_attention_cache]:
+                        for v in [cache_cls.layers[layer_idx].keys, cache_cls.layers[layer_idx].values]:
+                            layer_past_key_values.append(v[batch_idx][None].cpu())
+                    all_past_key_values.append(tuple(layer_past_key_values))
+                return EncoderDecoderCache(tuple(all_past_key_values))
 
             return values[batch_idx].cpu()
 
@@ -1234,15 +1222,22 @@ class WhisperGenerationMixin(GenerationMixin):
                 )
             elif key == "past_key_values":
                 if seek_outputs[0][key] is not None:
-                    outputs[key] = tuple(
-                        tuple(
-                            torch.stack([v[key][i][j] for v in seek_outputs]).squeeze(1).to(device)
-                            for j in range(len(seek_outputs[0][key][0]))
+                    all_past_key_values = []
+                    for layer_idx in range(len(seek_outputs[0][key])):
+                        layer_past_key_values = tuple(
+                            torch.stack(
+                                [
+                                    getattr(getattr(sub_output[key], sub_cache).layers[layer_idx], sub_key)
+                                    for sub_output in seek_outputs
+                                ]
+                            )
+                            .squeeze(1)
+                            .to(device)
+                            for sub_cache in ["self_attention_cache", "cross_attention_cache"]
+                            for sub_key in ["keys", "values"]
                         )
-                        for i in range(len(seek_outputs[0][key]))
-                    )
-                    if isinstance(seek_outputs[0][key], EncoderDecoderCache):
-                        outputs[key] = EncoderDecoderCache.from_legacy_cache(outputs[key])
+                        all_past_key_values.append(layer_past_key_values)
+                    outputs[key] = EncoderDecoderCache(tuple(all_past_key_values))
                 else:
                     outputs[key] = None
 

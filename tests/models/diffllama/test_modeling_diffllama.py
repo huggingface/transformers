@@ -21,7 +21,7 @@ import pytest
 from packaging import version
 from parameterized import parameterized
 
-from transformers import AutoTokenizer, DiffLlamaConfig, StaticCache, is_torch_available, set_seed
+from transformers import AutoTokenizer, BitsAndBytesConfig, DiffLlamaConfig, StaticCache, is_torch_available, set_seed
 from transformers.testing_utils import (
     backend_empty_cache,
     cleanup,
@@ -197,7 +197,7 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         if is_torch_available()
         else {}
     )
-    test_pruning = False
+
     fx_compatible = False
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
@@ -217,12 +217,6 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_diffllama_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -443,7 +437,7 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         """
         model = DiffLlamaForCausalLM.from_pretrained(
             "kajuma/DiffLlama-0.3B-handcut",
-            load_in_4bit=True,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
             device_map={"": 0},
         )
 
@@ -461,7 +455,7 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
         model = DiffLlamaForCausalLM.from_pretrained(
             "kajuma/DiffLlama-0.3B-handcut",
-            load_in_4bit=True,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
             device_map={"": 0},
             attn_implementation="flash_attention_2",
         )

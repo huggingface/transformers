@@ -19,8 +19,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import itertools
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -591,6 +592,7 @@ class Glm4vTextDecoderLayer(GradientCheckpointingLayer):
         self.post_self_attn_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_mlp_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -598,7 +600,6 @@ class Glm4vTextDecoderLayer(GradientCheckpointingLayer):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
-        output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
@@ -614,7 +615,6 @@ class Glm4vTextDecoderLayer(GradientCheckpointingLayer):
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
-            output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
             **kwargs,
@@ -806,7 +806,7 @@ class Glm4vTextModel(Glm4vPreTrainedModel):
         self.post_init()
 
     @auto_docstring
-    @check_model_inputs
+    @check_model_inputs()
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -837,17 +837,36 @@ class Glm4vTextModel(Glm4vPreTrainedModel):
         # the hard coded `3` is for temporal, height and width.
         if position_ids is None:
             position_ids = cache_position.view(1, 1, -1).expand(3, inputs_embeds.shape[0], -1)
-        elif position_ids.dim() == 2:
+        elif position_ids.ndim == 2:
             position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
 
-        causal_mask = create_causal_mask(
-            config=self.config,
-            input_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            cache_position=cache_position,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
+        # NOTE: we need to pass text position ids for packing. Qwen2-VL uses 3D positions
+        # where each dim indicates visual spatial positions for temporal/height/width grids.
+        # There are two scenarios when FA2-like packed masking might be activated.
+        # 1. User specifically passed packed `position_ids` and no attention mask.
+        #    In this case we expect the useer to create correct position ids for all 3 grids
+        #    and prepend text-only position ids to it. The final tensor will be [4, bs, seq-len]
+        # 2. User runs forward with no attention mask and no position ids. In this case, position ids
+        #    are prepared by the model (`get_rope_index`) as `[4, bs, seq-len]` tensor. Text-only positions are
+        #    prepended by us when creating positions so that the mask is constructed correctly. NOTE: failing to pass
+        #    text-only positions will cause incorrect mask construction, do not change `prepare_input_for_generation`
+        if position_ids.ndim == 3 and position_ids.shape[0] == 4:
+            text_position_ids = position_ids[0]
+            position_ids = position_ids[1:]
+        else:
+            # If inputs are not packed (usual 3D positions), do not prepare mask from position_ids
+            text_position_ids = None
+
+        mask_kwargs = {
+            "config": self.config,
+            "input_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+            "cache_position": cache_position,
+            "past_key_values": past_key_values,
+            "position_ids": text_position_ids,
+        }
+        # Create the masks
+        causal_mask = create_causal_mask(**mask_kwargs)
 
         hidden_states = inputs_embeds
 

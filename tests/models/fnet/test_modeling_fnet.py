@@ -254,7 +254,6 @@ class FNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
 
     # Skip Tests
-    test_pruning = False
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(

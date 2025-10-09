@@ -17,7 +17,7 @@ import unittest
 
 import pytest
 
-from transformers import is_torch_available
+from transformers import BitsAndBytesConfig, is_torch_available
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
@@ -142,7 +142,7 @@ class StableLmModelIntegrationTest(unittest.TestCase):
             "stabilityai/stablelm-3b-4e1t",
             device_map="auto",
             dtype="auto",
-            load_in_4bit=True,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
             attn_implementation="flash_attention_2",
         )
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)

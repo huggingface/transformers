@@ -127,7 +127,6 @@ class LightGlueModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (LightGlueForKeypointMatching,) if is_torch_available() else ()
     all_generative_model_classes = () if is_torch_available() else ()
 
-    test_pruning = False
     test_resize_embeddings = False
     has_attentions = True
 

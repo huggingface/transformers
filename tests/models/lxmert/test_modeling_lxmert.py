@@ -530,7 +530,7 @@ class LxmertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
 
     fx_compatible = True
-    test_pruning = False
+
     test_torchscript = False
 
     # overwrite function because qa models takes different input label shape

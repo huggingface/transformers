@@ -23,7 +23,8 @@ import os
 import random
 import sys
 import warnings
-from typing import Any, Callable, Literal, Optional, Union
+from collections.abc import Callable
+from typing import Any, Literal, Optional, Union
 
 import torch
 import torch.utils._pytree as pytree
@@ -35,7 +36,7 @@ from torch.fx.proxy import ParameterProxy
 
 from .. import logging
 from ..cache_utils import Cache, DynamicCache, StaticCache
-from ..modeling_utils import PretrainedConfig, PreTrainedModel
+from ..modeling_utils import PreTrainedConfig, PreTrainedModel
 from ..models.auto import get_values
 from ..models.auto.modeling_auto import (
     MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
@@ -75,7 +76,7 @@ _IS_IN_DEBUG_MODE = os.environ.get("FX_DEBUG_MODE", "").upper() in ENV_VARS_TRUE
 
 
 def _generate_supported_model_class_names(
-    model_name: type[PretrainedConfig],
+    model_name: type[PreTrainedConfig],
     supported_tasks: Optional[Union[str, list[str]]] = None,
 ) -> list[str]:
     task_mapping = {

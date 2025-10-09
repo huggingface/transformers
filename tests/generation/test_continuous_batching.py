@@ -328,6 +328,15 @@ class ContinuousBatchingTest(unittest.TestCase):
             "openai/gpt-oss-20b", "paged_attention|kernels-community/flash-attn", expected_outputs
         )
 
+    def test_attn_implementation(self) -> None:
+        model = AutoModelForCausalLM.from_pretrained("gpt2")
+        manager = model.init_continuous_batching()
+        assert "paged|sdpa" == manager.model.config._attn_implementation
+
+        model = AutoModelForCausalLM.from_pretrained("gpt2", _attn_implementation="eager")
+        manager = model.init_continuous_batching()
+        assert "paged|eager" == manager.model.config._attn_implementation
+
 
 # FIXME: the gemma test seem broken, there is a message about cuda graphs and the sdpa and flash expecteations are
 # inverted on CUDA. On AMD they do fine.

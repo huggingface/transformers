@@ -161,7 +161,7 @@ class ASTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
 
     # TODO: Fix the failed tests when this model gets more usage

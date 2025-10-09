@@ -42,16 +42,6 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 model = BarkModel.from_pretrained("suno/bark-small", dtype=torch.float16).to(device)
 ```
 
-#### Using 🤗 Better Transformer
-
-Better Transformer は、内部でカーネル融合を実行する 🤗 最適な機能です。パフォーマンスを低下させることなく、速度を 20% ～ 30% 向上させることができます。モデルを 🤗 Better Transformer にエクスポートするのに必要なコードは 1 行だけです。
-
-```python
-model =  model.to_bettertransformer()
-```
-
-この機能を使用する前に 🤗 Optimum をインストールする必要があることに注意してください。 [インストール方法はこちら](https://huggingface.co/docs/optimum/installation)
-
 #### Using CPU offload
 
 前述したように、Bark は 4 つのサブモデルで構成されており、オーディオ生成中に順番に呼び出されます。言い換えれば、1 つのサブモデルが使用されている間、他のサブモデルはアイドル状態になります。
@@ -64,27 +54,6 @@ model.enable_cpu_offload()
 
 この機能を使用する前に、🤗 Accelerate をインストールする必要があることに注意してください。 [インストール方法はこちら](https://huggingface.co/docs/accelerate/basic_tutorials/install)
 
-#### Combining optimization techniques
-
-最適化手法を組み合わせて、CPU オフロード、半精度、🤗 Better Transformer をすべて一度に使用できます。
-
-```python
-from transformers import BarkModel
-import torch
-
-device = "cuda" if torch.cuda.is_available() else "cpu"
-
-# load in fp16
-model = BarkModel.from_pretrained("suno/bark-small", dtype=torch.float16).to(device)
-
-# convert to bettertransformer
-model = BetterTransformer.transform(model, keep_original_model=False)
-
-# enable CPU offload
-model.enable_cpu_offload()
-```
-
-推論最適化手法の詳細については、[こちら](https://huggingface.co/docs/transformers/perf_infer_gpu_one) をご覧ください。
 
 ### Tips
 

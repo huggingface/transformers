@@ -35,8 +35,6 @@ from .utils import (
     ACCELERATE_MIN_VERSION,
     ExplicitEnum,
     is_accelerate_available,
-    is_ipex_available,
-    is_safetensors_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_torch_available,
@@ -299,7 +297,7 @@ class TrainingArguments:
             `max_steps` is reached.
         lr_scheduler_type (`str` or [`SchedulerType`], *optional*, defaults to `"linear"`):
             The scheduler type to use. See the documentation of [`SchedulerType`] for all possible values.
-        lr_scheduler_kwargs ('dict', *optional*, defaults to {}):
+        lr_scheduler_kwargs (`dict` or `str`, *optional*, defaults to `None`):
             The extra arguments for the lr_scheduler. See the documentation of each scheduler for possible values.
         warmup_ratio (`float`, *optional*, defaults to 0.0):
             Ratio of total training steps used for a linear warmup from 0 to `learning_rate`.
@@ -390,12 +388,12 @@ class TrainingArguments:
             Whether or not to use PyTorch jit trace for inference.
         bf16 (`bool`, *optional*, defaults to `False`):
             Whether to use bf16 16-bit (mixed) precision training instead of 32-bit training. Requires Ampere or higher
-            NVIDIA architecture or Intel XPU or using CPU (use_cpu) or Ascend NPU. This is an experimental API and it may change.
+            NVIDIA architecture or Intel XPU or using CPU (use_cpu) or Ascend NPU.
         fp16 (`bool`, *optional*, defaults to `False`):
             Whether to use fp16 16-bit (mixed) precision training instead of 32-bit training.
         bf16_full_eval (`bool`, *optional*, defaults to `False`):
             Whether to use full bfloat16 evaluation instead of 32-bit. This will be faster and save memory but can harm
-            metric values. This is an experimental API and it may change.
+            metric values.
         fp16_full_eval (`bool`, *optional*, defaults to `False`):
             Whether to use full float16 evaluation instead of 32-bit. This will be faster and save memory but can harm
             metric values.
@@ -475,7 +473,7 @@ class TrainingArguments:
             When resuming training, whether or not to skip the epochs and batches to get the data loading at the same
             stage as in the previous training. If set to `True`, the training will begin faster (as that skipping step
             can take a long time) but will not yield the same results as the interrupted training would have.
-        fsdp (`bool`, `str` or list of [`~trainer_utils.FSDPOption`], *optional*, defaults to `[]`):
+        fsdp (`bool`, `str` or list of [`~trainer_utils.FSDPOption`], *optional*, defaults to `None`):
             Use PyTorch Distributed Parallel Training (in distributed training only).
 
             A list of options along the following:
@@ -617,6 +615,14 @@ class TrainingArguments:
             `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"dvclive"`, `"flyte"`, `"mlflow"`, `"neptune"`,
             `"swanlab"`, `"tensorboard"`, `"trackio"` and `"wandb"`. Use `"all"` to report to all integrations
             installed, `"none"` for no integrations.
+        project (`str`, *optional*, defaults to `"huggingface"`):
+            The name of the project to use for logging. Currently, only used by Trackio.
+        trackio_space_id (`str` or `None`, *optional*, defaults to `"trackio"`):
+            The Hugging Face Space ID to deploy to when using Trackio. Should be a complete Space name like
+            `'username/reponame'` or `'orgname/reponame' `, or just `'reponame'` in which case the Space will be
+            created in the currently-logged-in Hugging Face user's namespace. If `None`, will log to a local directory.
+            Note that this Space will be public unless you set `hub_private_repo=True` or your organization's default
+            is to create private Spaces."
         ddp_find_unused_parameters (`bool`, *optional*):
             When using distributed training, the value of the flag `find_unused_parameters` passed to
             `DistributedDataParallel`. Will default to `False` if gradient checkpointing is used, `True` otherwise.
@@ -681,7 +687,9 @@ class TrainingArguments:
             The token to use to push the model to the Hub. Will default to the token in the cache folder obtained with
             `hf auth login`.
         hub_private_repo (`bool`, *optional*):
-            Whether to make the repo private. If `None` (default), the repo will be public unless the organization's default is private. This value is ignored if the repo already exists.
+            Whether to make the repo private. If `None` (default), the repo will be public unless the organization's
+            default is private. This value is ignored if the repo already exists. If reporting to Trackio with
+            deployment to Hugging Face Spaces enabled, the same logic determines whether the Space is private.
         hub_always_push (`bool`, *optional*, defaults to `False`):
             Unless this is `True`, the `Trainer` will skip pushing a checkpoint when the previous push is not finished.
         hub_revision (`str`, *optional*):
@@ -871,8 +879,8 @@ class TrainingArguments:
         default="linear",
         metadata={"help": "The scheduler type to use."},
     )
-    lr_scheduler_kwargs: Union[dict[str, Any], str] = field(
-        default_factory=dict,
+    lr_scheduler_kwargs: Optional[Union[dict, str]] = field(
+        default=None,
         metadata={
             "help": (
                 "Extra parameters for the lr_scheduler such as {'num_cycles': 1} for the cosine with hard restarts."
@@ -1138,8 +1146,8 @@ class TrainingArguments:
             )
         },
     )
-    fsdp: Union[list[FSDPOption], str, bool] = field(
-        default_factory=list,
+    fsdp: Optional[Union[list[FSDPOption], str]] = field(
+        default=None,
         metadata={
             "help": (
                 "Whether or not to use PyTorch Fully Sharded Data Parallel (FSDP) training (in distributed training"
@@ -1207,6 +1215,20 @@ class TrainingArguments:
     report_to: Union[None, str, list[str]] = field(
         default=None, metadata={"help": "The list of integrations to report the results and logs to."}
     )
+    project: str = field(
+        default="huggingface",
+        metadata={"help": "The name of the project to use for logging. Currenly, only used by Trackio."},
+    )
+    trackio_space_id: Optional[str] = field(
+        default="trackio",
+        metadata={
+            "help": "The Hugging Face Space ID to deploy to when using Trackio. Should be a complete Space name like "
+            "'username/reponame' or 'orgname/reponame', or just 'reponame' in which case the Space will be created in "
+            "the currently-logged-in Hugging Face user's namespace. If `None`, will log to a local directory. Note "
+            "that this Space will be public unless you set `hub_private_repo=True` or your organization's "
+            "default is to create private Spaces."
+        },
+    )
     ddp_find_unused_parameters: Optional[bool] = field(
         default=None,
         metadata={
@@ -1264,7 +1286,10 @@ class TrainingArguments:
     hub_private_repo: Optional[bool] = field(
         default=None,
         metadata={
-            "help": "Whether to make the repo private. If `None` (default), the repo will be public unless the organization's default is private. This value is ignored if the repo already exists."
+            "help": "Whether to make the repo private. If `None` (default), the repo will be public unless the "
+            "organization's default is private. This value is ignored if the repo already exists. If reporting to "
+            "Trackio with deployment to Hugging Face Spaces enabled, the same logic determines whether the Space is "
+            "private."
         },
     )
     hub_always_push: bool = field(
@@ -1542,10 +1567,7 @@ class TrainingArguments:
                         f"steps, but found {self.save_steps}, which is not a round multiple of {self.eval_steps}."
                     )
 
-        safetensors_available = is_safetensors_available()
-        if self.save_safetensors and not safetensors_available:
-            raise ValueError(f"--save_safetensors={self.save_safetensors} requires safetensors to be installed!")
-        if not self.save_safetensors and safetensors_available:
+        if not self.save_safetensors:
             logger.info(
                 f"Found safetensors installation, but --save_safetensors={self.save_safetensors}. "
                 f"Safetensors should be a preferred weights saving format due to security and performance reasons. "
@@ -1712,10 +1734,13 @@ class TrainingArguments:
         if not isinstance(self.warmup_steps, int) or self.warmup_steps < 0:
             raise ValueError("warmup_steps must be of type int and must be 0 or a positive integer.")
 
-        if isinstance(self.fsdp, bool):
-            self.fsdp = [FSDPOption.FULL_SHARD] if self.fsdp else ""
-        if isinstance(self.fsdp, str):
+        if self.fsdp is None:
+            self.fsdp = []
+        elif self.fsdp is True:
+            self.fsdp = [FSDPOption.FULL_SHARD]
+        elif isinstance(self.fsdp, str):
             self.fsdp = [FSDPOption(s) for s in self.fsdp.split()]
+
         if self.fsdp == [FSDPOption.OFFLOAD]:
             raise ValueError(
                 "`--fsdp offload` can't work on its own. It needs to be added to `--fsdp full_shard` or "
@@ -1871,19 +1896,6 @@ class TrainingArguments:
                 " when --dataloader_num_workers > 1."
             )
 
-        if self.eval_use_gather_object and not is_accelerate_available("0.30.0"):
-            raise ValueError(
-                "--eval_use_gather_object requires Accelerate to be version of `accelerate` > 0.30.0."
-                "This is not supported and we recommend you to update your version."
-            )
-
-        if self.data_seed is not None:
-            if not is_accelerate_available("1.1.0"):
-                raise NotImplementedError(
-                    "data_seed requires Accelerate version `accelerate` >= 1.1.0. "
-                    "This is not supported and we recommend you to update your version."
-                )
-
         if self.include_tokens_per_second is not None:
             logger.warning(
                 "include_tokens_per_second is deprecated and will be removed in v5. Use `include_num_input_tokens_seen` instead. "
@@ -2012,8 +2024,6 @@ class TrainingArguments:
             elif is_torch_mps_available():
                 device = torch.device("mps")
             elif is_torch_xpu_available():
-                if not is_ipex_available() and not is_accelerate_available("0.32.0.dev"):
-                    raise ImportError("Using the XPU PyTorch backend requires `accelerate>=0.32.0.dev`")
                 device = torch.device("xpu:0")
                 torch.xpu.set_device(device)
             elif is_torch_mlu_available():

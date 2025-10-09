@@ -15,7 +15,8 @@
 """PyTorch Speech2Text model."""
 
 import math
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -24,12 +25,7 @@ from torch.nn import CrossEntropyLoss
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
-from ...modeling_attn_mask_utils import (
-    _prepare_4d_attention_mask,
-    _prepare_4d_attention_mask_for_sdpa,
-    _prepare_4d_causal_attention_mask,
-    _prepare_4d_causal_attention_mask_for_sdpa,
-)
+from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -41,16 +37,11 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
+    TransformersKwargs,
     auto_docstring,
-    is_torch_flex_attn_available,
     logging,
 )
-from ...utils.deprecation import deprecate_kwarg
 from .configuration_speech_to_text import Speech2TextConfig
-
-
-if is_torch_flex_attn_available():
-    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 logger = logging.get_logger(__name__)
@@ -176,7 +167,7 @@ class Speech2TextSinusoidalPositionalEmbedding(nn.Module):
         return incremental_indices.long() + padding_idx
 
 
-# Copied from transformers.models.bart.modeling_bart.eager_attention_forward
+# Copied from transformers.models.bert.modeling_bert.eager_attention_forward
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -185,18 +176,21 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: Optional[float] = None,
     dropout: float = 0.0,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
     if scaling is None:
         scaling = query.size(-1) ** -0.5
 
+    # Take the dot product between "query" and "key" to get the raw attention scores.
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
     if attention_mask is not None:
+        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
@@ -240,7 +234,6 @@ class Speech2TextAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -275,17 +268,17 @@ class Speech2TextAttention(nn.Module):
                 is_updated = past_key_values.is_updated.get(self.layer_idx)
                 if is_cross_attention:
                     # after the first generated id, we can subsequently re-use all key/value_layer from cache
-                    curr_past_key_value = past_key_values.cross_attention_cache
+                    curr_past_key_values = past_key_values.cross_attention_cache
                 else:
-                    curr_past_key_value = past_key_values.self_attention_cache
+                    curr_past_key_values = past_key_values.self_attention_cache
             else:
-                curr_past_key_value = past_key_values
+                curr_past_key_values = past_key_values
 
         current_states = key_value_states if is_cross_attention else hidden_states
         if is_cross_attention and past_key_values is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.layers[self.layer_idx].keys
-            value_states = curr_past_key_value.layers[self.layer_idx].values
+            key_states = curr_past_key_values.layers[self.layer_idx].keys
+            value_states = curr_past_key_values.layers[self.layer_idx].values
         else:
             key_states = self.k_proj(current_states).view(*kv_input_shape).transpose(1, 2)
             value_states = self.v_proj(current_states).view(*kv_input_shape).transpose(1, 2)
@@ -293,7 +286,7 @@ class Speech2TextAttention(nn.Module):
             if past_key_values is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
                 cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = curr_past_key_value.update(
+                key_states, value_states = curr_past_key_values.update(
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
@@ -416,7 +409,6 @@ class Speech2TextDecoderLayer(GradientCheckpointingLayer):
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     # Copied from transformers.models.musicgen.modeling_musicgen.MusicgenDecoderLayer.forward
     def forward(
         self,
@@ -632,9 +624,10 @@ class Speech2TextEncoder(Speech2TextPreTrainedModel):
         hidden_states = inputs_embeds + embed_pos
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
-        attention_mask = self._update_full_mask(
-            attention_mask,
-            inputs_embeds,
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=inputs_embeds,
+            attention_mask=attention_mask,
         )
 
         encoder_states = () if output_hidden_states else None
@@ -673,27 +666,6 @@ class Speech2TextEncoder(Speech2TextPreTrainedModel):
         return BaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
-
-    # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_full_mask
-    def _update_full_mask(
-        self,
-        attention_mask: Union[torch.Tensor, None],
-        inputs_embeds: torch.Tensor,
-    ):
-        if attention_mask is not None:
-            if "flash" in self.config._attn_implementation:
-                attention_mask = attention_mask if 0 in attention_mask else None
-            elif self.config._attn_implementation == "sdpa":
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
-            elif self.config._attn_implementation == "flex_attention":
-                if isinstance(attention_mask, torch.Tensor):
-                    attention_mask = make_flex_block_causal_mask(attention_mask, is_causal=False)
-            else:
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
-
-        return attention_mask
 
 
 class Speech2TextDecoder(Speech2TextPreTrainedModel):
@@ -825,26 +797,25 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
 
         if use_cache and past_key_values is None:
             past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
-        if use_cache and isinstance(past_key_values, tuple):
-            logger.warning_once(
-                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
-                "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
-                "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
-            )
-            past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        attention_mask = self._update_causal_mask(
-            attention_mask,
-            input_shape,
-            inputs_embeds,
-            past_key_values_length,
+        if cache_position is None:
+            cache_position = torch.arange(
+                past_key_values_length, past_key_values_length + input_shape[1], device=inputs_embeds.device
+            )
+
+        attention_mask = create_causal_mask(
+            config=self.config,
+            input_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
         )
-        encoder_attention_mask = self._update_cross_attn_mask(
-            encoder_hidden_states,
-            encoder_attention_mask,
-            input_shape,
-            inputs_embeds,
+        encoder_attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=inputs_embeds,
+            attention_mask=encoder_attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
         )
 
         # embed positions
@@ -903,77 +874,6 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
             attentions=all_self_attns,
             cross_attentions=all_cross_attentions,
         )
-
-    # Copied from transformers.models.musicgen.modeling_musicgen.MusicgenDecoder._update_causal_mask
-    def _update_causal_mask(
-        self,
-        attention_mask: Union[torch.Tensor, None],
-        input_shape: torch.Size,
-        inputs_embeds: torch.Tensor,
-        past_key_values_length: int,
-    ):
-        if self.config._attn_implementation == "flash_attention_2":
-            # 2d mask is passed through the layers
-            attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
-        elif self.config._attn_implementation == "sdpa":
-            attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
-                attention_mask,
-                input_shape,
-                inputs_embeds,
-                past_key_values_length,
-            )
-        elif self.config._attn_implementation == "flex_attention":
-            if isinstance(attention_mask, torch.Tensor):
-                attention_mask = make_flex_block_causal_mask(attention_mask)
-            # Other attention flavors support in-built causal (when `mask is None`)
-            # while we need to create our specific block mask regardless
-            elif attention_mask is None:
-                attention_mask = make_flex_block_causal_mask(
-                    torch.ones(
-                        size=(input_shape),
-                        device=inputs_embeds.device,
-                    )
-                )
-        else:
-            # 4d mask is passed through the layers
-            attention_mask = _prepare_4d_causal_attention_mask(
-                attention_mask, input_shape, inputs_embeds, past_key_values_length
-            )
-
-        return attention_mask
-
-    # Copied from transformers.models.musicgen.modeling_musicgen.MusicgenDecoder._update_cross_attn_mask
-    def _update_cross_attn_mask(
-        self,
-        encoder_hidden_states: Union[torch.Tensor, None],
-        encoder_attention_mask: Union[torch.Tensor, None],
-        input_shape: torch.Size,
-        inputs_embeds: torch.Tensor,
-    ):
-        # expand encoder attention mask
-        if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            if self.config._attn_implementation == "flash_attention_2":
-                encoder_attention_mask = encoder_attention_mask if 0 in encoder_attention_mask else None
-            elif self.config._attn_implementation == "sdpa":
-                encoder_attention_mask = _prepare_4d_attention_mask_for_sdpa(
-                    encoder_attention_mask,
-                    inputs_embeds.dtype,
-                    tgt_len=input_shape[-1],
-                )
-            elif self.config._attn_implementation == "flex_attention":
-                if isinstance(encoder_attention_mask, torch.Tensor):
-                    encoder_attention_mask = make_flex_block_causal_mask(
-                        encoder_attention_mask,
-                        query_length=input_shape[-1],
-                        is_causal=False,
-                    )
-            else:
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                encoder_attention_mask = _prepare_4d_attention_mask(
-                    encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
-                )
-
-        return encoder_attention_mask
 
 
 @auto_docstring

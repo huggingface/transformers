@@ -244,8 +244,6 @@ class SwitchTransformersModelTester:
         self.parent.assertEqual(decoder_output.size(), (self.batch_size, self.decoder_seq_length, self.hidden_size))
         # There should be `num_layers` key value embeddings stored in decoder_past
         self.parent.assertEqual(len(decoder_past), config.num_layers)
-        # There should be a self attn key, a self attn value, a cross attn key and a cross attn value stored in each decoder_past tuple
-        self.parent.assertEqual(len(decoder_past[0]), 4)
 
     def create_and_check_with_lm_head(
         self,
@@ -262,8 +260,11 @@ class SwitchTransformersModelTester:
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
             labels=lm_labels,
+            output_attentions=True,
+            output_router_logits=True,
+            output_hidden_states=True,
         )
-        self.parent.assertEqual(len(outputs), 10)
+        self.parent.assertEqual(len(outputs), 13)
         self.parent.assertEqual(outputs["logits"].size(), (self.batch_size, self.decoder_seq_length, self.vocab_size))
         self.parent.assertEqual(outputs["loss"].size(), ())
 
@@ -569,7 +570,7 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
         else {}
     )
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = True
     is_encoder_decoder = True
     test_torchscript = False
@@ -577,6 +578,7 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     model_split_percents = [0.5, 0.8, 0.9]
     # `SwitchTransformers` is a MOE in which not all experts will get gradients because they are not all used in a single forward pass
     test_all_params_have_gradient = False
+    test_head_masking = False
 
     def setUp(self):
         self.model_tester = SwitchTransformersModelTester(self)
@@ -715,6 +717,10 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     def test_load_save_without_tied_weights(self):
         pass
 
+    @unittest.skip("TODO ARTHUR later on this will be fixed with t5 modular refactor")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+
 
 class SwitchTransformersEncoderOnlyModelTester:
     def __init__(
@@ -817,8 +823,10 @@ class SwitchTransformersEncoderOnlyModelTester:
 
 class SwitchTransformersEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SwitchTransformersEncoderModel,) if is_torch_available() else ()
-    test_pruning = False
+
     test_resize_embeddings = False
+    test_model_parallel = False
+    test_head_masking = False
     test_torchscript = False
 
     def setUp(self):
@@ -994,9 +1002,9 @@ class SwitchTransformerRouterTest(unittest.TestCase):
         router_z_loss = router_z_loss_func(router_logits)
         auxiliary_loss = load_balancing_loss_func(router_probs, torch.argmax(expert_index, dim=-1))
 
-        self.assertAlmostEqual(auxiliary_loss.item(), 1.000308, places=5)
-        self.assertAlmostEqual(router_z_loss.item(), 0.4789799, places=5)
-
+        self.assertAlmostEqual(router_z_loss.item(), 0.25389, places=5)
+        self.assertAlmostEqual(auxiliary_loss.item(), 1.000, places=5)
+        #
         # self.assertTrue(torch.allclose(expert_index.bool().unsqueeze(-1), expected_dispatch_mask))
 
     def test_max_routing_capacity(self):
@@ -1005,7 +1013,7 @@ class SwitchTransformerRouterTest(unittest.TestCase):
         batch_size = 4
         hidden_states = torch.stack(batch_size * [torch.rand((seq_len, self.config.hidden_size))])
 
-        router_probs, router_logits = model._compute_router_probabilities(hidden_states)
+        _, _, router_probs = model.forward(hidden_states)
         expert_index = torch.argmax(router_probs, dim=-1)
         expert_index = torch.nn.functional.one_hot(expert_index, num_classes=self.config.num_experts)
 

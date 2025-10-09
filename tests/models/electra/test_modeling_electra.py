@@ -439,13 +439,6 @@ class ElectraModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_electra_model_as_decoder(*config_and_inputs)
 
-    def test_electra_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            config_and_inputs[0]._attn_implementation = "eager"
-            self.model_tester.create_and_check_electra_model(*config_and_inputs)
-
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_electra_for_masked_lm(*config_and_inputs)

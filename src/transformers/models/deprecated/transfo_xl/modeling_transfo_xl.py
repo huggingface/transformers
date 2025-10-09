@@ -425,8 +425,8 @@ class TransfoXLPreTrainedModel(PreTrainedModel):
 
         new_num_tokens_layer = (
             new_num_tokens
-            - sum([emb.weight.shape[0] for emb in embeddings.emb_layers[:layer]])
-            - sum([emb.weight.shape[0] for emb in embeddings.emb_layers[layer + 1 :]])
+            - sum(emb.weight.shape[0] for emb in embeddings.emb_layers[:layer])
+            - sum(emb.weight.shape[0] for emb in embeddings.emb_layers[layer + 1 :])
         )
         return new_num_tokens_layer, layer
 

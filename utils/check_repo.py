@@ -941,6 +941,7 @@ def find_all_documented_objects() -> list[str]:
 
 # One good reason for not being documented is to be deprecated. Put in this list deprecated objects.
 DEPRECATED_OBJECTS = [
+    "PretrainedConfig",  # deprecated in favor of PreTrainedConfig
     "AutoModelWithLMHead",
     "BartPretrainedModel",
     "DataCollator",
@@ -1001,7 +1002,6 @@ UNDOCUMENTED_OBJECTS = [
     "VitPoseBackbone",  # Internal module
     "VitPoseBackboneConfig",  # Internal module
     "get_values",  # Internal object
-    "SinkCache",  # Moved to a custom_generate repository, to be deleted from transformers in v4.59.0
 ]
 
 # This list should be empty. Objects in it should get their own doc page.

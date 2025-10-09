@@ -25,7 +25,7 @@ from huggingface_hub.dataclasses import strict
 if TYPE_CHECKING:
     from ...processing_utils import ProcessorMixin
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
 
@@ -35,15 +35,15 @@ logger = logging.get_logger(__name__)
 
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-class CLIPTextConfig(PretrainedConfig):
+class CLIPTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`CLIPTextModel`]. It is used to instantiate a CLIP
     text encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the text encoder of the CLIP
     [openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 49408):
@@ -129,15 +129,15 @@ class CLIPTextConfig(PretrainedConfig):
 
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-class CLIPVisionConfig(PretrainedConfig):
+class CLIPVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`CLIPVisionModel`]. It is used to instantiate a
     CLIP vision encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the vision encoder of the CLIP
     [openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -212,15 +212,15 @@ class CLIPVisionConfig(PretrainedConfig):
 
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
-class CLIPConfig(PretrainedConfig):
+class CLIPConfig(PreTrainedConfig):
     r"""
     [`CLIPConfig`] is the configuration class to store the configuration of a [`CLIPModel`]. It is used to instantiate
     a CLIP model according to the specified arguments, defining the text model and vision model configs. Instantiating
     a configuration with the defaults will yield a similar configuration to that of the CLIP
     [openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`dict`, *optional*):
@@ -255,7 +255,7 @@ class CLIPConfig(PretrainedConfig):
     >>> config_text = CLIPTextConfig()
     >>> config_vision = CLIPVisionConfig()
 
-    >>> config = CLIPConfig.from_text_vision_configs(config_text, config_vision)
+    >>> config = CLIPConfig(text_config=config_text, vision_config=config_vision)
     ```"""
 
     model_type = "clip"
@@ -297,7 +297,7 @@ class CLIPConfig(PretrainedConfig):
 
             # Give a warning if the values exist in both `_text_config_dict` and `text_config` but being different.
             for key, value in _text_config_dict.items():
-                if key in text_config and value != text_config[key] and key not in ["transformers_version"]:
+                if key in text_config and value != text_config[key] and key != "transformers_version":
                     # If specified in `text_config_dict`
                     if key in text_config_dict:
                         message = (
@@ -326,7 +326,7 @@ class CLIPConfig(PretrainedConfig):
 
             # Give a warning if the values exist in both `_vision_config_dict` and `vision_config` but being different.
             for key, value in _vision_config_dict.items():
-                if key in vision_config and value != vision_config[key] and key not in ["transformers_version"]:
+                if key in vision_config and value != vision_config[key] and key != "transformers_version":
                     # If specified in `vision_config_dict`
                     if key in vision_config_dict:
                         message = (

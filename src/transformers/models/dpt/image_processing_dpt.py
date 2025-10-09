@@ -44,6 +44,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import (
     TensorType,
     filter_out_non_signature_kwargs,
@@ -61,6 +62,26 @@ if is_vision_available():
 
 
 logger = logging.get_logger(__name__)
+
+
+class DPTImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    ensure_multiple_of (`int`, *optional*, defaults to 1):
+        If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overridden
+        by `ensure_multiple_of` in `preprocess`.
+    keep_aspect_ratio (`bool`, *optional*, defaults to `False`):
+        If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved. Can
+        be overridden by `keep_aspect_ratio` in `preprocess`.
+    do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
+        Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
+        is used for background, and background itself is not included in all classes of a dataset (e.g.
+        ADE20k). The background label will be replaced by 255.
+    """
+
+    ensure_multiple_of: int
+    size_divisor: int
+    keep_aspect_ratio: bool
+    do_reduce_labels: bool
 
 
 def get_resize_output_image_size(
@@ -151,6 +172,7 @@ class DPTImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
+    valid_kwargs = DPTImageProcessorKwargs
 
     def __init__(
         self,

@@ -4,7 +4,8 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_gpt_neox.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -27,7 +28,6 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
 from .configuration_gpt_neox import GPTNeoXConfig
 
@@ -313,7 +313,6 @@ class GPTNeoXDecoderLayer(GradientCheckpointingLayer):
         self.input_layernorm = GPTNeoXRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = GPTNeoXRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -384,7 +383,7 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
@@ -518,7 +517,7 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
         attention_mask: Optional[torch.FloatTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Union[Cache, tuple[tuple[torch.FloatTensor]]]] = None,
+        past_key_values: Optional[Cache] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -613,7 +612,7 @@ class GPTNeoXForSequenceClassification(GPTNeoXPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Union[Cache, tuple[tuple[torch.FloatTensor]]]] = None,
+        past_key_values: Optional[Cache] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -688,7 +687,7 @@ class GPTNeoXForTokenClassification(GPTNeoXPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, tuple[tuple[torch.Tensor]]]] = None,
+        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
