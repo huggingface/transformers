@@ -149,7 +149,7 @@ class InstructBlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (InstructBlipVisionModel,) if is_torch_available() else ()
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
 
     def setUp(self):
@@ -422,7 +422,7 @@ class InstructBlipForConditionalGenerationDecoderOnlyModelTester:
         return config, input_ids, attention_mask, qformer_input_ids, qformer_attention_mask, pixel_values
 
     def get_config(self):
-        return InstructBlipConfig.from_vision_qformer_text_configs(
+        return InstructBlipConfig(
             vision_config=self.vision_model_tester.get_config(),
             qformer_config=self.qformer_model_tester.get_config(),
             text_config=self.text_model_tester.get_config(),
@@ -475,7 +475,7 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
     pipeline_model_mapping = {"image-text-to-text": InstructBlipForConditionalGeneration}
     additional_model_inputs = ["qformer_input_ids", "input_ids"]
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = True
     test_attention_outputs = False
     test_torchscript = False

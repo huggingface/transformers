@@ -312,8 +312,23 @@ class ReplaceSuperCallTransformer(cst.CSTTransformer):
                 break
         return new_body
 
-    def _fix_init_location(self, new_body):
-        """Fix the location of the `super().__init__()` in the new body, if we had new statements before it."""
+    def _fix_init_location(self, new_body, original_body):
+        """
+        Fix the location of the `super().__init__()` in the new body, if we had new statements before it.
+        If the original class' `super().__init__()` is not in the beginning, do not fix it and leave where it is.
+        In some cases we do not want to call super() at the very beginning.
+        """
+        start_index = 0
+        for i, node in enumerate(original_body):
+            if m.matches(node, DOCSTRING_NODE) and i == start_index:
+                start_index += 1
+                continue
+            code = self.python_module.code_for_node(node)
+            comment_less_code = re.sub(r"#.*", "", code).strip()
+            comment_less_code = re.sub(r"\ *\n", "\n", comment_less_code).strip()
+            if "super().__init__" in comment_less_code and i > start_index:
+                return new_body
+
         start_index = 0
         for i, node in enumerate(new_body):
             if m.matches(node, DOCSTRING_NODE) and i == start_index:
@@ -344,7 +359,7 @@ class ReplaceSuperCallTransformer(cst.CSTTransformer):
                 if self.is_call_to_super(base_statement_node, func_name):
                     original_modeling_method_body = self.original_modeling_methods[func_name].body.body
                     new_body.extend(self.update_body(original_modeling_method_body, actual_body[i + 1 :]))
-                    new_body = self._fix_init_location(new_body)
+                    new_body = self._fix_init_location(new_body, original_modeling_method_body)
                     # Break here as all future statement were already accounted for in `update_body`
                     break
                 # If not a call to super, this will replace all calls of the form `module.Class.func(...)` by a
@@ -1039,6 +1054,7 @@ def replace_class_node(
     # Recreate the whole new class body
     new_class_body = new_class_docstring + new_class_attributes + new_class_methods
 
+    # if renamed_super_class == "Aimv2Config":
     # Replace the calls to `super()` of the redefined modular methods with the unrolled code
     result_node = original_modeling_node.with_changes(body=cst.IndentedBlock(body=new_class_body))
     temp_module = cst.Module(body=[result_node])

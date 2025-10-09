@@ -239,7 +239,7 @@ class DebertaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     fx_compatible = True
     test_torchscript = False
-    test_pruning = False
+
     is_encoder_decoder = False
 
     def setUp(self):

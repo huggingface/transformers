@@ -102,8 +102,6 @@ class XcodecConfig(PreTrainedConfig):
         semantic_model_config: Union[dict, HubertConfig] = None,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         if acoustic_model_config is None:
             self.acoustic_model_config = DacConfig(
                 encoder_hidden_size=64,
@@ -157,6 +155,8 @@ class XcodecConfig(PreTrainedConfig):
         if codebook_dim is None:
             codebook_dim = self.acoustic_model_config.hidden_size + self.semantic_model_config.hidden_size
         self.codebook_dim = codebook_dim
+
+        super().__init__(**kwargs)
 
     @property
     def frame_rate(self) -> int:
