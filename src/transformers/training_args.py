@@ -367,8 +367,6 @@ class TrainingArguments:
             Random seed to be used with data samplers. If not set, random generators for data sampling will use the
             same seed as `seed`. This can be used to ensure reproducibility of data sampling, independent of the model
             seed.
-        jit_mode_eval (`bool`, *optional*, defaults to `False`):
-            Whether or not to use PyTorch jit trace for inference.
         bf16 (`bool`, *optional*, defaults to `False`):
             Whether to use bf16 16-bit (mixed) precision training instead of 32-bit training. Requires Ampere or higher
             NVIDIA architecture or Intel XPU or using CPU (use_cpu) or Ascend NPU.
@@ -964,9 +962,6 @@ class TrainingArguments:
     )
     seed: int = field(default=42, metadata={"help": "Random seed that will be set at the beginning of training."})
     data_seed: Optional[int] = field(default=None, metadata={"help": "Random seed to be used with data samplers."})
-    jit_mode_eval: bool = field(
-        default=False, metadata={"help": "Whether or not to use PyTorch jit trace for inference"}
-    )
     bf16: bool = field(
         default=False,
         metadata={
@@ -2335,7 +2330,6 @@ class TrainingArguments:
         accumulation_steps: Optional[int] = None,
         delay: Optional[float] = None,
         loss_only: bool = False,
-        jit_mode: bool = False,
     ):
         """
         A method that regroups all arguments linked to evaluation.
@@ -2362,8 +2356,6 @@ class TrainingArguments:
                 eval_strategy.
             loss_only (`bool`, *optional*, defaults to `False`):
                 Ignores all outputs except the loss.
-            jit_mode (`bool`, *optional*):
-                Whether or not to use PyTorch jit trace for inference.
 
         Example:
 
@@ -2385,14 +2377,12 @@ class TrainingArguments:
         self.eval_accumulation_steps = accumulation_steps
         self.eval_delay = delay
         self.prediction_loss_only = loss_only
-        self.jit_mode_eval = jit_mode
         return self
 
     def set_testing(
         self,
         batch_size: int = 8,
         loss_only: bool = False,
-        jit_mode: bool = False,
     ):
         """
         A method that regroups all basic arguments linked to testing on a held-out dataset.
@@ -2408,8 +2398,6 @@ class TrainingArguments:
                 The batch size per device (GPU/TPU core/CPU...) used for testing.
             loss_only (`bool`, *optional*, defaults to `False`):
                 Ignores all outputs except the loss.
-            jit_mode (`bool`, *optional*):
-                Whether or not to use PyTorch jit trace for inference.
 
         Example:
 
@@ -2425,7 +2413,6 @@ class TrainingArguments:
         self.do_predict = True
         self.per_device_eval_batch_size = batch_size
         self.prediction_loss_only = loss_only
-        self.jit_mode_eval = jit_mode
         return self
 
     def set_save(
