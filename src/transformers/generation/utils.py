@@ -381,7 +381,6 @@ class GenerationMixin(ContinuousMixin):
         **kwargs,
     ):
         if self.can_generate() and generation_config is not None:
-            logger.info("The user-defined `generation_config` will be used to override the default generation config.")
             self.generation_config = self.generation_config.from_dict(generation_config.to_dict())
         elif self.can_generate() and pretrained_model_name_or_path is not None:
             repo_loading_kwargs = {

@@ -869,9 +869,9 @@ def _get_resolved_checkpoint_files(
     This function will download the data if necessary.
     """
     cache_dir = download_kwargs.get("cache_dir")
-    force_download = bool(download_kwargs.get("force_download", False))
+    force_download = download_kwargs.get("force_download", False)
     proxies = download_kwargs.get("proxies")
-    local_files_only = bool(download_kwargs.get("local_files_only", False))
+    local_files_only = download_kwargs.get("local_files_only", False)
     token = download_kwargs.get("token")
     revision = download_kwargs.get("revision") or "main"
     subfolder = download_kwargs.get("subfolder", "")
