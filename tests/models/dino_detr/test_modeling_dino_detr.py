@@ -17,6 +17,7 @@
 import inspect
 import math
 import unittest
+from functools import cached_property
 from typing import Dict, List, Tuple
 
 import numpy as np
@@ -27,7 +28,6 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.file_utils import cached_property
 from transformers.models.dino_detr.image_processing_dino_detr import (
     DinoDetrImageProcessor,
 )
