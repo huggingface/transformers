@@ -4665,7 +4665,7 @@ class GenerationIntegrationTests(unittest.TestCase):
             value=1,
         )
         inputs_2b["past_key_values"] = outputs_1b.past_key_values
-        cache_length_1b = outputs_1b.past_key_values[0][0].shape[-2]
+        cache_length_1b = outputs_1b.past_key_values.get_seq_length()
         inputs_2b["cache_position"] = torch.arange(
             cache_length_1b,
             cache_length_1b + inputs_2b["input_ids"].shape[1],
