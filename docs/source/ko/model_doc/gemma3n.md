@@ -106,7 +106,7 @@ print(processor.decode(output[0], skip_special_tokens=True))
 <hfoption id="transformers CLI">
 
 ```bash
-echo -e "식물은 특정 과정을 통해 애너지를 생성합니다." | transformers run --task text-generation --model google/gemma-3n-e2b --device 0
+echo -e "식물은 특정 과정을 통해 에너지를 생성합니다." | transformers run --task text-generation --model google/gemma-3n-e2b --device 0
 ```
 
 </hfoption>
@@ -115,7 +115,7 @@ echo -e "식물은 특정 과정을 통해 애너지를 생성합니다." | tran
 ## 참고사항[[notes]]
 
 -   [`Gemma3nForConditionalGeneration`] 클래스를 사용하면 이미지-오디오-텍스트, 이미지-텍스트, 이미지-오디오, 오디오-텍스트, 이미지 단독, 오디오 단독 입력을 모두 처리할 수 있습니다.
--   Gemma 3n은 한 번의 입력에 여러 이미지를 지원합니다. 다만 프로세서에 전달하기 전에 이미지가 올바르게 배치되어 있는지 확인해야 합니다. 각 배치는 하나 이상의 이미지를 담은 리스트여야 합니다.
+-   Gemma 3n은 한 번의 입력에 여러 이미지를 지원합니다. 다만 프로세서에 전달하기 전에 이미지들이 배치 단위로 올바르게 묶여있는지 확인해야 합니다. 각 배치는 하나 이상의 이미지를 담은 리스트 형식입니다.
 
     ```py
     url_cow = "https://media.istockphoto.com/id/1192867753/photo/cow-in-berchida-beach-siniscola.jpg?s=612x612&w=0&k=20&c=v0hjjniwsMNfJSuKWZuIn8pssmD5h5bSN1peBd1CmH4="
