@@ -1911,10 +1911,6 @@ class TrainingArguments:
         if isinstance(self.include_num_input_tokens_seen, bool):
             self.include_num_input_tokens_seen = "all" if self.include_num_input_tokens_seen else "no"
 
-        if self.ray_scope is not None:
-            logger.warning("ray_scope is deprecated and will be removed in v5.2. Set env var `RAY_SCOPE` instead")
-            os.environ["RAY_SCOPE"] = self.ray_scope
-
     def __str__(self):
         self_as_dict = asdict(self)
 
