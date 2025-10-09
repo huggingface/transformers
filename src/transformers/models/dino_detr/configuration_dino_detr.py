@@ -183,7 +183,7 @@ class DinoDetrConfig(PretrainedConfig):
         rm_self_attn_layers=None,
         dec_detach=None,
         init_std=0.02,
-        backbone="resnet50",  # From here and down things are pretty clear
+        backbone="resnet50",
         num_feature_levels=4,
         num_heads=8,
         decoder_n_points=4,
@@ -247,8 +247,6 @@ class DinoDetrConfig(PretrainedConfig):
         pe_temperatureW=20,
         **kwargs,
     ):
-        # We default to values which were previously hard-coded in the model. This enables configurability of the config
-        # while keeping the default behavior the same.
         if use_timm_backbone:
             if backbone_kwargs is None:
                 backbone_kwargs = {}
@@ -260,7 +258,6 @@ class DinoDetrConfig(PretrainedConfig):
                 )
             backbone_kwargs["in_chans"] = num_channels
 
-        # Backwards compatibility
         elif not use_timm_backbone and backbone in (None, "resnet50"):
             if backbone_config is None:
                 logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
@@ -280,57 +277,6 @@ class DinoDetrConfig(PretrainedConfig):
             backbone_config=backbone_config,
             backbone_kwargs=backbone_kwargs,
         )
-
-        # Verify arguments
-        assert sorted(module_seq) == ["ca", "ffn", "sa"]
-        assert decoder_sa_type in ["sa", "ca_label", "ca_content"]
-        if enc_layer_dropout_prob is not None:
-            assert isinstance(enc_layer_dropout_prob, list)
-            assert len(enc_layer_dropout_prob) == num_encoder_layers
-            for i in enc_layer_dropout_prob:
-                assert 0.0 <= i <= 1.0
-        if dec_layer_number is not None:
-            assert isinstance(dec_layer_number, list)
-            assert len(dec_layer_number) == num_decoder_layers
-        if dec_layer_dropout_prob is not None:
-            assert isinstance(dec_layer_dropout_prob, list)
-            assert len(dec_layer_dropout_prob) == num_decoder_layers
-            for i in dec_layer_dropout_prob:
-                assert 0.0 <= i <= 1.0
-
-        assert decoder_sa_type in ["sa", "ca_label", "ca_content"]
-        assert two_stage_type in [
-            "no",
-            "standard",
-        ], f"Unknown param {two_stage_type} of two_stage_type"
-        if dec_layer_number is not None:
-            if two_stage_type != "no" or num_patterns == 0:
-                assert dec_layer_number[0] == num_queries, (
-                    f"dec_layer_number[0]({dec_layer_number[0]}) != num_queries({num_queries})"
-                )
-            else:
-                assert dec_layer_number[0] == num_queries * num_patterns, (
-                    f"dec_layer_number[0]({dec_layer_number[0]}) != num_queries({num_queries}) * num_patterns({num_patterns})"
-                )
-        if dec_detach:
-            assert isinstance(dec_detach, list)
-            assert any(i in ["enc_ref", "enc_tgt", "dec"] for i in dec_detach)
-
-        if num_feature_levels <= 1:
-            assert two_stage_type == "no", "two_stage_type should be no if num_feature_levels=1"
-        assert two_stage_type in [
-            "no",
-            "standard",
-        ], f"unknown param {two_stage_type} of two_stage_type"
-        if two_stage_type != "no":
-            if two_stage_bbox_embed_share:
-                assert dec_pred_class_embed_share and dec_pred_bbox_embed_share
-            if two_stage_class_embed_share:
-                assert dec_pred_class_embed_share and dec_pred_bbox_embed_share
-        assert decoder_sa_type in ["sa", "ca_label", "ca_content"]
-        assert query_dim in [2, 4], f"Query_dim should be 2/4 but {query_dim}"
-        if use_timm_backbone and backbone_kwargs is not None:
-            assert backbone_kwargs["in_chans"] == num_channels
 
         self.d_model = d_model
         self.num_feature_levels = num_feature_levels
@@ -426,11 +372,11 @@ class DinoDetrConfig(PretrainedConfig):
 
         self.use_dn = use_dn
         self.use_masks = use_masks
-        # Hungarian matcher
+
         self.class_cost = class_cost
         self.bbox_cost = bbox_cost
         self.giou_cost = giou_cost
-        # Loss coefficients
+
         self.mask_loss_coefficient = mask_loss_coefficient
         self.dice_loss_coefficient = dice_loss_coefficient
         self.cls_loss_coefficient = cls_loss_coefficient
