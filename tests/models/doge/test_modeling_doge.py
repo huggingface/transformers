@@ -274,8 +274,7 @@ class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         else {}
     )
     has_attentions = False
-    test_headmasking = False
-    test_pruning = False
+
     test_torchscript = False
     fx_compatible = False
 

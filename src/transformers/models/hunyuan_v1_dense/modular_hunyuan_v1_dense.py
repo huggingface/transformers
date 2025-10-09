@@ -14,10 +14,10 @@
 # limitations under the License.
 """PyTorch HunYuanDenseV1 model."""
 
-from typing import Callable, Optional
+from collections.abc import Callable
+from typing import Optional
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from transformers.cache_utils import Cache

@@ -13,8 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections.abc import Callable
 from functools import partial
-from typing import Any, Callable, TypeVar, Union, overload
+from typing import Any, TypeVar, Union, overload
 
 import torch
 import torch.nn as nn
@@ -93,7 +94,6 @@ def batched_gather(data: torch.Tensor, inds: torch.Tensor, dim: int = 0, no_batc
 T = TypeVar("T")
 
 
-# With tree_map, a poor man's JAX tree_map
 def dict_map(
     fn: Callable[[T], Any], dic: dict[Any, Union[dict, list, tuple, T]], leaf_type: type[T]
 ) -> dict[Any, Union[dict, list, tuple, Any]]:

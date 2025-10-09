@@ -132,8 +132,7 @@ class Emu3Text2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
-    test_pruning = False
+
     fx_compatible = False
 
     def setUp(self):
@@ -321,8 +320,7 @@ class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
         else ()
     )
     pipeline_model_mapping = {}
-    test_headmasking = False
-    test_pruning = False
+
     fx_compatible = False
 
     def setUp(self):
@@ -350,18 +348,10 @@ class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
     def test_cpu_offload(self):
         pass
 
-    @unittest.skip("VQ-VAE module doesn't initialize weights properly")
-    def test_initialization(self):
-        pass
-
     @pytest.mark.generate
     @unittest.skip("Emu3 has dynamic control flow in vision backbone")
     def test_generate_with_static_cache(self):
         pass
-
-    # @unittest.skip("Emu3 can't be smaller than currently if we want to downsample images")
-    # def test_model_is_small(self):
-    #     pass
 
 
 @require_torch

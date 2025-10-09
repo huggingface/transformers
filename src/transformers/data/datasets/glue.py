@@ -69,10 +69,6 @@ class Split(Enum):
 
 
 class GlueDataset(Dataset):
-    """
-    This will be superseded by a framework-agnostic approach soon.
-    """
-
     args: GlueDataTrainingArguments
     output_mode: str
     features: list[InputFeatures]

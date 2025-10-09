@@ -20,7 +20,6 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_openai import *
     from .modeling_openai import *
-    from .modeling_tf_openai import *
     from .tokenization_openai import *
     from .tokenization_openai_fast import *
 else:
