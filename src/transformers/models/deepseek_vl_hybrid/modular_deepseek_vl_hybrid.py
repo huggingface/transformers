@@ -86,8 +86,8 @@ class DeepseekVLHybridConfig(DeepseekVLConfig):
     with the defaults will yield a similar configuration to that of the DeepseekVLHybrid
     [deepseek-community/deepseek-vl-7b-chat](https://huggingface.co/deepseek-community/deepseek-vl-7b-chat) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `LlamaConfig`):
@@ -429,7 +429,7 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneratio
         return model_inputs
 
 
-class DeepseekVLHybridImageProcessorKwargs(ImagesKwargs):
+class DeepseekVLHybridImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     min_size (`int`, *optional*, defaults to 14):
         The minimum allowed size for the resized image. Ensures that neither the height nor width
@@ -450,9 +450,9 @@ class DeepseekVLHybridImageProcessorKwargs(ImagesKwargs):
 
     min_size: int
     high_res_size: dict
-    high_res_resample: "PILImageResampling"
-    high_res_image_mean: list[float]
-    high_res_image_std: list[float]
+    high_res_resample: Union["PILImageResampling", int]
+    high_res_image_mean: Union[float, list[float], tuple[float, ...]]
+    high_res_image_std: Union[float, list[float], tuple[float, ...]]
 
 
 class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
@@ -764,7 +764,7 @@ class DeepseekVLHybridImageProcessorFast(DeepseekVLImageProcessorFast):
         if kwargs.get("image_mean") is None:
             background_color = (127, 127, 127)
         else:
-            background_color = tuple([int(x * 255) for x in kwargs.get("image_mean")])
+            background_color = tuple(int(x * 255) for x in kwargs.get("image_mean"))
         if kwargs.get("high_res_image_mean") is None:
             high_res_background_color = (127, 127, 127)
         else:

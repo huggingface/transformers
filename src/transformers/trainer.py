@@ -56,7 +56,7 @@ from torch import nn
 from torch.utils.data import DataLoader, Dataset, IterableDataset, RandomSampler, SequentialSampler
 
 from . import __version__
-from .configuration_utils import PretrainedConfig
+from .configuration_utils import PreTrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugOption, DebugUnderflowOverflow
 from .feature_extraction_sequence_utils import SequenceFeatureExtractor
@@ -162,13 +162,11 @@ from .utils import (
     is_schedulefree_available,
     is_torch_hpu_available,
     is_torch_mlu_available,
-    is_torch_mps_available,
     is_torch_musa_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_optimi_available,
     is_torch_xla_available,
-    is_torch_xpu_available,
     is_torchao_available,
     logging,
     strtobool,
@@ -215,26 +213,19 @@ if is_accelerate_available():
     from accelerate.state import AcceleratorState
     from accelerate.utils import (
         AutocastKwargs,
+        DataLoaderConfiguration,
         DistributedDataParallelKwargs,
         DistributedType,
         load_fsdp_model,
         load_fsdp_optimizer,
+        release_memory,
         save_fsdp_model,
         save_fsdp_optimizer,
     )
-
-    DATA_SAMPLERS = [RandomSampler]
-    if version.parse(accelerate_version) > version.parse("1.3.0"):
-        from accelerate.utils import TorchTensorParallelPlugin
-    from accelerate.data_loader import SeedableRandomSampler
-
-    DATA_SAMPLERS += [SeedableRandomSampler]
+    from accelerate.utils.memory import clear_device_cache
 
     if is_deepspeed_available():
         from accelerate.utils import DeepSpeedSchedulerWrapper
-
-if is_accelerate_available("0.28.0"):
-    from accelerate.utils import DataLoaderConfiguration
 
 
 def _is_peft_model(model):
@@ -250,8 +241,7 @@ def _is_peft_model(model):
 
 
 def _get_fsdp_ckpt_kwargs():
-    # TODO: @AjayP13, @younesbelkada replace this check with version check at the next `accelerate` release
-    if is_accelerate_available() and "adapter_only" in list(inspect.signature(save_fsdp_model).parameters):
+    if "adapter_only" in list(inspect.signature(save_fsdp_model).parameters):
         return {"adapter_only": True}
     else:
         return {}
@@ -1464,70 +1454,57 @@ class Trainer:
             OptimizerNames.RMSPROP_8BIT,
             OptimizerNames.RMSPROP_32BIT,
         ]:
-            try:
-                from bitsandbytes.optim import AdamW, Lion, RMSprop
-
-                is_paged = False
-                optim_bits = 32
-                optimizer_cls = None
-                additional_optim_kwargs = adam_kwargs
-                if "paged" in args.optim:
-                    is_paged = True
-                if "8bit" in args.optim:
-                    optim_bits = 8
-                if "adam" in args.optim:
-                    optimizer_cls = AdamW
-                elif "lion" in args.optim:
-                    optimizer_cls = Lion
-                    additional_optim_kwargs = {"betas": (args.adam_beta1, args.adam_beta2)}
-                elif "rmsprop" in args.optim:
-                    optimizer_cls = RMSprop
-                    # Above we pass all `adam_kwargs` to the optimizer, here
-                    # we only pass `optim_args` which can be passed by the user.
-                    additional_optim_kwargs = optim_args
-                elif "ademamix" in args.optim:
-                    if is_bitsandbytes_available() and version.parse(
-                        importlib.metadata.version("bitsandbytes")
-                    ) < version.parse("0.44.0"):
-                        raise ValueError(
-                            "The AdEMAMix optimizer is not supported by your current version of `bitsandbytes`. "
-                            "Please install `bitsandbytes` >= 0.44.0."
-                        )
-
-                    from bitsandbytes.optim import AdEMAMix
-
-                    optimizer_cls = AdEMAMix
-                    additional_optim_kwargs = {
-                        "betas": (
-                            float(optim_args.get("beta1", args.adam_beta1)),
-                            float(optim_args.get("beta2", args.adam_beta2)),
-                            float(optim_args.get("beta3", 0.9999)),
-                        ),
-                        "alpha": float(optim_args.get("alpha", 5.0)),
-                        "eps": float(optim_args.get("eps", args.adam_epsilon)),
-                    }
-
-                    if "t_alpha" in optim_args:
-                        additional_optim_kwargs["t_alpha"] = int(optim_args["t_alpha"])
-
-                    if "t_beta3" in optim_args:
-                        additional_optim_kwargs["t_beta3"] = int(optim_args["t_beta3"])
-
-                bnb_kwargs = {"optim_bits": optim_bits}
-                if "rmsprop" not in args.optim:
-                    bnb_kwargs["is_paged"] = is_paged
-
-                optimizer_kwargs.update(additional_optim_kwargs)
-                optimizer_kwargs.update(bnb_kwargs)
-            except ImportError:
-                raise ValueError("Trainer tried to instantiate bnb optimizer but `bitsandbytes` is not installed!")
-            if is_bitsandbytes_available() and version.parse(
-                importlib.metadata.version("bitsandbytes")
-            ) < version.parse("0.41.1"):
-                logger.warning(
-                    "You are using 8-bit optimizers with a version of `bitsandbytes` < 0.41.1. "
-                    "It is recommended to update your version as a major bug has been fixed in 8-bit optimizers."
+            if not is_bitsandbytes_available():
+                raise ImportError(
+                    "You need to install `bitsandbytes` in order to use bitsandbytes optimizers: `pip install -U bitsandbytes`"
                 )
+
+            from bitsandbytes.optim import AdamW, Lion, RMSprop
+
+            is_paged = False
+            optim_bits = 32
+            optimizer_cls = None
+            additional_optim_kwargs = adam_kwargs
+            if "paged" in args.optim:
+                is_paged = True
+            if "8bit" in args.optim:
+                optim_bits = 8
+            if "adam" in args.optim:
+                optimizer_cls = AdamW
+            elif "lion" in args.optim:
+                optimizer_cls = Lion
+                additional_optim_kwargs = {"betas": (args.adam_beta1, args.adam_beta2)}
+            elif "rmsprop" in args.optim:
+                optimizer_cls = RMSprop
+                # Above we pass all `adam_kwargs` to the optimizer, here
+                # we only pass `optim_args` which can be passed by the user.
+                additional_optim_kwargs = optim_args
+            elif "ademamix" in args.optim:
+                from bitsandbytes.optim import AdEMAMix
+
+                optimizer_cls = AdEMAMix
+                additional_optim_kwargs = {
+                    "betas": (
+                        float(optim_args.get("beta1", args.adam_beta1)),
+                        float(optim_args.get("beta2", args.adam_beta2)),
+                        float(optim_args.get("beta3", 0.9999)),
+                    ),
+                    "alpha": float(optim_args.get("alpha", 5.0)),
+                    "eps": float(optim_args.get("eps", args.adam_epsilon)),
+                }
+
+                if "t_alpha" in optim_args:
+                    additional_optim_kwargs["t_alpha"] = int(optim_args["t_alpha"])
+
+                if "t_beta3" in optim_args:
+                    additional_optim_kwargs["t_beta3"] = int(optim_args["t_beta3"])
+
+            bnb_kwargs = {"optim_bits": optim_bits}
+            if "rmsprop" not in args.optim:
+                bnb_kwargs["is_paged"] = is_paged
+
+            optimizer_kwargs.update(additional_optim_kwargs)
+            optimizer_kwargs.update(bnb_kwargs)
         elif args.optim == OptimizerNames.ADAMW_ANYPRECISION:
             try:
                 from torchdistx.optimizers import AnyPrecisionAdamW
@@ -1625,8 +1602,6 @@ class Trainer:
                     "You need to install `lomo_optim` in order to use LOMO optimizers"
                     " install it with `pip install lomo-optim`"
                 )
-            if not is_accelerate_available("0.30.0"):
-                raise ImportError("You need to have `accelerate>=0.30.0` to be able to use LOMO optimizers")
 
             if model is None:
                 raise ValueError("You need to pass a `model` in order to correctly initialize a LOMO optimizer.")
@@ -1693,8 +1668,6 @@ class Trainer:
                     "You need to install `schedulefree` in order to use schedulefree optimizers. "
                     "Install it with `pip install schedulefree.`"
                 )
-            if not is_accelerate_available("0.30.0"):
-                raise ImportError("You need to have `accelerate>=0.30.0` to be able to use schedulefree optimizers")
             from schedulefree import AdamWScheduleFree, SGDScheduleFree
 
             additional_optim_kwargs = {}
@@ -2256,9 +2229,7 @@ class Trainer:
         self._train_batch_size = batch_size
         if self.args.auto_find_batch_size:
             if self.state.train_batch_size != self._train_batch_size:
-                from accelerate.utils import release_memory
-
-                (self.model_wrapped,) = release_memory(self.model_wrapped)
+                release_memory(self.model_wrapped)
                 self.model_wrapped = self.model
 
                 # Check for DeepSpeed *after* the initial pass and modify the config
@@ -2596,10 +2567,7 @@ class Trainer:
                                         args.max_grad_norm,
                                     )
 
-                            if (
-                                is_accelerate_available()
-                                and self.accelerator.distributed_type == DistributedType.DEEPSPEED
-                            ):
+                            if self.accelerator.distributed_type == DistributedType.DEEPSPEED:
                                 grad_norm = model.get_global_grad_norm()
                                 # In some cases the grad norm may not return a float
                                 if hasattr(grad_norm, "item"):
@@ -2812,7 +2780,7 @@ class Trainer:
         logger.info(f"Loading model from {resume_from_checkpoint}.")
 
         if os.path.isfile(config_file):
-            config = PretrainedConfig.from_json_file(config_file)
+            config = PreTrainedConfig.from_json_file(config_file)
             checkpoint_version = config.transformers_version
             if checkpoint_version is not None and checkpoint_version != __version__:
                 logger.warning(
@@ -3858,22 +3826,7 @@ class Trainer:
                 self.args.torch_empty_cache_steps is not None
                 and self.state.global_step % self.args.torch_empty_cache_steps == 0
             ):
-                if is_torch_xpu_available():
-                    torch.xpu.empty_cache()
-                elif is_torch_mlu_available():
-                    torch.mlu.empty_cache()
-                elif is_torch_musa_available():
-                    torch.musa.empty_cache()
-                elif is_torch_npu_available():
-                    torch.npu.empty_cache()
-                elif is_torch_mps_available():
-                    torch.mps.empty_cache()
-                elif is_torch_hpu_available():
-                    logger.warning(
-                        "`torch_empty_cache_steps` is set but HPU device/backend does not support empty_cache()."
-                    )
-                else:
-                    torch.cuda.empty_cache()
+                clear_device_cache()
 
             kwargs = {}
 
@@ -5058,7 +5011,7 @@ class Trainer:
     def create_accelerator_and_postprocess(self):
         # We explicitly don't rely on the `Accelerator` to do gradient accumulation
         grad_acc_kwargs = {}
-        if is_accelerate_available("0.28.0") and self.args.accelerator_config.gradient_accumulation_kwargs is not None:
+        if self.args.accelerator_config.gradient_accumulation_kwargs is not None:
             grad_acc_kwargs = self.args.accelerator_config.gradient_accumulation_kwargs
 
         # check if num_steps is attempted to be passed in gradient_accumulation_kwargs
@@ -5074,33 +5027,24 @@ class Trainer:
 
         accelerator_config = self.args.accelerator_config.to_dict()
 
-        if is_accelerate_available("0.28.0"):
-            # Extract dataloader config params from accelerator config
-            dataloader_params = ["split_batches", "dispatch_batches", "even_batches", "use_seedable_sampler"]
-            dataloader_config = DataLoaderConfiguration(
-                **{param: accelerator_config.pop(param) for param in dataloader_params}
-            )
-            if is_accelerate_available("1.1.0"):
-                dataloader_config.data_seed = self.args.data_seed
+        # Extract dataloader config params from accelerator config
+        dataloader_params = ["split_batches", "dispatch_batches", "even_batches", "use_seedable_sampler"]
+        dataloader_config = DataLoaderConfiguration(
+            **{param: accelerator_config.pop(param) for param in dataloader_params}
+        )
+        dataloader_config.data_seed = self.args.data_seed
 
         non_blocking = accelerator_config.pop("non_blocking")
-        if not is_accelerate_available("0.30.0"):
-            if non_blocking:
-                raise ImportError(
-                    "`non_blocking` is only supported in accelerate v0.30.0 and above. Please upgrade accelerate to use this feature."
-                )
-        else:
-            if non_blocking and not self.args.dataloader_pin_memory:
-                logger.warning(
-                    "`non_blocking` is enabled but `dataloader_pin_memory` is not. For the best performance, it's recommended to enable both."
-                )
-            dataloader_config.non_blocking = non_blocking
+
+        if non_blocking and not self.args.dataloader_pin_memory:
+            logger.warning(
+                "`non_blocking` is enabled but `dataloader_pin_memory` is not. For the best performance, it's recommended to enable both."
+            )
+        dataloader_config.non_blocking = non_blocking
         # this would have been updated above, no need for it anymore
         accelerator_config.pop("gradient_accumulation_kwargs")
 
-        args = {
-            "deepspeed_plugin": self.args.deepspeed_plugin,
-        }
+        args = {"deepspeed_plugin": self.args.deepspeed_plugin, "dataloader_config": dataloader_config}
 
         # We defer compatibility checks to accelerator
         if self.args.parallelism_config is not None:
@@ -5108,21 +5052,19 @@ class Trainer:
                 raise ImportError(
                     "ParallelismConfig requires accelerate v1.10.1 and above. Please upgrade accelerate to use this feature."
                 )
-
             args["parallelism_config"] = self.args.parallelism_config
 
-        if is_accelerate_available("0.28.0"):
-            args["dataloader_config"] = dataloader_config
-        else:
-            args.update(accelerator_config)
-        # tp is initialized at Accelerator init phase so
-        # args should be prepared here
-        if hasattr(self.model, "tp_size") and self.model.tp_size is not None and self.model.tp_size > 1:
+        self.is_tp_enabled = False
+        if getattr(self.model, "tp_size", None) is not None and self.model.tp_size > 1:
             self.is_tp_enabled = True
-            if version.parse(accelerate_version) > version.parse("1.3.0"):
-                args["torch_tp_plugin"] = TorchTensorParallelPlugin(tp_size=self.model.tp_size)
-            else:
-                raise ValueError("Requires accelerate>1.3.0 to use Tensor Parallelism.")
+            if self.args.parallelism_config is not None:
+                if version.parse(accelerate_version) > version.parse("1.10.1"):
+                    if self.args.parallelism_config is not None:
+                        from accelerate import ParallelismConfig
+
+                        args["parallelism_config"] = ParallelismConfig(tp_size=self.model.tp_size)
+                else:
+                    raise ValueError("Requires accelerate>1.10.1 to use Tensor Parallelism.")
 
         # create accelerator object
         self.accelerator = Accelerator(**args)
@@ -5137,7 +5079,7 @@ class Trainer:
         # deepspeed and accelerate flags covering both trainer args and accelerate launcher
         self.is_deepspeed_enabled = getattr(self.accelerator.state, "deepspeed_plugin", None) is not None
         self.is_fsdp_enabled = getattr(self.accelerator.state, "fsdp_plugin", None) is not None
-        self.is_tp_enabled = getattr(self.accelerator.state, "torch_tp_plugin", None) is not None
+
         # post accelerator creation setup
         if self.is_fsdp_enabled:
             fsdp_plugin = self.accelerator.state.fsdp_plugin
@@ -5200,13 +5142,12 @@ class Trainer:
             if (
                 getattr(self.model, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES
                 and self.model.hf_quantizer.quantization_config.bnb_4bit_quant_storage.is_floating_point
-                and version.parse(accelerate_version) > version.parse("0.27.0")
             ):
                 self.accelerator.state.fsdp_plugin.set_mixed_precision(
                     self.model.hf_quantizer.quantization_config.bnb_4bit_quant_storage, override=True
                 )
 
-    def _get_num_items_in_batch(self, batch_samples: list, device: torch.device) -> int | None:
+    def _get_num_items_in_batch(self, batch_samples: list, device: torch.device) -> Optional[Union[torch.Tensor, int]]:
         """
         Counts the number of items in the batches to properly scale the loss.
         Args:

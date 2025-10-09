@@ -161,7 +161,7 @@ class ClvpEncoderTester:
 @require_torch
 class ClvpEncoderTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (ClvpEncoder,) if is_torch_available() else ()
-    test_pruning = False
+
     test_torchscript = False
 
     def setUp(self):
@@ -279,8 +279,6 @@ class ClvpDecoderTester:
 class ClvpDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (ClvpModel, ClvpForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": ClvpModelForConditionalGeneration} if is_torch_available() else {}
-
-    test_pruning = False
 
     def setUp(self):
         self.model_tester = ClvpDecoderTester(self)
@@ -410,7 +408,6 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
     # Doesn't run generation tests. There are interface mismatches when using `generate` -- TODO @gante
     all_generative_model_classes = ()
 
-    test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
     test_torchscript = False

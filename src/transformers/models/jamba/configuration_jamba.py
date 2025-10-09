@@ -16,14 +16,14 @@
 
 import math
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class JambaConfig(PretrainedConfig):
+class JambaConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`JambaModel`]. It is used to instantiate a
     Jamba model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -31,8 +31,8 @@ class JambaConfig(PretrainedConfig):
 
     [ai21labs/Jamba-v0.1](https://huggingface.co/ai21labs/Jamba-v0.1)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:

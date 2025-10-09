@@ -14,7 +14,7 @@
 # limitations under the License.
 """Musicgen Melody model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 
@@ -22,15 +22,15 @@ from ..auto.configuration_auto import AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class MusicgenMelodyDecoderConfig(PretrainedConfig):
+class MusicgenMelodyDecoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`MusicgenMelodyDecoder`]. It is used to instantiate a
     Musicgen Melody decoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Musicgen Melody
     [facebook/musicgen-melody](https://huggingface.co/facebook/musicgen-melody) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -134,15 +134,15 @@ class MusicgenMelodyDecoderConfig(PretrainedConfig):
         )
 
 
-class MusicgenMelodyConfig(PretrainedConfig):
+class MusicgenMelodyConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MusicgenMelodyModel`]. It is used to instantiate a
     Musicgen Melody model according to the specified arguments, defining the text encoder, audio encoder and Musicgen Melody decoder
     configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the Musicgen Melody
     [facebook/musicgen-melody](https://huggingface.co/facebook/musicgen-melody) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_encoder (`Union[dict, `PretrainedConfig`]`):

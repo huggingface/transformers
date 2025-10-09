@@ -172,7 +172,7 @@ class QuantizationConfigMixin:
 
         Args:
             use_diff (`bool`, *optional*, defaults to `True`):
-                If set to `True`, only the difference between the config instance and the default `PretrainedConfig()`
+                If set to `True`, only the difference between the config instance and the default `PreTrainedConfig()`
                 is serialized to JSON string.
 
         Returns:
@@ -564,13 +564,6 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
 
         if not isinstance(self.bnb_4bit_use_double_quant, bool):
             raise TypeError("bnb_4bit_use_double_quant must be a boolean")
-
-        if self.load_in_4bit and not version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse(
-            "0.39.0"
-        ):
-            raise ValueError(
-                "4 bit quantization requires bitsandbytes>=0.39.0 - please upgrade your bitsandbytes version"
-            )
 
     def is_quantizable(self):
         r"""

@@ -1520,10 +1520,10 @@ def check_dependencies_and_create_import_node(
     ```
     from ..llama.modeling_llama import LlamaModel
 
-    class NewNameTextConfig(PretrainedConfig):
+    class NewNameTextConfig(PreTrainedConfig):
         ...
 
-    class NewNameConfig(PretrainedConfig):
+    class NewNameConfig(PreTrainedConfig):
         ...
 
     class NewNameModel(LlamaModel):

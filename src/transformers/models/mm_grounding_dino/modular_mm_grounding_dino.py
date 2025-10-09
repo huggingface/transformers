@@ -17,10 +17,10 @@ import math
 import torch
 from torch import nn
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 from ..auto.modeling_auto import AutoModel
 from ..grounding_dino.modeling_grounding_dino import (
     GroundingDinoContrastiveEmbedding,
@@ -39,18 +39,18 @@ from ..grounding_dino.modeling_grounding_dino import (
 logger = logging.get_logger(__name__)
 
 
-class MMGroundingDinoConfig(PretrainedConfig):
+class MMGroundingDinoConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MMGroundingDinoModel`]. It is used to instantiate a
     MM Grounding DINO model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the MM Grounding DINO tiny architecture
     [openmmlab-community/mm_grounding_dino_tiny_o365v1_goldg_v3det](https://huggingface.co/openmmlab-community/mm_grounding_dino_tiny_o365v1_goldg_v3det).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        backbone_config (`PretrainedConfig` or `dict`, *optional*, defaults to `ResNetConfig()`):
+        backbone_config (`PreTrainedConfig` or `dict`, *optional*, defaults to `ResNetConfig()`):
             The configuration of the backbone model.
         backbone (`str`, *optional*):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
@@ -161,6 +161,7 @@ class MMGroundingDinoConfig(PretrainedConfig):
         "hidden_size": "d_model",
         "num_attention_heads": "encoder_attention_heads",
     }
+    sub_configs = {"backbone_config": AutoConfig}
 
     def __init__(
         self,
@@ -291,17 +292,6 @@ class MMGroundingDinoConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
-
-    @property
-    def sub_configs(self):
-        sub_configs = {}
-        backbone_config = getattr(self, "backbone_config", None)
-        text_config = getattr(self, "text_config", None)
-        if isinstance(backbone_config, PretrainedConfig):
-            sub_configs["backbone_config"] = type(backbone_config)
-        if isinstance(text_config, PretrainedConfig):
-            sub_configs["text_config"] = type(self.text_config)
-        return sub_configs
 
 
 class MMGroundingDinoContrastiveEmbedding(GroundingDinoContrastiveEmbedding):

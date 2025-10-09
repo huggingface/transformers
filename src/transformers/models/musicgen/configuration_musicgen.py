@@ -14,7 +14,7 @@
 # limitations under the License.
 """MusicGen model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 
@@ -22,15 +22,15 @@ from ..auto.configuration_auto import AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class MusicgenDecoderConfig(PretrainedConfig):
+class MusicgenDecoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`MusicgenDecoder`]. It is used to instantiate a
     MusicGen decoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the MusicGen
     [facebook/musicgen-small](https://huggingface.co/facebook/musicgen-small) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -132,14 +132,14 @@ class MusicgenDecoderConfig(PretrainedConfig):
         )
 
 
-class MusicgenConfig(PretrainedConfig):
+class MusicgenConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MusicgenModel`]. It is used to instantiate a
     MusicGen model according to the specified arguments, defining the text encoder, audio encoder and MusicGen decoder
     configs.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_encoder (`Union[dict, `PretrainedConfig`]`):

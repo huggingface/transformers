@@ -20,12 +20,12 @@
 # limitations under the License.
 from typing import Optional
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-class AriaTextConfig(PretrainedConfig):
+class AriaTextConfig(PreTrainedConfig):
     r"""
     This class handles the configuration for the text component of the Aria model.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the model of the Aria
@@ -222,15 +222,15 @@ class AriaTextConfig(PretrainedConfig):
         )
 
 
-class AriaConfig(PretrainedConfig):
+class AriaConfig(PreTrainedConfig):
     r"""
     This class handles the configuration for both vision and text components of the Aria model,
     as well as additional parameters for image token handling and projector mapping.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the model of the Aria
     [rhymes-ai/Aria](https://huggingface.co/rhymes-ai/Aria) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vision_config (`AriaVisionConfig` or `dict`, *optional*):

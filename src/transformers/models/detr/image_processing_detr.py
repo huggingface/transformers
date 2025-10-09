@@ -27,6 +27,7 @@ from ...image_transforms import (
     PaddingMode,
     center_to_corners_format,
     corners_to_center_format,
+    get_size_with_aspect_ratio,
     id_to_rgb,
     pad,
     rescale,
@@ -83,7 +84,7 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 
 
-class DetrImageProcessorKwargs(ImagesKwargs):
+class DetrImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
         Data format of the annotations. One of "coco_detection" or "coco_panoptic".
@@ -99,53 +100,14 @@ class DetrImageProcessorKwargs(ImagesKwargs):
         Path to the directory containing the segmentation masks.
     """
 
-    format: Optional[Union[str, AnnotationFormat]]
-    do_convert_annotations: Optional[bool]
-    return_segmentation_masks: Optional[bool]
+    format: Union[str, AnnotationFormat]
+    do_convert_annotations: bool
+    return_segmentation_masks: bool
     annotations: Optional[Union[AnnotationType, list[AnnotationType]]]
     masks_path: Optional[Union[str, pathlib.Path]]
 
 
 # From the original repo: https://github.com/facebookresearch/detr/blob/3af9fa878e73b6894ce3596450a8d9b89d918ca9/datasets/transforms.py#L76
-def get_size_with_aspect_ratio(image_size, size, max_size=None) -> tuple[int, int]:
-    """
-    Computes the output image size given the input image size and the desired output size.
-
-    Args:
-        image_size (`tuple[int, int]`):
-            The input image size.
-        size (`int`):
-            The desired output size.
-        max_size (`int`, *optional*):
-            The maximum allowed output size.
-    """
-    height, width = image_size
-    raw_size = None
-    if max_size is not None:
-        min_original_size = float(min((height, width)))
-        max_original_size = float(max((height, width)))
-        if max_original_size / min_original_size * size > max_size:
-            raw_size = max_size * min_original_size / max_original_size
-            size = int(round(raw_size))
-
-    if (height <= width and height == size) or (width <= height and width == size):
-        oh, ow = height, width
-    elif width < height:
-        ow = size
-        if max_size is not None and raw_size is not None:
-            oh = int(raw_size * height / width)
-        else:
-            oh = int(size * height / width)
-    else:
-        oh = size
-        if max_size is not None and raw_size is not None:
-            ow = int(raw_size * width / height)
-        else:
-            ow = int(size * width / height)
-
-    return (oh, ow)
-
-
 def get_image_size_for_max_height_width(
     input_image: np.ndarray,
     max_height: int,

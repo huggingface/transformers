@@ -19,7 +19,7 @@ from collections.abc import Mapping
 
 from packaging import version
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
 
@@ -27,7 +27,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class Data2VecVisionConfig(PretrainedConfig):
+class Data2VecVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Data2VecVisionModel`]. It is used to instantiate
     an Data2VecVision model according to the specified arguments, defining the model architecture. Instantiating a

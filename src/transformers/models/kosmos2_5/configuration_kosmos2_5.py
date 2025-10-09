@@ -14,22 +14,22 @@
 # limitations under the License.
 """KOSMOS-2.5 model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class Kosmos2_5TextConfig(PretrainedConfig):
+class Kosmos2_5TextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Kosmos2_5TextModel`]. It is used to instantiate a
     KOSMOS-2.5 text decoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the text decoder of the KOSMOS-2.5
     [microsoft/kosmos-2.5](https://huggingface.co/microsoft/kosmos-2.5) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 108481):
@@ -123,15 +123,15 @@ class Kosmos2_5TextConfig(PretrainedConfig):
         self.use_cache = use_cache
 
 
-class Kosmos2_5VisionConfig(PretrainedConfig):
+class Kosmos2_5VisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Kosmos2_5VisionModel`]. It is used to
     instantiate a KOSMOS-2.5 vision encoder according to the specified arguments, defining the model architecture.
     Instantiating a configuration defaults will yield a similar configuration to that of the vision encoder of the KOSMOS-2.5
     [microsoft/kosmos-2.5](https://huggingface.co/microsoft/kosmos-2.5) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 1536):
@@ -209,7 +209,7 @@ class Kosmos2_5VisionConfig(PretrainedConfig):
         self.initializer_range = initializer_range
 
 
-class Kosmos2_5Config(PretrainedConfig):
+class Kosmos2_5Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Kosmos2_5Model`]. It is used to instantiate a
     KOSMOS-2.5 model according to the specified arguments, defining the model architecture. Instantiating a configuration
