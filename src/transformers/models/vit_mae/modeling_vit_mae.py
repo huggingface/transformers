@@ -15,9 +15,10 @@
 """PyTorch ViT MAE (masked autoencoder) model."""
 
 import collections.abc
+from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import Optional
 
 import numpy as np
 import torch

@@ -24,11 +24,11 @@ import os
 import re
 import warnings
 from collections import UserDict
-from collections.abc import Mapping, Sequence, Sized
+from collections.abc import Callable, Mapping, Sequence, Sized
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Literal, NamedTuple, Optional, Union, overload
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Optional, Union, overload
 
 import numpy as np
 from packaging import version
