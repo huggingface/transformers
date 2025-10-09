@@ -14,8 +14,8 @@
 from __future__ import annotations
 
 import inspect
+from collections.abc import Callable
 from functools import lru_cache, wraps
-from typing import Callable
 
 import torch
 from safetensors.torch import storage_ptr, storage_size

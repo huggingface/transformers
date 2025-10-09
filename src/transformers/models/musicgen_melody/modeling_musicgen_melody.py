@@ -18,8 +18,9 @@ import copy
 import inspect
 import math
 import random
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -1253,8 +1254,8 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
                 "Either a configuration has to be provided, or all three of text encoder, audio encoder and Musicgen Melody decoder."
             )
         if config is None:
-            config = MusicgenMelodyConfig.from_sub_models_config(
-                text_encoder.config, audio_encoder.config, decoder.config
+            config = MusicgenMelodyConfig(
+                text_encoder=text_encoder.config, audio_encoder=audio_encoder.config, decoder=decoder.config
             )
         else:
             if not isinstance(config, self.config_class):
@@ -1537,8 +1538,8 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
             )
 
         # instantiate config with corresponding kwargs
-        config = MusicgenMelodyConfig.from_sub_models_config(
-            text_encoder.config, audio_encoder.config, decoder.config, **kwargs
+        config = MusicgenMelodyConfig(
+            text_encoder=text_encoder.config, audio_encoder=audio_encoder.config, decoder=decoder.config, **kwargs
         )
         return cls(text_encoder=text_encoder, audio_encoder=audio_encoder, decoder=decoder, config=config)
 
