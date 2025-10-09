@@ -828,19 +828,16 @@ class SpecialTokensMixin:
         # TODO clean this up at some point (probably by switching to fast tokenizers)
 
         for key, value in kwargs.items():
-            if value is None:
+            if value is None or key not in self.SPECIAL_TOKENS_ATTRIBUTES:
                 continue
-            if key in self.SPECIAL_TOKENS_ATTRIBUTES:
-                if key == "additional_special_tokens":
-                    assert isinstance(value, (list, tuple)), f"Value {value} is not a list or tuple"
-                    assert all(isinstance(t, (str, AddedToken)) for t in value), (
-                        "One of the tokens is not a string or an AddedToken"
-                    )
-                    setattr(self, key, value)
-                elif isinstance(value, (str, AddedToken)):
-                    setattr(self, key, value)
-                else:
-                    raise TypeError(f"Special token {key} has to be either str or AddedToken but got: {type(value)}")
+            if key == "additional_special_tokens":
+                if not isinstance(value, (list, tuple)) or not all(isinstance(t, (str, AddedToken)) for t in value):
+                    raise TypeError("additional_special_tokens must be a list/tuple of str or AddedToken")
+                setattr(self, key, value)
+            elif isinstance(value, (str, AddedToken)):
+                setattr(self, key, value)
+            else:
+                raise TypeError(f"Special token {key} has to be either str or AddedToken but got: {type(value)}")
 
     def add_special_tokens(
         self,
@@ -905,7 +902,7 @@ class SpecialTokensMixin:
         if not special_tokens_dict:
             return 0
 
-        added_tokens = []
+        tokens_to_add = []
         for key, value in special_tokens_dict.items():
             assert key in self.SPECIAL_TOKENS_ATTRIBUTES, f"Key {key} is not a special token"
 
@@ -913,38 +910,27 @@ class SpecialTokensMixin:
                 logger.info(f"Assigning {value} to the {key} key of the tokenizer")
 
             if key == "additional_special_tokens":
-                assert isinstance(value, (list, tuple)) and all(isinstance(t, (str, AddedToken)) for t in value), (
-                    f"Tokens {value} for key {key} should all be str or AddedToken instances"
-                )
-
-                to_add = []
-                for token in value:
-                    if isinstance(token, str):
-                        # for legacy purpose we default to stripping. `test_add_tokens_tokenizer` depends on this
-                        token = AddedToken(token, rstrip=False, lstrip=False, normalized=False, special=True)
-                    if not replace_additional_special_tokens and str(token) in self.additional_special_tokens:
-                        continue
-                    to_add.append(token)
-                if replace_additional_special_tokens and len(to_add) > 0:
-                    setattr(self, key, list(to_add))
+                if not isinstance(value, (list, tuple)) or not all(isinstance(t, (str, AddedToken)) for t in value):
+                    raise ValueError(f"Tokens {value} for key {key} should all be str or AddedToken instances")
+                new_tokens = [
+                    (AddedToken(t, rstrip=False, lstrip=False, normalized=False, special=True) if isinstance(t, str) else t)
+                    for t in value
+                    if replace_additional_special_tokens or str(t) not in self.additional_special_tokens
+                ]
+                if replace_additional_special_tokens and new_tokens:
+                    setattr(self, key, list(new_tokens))
                 else:
-                    self._special_tokens_map["additional_special_tokens"].extend(to_add)
-                added_tokens += to_add
-
+                    self._special_tokens_map["additional_special_tokens"].extend(new_tokens)
+                tokens_to_add.extend(new_tokens)
             else:
                 if not isinstance(value, (str, AddedToken)):
                     raise ValueError(f"Token {value} for key {key} should be a str or an AddedToken instance")
-                if isinstance(value, (str)):
-                    # for legacy purpose we default to stripping. `False` depends on this
+                if isinstance(value, str):
                     value = AddedToken(value, rstrip=False, lstrip=False, normalized=False, special=True)
-                if isinstance(value, AddedToken):
-                    setattr(self, key, value)
-                if value not in added_tokens:
-                    added_tokens.append(value)
+                setattr(self, key, value)
+                tokens_to_add.append(value)
 
-        # if we are adding tokens that were not part of the vocab, we ought to add them
-        added_tokens = self.add_tokens(added_tokens, special_tokens=True)
-        return added_tokens
+        return self.add_tokens(tokens_to_add, special_tokens=True)
 
     def add_tokens(
         self, new_tokens: Union[str, AddedToken, Sequence[Union[str, AddedToken]]], special_tokens: bool = False
@@ -1063,12 +1049,7 @@ class SpecialTokensMixin:
 
         Convert potential tokens of `tokenizers.AddedToken` type to string.
         """
-        set_attr = {}
-        for attr in self.SPECIAL_TOKENS_ATTRIBUTES:
-            attr_value = getattr(self, attr)
-            if attr_value:
-                set_attr[attr] = attr_value
-        return set_attr
+        return {attr: getattr(self, attr) for attr in self.SPECIAL_TOKENS_ATTRIBUTES if getattr(self, attr)}
 
     @property
     def all_special_tokens(self) -> list[str]:
@@ -1093,9 +1074,7 @@ class SpecialTokensMixin:
         """
         `list[int]`: List the ids of the special tokens(`'<unk>'`, `'<cls>'`, etc.) mapped to class attributes.
         """
-        all_toks = self.all_special_tokens
-        all_ids = self.convert_tokens_to_ids(all_toks)
-        return all_ids
+        return self.convert_tokens_to_ids(self.all_special_tokens)
 
     def _set_model_specific_special_tokens(self, special_tokens: list[str]):
         """

@@ -433,12 +433,11 @@ class PreTrainedSentencePieceTokenizer(PreTrainedTokenizerBase):
         # Note: resize_token_embeddings expects to receive the full size of the new vocabulary, i.e. the length of the tokenizer.
         model.resize_token_embeddings(len(tokenizer))
         ```"""
-        added_tokens = 0
-        if new_tokens is None:
-            return added_tokens
-        # TODO this is fairly slow to improve!
-        current_vocab = self.get_vocab().copy()
-        new_idx = len(current_vocab)  # only call this once, len gives the last index + 1
+        if not new_tokens:
+            return 0
+
+        next_index = len(self)  # total size (base + added)
+        num_added = 0
         for token in new_tokens:
             if not isinstance(token, (str, AddedToken)):
                 raise TypeError(f"Token {token} is not a string but a {type(token)}.")
@@ -447,27 +446,31 @@ class PreTrainedSentencePieceTokenizer(PreTrainedTokenizerBase):
             if isinstance(token, str):
                 if token in self._added_tokens_encoder:
                     continue
-                else:
-                    # very important for fast and slow equivalence!
-                    is_special = token in self.all_special_tokens or special_tokens
-                    token = AddedToken(
-                        token, rstrip=False, lstrip=False, normalized=not is_special, special=is_special
-                    )
+                is_special = token in self.all_special_tokens or special_tokens
+                token = AddedToken(token, rstrip=False, lstrip=False, normalized=not is_special, special=is_special)
             elif special_tokens:
                 # doing token.special=True changes the normalization! will fix in rust
                 # this is important and the only reason why the AddedTokens in each class are normalized by default
                 token.__setstate__({"special": True, "normalized": token.normalized})
-            if token in self._added_tokens_decoder:
+
+            if token in self._added_tokens_decoder.values():
                 continue
             if not token.special and token.normalized and getattr(self, "do_lower_case", False):
-                # Normalize if requested
                 token.content = token.content.lower()
-            if token.content not in current_vocab:
-                token_index = new_idx + added_tokens
-                current_vocab[token.content] = token_index
-                added_tokens += 1
+
+            # Check if in base vocab via SentencePiece directly
+            in_base_vocab = False
+            base_unk_id = self._convert_token_to_id(str(self.unk_token)) if getattr(self, "unk_token", None) is not None else None
+            if base_unk_id is not None:
+                tok_id = self._convert_token_to_id(token.content)
+                in_base_vocab = tok_id is not None and tok_id != base_unk_id
+
+            if in_base_vocab:
+                token_index = tok_id
             else:
-                token_index = current_vocab[token.content]
+                token_index = next_index
+                next_index += 1
+                num_added += 1
 
             if token.special and str(token) not in self.all_special_tokens:
                 self._special_tokens_map["additional_special_tokens"].append(token)
@@ -479,7 +482,7 @@ class PreTrainedSentencePieceTokenizer(PreTrainedTokenizerBase):
 
         self._update_trie()
         self._update_total_vocab_size()
-        return added_tokens
+        return num_added
 
     def _update_trie(self, unique_no_split_tokens: Optional[list[str]] = None):
         for token in self._added_tokens_decoder.values():
