@@ -132,20 +132,17 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             # save in new folder
             processor.save_pretrained(tmpdirname)
 
-            if os.path.isfile(os.path.join(tmpdirname, PROCESSOR_NAME)):
-                # drop `processor_class` in processor
-                with open(os.path.join(tmpdirname, PROCESSOR_NAME)) as f:
-                    config_dict = json.load(f)
-                    config_dict.pop("processor_class")
-
-                with open(os.path.join(tmpdirname, PROCESSOR_NAME), "w") as f:
-                    f.write(json.dumps(config_dict))
+            # drop `processor_class` in processor
+            with open(os.path.join(tmpdirname, PROCESSOR_NAME)) as f:
+                config_dict = json.load(f)
+                config_dict.pop("processor_class")
+            with open(os.path.join(tmpdirname, PROCESSOR_NAME), "w") as f:
+                f.write(json.dumps(config_dict))
 
             # drop `processor_class` in tokenizer
             with open(os.path.join(tmpdirname, TOKENIZER_CONFIG_FILE)) as f:
                 config_dict = json.load(f)
                 config_dict.pop("processor_class")
-
             with open(os.path.join(tmpdirname, TOKENIZER_CONFIG_FILE), "w") as f:
                 f.write(json.dumps(config_dict))
 
@@ -163,19 +160,12 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             # save in new folder
             processor.save_pretrained(tmpdirname)
 
-            if os.path.isfile(os.path.join(tmpdirname, PROCESSOR_NAME)):
-                # drop `processor_class` in processor
-                with open(os.path.join(tmpdirname, PROCESSOR_NAME)) as f:
-                    config_dict = json.load(f)
-                    config_dict.pop("processor_class")
-
-                with open(os.path.join(tmpdirname, PROCESSOR_NAME), "w") as f:
-                    f.write(json.dumps(config_dict))
-
-            # drop `processor_class` in feature extractor
-            with open(os.path.join(tmpdirname, FEATURE_EXTRACTOR_NAME)) as f:
+            # drop `processor_class` in processor
+            with open(os.path.join(tmpdirname, PROCESSOR_NAME)) as f:
                 config_dict = json.load(f)
                 config_dict.pop("processor_class")
+            with open(os.path.join(tmpdirname, PROCESSOR_NAME), "w") as f:
+                f.write(json.dumps(config_dict))
 
             with open(os.path.join(tmpdirname, FEATURE_EXTRACTOR_NAME), "w") as f:
                 f.write(json.dumps(config_dict))

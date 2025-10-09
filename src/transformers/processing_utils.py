@@ -544,6 +544,7 @@ class ProcessorMixin(PushToHubMixin):
                     f"Tried to use `{proper_class}` for audio tokenization. However, this class is not"
                     " registered for audio tokenization."
                 )
+            setattr(self, "audio_tokenizer", audio_tokenizer)
 
         # Sanitize args and kwargs
         for key in kwargs:
@@ -659,7 +660,8 @@ class ProcessorMixin(PushToHubMixin):
         # Get the kwargs in `__init__`.
         sig = inspect.signature(self.__init__)
         # Only save the attributes that are presented in the kwargs of `__init__`.
-        attrs_to_save = list(sig.parameters)
+        # or in the attributes
+        attrs_to_save = list(sig.parameters) + self.__class__.attributes
         # extra attributes to be kept
         attrs_to_save += ["auto_map"]
 
@@ -676,6 +678,15 @@ class ProcessorMixin(PushToHubMixin):
         if "chat_template" in output:
             del output["chat_template"]
 
+        def save_processor_class(dictionary):
+            _processor_class = dictionary.pop("_processor_class", self.__class__.__name__)
+            dictionary["processor_class"] = _processor_class
+
+            for key, value in dictionary.items():
+                if key in self.__class__.attributes and isinstance(value, dict):
+                    dictionary[key] = save_processor_class(value)
+            return dictionary
+
         def cast_array_to_list(dictionary):
             """
             Numpy arrays are not serialiazable but can be in pre-processing dicts.
@@ -687,6 +698,15 @@ class ProcessorMixin(PushToHubMixin):
                 elif isinstance(value, dict):
                     dictionary[key] = cast_array_to_list(value)
             return dictionary
+
+        # Special case, add `audio_tokenizer` dict which points to model weights and path
+        if not legacy_serialization and "audio_tokenizer" in output:
+            audio_tokenizer_dict = {
+                "audio_tokenizer_class": self.audio_tokenizer.__class__.__name__,
+                "audio_tokenizer_name_or_path": self.audio_tokenizer.name_or_path,
+            }
+            # Update or overwrite, what do audio tokenizers expect when loading?
+            output["audio_tokenizer"] = audio_tokenizer_dict
 
         # Serialize attributes as a dict
         output = {
@@ -701,17 +721,7 @@ class ProcessorMixin(PushToHubMixin):
             )
         }
         output = cast_array_to_list(output)
-
-        # Special case, add `audio_tokenizer` dict which points to model weights and path
-        if not legacy_serialization and "audio_tokenizer" in output:
-            audio_tokenizer_dict = {
-                "audio_tokenizer_class": self.audio_tokenizer.__class__.__name__,
-                "audio_tokenizer_name_or_path": self.audio_tokenizer.name_or_path,
-            }
-            # Update or overwrite, what do audio tokenizers expect when loading?
-            output["audio_tokenizer"] = audio_tokenizer_dict
-
-        output["processor_class"] = self.__class__.__name__
+        output = save_processor_class(output)
 
         return output
 
@@ -801,20 +811,19 @@ class ProcessorMixin(PushToHubMixin):
         save_jinja_files = kwargs.get("save_jinja_files", True)
 
         for attribute_name in self.attributes:
+            attribute = getattr(self, attribute_name)
+            if hasattr(attribute, "_set_processor_class"):
+                attribute._set_processor_class(self.__class__.__name__)
+
             # Save the tokenizer in its own vocab file. The other attributes are saved as part of `processor_config.json`
             if attribute_name == "tokenizer":
-                attribute = getattr(self, attribute_name)
-                if hasattr(attribute, "_set_processor_class"):
-                    attribute._set_processor_class(self.__class__.__name__)
-
                 # Propagate save_jinja_files to tokenizer to ensure we don't get conflicts
                 attribute.save_pretrained(save_directory, save_jinja_files=save_jinja_files)
             elif legacy_serialization:
-                attribute = getattr(self, attribute_name)
-                # Include the processor class in attribute config so this processor can then be reloaded with `AutoProcessor` API.
-                if hasattr(attribute, "_set_processor_class"):
-                    attribute._set_processor_class(self.__class__.__name__)
                 attribute.save_pretrained(save_directory)
+            else:
+                if (attribute := getattr(self, attribute_name)) and attribute._auto_class is not None:
+                    custom_object_save(attribute, save_directory, config=attribute)
 
         if self._auto_class is not None:
             # We added an attribute to the init_kwargs of the tokenizers, which needs to be cleaned up.
@@ -887,7 +896,7 @@ class ProcessorMixin(PushToHubMixin):
             else:
                 return_files = [output_processor_file]
 
-            if self.audio_tokenizer is not None:
+            if getattr(self, "audio_tokenizer", None) is not None:
                 audio_tokenizer_class = self.audio_tokenizer.__class__.__name__
                 audio_tokenizer_name_or_path = self.audio_tokenizer.name_or_path
                 audio_tokenizer_dict = {
@@ -1164,10 +1173,6 @@ class ProcessorMixin(PushToHubMixin):
                 audio_tokenizer_path, **audio_tokenizer_kwargs
             )
 
-        # Pop attributes if saved in a single processor dict, they are loaded in `_get_arguments_from_pretrained`
-        for attribute in cls.attributes:
-            processor_dict.pop(attribute, None)
-
         return processor_dict, kwargs
 
     @classmethod
@@ -1191,12 +1196,9 @@ class ProcessorMixin(PushToHubMixin):
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
 
         # We have to pop up some unused (but specific) kwargs and then validate that it doesn't contain unused kwargs
-        # If we don't pop, some specific kwargs will raise a warning
-        if "processor_class" in processor_dict:
-            del processor_dict["processor_class"]
-
-        if "auto_map" in processor_dict:
-            del processor_dict["auto_map"]
+        # If we don't pop, some specific kwargs will raise a warning or error
+        for unused_kwarg in cls.attributes + ["auto_map", "processor_class"]:
+            processor_dict.pop(unused_kwarg, None)
 
         # override processor_dict with given kwargs
         processor_dict.update(kwargs)
@@ -1515,13 +1517,7 @@ class ProcessorMixin(PushToHubMixin):
             else:
                 attribute_class = cls.get_possibly_dynamic_module(class_name)
 
-            if attribute_name in processor_dict:
-                # The new format when the args are saved as nested dict
-                attribute = attribute_class.from_dict(processor_dict[attribute_name], **kwargs)
-            else:
-                # Legacy format when args were saved in their own respective json files
-                attribute = attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
-            args.append(attribute)
+            args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
 
         return args
 
