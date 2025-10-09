@@ -51,7 +51,7 @@ from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3
 from .integrations.accelerate import (
     accelerate_disk_offload,
     accelerate_dispatch,
-    auto_set_device_map,
+    check_and_set_device_map,
     find_tied_parameters,
     init_empty_weights,
 )
@@ -102,7 +102,6 @@ from .utils import (
     is_flash_attn_3_available,
     is_kernels_available,
     is_offline_mode,
-    is_peft_available,
     is_remote_url,
     is_torch_flex_attn_available,
     is_torch_greater_or_equal,
@@ -137,8 +136,6 @@ if is_accelerate_available():
     )
     from accelerate.utils.modeling import get_state_dict_from_offload
 
-if is_peft_available():
-    pass
 
 _torch_distributed_available = torch.distributed.is_available()
 _is_dtensor_available = _torch_distributed_available and is_torch_greater_or_equal("2.5")
@@ -4466,7 +4463,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             dtype = dtype if dtype is not None else torch_dtype
 
         if is_offline_mode() and not local_files_only:
-            logger.info("Offline mode: forcing local_files_only=True")
             local_files_only = True
 
         download_kwargs = {
@@ -4492,7 +4488,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 ": PartialState().process_index} where PartialState comes from accelerate library"
             )
 
-        if tp_plan is not None:  # TP warnings, and setup
+        if tp_plan is not None or tp_size is not None:  # TP warnings, and setup
             tp_plan, device_map, device_mesh, tp_size = initialize_tensor_parallelism(
                 tp_plan, tp_size=tp_size, device_mesh=device_mesh, device_map=device_map
             )
@@ -4512,7 +4508,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         commit_hash = adapter_download_kwargs.get("commit_hash", commit_hash)
         download_kwargs_with_commit["commit_hash"] = commit_hash
 
-        device_map = auto_set_device_map(device_map)  # warn, error and fix the device map
+        device_map = check_and_set_device_map(device_map)  # warn, error and fix the device map
 
         user_agent = {"file_type": "model", "framework": "pytorch", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
@@ -4654,9 +4650,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # If it is a model with generation capabilities, attempt to load generation files (generation config,
         # custom generate function)
-        adjust_generation_fn = getattr(model, "adjust_generation_function", None)
-        if callable(adjust_generation_fn):
-            adjust_generation_fn(
+        if model.can_generate():
+            model.adjust_generation_fn(
                 generation_config,
                 from_auto_class,
                 from_pipeline,
@@ -4904,7 +4899,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # This offload index if for params explicitly on the "disk" in the device_map
         disk_offload_index = None
         disk_only_shard_files = []
-        # Prepare parameters offloading if needed TODO: split this in a separate function
+        # Prepare parameters offloading if needed
         if device_map is not None and "disk" in device_map.values():
             disk_offload_index, disk_only_shard_files = accelerate_disk_offload(
                 disk_offload_folder,

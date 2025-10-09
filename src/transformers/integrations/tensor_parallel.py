@@ -38,7 +38,7 @@ if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
     from torch.distributed.tensor import DTensor, Placement, Replicate, Shard
 
 
-def initialize_tensor_parallelism(tp_plan, tp_size=None, device_mesh=None, device_map=None):
+def initialize_tensor_parallelism(tp_plan, tp_size=None, device_mesh=None, device_map):
     r"""
     Sets up the device mesh and initialized the backend for tensor parallelism.
     This function is called when the model is loaded and the TP plan is set to 'auto'.
@@ -51,9 +51,6 @@ def initialize_tensor_parallelism(tp_plan, tp_size=None, device_mesh=None, devic
     if tp_plan is not None and device_map is not None:
         raise ValueError("`tp_plan` and `device_map` are mutually exclusive. Choose either one for parallelization.")
     if device_mesh is None:
-        if tp_plan is None:
-            return None, None, None
-
         if not is_torch_greater_or_equal("2.5"):
             raise OSError("Tensor parallel is only supported for `torch>=2.5`.")
 

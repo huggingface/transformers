@@ -205,7 +205,7 @@ def find_tied_parameters(model: "nn.Module", **kwargs):
     return [sorted([weight] + list(set(tied))) for weight, tied in tied_param_groups.items()]
 
 
-def auto_set_device_map(device_map):
+def check_and_set_device_map(device_map):
     from ..modeling_utils import get_torch_context_manager_or_global_device
 
     # Potentially detect context manager or global device, and use it (only if no device_map was provided)
