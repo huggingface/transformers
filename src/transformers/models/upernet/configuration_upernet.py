@@ -17,7 +17,7 @@
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto.configuration_auto import CONFIG_MAPPING
+from ..auto.configuration_auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -83,6 +83,7 @@ class UperNetConfig(PreTrainedConfig):
     ```"""
 
     model_type = "upernet"
+    sub_configs = {"backbone_config": AutoConfig}
 
     def __init__(
         self,
@@ -135,14 +136,6 @@ class UperNetConfig(PreTrainedConfig):
         self.auxiliary_num_convs = auxiliary_num_convs
         self.auxiliary_concat_input = auxiliary_concat_input
         self.loss_ignore_index = loss_ignore_index
-
-    @property
-    def sub_configs(self):
-        return (
-            {"backbone_config": type(self.backbone_config)}
-            if getattr(self, "backbone_config", None) is not None
-            else {}
-        )
 
 
 __all__ = ["UperNetConfig"]
