@@ -38,14 +38,16 @@ class AudioFlamingo3ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": True,
-            "padding_side": "left",
         },
         "audio_kwargs": {
             "sound_token": "<sound>",  # Placeholder token used in text for audio expansion.
             "return_attention_mask": True,
             "padding": "max_length",
         },
-        "common_kwargs": {"return_tensors": "pt"},
+        "common_kwargs": {
+            "return_tensors": "pt",
+            "padding_side": "left",
+        },
     }
 
 
@@ -196,6 +198,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
                         # Chat template: insert after user start
                         sample = sample.replace(user_start, user_start + prefix, 1)
                     else:
+                        logger.warning("Consider applying the chat template to ensure proper output.")
                         # Plain text: prepend to the beginning
                         sample = prefix + sample
                 else:
