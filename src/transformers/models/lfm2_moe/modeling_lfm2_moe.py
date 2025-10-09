@@ -33,7 +33,6 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import check_model_inputs
 from ...utils.import_utils import is_causal_conv1d_available
 from .configuration_lfm2_moe import Lfm2MoeConfig
@@ -313,9 +312,6 @@ class Lfm2MoeHybridConvCache:
     def __len__(self) -> int:
         return len(self.key_cache)
 
-    def __getitem__(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
-        return self.key_cache[layer_idx], self.value_cache[layer_idx]
-
     def reset(self):
         for layer_idx in range(len(self.conv_cache)):
             # In-place ops prevent breaking the static address
@@ -412,7 +408,6 @@ class Lfm2MoeAttention(nn.Module):
         self.q_layernorm = Lfm2MoeRMSNorm(self.head_dim, eps=config.norm_eps)
         self.k_layernorm = Lfm2MoeRMSNorm(self.head_dim, eps=config.norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -493,7 +488,6 @@ class Lfm2MoeShortConv(nn.Module):
         self.in_proj = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=self.bias)
         self.out_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=self.bias)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def cuda_kernels_forward(
         self,
         x: torch.Tensor,
@@ -528,7 +522,6 @@ class Lfm2MoeShortConv(nn.Module):
         y = self.out_proj(y.transpose(-1, -2).contiguous())
         return y
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def slow_forward(
         self,
         x: torch.Tensor,
@@ -567,7 +560,6 @@ class Lfm2MoeShortConv(nn.Module):
         y = self.out_proj(y)
         return y
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -597,7 +589,6 @@ class Lfm2MoeDecoderLayer(GradientCheckpointingLayer):
         self.operator_norm = Lfm2MoeRMSNorm(config.hidden_size, eps=config.norm_eps)
         self.ffn_norm = Lfm2MoeRMSNorm(config.hidden_size, eps=config.norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,

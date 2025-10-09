@@ -224,7 +224,6 @@ class DistilBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         else {}
     )
     fx_compatible = False  # won't be maintained
-    test_pruning = True
     test_resize_embeddings = True
     test_resize_position_embeddings = True
 

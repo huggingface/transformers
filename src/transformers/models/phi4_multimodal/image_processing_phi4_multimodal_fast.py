@@ -35,7 +35,7 @@ from ...utils import (
 logger = logging.get_logger(__name__)
 
 
-class Phi4MultimodalImageProcessorKwargs(ImagesKwargs):
+class Phi4MultimodalImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     patch_size (`int`, *optional*):
         The size of the patch.
@@ -43,8 +43,8 @@ class Phi4MultimodalImageProcessorKwargs(ImagesKwargs):
         The maximum number of crops per image.
     """
 
-    patch_size: Optional[int]
-    dynamic_hd: Optional[int]
+    patch_size: int
+    dynamic_hd: int
 
 
 @auto_docstring

@@ -1219,13 +1219,13 @@ def _get_dtype(
                 dtype = getattr(torch, dtype)
                 config.dtype = dtype
                 for sub_config_key in config.sub_configs:
-                    sub_config = getattr(config, sub_config_key)
-                    sub_config.dtype = dtype
+                    if (sub_config := getattr(config, sub_config_key)) is not None:
+                        sub_config.dtype = dtype
         elif isinstance(dtype, torch.dtype):
             config.dtype = dtype
             for sub_config_key in config.sub_configs:
-                sub_config = getattr(config, sub_config_key)
-                sub_config.dtype = dtype
+                if (sub_config := getattr(config, sub_config_key)) is not None:
+                    sub_config.dtype = dtype
         elif isinstance(dtype, dict):
             for key, curr_dtype in dtype.items():
                 if hasattr(config, key):
@@ -1250,8 +1250,8 @@ def _get_dtype(
         default_dtype = torch.get_default_dtype()
         config.dtype = default_dtype
         for key in config.sub_configs:
-            value = getattr(config, key)
-            value.dtype = default_dtype
+            if (sub_config := getattr(config, key)) is not None:
+                sub_config.dtype = default_dtype
 
     return config, dtype, dtype_orig
 
@@ -1806,8 +1806,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     [`PreTrainedModel`] takes care of storing the configuration of the models and handles methods for loading,
     downloading and saving models as well as a few methods common to all models to:
 
-        - resize the input embeddings,
-        - prune heads in the self-attention heads.
+        - resize the input embeddings
 
     Class attributes (overridden by derived classes):
 
@@ -2577,12 +2576,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # preload flash attention here to allow compile with fullgraph
             if applicable_attn_implementation.startswith("flash_attention"):
                 lazy_import_flash_attention(applicable_attn_implementation, force_import=True)
-
         return applicable_attn_implementation
 
     def get_correct_attn_implementation(self, requested_attention: Optional[str], is_init_check: bool = False) -> str:
         applicable_attention = "sdpa" if requested_attention is None else requested_attention
-
         if applicable_attention not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
             message = (
                 f'Specified `attn_implementation="{applicable_attention}"` is not supported. The only possible arguments are '
@@ -2703,34 +2700,34 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # We need this as some old and badly designed models use subconfigs without declaring the corresponding modules as PreTrainedModel
         for subconfig_key in self.config.sub_configs:
-            subconfig = getattr(self.config, subconfig_key)
-            sub_implementation = (
-                requested_implementation
-                if not isinstance(attn_implementation, dict)
-                else attn_implementation.get(subconfig_key, subconfig._attn_implementation)
-            )
-            # This means we did not perform any check above for this particular subconfig -> set it in the dark if it is registered
-            if (
-                not hasattr(subconfig, "_attn_was_changed")
-                # If it's already the same, then no need to enter here and raise warnings
-                and sub_implementation != subconfig._attn_implementation
-            ):
-                if sub_implementation not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
-                    raise ValueError(
-                        f'Specified `attn_implementation="{sub_implementation}"` is not supported for {subconfig_key}. '
-                        'The only possible arguments are "eager" (manual attention implementation)'
-                        f"or one of the following: {list(ALL_ATTENTION_FUNCTIONS.valid_keys())}"
-                    )
-                subconfig._attn_implementation_internal = sub_implementation
-                logger.warning(
-                    f"We set the attention implementation for the sub-config `{subconfig_key}` to `{sub_implementation}` "
-                    "without finding the associated sub-model. For this reason we could not check if the model supports it. "
-                    "You may encounter undefined behavior."
+            if (subconfig := getattr(self.config, subconfig_key)) is not None:
+                sub_implementation = (
+                    requested_implementation
+                    if not isinstance(attn_implementation, dict)
+                    else attn_implementation.get(subconfig_key, subconfig._attn_implementation)
                 )
-            # Unset the attribute in this case, to avoid issues in the future
-            else:
-                if hasattr(subconfig, "_attn_was_changed"):
-                    del subconfig._attn_was_changed
+                # This means we did not perform any check above for this particular subconfig -> set it in the dark if it is registered
+                if (
+                    not hasattr(subconfig, "_attn_was_changed")
+                    # If it's already the same, then no need to enter here and raise warnings
+                    and sub_implementation != subconfig._attn_implementation
+                ):
+                    if sub_implementation not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
+                        raise ValueError(
+                            f'Specified `attn_implementation="{sub_implementation}"` is not supported for {subconfig_key}. '
+                            'The only possible arguments are "eager" (manual attention implementation)'
+                            f"or one of the following: {list(ALL_ATTENTION_FUNCTIONS.valid_keys())}"
+                        )
+                    subconfig._attn_implementation_internal = sub_implementation
+                    logger.warning(
+                        f"We set the attention implementation for the sub-config `{subconfig_key}` to `{sub_implementation}` "
+                        "without finding the associated sub-model. For this reason we could not check if the model supports it. "
+                        "You may encounter undefined behavior."
+                    )
+                # Unset the attribute in this case, to avoid issues in the future
+                else:
+                    if hasattr(subconfig, "_attn_was_changed"):
+                        del subconfig._attn_was_changed
 
     def enable_input_require_grads(self):
         """
@@ -3523,13 +3520,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     def init_weights(self):
         """
-        If needed prunes and maybe initializes weights. If using a custom `PreTrainedModel`, you need to implement any
+        Maybe initializes weights. If using a custom `PreTrainedModel`, you need to implement any
         initialization logic in `_init_weights`.
         """
-        # Prune heads if needed
-        if self.config.pruned_heads:
-            self.prune_heads(self.config.pruned_heads)
-
         if _init_weights:
             # Initialize weights
             self.initialize_weights()
@@ -3537,23 +3530,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # Tie weights should be skipped when not initializing all weights
             # since from_pretrained(...) calls tie weights anyways
             self.tie_weights()
-
-    def prune_heads(self, heads_to_prune: dict[int, list[int]]):
-        """
-        Prunes heads of the base model.
-
-        Arguments:
-            heads_to_prune (`dict[int, list[int]]`):
-                Dictionary with keys being selected layer indices (`int`) and associated values being the list of heads
-                to prune in said layer (list of `int`). For instance {1: [0, 2], 2: [2, 3]} will prune heads 0 and 2 on
-                layer 1 and heads 2 and 3 on layer 2.
-        """
-        # save new sets of pruned heads as union of previously stored pruned heads and newly pruned heads
-        for layer, heads in heads_to_prune.items():
-            union_heads = set(self.config.pruned_heads.get(layer, [])) | set(heads)
-            self.config.pruned_heads[layer] = list(union_heads)  # Unfortunately we have to store it as list for JSON
-
-        self.base_model._prune_heads(heads_to_prune)
 
     def gradient_checkpointing_enable(self, gradient_checkpointing_kwargs=None):
         """
@@ -4138,11 +4114,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     "Calling `cuda()` is not supported for `8-bit` quantized models. "
                     " Please use the model as it is, since the model has already been set to the correct devices."
                 )
-            elif version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.43.2"):
-                raise ValueError(
-                    "Calling `cuda()` is not supported for `4-bit` quantized models with the installed version of bitsandbytes. "
-                    f"The current device is `{self.device}`. If you intended to move the model, please install bitsandbytes >= 0.43.2."
-                )
         return super().cuda(*args, **kwargs)
 
     @wraps(torch.nn.Module.to)
@@ -4198,11 +4169,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 raise ValueError(
                     "`.to` is not supported for `8-bit` bitsandbytes models. Please use the model as it is, since the"
                     " model has already been set to the correct devices and casted to the correct `dtype`."
-                )
-            elif version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.43.2"):
-                raise ValueError(
-                    "Calling `to()` is not supported for `4-bit` quantized models with the installed version of bitsandbytes. "
-                    f"The current device is `{self.device}`. If you intended to move the model, please install bitsandbytes >= 0.43.2."
                 )
         elif getattr(self, "quantization_method", None) == QuantizationMethod.GPTQ:
             if dtype_present_in_args:

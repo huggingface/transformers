@@ -173,7 +173,7 @@ class PagedAttentionCache:
         page_size = self.head_dim * self.num_key_value_heads
 
         if "flash" in self.config._attn_implementation:
-            num_attention_masks = 0
+            num_attention_masks = 1  # only used to compute the default meme args
         else:
             # TODO: when we generalize to allow for block-attn, we can use `num_attention_masks=sum(set(group_types))`
             num_attention_masks = 2 if "sliding_attention" in group_types else 1
