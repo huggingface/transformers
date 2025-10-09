@@ -176,6 +176,7 @@ _deps = [
     "torchvision",
     "pyctcdecode>=0.4.0",
     "tqdm>=4.27",
+    "typer-slim",
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
     "urllib3<2.0.0",
@@ -408,6 +409,7 @@ install_requires = [
     deps["regex"],  # for OpenAI GPT
     deps["requests"],  # for downloading models over HTTPS
     deps["tokenizers"],
+    deps["typer-slim"],  # CLI utilities. In practice, already a dependency of huggingface_hub
     deps["safetensors"],
     deps["tqdm"],  # progress bars in model download and training scripts
 ]
