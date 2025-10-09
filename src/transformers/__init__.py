@@ -460,11 +460,7 @@ else:
         "get_wsd_schedule",
         "get_reduce_on_plateau_schedule",
     ]
-    _import_structure["pytorch_utils"] = [
-        "Conv1D",
-        "apply_chunking_to_forward",
-        "infer_device",
-    ]
+    _import_structure["pytorch_utils"] = ["Conv1D", "apply_chunking_to_forward"]
     _import_structure["time_series_utils"] = []
     _import_structure["trainer"] = ["Trainer"]
     _import_structure["trainer_pt_utils"] = ["torch_distributed_zero_first"]

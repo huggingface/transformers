@@ -16,8 +16,9 @@
 """PyTorch Qwen2.5Omni model (Audio, Image, Video)."""
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 import torch

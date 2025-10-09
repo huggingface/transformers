@@ -4,8 +4,9 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_new_task_model.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, ClassVar, Optional, Union
+from typing import ClassVar, Optional, Union
 
 import torch
 from torch import nn

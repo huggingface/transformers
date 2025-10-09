@@ -20,8 +20,9 @@
 # limitations under the License.
 
 import warnings
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -30,8 +31,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
-from ...masking_utils import create_causal_mask
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_attention_mask_for_sdpa
+from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -47,13 +47,9 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, is_torch_flex_attn_available, logging
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple, check_model_inputs
 from .configuration_ernie import ErnieConfig
-
-
-if is_torch_flex_attn_available():
-    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 logger = logging.get_logger(__name__)
@@ -680,43 +676,14 @@ class ErnieModel(ErniePreTrainedModel):
             past_key_values_length=past_key_values_length,
         )
 
-        if attention_mask is not None and attention_mask.dim() == 2:
-            if self.config.is_decoder:
-                attention_mask = create_causal_mask(
-                    config=self.config,
-                    input_embeds=embedding_output,
-                    attention_mask=attention_mask,
-                    cache_position=cache_position,
-                    past_key_values=past_key_values,
-                )
-            else:
-                attention_mask = self._update_full_mask(
-                    attention_mask,
-                    embedding_output,
-                )
-        elif attention_mask is not None and attention_mask.dim() == 3:
-            if "flash" in self.config._attn_implementation or self.config._attn_implementation == "flex_attention":
-                raise ValueError(
-                    "Passing attention mask with a 3D/4D shape does not work with type "
-                    f"{self.config._attn_implementation} - please use either `sdpa` or `eager` instead."
-                )
-            attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
-
-        if encoder_attention_mask is not None:
-            if encoder_attention_mask.dim() == 2:
-                encoder_attention_mask = self._update_cross_attn_mask(
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    embedding_output.shape[:2],
-                    embedding_output,
-                )
-            else:
-                if "flash" in self.config._attn_implementation or self.config._attn_implementation == "flex_attention":
-                    raise ValueError(
-                        "Passing attention mask with a 3D/4D shape does not work with type "
-                        f"{self.config._attn_implementation} - please use either `sdpa` or `eager` instead."
-                    )
-                encoder_attention_mask = self.invert_attention_mask(encoder_attention_mask)
+        attention_mask, encoder_attention_mask = self._create_attention_masks(
+            attention_mask=attention_mask,
+            encoder_attention_mask=encoder_attention_mask,
+            embedding_output=embedding_output,
+            encoder_hidden_states=encoder_hidden_states,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
+        )
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -740,7 +707,6 @@ class ErnieModel(ErniePreTrainedModel):
 
     def _create_attention_masks(
         self,
-        input_shape,
         attention_mask,
         encoder_attention_mask,
         embedding_output,
@@ -748,98 +714,30 @@ class ErnieModel(ErniePreTrainedModel):
         cache_position,
         past_key_values,
     ):
-        if attention_mask is not None and attention_mask.dim() == 2:
-            if self.config.is_decoder:
-                attention_mask = create_causal_mask(
-                    config=self.config,
-                    input_embeds=embedding_output,
-                    attention_mask=attention_mask,
-                    cache_position=cache_position,
-                    past_key_values=past_key_values,
-                )
-            else:
-                attention_mask = self._update_full_mask(
-                    attention_mask,
-                    embedding_output,
-                )
-        elif attention_mask is not None and attention_mask.dim() == 3:
-            if "flash" in self.config._attn_implementation or self.config._attn_implementation == "flex_attention":
-                raise ValueError(
-                    "Passing attention mask with a 3D/4D shape does not work with type "
-                    f"{self.config._attn_implementation} - please use either `sdpa` or `eager` instead."
-                )
-            attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
+        if self.config.is_decoder:
+            attention_mask = create_causal_mask(
+                config=self.config,
+                input_embeds=embedding_output,
+                attention_mask=attention_mask,
+                cache_position=cache_position,
+                past_key_values=past_key_values,
+            )
+        else:
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=embedding_output,
+                attention_mask=attention_mask,
+            )
 
         if encoder_attention_mask is not None:
-            if encoder_attention_mask.dim() == 2:
-                encoder_attention_mask = self._update_cross_attn_mask(
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    embedding_output.shape[:2],
-                    embedding_output,
-                )
-            else:
-                if "flash" in self.config._attn_implementation or self.config._attn_implementation == "flex_attention":
-                    raise ValueError(
-                        "Passing attention mask with a 3D/4D shape does not work with type "
-                        f"{self.config._attn_implementation} - please use either `sdpa` or `eager` instead."
-                    )
-                encoder_attention_mask = self.invert_attention_mask(encoder_attention_mask)
+            encoder_attention_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=embedding_output,
+                attention_mask=encoder_attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
+            )
 
         return attention_mask, encoder_attention_mask
-
-    def _update_full_mask(
-        self,
-        attention_mask: Union[torch.Tensor, None],
-        inputs_embeds: torch.Tensor,
-    ):
-        if attention_mask is not None:
-            if "flash" in self.config._attn_implementation:
-                attention_mask = attention_mask if 0 in attention_mask else None
-            elif self.config._attn_implementation == "sdpa":
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
-            elif self.config._attn_implementation == "flex_attention":
-                if isinstance(attention_mask, torch.Tensor):
-                    attention_mask = make_flex_block_causal_mask(attention_mask, is_causal=False)
-            else:
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
-
-        return attention_mask
-
-    def _update_cross_attn_mask(
-        self,
-        encoder_hidden_states: Union[torch.Tensor, None],
-        encoder_attention_mask: Union[torch.Tensor, None],
-        input_shape: torch.Size,
-        inputs_embeds: torch.Tensor,
-    ):
-        # expand encoder attention mask
-        if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            if "flash" in self.config._attn_implementation:
-                encoder_attention_mask = encoder_attention_mask if 0 in encoder_attention_mask else None
-            elif self.config._attn_implementation == "sdpa":
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                encoder_attention_mask = _prepare_4d_attention_mask_for_sdpa(
-                    encoder_attention_mask,
-                    inputs_embeds.dtype,
-                    tgt_len=input_shape[-1],
-                )
-            elif self.config._attn_implementation == "flex_attention":
-                if isinstance(encoder_attention_mask, torch.Tensor):
-                    encoder_attention_mask = make_flex_block_causal_mask(
-                        encoder_attention_mask,
-                        query_length=input_shape[-1],
-                        is_causal=False,
-                    )
-            else:
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                encoder_attention_mask = _prepare_4d_attention_mask(
-                    encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
-                )
-
-        return encoder_attention_mask
 
 
 @dataclass

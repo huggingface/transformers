@@ -16,13 +16,14 @@
 """PyTorch ESM model."""
 
 import math
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_attention_mask_for_sdpa
+from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithCrossAttentions,
@@ -33,13 +34,9 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import OutputRecorder, check_model_inputs
 from .configuration_esm import EsmConfig
-
-
-if is_torch_flex_attn_available():
-    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 logger = logging.get_logger(__name__)
@@ -656,16 +653,14 @@ class EsmModel(EsmPreTrainedModel):
                 position_ids=position_ids,
             )
 
-        attention_mask = self._update_full_mask(
-            attention_mask,
-            inputs_embeds,
-        )
-
-        encoder_attention_mask = self._update_cross_attn_mask(
-            encoder_hidden_states,
-            encoder_attention_mask,
-            inputs_embeds.shape[:2],
-            inputs_embeds,
+        attention_mask, encoder_attention_mask = self._create_attention_masks(
+            attention_mask=attention_mask,
+            encoder_attention_mask=encoder_attention_mask,
+            embedding_output=inputs_embeds,
+            encoder_hidden_states=encoder_hidden_states,
+            # There is no real logic for decoder generation, creating values on the fly
+            cache_position=torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device),
+            past_key_values=None,
         )
 
         encoder_outputs = self.encoder(
@@ -683,60 +678,40 @@ class EsmModel(EsmPreTrainedModel):
             pooler_output=pooled_output,
         )
 
-    # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_full_mask
-    def _update_full_mask(
+    # Copied from transformers.models.bert.modeling_bert.BertModel._create_attention_masks
+    def _create_attention_masks(
         self,
-        attention_mask: Union[torch.Tensor, None],
-        inputs_embeds: torch.Tensor,
+        attention_mask,
+        encoder_attention_mask,
+        embedding_output,
+        encoder_hidden_states,
+        cache_position,
+        past_key_values,
     ):
-        if attention_mask is not None:
-            if "flash" in self.config._attn_implementation:
-                attention_mask = attention_mask if 0 in attention_mask else None
-            elif self.config._attn_implementation == "sdpa":
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
-            elif self.config._attn_implementation == "flex_attention":
-                if isinstance(attention_mask, torch.Tensor):
-                    attention_mask = make_flex_block_causal_mask(attention_mask, is_causal=False)
-            else:
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
+        if self.config.is_decoder:
+            attention_mask = create_causal_mask(
+                config=self.config,
+                input_embeds=embedding_output,
+                attention_mask=attention_mask,
+                cache_position=cache_position,
+                past_key_values=past_key_values,
+            )
+        else:
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=embedding_output,
+                attention_mask=attention_mask,
+            )
 
-        return attention_mask
+        if encoder_attention_mask is not None:
+            encoder_attention_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=embedding_output,
+                attention_mask=encoder_attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
+            )
 
-    # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_cross_attn_mask
-    def _update_cross_attn_mask(
-        self,
-        encoder_hidden_states: Union[torch.Tensor, None],
-        encoder_attention_mask: Union[torch.Tensor, None],
-        input_shape: torch.Size,
-        inputs_embeds: torch.Tensor,
-    ):
-        # expand encoder attention mask
-        if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            if "flash" in self.config._attn_implementation:
-                encoder_attention_mask = encoder_attention_mask if 0 in encoder_attention_mask else None
-            elif self.config._attn_implementation == "sdpa":
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                encoder_attention_mask = _prepare_4d_attention_mask_for_sdpa(
-                    encoder_attention_mask,
-                    inputs_embeds.dtype,
-                    tgt_len=input_shape[-1],
-                )
-            elif self.config._attn_implementation == "flex_attention":
-                if isinstance(encoder_attention_mask, torch.Tensor):
-                    encoder_attention_mask = make_flex_block_causal_mask(
-                        encoder_attention_mask,
-                        query_length=input_shape[-1],
-                        is_causal=False,
-                    )
-            else:
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                encoder_attention_mask = _prepare_4d_attention_mask(
-                    encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
-                )
-
-        return encoder_attention_mask
+        return attention_mask, encoder_attention_mask
 
     def predict_contacts(self, tokens, attention_mask):
         attns = self(tokens, attention_mask=attention_mask, return_dict=True, output_attentions=True).attentions
