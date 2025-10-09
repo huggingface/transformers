@@ -81,7 +81,8 @@ class AudioFlamingo3Processor(ProcessorMixin):
         Main method to prepare one or several text sequence(s) and audio waveform(s) for the model. This
         method expands `<sound>` placeholders in the text based on the post-pool frame counts of the
         audio windows, then tokenizes the provided strings as-is, and extracts log-mel features
-        with [`WhisperFeatureExtractor`].
+        with [`WhisperFeatureExtractor`]. If `audio` is `None`, no audio processing is performed and
+        the text is tokenized as-is (LM-only behavior).
 
         Args:
             text (`str` or `list[str]`):
@@ -117,7 +118,8 @@ class AudioFlamingo3Processor(ProcessorMixin):
         else:
             raise ValueError("`text` must be a str or list[str].")
 
-        # Handle audio
+        expanded_texts: list[str] = texts
+
         audio_inputs = {}
         if audio is not None:
             audios = make_list_of_audio(audio)
@@ -171,7 +173,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
                 frames_per_window.append(max(1, K))
 
             # Expand text per sample
-            expanded_texts: list[str] = []
+            expanded_texts = []
             w_ptr = 0
             for idx, t in enumerate(texts):
                 n_win = per_sample_windows[idx]
