@@ -211,7 +211,6 @@ if is_accelerate_available():
     from accelerate import __version__ as accelerate_version
     from accelerate.state import AcceleratorState
     from accelerate.utils import (
-        AutocastKwargs,
         DataLoaderConfiguration,
         DistributedDataParallelKwargs,
         DistributedType,
