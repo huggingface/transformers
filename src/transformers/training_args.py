@@ -107,17 +107,6 @@ if is_sagemaker_mp_enabled():
     smp.init()
 
 
-def default_logdir() -> str:
-    """
-    Same default as PyTorch
-    """
-    import socket
-    from datetime import datetime
-
-    current_time = datetime.now().strftime("%b%d_%H-%M-%S")
-    return os.path.join("runs", current_time + "_" + socket.gethostname())
-
-
 def get_int_from_env(env_keys, default):
     """Returns the first positive env value found in the `env_keys` list or the default."""
     for e in env_keys:
@@ -219,9 +208,6 @@ class TrainingArguments:
     Parameters:
         output_dir (`str`, *optional*, defaults to `"trainer_output"`):
             The output directory where the model predictions and checkpoints will be written.
-        overwrite_output_dir (`bool`, *optional*, defaults to `False`):
-            If `True`, overwrite the content of the output directory. Use this to continue training if `output_dir`
-            points to a checkpoint directory.
         do_train (`bool`, *optional*, defaults to `False`):
             Whether to run training or not. This argument is not directly used by [`Trainer`], it's intended to be used
             by your training/evaluation scripts instead. See the [example
@@ -312,9 +298,6 @@ class TrainingArguments:
         log_on_each_node (`bool`, *optional*, defaults to `True`):
             In multinode distributed training, whether to log using `log_level` once per node, or only on the main
             node.
-        logging_dir (`str`, *optional*):
-            [TensorBoard](https://www.tensorflow.org/tensorboard) log directory. Will default to
-            *output_dir/runs/**CURRENT_DATETIME_HOSTNAME***.
         logging_strategy (`str` or [`~trainer_utils.IntervalStrategy`], *optional*, defaults to `"steps"`):
             The logging strategy to adopt during training. Possible values are:
 
@@ -603,7 +586,7 @@ class TrainingArguments:
             Column name for precomputed lengths. If the column exists, grouping by length will use these values rather
             than computing them on train startup. Ignored unless `group_by_length` is `True` and the dataset is an
             instance of `Dataset`.
-        report_to (`str` or `list[str]`, *optional*, defaults to `"all"`):
+        report_to (`str` or `list[str]`, *optional*, defaults to `"none"`):
             The list of integrations to report the results and logs to. Supported platforms are `"azure_ml"`,
             `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"dvclive"`, `"flyte"`, `"mlflow"`, `"neptune"`,
             `"swanlab"`, `"tensorboard"`, `"trackio"` and `"wandb"`. Use `"all"` to report to all integrations
@@ -799,15 +782,6 @@ class TrainingArguments:
             "help": "The output directory where the model predictions and checkpoints will be written. Defaults to 'trainer_output' if not provided."
         },
     )
-    overwrite_output_dir: bool = field(
-        default=False,
-        metadata={
-            "help": (
-                "Overwrite the content of the output directory. "
-                "Use this to continue training if output_dir points to a checkpoint directory."
-            )
-        },
-    )
 
     do_train: bool = field(default=False, metadata={"help": "Whether to run training."})
     do_eval: bool = field(default=False, metadata={"help": "Whether to run eval on the dev set."})
@@ -912,7 +886,6 @@ class TrainingArguments:
             )
         },
     )
-    logging_dir: Optional[str] = field(default=None, metadata={"help": "Tensorboard log dir."})
     logging_strategy: Union[IntervalStrategy, str] = field(
         default="steps",
         metadata={"help": "The logging strategy to use."},
@@ -1194,7 +1167,7 @@ class TrainingArguments:
         metadata={"help": "Column name with precomputed lengths to use when grouping by length."},
     )
     report_to: Union[None, str, list[str]] = field(
-        default=None, metadata={"help": "The list of integrations to report the results and logs to."}
+        default="none", metadata={"help": "The list of integrations to report the results and logs to."}
     )
     project: str = field(
         default="huggingface",
@@ -1461,10 +1434,6 @@ class TrainingArguments:
         # see https://github.com/huggingface/transformers/issues/10628
         if self.output_dir is not None:
             self.output_dir = os.path.expanduser(self.output_dir)
-        if self.logging_dir is None and self.output_dir is not None:
-            self.logging_dir = os.path.join(self.output_dir, default_logdir())
-        if self.logging_dir is not None:
-            self.logging_dir = os.path.expanduser(self.logging_dir)
 
         if self.disable_tqdm is None:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
@@ -1667,13 +1636,6 @@ class TrainingArguments:
             mixed_precision_dtype = "bf16"
         os.environ["ACCELERATE_MIXED_PRECISION"] = mixed_precision_dtype
 
-        if self.report_to is None:
-            logger.info(
-                "The default value for the training argument `--report_to` will change in v5 (from all installed "
-                "integrations to none). In v5, you will need to use `--report_to all` to get the same behavior as "
-                "now. You should start updating your code and make this info disappear :-)."
-            )
-            self.report_to = "all"
         if self.report_to == "all" or self.report_to == ["all"]:
             # Import at runtime to avoid a circular import.
             from .integrations import get_available_reporting_integrations
@@ -2535,7 +2497,7 @@ class TrainingArguments:
                 Logger log level to use on the main process. Possible choices are the log levels as strings: `"debug"`,
                 `"info"`, `"warning"`, `"error"` and `"critical"`, plus a `"passive"` level which doesn't set anything
                 and lets the application set the level.
-            report_to (`str` or `list[str]`, *optional*, defaults to `"all"`):
+            report_to (`str` or `list[str]`, *optional*, defaults to `"none"`):
                 The list of integrations to report the results and logs to. Supported platforms are `"azure_ml"`,
                 `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"dvclive"`, `"flyte"`, `"mlflow"`,
                 `"neptune"`, `"swanlab"`, `"tensorboard"`, `"trackio"` and `"wandb"`. Use `"all"` to report to all
