@@ -35,7 +35,7 @@ def check_models_equal(model1, model2):
 @require_torch
 class VocosProcessorTest(unittest.TestCase):
     def setUp(self):
-        self.checkpoint = "Manel/vocos-mel-24khz"
+        self.checkpoint = "hf-audio/vocos-mel-24khz"
         self.tmpdir = tempfile.mkdtemp()
 
         self.processor = VocosProcessor(

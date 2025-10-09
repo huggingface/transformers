@@ -26,7 +26,7 @@ class VocosConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`VocosModel`]. It is used to
     instantiate a Vocos vocoder model according to the specified arguments, defining the model
     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
-    [Manel/vocos-mel-24khz](https://huggingface.co/Manel/vocos-mel-24khz) architecture.
+    [hf-audio/vocos-mel-24khz](https://huggingface.co/hf-audio/vocos-mel-24khz) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model
     outputs. Read the documentation from [`PretrainedConfig`] for more information.
