@@ -524,7 +524,6 @@ class ProcessorMixin(PushToHubMixin):
     """
 
     attributes = ["feature_extractor", "tokenizer"]
-    optional_attributes = ["chat_template", "audio_tokenizer"]
     optional_call_args: list[str] = []
     # Names need to be attr_class for attr in attributes
     feature_extractor_class = None
@@ -534,21 +533,17 @@ class ProcessorMixin(PushToHubMixin):
 
     # args have to match the attributes class attribute
     def __init__(self, *args, **kwargs):
-        # First, extract optional attributes from kwargs if present
-        # Optional attributes can never be positional arguments
-        for optional_attribute in self.optional_attributes:
-            optional_attribute_value = kwargs.pop(optional_attribute, None)
-            setattr(self, optional_attribute, optional_attribute_value)
+        # First, extract chat template from kwargs. It can never be a positional arg
+        setattr(self, "chat_template", kwargs.pop("chat_template", None))
 
-            # Check audio tokenizer for its class but do not treat it as attr to avoid saving weights
-            if optional_attribute == "audio_tokenizer" and optional_attribute_value is not None:
-                proper_class = self.check_argument_for_proper_class(optional_attribute, optional_attribute_value)
-
-                if not (is_torch_available() and isinstance(optional_attribute_value, PreTrainedAudioTokenizerBase)):
-                    raise ValueError(
-                        f"Tried to use `{proper_class}` for audio tokenization. However, this class is not"
-                        " registered for audio tokenization."
-                    )
+        # Check audio tokenizer for its class but do not treat it as attr to avoid saving weights
+        if (audio_tokenizer := kwargs.pop("audio_tokenizer", None)) is not None:
+            proper_class = self.check_argument_for_proper_class("audio_tokenizer", audio_tokenizer)
+            if not (is_torch_available() and isinstance(audio_tokenizer, PreTrainedAudioTokenizerBase)):
+                raise ValueError(
+                    f"Tried to use `{proper_class}` for audio tokenization. However, this class is not"
+                    " registered for audio tokenization."
+                )
 
         # Sanitize args and kwargs
         for key in kwargs:
@@ -747,7 +742,7 @@ class ProcessorMixin(PushToHubMixin):
         attributes_repr = "\n".join(attributes_repr)
         return f"{self.__class__.__name__}:\n{attributes_repr}\n\n{self.to_json_string()}"
 
-    def save_pretrained(self, save_directory, push_to_hub: bool = False, legacy_serialization: bool = True, **kwargs):
+    def save_pretrained(self, save_directory, push_to_hub: bool = False, legacy_serialization: bool = False, **kwargs):
         """
         Saves the attributes of this processor (feature extractor, tokenizer...) in the specified directory so that it
         can be reloaded using the [`~ProcessorMixin.from_pretrained`] method.
@@ -1461,8 +1456,8 @@ class ProcessorMixin(PushToHubMixin):
         if token is not None:
             kwargs["token"] = token
 
-        args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
         processor_dict, kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
+        args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, processor_dict, **kwargs)
         return cls.from_args_and_dict(args, processor_dict, **kwargs)
 
     @classmethod
@@ -1488,7 +1483,7 @@ class ProcessorMixin(PushToHubMixin):
         cls._auto_class = auto_class
 
     @classmethod
-    def _get_arguments_from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+    def _get_arguments_from_pretrained(cls, pretrained_model_name_or_path, processor_dict, **kwargs):
         """
         Identify and instantiate the subcomponents of Processor classes, like image processors and
         tokenizers. This method uses the Processor attributes like `tokenizer_class` to figure out what class those
@@ -1520,7 +1515,13 @@ class ProcessorMixin(PushToHubMixin):
             else:
                 attribute_class = cls.get_possibly_dynamic_module(class_name)
 
-            args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
+            if attribute_name in processor_dict:
+                # The new format when the args are saved as nested dict
+                attribute = attribute_class.from_dict(processor_dict[attribute_name], **kwargs)
+            else:
+                # Legacy format when args were saved in their own respective json files
+                attribute = attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
+            args.append(attribute)
 
         return args
 
