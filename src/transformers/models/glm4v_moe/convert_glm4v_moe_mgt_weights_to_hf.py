@@ -19,7 +19,6 @@ import os
 import pickle
 import re
 from pathlib import Path
-from typing import Callable, Optional
 
 import torch
 from safetensors.torch import save_file
@@ -382,8 +381,8 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
         pp_dict = organized_sd[pp]
         next_llm_layer_offset = llm_layer_offset
         next_vit_layer_offset = vit_layer_offset
-        ep_map = dict()
-        tp_map = dict()
+        ep_map = {}
+        tp_map = {}
         tp_seen = set()
         for (ep, tp), item in pp_dict.items():
             if tp not in tp_seen:
@@ -448,7 +447,6 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
         llm_layer_offset = next_llm_layer_offset
         vit_layer_offset = next_vit_layer_offset
 
-    print(f"============ weight loaded from file", flush=True)
     for k in sorted(full_weights.keys()):
         item = full_weights[k]
         if isinstance(item, list):
