@@ -61,7 +61,7 @@ ARG FA3=FALSE
 RUN if [ "$FA3" != "FALSE" ]; then \
         git clone https://github.com/Dao-AILab/flash-attention && \
         cd flash-attention/hopper && \
-        MAX_JOBS=16 python3 setup.py install; \
+        MAX_JOBS=28 python3 setup.py install; \
     else \
         echo "FA3 is not installed."; \
     fi
