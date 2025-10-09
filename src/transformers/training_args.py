@@ -690,12 +690,6 @@ class TrainingArguments:
         full_determinism (`bool`, *optional*, defaults to `False`)
             If `True`, [`enable_full_determinism`] is called instead of [`set_seed`] to ensure reproducible results in
             distributed training. Important: this will negatively impact the performance, so only use it for debugging.
-        ray_scope (`str`, *optional*, defaults to `"last"`):
-            The scope to use when doing hyperparameter search with Ray. By default, `"last"` will be used. Ray will
-            then use the last checkpoint of all trials, compare those, and select the best one. However, other options
-            are also available. See the [Ray documentation](
-            https://docs.ray.io/en/latest/tune/api_docs/analysis.html#ray.tune.ExperimentAnalysis.get_best_trial) for
-            more options.
         ddp_timeout (`int`, *optional*, defaults to 1800):
             The timeout for `torch.distributed.init_process_group` calls, used to avoid GPU socket timeouts when
             performing slow operations in distributed runnings. Please refer the [PyTorch documentation]
@@ -1311,9 +1305,10 @@ class TrainingArguments:
         },
     )
     ray_scope: str = field(
-        default="last",
+        default=None,
         metadata={
             "help": (
+                "This argument is deprecated and will be removed in v5.2. Set env var RAY_SCOPE instead."
                 'The scope to use when doing hyperparameter search with Ray. By default, `"last"` will be used. Ray'
                 " will then use the last checkpoint of all trials, compare those, and select the best one. However,"
                 " other options are also available. See the Ray documentation"
