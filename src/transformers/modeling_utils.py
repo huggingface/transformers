@@ -56,7 +56,7 @@ from .integrations.eager_paged import eager_paged_attention_forward
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
-from .integrations.hub_kernels import is_kernel, load_and_register_attn_kernel
+from .integrations.hub_kernels import is_kernel
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
 from .integrations.tensor_parallel import (
@@ -2549,7 +2549,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if is_kernel(applicable_attn_implementation):
             try:
-                load_and_register_attn_kernel(applicable_attn_implementation)
+                # preload flash attention here to allow compile with fullgraph
+                lazy_import_flash_attention(applicable_attn_implementation)
+
                 # log that we used kernel fallback if successful
                 if attn_implementation.startswith("flash_attention"):
                     logger.warning_once(
@@ -2571,9 +2573,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 applicable_attn_implementation, is_init_check
             )
 
-        # preload flash attention here to allow compile with fullgraph
-        if "flash" in applicable_attn_implementation:
-            lazy_import_flash_attention(applicable_attn_implementation)
+            # preload flash attention here to allow compile with fullgraph
+            if "flash" in applicable_attn_implementation:
+                lazy_import_flash_attention(applicable_attn_implementation)
 
         return applicable_attn_implementation
 

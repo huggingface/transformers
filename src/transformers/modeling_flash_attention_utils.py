@@ -13,8 +13,9 @@
 # limitations under the License.
 import inspect
 import os
+from collections.abc import Callable
 from functools import partial
-from typing import Callable, Optional, TypedDict
+from typing import Optional, TypedDict
 
 import torch
 import torch.nn.functional as F
@@ -96,11 +97,11 @@ def _lazy_imports(implementation: Optional[str], attention_wrapper: Optional[Cal
             from flash_attn_interface import flash_attn_func, flash_attn_varlen_func
         # Kernels fallback
         else:
-            from .integrations.hub_kernels import load_and_register_kernel
+            from .integrations.hub_kernels import load_and_register_attn_kernel
 
             # We want to explicitly register the name with `paged|` if found
             kernel_implementation = f"paged|{implementation}" if is_paged else implementation
-            kernel = load_and_register_kernel(kernel_implementation, attention_wrapper)
+            kernel = load_and_register_attn_kernel(kernel_implementation, attention_wrapper)
 
             flash_attn_func = getattr(kernel, "flash_attn_func", None)
             flash_attn_varlen_func = getattr(kernel, "flash_attn_varlen_func", None)

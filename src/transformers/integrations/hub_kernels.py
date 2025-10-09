@@ -165,7 +165,7 @@ def is_kernel(attn_implementation: Optional[str]) -> bool:
     )
 
 
-def load_and_register_kernel(
+def load_and_register_attn_kernel(
     attn_implementation: str, attention_wrapper: Optional[Callable] = None
 ) -> Optional[ModuleType]:
     """
