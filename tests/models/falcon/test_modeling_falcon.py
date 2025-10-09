@@ -18,6 +18,7 @@ import unittest
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
+    BitsAndBytesConfig,
     FalconConfig,
     is_torch_available,
 )
@@ -104,7 +105,9 @@ class FalconLanguageGenerationTest(unittest.TestCase):
     def test_lm_generate_falcon_11b(self):
         tokenizer = AutoTokenizer.from_pretrained("tiiuae/falcon-11B", padding_side="left")
         model = FalconForCausalLM.from_pretrained(
-            "tiiuae/falcon-11B", device_map={"": torch_device}, load_in_8bit=True
+            "tiiuae/falcon-11B",
+            device_map={"": torch_device},
+            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
         )
         model.eval()
         inputs = tokenizer(
@@ -164,7 +167,7 @@ class FalconLanguageGenerationTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             "tiiuae/falcon-7b",
             device_map={"": torch_device},
-            load_in_4bit=True,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
         )
 
         test_text = "A sequence: 1, 2"  # should generate the rest of the sequence

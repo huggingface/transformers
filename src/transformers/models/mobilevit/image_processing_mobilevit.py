@@ -53,7 +53,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-class MobileVitImageProcessorKwargs(ImagesKwargs):
+class MobileVitImageProcessorKwargs(ImagesKwargs, total=False):
     """
     do_flip_channel_order (`bool`, *optional*, defaults to `self.do_flip_channel_order`):
         Whether to flip the color channels from RGB to BGR or vice versa.
@@ -63,8 +63,8 @@ class MobileVitImageProcessorKwargs(ImagesKwargs):
         ADE20k). The background label will be replaced by 255.
     """
 
-    do_flip_channel_order: Optional[bool]
-    do_reduce_labels: Optional[bool]
+    do_flip_channel_order: bool
+    do_reduce_labels: bool
 
 
 @requires(backends=("vision",))

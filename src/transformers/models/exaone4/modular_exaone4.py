@@ -15,7 +15,8 @@
 # limitations under the License.
 """LG AI Research EXAONE Lab"""
 
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -35,7 +36,6 @@ from ...utils import (
     TransformersKwargs,
     logging,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ..llama.modeling_llama import (
     LlamaForCausalLM,
     LlamaForQuestionAnswering,
@@ -287,7 +287,6 @@ class Exaone4Attention(nn.Module):
         self.q_norm = Exaone4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = Exaone4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
