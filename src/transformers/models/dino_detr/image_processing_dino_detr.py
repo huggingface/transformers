@@ -7,7 +7,8 @@
 import io
 import pathlib
 from collections import defaultdict
-from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
+from collections.abc import Iterable
+from typing import Any, Optional, Union
 
 import numpy as np
 
@@ -72,7 +73,7 @@ SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationForma
 
 
 # From the original repo: https://github.com/facebookresearch/dino_detr/blob/3af9fa878e73b6894ce3596450a8d9b89d918ca9/datasets/transforms.py#L76
-def get_size_with_aspect_ratio(image_size, size, max_size=None) -> Tuple[int, int]:
+def get_size_with_aspect_ratio(image_size, size, max_size=None) -> tuple[int, int]:
     """
     Computes the output image size given the input image size and the desired output size.
 
@@ -116,7 +117,7 @@ def get_image_size_for_max_height_width(
     max_height: int,
     max_width: int,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     """
     Computes the output image size given the input image and the maximum allowed height and width. Keep aspect ratio.
     Important, even if image_height < max_height and image_width < max_width, the image will be resized
@@ -148,10 +149,10 @@ def get_image_size_for_max_height_width(
 
 def get_resize_output_image_size(
     input_image: np.ndarray,
-    size: Union[int, Tuple[int, int], List[int]],
+    size: Union[int, tuple[int, int], list[int]],
     max_size: Optional[int] = None,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     """
     Computes the output image size given the input image size and the desired output size. If the desired output size
     is a tuple or list, the output image size is returned as is. If the desired output size is an integer, the output
@@ -187,7 +188,7 @@ def safe_squeeze(arr: np.ndarray, axis: Optional[int] = None) -> np.ndarray:
         return arr
 
 
-def normalize_annotation(annotation: Dict, image_size: Tuple[int, int]) -> Dict:
+def normalize_annotation(annotation: dict, image_size: tuple[int, int]) -> dict:
     image_height, image_width = image_size
     norm_annotation = {}
     for key, value in annotation.items():
@@ -201,7 +202,7 @@ def normalize_annotation(annotation: Dict, image_size: Tuple[int, int]) -> Dict:
     return norm_annotation
 
 
-def max_across_indices(values: Iterable[Any]) -> List[Any]:
+def max_across_indices(values: Iterable[Any]) -> list[Any]:
     """
     Return the maximum value across all indices of an iterable of values.
     """
@@ -209,8 +210,8 @@ def max_across_indices(values: Iterable[Any]) -> List[Any]:
 
 
 def get_max_height_width(
-    images: List[np.ndarray], input_data_format: Optional[Union[str, ChannelDimension]] = None
-) -> List[int]:
+    images: list[np.ndarray], input_data_format: Optional[Union[str, ChannelDimension]] = None
+) -> list[int]:
     """
     Get the maximum height and width across all images in a batch.
     """
@@ -227,7 +228,7 @@ def get_max_height_width(
 
 
 def make_pixel_mask(
-    image: np.ndarray, output_size: Tuple[int, int], input_data_format: Optional[Union[str, ChannelDimension]] = None
+    image: np.ndarray, output_size: tuple[int, int], input_data_format: Optional[Union[str, ChannelDimension]] = None
 ) -> np.ndarray:
     """
     Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
@@ -376,11 +377,11 @@ def masks_to_boxes(masks: np.ndarray) -> np.ndarray:
 
 def prepare_coco_panoptic_annotation(
     image: np.ndarray,
-    target: Dict,
+    target: dict,
     masks_path: Union[str, pathlib.Path],
     return_masks: bool = True,
     input_data_format: Union[ChannelDimension, str] = None,
-) -> Dict:
+) -> dict:
     """
     Prepare a coco panoptic annotation for DINO_DETR.
     """
@@ -416,9 +417,9 @@ def prepare_coco_panoptic_annotation(
 
 
 def resize_annotation(
-    annotation: Dict[str, Any],
-    orig_size: Tuple[int, int],
-    target_size: Tuple[int, int],
+    annotation: dict[str, Any],
+    orig_size: tuple[int, int],
+    target_size: tuple[int, int],
     threshold: float = 0.5,
     resample: PILImageResampling = PILImageResampling.NEAREST,
 ):
@@ -563,14 +564,14 @@ def compute_segments(
     pred_labels,
     mask_threshold: float = 0.5,
     overlap_mask_area_threshold: float = 0.8,
-    label_ids_to_fuse: Optional[Set[int]] = None,
-    target_size: Optional[Tuple[int, int]] = None,
+    label_ids_to_fuse: Optional[set[int]] = None,
+    target_size: Optional[tuple[int, int]] = None,
 ):
     height = mask_probs.shape[1] if target_size is None else target_size[0]
     width = mask_probs.shape[2] if target_size is None else target_size[1]
 
     segmentation = torch.zeros((height, width), dtype=torch.int32, device=mask_probs.device)
-    segments: List[Dict] = []
+    segments: list[dict] = []
 
     if target_size is not None:
         mask_probs = nn.functional.interpolate(
@@ -584,7 +585,7 @@ def compute_segments(
     mask_labels = mask_probs.argmax(0)  # [height, width]
 
     # Keep track of instances of each class
-    stuff_memory_list: Dict[str, int] = {}
+    stuff_memory_list: dict[str, int] = {}
     for k in range(pred_labels.shape[0]):
         pred_class = pred_labels[k].item()
         should_fuse = pred_class in label_ids_to_fuse
@@ -677,16 +678,16 @@ class DinoDetrImageProcessor(BaseImageProcessor):
         self,
         format: Union[str, AnnotationFormat] = AnnotationFormat.COCO_DETECTION,
         do_resize: bool = True,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_convert_annotations: Optional[bool] = None,
         do_pad: bool = True,
-        pad_size: Optional[Dict[str, int]] = None,
+        pad_size: Optional[dict[str, int]] = None,
         **kwargs,
     ) -> None:
         if "pad_and_return_pixel_mask" in kwargs:
@@ -744,7 +745,7 @@ class DinoDetrImageProcessor(BaseImageProcessor):
         ]
 
     @classmethod
-    def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
+    def from_dict(cls, image_processor_dict: dict[str, Any], **kwargs):
         """
         Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
         created using from_dict and kwargs e.g. `DinoDetrImageProcessor.from_pretrained(checkpoint, size=600,
@@ -760,12 +761,12 @@ class DinoDetrImageProcessor(BaseImageProcessor):
     def prepare_annotation(
         self,
         image: np.ndarray,
-        target: Dict,
+        target: dict,
         format: Optional[AnnotationFormat] = None,
         return_segmentation_masks: Optional[bool] = None,
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> Dict:
+    ) -> dict:
         """
         Prepare an annotation for feeding into DINO_DETR model.
         """
@@ -792,7 +793,7 @@ class DinoDetrImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
+        size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[ChannelDimension] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -863,7 +864,7 @@ class DinoDetrImageProcessor(BaseImageProcessor):
         orig_size,
         size,
         resample: PILImageResampling = PILImageResampling.NEAREST,
-    ) -> Dict:
+    ) -> dict:
         """
         Resize the annotation to match the resized image. If size is an int, smaller edge of the mask will be matched
         to this number.
@@ -899,7 +900,7 @@ class DinoDetrImageProcessor(BaseImageProcessor):
         """
         return rescale(image, rescale_factor, data_format=data_format, input_data_format=input_data_format)
 
-    def normalize_annotation(self, annotation: Dict, image_size: Tuple[int, int]) -> Dict:
+    def normalize_annotation(self, annotation: dict, image_size: tuple[int, int]) -> dict:
         """
         Normalize the boxes in the annotation from `[top_left_x, top_left_y, bottom_right_x, bottom_right_y]` to
         `[center_x, center_y, width, height]` format and from absolute to relative pixel values.
@@ -908,12 +909,12 @@ class DinoDetrImageProcessor(BaseImageProcessor):
 
     def _update_annotation_for_padded_image(
         self,
-        annotation: Dict,
-        input_image_size: Tuple[int, int],
-        output_image_size: Tuple[int, int],
+        annotation: dict,
+        input_image_size: tuple[int, int],
+        output_image_size: tuple[int, int],
         padding,
         update_bboxes,
-    ) -> Dict:
+    ) -> dict:
         """
         Update the annotation for a padded image.
         """
@@ -952,8 +953,8 @@ class DinoDetrImageProcessor(BaseImageProcessor):
     def _pad_image(
         self,
         image: np.ndarray,
-        output_size: Tuple[int, int],
-        annotation: Optional[Dict[str, Any]] = None,
+        output_size: tuple[int, int],
+        annotation: Optional[dict[str, Any]] = None,
         constant_values: Union[float, Iterable[float]] = 0,
         data_format: Optional[ChannelDimension] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -984,15 +985,15 @@ class DinoDetrImageProcessor(BaseImageProcessor):
 
     def pad(
         self,
-        images: List[np.ndarray],
-        annotations: Optional[Union[AnnotationType, List[AnnotationType]]] = None,
+        images: list[np.ndarray],
+        annotations: Optional[Union[AnnotationType, list[AnnotationType]]] = None,
         constant_values: Union[float, Iterable[float]] = 0,
         return_pixel_mask: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         update_bboxes: bool = True,
-        pad_size: Optional[Dict[str, int]] = None,
+        pad_size: Optional[dict[str, int]] = None,
     ) -> BatchFeature:
         """
         Pads a batch of images to the bottom and right of the image with zeros to the size of largest height and width
@@ -1070,24 +1071,24 @@ class DinoDetrImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        annotations: Optional[Union[AnnotationType, List[AnnotationType]]] = None,
+        annotations: Optional[Union[AnnotationType, list[AnnotationType]]] = None,
         return_segmentation_masks: Optional[bool] = None,
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample=None,  # PILImageResampling
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[Union[int, float]] = None,
         do_normalize: Optional[bool] = None,
         do_convert_annotations: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_pad: Optional[bool] = None,
         format: Optional[Union[str, AnnotationFormat]] = None,
         return_tensors: Optional[Union[TensorType, str]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        pad_size: Optional[Dict[str, int]] = None,
+        pad_size: Optional[dict[str, int]] = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -1685,7 +1686,7 @@ class DinoDetrImageProcessor(BaseImageProcessor):
 
         return results
 
-    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[List[Tuple[int, int]]] = None):
+    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[list[tuple[int, int]]] = None):
         """
         Converts the output of [`DinoDetrForSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 
@@ -1739,9 +1740,9 @@ class DinoDetrImageProcessor(BaseImageProcessor):
         threshold: float = 0.5,
         mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
-        target_sizes: Optional[List[Tuple[int, int]]] = None,
+        target_sizes: Optional[list[tuple[int, int]]] = None,
         return_coco_annotation: Optional[bool] = False,
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """
         Converts the output of [`DinoDetrForSegmentation`] into instance segmentation predictions. Only supports PyTorch.
 
@@ -1783,7 +1784,7 @@ class DinoDetrImageProcessor(BaseImageProcessor):
         pred_scores, pred_labels = nn.functional.softmax(class_queries_logits, dim=-1).max(-1)
 
         # Loop over items in batch size
-        results: List[Dict[str, TensorType]] = []
+        results: list[dict[str, TensorType]] = []
 
         for i in range(batch_size):
             mask_probs_item, pred_scores_item, pred_labels_item = remove_low_and_no_objects(
@@ -1823,9 +1824,9 @@ class DinoDetrImageProcessor(BaseImageProcessor):
         threshold: float = 0.5,
         mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
-        label_ids_to_fuse: Optional[Set[int]] = None,
-        target_sizes: Optional[List[Tuple[int, int]]] = None,
-    ) -> List[Dict]:
+        label_ids_to_fuse: Optional[set[int]] = None,
+        target_sizes: Optional[list[tuple[int, int]]] = None,
+    ) -> list[dict]:
         """
         Converts the output of [`DinoDetrForSegmentation`] into image panoptic segmentation predictions. Only supports
         PyTorch.
@@ -1876,7 +1877,7 @@ class DinoDetrImageProcessor(BaseImageProcessor):
         pred_scores, pred_labels = nn.functional.softmax(class_queries_logits, dim=-1).max(-1)
 
         # Loop over items in batch size
-        results: List[Dict[str, TensorType]] = []
+        results: list[dict[str, TensorType]] = []
 
         for i in range(batch_size):
             mask_probs_item, pred_scores_item, pred_labels_item = remove_low_and_no_objects(
