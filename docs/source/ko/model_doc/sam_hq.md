@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*이 모델은 2023-06-02에 출시되었으며 2025-04-28에 Hugging Face Transformers에 추가되었습니다.*
+*이 모델은 2023-06-02에 발표되었으며 2025-04-28에 Hugging Face Transformers에 추가되었습니다.*
 
 # SAM-HQ[[sam_hq]]
 
@@ -25,7 +25,7 @@ SAM-HQ (High-Quality Segment Anything Model)는 Lei Ke, Mingqiao Ye, Martin Dane
 
 ![example image](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-output.png)
 
-SAM-HQ는 기존 SAM 모델 대비 다음과 같은 5가지 핵심 개선 사항을 도입했습니다:
+SAM-HQ는 기존 SAM 모델 대비 다음과 같은 5가지 핵심 개선 사항을 도입했습니다.
 
 1. 고품질 출력 토큰: SAM-HQ는 SAM의 마스크 디코더에 학습 가능한 토큰을 주입합니다. 이 토큰은 모델이 더 높은 품질의 분할 마스크를 예측하도록 돕는 핵심적인 요소입니다.
 2. 전역-지역 특징 융합: 모델의 서로 다른 단계에서 추출된 특징들을 결합하여 분할 마스크의 세부적인 정확도를 향상시킵니다. 이미지의 전체적인 맥락 정보와 객체의 미세한 경계 정보를 함께 활용하여 마스크 품질을 개선합니다.
@@ -50,7 +50,7 @@ SAM-HQ 사용 팁:
 이 모델은 [sushmanth](https://huggingface.co/sushmanth)님께서 기여해주셨습니다.
 원본 코드는 [여기](https://github.com/SysCV/SAM-HQ)에서 확인하실 수 있습니다.
 
-아래는 이미지와 2차원 포인트가 주어졌을 때, 마스크 생성을 실행하는 방법에 대한 예시입니다:
+아래는 이미지와 2차원 포인트가 주어졌을 때, 마스크를 생성하는 방법에 대한 예시입니다.
 
 ```python
 import torch
@@ -76,7 +76,7 @@ masks = processor.image_processor.post_process_masks(
 scores = outputs.iou_scores
 ```
 
-또한, 프로세서에서 입력 이미지와 함께 사용자의 마스크를 직접 처리하여 모델에 전달할 수도 있습니다:
+또한, 프로세서에서 입력 이미지와 함께 사용자의 마스크를 직접 처리하여 모델에 전달할 수도 있습니다.
 
 ```python
 import torch
@@ -106,7 +106,7 @@ scores = outputs.iou_scores
 
 ## 자료[[resources]]
 
-SAM-HQ 사용을 시작하는 데 도움이 되는 공식 Hugging Face 및 커뮤니티 (🌎로 표시) 자료 목록입니다:
+다음은 SAM-HQ 사용을 시작하는 데 도움이 되는 공식 Hugging Face 및 커뮤니티 (🌎로 표시) 자료 목록입니다.
 
 - 모델 사용을 위한 데모 노트북 (출시 예정)
 - 논문 구현 및 코드: [SAM-HQ 깃허브 저장소](https://github.com/SysCV/SAM-HQ)
