@@ -12,8 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import re
+from collections.abc import Callable
 from functools import partial
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 from ..modeling_flash_attention_utils import lazy_import_flash_attention
 from .flash_attention import flash_attention_forward
@@ -41,7 +42,6 @@ try:
         },
         "Llama4TextMoe": {
             "cuda": LayerRepository(
-                # Move to kernels-community/moe once we release.
                 repo_id="kernels-community/moe",
                 layer_name="Llama4TextMoe",
             )
@@ -50,13 +50,11 @@ try:
             "cuda": LayerRepository(
                 repo_id="kernels-community/liger_kernels",
                 layer_name="LigerRMSNorm",
-                # revision="pure-layer-test",
             ),
             "rocm": {
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/liger_kernels",
                     layer_name="LigerRMSNorm",
-                    # revision="pure-layer-test",
                 )
             },
         },
@@ -168,7 +166,7 @@ def is_kernel(attn_implementation: Optional[str]) -> bool:
     )
 
 
-def load_and_register_kernel(attn_implementation: str, attention_wrapper: Optional[Callable] = None) -> None:
+def load_and_register_attn_kernel(attn_implementation: str, attention_wrapper: Optional[Callable] = None) -> None:
     """
     Load and register the kernel associated to `attn_implementation`.
 
