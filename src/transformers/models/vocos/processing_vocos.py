@@ -116,7 +116,13 @@ class VocosProcessor(ProcessorMixin):
         if audio is not None:
             if bandwidth is not None:
                 # pad audio into batch
-                fe_outputs = self.feature_extractor(audio, return_audio_only=True, device=device, **audio_kwargs)
+                fe_outputs = self.feature_extractor(
+                    audio,
+                    return_audio_only=True,
+                    pad_to_multiple_of=self.audio_tokenizer.config.hop_length,
+                    device=device,
+                    **audio_kwargs,
+                )
                 audio = fe_outputs["audio"]
 
                 # encode audio as in original:

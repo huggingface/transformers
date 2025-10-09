@@ -190,8 +190,8 @@ class VocosFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Te
 
         # Test feature size
         audio_spectrogram = feature_extractor(np_audio_inputs, padding=True, return_tensors="np").audio_spectrogram
-        self.assertTrue(audio_spectrogram.ndim == 3)
-        self.assertTrue(audio_spectrogram.shape[-1] == feature_extractor.feature_size)
+        self.assertTrue(audio_spectrogram.ndim == 3)  # (batch, mel, frame)
+        self.assertTrue(audio_spectrogram.shape[1] == feature_extractor.feature_size)
 
         # Test not batched input
         encoded_sequences_1 = feature_extractor(
@@ -233,5 +233,5 @@ class VocosFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Te
         speech = ds[0]["audio"]["array"]
         feature_extractor = VocosFeatureExtractor.from_pretrained("hf-audio/vocos-mel-24khz")
         audio_spectrogram = feature_extractor(speech, return_tensors="pt").audio_spectrogram
-        self.assertEqual(audio_spectrogram.shape, (1, 100, 549))
+        self.assertEqual(audio_spectrogram.shape, (1, 100, 550))
         torch.testing.assert_close(audio_spectrogram[0, 0, :30], self.EXPECTED_INPUT_FEATURES, rtol=1e-6, atol=1e-6)

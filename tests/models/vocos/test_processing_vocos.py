@@ -108,10 +108,17 @@ class VocosProcessorTest(unittest.TestCase):
     def test_encodec_audio_vs_codes_consistency(self, bandwidth):
         # checking that audio to codes and direct codes input give same outputs
         audio = torch.randn(1, 1024, dtype=torch.float32)
-
-        output_processor = self.processor(audio=audio, bandwidth=bandwidth, return_tensors="pt")["input_features"]
-
         audio_tokenizer = self.processor.audio_tokenizer
+
+        # pad audio so same for both
+        audio = self.processor.feature_extractor(
+            audio,
+            sampling_rate=self.processor.feature_extractor.sampling_rate,
+            return_tensors="pt",
+            return_audio_only=True,
+            pad_to_multiple_of=audio_tokenizer.config.hop_length,
+        ).audio
+        output_processor = self.processor(audio=audio, bandwidth=bandwidth, return_tensors="pt")["input_features"]
 
         with torch.no_grad():
             encoded_frames = audio_tokenizer.encoder(audio.unsqueeze(1))

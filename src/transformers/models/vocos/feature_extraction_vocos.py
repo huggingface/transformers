@@ -114,6 +114,7 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
         audio: AudioInput,
         padding: Optional[Union[bool, str, PaddingStrategy]] = True,
         max_length: Optional[int] = None,
+        pad_to_multiple_of: Optional[int] = None,
         truncation: Optional[bool] = False,
         sampling_rate: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -177,6 +178,9 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
         if padding and truncation:
             raise ValueError("Both padding and truncation were set. Make sure you only set one.")
 
+        if pad_to_multiple_of is None:
+            pad_to_multiple_of = self.hop_length
+
         # Ensure batch
         audio = make_list_of_audio(audio)
 
@@ -203,6 +207,7 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
             batch,
             padding=padding,
             max_length=max_length,
+            pad_to_multiple_of=pad_to_multiple_of,
             truncation=truncation,
             return_attention_mask=True,
             return_tensors="pt",
