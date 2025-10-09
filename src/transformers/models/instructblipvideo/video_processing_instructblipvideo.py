@@ -24,13 +24,9 @@ from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling, SizeDict
-from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TensorType
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import group_videos_by_shape, reorder_videos
-
-
-class InstructBlipVideoVideoProcessorInitKwargs(VideosKwargs): ...
 
 
 class InstructBlipVideoVideoProcessor(BaseVideoProcessor):
@@ -44,11 +40,7 @@ class InstructBlipVideoVideoProcessor(BaseVideoProcessor):
     do_normalize = True
     do_convert_rgb = True
     do_sample_frames = False  # Set to False for BC, recommended to set `True` in new models
-    valid_kwargs = InstructBlipVideoVideoProcessorInitKwargs
     model_input_names = ["pixel_values"]
-
-    def __init__(self, **kwargs: Unpack[InstructBlipVideoVideoProcessorInitKwargs]):
-        super().__init__(**kwargs)
 
     def _preprocess(
         self,

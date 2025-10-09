@@ -121,7 +121,7 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SuperGlueForKeypointMatching,) if is_torch_available() else ()
 
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
     has_attentions = True
 

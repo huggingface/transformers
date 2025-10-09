@@ -58,12 +58,6 @@ class ClapTextConfig(PreTrainedConfig):
             The vocabulary size of the `token_type_ids` passed when calling [`ClapTextModel`].
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
-            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
-            positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
-            [Self-Attention with Relative Position Representations (Shaw et al.)](https://huggingface.co/papers/1803.02155).
-            For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
-            with Better Relative Position Embeddings (Huang et al.)](https://huggingface.co/papers/2009.13658).
         is_decoder (`bool`, *optional*, defaults to `False`):
             Whether the model is used as a decoder or not. If `False`, the model is used as an encoder.
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -111,7 +105,6 @@ class ClapTextConfig(PreTrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        position_embedding_type="absolute",
         use_cache=True,
         projection_hidden_act="relu",
         **kwargs,
@@ -130,7 +123,6 @@ class ClapTextConfig(PreTrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.initializer_factor = initializer_factor
         self.layer_norm_eps = layer_norm_eps
-        self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
         self.projection_hidden_act = projection_hidden_act
         self.projection_dim = projection_dim
@@ -336,7 +328,7 @@ class ClapConfig(PreTrainedConfig):
     >>> config_text = ClapTextConfig()
     >>> config_audio = ClapAudioConfig()
 
-    >>> config = ClapConfig.from_text_audio_configs(config_text, config_audio)
+    >>> config = ClapConfig(text_config=config_text, audio_config=config_audio)
     ```"""
 
     model_type = "clap"
@@ -352,18 +344,21 @@ class ClapConfig(PreTrainedConfig):
         initializer_factor=1.0,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         if text_config is None:
-            text_config = {}
-            logger.info("text_config is None. Initializing the ClapTextConfig with default values.")
+            text_config = ClapTextConfig()
+            logger.info("`text_config` is `None`. initializing the `ClapTextConfig` with default values.")
+        elif isinstance(text_config, dict):
+            text_config = ClapTextConfig(**text_config)
 
         if audio_config is None:
-            audio_config = {}
-            logger.info("audio_config is None. initializing the ClapAudioConfig with default values.")
+            audio_config = ClapAudioConfig()
+            logger.info("`audio_config` is `None`. initializing the `ClapAudioConfig` with default values.")
+        elif isinstance(audio_config, dict):
+            audio_config = ClapAudioConfig(**audio_config)
 
-        self.text_config = ClapTextConfig(**text_config)
-        self.audio_config = ClapAudioConfig(**audio_config)
+        self.text_config = text_config
+        self.audio_config = audio_config
+
         self.text_config.projection_dim = projection_dim
         self.audio_config.projection_dim = projection_dim
 
@@ -377,6 +372,7 @@ class ClapConfig(PreTrainedConfig):
         self.logit_scale_init_value = logit_scale_init_value
         self.initializer_factor = initializer_factor
         self.num_hidden_layers = self.text_config.num_hidden_layers + len(self.audio_config.depths)
+        super().__init__(**kwargs)
 
 
 __all__ = ["ClapAudioConfig", "ClapConfig", "ClapTextConfig"]

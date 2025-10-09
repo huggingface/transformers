@@ -121,11 +121,7 @@ class AutoQuantizationConfig:
     @classmethod
     def from_dict(cls, quantization_config_dict: dict):
         quant_method = quantization_config_dict.get("quant_method")
-        # We need a special care for bnb models to make sure everything is BC ..
-        if quantization_config_dict.get("load_in_8bit", False) or quantization_config_dict.get("load_in_4bit", False):
-            suffix = "_4bit" if quantization_config_dict.get("load_in_4bit", False) else "_8bit"
-            quant_method = QuantizationMethod.BITS_AND_BYTES + suffix
-        elif quant_method is None:
+        if quant_method is None:
             raise ValueError(
                 "The model's quantization config from the arguments has no `quant_method` attribute. Make sure that the model has been correctly quantized"
             )
@@ -287,7 +283,7 @@ def register_quantizer(name: str):
             raise ValueError(f"Quantizer '{name}' already registered")
 
         if not issubclass(cls, HfQuantizer):
-            raise ValueError("Quantizer must extend HfQuantizer")
+            raise TypeError("Quantizer must extend HfQuantizer")
 
         AUTO_QUANTIZER_MAPPING[name] = cls
         return cls

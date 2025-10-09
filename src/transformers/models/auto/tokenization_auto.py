@@ -170,6 +170,13 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("cpmant", ("CpmAntTokenizer", None)),
         ("csm", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("ctrl", ("CTRLTokenizer", None)),
+        (
+            "cwm",
+            (
+                "LlamaTokenizer" if is_sentencepiece_available() else None,
+                "LlamaTokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
         ("data2vec-audio", ("Wav2Vec2CTCTokenizer", None)),
         ("data2vec-text", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
         ("dbrx", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
@@ -940,7 +947,9 @@ class AutoTokenizer:
 
     @classmethod
     @replace_list_option_in_docstrings(TOKENIZER_MAPPING_NAMES)
-    def from_pretrained(cls, pretrained_model_name_or_path, *inputs, **kwargs):
+    def from_pretrained(
+        cls, pretrained_model_name_or_path, *inputs, **kwargs
+    ) -> Union[PreTrainedTokenizer, PreTrainedTokenizerFast]:
         r"""
         Instantiate one of the tokenizer classes of the library from a pretrained model vocabulary.
 

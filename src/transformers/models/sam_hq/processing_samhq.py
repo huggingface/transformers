@@ -31,14 +31,14 @@ if is_torch_available():
     import torch
 
 
-class SamHQImagesKwargs(ImagesKwargs):
+class SamHQImagesKwargs(ImagesKwargs, total=False):
     segmentation_maps: Optional[ImageInput]
     input_points: Optional[list[list[float]]]
     input_labels: Optional[list[list[int]]]
     input_boxes: Optional[list[list[list[float]]]]
     point_pad_value: Optional[int]
-    mask_size: Optional[dict[str, int]]
-    mask_pad_size: Optional[dict[str, int]]
+    mask_size: dict[str, int]
+    mask_pad_size: dict[str, int]
 
 
 class SamHQProcessorKwargs(ProcessingKwargs, total=False):
@@ -171,7 +171,7 @@ class SamHQProcessor(ProcessorMixin):
         r"""
         The method pads the 2D points and labels to the maximum number of points in the batch.
         """
-        expected_nb_points = max([point.shape[0] for point in input_points])
+        expected_nb_points = max(point.shape[0] for point in input_points)
         processed_input_points = []
         for i, point in enumerate(input_points):
             if point.shape[0] != expected_nb_points:

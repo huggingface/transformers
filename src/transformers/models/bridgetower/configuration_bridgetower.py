@@ -133,12 +133,6 @@ class BridgeTowerTextConfig(PreTrainedConfig):
             testing).
         layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
-        position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
-            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
-            positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
-            [Self-Attention with Relative Position Representations (Shaw et al.)](https://huggingface.co/papers/1803.02155).
-            For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
-            with Better Relative Position Embeddings (Huang et al.)](https://huggingface.co/papers/2009.13658).
         is_decoder (`bool`, *optional*, defaults to `False`):
             Whether the model is used as a decoder or not. If `False`, the model is used as an encoder.
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -177,7 +171,6 @@ class BridgeTowerTextConfig(PreTrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        position_embedding_type="absolute",
         use_cache=True,
         **kwargs,
     ):
@@ -195,7 +188,6 @@ class BridgeTowerTextConfig(PreTrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.type_vocab_size = type_vocab_size
         self.layer_norm_eps = layer_norm_eps
-        self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
@@ -280,7 +272,6 @@ class BridgeTowerConfig(PreTrainedConfig):
         _ = kwargs.pop("text_config_dict", None)
         _ = kwargs.pop("vision_config_dict", None)
 
-        super().__init__(**kwargs)
         self.share_cross_modal_transformer_layers = share_cross_modal_transformer_layers
         self.hidden_act = hidden_act
         self.hidden_size = hidden_size
@@ -294,15 +285,20 @@ class BridgeTowerConfig(PreTrainedConfig):
         self.init_layernorm_from_vision_encoder = init_layernorm_from_vision_encoder
 
         if text_config is None:
-            text_config = {}
-            logger.info("`text_config` is `None`. Initializing the `BridgeTowerTextConfig` with default values.")
+            text_config = BridgeTowerTextConfig()
+            logger.info("`text_config` is `None`. initializing the `BridgeTowerTextConfig` with default values.")
+        elif isinstance(text_config, dict):
+            text_config = BridgeTowerTextConfig(**text_config)
 
         if vision_config is None:
-            vision_config = {}
-            logger.info("`vision_config` is `None`. Initializing the `BridgeTowerVisionConfig` with default values.")
+            vision_config = BridgeTowerVisionConfig()
+            logger.info("`vision_config` is `None`. initializing the `BridgeTowerVisionConfig` with default values.")
+        elif isinstance(vision_config, dict):
+            vision_config = BridgeTowerVisionConfig(**vision_config)
 
-        self.text_config = BridgeTowerTextConfig(**text_config)
-        self.vision_config = BridgeTowerVisionConfig(**vision_config)
+        self.text_config = text_config
+        self.vision_config = vision_config
+        super().__init__(**kwargs)
 
 
 __all__ = ["BridgeTowerConfig", "BridgeTowerTextConfig", "BridgeTowerVisionConfig"]

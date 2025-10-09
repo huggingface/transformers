@@ -64,7 +64,7 @@ if is_torch_available():
     from torch import nn
 
 
-class OneFormerImageProcessorKwargs(ImagesKwargs):
+class OneFormerImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     repo_path (`str`, *optional*, defaults to `shi-labs/oneformer_demo`):
         Path to a local directory or Hugging Face Hub repository containing model metadata.
@@ -85,7 +85,7 @@ class OneFormerImageProcessorKwargs(ImagesKwargs):
     num_text: Optional[int]
     num_labels: Optional[int]
     ignore_index: Optional[int]
-    do_reduce_labels: Optional[bool]
+    do_reduce_labels: bool
 
 
 # Copied from transformers.models.detr.image_processing_detr.max_across_indices
