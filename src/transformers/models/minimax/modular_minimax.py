@@ -172,12 +172,12 @@ class MiniMaxConfig(MixtralConfig):
         self.mlp_alpha_factor = mlp_alpha_factor
         self.mlp_beta_factor = mlp_beta_factor
 
+        super().__init__(**super_kwargs)
         if self.layer_types is None:
             self.layer_types = [
                 "full_attention" if bool((i + 1) % 2) else "linear_attention" for i in range(self.num_hidden_layers)
             ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
-        super().__init__(**super_kwargs)
 
 
 class MiniMaxRMSNorm(MixtralRMSNorm):

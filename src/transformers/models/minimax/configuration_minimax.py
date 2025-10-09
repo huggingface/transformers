@@ -189,12 +189,6 @@ class MiniMaxConfig(PreTrainedConfig):
         self.linear_attn_beta_factor = linear_attn_beta_factor
         self.mlp_alpha_factor = mlp_alpha_factor
         self.mlp_beta_factor = mlp_beta_factor
-
-        if self.layer_types is None:
-            self.layer_types = [
-                "full_attention" if bool((i + 1) % 2) else "linear_attention" for i in range(self.num_hidden_layers)
-            ]
-        layer_type_validation(self.layer_types, self.num_hidden_layers)
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -228,6 +222,11 @@ class MiniMaxConfig(PreTrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+        if self.layer_types is None:
+            self.layer_types = [
+                "full_attention" if bool((i + 1) % 2) else "linear_attention" for i in range(self.num_hidden_layers)
+            ]
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
 
 __all__ = ["MiniMaxConfig"]
