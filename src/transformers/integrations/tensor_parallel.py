@@ -38,7 +38,7 @@ if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
     from torch.distributed.tensor import DTensor, Placement, Replicate, Shard
 
 
-def initialize_tensor_parallelism(tp_plan, tp_size=None, device_mesh=None, device_map):
+def initialize_tensor_parallelism(tp_plan, tp_size=None, device_mesh=None, device_map=None):
     r"""
     Sets up the device mesh and initialized the backend for tensor parallelism.
     This function is called when the model is loaded and the TP plan is set to 'auto'.
