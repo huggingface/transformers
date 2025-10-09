@@ -27,7 +27,7 @@ from ....tokenization_utils import AddedToken, PreTrainedTokenizer
 from ....tokenization_utils_base import BatchEncoding
 from ....utils import TensorType, is_torch_available, logging
 from ....utils.generic import is_numpy_array
-from ...utils.safe import regex
+from ....utils.safe import regex
 
 
 logger = logging.get_logger(__name__)
