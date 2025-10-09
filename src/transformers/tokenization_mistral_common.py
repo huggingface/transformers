@@ -471,7 +471,7 @@ class MistralCommonTokenizer(PushToHubMixin):
         if clean_up_tokenization_spaces:
             decoded_string = PreTrainedTokenizerBase.clean_up_tokenization(decoded_string)
 
-        # in the specific case of Voxtral, the added f"lang:xx" (always a two language code since is follows ISO 639-1 alpha-2 format)
+        # in the specific case of Voxtral, the added f"lang:xx" (always a two char language code since is follows ISO 639-1 alpha-2 format)
         # is not considered as a special token by mistral-common and is encoded/ decoded as normal text.
         # Nevertheless we should remove it to ease users life.
         lang_prefix = "lang:xx"
