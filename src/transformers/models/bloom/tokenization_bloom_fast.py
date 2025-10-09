@@ -114,6 +114,7 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
             for pre_tokenizer in self.backend_tokenizer.pre_tokenizer:
                 if hasattr(pre_tokenizer, "add_prefix_space"):
                     pre_tokenizer.add_prefix_space = add_prefix_space
+            self.backend_tokenizer.decoder.add_prefix_space = add_prefix_space
         self.add_prefix_space = add_prefix_space
 
     def _batch_encode_plus(self, *args, **kwargs) -> BatchEncoding:
