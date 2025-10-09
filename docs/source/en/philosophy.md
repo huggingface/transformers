@@ -56,7 +56,6 @@ A few other goals:
 - Incorporate a subjective selection of promising tools for fine-tuning and investigating these models:
 
   - A simple and consistent way to add new tokens to the vocabulary and embeddings for fine-tuning.
-  - Simple ways to mask and prune Transformer heads.
 
 ## Main concepts
 

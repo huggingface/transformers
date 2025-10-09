@@ -98,9 +98,10 @@ The example below demonstrates how to create a generation loop with [`DynamicCac
 
 ```py
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache, infer_device
+from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache
+from accelerate import Accelerator
 
-device = f"{infer_device()}:0"
+device = Accelerator().device
 
 model_id = "meta-llama/Llama-2-7b-chat-hf"
 model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map=device)
@@ -143,9 +144,10 @@ The generation loop usually takes care of the cache position, but if you're writ
 
 ```py
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache, infer_device
+from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache
+from accelerate import Accelerator
 
-device = f"{infer_device()}:0"
+device = Accelerator().device
 
 model_id = "meta-llama/Llama-2-7b-chat-hf"
 model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map=device)
@@ -155,32 +157,4 @@ messages = [{"role": "user", "content": "You are a helpful assistant."}]
 inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True).to(model.device)
 generated_ids = model.generate(**inputs, use_cache=True, max_new_tokens=10)
 
-```
-
-## Legacy cache format
-
-Before the [`Cache`] class, the cache used to be stored as a tuple of tuples of tensors. This format is dynamic because it grows as text is generated, similar to [`DynamicCache`].
-
-The legacy format is essentially the same data structure but organized differently.
-
-- It's a tuple of tuples, where each inner tuple contains the key and value tensors for a layer.
-- The tensors have the same shape `[batch_size, num_heads, seq_len, head_dim]`.
-- The format is less flexible and doesn't support features like quantization or offloading.
-
-If your project depends on this legacy format, we recommend to convert to [`DynamicCache`] with [`~DynamicCache.from_legacy_cache`]. Note that legacy cache format is deprecated and not used anymore in `Transformers`. You can convert back to tuple format with [`DynamicCache.to_legacy_cache`] functions, which is helpful if you have custom logic for manipulating a cache in a specific format.
-
-```py
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache
-
-tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", dtype=torch.float16, device_map="auto")
-inputs = tokenizer("Hello, my name is", return_tensors="pt").to(model.device)
-
-# `return_dict_in_generate=True` is required to return the cache and `return_legacy_cache` forces the returned cache
-# in the legacy format
-generation_outputs = model.generate(**inputs, return_dict_in_generate=True, return_legacy_cache=True, max_new_tokens=5)
-
-cache = DynamicCache.from_legacy_cache(generation_outputs.past_key_values)
-legacy_format_cache = cache.to_legacy_cache()
 ```

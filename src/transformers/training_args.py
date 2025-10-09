@@ -35,7 +35,6 @@ from .utils import (
     ACCELERATE_MIN_VERSION,
     ExplicitEnum,
     is_accelerate_available,
-    is_ipex_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_torch_available,
@@ -417,11 +416,6 @@ class TrainingArguments:
         dataloader_num_workers (`int`, *optional*, defaults to 0):
             Number of subprocesses to use for data loading (PyTorch only). 0 means that the data will be loaded in the
             main process.
-        past_index (`int`, *optional*, defaults to -1):
-            Some models like [TransformerXL](../model_doc/transformerxl) or [XLNet](../model_doc/xlnet) can make use of
-            the past hidden states for their predictions. If this argument is set to a positive int, the `Trainer` will
-            use the corresponding output (usually index 2) as the past state and feed it to the model at the next
-            training step under the keyword argument `mems`.
         run_name (`str`, *optional*, defaults to `output_dir`):
             A descriptor for the run. Typically used for [trackio](https://github.com/gradio-app/trackio),
             [wandb](https://www.wandb.com/), [mlflow](https://www.mlflow.org/), [comet](https://www.comet.com/site) and
@@ -472,7 +466,7 @@ class TrainingArguments:
             When resuming training, whether or not to skip the epochs and batches to get the data loading at the same
             stage as in the previous training. If set to `True`, the training will begin faster (as that skipping step
             can take a long time) but will not yield the same results as the interrupted training would have.
-        fsdp (`bool`, `str` or list of [`~trainer_utils.FSDPOption`], *optional*, defaults to `[]`):
+        fsdp (`bool`, `str` or list of [`~trainer_utils.FSDPOption`], *optional*, defaults to `None`):
             Use PyTorch Distributed Parallel Training (in distributed training only).
 
             A list of options along the following:
@@ -1014,12 +1008,7 @@ class TrainingArguments:
         default=False,
         metadata={"help": "Whether to use fp16 (mixed) precision instead of 32-bit"},
     )
-    half_precision_backend: Optional[str] = field(
-        default=None,
-        metadata={
-            "help": "The backend to be used for half precision. This argument is deprecated. We will always use CPU/CUDA AMP from torch",
-        },
-    )
+
     bf16_full_eval: bool = field(
         default=False,
         metadata={
@@ -1094,10 +1083,6 @@ class TrainingArguments:
             )
         },
     )
-    past_index: int = field(
-        default=-1,
-        metadata={"help": "If >=0, uses the corresponding part of the output as the past state for next step."},
-    )
 
     run_name: Optional[str] = field(
         default=None,
@@ -1142,8 +1127,8 @@ class TrainingArguments:
             )
         },
     )
-    fsdp: Union[list[FSDPOption], str, bool] = field(
-        default_factory=list,
+    fsdp: Optional[Union[list[FSDPOption], str]] = field(
+        default=None,
         metadata={
             "help": (
                 "Whether or not to use PyTorch Fully Sharded Data Parallel (FSDP) training (in distributed training"
@@ -1381,14 +1366,6 @@ class TrainingArguments:
             "help": "Which mode to use with `torch.compile`, passing one will trigger a model compilation.",
         },
     )
-
-    include_tokens_per_second: Optional[bool] = field(
-        default=None,
-        metadata={
-            "help": "This arg is deprecated and will be removed in v5 , use `include_num_input_tokens_seen` instead."
-        },
-    )
-
     include_num_input_tokens_seen: Union[str, bool] = field(
         default="no",
         metadata={
@@ -1590,11 +1567,6 @@ class TrainingArguments:
                         # gpu
                         raise ValueError(error_message)
 
-        if self.half_precision_backend is not None:
-            raise ValueError(
-                "half_precision_backend is deprecated. For mixed precision, we will always use CPU/CUDA AMP from torch"
-            )
-
         if self.fp16 and self.bf16:
             raise ValueError("At most one of fp16 and bf16 can be True, but not both")
 
@@ -1730,10 +1702,13 @@ class TrainingArguments:
         if not isinstance(self.warmup_steps, int) or self.warmup_steps < 0:
             raise ValueError("warmup_steps must be of type int and must be 0 or a positive integer.")
 
-        if isinstance(self.fsdp, bool):
-            self.fsdp = [FSDPOption.FULL_SHARD] if self.fsdp else ""
-        if isinstance(self.fsdp, str):
+        if self.fsdp is None:
+            self.fsdp = []
+        elif self.fsdp is True:
+            self.fsdp = [FSDPOption.FULL_SHARD]
+        elif isinstance(self.fsdp, str):
             self.fsdp = [FSDPOption(s) for s in self.fsdp.split()]
+
         if self.fsdp == [FSDPOption.OFFLOAD]:
             raise ValueError(
                 "`--fsdp offload` can't work on its own. It needs to be added to `--fsdp full_shard` or "
@@ -1889,25 +1864,6 @@ class TrainingArguments:
                 " when --dataloader_num_workers > 1."
             )
 
-        if self.eval_use_gather_object and not is_accelerate_available("0.30.0"):
-            raise ValueError(
-                "--eval_use_gather_object requires Accelerate to be version of `accelerate` > 0.30.0."
-                "This is not supported and we recommend you to update your version."
-            )
-
-        if self.data_seed is not None:
-            if not is_accelerate_available("1.1.0"):
-                raise NotImplementedError(
-                    "data_seed requires Accelerate version `accelerate` >= 1.1.0. "
-                    "This is not supported and we recommend you to update your version."
-                )
-
-        if self.include_tokens_per_second is not None:
-            logger.warning(
-                "include_tokens_per_second is deprecated and will be removed in v5. Use `include_num_input_tokens_seen` instead. "
-            )
-            self.include_num_input_tokens_seen = self.include_tokens_per_second
-
         if isinstance(self.include_num_input_tokens_seen, bool):
             self.include_num_input_tokens_seen = "all" if self.include_num_input_tokens_seen else "no"
 
@@ -2030,8 +1986,6 @@ class TrainingArguments:
             elif is_torch_mps_available():
                 device = torch.device("mps")
             elif is_torch_xpu_available():
-                if not is_ipex_available() and not is_accelerate_available("0.32.0.dev"):
-                    raise ImportError("Using the XPU PyTorch backend requires `accelerate>=0.32.0.dev`")
                 device = torch.device("xpu:0")
                 torch.xpu.set_device(device)
             elif is_torch_mlu_available():

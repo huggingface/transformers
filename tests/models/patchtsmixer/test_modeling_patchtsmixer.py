@@ -221,7 +221,7 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     )
     pipeline_model_mapping = {"feature-extraction": PatchTSMixerModel} if is_torch_available() else {}
     is_encoder_decoder = False
-    test_pruning = False
+
     test_missing_keys = False
     test_torchscript = False
     test_inputs_embeds = False

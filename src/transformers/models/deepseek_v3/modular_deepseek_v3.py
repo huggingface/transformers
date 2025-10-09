@@ -1,5 +1,6 @@
 import math
-from typing import Callable, Optional
+from collections.abc import Callable
+from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -11,7 +12,6 @@ from ...modeling_layers import GenericForSequenceClassification, GenericForToken
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import logging
-from ...utils.deprecation import deprecate_kwarg
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaForCausalLM,
@@ -216,7 +216,6 @@ class DeepseekV3Attention(nn.Module):
                 mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
                 self.scaling = self.scaling * mscale * mscale
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
