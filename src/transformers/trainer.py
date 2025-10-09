@@ -16,7 +16,6 @@ The Trainer class, to easily train a 🤗 Transformers from scratch or finetune 
 """
 
 import contextlib
-import copy
 import functools
 import glob
 import importlib.metadata
@@ -212,7 +211,6 @@ if is_accelerate_available():
     from accelerate import __version__ as accelerate_version
     from accelerate.state import AcceleratorState
     from accelerate.utils import (
-        AutocastKwargs,
         DataLoaderConfiguration,
         DistributedDataParallelKwargs,
         DistributedType,
@@ -1881,40 +1879,6 @@ class Trainer:
 
         return model
 
-    def torch_jit_model_eval(self, model, dataloader, training=False):
-        if not training:
-            if dataloader is None:
-                logger.warning("failed to use PyTorch jit mode due to current dataloader is none.")
-                return model
-            example_batch = next(iter(dataloader))
-            example_batch = self._prepare_inputs(example_batch)
-            try:
-                jit_model = copy.copy(model)
-                jit_model.eval()
-                original_forward = jit_model.__dict__.pop("_original_forward", None)
-                # remove mixed precision hooks from the model
-                if original_forward:
-                    jit_model.forward = original_forward
-                autocast_handler = AutocastKwargs(cache_enabled=False)
-                with self.accelerator.autocast(autocast_handler=autocast_handler), torch.no_grad():
-                    if isinstance(example_batch, dict):
-                        jit_model = torch.jit.trace(jit_model, example_kwarg_inputs=example_batch, strict=False)
-                    else:
-                        jit_model = torch.jit.trace(
-                            jit_model,
-                            example_kwarg_inputs={key: example_batch[key] for key in example_batch},
-                            strict=False,
-                        )
-                jit_model = torch.jit.freeze(jit_model)
-                with torch.no_grad():
-                    jit_model(**example_batch)
-                    jit_model(**example_batch)
-                model = jit_model
-            except (RuntimeError, TypeError, ValueError, NameError, IndexError) as e:
-                logger.warning(f"failed to use PyTorch jit mode due to: {e}.")
-
-        return model
-
     def compare_trainer_and_checkpoint_args(self, training_args, trainer_state):
         attributes_map = {
             "logging_steps": "logging_steps",
@@ -1957,11 +1921,6 @@ class Trainer:
         # Multi-gpu training, 8bit models does not support DP
         if self.args.n_gpu > 1 and not getattr(model, "is_loaded_in_8bit", False):
             model = nn.DataParallel(model)
-
-        if self.args.jit_mode_eval:
-            start_time = time.time()
-            model = self.torch_jit_model_eval(model, dataloader, training)
-            self.jit_compilation_time = round(time.time() - start_time, 4)
 
         # Note: in torch.distributed mode, there's no point in wrapping the model
         # inside a DistributedDataParallel as we'll be under `no_grad` anyways.
@@ -4250,8 +4209,6 @@ class Trainer:
         )
 
         total_batch_size = self.args.eval_batch_size * self.args.world_size
-        if f"{metric_key_prefix}_jit_compilation_time" in output.metrics:
-            start_time += output.metrics[f"{metric_key_prefix}_jit_compilation_time"]
         if f"{metric_key_prefix}_model_preparation_time" in output.metrics:
             start_time += output.metrics[f"{metric_key_prefix}_model_preparation_time"]
         output.metrics.update(
@@ -4320,8 +4277,6 @@ class Trainer:
             test_dataloader, description="Prediction", ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix
         )
         total_batch_size = self.args.eval_batch_size * self.args.world_size
-        if f"{metric_key_prefix}_jit_compilation_time" in output.metrics:
-            start_time += output.metrics[f"{metric_key_prefix}_jit_compilation_time"]
         if f"{metric_key_prefix}_model_preparation_time" in output.metrics:
             start_time += output.metrics[f"{metric_key_prefix}_model_preparation_time"]
         output.metrics.update(
@@ -4536,8 +4491,6 @@ class Trainer:
             metrics[f"{metric_key_prefix}_loss"] = np.concatenate(all_losses).mean().item()
         elif isinstance(all_losses, np.ndarray):
             metrics[f"{metric_key_prefix}_loss"] = all_losses.mean().item()
-        if hasattr(self, "jit_compilation_time"):
-            metrics[f"{metric_key_prefix}_jit_compilation_time"] = self.jit_compilation_time
         if hasattr(self, "model_preparation_time"):
             metrics[f"{metric_key_prefix}_model_preparation_time"] = self.model_preparation_time
 
