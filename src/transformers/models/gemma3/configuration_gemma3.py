@@ -22,7 +22,6 @@
 from typing import Any, Optional, Union
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 from ..siglip import SiglipVisionConfig
 
@@ -232,7 +231,6 @@ class Gemma3TextConfig(PreTrainedConfig):
 
         self.rope_local_base_freq = rope_local_base_freq
         self.rope_scaling = rope_scaling
-        rope_config_validation(self)
 
         # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
         self._sliding_window_pattern = kwargs.get("sliding_window_pattern", 6)

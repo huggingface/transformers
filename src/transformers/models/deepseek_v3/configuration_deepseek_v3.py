@@ -17,7 +17,6 @@
 """DeepSeekV3 model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import rope_config_validation
 
 
 DEEPSEEK_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
@@ -241,8 +240,6 @@ class DeepseekV3Config(PreTrainedConfig):
             for key in ["beta_fast", "beta_slow", "factor"]:
                 if key in self.rope_scaling:
                     self.rope_scaling[key] = float(self.rope_scaling[key])
-
-        rope_config_validation(self)
 
         super().__init__(
             pad_token_id=pad_token_id,

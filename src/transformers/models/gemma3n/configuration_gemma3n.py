@@ -23,7 +23,6 @@ from collections.abc import Sequence
 from typing import Any, Optional, Union
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import rope_config_validation
 from ...utils import is_timm_available, logging, requires_backends
 
 
@@ -268,7 +267,6 @@ class Gemma3nTextConfig(PreTrainedConfig):
 
         self.rope_local_base_freq = rope_local_base_freq
         self.rope_scaling = rope_scaling
-        rope_config_validation(self)
 
         if layer_types is None:
             self.layer_types = [

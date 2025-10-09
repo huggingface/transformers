@@ -20,7 +20,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import rope_config_validation
 
 
 class Cohere2Config(PreTrainedConfig):
@@ -206,7 +205,6 @@ class Cohere2Config(PreTrainedConfig):
         self.head_dim = hidden_size // num_attention_heads
 
         # Validate the correctness of rotary position embeddings parameters
-        rope_config_validation(self)
 
         # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
         self._sliding_window_pattern = kwargs.get("sliding_window_pattern", 4)

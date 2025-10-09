@@ -15,7 +15,6 @@
 """Qwen3-Next model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 
 
@@ -239,7 +238,6 @@ class Qwen3NextConfig(PreTrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.head_dim = head_dim
-        rope_config_validation(self)
 
         self.layer_types = layer_types
         if self.layer_types is None:

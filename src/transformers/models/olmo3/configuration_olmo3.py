@@ -20,7 +20,6 @@
 # limitations under the License.
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import rope_config_validation
 
 
 class Olmo3Config(PreTrainedConfig):
@@ -218,7 +217,6 @@ class Olmo3Config(PreTrainedConfig):
         """
         Validate the `rope_scaling` configuration.
         """
-        rope_config_validation(self)
 
 
 __all__ = ["Olmo3Config"]

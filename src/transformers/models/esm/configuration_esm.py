@@ -14,7 +14,6 @@
 # limitations under the License.
 """ESM model configuration"""
 
-from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Optional, Union
 
@@ -42,11 +41,12 @@ class EsmFoldConfig(PreTrainedConfig):
     lddt_head_hid_dim: Optional[int] = 128
     trunk: Optional[Union[dict, "TrunkConfig"]] = None
 
-    def __post_init__(self):
+    def __post_init__(self, **kwargs):
         if self.trunk is None:
             self.trunk = TrunkConfig()
         elif isinstance(self.trunk, dict):
             self.trunk = TrunkConfig(**self.trunk)
+        super().__post_init__(**kwargs)
 
 
 @strict(accept_kwargs=True)
@@ -65,7 +65,7 @@ class TrunkConfig(PreTrainedConfig):
     chunk_size: Optional[int] = 128
     structure_module: Optional[Union[dict, "StructureModuleConfig"]] = None
 
-    def __post_init__(self):
+    def __post_init__(self, **kwargs):
         if self.structure_module is None:
             self.structure_module = StructureModuleConfig()
         elif isinstance(self.structure_module, dict):
@@ -95,6 +95,7 @@ class TrunkConfig(PreTrainedConfig):
                 "`pairwise_state_dim` should be equal to `pairwise_num_heads * pairwise_head_width, got"
                 f" {self.pairwise_state_dim} != {pairwise_num_heads} * {self.pairwise_head_width}."
             )
+        super().__post_init__(**kwargs)
 
 
 @strict(accept_kwargs=True)
@@ -241,7 +242,7 @@ class EsmConfig(PreTrainedConfig):
     token_dropout: Optional[bool] = False
     is_folding_model: Optional[bool] = False
     esmfold_config: Optional[Union[dict, EsmFoldConfig]] = None
-    vocab_list: Optional[Sequence[str]] = None
+    vocab_list: Optional[list[str] | tuple[str, ...]] = None
 
     def __post_init__(self, **kwargs):
         if self.is_folding_model:

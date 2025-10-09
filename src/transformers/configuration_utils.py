@@ -418,7 +418,7 @@ class PreTrainedConfig(PushToHubMixin):
         if not (hasattr(self, "layer_types") and hasattr(self, "num_hidden_layers")):
             return
         elif not all(layer_type in ALLOWED_LAYER_TYPES for layer_type in self.layer_types):
-            raise ValueError(f"The `layer_types` entries must be in {ALLOWED_LAYER_TYPES}")
+            raise ValueError(f"The `layer_types` entries must be in {ALLOWED_LAYER_TYPES} but got {self.layer_types}")
         elif self.num_hidden_layers is not None and self.num_hidden_layers != len(self.layer_types):
             raise ValueError(
                 f"`num_hidden_layers` ({self.num_hidden_layers}) must be equal to the number of layer types "
