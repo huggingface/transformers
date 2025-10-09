@@ -22,12 +22,11 @@ import importlib.util
 import json
 import numbers
 import os
-import pickle
 import re
 import shutil
 import sys
 import tempfile
-from dataclasses import asdict, fields
+from dataclasses import fields
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Optional, Union
@@ -178,6 +177,7 @@ def is_ray_tune_available():
     if not is_ray_available():
         return False
     return importlib.util.find_spec("ray.tune") is not None
+
 
 def is_azureml_available():
     if importlib.util.find_spec("azureml") is None:
@@ -435,6 +435,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
     if _tb_writer is not None:
         trainer.add_callback(_tb_writer)
     return best_run
+
 
 def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
     if not is_wandb_available():

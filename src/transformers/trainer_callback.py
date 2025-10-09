@@ -24,7 +24,7 @@ from typing import Optional, Union
 import numpy as np
 from tqdm.auto import tqdm
 
-from .trainer_utils import HPSearchBackend, IntervalStrategy, SaveStrategy, has_length
+from .trainer_utils import IntervalStrategy, SaveStrategy, has_length
 from .training_args import TrainingArguments
 from .utils import logging
 
@@ -178,6 +178,7 @@ class TrainerState:
         self.trial_params = None
         if trial is not None:
             from transformers.integrations import hp_params
+
             self.trial_params = hp_params(trial)
 
         self.max_steps = max_steps

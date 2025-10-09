@@ -302,6 +302,7 @@ def default_hp_space_ray(trial) -> dict[str, Any]:
         "per_device_train_batch_size": tune.choice([4, 8, 16, 32, 64]),
     }
 
+
 def default_hp_space_wandb(trial) -> dict[str, Any]:
     from .integrations import is_wandb_available
 
