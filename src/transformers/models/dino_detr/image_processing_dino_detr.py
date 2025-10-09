@@ -17,6 +17,7 @@ from ...image_transforms import (
     PaddingMode,
     center_to_corners_format,
     corners_to_center_format,
+    get_size_with_aspect_ratio,
     id_to_rgb,
     pad,
     rescale,
@@ -31,16 +32,18 @@ from ...image_utils import (
     AnnotationType,
     ChannelDimension,
     ImageInput,
+    PILImageResampling,
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
     validate_annotations,
     validate_kwargs,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import (
     TensorType,
     is_torch_available,
@@ -59,9 +62,6 @@ if is_torch_available():
 if is_torchvision_available():
     from torchvision.ops.boxes import nms
 
-if is_vision_available():
-    from ...image_utils import PILImageResampling
-
 
 if is_vision_available():
     import PIL
@@ -69,49 +69,34 @@ if is_vision_available():
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
+
+class DinoDetrImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
+        Data format of the annotations. One of "coco_detection" or "coco_panoptic".
+    do_convert_annotations (`bool`, *optional*, defaults to `True`):
+        Controls whether to convert the annotations to the format expected by the DINO_DETR model. Converts the
+        bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
+        Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
+    return_segmentation_masks (`bool`, *optional*, defaults to `False`):
+        Whether to return segmentation masks.
+    annotations (`AnnotationType` or `list[AnnotationType]`, *optional*):
+        Annotations to transform according to the padding that is applied to the images.
+    masks_path (`str` or `pathlib.Path`, *optional*):
+        Path to the directory containing the segmentation masks.
+    """
+
+    format: Union[str, AnnotationFormat]
+    do_convert_annotations: bool
+    return_segmentation_masks: bool
+    annotations: Optional[Union[AnnotationType, list[AnnotationType]]]
+    masks_path: Optional[Union[str, pathlib.Path]]
+
+
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 
 
 # From the original repo: https://github.com/facebookresearch/dino_detr/blob/3af9fa878e73b6894ce3596450a8d9b89d918ca9/datasets/transforms.py#L76
-def get_size_with_aspect_ratio(image_size, size, max_size=None) -> tuple[int, int]:
-    """
-    Computes the output image size given the input image size and the desired output size.
-
-    Args:
-        image_size (`Tuple[int, int]`):
-            The input image size.
-        size (`int`):
-            The desired output size.
-        max_size (`int`, *optional*):
-            The maximum allowed output size.
-    """
-    height, width = image_size
-    raw_size = None
-    if max_size is not None:
-        min_original_size = float(min((height, width)))
-        max_original_size = float(max((height, width)))
-        if max_original_size / min_original_size * size > max_size:
-            raw_size = max_size * min_original_size / max_original_size
-            size = int(round(raw_size))
-
-    if (height <= width and height == size) or (width <= height and width == size):
-        oh, ow = height, width
-    elif width < height:
-        ow = size
-        if max_size is not None and raw_size is not None:
-            oh = int(raw_size * height / width)
-        else:
-            oh = int(size * height / width)
-    else:
-        oh = size
-        if max_size is not None and raw_size is not None:
-            ow = int(raw_size * width / height)
-        else:
-            ow = int(size * width / height)
-
-    return (oh, ow)
-
-
 def get_image_size_for_max_height_width(
     input_image: np.ndarray,
     max_height: int,
@@ -161,7 +146,7 @@ def get_resize_output_image_size(
     Args:
         input_image (`np.ndarray`):
             The image to resize.
-        size (`int` or `Tuple[int, int]` or `List[int]`):
+        size (`int` or `tuple[int, int]` or `list[int]`):
             The desired output size.
         max_size (`int`, *optional*):
             The maximum allowed output size.
@@ -236,7 +221,7 @@ def make_pixel_mask(
     Args:
         image (`np.ndarray`):
             Image to make the pixel mask for.
-        output_size (`Tuple[int, int]`):
+        output_size (`tuple[int, int]`):
             Output size of the mask.
     """
     input_height, input_width = get_image_size(image, channel_dim=input_data_format)
@@ -251,7 +236,7 @@ def convert_coco_poly_to_mask(segmentations, height: int, width: int) -> np.ndar
     Convert a COCO polygon annotation to a mask.
 
     Args:
-        segmentations (`List[List[float]]`):
+        segmentations (`list[list[float]]`):
             List of polygons, each polygon represented by a list of x-y coordinates.
         height (`int`):
             Height of the mask.
@@ -304,7 +289,7 @@ def prepare_coco_detection_annotation(
 
     # for conversion to coco api
     area = np.asarray([obj["area"] for obj in annotations], dtype=np.float32)
-    iscrowd = np.asarray([obj["iscrowd"] if "iscrowd" in obj else 0 for obj in annotations], dtype=np.int64)
+    iscrowd = np.asarray([obj.get("iscrowd", 0) for obj in annotations], dtype=np.int64)
 
     boxes = [obj["bbox"] for obj in annotations]
     # guard against no boxes via resizing
@@ -427,11 +412,11 @@ def resize_annotation(
     Resizes an annotation to a target size.
 
     Args:
-        annotation (`Dict[str, Any]`):
+        annotation (`dict[str, Any]`):
             The annotation dictionary.
-        orig_size (`Tuple[int, int]`):
+        orig_size (`tuple[int, int]`):
             The original size of the input image.
-        target_size (`Tuple[int, int]`):
+        target_size (`tuple[int, int]`):
             The target size of the image, as returned by the preprocessing `resize` step.
         threshold (`float`, *optional*, defaults to 0.5):
             The threshold used to binarize the segmentation masks.
@@ -467,7 +452,6 @@ def resize_annotation(
     return new_annotation
 
 
-# TODO - (Amy) make compatible with other frameworks
 def binary_mask_to_rle(mask):
     """
     Converts given binary mask of shape `(height, width)` to the run-length encoding (RLE) format.
@@ -490,7 +474,6 @@ def binary_mask_to_rle(mask):
     return list(runs)
 
 
-# TODO - (Amy) make compatible with other frameworks
 def convert_segmentation_to_rle(segmentation):
     """
     Converts given segmentation map of shape `(height, width)` to the run-length encoding (RLE) format.
@@ -499,7 +482,7 @@ def convert_segmentation_to_rle(segmentation):
         segmentation (`torch.Tensor` or `numpy.array`):
             A segmentation map of shape `(height, width)` where each value denotes a segment or class id.
     Returns:
-        `List[List]`: A list of lists, where each list is the run-length encoding of a segment / class id.
+        `list[List]`: A list of lists, where each list is the run-length encoding of a segment / class id.
     """
     segment_ids = torch.unique(segmentation)
 
@@ -529,7 +512,7 @@ def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_
     Raises:
         `ValueError`: Raised when the first dimension doesn't match in all input tensors.
     Returns:
-        `Tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`]`: The `masks`, `scores` and `labels` without the region
+        `tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`]`: The `masks`, `scores` and `labels` without the region
         < `object_mask_threshold`.
     """
     if not (masks.shape[0] == scores.shape[0] == labels.shape[0]):
@@ -629,7 +612,7 @@ class DinoDetrImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Controls whether to resize the image's `(height, width)` dimensions to the specified `size`. Can be
             overridden by the `do_resize` parameter in the `preprocess` method.
-        size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 800, "longest_edge": 1333}`):
+        size (`dict[str, int]` *optional*, defaults to `{"shortest_edge": 800, "longest_edge": 1333}`):
             Size of the image's `(height, width)` dimensions after resizing. Can be overridden by the `size` parameter
             in the `preprocess` method. Available options are:
                 - `{"height": int, "width": int}`: The image will be resized to the exact size `(height, width)`.
@@ -651,10 +634,10 @@ class DinoDetrImageProcessor(BaseImageProcessor):
         do_normalize (`bool`, *optional*, defaults to True):
             Controls whether to normalize the image. Can be overridden by the `do_normalize` parameter in the
             `preprocess` method.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_MEAN`):
+        image_mean (`float` or `list[float]`, *optional*, defaults to `IMAGENET_DEFAULT_MEAN`):
             Mean values to use when normalizing the image. Can be a single value or a list of values, one for each
             channel. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_STD`):
+        image_std (`float` or `list[float]`, *optional*, defaults to `IMAGENET_DEFAULT_STD`):
             Standard deviation values to use when normalizing the image. Can be a single value or a list of values, one
             for each channel. Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_convert_annotations (`bool`, *optional*, defaults to `True`):
@@ -666,13 +649,14 @@ class DinoDetrImageProcessor(BaseImageProcessor):
             method. If `True`, padding will be applied to the bottom and right of the image with zeros.
             If `pad_size` is provided, the image will be padded to the specified dimensions.
             Otherwise, the image will be padded to the maximum height and width of the batch.
-        pad_size (`Dict[str, int]`, *optional*):
+        pad_size (`dict[str, int]`, *optional*):
             The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
             provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
             height and width in the batch.
     """
 
     model_input_names = ["pixel_values", "pixel_mask"]
+    valid_kwargs = DinoDetrImageProcessorKwargs
 
     def __init__(
         self,
@@ -806,7 +790,7 @@ class DinoDetrImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Size of the image's `(height, width)` dimensions after resizing. Available options are:
                     - `{"height": int, "width": int}`: The image will be resized to the exact size `(height, width)`.
                         Do NOT keep the aspect ratio.
@@ -1000,9 +984,9 @@ class DinoDetrImageProcessor(BaseImageProcessor):
         in the batch and optionally returns their corresponding pixel mask.
 
         Args:
-            images (List[`np.ndarray`]):
+            images (list[`np.ndarray`]):
                 Images to pad.
-            annotations (`AnnotationType` or `List[AnnotationType]`, *optional*):
+            annotations (`AnnotationType` or `list[AnnotationType]`, *optional*):
                 Annotations to transform according to the padding that is applied to the images.
             constant_values (`float` or `Iterable[float]`, *optional*):
                 The value to use for the padding if `mode` is `"constant"`.
@@ -1011,10 +995,8 @@ class DinoDetrImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
             input_data_format (`ChannelDimension` or `str`, *optional*):
@@ -1023,7 +1005,7 @@ class DinoDetrImageProcessor(BaseImageProcessor):
                 Whether to update the bounding boxes in the annotations to match the padded images. If the
                 bounding boxes have not been converted to relative coordinates and `(centre_x, centre_y, width, height)`
                 format, the bounding boxes will not be updated.
-            pad_size (`Dict[str, int]`, *optional*):
+            pad_size (`dict[str, int]`, *optional*):
                 The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
                 provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
                 height and width in the batch.
@@ -1098,15 +1080,15 @@ class DinoDetrImageProcessor(BaseImageProcessor):
             images (`ImageInput`):
                 Image or batch of images to preprocess. Expects a single or batch of images with pixel values ranging
                 from 0 to 255. If passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-            annotations (`AnnotationType` or `List[AnnotationType]`, *optional*):
+            annotations (`AnnotationType` or `list[AnnotationType]`, *optional*):
                 List of annotations associated with the image or batch of images. If annotation is for object
                 detection, the annotations should be a dictionary with the following keys:
                 - "image_id" (`int`): The image id.
-                - "annotations" (`List[Dict]`): List of annotations for an image. Each annotation should be a
+                - "annotations" (`list[Dict]`): List of annotations for an image. Each annotation should be a
                   dictionary. An image can have no annotations, in which case the list should be empty.
                 If annotation is for segmentation, the annotations should be a dictionary with the following keys:
                 - "image_id" (`int`): The image id.
-                - "segments_info" (`List[Dict]`): List of segments for an image. Each segment should be a dictionary.
+                - "segments_info" (`list[Dict]`): List of segments for an image. Each segment should be a dictionary.
                   An image can have no segments, in which case the list should be empty.
                 - "file_name" (`str`): The file name of the image.
             return_segmentation_masks (`bool`, *optional*, defaults to self.return_segmentation_masks):
@@ -1115,7 +1097,7 @@ class DinoDetrImageProcessor(BaseImageProcessor):
                 Path to the directory containing the segmentation masks.
             do_resize (`bool`, *optional*, defaults to self.do_resize):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to self.size):
+            size (`dict[str, int]`, *optional*, defaults to self.size):
                 Size of the image's `(height, width)` dimensions after resizing. Available options are:
                     - `{"height": int, "width": int}`: The image will be resized to the exact size `(height, width)`.
                         Do NOT keep the aspect ratio.
@@ -1137,9 +1119,9 @@ class DinoDetrImageProcessor(BaseImageProcessor):
                 Whether to convert the annotations to the format expected by the model. Converts the bounding
                 boxes from the format `(top_left_x, top_left_y, width, height)` to `(center_x, center_y, width, height)`
                 and in relative coordinates.
-            image_mean (`float` or `List[float]`, *optional*, defaults to self.image_mean):
+            image_mean (`float` or `list[float]`, *optional*, defaults to self.image_mean):
                 Mean to use when normalizing the image.
-            image_std (`float` or `List[float]`, *optional*, defaults to self.image_std):
+            image_std (`float` or `list[float]`, *optional*, defaults to self.image_std):
                 Standard deviation to use when normalizing the image.
             do_pad (`bool`, *optional*, defaults to self.do_pad):
                 Whether to pad the image. If `True`, padding will be applied to the bottom and right of
@@ -1160,7 +1142,7 @@ class DinoDetrImageProcessor(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-            pad_size (`Dict[str, int]`, *optional*):
+            pad_size (`dict[str, int]`, *optional*):
                 The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
                 provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
                 height and width in the batch.
@@ -1195,13 +1177,10 @@ class DinoDetrImageProcessor(BaseImageProcessor):
         pad_size = self.pad_size if pad_size is None else pad_size
         format = self.format if format is None else format
 
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor.")
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         # Here, the pad() method pads to the maximum of (width, height). It does not need to be validated.
@@ -1332,12 +1311,11 @@ class DinoDetrImageProcessor(BaseImageProcessor):
 
         return encoded_inputs
 
-    # POSTPROCESSING METHODS - TODO: add support for other frameworks
     # inspired by https://github.com/facebookresearch/dino_detr/blob/master/models/dino_detr.py#L258
     def post_process(self, outputs, target_sizes):
         """
         Converts the raw output of [`DinoDetrForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
-        bottom_right_x, bottom_right_y) format. Only supports PyTorch.
+        bottom_right_x, bottom_right_y) format.
 
         Args:
             outputs ([`DinoDetrObjectDetectionOutput`]):
@@ -1347,7 +1325,7 @@ class DinoDetrImageProcessor(BaseImageProcessor):
                 original image size (before any data augmentation). For visualization, this should be the image size
                 after data augment, but before padding.
         Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
+            `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
         logger.warning_once(
@@ -1382,14 +1360,14 @@ class DinoDetrImageProcessor(BaseImageProcessor):
         Args:
             outputs ([`DinoDetrSegmentationOutput`]):
                 Raw outputs of the model.
-            target_sizes (`torch.Tensor` of shape `(batch_size, 2)` or `List[Tuple]` of length `batch_size`):
+            target_sizes (`torch.Tensor` of shape `(batch_size, 2)` or `list[Tuple]` of length `batch_size`):
                 Torch Tensor (or list) corresponding to the requested final size (h, w) of each prediction.
             threshold (`float`, *optional*, defaults to 0.9):
                 Threshold to use to filter out queries.
             mask_threshold (`float`, *optional*, defaults to 0.5):
                 Threshold to use when turning the predicted masks into binary values.
         Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels, and masks for an image
+            `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels, and masks for an image
             in the batch as predicted by the model.
         """
         logger.warning_once(
@@ -1426,7 +1404,7 @@ class DinoDetrImageProcessor(BaseImageProcessor):
         PyTorch.
 
         Args:
-            results (`List[Dict]`):
+            results (`list[Dict]`):
                 Results list obtained by [`~DinoDetrImageProcessor.post_process`], to which "masks" results will be added.
             outputs ([`DinoDetrSegmentationOutput`]):
                 Raw outputs of the model.
@@ -1439,7 +1417,7 @@ class DinoDetrImageProcessor(BaseImageProcessor):
             threshold (`float`, *optional*, defaults to 0.5):
                 Threshold to use when turning the predicted masks into binary values.
         Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels, boxes and masks for an
+            `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels, boxes and masks for an
             image in the batch as predicted by the model.
         """
         logger.warning_once(
@@ -1473,10 +1451,10 @@ class DinoDetrImageProcessor(BaseImageProcessor):
         Args:
             outputs ([`DinoDetrSegmentationOutput`]):
                 Raw outputs of the model.
-            processed_sizes (`torch.Tensor` of shape `(batch_size, 2)` or `List[Tuple]` of length `batch_size`):
+            processed_sizes (`torch.Tensor` of shape `(batch_size, 2)` or `list[Tuple]` of length `batch_size`):
                 Torch Tensor (or list) containing the size (h, w) of each image of the batch, i.e. the size after data
                 augmentation but before batching.
-            target_sizes (`torch.Tensor` of shape `(batch_size, 2)` or `List[Tuple]` of length `batch_size`, *optional*):
+            target_sizes (`torch.Tensor` of shape `(batch_size, 2)` or `list[Tuple]` of length `batch_size`, *optional*):
                 Torch Tensor (or list) corresponding to the requested final size `(height, width)` of each prediction.
                 If left to None, it will default to the `processed_sizes`.
             is_thing_map (`torch.Tensor` of shape `(batch_size, 2)`, *optional*):
@@ -1485,7 +1463,7 @@ class DinoDetrImageProcessor(BaseImageProcessor):
             threshold (`float`, *optional*, defaults to 0.85):
                 Threshold to use to filter out queries.
         Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing a PNG string and segments_info values for
+            `list[Dict]`: A list of dictionaries, each dictionary containing a PNG string and segments_info values for
             an image in the batch as predicted by the model.
         """
         logger.warning_once(
@@ -1693,11 +1671,11 @@ class DinoDetrImageProcessor(BaseImageProcessor):
         Args:
             outputs ([`DinoDetrForSegmentation`]):
                 Raw outputs of the model.
-            target_sizes (`List[Tuple[int, int]]`, *optional*):
-                A list of tuples (`Tuple[int, int]`) containing the target size (height, width) of each image in the
+            target_sizes (`list[tuple[int, int]]`, *optional*):
+                A list of tuples (`tuple[int, int]`) containing the target size (height, width) of each image in the
                 batch. If unset, predictions will not be resized.
         Returns:
-            `List[torch.Tensor]`:
+            `list[torch.Tensor]`:
                 A list of length `batch_size`, where each item is a semantic segmentation map of shape (height, width)
                 corresponding to the target_sizes entry (if `target_sizes` is specified). Each entry of each
                 `torch.Tensor` correspond to a semantic class id.
@@ -1756,16 +1734,16 @@ class DinoDetrImageProcessor(BaseImageProcessor):
             overlap_mask_area_threshold (`float`, *optional*, defaults to 0.8):
                 The overlap mask area threshold to merge or discard small disconnected parts within each binary
                 instance mask.
-            target_sizes (`List[Tuple]`, *optional*):
-                List of length (batch_size), where each list item (`Tuple[int, int]]`) corresponds to the requested
+            target_sizes (`list[Tuple]`, *optional*):
+                List of length (batch_size), where each list item (`tuple[int, int]]`) corresponds to the requested
                 final size (height, width) of each prediction. If unset, predictions will not be resized.
             return_coco_annotation (`bool`, *optional*):
                 Defaults to `False`. If set to `True`, segmentation maps are returned in COCO run-length encoding (RLE)
                 format.
         Returns:
-            `List[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
+            `list[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
             - **segmentation** -- A tensor of shape `(height, width)` where each pixel represents a `segment_id` or
-              `List[List]` run-length encoding (RLE) of the segmentation map if return_coco_annotation is set to
+              `list[List]` run-length encoding (RLE) of the segmentation map if return_coco_annotation is set to
               `True`. Set to `None` if no mask if found above `threshold`.
             - **segments_info** -- A dictionary that contains additional information on each segment.
                 - **id** -- An integer representing the `segment_id`.
@@ -1845,11 +1823,11 @@ class DinoDetrImageProcessor(BaseImageProcessor):
                 The labels in this state will have all their instances be fused together. For instance we could say
                 there can only be one sky in an image, but several persons, so the label ID for sky would be in that
                 set, but not the one for person.
-            target_sizes (`List[Tuple]`, *optional*):
-                List of length (batch_size), where each list item (`Tuple[int, int]]`) corresponds to the requested
+            target_sizes (`list[Tuple]`, *optional*):
+                List of length (batch_size), where each list item (`tuple[int, int]]`) corresponds to the requested
                 final size (height, width) of each prediction in batch. If unset, predictions will not be resized.
         Returns:
-            `List[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
+            `list[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
             - **segmentation** -- a tensor of shape `(height, width)` where each pixel represents a `segment_id` or
               `None` if no mask if found above `threshold`. If `target_sizes` is specified, segmentation is resized to
               the corresponding `target_sizes` entry.
