@@ -770,10 +770,10 @@ def _load_state_dict_into_meta_model(
                     if value.device.type == "meta":
                         continue
                     val_kwargs = value.__dict__
-                    if value.dtype in [torch.uint8, torch.int8]:
+                    if not value.is_floating_point():
                         val_kwargs["requires_grad"] = False
-                    param_to = "meta" if is_fsdp_enabled() and not is_local_dist_rank_0() else "cpu"
-                    value = type(value)(value.data.to(param_to), **val_kwargs)
+                    device = "meta" if is_fsdp_enabled() and not is_local_dist_rank_0() else "cpu"
+                    value = type(value)(value.data.to(device), **val_kwargs)
                     setattr(module, param_type, value)
 
         # Remove the param from the state dict if it was not loaded on the fly to avoid wasting memory
