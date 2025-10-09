@@ -39,14 +39,14 @@ from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 from .image_processing_video_llama_3 import smart_resize
 
 
-class VideoLlama3VideoProcessorInitKwargs(VideosKwargs):
-    min_pixels: Optional[int]
-    max_pixels: Optional[int]
-    patch_size: Optional[int]
-    temporal_patch_size: Optional[int]
-    merge_size: Optional[int]
-    min_frames: Optional[int]
-    max_frames: Optional[int]
+class VideoLlama3VideoProcessorInitKwargs(VideosKwargs, total=False):
+    min_pixels: int
+    max_pixels: int
+    patch_size: int
+    temporal_patch_size: int
+    merge_size: int
+    min_frames: int
+    max_frames: int
     use_token_compression: Optional[bool]
 
 
