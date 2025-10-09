@@ -763,7 +763,7 @@ def _load_state_dict_into_meta_model(
                 # and then cast it to CPU to avoid excessive memory usage on each GPU
                 # in comparison to the sharded model across GPUs.
                 if is_fsdp_enabled() or is_deepspeed_zero3_enabled():
-                    param_name = hf_quantizer.update_param_name(param_name)
+                    param_name = hf_quantizer.get_param_name(param_name)
                     module, param_type = get_module_from_name(model, param_name)
                     value = getattr(module, param_type)
                     # We need to wait until the quantized value is created
@@ -5818,7 +5818,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
         # For example in the case of MXFP4 quantization, we need to update the param name to the original param name
         # because the checkpoint contains blocks, and scales, but since we are dequantizing, we need to use the original param name
         if hf_quantizer is not None:
-            param_name = hf_quantizer.update_param_name(param_name)
+            param_name = hf_quantizer.get_param_name(param_name)
 
         try:
             param = model.get_parameter_or_buffer(param_name)
