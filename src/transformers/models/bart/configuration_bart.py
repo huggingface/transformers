@@ -17,7 +17,10 @@
 import warnings
 from collections import OrderedDict
 from collections.abc import Mapping
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Optional
+
+from huggingface_hub.dataclasses import strict
 
 from ... import PreTrainedTokenizer
 from ...configuration_utils import PreTrainedConfig
@@ -29,6 +32,8 @@ from ...utils import is_torch_available, logging
 logger = logging.get_logger(__name__)
 
 
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 class BartConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BartModel`]. It is used to instantiate a BART
@@ -109,67 +114,35 @@ class BartConfig(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
 
-    def __init__(
-        self,
-        vocab_size=50265,
-        max_position_embeddings=1024,
-        encoder_layers=12,
-        encoder_ffn_dim=4096,
-        encoder_attention_heads=16,
-        decoder_layers=12,
-        decoder_ffn_dim=4096,
-        decoder_attention_heads=16,
-        encoder_layerdrop=0.0,
-        decoder_layerdrop=0.0,
-        activation_function="gelu",
-        d_model=1024,
-        dropout=0.1,
-        attention_dropout=0.0,
-        activation_dropout=0.0,
-        init_std=0.02,
-        classifier_dropout=0.0,
-        scale_embedding=False,
-        use_cache=True,
-        num_labels=3,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
-        is_encoder_decoder=True,
-        decoder_start_token_id=2,
-        forced_eos_token_id=2,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.d_model = d_model
-        self.encoder_ffn_dim = encoder_ffn_dim
-        self.encoder_layers = encoder_layers
-        self.encoder_attention_heads = encoder_attention_heads
-        self.decoder_ffn_dim = decoder_ffn_dim
-        self.decoder_layers = decoder_layers
-        self.decoder_attention_heads = decoder_attention_heads
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.activation_dropout = activation_dropout
-        self.activation_function = activation_function
-        self.init_std = init_std
-        self.encoder_layerdrop = encoder_layerdrop
-        self.decoder_layerdrop = decoder_layerdrop
-        self.classifier_dropout = classifier_dropout
-        self.use_cache = use_cache
-        self.num_hidden_layers = encoder_layers
-        self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
+    vocab_size: Optional[int] = 50265
+    max_position_embeddings: Optional[int] = 1024
+    encoder_layers: Optional[int] = 12
+    encoder_ffn_dim: Optional[int] = 4096
+    encoder_attention_heads: Optional[int] = 16
+    decoder_layers: Optional[int] = 12
+    decoder_ffn_dim: Optional[int] = 4096
+    decoder_attention_heads: Optional[int] = 16
+    encoder_layerdrop: Optional[float] = 0.0
+    decoder_layerdrop: Optional[float] = 0.0
+    activation_function: Optional[str] = "gelu"
+    d_model: Optional[int] = 1024
+    dropout: Optional[float] = 0.1
+    attention_dropout: Optional[float] = 0.0
+    activation_dropout: Optional[float] = 0.0
+    init_std: Optional[float] = 0.02
+    classifier_dropout: Optional[float] = 0.0
+    scale_embedding: Optional[bool] = False
+    use_cache: Optional[bool] = True
+    pad_token_id: Optional[int] = 1
+    bos_token_id: Optional[int] = 0
+    eos_token_id: Optional[int] = 2
+    is_encoder_decoder: Optional[bool] = True
+    decoder_start_token_id: Optional[int] = 2
+    forced_eos_token_id: Optional[int] = 2
 
-        super().__init__(
-            num_labels=num_labels,
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            decoder_start_token_id=decoder_start_token_id,
-            forced_eos_token_id=forced_eos_token_id,
-            **kwargs,
-        )
+    def __post_init__(self, **kwargs):
+        self.num_hidden_layers = self.encoder_layers
+        super().__post_init__(**kwargs)
 
         # ensure backward compatibility for BART CNN models
         if self.forced_bos_token_id is None and kwargs.get("force_bos_token_to_be_generated", False):

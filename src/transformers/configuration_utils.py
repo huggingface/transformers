@@ -261,7 +261,9 @@ class PreTrainedConfig(PushToHubMixin):
         # Retrocompatibility: Parameters for sequence generation. While we will keep the ability to load these
         # parameters, saving them will be deprecated. In a distant future, we won't need to load them.
         for parameter_name, default_value in self._get_global_generation_defaults().items():
-            setattr(self, parameter_name, kwargs.pop(parameter_name, default_value))
+            value = getattr(self, parameter_name, kwargs.get(parameter_name))
+            value = value if value is not None else default_value
+            setattr(self, parameter_name, value)
 
         # Name or path to the pretrained checkpoint
         self._name_or_path = str(kwargs.pop("name_or_path", ""))
