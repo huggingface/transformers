@@ -82,7 +82,7 @@ if is_scipy_available():
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
-class DeformableDetrImageProcessorKwargs(ImagesKwargs):
+class DeformableDetrImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
         Data format of the annotations. One of "coco_detection" or "coco_panoptic".
@@ -98,9 +98,9 @@ class DeformableDetrImageProcessorKwargs(ImagesKwargs):
         Path to the directory containing the segmentation masks.
     """
 
-    format: Optional[Union[str, AnnotationFormat]]
-    do_convert_annotations: Optional[bool]
-    return_segmentation_masks: Optional[bool]
+    format: Union[str, AnnotationFormat]
+    do_convert_annotations: bool
+    return_segmentation_masks: bool
     annotations: Optional[Union[AnnotationType, list[AnnotationType]]]
     masks_path: Optional[Union[str, pathlib.Path]]
 

@@ -32,7 +32,6 @@ from ...modeling_outputs import (
     SemanticSegmenterOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import auto_docstring, logging, torch_int
 from .configuration_mobilevit import MobileViTConfig
 
@@ -262,25 +261,6 @@ class MobileViTAttention(nn.Module):
         super().__init__()
         self.attention = MobileViTSelfAttention(config, hidden_size)
         self.output = MobileViTSelfOutput(config, hidden_size)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads: set[int]) -> None:
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.attention.num_attention_heads, self.attention.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.attention.query = prune_linear_layer(self.attention.query, index)
-        self.attention.key = prune_linear_layer(self.attention.key, index)
-        self.attention.value = prune_linear_layer(self.attention.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
-        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         self_outputs = self.attention(hidden_states)
@@ -669,16 +649,6 @@ class MobileViTModel(MobileViTPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def _prune_heads(self, heads_to_prune):
-        """Prunes heads of the model.
-        heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base class PreTrainedModel
-        """
-        for layer_index, heads in heads_to_prune.items():
-            mobilevit_layer = self.encoder.layer[layer_index]
-            if isinstance(mobilevit_layer, MobileViTLayer):
-                for transformer_layer in mobilevit_layer.transformer.layer:
-                    transformer_layer.attention.prune_heads(heads)
 
     @auto_docstring
     def forward(

@@ -47,9 +47,10 @@ The model supports audio-text instructions, including multi-turn and multi-audio
 
 ```python
 import torch
-from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device
+from transformers import VoxtralForConditionalGeneration, AutoProcessor
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
 processor = AutoProcessor.from_pretrained(repo_id)
@@ -84,9 +85,10 @@ print("=" * 80)
 
 ```python
 import torch
-from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device
+from transformers import VoxtralForConditionalGeneration, AutoProcessor
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
 processor = AutoProcessor.from_pretrained(repo_id)
@@ -125,9 +127,10 @@ print("=" * 80)
 
 ```python
 import torch
-from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device
+from transformers import VoxtralForConditionalGeneration, AutoProcessor
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
 processor = AutoProcessor.from_pretrained(repo_id)
@@ -180,9 +183,10 @@ print("=" * 80)
 
 ```python
 import torch
-from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device
+from transformers import VoxtralForConditionalGeneration, AutoProcessor
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
 processor = AutoProcessor.from_pretrained(repo_id)
@@ -216,9 +220,10 @@ print("=" * 80)
 
 ```python
 import torch
-from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device
+from transformers import VoxtralForConditionalGeneration, AutoProcessor
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
 processor = AutoProcessor.from_pretrained(repo_id)
@@ -252,9 +257,10 @@ print("=" * 80)
 
 ```python
 import torch
-from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device()
+from transformers import VoxtralForConditionalGeneration, AutoProcessor
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
 processor = AutoProcessor.from_pretrained(repo_id)
@@ -313,9 +319,10 @@ Use the model to transcribe audio (supports English, Spanish, French, Portuguese
 
 ```python
 import torch
-from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device
+from transformers import VoxtralForConditionalGeneration, AutoProcessor
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
 processor = AutoProcessor.from_pretrained(repo_id)

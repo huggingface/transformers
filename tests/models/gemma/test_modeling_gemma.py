@@ -18,7 +18,7 @@ import unittest
 import pytest
 from packaging import version
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, is_torch_available
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
     DeviceProperties,
@@ -197,7 +197,9 @@ class GemmaIntegrationTest(unittest.TestCase):
             "Hi today I'd like to share with you my experience with the new wattpad wattpad wattpad wattpad wattpad wattpad wattpad",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(model_id, load_in_4bit=True)
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
@@ -328,7 +330,9 @@ class GemmaIntegrationTest(unittest.TestCase):
         )
         EXPECTED_TEXTS = expectations.get_expectation()
 
-        model = AutoModelForCausalLM.from_pretrained(model_id, load_in_4bit=True)
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
