@@ -2434,10 +2434,6 @@ class Trainer:
             if hasattr(epoch_dataloader, "set_epoch"):
                 epoch_dataloader.set_epoch(epoch)
 
-            # Reset the past mems state at the beginning of each epoch if necessary.
-            if args.past_index >= 0:
-                self._past = None
-
             steps_in_epoch = (
                 len(epoch_dataloader)
                 if len_dataloader is not None
@@ -2645,10 +2641,6 @@ class Trainer:
                     )
             if self.control.should_training_stop:
                 break
-
-        if args.past_index and hasattr(self, "_past"):
-            # Clean the state at the end of training
-            delattr(self, "_past")
 
         logger.info("\n\nTraining completed. Do not forget to share your model on huggingface.co/models =)\n\n")
         if args.load_best_model_at_end and self.state.best_model_checkpoint is not None:
@@ -3619,8 +3611,6 @@ class Trainer:
                 "The batch received was empty, your model won't be able to train on it. Double-check that your "
                 f"training dataset contains keys expected by the model: {','.join(self._signature_columns)}."
             )
-        if self.args.past_index >= 0 and self._past is not None:
-            inputs["mems"] = self._past
 
         return inputs
 
@@ -3878,10 +3868,6 @@ class Trainer:
                 kwargs["num_items_in_batch"] = num_items_in_batch
             inputs = {**inputs, **kwargs}
         outputs = model(**inputs)
-        # Save past state if it exists
-        # TODO: this needs to be fixed and made cleaner later.
-        if self.args.past_index >= 0:
-            self._past = outputs[self.args.past_index]
 
         # User-defined compute_loss function
         if self.compute_loss_func is not None:
@@ -4422,9 +4408,6 @@ class Trainer:
         # Do this before wrapping.
         eval_dataset = getattr(dataloader, "dataset", None)
 
-        if args.past_index >= 0:
-            self._past = None
-
         # Initialize containers
         all_losses = EvalLoopContainer(self.args.eval_do_concat_batches, padding_index=-100)
         all_preds = EvalLoopContainer(self.args.eval_do_concat_batches, padding_index=-100)
@@ -4509,9 +4492,6 @@ class Trainer:
 
         # After all calls to `.gather_function`, reset to `gather_for_metrics`:
         self.gather_function = self.accelerator.gather_for_metrics
-        if args.past_index and hasattr(self, "_past"):
-            # Clean the state at the end of the evaluation loop
-            delattr(self, "_past")
 
         # Gather all remaining tensors and put them back on the CPU
         all_losses = all_losses.get_arrays()
@@ -4682,9 +4662,6 @@ class Trainer:
                         logits = tuple(v for k, v in outputs.items() if k not in ignore_keys)
                     else:
                         logits = outputs
-                    # TODO: this needs to be fixed and made cleaner later.
-                    if self.args.past_index >= 0:
-                        self._past = outputs[self.args.past_index - 1]
 
         if prediction_loss_only:
             return (loss, None, None)
