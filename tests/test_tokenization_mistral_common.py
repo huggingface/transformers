@@ -263,7 +263,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
             self.tokenizer.decode(tokens_ids, skip_special_tokens=False, unk_args="")
 
     def test_decode_transcription_mode(self):
-        # in the specific case of Voxtral, the added f"lang:xx" (always a two char language code since is follows ISO 639-1 alpha-2 format)
+        # in the specific case of Voxtral, the added f"lang:xx" (always a two char language code since it follows ISO 639-1 alpha-2 format)
         # is not considered as a special token by mistral-common and is encoded/ decoded as normal text.
         # we made the explicit choice of skipping "lang:xx" it to ease users life, see `[~MistralCommonTokenizer.decode]`
         expected_string = "lang:en[TRANSCRIBE]"
