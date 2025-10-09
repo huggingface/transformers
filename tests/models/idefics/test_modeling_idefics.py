@@ -323,7 +323,7 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMi
         if is_torch_available()
         else {}
     )
-    test_pruning = False
+
     test_torchscript = False
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -690,14 +690,7 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
 
             # The two sets of generated text and past kv should be equal to each other
             self.assertListEqual(outputs.sequences.tolist(), outputs_cached.sequences.tolist())
-            for layer_idx in range(len(outputs_cached.past_key_values)):
-                for kv_idx in range(len(outputs_cached.past_key_values[layer_idx])):
-                    self.assertTrue(
-                        torch.allclose(
-                            outputs.past_key_values[layer_idx][kv_idx],
-                            outputs_cached.past_key_values[layer_idx][kv_idx],
-                        )
-                    )
+            self._check_caches_are_equal(outputs.past_key_values, outputs_cached.past_key_values)
 
     @pytest.mark.generate
     def test_generate_without_input_ids(self):
@@ -774,14 +767,7 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
             # Verify that the combined outputs match the full generation.
             combined_output_sequences = torch.concat([initial_output.sequences, cached_output.sequences], axis=1)
             self.assertListEqual(outputs.sequences.tolist(), combined_output_sequences.tolist())
-            for layer_idx in range(len(cached_output.past_key_values)):
-                for kv_idx in range(len(cached_output.past_key_values[layer_idx])):
-                    self.assertTrue(
-                        torch.allclose(
-                            outputs.past_key_values[layer_idx][kv_idx],
-                            cached_output.past_key_values[layer_idx][kv_idx],
-                        )
-                    )
+            self._check_caches_are_equal(outputs.past_key_values, cached_output.past_key_values)
 
     def _check_attentions_for_generate(
         self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values

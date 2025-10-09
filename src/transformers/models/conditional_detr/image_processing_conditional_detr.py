@@ -22,8 +22,10 @@ from typing import Any, Optional, Union
 
 import numpy as np
 
+from transformers.image_transforms import get_size_with_aspect_ratio
+
 from ...feature_extraction_utils import BatchFeature
-from ...image_processing_utils import BaseImageProcessor, get_size_dict
+from ...image_processing_utils import BaseImageProcessor, ImagesKwargs, get_size_dict
 from ...image_transforms import (
     PaddingMode,
     center_to_corners_format,
@@ -53,14 +55,7 @@ from ...image_utils import (
     validate_kwargs,
     validate_preprocess_arguments,
 )
-from ...utils import (
-    TensorType,
-    is_scipy_available,
-    is_torch_available,
-    is_torch_tensor,
-    is_vision_available,
-    logging,
-)
+from ...utils import TensorType, is_scipy_available, is_torch_available, is_torch_tensor, is_vision_available, logging
 from ...utils.import_utils import requires
 
 
@@ -82,46 +77,6 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
-
-
-# Copied from transformers.models.detr.image_processing_detr.get_size_with_aspect_ratio
-def get_size_with_aspect_ratio(image_size, size, max_size=None) -> tuple[int, int]:
-    """
-    Computes the output image size given the input image size and the desired output size.
-
-    Args:
-        image_size (`tuple[int, int]`):
-            The input image size.
-        size (`int`):
-            The desired output size.
-        max_size (`int`, *optional*):
-            The maximum allowed output size.
-    """
-    height, width = image_size
-    raw_size = None
-    if max_size is not None:
-        min_original_size = float(min((height, width)))
-        max_original_size = float(max((height, width)))
-        if max_original_size / min_original_size * size > max_size:
-            raw_size = max_size * min_original_size / max_original_size
-            size = int(round(raw_size))
-
-    if (height <= width and height == size) or (width <= height and width == size):
-        oh, ow = height, width
-    elif width < height:
-        ow = size
-        if max_size is not None and raw_size is not None:
-            oh = int(raw_size * height / width)
-        else:
-            oh = int(size * height / width)
-    else:
-        oh = size
-        if max_size is not None and raw_size is not None:
-            ow = int(raw_size * width / height)
-        else:
-            ow = int(size * width / height)
-
-    return (oh, ow)
 
 
 # Copied from transformers.models.detr.image_processing_detr.get_resize_output_image_size
@@ -774,6 +729,29 @@ def compute_segments(
     return segmentation, segments
 
 
+class ConditionalDetrImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
+        Data format of the annotations. One of "coco_detection" or "coco_panoptic".
+    do_convert_annotations (`bool`, *optional*, defaults to `True`):
+        Controls whether to convert the annotations to the format expected by the CONDITIONAL_DETR model. Converts the
+        bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
+        Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
+    return_segmentation_masks (`bool`, *optional*, defaults to `False`):
+        Whether to return segmentation masks.
+    annotations (`AnnotationType` or `list[AnnotationType]`, *optional*):
+        Annotations to transform according to the padding that is applied to the images.
+    masks_path (`str` or `pathlib.Path`, *optional*):
+        Path to the directory containing the segmentation masks.
+    """
+
+    format: Union[str, AnnotationFormat]
+    do_convert_annotations: bool
+    return_segmentation_masks: bool
+    annotations: Optional[Union[AnnotationType, list[AnnotationType]]]
+    masks_path: Optional[Union[str, pathlib.Path]]
+
+
 @requires(backends=("vision",))
 class ConditionalDetrImageProcessor(BaseImageProcessor):
     r"""
@@ -829,6 +807,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values", "pixel_mask"]
+    valid_kwargs = ConditionalDetrImageProcessorKwargs
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.__init__
     def __init__(

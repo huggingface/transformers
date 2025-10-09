@@ -205,7 +205,7 @@ class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     )
 
     is_encoder_decoder = False
-    test_pruning = False
+
     test_missing_keys = False
     zero_init_hidden_state = True
     test_torch_exportable = True
@@ -218,7 +218,7 @@ class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         inputs_dict = copy.deepcopy(inputs_dict)
 
         if return_labels:
-            if model_class in [MaskFormerForInstanceSegmentation]:
+            if model_class == MaskFormerForInstanceSegmentation:
                 inputs_dict["mask_labels"] = torch.zeros(
                     (
                         self.model_tester.batch_size,

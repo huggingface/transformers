@@ -79,6 +79,7 @@ class Ernie4_5IntegrationTest(unittest.TestCase):
         """
         expected_texts = Expectations(
             {
+                ("xpu", 3): "User: Hey, are you conscious? Can you talk to me?\nAssistant: Hey! I'm here to help you with whatever you need. Are you feeling a bit overwhelmed or stressed? I'm here to listen and provide support.",
                 ("cuda", None): "User: Hey, are you conscious? Can you talk to me?\nAssistant: Hey! I'm here to help you with whatever you need. Are you feeling a bit overwhelmed or stressed? I'm here to listen and provide support.",
             }
         )  # fmt: skip

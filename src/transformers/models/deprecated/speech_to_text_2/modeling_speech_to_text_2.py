@@ -28,7 +28,6 @@ from ....modeling_layers import GradientCheckpointingLayer
 from ....modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ....modeling_utils import PreTrainedModel
 from ....utils import add_start_docstrings, logging, replace_return_docstrings
-from ....utils.deprecation import deprecate_kwarg
 from .configuration_speech_to_text_2 import Speech2Text2Config
 
 
@@ -144,7 +143,6 @@ class Speech2Text2Attention(nn.Module):
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -286,7 +284,6 @@ class Speech2Text2DecoderLayer(GradientCheckpointingLayer):
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -832,15 +829,6 @@ class Speech2Text2ForCausalLM(Speech2Text2PreTrainedModel):
             "past_key_values": past_key_values,
             "use_cache": use_cache,
         }
-
-    @staticmethod
-    def _reorder_cache(past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past
 
 
 __all__ = ["Speech2Text2ForCausalLM", "Speech2Text2PreTrainedModel"]

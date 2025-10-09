@@ -21,7 +21,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN, gelu
-from ...cache_utils import Cache, EncoderDecoderCache
+from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_attention_mask_for_sdpa
@@ -38,7 +38,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import TransformersKwargs, auto_docstring, is_torch_flex_attn_available, logging
 from ...utils.generic import can_return_tuple, check_model_inputs
 from .configuration_xmod import XmodConfig
@@ -63,7 +63,6 @@ class XmodEmbeddings(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
         self.register_buffer(
             "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
         )
@@ -115,11 +114,11 @@ class XmodEmbeddings(nn.Module):
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
-
         embeddings = inputs_embeds + token_type_embeddings
-        if self.position_embedding_type == "absolute":
-            position_embeddings = self.position_embeddings(position_ids)
-            embeddings += position_embeddings
+
+        position_embeddings = self.position_embeddings(position_ids)
+        embeddings = embeddings + position_embeddings
+
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
@@ -168,40 +167,15 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: Optional[float] = None,
     dropout: float = 0.0,
-    use_cache: Optional[bool] = None,
     **kwargs: Unpack[TransformersKwargs],
 ):
     if scaling is None:
         scaling = query.size(-1) ** -0.5
 
     # Take the dot product between "query" and "key" to get the raw attention scores.
-    attn_weights = torch.matmul(query, key.transpose(2, 3))
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
-    # Relative positional embeddings
-    if module.position_embedding_type == "relative_key" or module.position_embedding_type == "relative_key_query":
-        query_length, key_length = query.shape[2], key.shape[2]
-        if use_cache:
-            position_ids_l = torch.tensor(key_length - 1, dtype=torch.long, device=query.device).view(-1, 1)
-        else:
-            position_ids_l = torch.arange(query_length, dtype=torch.long, device=query.device).view(-1, 1)
-        position_ids_r = torch.arange(key_length, dtype=torch.long, device=query.device).view(1, -1)
-        distance = position_ids_l - position_ids_r
-
-        positional_embedding = module.distance_embedding(distance + module.max_position_embeddings - 1)
-        positional_embedding = positional_embedding.to(dtype=query.dtype)  # fp16 compatibility
-
-        if module.position_embedding_type == "relative_key":
-            relative_position_scores = torch.einsum("bhld,lrd->bhlr", query, positional_embedding)
-            attn_weights = attn_weights + relative_position_scores
-        elif module.position_embedding_type == "relative_key_query":
-            relative_position_scores_query = torch.einsum("bhld,lrd->bhlr", query, positional_embedding)
-            relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key, positional_embedding)
-            attn_weights = attn_weights + relative_position_scores_query + relative_position_scores_key
-
-    # Scaling is shifted in case of embeddings being relative
-    attn_weights = attn_weights * scaling
-
-    if attention_mask is not None and attention_mask.ndim == 4:
+    if attention_mask is not None:
         attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + attention_mask
 
@@ -216,7 +190,7 @@ def eager_attention_forward(
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaSelfAttention with Roberta->Xmod
 class XmodSelfAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None, is_causal=False, layer_idx=None):
+    def __init__(self, config, is_causal=False, layer_idx=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -235,12 +209,6 @@ class XmodSelfAttention(nn.Module):
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.position_embedding_type = position_embedding_type or getattr(
-            config, "position_embedding_type", "absolute"
-        )
-        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            self.max_position_embeddings = config.max_position_embeddings
-            self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
 
         self.is_decoder = config.is_decoder
         self.is_causal = is_causal
@@ -278,11 +246,6 @@ class XmodSelfAttention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.position_embedding_type != "absolute":
-                raise ValueError(
-                    f"You are using {self.config._attn_implementation} as attention type. However, non-absolute "
-                    'positional embeddings can not work with them. Please load the model with `attn_implementation="eager"`.'
-                )
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
@@ -293,8 +256,6 @@ class XmodSelfAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.dropout.p,
             scaling=self.scaling,
-            # only for relevant for non-absolute positional embeddings
-            use_cache=past_key_value is not None,
             **kwargs,
         )
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
@@ -303,7 +264,7 @@ class XmodSelfAttention(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertCrossAttention with Bert->Xmod
 class XmodCrossAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None, is_causal=False, layer_idx=None):
+    def __init__(self, config, is_causal=False, layer_idx=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -322,12 +283,6 @@ class XmodCrossAttention(nn.Module):
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.position_embedding_type = position_embedding_type or getattr(
-            config, "position_embedding_type", "absolute"
-        )
-        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            self.max_position_embeddings = config.max_position_embeddings
-            self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
 
         self.is_causal = is_causal
         self.layer_idx = layer_idx
@@ -369,11 +324,6 @@ class XmodCrossAttention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.position_embedding_type != "absolute":
-                raise ValueError(
-                    f"You are using {self.config._attn_implementation} as attention type. However, non-absolute "
-                    'positional embeddings can not work with them. Please load the model with `attn_implementation="eager"`.'
-                )
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
@@ -384,8 +334,6 @@ class XmodCrossAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.dropout.p,
             scaling=self.scaling,
-            # only for relevant for non-absolute positional embeddings
-            use_cache=past_key_value is not None,
             **kwargs,
         )
         attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
@@ -408,37 +356,14 @@ class XmodSelfOutput(nn.Module):
 
 
 class XmodAttention(nn.Module):
-    def __init__(
-        self, config, position_embedding_type=None, is_causal=False, layer_idx=None, is_cross_attention=False
-    ):
+    def __init__(self, config, is_causal=False, layer_idx=None, is_cross_attention=False):
         super().__init__()
         self.is_cross_attention = is_cross_attention
         attention_class = XmodCrossAttention if is_cross_attention else XmodSelfAttention
-        self.self = attention_class(
-            config, position_embedding_type=position_embedding_type, is_causal=is_causal, layer_idx=layer_idx
-        )
+        self.self = attention_class(config, is_causal=is_causal, layer_idx=layer_idx)
         self.output = XmodSelfOutput(config)
-        self.pruned_heads = set()
+
         self.pre_norm = config.pre_norm
-
-    # Copied from transformers.models.roberta.modeling_roberta.RobertaAttention.prune_heads
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.self.query = prune_linear_layer(self.self.query, index)
-        self.self.key = prune_linear_layer(self.self.key, index)
-        self.self.value = prune_linear_layer(self.self.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
-        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
         self,
@@ -568,7 +493,6 @@ class XmodLayer(GradientCheckpointingLayer):
                 raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
             self.crossattention = XmodAttention(
                 config,
-                position_embedding_type="absolute",
                 is_causal=False,
                 layer_idx=layer_idx,
                 is_cross_attention=True,
@@ -794,16 +718,7 @@ class XmodModel(XmodPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    # Copied from transformers.models.roberta.modeling_roberta.RobertaModel._prune_heads
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
-
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
@@ -830,15 +745,8 @@ class XmodModel(XmodPreTrainedModel):
         else:
             use_cache = False
 
-        return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):
-            logger.warning_once(
-                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
-                "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
-                "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
-            )
-            return_legacy_cache = True
-            past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
+        if use_cache and past_key_values is None:
+            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -896,9 +804,6 @@ class XmodModel(XmodPreTrainedModel):
         )
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
-
-        if return_legacy_cache:
-            encoder_outputs.past_key_values = encoder_outputs.past_key_values.to_legacy_cache()
 
         return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,

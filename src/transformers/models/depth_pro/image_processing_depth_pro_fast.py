@@ -30,7 +30,6 @@ from ...image_utils import (
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_v2_available,
     logging,
     requires_backends,
 )
@@ -41,10 +40,7 @@ if TYPE_CHECKING:
     from .modeling_depth_pro import DepthProDepthEstimatorOutput
 
 
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
+from torchvision.transforms.v2 import functional as F
 
 
 logger = logging.get_logger(__name__)

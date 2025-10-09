@@ -1,4 +1,5 @@
-# Copyright 2021 The HuggingFace Team. All rights reserved.
+# coding=utf-8
+# Copyright 2025 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,20 +12,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import warnings
 
-from ..trainer import Trainer
-from ..utils import logging
+from typing import TYPE_CHECKING
 
-
-logger = logging.get_logger(__name__)
+from ...utils import _LazyModule
+from ...utils.import_utils import define_import_structure
 
 
-class SageMakerTrainer(Trainer):
-    def __init__(self, args=None, **kwargs):
-        warnings.warn(
-            "`SageMakerTrainer` is deprecated and will be removed in v5 of Transformers. You can use `Trainer` "
-            "instead.",
-            FutureWarning,
-        )
-        super().__init__(args=args, **kwargs)
+if TYPE_CHECKING:
+    from .configuration_lfm2_moe import *
+    from .modeling_lfm2_moe import *
+else:
+    import sys
+
+    _file = globals()["__file__"]
+    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
