@@ -1772,9 +1772,10 @@ class MistralCommonTokenizer(PushToHubMixin):
             raise ValueError("`init_inputs` are not supported by `MistralCommonTokenizer.from_pretrained`.")
 
         # Handle kwargs and AutoTokenizer case
-        if kwargs and not set(kwargs.keys()).issubset({"_from_auto", "trust_remote_code"}):
+        ignore_subset = {"_from_auto", "trust_remote_code"}
+        if kwargs and not (set_kwargs := set(kwargs.keys())).issubset(ignore_subset):
             raise ValueError(
-                f"Kwargs {list(kwargs.keys())} are not supported by `MistralCommonTokenizer.from_pretrained`."
+                f"Kwargs {list(set_kwargs - ignore_subset)} are not supported by `MistralCommonTokenizer.from_pretrained`."
             )
 
         if not os.path.isdir(pretrained_model_name_or_path):
