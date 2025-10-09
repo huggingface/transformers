@@ -35,7 +35,7 @@ from transformers import (
     AutoModel,
     AutoModelForSequenceClassification,
     BitsAndBytesConfig,
-    PretrainedConfig,
+    PreTrainedConfig,
     PreTrainedModel,
     is_torch_available,
     logging,
