@@ -880,7 +880,6 @@ class PreTrainedConfig(PushToHubMixin):
                 isinstance(getattr(self, key, None), PreTrainedConfig)
                 and key in class_config_dict
                 and isinstance(class_config_dict[key], dict)
-                or key in self.sub_configs
             ):
                 # For nested configs we need to clean the diff recursively
                 diff = recursive_diff_dict(value, default_config_dict, config_obj=getattr(self, key, None))

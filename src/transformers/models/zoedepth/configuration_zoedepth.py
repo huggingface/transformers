@@ -16,7 +16,7 @@
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
-from ..auto.configuration_auto import CONFIG_MAPPING
+from ..auto.configuration_auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -133,6 +133,7 @@ class ZoeDepthConfig(PreTrainedConfig):
     ```"""
 
     model_type = "zoedepth"
+    sub_configs = {"backbone_config": AutoConfig}
 
     def __init__(
         self,
@@ -232,14 +233,6 @@ class ZoeDepthConfig(PreTrainedConfig):
         self.patch_transformer_hidden_size = patch_transformer_hidden_size
         self.patch_transformer_intermediate_size = patch_transformer_intermediate_size
         self.patch_transformer_num_attention_heads = patch_transformer_num_attention_heads
-
-    @property
-    def sub_configs(self):
-        return (
-            {"backbone_config": type(self.backbone_config)}
-            if getattr(self, "backbone_config", None) is not None
-            else {}
-        )
 
 
 __all__ = ["ZOEDEPTH_PRETRAINED_CONFIG_ARCHIVE_MAP", "ZoeDepthConfig"]
