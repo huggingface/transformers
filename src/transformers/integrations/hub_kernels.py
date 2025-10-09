@@ -12,8 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import re
+from collections.abc import Callable
 from functools import partial
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 from ..modeling_flash_attention_utils import lazy_import_flash_attention
 from .flash_attention import flash_attention_forward

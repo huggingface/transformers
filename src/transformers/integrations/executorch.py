@@ -11,7 +11,8 @@
 # specific language governing permissions and limitations under the License.
 
 import logging
-from typing import Callable, Optional
+from collections.abc import Callable
+from typing import Optional
 
 import torch
 

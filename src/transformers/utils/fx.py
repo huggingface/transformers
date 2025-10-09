@@ -23,7 +23,8 @@ import os
 import random
 import sys
 import warnings
-from typing import Any, Callable, Literal, Optional, Union
+from collections.abc import Callable
+from typing import Any, Literal, Optional, Union
 
 import torch
 import torch.utils._pytree as pytree
