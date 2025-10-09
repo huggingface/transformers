@@ -198,7 +198,6 @@ class MMGroundingDinoConfig(PreTrainedConfig):
         layer_norm_eps=1e-5,
         **kwargs,
     ):
-        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
         if backbone_config is None and backbone is None:
             logger.info("`backbone_config` is `None`. Initializing the config with the default `Swin` backbone.")
             backbone_config = CONFIG_MAPPING["swin"](
@@ -280,6 +279,8 @@ class MMGroundingDinoConfig(PreTrainedConfig):
         self.positional_embedding_temperature = positional_embedding_temperature
         self.init_std = init_std
         self.layer_norm_eps = layer_norm_eps
+
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
 __all__ = ["MMGroundingDinoConfig"]

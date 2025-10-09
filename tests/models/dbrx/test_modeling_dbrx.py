@@ -126,12 +126,6 @@ class DbrxModelTest(CausalLMModelTest, unittest.TestCase):
     def test_model_rope_scaling_from_config(self, scaling_type):
         pass
 
-    #
-    # @unittest.skip(reason="Not that big not that slow offload")
-    # def test_model_is_small(self):
-    #     pass
-    #
-
 
 @require_torch
 class DbrxModelIntegrationTest(unittest.TestCase):
