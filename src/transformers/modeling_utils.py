@@ -61,8 +61,8 @@ from .integrations.eager_paged import eager_paged_attention_forward
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
-from .integrations.hub_kernels import is_kernel, load_and_register_kernel
 from .integrations.peft import maybe_load_adapters
+from .integrations.hub_kernels import is_kernel, load_and_register_attn_kernel
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
 from .integrations.tensor_parallel import (
@@ -2511,7 +2511,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if is_kernel(applicable_attn_implementation):
             try:
-                load_and_register_kernel(applicable_attn_implementation)
+                load_and_register_attn_kernel(applicable_attn_implementation)
                 # log that we used kernel fallback if successful
                 if attn_implementation.startswith("flash_attention"):
                     logger.warning_once(
@@ -4364,10 +4364,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 Whether or not to offload the buffers with the model parameters.
             quantization_config (`Union[QuantizationConfigMixin,Dict]`, *optional*):
                 A dictionary of configuration parameters or a QuantizationConfigMixin object for quantization (e.g
-                bitsandbytes, gptq). There may be other quantization-related kwargs, including `load_in_4bit` and
-                `load_in_8bit`, which are parsed by QuantizationConfigParser. Supported only for bitsandbytes
-                quantizations and not preferred. consider inserting all such arguments into quantization_config
-                instead.
+                bitsandbytes, gptq).
             subfolder (`str`, *optional*, defaults to `""`):
                 In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
                 specify the folder name here.
