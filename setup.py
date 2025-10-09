@@ -433,7 +433,8 @@ setup(
     extras_require=extras,
     entry_points={
         "console_scripts": [
-            "transformers=transformers.commands.transformers_cli:main",
+            "transformers=transformers.cli.transformers:main",
+            "transformers-legacy=transformers.commands.transformers_cli:main",
         ]
     },
     python_requires=">=3.10.0",
