@@ -51,10 +51,11 @@ EdgeTAM Video's key strength is its ability to track objects across video frames
 #### Basic Video Tracking
 
 ```python
->>> from transformers import EdgeTamVideoModel, Sam2VideoProcessor, infer_device
+>>> from transformers import EdgeTamVideoModel, Sam2VideoProcessor
+from accelerate import Accelerator
 >>> import torch
 
->>> device = infer_device()
+>>> device = Accelerator().device
 >>> model = EdgeTamVideoModel.from_pretrained("yonigozlan/edgetam-video-1").to(device, dtype=torch.bfloat16)
 >>> processor = Sam2VideoProcessor.from_pretrained("yonigozlan/edgetam-video-1")
 
