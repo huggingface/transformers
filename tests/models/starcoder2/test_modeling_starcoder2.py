@@ -17,7 +17,7 @@ import unittest
 
 import pytest
 
-from transformers import is_torch_available
+from transformers import BitsAndBytesConfig, is_torch_available
 from transformers.testing_utils import (
     Expectations,
     require_bitsandbytes,
@@ -146,7 +146,9 @@ class Starcoder2IntegrationTest(unittest.TestCase):
 
         model_id = "bigcode/starcoder2-7b"
 
-        model = Starcoder2ForCausalLM.from_pretrained(model_id, load_in_4bit=True)
+        model = Starcoder2ForCausalLM.from_pretrained(
+            model_id, quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         tokenizer.pad_token = tokenizer.eos_token
 
