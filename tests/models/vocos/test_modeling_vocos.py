@@ -20,7 +20,7 @@ import unittest
 
 from datasets import Audio, load_dataset
 
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
 from transformers.utils import is_torch_available
 
 from ...test_configuration_common import ConfigTester
@@ -233,6 +233,7 @@ class VocosModelTest(ModelTesterMixin, unittest.TestCase):
 class VocosModelIntegrationTest(unittest.TestCase):
     """
     See code for reproducing expected outputs: https://gist.github.com/Manalelaidouni/853f4c902ab0ce0a512e5217d87d564c
+    Outputs should be computed on GPU because the mel spectrogram outputs differ on CPU and GPU.
     """
 
     def _load_datasamples(self, num_samples):
@@ -252,6 +253,7 @@ class VocosModelIntegrationTest(unittest.TestCase):
             self.encodec_batch_expected = json.load(f)
 
     @slow
+    @require_torch_gpu
     def test_inference_mel_vocos(self):
         hf_repo_id = "hf-audio/vocos-mel-24khz"
         processor = VocosProcessor.from_pretrained(hf_repo_id)
@@ -274,6 +276,7 @@ class VocosModelIntegrationTest(unittest.TestCase):
         )
 
     @slow
+    @require_torch_gpu
     def test_inference_encodec_vocos(self):
         hf_repo_id = "hf-audio/vocos-encodec-24khz"
         model = VocosModel.from_pretrained(hf_repo_id).to(torch_device).eval()
@@ -316,6 +319,7 @@ class VocosModelIntegrationTest(unittest.TestCase):
             )
 
     @slow
+    @require_torch_gpu
     def test_inference_batch_mel_vocos(self):
         repo_id = "hf-audio/vocos-mel-24khz"
         processor = VocosProcessor.from_pretrained(repo_id)
@@ -336,6 +340,7 @@ class VocosModelIntegrationTest(unittest.TestCase):
             )
 
     @slow
+    @require_torch_gpu
     def test_batch_encodec_vocos(self):
         repo_id = "hf-audio/vocos-encodec-24khz"
         processor = VocosProcessor.from_pretrained(repo_id)
