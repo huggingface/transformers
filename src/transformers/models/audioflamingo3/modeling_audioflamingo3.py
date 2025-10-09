@@ -45,11 +45,6 @@ from .configuration_audioflamingo3 import AudioFlamingo3Config, AudioFlamingo3En
 logger = logging.get_logger(__name__)
 
 
-# --------------------------------------------------------------------------
-# Outputs
-# --------------------------------------------------------------------------
-
-
 @dataclass
 class AudioFlamingo3CausalLMOutputWithPast(ModelOutput):
     """
@@ -301,11 +296,6 @@ class AudioFlamingo3EncoderLayer(GradientCheckpointingLayer):
         return hidden_states, attn_weights
 
 
-# --------------------------------------------------------------------------
-# Base model
-# --------------------------------------------------------------------------
-
-
 class AudioFlamingo3PreTrainedModel(PreTrainedModel):
     """
     Base class with common functionality for AudioFlamingo3 models.
@@ -426,8 +416,6 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
         )
         return_dict = self.config.use_return_dict if return_dict is None else return_dict
 
-        input_features = input_features.to(dtype=self.conv1.weight.dtype, device=self.conv1.weight.device)
-
         # Conv front-end
         x = nn.functional.gelu(self.conv1(input_features))
         x = nn.functional.gelu(self.conv2(x))  # (B, C, T')
@@ -484,20 +472,6 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
             attentions=tuple(attn_list) if attn_list is not None else None,
         )
 
-    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
-        """
-        Compute (pre-conv) and (post-pool) sequence lengths given mel frame lengths.
-        Matches the conv/pool schedule used in `forward`.
-        """
-        input_lengths = (input_lengths - 1) // 2 + 1
-        output_lengths = (input_lengths - 2) // 2 + 1
-        return input_lengths, output_lengths
-
-
-# --------------------------------------------------------------------------
-# Projector
-# --------------------------------------------------------------------------
-
 
 class AudioFlamingo3MultiModalProjector(nn.Module):
     """
@@ -515,11 +489,6 @@ class AudioFlamingo3MultiModalProjector(nn.Module):
         for layer in self.layers:
             x = layer(x)
         return x
-
-
-# --------------------------------------------------------------------------
-# Conditional generation model
-# --------------------------------------------------------------------------
 
 
 class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, GenerationMixin):
@@ -593,14 +562,14 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         if input_features is not None and input_ids is not None and input_ids.shape[1] != 1:
             dev = next(self.audio_tower.parameters()).device
 
-            input_features = input_features.to(dev)
             if feature_attention_mask is None:
                 raise ValueError("`feature_attention_mask` is required when `input_features` is provided.")
-            feature_attention_mask = feature_attention_mask.to(dev)
 
             # Compute pre/post lengths (mel -> conv -> pool)
             Lmel = feature_attention_mask.sum(-1)  # (#windows,)
-            pre_lengths, post_lengths = self.audio_tower._get_feat_extract_output_lengths(Lmel)
+
+            pre_lengths = (Lmel - 1) // 2 + 1
+            post_lengths = (pre_lengths - 2) // 2 + 1
             pre_lengths = pre_lengths.to(dtype=torch.long)
             post_lengths = post_lengths.to(dtype=torch.long)
 
