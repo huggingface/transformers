@@ -22,8 +22,7 @@ import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
-from ...masking_utils import create_causal_mask
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_attention_mask_for_sdpa
+from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -36,7 +35,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, is_torch_flex_attn_available, logging
+from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple, check_model_inputs
 from ..bert.modeling_bert import (
     BertCrossAttention,
@@ -58,10 +57,6 @@ from ..bert.modeling_bert import (
     BertSelfAttention,
 )
 from .configuration_ernie import ErnieConfig
-
-
-if is_torch_flex_attn_available():
-    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 logger = logging.get_logger(__name__)
@@ -268,43 +263,14 @@ class ErnieModel(BertModel):
             past_key_values_length=past_key_values_length,
         )
 
-        if attention_mask is not None and attention_mask.dim() == 2:
-            if self.config.is_decoder:
-                attention_mask = create_causal_mask(
-                    config=self.config,
-                    input_embeds=embedding_output,
-                    attention_mask=attention_mask,
-                    cache_position=cache_position,
-                    past_key_values=past_key_values,
-                )
-            else:
-                attention_mask = self._update_full_mask(
-                    attention_mask,
-                    embedding_output,
-                )
-        elif attention_mask is not None and attention_mask.dim() == 3:
-            if "flash" in self.config._attn_implementation or self.config._attn_implementation == "flex_attention":
-                raise ValueError(
-                    "Passing attention mask with a 3D/4D shape does not work with type "
-                    f"{self.config._attn_implementation} - please use either `sdpa` or `eager` instead."
-                )
-            attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
-
-        if encoder_attention_mask is not None:
-            if encoder_attention_mask.dim() == 2:
-                encoder_attention_mask = self._update_cross_attn_mask(
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    embedding_output.shape[:2],
-                    embedding_output,
-                )
-            else:
-                if "flash" in self.config._attn_implementation or self.config._attn_implementation == "flex_attention":
-                    raise ValueError(
-                        "Passing attention mask with a 3D/4D shape does not work with type "
-                        f"{self.config._attn_implementation} - please use either `sdpa` or `eager` instead."
-                    )
-                encoder_attention_mask = self.invert_attention_mask(encoder_attention_mask)
+        attention_mask, encoder_attention_mask = self._create_attention_masks(
+            attention_mask=attention_mask,
+            encoder_attention_mask=encoder_attention_mask,
+            embedding_output=embedding_output,
+            encoder_hidden_states=encoder_hidden_states,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
+        )
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -326,60 +292,40 @@ class ErnieModel(BertModel):
             past_key_values=encoder_outputs.past_key_values,
         )
 
-    # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_full_mask
-    def _update_full_mask(
+    # Copied from transformers.models.bert.modeling_bert.BertModel._create_attention_masks
+    def _create_attention_masks(
         self,
-        attention_mask: Union[torch.Tensor, None],
-        inputs_embeds: torch.Tensor,
+        attention_mask,
+        encoder_attention_mask,
+        embedding_output,
+        encoder_hidden_states,
+        cache_position,
+        past_key_values,
     ):
-        if attention_mask is not None:
-            if "flash" in self.config._attn_implementation:
-                attention_mask = attention_mask if 0 in attention_mask else None
-            elif self.config._attn_implementation == "sdpa":
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
-            elif self.config._attn_implementation == "flex_attention":
-                if isinstance(attention_mask, torch.Tensor):
-                    attention_mask = make_flex_block_causal_mask(attention_mask, is_causal=False)
-            else:
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
+        if self.config.is_decoder:
+            attention_mask = create_causal_mask(
+                config=self.config,
+                input_embeds=embedding_output,
+                attention_mask=attention_mask,
+                cache_position=cache_position,
+                past_key_values=past_key_values,
+            )
+        else:
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=embedding_output,
+                attention_mask=attention_mask,
+            )
 
-        return attention_mask
+        if encoder_attention_mask is not None:
+            encoder_attention_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=embedding_output,
+                attention_mask=encoder_attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
+            )
 
-    # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_cross_attn_mask
-    def _update_cross_attn_mask(
-        self,
-        encoder_hidden_states: Union[torch.Tensor, None],
-        encoder_attention_mask: Union[torch.Tensor, None],
-        input_shape: torch.Size,
-        inputs_embeds: torch.Tensor,
-    ):
-        # expand encoder attention mask
-        if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            if "flash" in self.config._attn_implementation:
-                encoder_attention_mask = encoder_attention_mask if 0 in encoder_attention_mask else None
-            elif self.config._attn_implementation == "sdpa":
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                encoder_attention_mask = _prepare_4d_attention_mask_for_sdpa(
-                    encoder_attention_mask,
-                    inputs_embeds.dtype,
-                    tgt_len=input_shape[-1],
-                )
-            elif self.config._attn_implementation == "flex_attention":
-                if isinstance(encoder_attention_mask, torch.Tensor):
-                    encoder_attention_mask = make_flex_block_causal_mask(
-                        encoder_attention_mask,
-                        query_length=input_shape[-1],
-                        is_causal=False,
-                    )
-            else:
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                encoder_attention_mask = _prepare_4d_attention_mask(
-                    encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
-                )
-
-        return encoder_attention_mask
+        return attention_mask, encoder_attention_mask
 
 
 class ErnieForPreTrainingOutput(BertForPreTrainingOutput):

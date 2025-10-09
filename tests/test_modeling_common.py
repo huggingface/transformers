@@ -34,6 +34,7 @@ from pytest import mark
 from transformers import (
     AutoModel,
     AutoModelForSequenceClassification,
+    BitsAndBytesConfig,
     PreTrainedConfig,
     PreTrainedModel,
     is_torch_available,
@@ -1257,7 +1258,8 @@ class ModelTesterMixin:
             del inputs_dict["output_attentions"]
             config.output_attentions = True
             for k in config.sub_configs:
-                getattr(config, k).output_attentions = True
+                if getattr(config, k) is not None:
+                    getattr(config, k).output_attentions = True
 
             model = model_class(config)
             model.to(torch_device)
@@ -1736,20 +1738,23 @@ class ModelTesterMixin:
             del inputs_dict["output_hidden_states"]
             config.output_hidden_states = True
             for k in config.sub_configs:
-                getattr(config, k).output_hidden_states = True
+                if getattr(config, k) is not None:
+                    getattr(config, k).output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
     def test_retain_grad_hidden_states_attentions(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for k in config.sub_configs:
-            getattr(config, k).output_hidden_states = True
+            if getattr(config, k) is not None:
+                getattr(config, k).output_hidden_states = True
 
         config.output_hidden_states = True
         config.output_attentions = self.has_attentions
 
         for k in config.sub_configs:
-            getattr(config, k).output_attentions = self.has_attentions
+            if getattr(config, k) is not None:
+                getattr(config, k).output_attentions = self.has_attentions
 
         # force eager attention to support output attentions
         if self.has_attentions:
@@ -3188,13 +3193,15 @@ class ModelTesterMixin:
             # we just need to test if passing 'attn_implementation' as a dict fails or not
             attn_implementation_per_subconfig = {"": "eager"}
             for key in config.sub_configs:
-                attn_implementation_per_subconfig[key] = "eager"
+                if getattr(config, key) is not None:
+                    attn_implementation_per_subconfig[key] = "eager"
 
             config._attn_implementation = attn_implementation_per_subconfig
             model = model_class(config)
             for key in config.sub_configs:
-                sub_config = getattr(model.config, key)
-                self.assertTrue(sub_config._attn_implementation == "eager")
+                if getattr(config, key) is not None:
+                    sub_config = getattr(model.config, key)
+                    self.assertTrue(sub_config._attn_implementation == "eager")
 
             for name, submodule in model.named_modules():
                 class_name = submodule.__class__.__name__
@@ -3579,7 +3586,7 @@ class ModelTesterMixin:
                     tmpdirname,
                     dtype=torch.float16,
                     attn_implementation="flash_attention_2",
-                    load_in_4bit=True,
+                    quantization_config=BitsAndBytesConfig(load_in_4bit=True),
                 )
 
                 for _, param in model.named_parameters():
@@ -3934,8 +3941,9 @@ class ModelTesterMixin:
         # Update config values
         update_config_headdim(config, requested_dim)
         for key in config.sub_configs:
-            sub_config = getattr(config, key)
-            update_config_headdim(sub_config, requested_dim)
+            if getattr(config, key) is not None:
+                sub_config = getattr(config, key)
+                update_config_headdim(sub_config, requested_dim)
 
         return config
 
@@ -4096,11 +4104,20 @@ class ModelTesterMixin:
                 if isinstance(attribute_value, PreTrainedConfig):
                     check_attn_implementation_setter(attribute_value, attn_implementation)
 
-        config._attn_implementation = "eager"
+        # Check that attention implementation can be passed with init args
+        config_dict = config.to_diff_dict()
+        config_dict.pop("_attn_implementation_internal", None)
+        config_dict.pop("_attn_implementation", None)
+        config_dict["attn_implementation"] = "eager"
+        config = type(config)(**config_dict)
         check_attn_implementation_setter(config, "eager")
 
+        # Check that attention implementation can be set to different value
         config._attn_implementation = "sdpa"
         check_attn_implementation_setter(config, "sdpa")
+
+        config._attn_implementation = "eager"
+        check_attn_implementation_setter(config, "eager")
 
     def test_internal_model_config_and_subconfig_are_same(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -4119,7 +4136,10 @@ class ModelTesterMixin:
                     for subconfig_key in subconfig_keys:
                         # Get the subconfig from the model config
                         subconfig_from_model_config = getattr(model.config, subconfig_key)
-                        if subconfig_from_model_config.__class__ == subconfig_from_model_internal.__class__:
+                        if (
+                            subconfig_from_model_config is not None
+                            and subconfig_from_model_config.__class__ == subconfig_from_model_internal.__class__
+                        ):
                             # Since some composite models have different submodels parameterized by 2 of the same config
                             # class instances, we need to check against a list of matching classes, and check that at least
                             # 1 is the exact object (instead of checking immediately for similar object)
@@ -4150,7 +4170,8 @@ class ModelTesterMixin:
             # sanity check to make sure everything is correctly eager
             self.assertTrue(model.config._attn_implementation == "eager")
             for subconfig_key in model.config.sub_configs:
-                self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "eager")
+                if getattr(config, subconfig_key) is not None:
+                    self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "eager")
 
             if not all(
                 submodule._can_set_attn_implementation()
@@ -4170,7 +4191,8 @@ class ModelTesterMixin:
             # Check everything was correctly changed
             self.assertTrue(model.config._attn_implementation == "sdpa")
             for subconfig_key in model.config.sub_configs:
-                self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "sdpa")
+                if getattr(config, subconfig_key) is not None:
+                    self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "sdpa")
 
             # Check we cannot set it to random values, and it raises an error
             with self.assertRaisesRegex(ValueError, 'Specified `attn_implementation="foo"` is not supported'):
@@ -4179,7 +4201,8 @@ class ModelTesterMixin:
             # Should still be sdpa everywhere
             self.assertTrue(model.config._attn_implementation == "sdpa")
             for subconfig_key in model.config.sub_configs:
-                self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "sdpa")
+                if getattr(config, subconfig_key) is not None:
+                    self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "sdpa")
 
     def test_can_set_attention_dynamically_composite_model(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -4198,7 +4221,8 @@ class ModelTesterMixin:
             # sanity check to make sure everything is correctly eager
             self.assertTrue(model.config._attn_implementation == "eager")
             for subconfig_key in model.config.sub_configs:
-                self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "eager")
+                if getattr(config, subconfig_key) is not None:
+                    self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "eager")
 
             if not all(
                 submodule._can_set_attn_implementation()
@@ -4213,7 +4237,8 @@ class ModelTesterMixin:
             # Check only top-most was correctly changed
             self.assertTrue(model.config._attn_implementation == "sdpa")
             for subconfig_key in model.config.sub_configs:
-                self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "eager")
+                if getattr(config, subconfig_key) is not None:
+                    self.assertTrue(getattr(model.config, subconfig_key)._attn_implementation == "eager")
 
     @require_torch
     def test_bc_torch_dtype(self):
