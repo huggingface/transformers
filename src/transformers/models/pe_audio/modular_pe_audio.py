@@ -225,13 +225,6 @@ class DacEncoderVAE(torch.nn.Module):
             return wavs
 
 
-## Transformer
-class PEAudioMLP(Qwen3MLP): ...
-
-
-class PEAudioRMSNorm(Qwen3RMSNorm): ...
-
-
 class PEAudioRotaryEmbedding(Qwen3RotaryEmbedding): ...
 
 
