@@ -275,10 +275,6 @@ class MistralCommonTokenizer(PushToHubMixin):
         self._cache_get_vocab: Optional[dict[str, int]] = None
 
     @property
-    def is_fast(self) -> bool:
-        return True
-
-    @property
     def bos_token_id(self) -> int:
         """
         Id of the beginning of sentence token in the vocabulary.
