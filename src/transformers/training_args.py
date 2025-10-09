@@ -1001,12 +1001,6 @@ class TrainingArguments:
     )
     seed: int = field(default=42, metadata={"help": "Random seed that will be set at the beginning of training."})
     data_seed: Optional[int] = field(default=None, metadata={"help": "Random seed to be used with data samplers."})
-    jit_mode_eval: bool = field(
-        default=False,
-        metadata={
-            "help": "`jit mode eval is deprecated and will be removed in v5.2. Please use torch_compile instead. "
-        },
-    )
     bf16: bool = field(
         default=False,
         metadata={
@@ -1916,9 +1910,6 @@ class TrainingArguments:
 
         if isinstance(self.include_num_input_tokens_seen, bool):
             self.include_num_input_tokens_seen = "all" if self.include_num_input_tokens_seen else "no"
-
-        if self.jit_mode_eval is not None:
-            logger.warning("`jit_mode_eval` is deprecated and will be removed in v5.2. Use `torch_compile` instead.")
 
     def __str__(self):
         self_as_dict = asdict(self)
