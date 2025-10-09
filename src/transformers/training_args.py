@@ -1327,12 +1327,6 @@ class TrainingArguments:
             "help": "Whether to recursively concat inputs/losses/labels/predictions across batches. If `False`, will instead store them as lists, with each batch kept separate."
         },
     )
-    _n_gpu: int = field(init=False, repr=False, default=-1)
-    mp_parameters: str = field(
-        default="",
-        metadata={"help": "Used by the SageMaker launcher to send mp-specific args. Ignored in Trainer"},
-    )
-
     auto_find_batch_size: bool = field(
         default=False,
         metadata={
