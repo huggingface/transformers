@@ -339,6 +339,12 @@ class ContinuousBatchProcessor:
             "use_cache": False,
         }
 
+        # If there is padding, we need to make sure all padding tokens are attended to, to avoid NaNs
+        if use_padding:
+            self.max_seqlen_q = max(self.max_seqlen_q, q_len - self.total_seqlen_q)
+            self.cumulative_seqlens_q[self.actual_batch_size+1:] = q_len
+            # TODO: can this be avoided with setting tokens to non-nan after the foward? might be faster.
+
         # For the attributes that are lists of tensors, we construct list of tensor references
         for i, (read_index_size, write_index_size) in enumerate(self.actual_index_sizes):
             read_index_size = padded_kv_size if use_padding else read_index_size
@@ -520,6 +526,7 @@ class ContinuousBatchProcessor:
         self.position_ids[:, : len(position_ids)] = to_tensor(position_ids)
         self.cumulative_seqlens_q[: len(cumulative_seqlens_q)] = to_tensor(cumulative_seqlens_q)
         self.logits_indices[: len(logits_indices)] = to_tensor(logits_indices)
+        self.total_seqlen_q = cumulative_seqlens_q[-1]
 
         # Those kwargs are either dict of tensors or tensors, so we need to handle both cases
         for layer_type, layer_type_seqlens_k in cumulative_seqlens_k.items():
