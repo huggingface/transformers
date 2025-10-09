@@ -880,7 +880,6 @@ class PreTrainedConfig(PushToHubMixin):
                 isinstance(getattr(self, key, None), PreTrainedConfig)
                 and key in class_config_dict
                 and isinstance(class_config_dict[key], dict)
-                or key in self.sub_configs
             ):
                 # For nested configs we need to clean the diff recursively
                 diff = recursive_diff_dict(value, default_config_dict, config_obj=getattr(self, key, None))
@@ -1132,11 +1131,11 @@ class PreTrainedConfig(PushToHubMixin):
         non_default_generation_parameters = {}
         decoder_attribute_name = None
 
-        # Composite models don't have a default config, use their decoder config as a fallback for default values
+        # Some composite models don't have a default config, use their decoder config as a fallback for default values
         # If no known pattern is matched, then `default_config = None` -> check against the global generation defaults
-        try:
+        if not self.has_no_defaults_at_init:
             default_config = self.__class__()
-        except ValueError:
+        else:
             decoder_config = self.get_text_config(decoder=True)
             if decoder_config is not self:
                 default_config = decoder_config.__class__()
@@ -1246,42 +1245,6 @@ class PreTrainedConfig(PushToHubMixin):
                     setattr(config_to_return, new_key, value)
 
         return config_to_return
-
-    @classmethod
-    def from_text_vision_configs(cls, text_config, vision_config, **kwargs):
-        r"""
-        Instantiate a model config (or a derived class) from text model configuration and vision model
-        configuration.
-
-        Returns:
-            [`PreTrainedConfig`]: An instance of a configuration object
-        """
-
-        warnings.warn(
-            "The `from_text_vision_configs` method is deprecated and will be removed in v4.60 of Transformers. Please instantiate "
-            "the config class directly with `MyConfig(text_config=text_config, vision_config=vision_config, **kwargs)` instead.",
-            FutureWarning,
-        )
-
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
-
-    @classmethod
-    def from_text_audio_configs(cls, text_config, audio_config, **kwargs):
-        r"""
-        Instantiate a model config (or a derived class) from text model configuration and audio model
-        configuration.
-
-        Returns:
-            [`PreTrainedConfig`]: An instance of a configuration object
-        """
-
-        warnings.warn(
-            "The `from_text_audio_configs` method is deprecated and will be removed in v4.60 of Transformers. Please instantiate "
-            "the config class directly with `MyConfig(text_config=text_config, audio_config=audio_config, **kwargs)` instead.",
-            FutureWarning,
-        )
-
-        return cls(text_config=text_config.to_dict(), audio_config=audio_config.to_dict(), **kwargs)
 
 
 def get_configuration_file(configuration_files: list[str]) -> str:

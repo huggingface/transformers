@@ -38,8 +38,8 @@ from ...utils.deprecation import deprecate_kwarg
 logger = logging.get_logger(__name__)
 
 
-class Swin2SRImageProcessorKwargs(ImagesKwargs):
-    size_divisor: Optional[int]
+class Swin2SRImageProcessorKwargs(ImagesKwargs, total=False):
+    size_divisor: int
 
 
 class Swin2SRImageProcessor(BaseImageProcessor):
