@@ -427,7 +427,7 @@ class Blip2ForConditionalGenerationDecoderOnlyModelTester:
         return config, input_ids, attention_mask, pixel_values
 
     def get_config(self):
-        return Blip2Config.from_vision_qformer_text_configs(
+        return Blip2Config(
             vision_config=self.vision_model_tester.get_config(),
             qformer_config=self.qformer_model_tester.get_config(),
             text_config=self.text_model_tester.get_config(),
@@ -733,7 +733,7 @@ class Blip2ModelTester:
         return config, input_ids, attention_mask, pixel_values, decoder_input_ids, decoder_attention_mask, lm_labels
 
     def get_config(self):
-        return Blip2Config.from_vision_qformer_text_configs(
+        return Blip2Config(
             vision_config=self.vision_model_tester.get_config(),
             qformer_config=self.qformer_model_tester.get_config(),
             text_config=self.text_model_tester.get_config(),
@@ -1010,7 +1010,7 @@ class Blip2TextModelWithProjectionTester:
         self.batch_size = self.vision_model_tester.batch_size  # need bs for batching_equivalence test
 
     def get_config(self):
-        return Blip2Config.from_vision_qformer_text_configs(
+        return Blip2Config(
             vision_config=self.vision_model_tester.get_config(),
             qformer_config=self.qformer_model_tester.get_config(),
         )
@@ -1168,7 +1168,7 @@ class Blip2VisionModelWithProjectionTester:
         self.batch_size = self.vision_model_tester.batch_size  # need bs for batching_equivalence test
 
     def get_config(self):
-        return Blip2Config.from_vision_qformer_text_configs(
+        return Blip2Config(
             vision_config=self.vision_model_tester.get_config(),
             qformer_config=self.qformer_model_tester.get_config(),
         )
@@ -1330,7 +1330,7 @@ class Blip2TextRetrievalModelTester:
         self.batch_size = self.vision_model_tester.batch_size  # need bs for batching_equivalence test
 
     def get_config(self):
-        return Blip2Config.from_vision_qformer_text_configs(
+        return Blip2Config(
             vision_config=self.vision_model_tester.get_config(),
             qformer_config=self.qformer_model_tester.get_config(),
         )

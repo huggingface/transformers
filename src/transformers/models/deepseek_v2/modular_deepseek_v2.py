@@ -14,7 +14,8 @@
 # limitations under the License.
 
 import warnings
-from typing import Callable, Optional
+from collections.abc import Callable
+from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -188,9 +189,6 @@ class DeepseekV2Config(LlamaConfig):
         moe_intermediate_size=1407,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
-        del self.pretraining_tp
         self.first_k_dense_replace = first_k_dense_replace
         self.kv_lora_rank = kv_lora_rank
         self.q_lora_rank = q_lora_rank
@@ -205,7 +203,11 @@ class DeepseekV2Config(LlamaConfig):
         self.v_head_dim = v_head_dim
         self.num_experts_per_tok = num_experts_per_tok
         self.moe_intermediate_size = moe_intermediate_size
+
+        super().__init__(**kwargs)
+
         self.head_dim = qk_rope_head_dim
+        del self.pretraining_tp
 
 
 def apply_rotary_emb(

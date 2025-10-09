@@ -131,28 +131,29 @@ class ConfigTester:
             # Iterate over all sub_configs if there are any and load them with their own classes
             sub_configs = general_config_loaded.sub_configs
             for sub_config_key, sub_class in sub_configs.items():
-                if sub_class.__name__ == "AutoConfig":
-                    sub_class = sub_class.for_model(**general_config_dict[sub_config_key]).__class__
-                    sub_config_loaded = sub_class.from_pretrained(tmpdirname)
-                else:
-                    sub_config_loaded = sub_class.from_pretrained(tmpdirname)
+                if general_config_dict[sub_config_key] is not None:
+                    if sub_class.__name__ == "AutoConfig":
+                        sub_class = sub_class.for_model(**general_config_dict[sub_config_key]).__class__
+                        sub_config_loaded = sub_class.from_pretrained(tmpdirname)
+                    else:
+                        sub_config_loaded = sub_class.from_pretrained(tmpdirname)
 
-                # Pop `transformers_version`, it never exists when a config is part of a general composite config
-                # Verify that loading with subconfig class results in same dict as if we loaded with general composite config class
-                sub_config_loaded_dict = sub_config_loaded.to_dict()
-                sub_config_loaded_dict.pop("transformers_version", None)
-                general_config_dict[sub_config_key].pop("transformers_version", None)
-                self.parent.assertEqual(sub_config_loaded_dict, general_config_dict[sub_config_key])
+                    # Pop `transformers_version`, it never exists when a config is part of a general composite config
+                    # Verify that loading with subconfig class results in same dict as if we loaded with general composite config class
+                    sub_config_loaded_dict = sub_config_loaded.to_dict()
+                    sub_config_loaded_dict.pop("transformers_version", None)
+                    general_config_dict[sub_config_key].pop("transformers_version", None)
+                    self.parent.assertEqual(sub_config_loaded_dict, general_config_dict[sub_config_key])
 
-                # Verify that the loaded config type is same as in the general config
-                type_from_general_config = type(getattr(general_config_loaded, sub_config_key))
-                self.parent.assertTrue(isinstance(sub_config_loaded, type_from_general_config))
+                    # Verify that the loaded config type is same as in the general config
+                    type_from_general_config = type(getattr(general_config_loaded, sub_config_key))
+                    self.parent.assertTrue(isinstance(sub_config_loaded, type_from_general_config))
 
-                # Now save only the sub-config and load it back to make sure the whole load-save-load pipeline works
-                with tempfile.TemporaryDirectory() as tmpdirname2:
-                    sub_config_loaded.save_pretrained(tmpdirname2)
-                    sub_config_loaded_2 = sub_class.from_pretrained(tmpdirname2)
-                    self.parent.assertEqual(sub_config_loaded.to_dict(), sub_config_loaded_2.to_dict())
+                    # Now save only the sub-config and load it back to make sure the whole load-save-load pipeline works
+                    with tempfile.TemporaryDirectory() as tmpdirname2:
+                        sub_config_loaded.save_pretrained(tmpdirname2)
+                        sub_config_loaded_2 = sub_class.from_pretrained(tmpdirname2)
+                        self.parent.assertEqual(sub_config_loaded.to_dict(), sub_config_loaded_2.to_dict())
 
     def create_and_test_config_from_pretrained_custom_kwargs(self):
         """

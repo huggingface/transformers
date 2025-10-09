@@ -19,7 +19,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -220,7 +221,7 @@ class Data2VecTextSelfAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
@@ -232,14 +233,14 @@ class Data2VecTextSelfAttention(nn.Module):
         key_layer = self.key(hidden_states).view(*hidden_shape).transpose(1, 2)
         value_layer = self.value(hidden_states).view(*hidden_shape).transpose(1, 2)
 
-        if past_key_value is not None:
+        if past_key_values is not None:
             # decoder-only data2vec_text can have a simple dynamic cache for example
-            current_past_key_value = past_key_value
-            if isinstance(past_key_value, EncoderDecoderCache):
-                current_past_key_value = past_key_value.self_attention_cache
+            current_past_key_values = past_key_values
+            if isinstance(past_key_values, EncoderDecoderCache):
+                current_past_key_values = past_key_values.self_attention_cache
 
             # save all key/value_layer to cache to be re-used for fast auto-regressive generation
-            key_layer, value_layer = current_past_key_value.update(
+            key_layer, value_layer = current_past_key_values.update(
                 key_layer,
                 value_layer,
                 self.layer_idx,
@@ -293,7 +294,7 @@ class Data2VecTextCrossAttention(nn.Module):
         hidden_states: torch.Tensor,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[EncoderDecoderCache] = None,
+        past_key_values: Optional[EncoderDecoderCache] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         # determine input shapes
@@ -306,22 +307,22 @@ class Data2VecTextCrossAttention(nn.Module):
         # get query proj
         query_layer = self.query(hidden_states).view(*q_input_shape).transpose(1, 2)
 
-        is_updated = past_key_value.is_updated.get(self.layer_idx) if past_key_value is not None else False
-        if past_key_value is not None and is_updated:
+        is_updated = past_key_values.is_updated.get(self.layer_idx) if past_key_values is not None else False
+        if past_key_values is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_layer = past_key_value.cross_attention_cache.layers[self.layer_idx].keys
-            value_layer = past_key_value.cross_attention_cache.layers[self.layer_idx].values
+            key_layer = past_key_values.cross_attention_cache.layers[self.layer_idx].keys
+            value_layer = past_key_values.cross_attention_cache.layers[self.layer_idx].values
         else:
             key_layer = self.key(encoder_hidden_states).view(*kv_input_shape).transpose(1, 2)
             value_layer = self.value(encoder_hidden_states).view(*kv_input_shape).transpose(1, 2)
 
-            if past_key_value is not None:
+            if past_key_values is not None:
                 # save all states to the cache
-                key_layer, value_layer = past_key_value.cross_attention_cache.update(
+                key_layer, value_layer = past_key_values.cross_attention_cache.update(
                     key_layer, value_layer, self.layer_idx
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                past_key_value.is_updated[self.layer_idx] = True
+                past_key_values.is_updated[self.layer_idx] = True
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -369,7 +370,7 @@ class Data2VecTextAttention(nn.Module):
         attention_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
@@ -378,7 +379,7 @@ class Data2VecTextAttention(nn.Module):
             hidden_states,
             encoder_hidden_states=encoder_hidden_states,
             attention_mask=attention_mask,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             cache_position=cache_position,
             **kwargs,
         )
@@ -441,14 +442,14 @@ class Data2VecTextLayer(GradientCheckpointingLayer):
         attention_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         self_attention_output, _ = self.attention(
             hidden_states,
             attention_mask,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             cache_position=cache_position,
             **kwargs,
         )
@@ -466,7 +467,7 @@ class Data2VecTextLayer(GradientCheckpointingLayer):
                 None,  # attention_mask
                 encoder_hidden_states,
                 encoder_attention_mask,
-                past_key_value=past_key_value,
+                past_key_values=past_key_values,
                 **kwargs,
             )
             attention_output = cross_attention_output
@@ -540,7 +541,7 @@ class Data2VecTextEncoder(nn.Module):
                 attention_mask,
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,
-                past_key_value=past_key_values,
+                past_key_values=past_key_values,
                 cache_position=cache_position,
                 **kwargs,
             )
