@@ -107,17 +107,6 @@ if is_sagemaker_mp_enabled():
     smp.init()
 
 
-def default_logdir() -> str:
-    """
-    Same default as PyTorch
-    """
-    import socket
-    from datetime import datetime
-
-    current_time = datetime.now().strftime("%b%d_%H-%M-%S")
-    return os.path.join("runs", current_time + "_" + socket.gethostname())
-
-
 def get_int_from_env(env_keys, default):
     """Returns the first positive env value found in the `env_keys` list or the default."""
     for e in env_keys:
@@ -219,9 +208,6 @@ class TrainingArguments:
     Parameters:
         output_dir (`str`, *optional*, defaults to `"trainer_output"`):
             The output directory where the model predictions and checkpoints will be written.
-        overwrite_output_dir (`bool`, *optional*, defaults to `False`):
-            If `True`, overwrite the content of the output directory. Use this to continue training if `output_dir`
-            points to a checkpoint directory.
         do_train (`bool`, *optional*, defaults to `False`):
             Whether to run training or not. This argument is not directly used by [`Trainer`], it's intended to be used
             by your training/evaluation scripts instead. See the [example
@@ -312,9 +298,6 @@ class TrainingArguments:
         log_on_each_node (`bool`, *optional*, defaults to `True`):
             In multinode distributed training, whether to log using `log_level` once per node, or only on the main
             node.
-        logging_dir (`str`, *optional*):
-            [TensorBoard](https://www.tensorflow.org/tensorboard) log directory. Will default to
-            *output_dir/runs/**CURRENT_DATETIME_HOSTNAME***.
         logging_strategy (`str` or [`~trainer_utils.IntervalStrategy`], *optional*, defaults to `"steps"`):
             The logging strategy to adopt during training. Possible values are:
 
@@ -418,11 +401,6 @@ class TrainingArguments:
         dataloader_num_workers (`int`, *optional*, defaults to 0):
             Number of subprocesses to use for data loading (PyTorch only). 0 means that the data will be loaded in the
             main process.
-        past_index (`int`, *optional*, defaults to -1):
-            Some models like [TransformerXL](../model_doc/transformerxl) or [XLNet](../model_doc/xlnet) can make use of
-            the past hidden states for their predictions. If this argument is set to a positive int, the `Trainer` will
-            use the corresponding output (usually index 2) as the past state and feed it to the model at the next
-            training step under the keyword argument `mems`.
         run_name (`str`, *optional*, defaults to `output_dir`):
             A descriptor for the run. Typically used for [trackio](https://github.com/gradio-app/trackio),
             [wandb](https://www.wandb.com/), [mlflow](https://www.mlflow.org/), [comet](https://www.comet.com/site) and
@@ -610,7 +588,7 @@ class TrainingArguments:
             Column name for precomputed lengths. If the column exists, grouping by length will use these values rather
             than computing them on train startup. Ignored unless `group_by_length` is `True` and the dataset is an
             instance of `Dataset`.
-        report_to (`str` or `list[str]`, *optional*, defaults to `"all"`):
+        report_to (`str` or `list[str]`, *optional*, defaults to `"none"`):
             The list of integrations to report the results and logs to. Supported platforms are `"azure_ml"`,
             `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"dvclive"`, `"flyte"`, `"mlflow"`, `"neptune"`,
             `"swanlab"`, `"tensorboard"`, `"trackio"` and `"wandb"`. Use `"all"` to report to all integrations
@@ -806,15 +784,6 @@ class TrainingArguments:
             "help": "The output directory where the model predictions and checkpoints will be written. Defaults to 'trainer_output' if not provided."
         },
     )
-    overwrite_output_dir: bool = field(
-        default=False,
-        metadata={
-            "help": (
-                "Overwrite the content of the output directory. "
-                "Use this to continue training if output_dir points to a checkpoint directory."
-            )
-        },
-    )
 
     do_train: bool = field(default=False, metadata={"help": "Whether to run training."})
     do_eval: bool = field(default=False, metadata={"help": "Whether to run eval on the dev set."})
@@ -919,7 +888,6 @@ class TrainingArguments:
             )
         },
     )
-    logging_dir: Optional[str] = field(default=None, metadata={"help": "Tensorboard log dir."})
     logging_strategy: Union[IntervalStrategy, str] = field(
         default="steps",
         metadata={"help": "The logging strategy to use."},
@@ -1018,12 +986,7 @@ class TrainingArguments:
         default=False,
         metadata={"help": "Whether to use fp16 (mixed) precision instead of 32-bit"},
     )
-    half_precision_backend: Optional[str] = field(
-        default=None,
-        metadata={
-            "help": "The backend to be used for half precision. This argument is deprecated. We will always use CPU/CUDA AMP from torch",
-        },
-    )
+
     bf16_full_eval: bool = field(
         default=False,
         metadata={
@@ -1097,10 +1060,6 @@ class TrainingArguments:
                 "2 means there will be a total of 2 * num_workers batches prefetched across all workers. "
             )
         },
-    )
-    past_index: int = field(
-        default=-1,
-        metadata={"help": "If >=0, uses the corresponding part of the output as the past state for next step."},
     )
 
     run_name: Optional[str] = field(
@@ -1213,7 +1172,7 @@ class TrainingArguments:
         metadata={"help": "Column name with precomputed lengths to use when grouping by length."},
     )
     report_to: Union[None, str, list[str]] = field(
-        default=None, metadata={"help": "The list of integrations to report the results and logs to."}
+        default="none", metadata={"help": "The list of integrations to report the results and logs to."}
     )
     project: str = field(
         default="huggingface",
@@ -1385,14 +1344,6 @@ class TrainingArguments:
             "help": "Which mode to use with `torch.compile`, passing one will trigger a model compilation.",
         },
     )
-
-    include_tokens_per_second: Optional[bool] = field(
-        default=None,
-        metadata={
-            "help": "This arg is deprecated and will be removed in v5 , use `include_num_input_tokens_seen` instead."
-        },
-    )
-
     include_num_input_tokens_seen: Union[str, bool] = field(
         default="no",
         metadata={
@@ -1488,10 +1439,6 @@ class TrainingArguments:
         # see https://github.com/huggingface/transformers/issues/10628
         if self.output_dir is not None:
             self.output_dir = os.path.expanduser(self.output_dir)
-        if self.logging_dir is None and self.output_dir is not None:
-            self.logging_dir = os.path.join(self.output_dir, default_logdir())
-        if self.logging_dir is not None:
-            self.logging_dir = os.path.expanduser(self.logging_dir)
 
         if self.disable_tqdm is None:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
@@ -1594,11 +1541,6 @@ class TrainingArguments:
                         # gpu
                         raise ValueError(error_message)
 
-        if self.half_precision_backend is not None:
-            raise ValueError(
-                "half_precision_backend is deprecated. For mixed precision, we will always use CPU/CUDA AMP from torch"
-            )
-
         if self.fp16 and self.bf16:
             raise ValueError("At most one of fp16 and bf16 can be True, but not both")
 
@@ -1699,13 +1641,6 @@ class TrainingArguments:
             mixed_precision_dtype = "bf16"
         os.environ["ACCELERATE_MIXED_PRECISION"] = mixed_precision_dtype
 
-        if self.report_to is None:
-            logger.info(
-                "The default value for the training argument `--report_to` will change in v5 (from all installed "
-                "integrations to none). In v5, you will need to use `--report_to all` to get the same behavior as "
-                "now. You should start updating your code and make this info disappear :-)."
-            )
-            self.report_to = "all"
         if self.report_to == "all" or self.report_to == ["all"]:
             # Import at runtime to avoid a circular import.
             from .integrations import get_available_reporting_integrations
@@ -1895,12 +1830,6 @@ class TrainingArguments:
                 "--dataloader_prefetch_factor can only be set when data is loaded in a different process, i.e."
                 " when --dataloader_num_workers > 1."
             )
-
-        if self.include_tokens_per_second is not None:
-            logger.warning(
-                "include_tokens_per_second is deprecated and will be removed in v5. Use `include_num_input_tokens_seen` instead. "
-            )
-            self.include_num_input_tokens_seen = self.include_tokens_per_second
 
         if isinstance(self.include_num_input_tokens_seen, bool):
             self.include_num_input_tokens_seen = "all" if self.include_num_input_tokens_seen else "no"
@@ -2581,7 +2510,7 @@ class TrainingArguments:
                 Logger log level to use on the main process. Possible choices are the log levels as strings: `"debug"`,
                 `"info"`, `"warning"`, `"error"` and `"critical"`, plus a `"passive"` level which doesn't set anything
                 and lets the application set the level.
-            report_to (`str` or `list[str]`, *optional*, defaults to `"all"`):
+            report_to (`str` or `list[str]`, *optional*, defaults to `"none"`):
                 The list of integrations to report the results and logs to. Supported platforms are `"azure_ml"`,
                 `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"dvclive"`, `"flyte"`, `"mlflow"`,
                 `"neptune"`, `"swanlab"`, `"tensorboard"`, `"trackio"` and `"wandb"`. Use `"all"` to report to all
