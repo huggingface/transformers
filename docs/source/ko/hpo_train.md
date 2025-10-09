@@ -23,6 +23,7 @@ rendered properly in your Markdown viewer.
 [optuna](https://optuna.org/)와 [sigopt](https://sigopt.com/), [raytune](https://docs.ray.io/en/latest/tune/index.html), [wandb](https://wandb.ai/site/sweeps) 입니다.
 
 하이퍼파라미터 탐색 백엔드로 사용하기 전에 아래의 명령어를 사용하여 라이브러리들을 설치하세요.
+
 ```bash
 pip install optuna/sigopt/wandb/ray[tune]
 ```
@@ -32,6 +33,7 @@ pip install optuna/sigopt/wandb/ray[tune]
 하이퍼파라미터 탐색 공간을 정의하세요. 하이퍼파라미터 탐색 백엔드마다 서로 다른 형식이 필요합니다.
 
 sigopt의 경우, 해당 [object_parameter](https://docs.sigopt.com/ai-module-api-references/api_reference/objects/object_parameter) 문서를 참조하여 아래와 같이 작성하세요:
+
 ```py
 >>> def sigopt_hp_space(trial):
 ...     return [
@@ -79,6 +81,7 @@ wandb의 경우, 해당 [object_parameter](https://docs.wandb.ai/guides/sweeps/c
 ```
 
 `model_init` 함수를 정의하고 이를 [`Trainer`]에 전달하세요. 아래는 그 예시입니다.
+
 ```py
 >>> def model_init(trial):
 ...     return AutoModelForSequenceClassification.from_pretrained(
@@ -87,7 +90,7 @@ wandb의 경우, 해당 [object_parameter](https://docs.wandb.ai/guides/sweeps/c
 ...         config=config,
 ...         cache_dir=model_args.cache_dir,
 ...         revision=model_args.model_revision,
-...         token=True if model_args.use_auth_token else None,
+...         token=model_args.token,
 ...     )
 ```
 
@@ -121,4 +124,5 @@ wandb의 경우, 해당 [object_parameter](https://docs.wandb.ai/guides/sweeps/c
 ```
 
 ## DDP 미세 조정을 위한 하이퍼파라미터 탐색 [[hyperparameter-search-for-ddp-finetune]]
+
 현재, DDP(Distributed Data Parallelism; 분산 데이터 병렬처리)를 위한 하이퍼파라미터 탐색은 optuna와 sigopt에서 가능합니다. 최상위 프로세스가 하이퍼파라미터 탐색 과정을 시작하고 그 결과를 다른 프로세스에 전달합니다.
