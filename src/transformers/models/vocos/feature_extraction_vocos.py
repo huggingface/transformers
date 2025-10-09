@@ -186,11 +186,6 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
                 device = audio[0].device
             else:
                 device = "cpu"
-                logger.warning(
-                    f"The `device` argument was not provided to the processor call. "
-                    f"Defaulting to device='{device}'. For GPU acceleration, pass the `device` parameter "
-                    "to the processor (e.g., processor(audio=audio, device='cuda'))."
-                )
 
         # Check mono input(s)
         for _audio in audio:
