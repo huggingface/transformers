@@ -94,8 +94,7 @@ class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     )
 
     test_resize_embeddings = False
-    test_head_masking = False
-    test_pruning = False
+
     has_attentions = False
 
     def setUp(self):
@@ -156,10 +155,6 @@ class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     @unittest.skip(reason="TimmWrapper initialization is managed on the timm side")
     def test_can_init_all_missing_weights(self):
-        pass
-
-    @unittest.skip(reason="TimmWrapper initialization is managed on the timm side")
-    def test_initialization(self):
         pass
 
     def test_gradient_checkpointing(self):

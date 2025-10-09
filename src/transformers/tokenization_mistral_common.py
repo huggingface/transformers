@@ -15,10 +15,10 @@
 import os
 import shutil
 import warnings
-from collections.abc import Mapping, Sized
+from collections.abc import Callable, Mapping, Sized
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Optional, Union, overload
+from typing import Any, Optional, Union, overload
 
 import numpy as np
 
@@ -1440,7 +1440,7 @@ class MistralCommonTokenizer(PushToHubMixin):
                 f"Kwargs {list(kwargs.keys())} are not supported by `MistralCommonTokenizer.apply_chat_template`."
             )
         if not isinstance(truncation, bool):
-            raise ValueError("`truncation` must be a boolean for `apply_chat_template` method.")
+            raise TypeError("`truncation` must be a boolean for `apply_chat_template` method.")
 
         if isinstance(conversation, (list, tuple)) and (
             isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "messages")
@@ -1796,7 +1796,7 @@ class MistralCommonTokenizer(PushToHubMixin):
                 if "tekken.json" in valid_tokenizer_files:
                     tokenizer_file = "tekken.json"
                 else:
-                    tokenizer_file = sorted(valid_tokenizer_files)[-1]
+                    tokenizer_file = max(valid_tokenizer_files)
                 logger.warning(
                     f"Multiple tokenizer files found in directory: {pretrained_model_name_or_path}. Using {tokenizer_file}."
                 )

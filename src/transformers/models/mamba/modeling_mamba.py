@@ -23,7 +23,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
@@ -65,8 +65,13 @@ def _lazy_load_causal_conv1d():
     if is_kernels_available():
         from kernels import get_kernel
 
-        _causal_conv1d_kernel = get_kernel("kernels-community/causal-conv1d")
-        _causal_conv1d_cache = (_causal_conv1d_kernel.causal_conv1d_update, _causal_conv1d_kernel.causal_conv1d_fn)
+        try:
+            _causal_conv1d_kernel = get_kernel("kernels-community/causal-conv1d")
+        except FileNotFoundError:
+            # no kernel binary match, fallback to slow path
+            _causal_conv1d_cache = (None, None)
+        else:
+            _causal_conv1d_cache = (_causal_conv1d_kernel.causal_conv1d_update, _causal_conv1d_kernel.causal_conv1d_fn)
     elif is_causal_conv1d_available():
         from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
 
@@ -81,7 +86,7 @@ class MambaCache:
     Cache for mamba model which does not have attention mechanism and key value states.
 
     Arguments:
-        config (`PretrainedConfig):
+        config (`PreTrainedConfig):
             The configuration file defining the shape-related attributes required to initialize the static cache.
         max_batch_size (`int`):
             The maximum batch size with which the model will be used. Note that a new instance must be instantiated if
@@ -115,7 +120,7 @@ class MambaCache:
     # TODO (joao): add layer_device_map arg and update code in `generate` accordingly
     def __init__(
         self,
-        config: PretrainedConfig,
+        config: PreTrainedConfig,
         max_batch_size: int,
         dtype: torch.dtype = torch.float16,
         device: Union[torch.device, str, None] = None,

@@ -22,6 +22,7 @@ Voxtral is an upgrade of [Ministral 3B and Mistral Small 3B](https://mistral.ai/
 You can read more in Mistral's [realease blog post](https://mistral.ai/news/voxtral).
 
 The model is available in two checkpoints:
+
 - 3B: [mistralai/Voxtral-Mini-3B-2507](https://huggingface.co/mistralai/Voxtral-Mini-3B-2507)
 - 24B: [mistralai/Voxtral-Small-24B-2507](https://huggingface.co/mistralai/Voxtral-Small-24B-2507)
 
@@ -46,9 +47,10 @@ The model supports audio-text instructions, including multi-turn and multi-audio
 
 ```python
 import torch
-from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device
+from transformers import VoxtralForConditionalGeneration, AutoProcessor
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
 processor = AutoProcessor.from_pretrained(repo_id)
@@ -83,9 +85,10 @@ print("=" * 80)
 
 ```python
 import torch
-from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device
+from transformers import VoxtralForConditionalGeneration, AutoProcessor
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
 processor = AutoProcessor.from_pretrained(repo_id)
@@ -124,9 +127,10 @@ print("=" * 80)
 
 ```python
 import torch
-from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device
+from transformers import VoxtralForConditionalGeneration, AutoProcessor
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
 processor = AutoProcessor.from_pretrained(repo_id)
@@ -179,9 +183,10 @@ print("=" * 80)
 
 ```python
 import torch
-from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device
+from transformers import VoxtralForConditionalGeneration, AutoProcessor
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
 processor = AutoProcessor.from_pretrained(repo_id)
@@ -215,9 +220,10 @@ print("=" * 80)
 
 ```python
 import torch
-from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device
+from transformers import VoxtralForConditionalGeneration, AutoProcessor
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
 processor = AutoProcessor.from_pretrained(repo_id)
@@ -251,9 +257,10 @@ print("=" * 80)
 
 ```python
 import torch
-from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device()
+from transformers import VoxtralForConditionalGeneration, AutoProcessor
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
 processor = AutoProcessor.from_pretrained(repo_id)
@@ -313,9 +320,10 @@ It also support automatic language detection.
 
 ```python
 import torch
-from transformers import VoxtralForConditionalGeneration, AutoProcessor, infer_device
+from transformers import VoxtralForConditionalGeneration, AutoProcessor
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
 processor = AutoProcessor.from_pretrained(repo_id)

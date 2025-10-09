@@ -973,7 +973,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
 
         # Test 3:
         # assert truncation is boolean
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             self.tokenizer.apply_chat_template(
                 conversation, tokenize=True, truncation=TruncationStrategy.LONGEST_FIRST, max_length=20
             )
@@ -1217,7 +1217,7 @@ class TestMistralCommonTokenizer(unittest.TestCase):
 
         # Test 3:
         # assert truncation is boolean
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             self.tokenizer.apply_chat_template(
                 self.fixture_conversations, tokenize=True, truncation=TruncationStrategy.LONGEST_FIRST, max_length=20
             )

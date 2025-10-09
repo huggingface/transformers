@@ -24,7 +24,8 @@ import random
 import re
 import threading
 import time
-from typing import Any, Callable, NamedTuple, Optional, Union
+from collections.abc import Callable
+from typing import Any, NamedTuple, Optional, Union
 
 import numpy as np
 
@@ -222,12 +223,6 @@ class SaveStrategy(ExplicitEnum):
     STEPS = "steps"
     EPOCH = "epoch"
     BEST = "best"
-
-
-class EvaluationStrategy(ExplicitEnum):
-    NO = "no"
-    STEPS = "steps"
-    EPOCH = "epoch"
 
 
 class HubStrategy(ExplicitEnum):

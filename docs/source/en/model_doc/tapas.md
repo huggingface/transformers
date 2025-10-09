@@ -30,6 +30,7 @@ token types that encode tabular structure. TAPAS is pre-trained on the masked la
 millions of tables from English Wikipedia and corresponding texts.
 
 For question answering, TAPAS has 2 heads on top: a cell selection head and an aggregation head, for (optionally) performing aggregations (such as counting or summing) among selected cells. TAPAS has been fine-tuned on several datasets:
+
 - [SQA](https://www.microsoft.com/en-us/download/details.aspx?id=54253) (Sequential Question Answering by Microsoft)
 - [WTQ](https://github.com/ppasupat/WikiTableQuestions) (Wiki Table Questions by Stanford University)
 - [WikiSQL](https://github.com/salesforce/WikiSQL) (by Salesforce).

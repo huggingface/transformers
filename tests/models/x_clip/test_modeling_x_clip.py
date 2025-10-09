@@ -150,9 +150,8 @@ class XCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (XCLIPVisionModel,) if is_torch_available() else ()
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = XCLIPVisionModelTester(self)
@@ -290,12 +289,6 @@ class XCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_multi_gpu_data_parallel_forward(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        # some params shouldn't be scattered by nn.DataParallel
-        # so just remove them if they are present.
-        blacklist_non_batched_params = ["head_mask", "decoder_head_mask", "cross_attn_head_mask"]
-        for k in blacklist_non_batched_params:
-            inputs_dict.pop(k, None)
-
         # move input tensors to cuda:O
         for k, v in inputs_dict.items():
             if torch.is_tensor(v):
@@ -407,8 +400,6 @@ class XCLIPTextModelTester:
 class XCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (XCLIPTextModel,) if is_torch_available() else ()
     fx_compatible = False
-    test_pruning = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = XCLIPTextModelTester(self)
@@ -529,8 +520,7 @@ class XCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (XCLIPModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": XCLIPModel} if is_torch_available() else {}
     fx_compatible = False
-    test_head_masking = False
-    test_pruning = False
+
     test_resize_embeddings = False
     test_attention_outputs = False
     test_torchscript = False
@@ -569,32 +559,6 @@ class XCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip(reason="XCLIPModel does not support feedforward chunking")
     def test_feed_forward_chunking(self):
         pass
-
-    # override as the `logit_scale`, `prompts_generator.alpha` parameters require special treatment
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    # check if `logit_scale` is initialized as per the original implementation
-                    if name == "logit_scale":
-                        self.assertAlmostEqual(
-                            param.data.item(),
-                            np.log(1 / 0.07),
-                            delta=1e-3,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    elif name == "prompts_generator.alpha":
-                        self.assertAlmostEqual(param.data.mean().item(), model.config.prompt_alpha)
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:

@@ -16,18 +16,18 @@
 
 from typing import Any, Optional, Union
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 
 
-class Emu3VQVAEConfig(PretrainedConfig):
+class Emu3VQVAEConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Emu3VQVAE`]. It is used to instantiate an VQ-VAE
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a configuration to the VQ model presented in Emu3 paper.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
     Args:
         codebook_size (`int`, *optional*, defaults to 32768):
             Codebook size of the VQ model.
@@ -110,15 +110,15 @@ class Emu3VQVAEConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
 
 
-class Emu3TextConfig(PretrainedConfig):
+class Emu3TextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Emu3TextModel`]. It is used to instantiate a
     emu3 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the
     [Emu3-community/Emu3-Chat-hf](https://huggingface.co/Emu3-community/Emu3-Chat-hf).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -276,15 +276,15 @@ class Emu3TextConfig(PretrainedConfig):
         )
 
 
-class Emu3Config(PretrainedConfig):
+class Emu3Config(PreTrainedConfig):
     """
     This is the configuration class to store the configuration of a [`Emu3Model`]. It is used to instantiate a
     emu3 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the
     [Emu3-community/Emu3-Chat-hf](https://huggingface.co/Emu3-community/Emu3-Chat-hf).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:

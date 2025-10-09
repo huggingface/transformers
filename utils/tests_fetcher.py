@@ -409,7 +409,7 @@ def get_diff_for_doctesting(repo: Repo, base_commit: str, commits: list[str]) ->
             if not diff_obj.b_path.endswith(".py") and not diff_obj.b_path.endswith(".md"):
                 continue
             # We always add new python/md files
-            if diff_obj.change_type in ["A"]:
+            if diff_obj.change_type == "A":
                 code_diff.append(diff_obj.b_path)
             # Now for modified files
             elif diff_obj.change_type in ["M", "R"]:
@@ -876,7 +876,7 @@ def create_reverse_dependency_map() -> dict[str, list[str]]:
     # all the modules impacted by that init.
     for m in [f for f in all_modules if f.endswith("__init__.py")]:
         direct_deps = get_module_dependencies(m, cache=cache)
-        deps = sum([reverse_map[d] for d in direct_deps if not d.endswith("__init__.py")], direct_deps)
+        deps = sum((reverse_map[d] for d in direct_deps if not d.endswith("__init__.py")), direct_deps)
         reverse_map[m] = list(set(deps) - {m})
 
     return reverse_map

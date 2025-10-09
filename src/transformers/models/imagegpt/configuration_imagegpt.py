@@ -18,7 +18,7 @@ from collections import OrderedDict
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
 
@@ -29,15 +29,15 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-class ImageGPTConfig(PretrainedConfig):
+class ImageGPTConfig(PreTrainedConfig):
     """
     This is the configuration class to store the configuration of a [`ImageGPTModel`] or a [`TFImageGPTModel`]. It is
     used to instantiate a GPT-2 model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the ImageGPT
     [openai/imagegpt-small](https://huggingface.co/openai/imagegpt-small) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:

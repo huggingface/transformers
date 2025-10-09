@@ -33,7 +33,7 @@ from transformers.models.sam2.modeling_sam2 import (
 )
 from transformers.utils.generic import TransformersKwargs, check_model_inputs
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...processing_utils import Unpack
 from ...utils import (
     auto_docstring,
@@ -46,18 +46,18 @@ if True:
     from transformers.models.timm_wrapper.modeling_timm_wrapper import TimmWrapperModel
 
 
-class EdgeTamVisionConfig(PretrainedConfig):
+class EdgeTamVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`EdgeTamVisionModel`]. It is used to instantiate a SAM
     vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
     defaults will yield a similar configuration to that of SAM 2.1 Hiera-tiny
     [facebook/EdgeTAM](https://huggingface.co/facebook/EdgeTAM) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        backbone_config (`Union[dict, "PretrainedConfig"]`, *optional*):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*):
             Configuration for the vision backbone. This is used to instantiate the backbone using
             `AutoModel.from_config`.
         backbone_channel_list (`List[int]`, *optional*, defaults to `[384, 192, 96, 48]`):
@@ -107,8 +107,6 @@ class EdgeTamVisionConfig(PretrainedConfig):
         initializer_range=0.02,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         backbone_channel_list = [384, 192, 96, 48] if backbone_channel_list is None else backbone_channel_list
         backbone_feature_sizes = (
             [[256, 256], [128, 128], [64, 64]] if backbone_feature_sizes is None else backbone_feature_sizes
@@ -141,6 +139,7 @@ class EdgeTamVisionConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
+        super().__init__(**kwargs)
 
 
 class EdgeTamPromptEncoderConfig(Sam2PromptEncoderConfig):
@@ -208,7 +207,7 @@ class EdgeTamVisionModel(Sam2VisionModel):
     def get_input_embeddings(self):
         raise NotImplementedError("Can't get input embeddings from timm wrapper model")
 
-    @check_model_inputs
+    @check_model_inputs()
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
