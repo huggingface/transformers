@@ -31,6 +31,13 @@ else:
 logger = logging.get_logger(__file__)
 
 
+def _assign_original_dtype(module, original_dtype):
+    for child in module.children():
+        if isinstance(child, PreTrainedModel):
+            child.config._pre_quantization_dtype = original_dtype
+        _assign_original_dtype(child, original_dtype)
+
+
 class HfQuantizer(ABC):
     """
     Abstract class of the HuggingFace quantizer. Supports for now quantizing HF transformers models for inference and/or quantization.
@@ -229,19 +236,8 @@ class HfQuantizer(ABC):
         # Note that once you have loaded a quantized model, you can't change its dtype so this will
         # remain a single source of truth
         original_dtype = dtype if dtype is not None else torch.get_default_dtype()
-
-        def _assign_original_dtype(module):
-            for child in module.children():
-                if isinstance(child, PreTrainedModel):
-                    child.config._pre_quantization_dtype = original_dtype
-                _assign_original_dtype(child)
-
         config._pre_quantization_dtype = original_dtype
-        _assign_original_dtype(model)
-
-        # Torchao needs access to all metadata later
-        if model.quantization_config.quant_method == QuantizationMethod.TORCHAO:
-            model.set_metadata(checkpoint_files)
+        _assign_original_dtype(model, original_dtype)
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         return model
