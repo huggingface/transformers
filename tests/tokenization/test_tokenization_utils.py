@@ -19,7 +19,8 @@ import os
 import pickle
 import tempfile
 import unittest
-from typing import Callable, Optional
+from collections.abc import Callable
+from typing import Optional
 
 import numpy as np
 

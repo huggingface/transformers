@@ -16,7 +16,8 @@
 
 import copy
 import math
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 import numpy as np
 import torch

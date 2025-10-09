@@ -15,7 +15,8 @@
 """PyTorch M2M100 model."""
 
 import math
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 import torch
 from torch import nn
