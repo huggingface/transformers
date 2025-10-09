@@ -39,6 +39,7 @@ from transformers import (
     AutoImageProcessor,
     AutoProcessor,
     AutoTokenizer,
+    BitsAndBytesConfig,
     DataCollatorForLanguageModeling,
     IntervalStrategy,
     PreTrainedConfig,
@@ -1486,7 +1487,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # QLoRA + torch compile is not really supported yet, but we should at least support the model
         # loading and let torch throw the
         tiny_model = AutoModelForCausalLM.from_pretrained(
-            "hf-internal-testing/tiny-random-LlamaForCausalLM", load_in_4bit=True
+            "hf-internal-testing/tiny-random-LlamaForCausalLM",
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
         )
 
         peft_config = LoraConfig(

@@ -345,7 +345,7 @@ The `device_map="auto"` setting is useful for automatically distributing the mod
 > [!TIP]
 > Inputs are internally converted to torch.float16 and it only works for models with a PyTorch backend.
 
-Lastly, [`Pipeline`] also accepts quantized models to reduce memory usage even further. Make sure you have the [bitsandbytes](https://hf.co/docs/bitsandbytes/installation) library installed first, and then add `load_in_8bit=True` to `model_kwargs` in the pipeline.
+Lastly, [`Pipeline`] also accepts quantized models to reduce memory usage even further. Make sure you have the [bitsandbytes](https://hf.co/docs/bitsandbytes/installation) library installed first, and then add `quantization_config` to `model_kwargs` in the pipeline.
 
 ```py
 import torch
