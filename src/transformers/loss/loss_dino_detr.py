@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import copy
-from typing import List, Optional
+from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -620,7 +620,7 @@ class NestedTensor:
         return str(self.tensors)
 
 
-def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
+def nested_tensor_from_tensor_list(tensor_list: list[Tensor]):
     if tensor_list[0].ndim == 3:
         max_size = _max_by_axis([list(img.shape) for img in tensor_list])
         batch_shape = [len(tensor_list)] + max_size
