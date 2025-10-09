@@ -62,7 +62,7 @@ model = AutoModelForSpeechSeq2Seq.from_pretrained(
 
 # Load audio from dummy dataset
 dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-wav = torch.tensor(dataset[0]["audio"]["array"]).unsqueeze(0)  # add batch dimension
+wav = dataset[0]["audio"].get_all_samples().data.unsqueeze(0)  # add batch dimension
 
 # Create chat conversation with audio
 system_prompt = "Knowledge Cutoff Date: April 2024.\nToday's Date: April 9, 2025.\nYou are Granite, developed by IBM. You are a helpful AI assistant"
