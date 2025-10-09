@@ -14,22 +14,22 @@
 # limitations under the License.
 """SeamlessM4Tv2 model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class SeamlessM4Tv2Config(PretrainedConfig):
+class SeamlessM4Tv2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`~SeamlessM4Tv2Model`]. It is used to instantiate
     an SeamlessM4Tv2 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the SeamlessM4Tv2
     [""](https://huggingface.co/"") architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:

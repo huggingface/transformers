@@ -183,7 +183,7 @@ class RTDetrV2ModelTester:
             out_features=["stage2", "stage3", "stage4"],
             out_indices=[2, 3, 4],
         )
-        return RTDetrV2Config.from_backbone_configs(
+        return RTDetrV2Config(
             backbone_config=backbone_config,
             encoder_hidden_dim=self.encoder_hidden_dim,
             encoder_in_channels=hidden_sizes[1:],
@@ -263,7 +263,7 @@ class RTDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     )
     is_encoder_decoder = True
     test_torchscript = False
-    test_pruning = False
+
     test_missing_keys = False
     test_torch_exportable = True
 

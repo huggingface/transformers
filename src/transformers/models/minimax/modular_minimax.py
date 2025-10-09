@@ -30,7 +30,6 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeModelOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import OutputRecorder, check_model_inputs
 from ..mixtral.configuration_mixtral import MixtralConfig
 from ..mixtral.modeling_mixtral import (
@@ -58,8 +57,8 @@ class MiniMaxConfig(MixtralConfig):
 
     [MiniMaxAI/MiniMax-Text-01-hf](https://huggingface.co/MiniMaxAI/MiniMax-Text-01-hf)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -164,7 +163,6 @@ class MiniMaxConfig(MixtralConfig):
         mlp_beta_factor=1,
         **super_kwargs,
     ):
-        super().__init__(**super_kwargs)
         self.layer_types = layer_types
         self.block_size = block_size
         self.full_attn_alpha_factor = full_attn_alpha_factor
@@ -174,6 +172,7 @@ class MiniMaxConfig(MixtralConfig):
         self.mlp_alpha_factor = mlp_alpha_factor
         self.mlp_beta_factor = mlp_beta_factor
 
+        super().__init__(**super_kwargs)
         if self.layer_types is None:
             self.layer_types = [
                 "full_attention" if bool((i + 1) % 2) else "linear_attention" for i in range(self.num_hidden_layers)
@@ -203,15 +202,6 @@ class MiniMaxCache(DynamicCache):
 
     def __len__(self):
         return max(super().__len__(), len(self.linear_cache))
-
-    def __getitem__(self, layer_idx: int):
-        if layer_idx < len(self.linear_cache) and self.linear_cache[layer_idx] != []:
-            return (self.linear_cache[layer_idx],)
-        return super().__getitem__(layer_idx)
-
-    def __iter__(self):
-        for layer_idx in range(len(self)):
-            yield self[layer_idx]
 
     def batch_repeat_interleave(self, repeats: int):
         for layer_idx in range(len(self)):
@@ -279,7 +269,6 @@ class MiniMaxLightningAttention(nn.Module):
 
         return query_decay, key_decay, diagonal_decay
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -447,7 +436,7 @@ class MiniMaxPreTrainedModel(MixtralPreTrainedModel):
 
 
 class MiniMaxModel(MixtralModel):
-    @check_model_inputs
+    @check_model_inputs()
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

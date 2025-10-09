@@ -18,11 +18,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 
 
-class Glm4vMoeVisionConfig(PretrainedConfig):
+class Glm4vMoeVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Glm4vMoeVisionModel`]. It is used to instantiate an Glm4vMoeVisionModel
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the defaults will yield
@@ -119,15 +119,15 @@ class Glm4vMoeVisionConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
 
 
-class Glm4vMoeTextConfig(PretrainedConfig):
+class Glm4vMoeTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Glm4vMoeModel`]. It is used to instantiate a
     GLM-4.5V model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of
     GLM-4.5V [zai-org/GLM-4.5V](https://huggingface.co/zai-org/GLM-4.5V).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 151424):
@@ -307,15 +307,15 @@ class Glm4vMoeTextConfig(PretrainedConfig):
         self.norm_topk_prob = norm_topk_prob
 
 
-class Glm4vMoeConfig(PretrainedConfig):
+class Glm4vMoeConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Glm4vMoeModel`]. It is used to instantiate a
     GLM-4.5V model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of
     GLM-4.5V [zai-org/GLM-4.5V](https://huggingface.co/zai-org/GLM-4.5V).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -365,7 +365,6 @@ class Glm4vMoeConfig(PretrainedConfig):
         video_end_token_id=151342,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         if isinstance(vision_config, dict):
             self.vision_config = self.sub_configs["vision_config"](**vision_config)
         elif vision_config is None:
@@ -382,6 +381,8 @@ class Glm4vMoeConfig(PretrainedConfig):
         self.video_end_token_id = video_end_token_id
         self.image_start_token_id = image_start_token_id
         self.image_end_token_id = image_end_token_id
+
+        super().__init__(**kwargs)
 
 
 __all__ = ["Glm4vMoeConfig", "Glm4vMoeTextConfig"]

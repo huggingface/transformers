@@ -13,7 +13,8 @@
 # limitations under the License.
 
 import math
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -22,7 +23,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import (
@@ -67,8 +68,8 @@ class Phi4MultimodalVisionConfig(SiglipVisionConfig):
     configuration with the defaults will yield a similar configuration to that of the vision encoder of
     [microsoft/Phi-4-multimodal-instruct](https://huggingface.co/microsoft/Phi-4-multimodal-instruct) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 1152):
@@ -145,15 +146,15 @@ class Phi4MultimodalVisionConfig(SiglipVisionConfig):
         self.feature_layer = feature_layer
 
 
-class Phi4MultimodalAudioConfig(PretrainedConfig):
+class Phi4MultimodalAudioConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Phi4MultimodalAudioModel`]. It is used to instantiate a
     Phi4Multimodal audio encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the audio encoder of
     [microsoft/Phi-4-multimodal-instruct](https://huggingface.co/microsoft/Phi-4-multimodal-instruct) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 1024):
@@ -285,8 +286,8 @@ class Phi4MultimodalConfig(Phi3Config):
     with the defaults will yield a similar configuration to that of the
     [microsoft/Phi-4-multimodal-instruct](https://huggingface.co/microsoft/Phi-4-multimodal-instruct) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 200064):
@@ -402,6 +403,18 @@ class Phi4MultimodalConfig(Phi3Config):
         audio_config=None,
         **kwargs,
     ):
+        if isinstance(vision_config, dict):
+            vision_config = Phi4MultimodalVisionConfig(**vision_config)
+        elif vision_config is None:
+            Phi4MultimodalVisionConfig()
+        self.vision_config = vision_config
+
+        if isinstance(audio_config, dict):
+            audio_config = Phi4MultimodalAudioConfig(**audio_config)
+        elif vision_config is None:
+            audio_config = Phi4MultimodalAudioConfig()
+        self.audio_config = audio_config
+
         super().__init__(
             vocab_size=vocab_size,
             hidden_size=hidden_size,
@@ -428,18 +441,6 @@ class Phi4MultimodalConfig(Phi3Config):
             sliding_window=sliding_window,
             **kwargs,
         )
-
-        if isinstance(vision_config, dict):
-            vision_config = Phi4MultimodalVisionConfig(**vision_config)
-        elif vision_config is None:
-            Phi4MultimodalVisionConfig()
-        self.vision_config = vision_config
-
-        if isinstance(audio_config, dict):
-            audio_config = Phi4MultimodalAudioConfig(**audio_config)
-        elif vision_config is None:
-            audio_config = Phi4MultimodalAudioConfig()
-        self.audio_config = audio_config
 
 
 class Phi4MultimodalVisionMLP(SiglipMLP):
@@ -672,7 +673,7 @@ class Phi4MultimodalVisionModel(Phi4MultimodalVisionPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.embeddings.patch_embedding
 
-    @check_model_inputs
+    @check_model_inputs(tie_last_hidden_states=False)
     def forward(
         self,
         pixel_values,
@@ -1472,7 +1473,7 @@ class Phi4MultimodalModel(Phi3Model):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs()
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

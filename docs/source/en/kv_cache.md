@@ -124,11 +124,12 @@ The example below shows how you can fallback to an offloaded cache if you run ou
 
 ```py
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, infer_device
+from transformers import AutoTokenizer, AutoModelForCausalLM
+from accelerate import Accelerator
 
 def resilient_generate(model, *args, **kwargs):
     oom = False
-    device = infer_device()
+    device = Accelerator().device
     torch_device_module = getattr(torch, device, torch.cuda)
     try:
         return model.generate(*args, **kwargs)

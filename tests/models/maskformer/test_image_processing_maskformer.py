@@ -540,8 +540,8 @@ class MaskFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
                 fuse_targets = [1 for el in el_unfused if el["label_id"] == 1]
                 num_to_fuse = 0 if len(fuse_targets) == 0 else sum(fuse_targets) - 1
                 # Expected number of segments after fusing
-                expected_num_segments = max([el["id"] for el in el_unfused]) - num_to_fuse
-                num_segments_fused = max([el["id"] for el in el_fused])
+                expected_num_segments = max(el["id"] for el in el_unfused) - num_to_fuse
+                num_segments_fused = max(el["id"] for el in el_fused)
                 self.assertEqual(num_segments_fused, expected_num_segments)
 
     def test_slow_fast_equivalence(self):

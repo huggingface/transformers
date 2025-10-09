@@ -3,7 +3,7 @@
 # 2. run `make deps_table_update``
 deps = {
     "Pillow": "Pillow>=10.0.1,<=15.0",
-    "accelerate": "accelerate>=0.26.0",
+    "accelerate": "accelerate>=1.1.0",
     "av": "av",
     "beautifulsoup4": "beautifulsoup4",
     "blobfile": "blobfile",
@@ -23,7 +23,7 @@ deps = {
     "GitPython": "GitPython<3.1.19",
     "hf-doc-builder": "hf-doc-builder>=0.3.0",
     "hf_xet": "hf_xet",
-    "huggingface-hub": "huggingface-hub==1.0.0.rc2",
+    "huggingface-hub": "huggingface-hub==1.0.0.rc4",
     "importlib_metadata": "importlib_metadata",
     "ipadic": "ipadic>=1.0.0,<2.0",
     "jinja2": "jinja2>=3.1.0",
@@ -52,7 +52,7 @@ deps = {
     "pytest-timeout": "pytest-timeout",
     "pytest-xdist": "pytest-xdist",
     "pytest-order": "pytest-order",
-    "python": "python>=3.9.0",
+    "python": "python>=3.10.0",
     "ray[tune]": "ray[tune]>=2.7.0",
     "regex": "regex!=2019.12.17",
     "requests": "requests",

@@ -177,7 +177,7 @@ class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTest
     )
     pipeline_model_mapping = {"image-text-to-text": VipLlavaForConditionalGeneration} if is_torch_available() else {}
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = True
     _is_composite = True
 

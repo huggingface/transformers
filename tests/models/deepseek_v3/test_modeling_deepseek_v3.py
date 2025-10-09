@@ -40,6 +40,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        Cache,
         DeepseekV3ForCausalLM,
         DeepseekV3ForSequenceClassification,
         DeepseekV3ForTokenClassification,
@@ -234,7 +235,7 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         if is_torch_available()
         else {}
     )
-    test_pruning = False
+
     fx_compatible = False
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
@@ -247,6 +248,23 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def setUp(self):
         self.model_tester = DeepseekV3ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=DeepseekV3Config, hidden_size=37)
+
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+        """Needs to be overridden as deepseek has special MLA cache format (though we don't really use the MLA)"""
+        self.assertIsInstance(past_key_values, Cache)
+
+        # (batch, head, seq_length, head_features)
+        expected_common_shape = (
+            batch_size,
+            getattr(config, "num_key_value_heads", config.num_attention_heads),
+            seq_length,
+        )
+        expected_key_shape = expected_common_shape + (config.qk_nope_head_dim + config.qk_rope_head_dim,)
+        expected_value_shape = expected_common_shape + (config.v_head_dim,)
+
+        for layer in past_key_values.layers:
+            self.assertEqual(layer.keys.shape, expected_key_shape)
+            self.assertEqual(layer.values.shape, expected_value_shape)
 
     @parameterized.expand([("random",), ("same",)])
     @unittest.skip("DeepseekV3 is not compatible with assisted decoding")
@@ -279,12 +297,6 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
 
     @parameterized.expand([("yarn",)])
     def test_model_rope_scaling_from_config(self, scaling_type):
@@ -383,22 +395,6 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             torch.testing.assert_close(yarn_cos_long, original_cos_long)
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(yarn_sin_long, original_sin_long)
-
-    def test_past_key_values_format(self):
-        """
-        Overwriting to pass the expected cache shapes (Deepseek-V3 uses MLA so the cache shapes are non-standard)
-        """
-        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        batch_size, seq_length = inputs["input_ids"].shape
-        # difference: last dim
-        k_embed_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
-        v_embed_dim = config.v_head_dim
-        self_attention_keys_shape = (batch_size, config.num_key_value_heads, seq_length, k_embed_dim)
-        self_attention_values_shape = (batch_size, config.num_key_value_heads, seq_length, v_embed_dim)
-        # build the full cache shapes
-        num_hidden_layers = config.num_hidden_layers
-        all_cache_shapes = [[self_attention_keys_shape, self_attention_values_shape] for _ in range(num_hidden_layers)]
-        super().test_past_key_values_format(custom_all_cache_shapes=all_cache_shapes)
 
     @require_torch_large_accelerator
     @slow

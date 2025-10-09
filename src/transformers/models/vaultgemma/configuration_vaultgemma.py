@@ -19,17 +19,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...configuration_utils import PretrainedConfig, layer_type_validation
+from ...configuration_utils import PreTrainedConfig, layer_type_validation
 
 
-class VaultGemmaConfig(PretrainedConfig):
+class VaultGemmaConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`VaultGemmaModel`]. It is used to instantiate an VaultGemma
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the VaultGemma-7B.
     e.g. [google/vaultgemma-7b](https://huggingface.co/google/vaultgemma-7b)
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 256000):

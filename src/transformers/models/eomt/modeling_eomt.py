@@ -21,8 +21,9 @@
 
 import collections.abc
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import Optional
 
 import numpy as np
 import torch
@@ -1082,7 +1083,7 @@ class EomtForUniversalSegmentation(EomtPreTrainedModel):
     def get_loss(self, loss_dict: dict[str, Tensor]) -> Tensor:
         return sum(loss_dict.values())
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
