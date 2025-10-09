@@ -270,7 +270,7 @@ class DinoDetrConfig(PretrainedConfig):
                 config_class = CONFIG_MAPPING[backbone_model_type]
                 backbone_config = config_class.from_dict(backbone_config)
         if not isinstance(num_patterns, int):
-            Warning("num_patterns should be int but {}".format(type(num_patterns)))
+            Warning(f"num_patterns should be int but {type(num_patterns)}")
             num_patterns = 0
 
         verify_backbone_config_arguments(
@@ -302,7 +302,7 @@ class DinoDetrConfig(PretrainedConfig):
         assert two_stage_type in [
             "no",
             "standard",
-        ], "Unknown param {} of two_stage_type".format(two_stage_type)
+        ], f"Unknown param {two_stage_type} of two_stage_type"
         if dec_layer_number is not None:
             if two_stage_type != "no" or num_patterns == 0:
                 assert dec_layer_number[0] == num_queries, (
@@ -321,14 +321,14 @@ class DinoDetrConfig(PretrainedConfig):
         assert two_stage_type in [
             "no",
             "standard",
-        ], "unknown param {} of two_stage_type".format(two_stage_type)
+        ], f"unknown param {two_stage_type} of two_stage_type"
         if two_stage_type != "no":
             if two_stage_bbox_embed_share:
                 assert dec_pred_class_embed_share and dec_pred_bbox_embed_share
             if two_stage_class_embed_share:
                 assert dec_pred_class_embed_share and dec_pred_bbox_embed_share
         assert decoder_sa_type in ["sa", "ca_label", "ca_content"]
-        assert query_dim in [2, 4], "Query_dim should be 2/4 but {}".format(query_dim)
+        assert query_dim in [2, 4], f"Query_dim should be 2/4 but {query_dim}"
         if use_timm_backbone and backbone_kwargs is not None:
             assert backbone_kwargs["in_chans"] == num_channels
 
