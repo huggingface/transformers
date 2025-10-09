@@ -672,4 +672,4 @@ def maybe_load_adapters(
             _adapter_model_path = pretrained_model_name_or_path
             pretrained_model_name_or_path = json.load(f)["base_model_name_or_path"]
 
-    return _adapter_model_path
+    return _adapter_model_path, pretrained_model_name_or_path
