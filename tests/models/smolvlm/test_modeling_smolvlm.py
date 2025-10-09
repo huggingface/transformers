@@ -699,17 +699,17 @@ class SmolVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Basic verification that the model was loaded successfully
         self.assertIsNotNone(model)
         self.assertEqual(model.dtype, torch.bfloat16)
-        
+
         # Test that the inputs_merger method works correctly with quantized weights
         # Create dummy inputs to test the dtype conversion logic
         batch_size = 1
         seq_len = 10
         hidden_size = model.config.hidden_size
-        
+
         # Simulate the scenario that was causing the dtype mismatch
         inputs_embeds = torch.randn(batch_size, seq_len, hidden_size, dtype=torch.bfloat16)
         image_hidden_states = torch.randn(1, 8, hidden_size, dtype=torch.float32)
-        
+
         # Test that inputs_merger handles dtype conversion correctly
         # This should not raise a RuntimeError about dtype mismatch
         try:
