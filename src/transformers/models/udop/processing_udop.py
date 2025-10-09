@@ -31,7 +31,7 @@ logger = logging.get_logger(__name__)
 
 class UdopTextKwargs(TextKwargs, total=False):
     word_labels: Optional[Union[list[int], list[list[int]]]]
-    boxes: Union[list[list[int]], list[list[list[int]]]]
+    boxes: Optional[Union[list[list[int]], list[list[list[int]]]]]
 
 
 class UdopProcessorKwargs(ProcessingKwargs, total=False):

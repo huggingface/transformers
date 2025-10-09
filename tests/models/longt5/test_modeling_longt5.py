@@ -234,8 +234,6 @@ class LongT5ModelTester:
         self.parent.assertEqual(decoder_output.size(), (self.batch_size, self.decoder_seq_length, self.hidden_size))
         # There should be `num_layers` key value embeddings stored in decoder_past
         self.parent.assertEqual(len(decoder_past), config.num_layers)
-        # There should be a self attn key, a self attn value, a cross attn key and a cross attn value stored in each decoder_past tuple
-        self.parent.assertEqual(len(decoder_past[0]), 4)
 
     def create_and_check_with_lm_head(
         self,
@@ -512,7 +510,7 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         else {}
     )
     fx_compatible = False
-    test_pruning = False
+
     test_torchscript = True
     test_resize_embeddings = True
     is_encoder_decoder = True
@@ -1008,7 +1006,7 @@ class LongT5EncoderOnlyModelTester:
 
 class LongT5EncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (LongT5EncoderModel,) if is_torch_available() else ()
-    test_pruning = False
+
     test_torchscript = True
     test_resize_embeddings = False
 

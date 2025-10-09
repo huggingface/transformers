@@ -107,8 +107,6 @@ class EdgeTamVisionConfig(PreTrainedConfig):
         initializer_range=0.02,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         backbone_channel_list = [384, 192, 96, 48] if backbone_channel_list is None else backbone_channel_list
         backbone_feature_sizes = (
             [[256, 256], [128, 128], [64, 64]] if backbone_feature_sizes is None else backbone_feature_sizes
@@ -141,6 +139,7 @@ class EdgeTamVisionConfig(PreTrainedConfig):
         self.hidden_act = hidden_act
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
+        super().__init__(**kwargs)
 
 
 class EdgeTamPromptEncoderConfig(Sam2PromptEncoderConfig):
