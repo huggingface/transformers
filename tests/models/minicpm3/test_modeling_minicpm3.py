@@ -45,23 +45,10 @@ class MiniCPM3ModelTester(CausalLMModelTester):
     config_class = MiniCPM3Config
     if is_torch_available():
         base_model_class = MiniCPM3Model
-        causal_lm_class = MiniCPM3ForCausalLM
-        sequence_class = MiniCPM3ForSequenceClassification
-        token_class = MiniCPM3ForTokenClassification
 
 
 @require_torch
 class MiniCPM3ModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            MiniCPM3Model,
-            MiniCPM3ForCausalLM,
-            MiniCPM3ForSequenceClassification,
-            MiniCPM3ForTokenClassification,
-        )
-        if is_torch_available()
-        else ()
-    )
     test_headmasking = False
     test_pruning = False
     model_tester_class = MiniCPM3ModelTester
