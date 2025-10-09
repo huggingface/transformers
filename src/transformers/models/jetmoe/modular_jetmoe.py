@@ -14,7 +14,8 @@
 # limitations under the License.
 """PyTorch JetMoe model."""
 
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -311,7 +312,8 @@ class JetMoeAttention(nn.Module):
                 "when creating this class."
             )
 
-        self.num_key_value_groups = config.num_experts_per_tok
+        self.num_key_value_groups = 1  # We ignore this by setting it to 1 as we have different repeat patterns
+        self.top_k = config.num_experts_per_tok
         self.attention_dropout = config.attention_dropout
         self.kv_projection_size = config.kv_channels * config.num_key_value_heads
         self.num_key_value_heads = config.num_key_value_heads
@@ -353,6 +355,11 @@ class JetMoeAttention(nn.Module):
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
+        # This is different from other models where we repeat k/v heads
+        # instead of repeat interleaving them
+        key_states = key_states.repeat(1, self.top_k, 1, 1)
+        value_states = value_states.repeat(1, self.top_k, 1, 1)
+
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
@@ -364,7 +371,7 @@ class JetMoeAttention(nn.Module):
             **kwargs,
         )
 
-        attn_output = attn_output.view(*input_shape, self.num_key_value_groups, -1)
+        attn_output = attn_output.view(*input_shape, self.top_k, -1)
         attn_output = self.experts.reduce(attn_output, topo_info)
         attn_output = attn_output.view(*input_shape, -1)
         return attn_output, attn_weights, router_logits
@@ -374,9 +381,10 @@ class JetMoeDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: JetMoeConfig, layer_idx: Optional[int] = None):
         super().__init__(config, layer_idx)
         self.input_layernorm = JetMoeRMSNorm(config.hidden_size)
-        self.self_attn = JetMoeAttention(config, layer_idx)
+        self.self_attention = JetMoeAttention(config, layer_idx)
         self.post_attention_layernorm = JetMoeRMSNorm(config.hidden_size)
         self.mlp = JetMoeMoE(config)
+        del self.self_attn
 
     def forward(
         self,
@@ -392,7 +400,7 @@ class JetMoeDecoderLayer(LlamaDecoderLayer):
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
         # Self Attention
-        hidden_states, _, _ = self.self_attn(
+        hidden_states, _, _ = self.self_attention(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -459,7 +467,7 @@ class JetMoeModel(MixtralModel):
         self._attn_implementation = config._attn_implementation
         self.norm = JetMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
@@ -511,6 +519,7 @@ class JetMoeModel(MixtralModel):
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
+                position_ids=position_ids,
                 **kwargs,
             )
 

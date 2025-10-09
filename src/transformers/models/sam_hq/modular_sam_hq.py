@@ -50,8 +50,8 @@ class SamHQPromptEncoderConfig(SamPromptEncoderConfig):
     similar configuration to that of the SAM_HQ model. The configuration is used to store the configuration of the model.
     [Uminosachi/sam-hq](https://huggingface.co/Uminosachi/sam-hq) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model's output.Read the documentation from
-    [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model's output.Read the documentation from
+    [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 256):
@@ -82,8 +82,8 @@ class SamHQMaskDecoderConfig(SamMaskDecoderConfig):
     will yield a similar configuration to that of the SAM_HQ-vit-h
     [facebook/sam_hq-vit-huge](https://huggingface.co/facebook/sam_hq-vit-huge) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 256):
@@ -126,8 +126,8 @@ class SamHQConfig(SamConfig):
     configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the
     SAM-HQ-ViT-H [sushmanth/sam_hq_vit_h](https://huggingface.co/sushmanth/sam_hq_vit_h) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vision_config (Union[`dict`, `SamHQVisionConfig`], *optional*):
@@ -195,7 +195,7 @@ class SamHQVisionEncoder(SamVisionEncoder, SamHQPreTrainedModel):
         "attentions": SamHQVisionAttention,
     }
 
-    @check_model_inputs
+    @check_model_inputs(tie_last_hidden_states=False)
     def forward(
         self, pixel_values: Optional[torch.FloatTensor] = None, **kwargs: Unpack[TransformersKwargs]
     ) -> Union[tuple, SamHQVisionEncoderOutput]:

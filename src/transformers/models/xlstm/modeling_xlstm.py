@@ -34,8 +34,9 @@ if is_xlstm_available():
 
     external_xlstm = True
 else:
+    from collections.abc import Callable
     from functools import partial
-    from typing import Callable, Literal
+    from typing import Literal
 
     from .configuration_xlstm import round_up_to_next_multiple_of
 
@@ -1293,7 +1294,7 @@ class xLSTMCache:
     Cache for xLSTM model which does not have attention mechanism and key value states.
 
     Arguments:
-        config (`PretrainedConfig):
+        config (`PreTrainedConfig):
             The configuration file defining the shape-related attributes required to initialize the static cache.
         max_batch_size (`int`):
             The batch size with which the model will be used.

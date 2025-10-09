@@ -20,7 +20,7 @@ import unittest
 
 import numpy as np
 
-from transformers import PretrainedConfig, VitsConfig
+from transformers import PreTrainedConfig, VitsConfig
 from transformers.testing_utils import (
     Expectations,
     is_flaky,
@@ -58,7 +58,7 @@ def _config_zero_init(config):
     for key in configs_no_init.__dict__:
         if "_range" in key or "_std" in key or "initializer_factor" in key or "layer_scale" in key:
             setattr(configs_no_init, key, 1e-10)
-        if isinstance(getattr(configs_no_init, key, None), PretrainedConfig):
+        if isinstance(getattr(configs_no_init, key, None), PreTrainedConfig):
             no_init_subconfig = _config_zero_init(getattr(configs_no_init, key))
             setattr(configs_no_init, key, no_init_subconfig)
     return configs_no_init
@@ -160,7 +160,7 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         {"feature-extraction": VitsModel, "text-to-audio": VitsModel} if is_torch_available() else {}
     )
     is_encoder_decoder = False
-    test_pruning = False
+
     test_resize_embeddings = False
     test_torchscript = False
     has_attentions = False

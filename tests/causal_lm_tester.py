@@ -18,7 +18,7 @@ from inspect import signature
 import pytest
 from parameterized import parameterized
 
-from transformers import AutoModelForCausalLM, PretrainedConfig, set_seed
+from transformers import AutoModelForCausalLM, PreTrainedConfig, set_seed
 from transformers.models.auto.auto_factory import getattribute_from_module
 from transformers.testing_utils import (
     _COMMON_MODEL_NAMES_MAP,
@@ -87,7 +87,7 @@ class CausalLMModelTester:
                     pass
             else:
                 if tester_attribute_name == "config_class":
-                    if "PretrainedConfig" not in str(getattr(cls, tester_attribute_name).__mro__):
+                    if "PreTrainedConfig" not in str(getattr(cls, tester_attribute_name).__mro__):
                         raise ValueError(
                             f"You have inherited from `CausalLMModelTester` but did not set the "
                             f"`{tester_attribute_name}` attribute to a valid config class. (It's set to "
@@ -287,7 +287,6 @@ class CausalLMModelTester:
 
 @require_torch
 class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin):
-    test_pruning = False
     model_tester_class = None
     all_model_classes = None
     pipeline_model_mapping = None
@@ -448,6 +447,7 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         # named location of the RoPE layer class.
         base_model = self.model_tester.base_model_class(config)
         possible_rope_attributes = [
+            "pos_emb",
             "rotary_emb",  # most common case
             "global_rotary_emb",
             "local_rotary_emb",
@@ -572,7 +572,7 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             _ = model(**inputs_dict, return_dict=False)
 
 
-def _config_supports_rope_scaling(config: PretrainedConfig) -> bool:
+def _config_supports_rope_scaling(config: PreTrainedConfig) -> bool:
     """Returns whether a certain model config supports RoPE scaling parameterization."""
     # Has rope_scaling -> model was designed with rope scaling in mind
     # Has rope_theta (and no rope_scaling) -> probably an older model, but should support rope scaling as well

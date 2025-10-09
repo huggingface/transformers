@@ -163,7 +163,6 @@ class FlavaImageModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (FlavaImageModel,) if is_torch_available() else ()
 
-    test_pruning = False
     test_torchscript = False
     test_resize_embeddings = False
 
@@ -338,7 +337,6 @@ class FlavaTextModelTester:
         vocab_size=102,
         type_vocab_size=2,
         max_position_embeddings=512,
-        position_embedding_type="absolute",
         hidden_size=32,
         num_hidden_layers=2,
         num_attention_heads=4,
@@ -360,7 +358,6 @@ class FlavaTextModelTester:
         self.vocab_size = vocab_size
         self.type_vocab_size = type_vocab_size
         self.max_position_embeddings = max_position_embeddings
-        self.position_embedding_type = position_embedding_type
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -401,7 +398,6 @@ class FlavaTextModelTester:
             vocab_size=self.vocab_size,
             type_vocab_size=self.type_vocab_size,
             max_position_embeddings=self.max_position_embeddings,
-            position_embedding_type=self.position_embedding_type,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
@@ -435,7 +431,7 @@ class FlavaTextModelTester:
 @require_torch
 class FlavaTextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (FlavaTextModel,) if is_torch_available() else ()
-    test_pruning = False
+
     test_torchscript = False
 
     def setUp(self):
@@ -572,7 +568,7 @@ class FlavaMultimodalModelTester:
 @require_torch
 class FlavaMultimodalModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (FlavaMultimodalModel,) if is_torch_available() else ()
-    test_pruning = False
+
     test_resize_embeddings = False
     test_torchscript = False
 
@@ -686,7 +682,7 @@ class FlavaImageCodebookTester:
 @require_torch
 class FlavaImageCodebookTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (FlavaImageCodebook,) if is_torch_available() else ()
-    test_pruning = False
+
     test_resize_embeddings = False
     test_torchscript = False
     has_attentions = False
@@ -818,11 +814,11 @@ class FlavaModelTester:
         }
 
     def get_config(self):
-        return FlavaConfig.from_configs(
-            self.image_model_tester.get_config(),
-            self.text_model_tester.get_config(),
-            self.multimodal_model_tester.get_config(),
-            self.image_codebook_tester.get_config(),
+        return FlavaConfig(
+            image_config=self.image_model_tester.get_config(),
+            text_config=self.text_model_tester.get_config(),
+            multimodal_config=self.multimodal_model_tester.get_config(),
+            image_codebook_config=self.image_codebook_tester.get_config(),
             hidden_size=self.hidden_size,
             projection_dim=self.projection_dim,
             initializer_range=self.initializer_range,
@@ -886,7 +882,7 @@ class FlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (FlavaModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": FlavaModel} if is_torch_available() else {}
     class_for_tester = FlavaModelTester
-    test_pruning = False
+
     test_resize_embeddings = False
     test_attention_outputs = False
 

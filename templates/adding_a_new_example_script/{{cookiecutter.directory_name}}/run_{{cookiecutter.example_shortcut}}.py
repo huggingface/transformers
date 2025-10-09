@@ -515,7 +515,7 @@ from transformers import (
     {{cookiecutter.model_class}},
     AutoTokenizer,
     DataCollatorWithPadding,
-    PretrainedConfig,
+    PreTrainedConfig,
     SchedulerType,
     default_data_collator,
     get_scheduler,

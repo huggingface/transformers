@@ -19,10 +19,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...configuration_utils import PretrainedConfig, layer_type_validation
+from ...configuration_utils import PreTrainedConfig, layer_type_validation
 
 
-class MiniMaxConfig(PretrainedConfig):
+class MiniMaxConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MiniMaxModel`]. It is used to instantiate an
     MiniMax model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -30,8 +30,8 @@ class MiniMaxConfig(PretrainedConfig):
 
     [MiniMaxAI/MiniMax-Text-01-hf](https://huggingface.co/MiniMaxAI/MiniMax-Text-01-hf)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -181,13 +181,14 @@ class MiniMaxConfig(PretrainedConfig):
         mlp_beta_factor=1,
         **kwargs,
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.layer_types = layer_types
+        self.block_size = block_size
+        self.full_attn_alpha_factor = full_attn_alpha_factor
+        self.full_attn_beta_factor = full_attn_beta_factor
+        self.linear_attn_alpha_factor = linear_attn_alpha_factor
+        self.linear_attn_beta_factor = linear_attn_beta_factor
+        self.mlp_alpha_factor = mlp_alpha_factor
+        self.mlp_beta_factor = mlp_beta_factor
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -214,15 +215,13 @@ class MiniMaxConfig(PretrainedConfig):
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
         self.router_jitter_noise = router_jitter_noise
-        self.layer_types = layer_types
-        self.block_size = block_size
-        self.full_attn_alpha_factor = full_attn_alpha_factor
-        self.full_attn_beta_factor = full_attn_beta_factor
-        self.linear_attn_alpha_factor = linear_attn_alpha_factor
-        self.linear_attn_beta_factor = linear_attn_beta_factor
-        self.mlp_alpha_factor = mlp_alpha_factor
-        self.mlp_beta_factor = mlp_beta_factor
-
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
         if self.layer_types is None:
             self.layer_types = [
                 "full_attention" if bool((i + 1) % 2) else "linear_attention" for i in range(self.num_hidden_layers)

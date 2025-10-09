@@ -20,12 +20,12 @@
 # limitations under the License.
 from typing import Optional
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-class AriaTextConfig(PretrainedConfig):
+class AriaTextConfig(PreTrainedConfig):
     r"""
     This class handles the configuration for the text component of the Aria model.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the model of the Aria
@@ -180,13 +180,10 @@ class AriaTextConfig(PretrainedConfig):
         moe_num_shared_experts: int = 2,
         **kwargs,
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.intermediate_size = intermediate_size
+        self.moe_num_experts = moe_num_experts
+        self.moe_topk = moe_topk
+        self.moe_num_shared_experts = moe_num_shared_experts
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -215,20 +212,25 @@ class AriaTextConfig(PretrainedConfig):
         if self.rope_scaling is not None and "type" in self.rope_scaling:
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self)
-        self.moe_num_experts = moe_num_experts
-        self.moe_topk = moe_topk
-        self.moe_num_shared_experts = moe_num_shared_experts
+
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
 
 
-class AriaConfig(PretrainedConfig):
+class AriaConfig(PreTrainedConfig):
     r"""
     This class handles the configuration for both vision and text components of the Aria model,
     as well as additional parameters for image token handling and projector mapping.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the model of the Aria
     [rhymes-ai/Aria](https://huggingface.co/rhymes-ai/Aria) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vision_config (`AriaVisionConfig` or `dict`, *optional*):
