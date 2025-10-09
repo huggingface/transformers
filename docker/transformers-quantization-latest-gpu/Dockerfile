@@ -30,21 +30,20 @@ RUN python3 -m pip install --no-cache-dir -U $VERSION torchvision torchaudio tor
 
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
 
-# needed in bnb and awq
-RUN python3 -m pip install --no-cache-dir einops
-
-# Add bitsandbytes for mixed int8 testing
-RUN python3 -m pip install --no-cache-dir bitsandbytes
-
-# Add gptqmodel for gtpq quantization testing, installed from source for pytorch==2.6.0 compatibility
-RUN python3 -m pip install lm_eval
-RUN git clone https://github.com/ModelCloud/GPTQModel.git && cd GPTQModel && pip install -v . --no-build-isolation
-
 # Add optimum for gptq quantization testing
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/optimum@main#egg=optimum
 
 # Add PEFT
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/peft@main#egg=peft
+
+# needed in bnb and awq
+RUN python3 -m pip install --no-cache-dir einops
+
+# Add bitsandbytes
+RUN python3 -m pip install --no-cache-dir bitsandbytes
+
+# # Add gptqmodel
+# RUN python3 -m pip install --no-cache-dir gptqmodel
 
 # Add hqq for quantization testing
 RUN python3 -m pip install --no-cache-dir hqq
@@ -83,6 +82,9 @@ RUN python3 -m pip uninstall -y flash-attn
 # this line must be added in order for python to be aware of transformers.
 RUN cd transformers && python3 setup.py develop
 
+# Add fp-quant for quantization testing
+RUN python3 -m pip install --no-cache-dir "fp-quant>=0.2.0"
+
 # Low usage or incompatible lib, will enable later on
 
 # # Add aqlm for quantization testing
@@ -103,7 +105,3 @@ RUN cd transformers && python3 setup.py develop
 # # TODO: create a new workflow to test them
 # RUN python3 -m pip install --no-cache-dir flute-kernel==0.4.1
 # RUN python3 -m pip install --no-cache-dir git+https://github.com/Dao-AILab/fast-hadamard-transform.git
-
-# Add fp-quant for quantization testing
-# Requires py3.11 but our CI runs on 3.9
-# RUN python3 -m pip install --no-cache-dir "fp-quant>=0.1.6"

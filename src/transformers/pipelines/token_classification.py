@@ -136,8 +136,8 @@ class TokenClassificationPipeline(ChunkPipeline):
     _load_feature_extractor = False
     _load_tokenizer = True
 
-    def __init__(self, args_parser=TokenClassificationArgumentHandler(), *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, args_parser=TokenClassificationArgumentHandler(), **kwargs):
+        super().__init__(**kwargs)
 
         self.check_model_type(MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES)
 

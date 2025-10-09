@@ -12,12 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import gc
-import importlib.metadata
 import tempfile
 import unittest
 
 import pytest
-from packaging import version
 
 from transformers import (
     AutoConfig,
@@ -41,7 +39,6 @@ from transformers.testing_utils import (
     require_accelerate,
     require_bitsandbytes,
     require_torch,
-    require_torch_gpu_if_bnb_not_multi_backend_enabled,
     require_torch_multi_accelerator,
     slow,
     torch_device,
@@ -93,7 +90,6 @@ if is_bitsandbytes_available():
 @require_bitsandbytes
 @require_accelerate
 @require_torch
-@require_torch_gpu_if_bnb_not_multi_backend_enabled
 @slow
 class BaseMixedInt8Test(unittest.TestCase):
     # We keep the constants inside the init function and model loading inside setUp function
@@ -472,7 +468,6 @@ class MixedInt8Test(BaseMixedInt8Test):
 @require_bitsandbytes
 @require_accelerate
 @require_torch
-@require_torch_gpu_if_bnb_not_multi_backend_enabled
 @slow
 class MixedInt8T5Test(unittest.TestCase):
     @classmethod
@@ -871,9 +866,6 @@ class MixedInt8TestTraining(BaseMixedInt8Test):
         super().setUp()
 
     def test_training(self):
-        if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.37.0"):
-            self.skipTest(reason="This test requires bitsandbytes>=0.37.0")
-
         # Step 1: freeze all parameters
         model = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True)
         model.train()
@@ -983,7 +975,6 @@ class MixedInt8LlamaTest(MixedInt8Test):
 @require_bitsandbytes
 @require_accelerate
 @require_torch
-@require_torch_gpu_if_bnb_not_multi_backend_enabled
 @slow
 @apply_skip_if_not_implemented
 class Bnb8bitCompile(unittest.TestCase):

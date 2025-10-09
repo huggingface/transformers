@@ -149,9 +149,8 @@ class InstructBlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (InstructBlipVisionModel,) if is_torch_available() else ()
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = InstructBlipVisionModelTester(self)
@@ -476,8 +475,7 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
     pipeline_model_mapping = {"image-text-to-text": InstructBlipForConditionalGeneration}
     additional_model_inputs = ["qformer_input_ids", "input_ids"]
     fx_compatible = False
-    test_head_masking = False
-    test_pruning = False
+
     test_resize_embeddings = True
     test_attention_outputs = False
     test_torchscript = False

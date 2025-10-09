@@ -22,6 +22,7 @@ Voxtral is an upgrade of [Ministral 3B and Mistral Small 3B](https://mistral.ai/
 You can read more in Mistral's [realease blog post](https://mistral.ai/news/voxtral).
 
 The model is available in two checkpoints:
+
 - 3B: [mistralai/Voxtral-Mini-3B-2507](https://huggingface.co/mistralai/Voxtral-Mini-3B-2507)
 - 24B: [mistralai/Voxtral-Small-24B-2507](https://huggingface.co/mistralai/Voxtral-Small-24B-2507)
 

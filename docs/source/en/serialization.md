@@ -51,7 +51,7 @@ optimum-cli export onnx --model distilbert/distilbert-base-uncased-distilled-squ
 
 You should see logs indicating the progress and showing where the resulting `model.onnx` is saved.
 
-```bash
+```text
 Validating ONNX model distilbert_base_uncased_squad_onnx/model.onnx...
 	-[✓] ONNX model output names match reference model (start_logits, end_logits)
 	- Validating ONNX Model output "start_logits":

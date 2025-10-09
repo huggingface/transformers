@@ -376,6 +376,8 @@ class BltCrossAttention(MllamaTextCrossAttention):
 class BltPreTrainedModel(MllamaPreTrainedModel):
     config: BltConfig
     _supports_attention_backend = False
+    _supports_flash_attn = False
+    _supports_flex_attn = False
     _no_split_modules = ["BltTransformerLayer"]
     _can_record_outputs = {
         "hidden_states": OutputRecorder(BltTransformerLayer, index=0, layer_name="local_decoder"),
@@ -534,7 +536,7 @@ class BltLocalDecoder(BltPreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs()
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -797,7 +799,7 @@ class BltModel(BltPreTrainedModel):
             self.patcher = None
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs()
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -866,7 +868,12 @@ class BltModel(BltPreTrainedModel):
         )
 
         cross_attn_mask_enc = _prepare_patch_cross_attention_mask(
-            patch_ids, patch_lengths.shape[1], sequence_length, True, self.config.cross_attn_k, encoder_embeds.dtype
+            patch_ids=patch_ids,
+            num_patches=patch_lengths.shape[1],
+            sequence_length=sequence_length,
+            patches_as_queries=True,
+            cross_attn_k=self.config.cross_attn_k,
+            dtype=encoder_embeds.dtype,
         )
         encoder_hidden_states, encoder_cross_states = self.local_encoder(
             input_ids=input_ids,
@@ -898,12 +905,12 @@ class BltModel(BltPreTrainedModel):
         )
         decoder_patch_ids = self._patch_ids_from_lengths(patch_lengths[:, 1:], sequence_length)
         cross_attn_mask_dec = _prepare_patch_cross_attention_mask(
-            decoder_patch_ids,
-            patch_lengths.shape[1],
-            sequence_length,
-            False,
-            self.config.cross_attn_k,
-            encoder_embeds.dtype,
+            patch_ids=decoder_patch_ids,
+            num_patches=patch_lengths.shape[1],
+            sequence_length=sequence_length,
+            patches_as_queries=False,
+            cross_attn_k=self.config.cross_attn_k,
+            dtype=encoder_embeds.dtype,
         )
         output = self.local_decoder(
             input_ids=input_ids,
@@ -961,7 +968,7 @@ class BltForCausalLM(MllamaForCausalLM):
         cross_attention_states: Optional[torch.LongTensor] = None,  # Keep for compatibility
         cross_attention_mask: Optional[torch.LongTensor] = None,
         full_text_row_masked_out_mask: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
