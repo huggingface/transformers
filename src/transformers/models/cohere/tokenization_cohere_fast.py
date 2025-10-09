@@ -146,12 +146,11 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         self.grounded_generation_template = kwargs.pop("grounded_generation_template", None)
         self.tool_use_template = kwargs.pop("tool_use_template", None)
 
-        if add_prefix_space:
-            # This is a `tokenizers.pre_tokenizers.Sequence`
-            for pre_tokenizer in self.backend_tokenizer.pre_tokenizer:
-                if hasattr(pre_tokenizer, "add_prefix_space"):
-                    pre_tokenizer.add_prefix_space = add_prefix_space
-            self.backend_tokenizer.decoder.add_prefix_space = add_prefix_space
+        # This is a `tokenizers.pre_tokenizers.Sequence`
+        for pre_tokenizer in self.backend_tokenizer.pre_tokenizer:
+            if hasattr(pre_tokenizer, "add_prefix_space"):
+                pre_tokenizer.add_prefix_space = add_prefix_space
+        self.backend_tokenizer.decoder.add_prefix_space = add_prefix_space
         self.add_prefix_space = add_prefix_space
 
     def _batch_encode_plus(self, *args, **kwargs) -> BatchEncoding:

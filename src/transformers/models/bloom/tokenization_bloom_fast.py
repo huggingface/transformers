@@ -109,12 +109,11 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             **kwargs,
         )
-        if add_prefix_space:
-            # This is a `tokenizers.pre_tokenizers.Sequence`
-            for pre_tokenizer in self.backend_tokenizer.pre_tokenizer:
-                if hasattr(pre_tokenizer, "add_prefix_space"):
-                    pre_tokenizer.add_prefix_space = add_prefix_space
-            self.backend_tokenizer.decoder.add_prefix_space = add_prefix_space
+        # This is a `tokenizers.pre_tokenizers.Sequence`
+        for pre_tokenizer in self.backend_tokenizer.pre_tokenizer:
+            if hasattr(pre_tokenizer, "add_prefix_space"):
+                pre_tokenizer.add_prefix_space = add_prefix_space
+        self.backend_tokenizer.decoder.add_prefix_space = add_prefix_space
         self.add_prefix_space = add_prefix_space
 
     def _batch_encode_plus(self, *args, **kwargs) -> BatchEncoding:
