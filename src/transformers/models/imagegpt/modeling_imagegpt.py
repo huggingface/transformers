@@ -215,11 +215,11 @@ class ImageGPTAttention(nn.Module):
                 is_updated = layer_past.is_updated.get(self.layer_idx)
                 if is_cross_attention:
                     # after the first generated id, we can subsequently re-use all key/value_states from cache
-                    curr_past_key_value = layer_past.cross_attention_cache
+                    curr_past_key_values = layer_past.cross_attention_cache
                 else:
-                    curr_past_key_value = layer_past.self_attention_cache
+                    curr_past_key_values = layer_past.self_attention_cache
             else:
-                curr_past_key_value = layer_past
+                curr_past_key_values = layer_past
 
         current_states = encoder_hidden_states if is_cross_attention else hidden_states
         if is_cross_attention:
@@ -232,8 +232,8 @@ class ImageGPTAttention(nn.Module):
             if layer_past is not None and is_updated:
                 # reuse k,v, cross_attentions, and compute only q
                 query = self.q_attn(hidden_states)
-                key = curr_past_key_value.layers[self.layer_idx].keys
-                value = curr_past_key_value.layers[self.layer_idx].values
+                key = curr_past_key_values.layers[self.layer_idx].keys
+                value = curr_past_key_values.layers[self.layer_idx].values
             else:
                 query = self.q_attn(hidden_states)
                 key, value = self.c_attn(current_states).split(self.split_size, dim=2)
@@ -247,7 +247,7 @@ class ImageGPTAttention(nn.Module):
         if layer_past is not None:
             # save all key/value_states to cache to be re-used for fast auto-regressive generation
             cache_position = cache_position if not is_cross_attention else None
-            key, value = curr_past_key_value.update(key, value, self.layer_idx, {"cache_position": cache_position})
+            key, value = curr_past_key_values.update(key, value, self.layer_idx, {"cache_position": cache_position})
             # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
             if is_cross_attention:
                 layer_past.is_updated[self.layer_idx] = True
