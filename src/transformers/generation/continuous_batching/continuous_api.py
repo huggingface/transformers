@@ -18,6 +18,7 @@ import threading
 from dataclasses import dataclass
 from functools import partial
 from itertools import count
+from math import ceil
 from time import perf_counter
 from typing import Generator, Optional, Union
 
@@ -42,12 +43,12 @@ generation goes on, there are two dimensions that change:
 - the number of queries tokens (Q), which can vary from batch to batch
 - the number of keys/values tokens (KV), which grows as the cache does
 
-To solve this, we pad those dimensions using fixed intervals. The size of the intervals is controlled by the variables
+To solve this, we slice along those dimensions to fixed lengths. The size of the slices is controlled by the variables
 below: NUM_X_CUDA_GRAPHS means that we create at most NUM_X_CUDA_GRAPHS graphs for the X dimension. So if the maximum
-number of queries tokens is 1000, and NUM_Q_CUDA_GRAPHS is 4, we will pad the number of queries token using intervals of
+number of queries tokens is 1000, and NUM_Q_CUDA_GRAPHS is 4, we will slice the number of queries token by intervals of
 1000 / 4 = 250 tokens, ie. to 250, 500, 750 or 1000 queries tokens.
 
-More intervals means more granularity and thus less padding. But since each graph takes up space on the GPU and time to
+Smaller slices means more granularity and thus less padding. But since each graph takes up space on the GPU and time to
 create, we don't want to many graphs. And since the size of the KV dimension is the number of queries tokens plus the
 number of tokens cached, dimension of KV is usually much larger than the the dimension of Q. So we have more granularity
 for the KV dimension than the query dimension.
@@ -58,12 +59,11 @@ NUM_KV_CUDA_GRAPHS = 8
 
 def pad_by_intervals(size: int, max_value: int, nb_intervals: int) -> int:
     """Return the smallest multiple of (max_value) // (nb_intervals) greater than (size)."""
-    for i in range(nb_intervals):
-        padded_size = (i + 1) * (max_value // nb_intervals)
-        padded_size = min(padded_size, max_value)
-        if padded_size >= size:
-            return padded_size
-    return max_value
+    interval_size = max_value // nb_intervals
+    if interval_size == 0:
+        return max_value
+    padded = ceil(size / interval_size) * interval_size
+    return min(padded, max_value)
 
 
 def attn_mask_is_needed(config: PretrainedConfig) -> bool:
@@ -342,7 +342,7 @@ class ContinuousBatchProcessor:
         # If there is padding, we need to make sure all padding tokens are attended to, to avoid NaNs
         if use_padding:
             self.max_seqlen_q = max(self.max_seqlen_q, q_len - self.total_seqlen_q)
-            self.cumulative_seqlens_q[self.actual_batch_size+1:] = q_len
+            self.cumulative_seqlens_q[self.actual_batch_size + 1 :] = q_len
             # TODO: can this be avoided with setting tokens to non-nan after the foward? might be faster.
 
         # For the attributes that are lists of tensors, we construct list of tensor references
@@ -635,7 +635,7 @@ class ContinuousBatchProcessor:
         padded_read_index_size = pad_by_intervals(
             max_read_index_size - self.max_batch_tokens,
             self.cache.num_blocks * self.cache.block_size,
-            NUM_KV_CUDA_GRAPHS
+            NUM_KV_CUDA_GRAPHS,
         )
 
         # Get the batch data and the associated graph
@@ -682,9 +682,7 @@ class ContinuousBatchProcessor:
     def _process_logit(self, batch_data: dict, logits: torch.Tensor, logit_processor: LogitsProcessor) -> torch.Tensor:
         # Pass continuous batching context to logits processor if it supports it.
         if hasattr(logit_processor, "set_continuous_batching_context"):
-            logit_processor.set_continuous_batching_context(
-                batch_data["logits_indices"], batch_data["cu_seq_lens_q"]
-            )
+            logit_processor.set_continuous_batching_context(batch_data["logits_indices"], batch_data["cu_seq_lens_q"])
         # Handle shape compatibility: logit processors expect 2D tensors [batch_size, vocab_size]
         # but continuous batching always produces 3D tensors [batch_size, seq_len, vocab_size]
         batch_size, seq_len, vocab_size = logits.shape
@@ -708,6 +706,7 @@ class ContinuousBatchProcessor:
         tokens = next_tokens.size(1)  # Get seq_len dimension
         self.output_ids[:, :tokens].copy_(next_tokens)
 
+
 # Manager Class (User Interface)
 @attach_tracer()
 class ContinuousBatchingManager:
@@ -723,6 +722,8 @@ class ContinuousBatchingManager:
         generation_config: GenerationConfig,
         manual_eviction: bool = False,
         max_queue_size: int = 0,
+        num_q_cuda_graphs: int = 0,
+        num_kv_cuda_graphs: int = 0,
     ) -> None:
         """Initialize the continuous batching manager.
 
@@ -730,6 +731,8 @@ class ContinuousBatchingManager:
             model: The language model for generation
             generation_config: Configuration for generation parameters
             max_queue_size: Maximum size of the request queue (0 = unlimited)
+            num_q_cuda_graphs: (optional) Number of CUDA graphs to use for the query dimension
+            num_kv_cuda_graphs: (optional) Number of CUDA graphs to use for the keys/values dimension
         """
         if "paged|" not in model.config._attn_implementation:
             attn_implementation = f"paged|{model.config._attn_implementation}"
@@ -760,17 +763,28 @@ class ContinuousBatchingManager:
         self.manual_eviction = manual_eviction
         self.batch_processor: Optional[ContinuousBatchProcessor] = None
 
-        # If the use of cuda graphs is specified, we follow the user's choice, otherwise we have a default heuristic
-        if use_cuda_graph is None:
+
+        # If a number of cuda graphs was specified for either Q or KV, we activate cuda graphs
+        if num_q_cuda_graphs > 0 or num_kv_cuda_graphs > 0:
+            self.use_cuda_graph = True
+        # If use_cuda_graph is specified, we follow the user's choice
+        elif use_cuda_graph is not None:
+            self.use_cuda_graph = use_cuda_graph
+        # If the use of cuda graphs is not specified, we follow the user's choice, otherwise we have a default heuristic
+        else:
             # Attention implementations where an attention mask is needed suffer a lot more from the padding associated
             # with cuda graphs, so default is to turn cuda graphs off for those implementations
-            use_cuda_graph = not attn_mask_is_needed(self.model.config)
+            self.use_cuda_graph = not attn_mask_is_needed(self.model.config)
             logger.warning(
-                f"No behavior specified for use_cuda_graph, defaulting to {use_cuda_graph = } because "
+                f"No behavior specified for use_cuda_graph, defaulting to {self.use_cuda_graph = } because "
                 f"{self.model.config._attn_implementation = }. If you want to save memory, turn off cuda graphs, but "
                 "they can improve performances."
             )
-        self.use_cuda_graph = use_cuda_graph
+
+        # If cuda graphs are activated, we set the number of cuda graphs for Q and KV if not specified
+        if self.use_cuda_graph:
+            self.num_q_cuda_graphs = num_q_cuda_graphs if num_q_cuda_graphs > 0 else NUM_Q_CUDA_GRAPHS
+            self.num_kv_cuda_graphs = num_kv_cuda_graphs if num_kv_cuda_graphs > 0 else NUM_KV_CUDA_GRAPHS
 
         if self.log_prob_generation:
             raise NotImplementedError("log_prob_generation is not supported yet")
@@ -1047,12 +1061,17 @@ class ContinuousMixin:
         generation_config: Optional[GenerationConfig] = None,
         manual_eviction: bool = False,
         max_queue_size: int = 0,
+        num_q_cuda_graphs: int = 0,
+        num_kv_cuda_graphs: int = 0,
     ) -> ContinuousBatchingManager:
         """Initialize a manager for continuous batching inference.
 
         Args:
             generation_config: Custom generation configuration
+            manual_eviction: Whether to manually evict requests from the cache
             max_queue_size: Maximum size of the input request queue
+            num_q_cuda_graphs: Number of CUDA graphs to use for the query dimension
+            num_kv_cuda_graphs: Number of CUDA graphs to use for the keys/values dimension
 
         Returns:
             `ContinuousBatchingManager`: The manager instance to add requests and retrieve results.
@@ -1074,6 +1093,8 @@ class ContinuousMixin:
             generation_config=gen_config,
             manual_eviction=manual_eviction,
             max_queue_size=max_queue_size,
+            num_q_cuda_graphs=num_q_cuda_graphs,
+            num_kv_cuda_graphs=num_kv_cuda_graphs,
         )
 
     @traced
@@ -1083,6 +1104,8 @@ class ContinuousMixin:
         inputs: list[list[int]],
         generation_config: Optional[GenerationConfig] = None,
         progress_bar: bool = True,
+        num_q_cuda_graphs: int = 0,
+        num_kv_cuda_graphs: int = 0,
         **kwargs,
     ) -> dict[str, GenerationOutput]:
         """Generate sequences for a batch of prompts using continuous batching.
@@ -1090,6 +1113,8 @@ class ContinuousMixin:
         Args:
             inputs: List of input token sequences (prompts)
             generation_config: Optional generation configuration
+            num_q_cuda_graphs: Number of CUDA graphs to use for the query dimension
+            num_kv_cuda_graphs: Number of CUDA graphs to use for the keys/values dimension
             **kwargs: Additional generation parameters
 
         Returns:
@@ -1104,7 +1129,11 @@ class ContinuousMixin:
             progress_bar = False
 
         # Initialize manager with the batch inputs
-        manager = self.init_continuous_batching(generation_config=generation_config)
+        manager = self.init_continuous_batching(
+            generation_config=generation_config,
+            num_q_cuda_graphs=num_q_cuda_graphs,
+            num_kv_cuda_graphs=num_kv_cuda_graphs,
+        )
         manager.start()
         results = {}
         num_requests = len(inputs)
