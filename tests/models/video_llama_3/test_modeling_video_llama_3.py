@@ -342,7 +342,6 @@ class VideoLlama3VisionModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (VideoLlama3VisionModel,) if is_torch_available() else ()
     additional_model_inputs = ["grid_thw", "merge_sizes"]
     # fx_compatible = False
-    test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
     test_cpu_offload = False
@@ -510,6 +509,14 @@ class VideoLlama3VisionModelTest(ModelTesterMixin, unittest.TestCase):
 
         if self.has_attentions:
             self.assertIsNotNone(attentions.grad)
+
+    @unittest.skip("Vision model requires additional positional inputs (grid_thw and merge_sizes)")
+    def test_flash_attn_2_inference_equivalence(self):
+        pass
+
+    @unittest.skip("Vision model requires additional positional inputs (grid_thw and merge_sizes)")
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
+        pass
 
 
 class VideoLlama3VisionText2TextModelTester:
