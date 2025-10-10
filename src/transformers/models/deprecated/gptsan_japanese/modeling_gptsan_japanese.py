@@ -407,11 +407,11 @@ class GPTSanJapaneseLayerSelfAttention(nn.Module):
         """
         # Self Attention
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        self_attn_past_key_value = past_key_values[:2] if past_key_values is not None else None
+        self_attn_past_key_values = past_key_values[:2] if past_key_values is not None else None
         # add present self-attn cache to positions 1,2 of present_key_value tuple
         atten_out = self.self_attn(
             hidden_states=hidden_states,
-            past_key_values=self_attn_past_key_value,
+            past_key_values=self_attn_past_key_values,
             attention_mask=(1 - attention_mask) * torch.finfo(hidden_states.dtype).min,
             output_attentions=output_attentions,
         )

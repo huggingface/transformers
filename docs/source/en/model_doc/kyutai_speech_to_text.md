@@ -34,10 +34,11 @@ rendered properly in your Markdown viewer.
 ```python
 import torch
 from datasets import load_dataset, Audio
-from transformers import infer_device, KyutaiSpeechToTextProcessor, KyutaiSpeechToTextForConditionalGeneration
+from transformers import KyutaiSpeechToTextProcessor, KyutaiSpeechToTextForConditionalGeneration
+from accelerate import Accelerator
 
 # 1. load the model and the processor
-torch_device = infer_device()
+torch_device = Accelerator().device
 model_id = "kyutai/stt-2.6b-en-trfs"
 
 processor = KyutaiSpeechToTextProcessor.from_pretrained(model_id)
@@ -67,10 +68,11 @@ print(processor.batch_decode(output_tokens, skip_special_tokens=True))
 ```python
 import torch
 from datasets import load_dataset, Audio
-from transformers import infer_device, KyutaiSpeechToTextProcessor, KyutaiSpeechToTextForConditionalGeneration
+from transformers import KyutaiSpeechToTextProcessor, KyutaiSpeechToTextForConditionalGeneration
+from accelerate import Accelerator
 
 # 1. load the model and the processor
-torch_device = infer_device()
+torch_device = Accelerator().device
 model_id = "kyutai/stt-2.6b-en-trfs"
 
 processor = KyutaiSpeechToTextProcessor.from_pretrained(model_id)

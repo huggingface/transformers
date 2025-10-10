@@ -165,13 +165,5 @@ class PegasusXConfig(PreTrainedConfig):
             **kwargs,
         )
 
-    @property
-    def num_attention_heads(self) -> int:
-        return self.encoder_attention_heads
-
-    @property
-    def hidden_size(self) -> int:
-        return self.d_model
-
 
 __all__ = ["PegasusXConfig"]

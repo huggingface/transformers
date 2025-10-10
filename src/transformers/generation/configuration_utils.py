@@ -19,8 +19,9 @@ import json
 import os
 import warnings
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, is_dataclass
-from typing import TYPE_CHECKING, Any, Callable, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 from .. import __version__
 from ..configuration_utils import PreTrainedConfig
