@@ -25,8 +25,8 @@ import random
 import re
 import threading
 import time
-from functools import partial
 from collections.abc import Callable
+from functools import partial
 from typing import Any, NamedTuple, Optional, Union
 
 import numpy as np
