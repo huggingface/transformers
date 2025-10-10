@@ -68,7 +68,7 @@ class LayoutLMv2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
-        image_processor = LayoutLMv2ImageProcessor(image_processor_map)
+        image_processor = LayoutLMv2ImageProcessor(**image_processor_map)
         processor = LayoutLMv2Processor(tokenizer=self.get_tokenizer(), image_processor=image_processor)
         processor.save_pretrained(self.tmpdirname)
 

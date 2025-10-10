@@ -65,7 +65,7 @@ class MgpstrProcessorTest(unittest.TestCase):
             "resample": 3,
             "size": {"height": 32, "width": 128},
         }
-        image_processor = ViTImageProcessor(image_processor_map)
+        image_processor = ViTImageProcessor(**image_processor_map)
         processor = MgpstrProcessor(tokenizer=self.get_tokenizer(), image_processor=image_processor)
         processor.save_pretrained(self.tmpdirname)
 

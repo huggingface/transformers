@@ -1461,7 +1461,7 @@ class ProcessorMixin(PushToHubMixin):
             kwargs["token"] = token
 
         processor_dict, kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
-        args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, processor_dict, **kwargs)
+        args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
         return cls.from_args_and_dict(args, processor_dict, **kwargs)
 
     @classmethod
@@ -1487,7 +1487,7 @@ class ProcessorMixin(PushToHubMixin):
         cls._auto_class = auto_class
 
     @classmethod
-    def _get_arguments_from_pretrained(cls, pretrained_model_name_or_path, processor_dict, **kwargs):
+    def _get_arguments_from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         """
         Identify and instantiate the subcomponents of Processor classes, like image processors and
         tokenizers. This method uses the Processor attributes like `tokenizer_class` to figure out what class those

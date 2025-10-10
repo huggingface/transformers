@@ -74,7 +74,7 @@ class ChineseCLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "do_convert_rgb": True,
         }
         tokenizer = cls.get_tokenizer()
-        image_processor = ChineseCLIPImageProcessor(image_processor_map)
+        image_processor = ChineseCLIPImageProcessor(**image_processor_map)
         processor = ChineseCLIPProcessor(tokenizer=tokenizer, image_processor=image_processor)
         processor.save_pretrained(cls.tmpdirname)
 

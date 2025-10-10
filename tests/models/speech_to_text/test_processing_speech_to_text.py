@@ -54,7 +54,7 @@ class Speech2TextProcessorTest(unittest.TestCase):
             "return_attention_mask": False,
             "do_normalize": True,
         }
-        feature_extractor = Speech2TextFeatureExtractor(feature_extractor_map)
+        feature_extractor = Speech2TextFeatureExtractor(**feature_extractor_map)
         tokenizer = Speech2TextTokenizer.from_pretrained(cls.tmpdirname)
         processor = Speech2TextProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
         processor.save_pretrained(cls.tmpdirname)

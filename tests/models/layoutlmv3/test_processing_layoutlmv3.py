@@ -81,7 +81,7 @@ class LayoutLMv3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "apply_ocr": True,
         }
 
-        image_processor = LayoutLMv3ImageProcessor(image_processor_map)
+        image_processor = LayoutLMv3ImageProcessor(**image_processor_map)
         processor = LayoutLMv3Processor(tokenizer=self.get_tokenizer(), image_processor=image_processor)
         processor.save_pretrained(self.tmpdirname)
 

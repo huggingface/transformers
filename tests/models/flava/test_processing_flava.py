@@ -75,7 +75,7 @@ class FlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "codebook_image_std": FLAVA_CODEBOOK_STD,
         }
 
-        image_processor = FlavaImageProcessor(image_processor_map)
+        image_processor = FlavaImageProcessor(**image_processor_map)
         processor = FlavaProcessor(tokenizer=self.get_tokenizer(), image_processor=image_processor)
         processor.save_pretrained(self.tmpdirname)
 

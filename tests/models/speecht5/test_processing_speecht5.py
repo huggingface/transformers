@@ -57,7 +57,7 @@ class SpeechT5ProcessorTest(unittest.TestCase):
             "return_attention_mask": True,
         }
 
-        feature_extractor = SpeechT5FeatureExtractor(feature_extractor_map)
+        feature_extractor = SpeechT5FeatureExtractor(**feature_extractor_map)
         tokenizer = SpeechT5Tokenizer.from_pretrained(cls.tmpdirname)
         processor = SpeechT5Processor(tokenizer=tokenizer, feature_extractor=feature_extractor)
         processor.save_pretrained(cls.tmpdirname)

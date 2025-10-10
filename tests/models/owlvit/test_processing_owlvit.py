@@ -60,7 +60,7 @@ class OwlViTProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "image_mean": [0.48145466, 0.4578275, 0.40821073],
             "image_std": [0.26862954, 0.26130258, 0.27577711],
         }
-        image_processor = OwlViTImageProcessor(image_processor_map)
+        image_processor = OwlViTImageProcessor(**image_processor_map)
         processor = OwlViTProcessor(tokenizer=self.get_tokenizer(), image_processor=image_processor)
         processor.save_pretrained(self.tmpdirname)
 

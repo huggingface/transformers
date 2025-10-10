@@ -55,7 +55,7 @@ class Wav2Vec2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             fp.write(json.dumps(vocab_tokens) + "\n")
         tokenizer = cls.get_tokenizer()
 
-        feature_extractor = Wav2Vec2FeatureExtractor(feature_extractor_map)
+        feature_extractor = Wav2Vec2FeatureExtractor(**feature_extractor_map)
         processor = Wav2Vec2Processor(tokenizer=tokenizer, feature_extractor=feature_extractor)
         processor.save_pretrained(cls.tmpdirname)
 
