@@ -85,9 +85,6 @@ class MPNetModelTester:
         self.num_choices = num_choices
         self.scope = scope
 
-    def get_large_model_config(self):
-        return MPNetConfig.from_pretrained("microsoft/mpnet-base")
-
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 

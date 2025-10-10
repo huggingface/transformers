@@ -19,6 +19,7 @@ from huggingface_hub import hf_hub_download
 
 from transformers import (
     AutoProcessor,
+    BitsAndBytesConfig,
     PerceptionLMConfig,
     PerceptionLMForConditionalGeneration,
     PerceptionLMModel,
@@ -418,7 +419,7 @@ class PerceptionLMForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     def test_small_model_integration_test(self):
         model = PerceptionLMForConditionalGeneration.from_pretrained(
-            TEST_MODEL_PATH, load_in_4bit=True, cache_dir="./"
+            TEST_MODEL_PATH, quantization_config=BitsAndBytesConfig(load_in_4bit=True), cache_dir="./"
         )
 
         inputs = self.processor.apply_chat_template(
@@ -444,7 +445,9 @@ class PerceptionLMForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     def test_small_model_integration_test_batched(self):
-        model = PerceptionLMForConditionalGeneration.from_pretrained(TEST_MODEL_PATH, load_in_4bit=True)
+        model = PerceptionLMForConditionalGeneration.from_pretrained(
+            TEST_MODEL_PATH, quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
         processor = AutoProcessor.from_pretrained(TEST_MODEL_PATH)
         inputs = processor.apply_chat_template(
             [self.conversation1, self.conversation2],
@@ -470,7 +473,9 @@ class PerceptionLMForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     def test_generation_no_images(self):
         # model_id = "facebook/Perception-LM-1B"
-        model = PerceptionLMForConditionalGeneration.from_pretrained(TEST_MODEL_PATH, load_in_4bit=True)
+        model = PerceptionLMForConditionalGeneration.from_pretrained(
+            TEST_MODEL_PATH, quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
         processor = AutoProcessor.from_pretrained(TEST_MODEL_PATH)
 
         # Prepare inputs with no images

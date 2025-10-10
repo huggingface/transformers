@@ -194,7 +194,7 @@ the [`bitsandbytes`](https://github.com/bitsandbytes-foundation/bitsandbytes) li
 We can then load models in 8-bit quantization by simply adding a `load_in_8bit=True` flag to `from_pretrained`.
 
 ```python
-model = AutoModelForCausalLM.from_pretrained("bigcode/octocoder", load_in_8bit=True, pad_token_id=0)
+model = AutoModelForCausalLM.from_pretrained("bigcode/octocoder", quantization_config=BitsAndBytesConfig(load_in_8bit=True), pad_token_id=0)
 ```
 
 Now, let's run our example again and measure the memory usage.
@@ -241,7 +241,7 @@ flush()
 Let's see what peak GPU memory consumption 4-bit quantization gives. Quantizing the model to 4-bit can be done with the same API as before - this time by passing `load_in_4bit=True` instead of `load_in_8bit=True`.
 
 ```python
-model = AutoModelForCausalLM.from_pretrained("bigcode/octocoder", load_in_4bit=True, pad_token_id=0)
+model = AutoModelForCausalLM.from_pretrained("bigcode/octocoder", quantization_config=BitsAndBytesConfig(load_in_4bit=True), pad_token_id=0)
 
 pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
 
@@ -484,7 +484,7 @@ for _ in range(5):
   next_token_id = torch.argmax(next_logits, dim=-1)
 
   print("shape of input_ids", next_token_id.shape)
-  print("length of key-value cache", len(past_key_values[0][0]))  # past_key_values are of shape [num_layers, 0 for k, 1 for v, batch_size, length, hidden_dim]
+  print("length of key-value cache", past_key_values.get_seq_length())  # past_key_values are of shape [num_layers, 0 for k, 1 for v, batch_size, length, hidden_dim]
   generated_tokens.append(next_token_id.item())
 
 generated_text = tokenizer.batch_decode(generated_tokens)

@@ -123,7 +123,6 @@ _import_structure = {
         "is_optuna_available",
         "is_ray_available",
         "is_ray_tune_available",
-        "is_sigopt_available",
         "is_swanlab_available",
         "is_tensorboard_available",
         "is_trackio_available",
@@ -460,11 +459,7 @@ else:
         "get_wsd_schedule",
         "get_reduce_on_plateau_schedule",
     ]
-    _import_structure["pytorch_utils"] = [
-        "Conv1D",
-        "apply_chunking_to_forward",
-        "infer_device",
-    ]
+    _import_structure["pytorch_utils"] = ["Conv1D", "apply_chunking_to_forward"]
     _import_structure["time_series_utils"] = []
     _import_structure["trainer"] = ["Trainer"]
     _import_structure["trainer_pt_utils"] = ["torch_distributed_zero_first"]
@@ -612,7 +607,6 @@ if TYPE_CHECKING:
     from .integrations import is_optuna_available as is_optuna_available
     from .integrations import is_ray_available as is_ray_available
     from .integrations import is_ray_tune_available as is_ray_tune_available
-    from .integrations import is_sigopt_available as is_sigopt_available
     from .integrations import is_swanlab_available as is_swanlab_available
     from .integrations import is_tensorboard_available as is_tensorboard_available
     from .integrations import is_trackio_available as is_trackio_available

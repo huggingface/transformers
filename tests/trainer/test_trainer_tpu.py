@@ -68,7 +68,7 @@ def main():
     training_args = parser.parse_args_into_dataclasses()[0]
 
     logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, "
+        f"Process rank: {training_args.local_process_index}, device: {training_args.device}, "
         f"tpu_num_cores: {training_args.tpu_num_cores}",
     )
 

@@ -39,6 +39,8 @@ from torch.futures import Future
 
 from transformers import AutoTokenizer, Olmo3Config, Olmo3ForCausalLM
 
+from ...utils import strtobool
+
 
 """
 Sample usage:
@@ -198,6 +200,13 @@ class RemoteFileSystemReader(dist_cp.StorageReader):
     def read_metadata(self) -> Metadata:
         if self._metadata is None:
             try:
+                if not strtobool(os.environ.get("TRUST_REMOTE_CODE", "False")):
+                    raise ValueError(
+                        "This part uses `pickle.load` which is insecure and will execute arbitrary code that is potentially "
+                        "malicious. It's recommended to never unpickle data that could have come from an untrusted source, or "
+                        "that could have been tampered with. If you already verified the pickle data and decided to use it, "
+                        "you can set the environment variable `TRUST_REMOTE_CODE` to `True` to allow it."
+                    )
                 with (Path(self.path) / ".metadata").open("rb") as metadata_file:
                     metadata = pickle.load(metadata_file)
             except FileNotFoundError as exc:
@@ -256,6 +265,13 @@ def load_model(model_path: str):
         )
         return state_dict
 
+    if not strtobool(os.environ.get("TRUST_REMOTE_CODE", "False")):
+        raise ValueError(
+            "This part uses `pickle.load` which is insecure and will execute arbitrary code that is potentially "
+            "malicious. It's recommended to never unpickle data that could have come from an untrusted source, or "
+            "that could have been tampered with. If you already verified the pickle data and decided to use it, "
+            "you can set the environment variable `TRUST_REMOTE_CODE` to `True` to allow it."
+        )
     with (Path(model_path) / ".metadata").open("rb") as metadata_file:
         metadata = pickle.load(metadata_file)
         keys = [key for key in metadata.state_dict_metadata.keys() if key.startswith("model.")]

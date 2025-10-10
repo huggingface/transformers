@@ -119,9 +119,6 @@ class Mamba2ModelTester:
         self.pad_token_id = vocab_size - 1
         self.tie_word_embeddings = tie_word_embeddings
 
-    def get_large_model_config(self):
-        return Mamba2Config.from_pretrained("mistralai/Mamba-Codestral-7B-v0.1")
-
     def prepare_config_and_inputs(
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
     ):
