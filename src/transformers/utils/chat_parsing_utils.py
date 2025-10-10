@@ -110,13 +110,18 @@ def recursive_parse(
                     f"Node has JSON parser but got non-string input: {node_content}\nSchema: {node_schema}"
                 )
             parser_args = node_schema.get("x-parser-args", {})
+            transform = parser_args.get("transform")
+            allow_non_json = parser_args.get("allow_non_json", False)
             try:
                 parsed_json = json.loads(node_content)
             except json.JSONDecodeError as e:
-                raise ValueError(
-                    f"Node has JSON parser but could not parse its contents as JSON: {node_content}\nError: {e}"
-                )
-            if "transform" in parser_args:
+                if allow_non_json:
+                    parsed_json = node_content
+                else:
+                    raise ValueError(
+                        f"Node has JSON parser but could not parse its contents as JSON. You can use the `allow_non_json` parser arg for nodes which may contain JSON or string content.\n\nContent: {node_content}\n\nError: {e}"
+                    )
+            if transform is not None:
                 if jmespath is None:
                     raise ImportError(
                         "Chat response schema includes a jmespath transformation, but jmespath is not installed. You can install it with `pip install jmespath`."

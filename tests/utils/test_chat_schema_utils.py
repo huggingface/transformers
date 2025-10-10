@@ -147,15 +147,14 @@ smollm_schema = {
 }
 
 qwen3_schema = {
-    "x-regex": r"^(?:<think>)?\s*(?P<thinking>.+?)\s*</think>\s*(?:<tool_call>(?P<tool_calls>.*?)\s*</tool_call>)?\s*(?P<content>.+?)\s*$",
+    "x-regex": r"^(?:(?:<think>)?\s*(?P<thinking>.+?)\s*</think>)?\s*(?:<tool_call>(?P<tool_calls>.*?)\s*</tool_call>)?\s*(?P<content>.+?)?\s*$",
     "type": "object",
     "properties": {
         "role": {"const": "assistant"},
         "content": {"type": "string"},
         "thinking": {"type": "string"},
         "tool_calls": {
-            "x-parser": "json",
-            "x-parser-args": {"transform": "[{type: 'function', function: @}]"},
+            "x-regex-iterator": r"^(.*)$",  # We have already extracted tool calls and there can only be one, so just make it a list
             "type": "array",
             "items": {
                 "type": "object",
@@ -164,10 +163,11 @@ qwen3_schema = {
                     "function": {
                         "type": "object",
                         "properties": {
-                            "name": {"type": "string"},
+                            "name": {"type": "string", "x-regex": r"<function=(\w+)>"},
                             "arguments": {
                                 "type": "object",
-                                "additionalProperties": {"type": "any"},
+                                "x-regex-key-value": r"<parameter=(?P<key>\w+)>\n(?P<value>.*?)\n</parameter>",
+                                "additionalProperties": {"type": "any", "x-parser": "json", "x-parser-args": {"allow_non_json": True}},
                             },
                         },
                     },
@@ -322,4 +322,13 @@ class ChatSchemaParserTest(unittest.TestCase):
                 "content": "Some content about gravity goes here but I'm cutting it off to make this shorter!",
                 "thinking": 'Okay, the user asked, "Hey! Can you tell me about gravity?" Let me start by breaking down what they might be looking for. They probably want a basic understanding of gravity, maybe for a school project or just personal curiosity. I should explain what gravity is, how it works, and maybe some examples.',
             },
+        )
+
+    def test_qwen3_tool_calls(self):
+        model_out = '<tool_call>\n<function=get_weather>\n<parameter=locations>\n[{"country": "France", "city": "Paris"}]\n</parameter>\n<parameter=temp_units>\ncelsius\n</parameter>\n</function>\n</tool_call>'
+        parsed_chat = recursive_parse(model_out, qwen3_schema)
+        self.assertEqual(
+            parsed_chat,
+            {'tool_calls': [{'type': 'function', 'function': {'name': 'get_weather', 'arguments': {
+                'locations': [{'country': 'France', 'city': 'Paris'}], 'temp_units': 'celsius'}}}]}
         )

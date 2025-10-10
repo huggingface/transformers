@@ -217,8 +217,8 @@ There is a small set of allowable `x-` keys that indicate how parsing should be 
   argument is `transform`, which specifies a `jmespath` transformation to apply to the output. This is useful when the JSON parser returns a structure
   that needs to be modified to match the schema.
 - `x-regex-key-value`: This is rarely necessary, but it can be useful when parsing key-value pairs in non-JSON format where the names of the keys are not known
-  in advance. The regex must have exactly two named capturing groups, `key` and `value`, and the output is a dict mapping keys to values. This should only
-  be used in `object` nodes.
+  in advance, such as when a model emits XML tool calls with arbitrary argument names. The regex must have exactly two named capturing groups, 
+  `key` and `value`, and the output is a dict mapping keys to values. This should only be used in `object` nodes.
 
 In general, multiple regexes/parsers cannot be combined at the same level. The exception is that `x-regex`, returning a single string, can be combined with the other parsers. In this case,
 `x-regex` is applied first, and then the output is passed to the other parser, either `x-regex-iterator`, `x-parser`, or `x-regex-key-value`.
