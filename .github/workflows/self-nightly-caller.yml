@@ -22,6 +22,8 @@ jobs:
   build_nightly_torch_ci_images:
     name: Build CI Docker Images with nightly torch
     uses: ./.github/workflows/build-nightly-ci-docker-images.yml
+    with:
+      job: latest-with-torch-nightly-docker
     secrets: inherit
 
   setup:

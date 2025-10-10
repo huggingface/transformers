@@ -18,7 +18,7 @@ import unittest
 
 import pytest
 
-from transformers import Phi3Config, StaticCache, is_torch_available
+from transformers import StaticCache, is_torch_available
 from transformers.models.auto.configuration_auto import AutoConfig
 from transformers.testing_utils import (
     Expectations,
@@ -36,11 +36,8 @@ if is_torch_available():
     from transformers import (
         AutoTokenizer,
         Phi3ForCausalLM,
-        Phi3ForSequenceClassification,
-        Phi3ForTokenClassification,
         Phi3Model,
     )
-    from transformers.models.phi3.modeling_phi3 import Phi3RotaryEmbedding
 
     end_of_text_token = 32000
 
@@ -87,36 +84,13 @@ if is_torch_available():
 
 
 class Phi3ModelTester(CausalLMModelTester):
-    config_class = Phi3Config
     if is_torch_available():
         base_model_class = Phi3Model
-        causal_lm_class = Phi3ForCausalLM
-        sequence_class = Phi3ForSequenceClassification
-        token_class = Phi3ForTokenClassification
 
 
 @require_torch
 class Phi3ModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (Phi3Model, Phi3ForCausalLM, Phi3ForSequenceClassification, Phi3ForTokenClassification)
-        if is_torch_available()
-        else ()
-    )
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": Phi3Model,
-            "text-classification": Phi3ForSequenceClassification,
-            "token-classification": Phi3ForTokenClassification,
-            "text-generation": Phi3ForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
-
-    test_headmasking = False
-    test_pruning = False
     model_tester_class = Phi3ModelTester
-    rotary_embedding_layer = Phi3RotaryEmbedding
 
 
 @slow
@@ -363,6 +337,7 @@ class Phi3IntegrationTest(unittest.TestCase):
 
         expected_text_completions = Expectations(
             {
+                ("xpu", None): ["You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user. A 45-year-old patient with a 10-year history of type 2 diabetes mellitus, who is currently on metformin and a SGLT2 inhibitor, presents with a 2-year history"],
                 ("rocm", (9, 5)): ["You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user. A 45-year-old patient with a 10-year history of type 2 diabetes mellitus presents with a 2-year history of progressive, non-healing, and painful, 2.5 cm"],
                 ("cuda", None): ["You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user. A 45-year-old patient with a 10-year history of type 2 diabetes mellitus, who is currently on metformin and a SGLT2 inhibitor, presents with a 2-year history"],
             }

@@ -15,13 +15,13 @@
 
 import copy
 import unittest
+from functools import cached_property
 from io import BytesIO
 
 import requests
 
 from transformers import OmDetTurboConfig, is_torch_available, is_vision_available
 from transformers.feature_extraction_utils import BatchFeature
-from transformers.file_utils import cached_property
 from transformers.testing_utils import (
     require_timm,
     require_torch,
@@ -32,7 +32,7 @@ from transformers.testing_utils import (
 )
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -195,8 +195,7 @@ class OmDetTurboModelTester:
 class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (OmDetTurboForObjectDetection,) if is_torch_available() else ()
     is_encoder_decoder = True
-    test_pruning = False
-    test_head_masking = False
+
     pipeline_model_mapping = (
         {"zero-shot-object-detection": OmDetTurboForObjectDetection} if is_torch_available() else {}
     )
@@ -614,29 +613,6 @@ class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         self.assertIsNotNone(encoder_hidden_states.grad)
         self.assertIsNotNone(encoder_attentions.grad)
         self.assertIsNotNone(cross_attentions.grad)
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    if (
-                        "embeddings" in name
-                        or ".fc" in name
-                        or "decoder.channel_projection_layers" in name
-                        or "query_position_head" in name
-                        or "decoder.encoder_vision_features" in name
-                        or "language_backbone.text_projection" in name
-                    ):
-                        continue
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} seems not properly initialized",
-                    )
 
 
 # We will verify our results on an image of cute cats

@@ -99,9 +99,6 @@ class UMT5ModelTester:
         self.scope = None
         self.decoder_layers = decoder_layers
 
-    def get_large_model_config(self):
-        return UMT5Config.from_pretrained("google/umt5-base")
-
     def prepare_inputs_dict(
         self,
         config,
@@ -109,30 +106,16 @@ class UMT5ModelTester:
         decoder_input_ids,
         attention_mask=None,
         decoder_attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
     ):
         if attention_mask is None:
             attention_mask = input_ids.ne(config.pad_token_id)
         if decoder_attention_mask is None:
             decoder_attention_mask = decoder_input_ids.ne(config.pad_token_id)
-        if head_mask is None:
-            head_mask = torch.ones(config.num_hidden_layers, config.num_attention_heads, device=torch_device)
-        if decoder_head_mask is None:
-            decoder_head_mask = torch.ones(config.num_decoder_layers, config.num_attention_heads, device=torch_device)
-        if cross_attn_head_mask is None:
-            cross_attn_head_mask = torch.ones(
-                config.num_decoder_layers, config.num_attention_heads, device=torch_device
-            )
         return {
             "input_ids": input_ids,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
             "decoder_attention_mask": decoder_attention_mask,
-            "head_mask": head_mask,
-            "decoder_head_mask": decoder_head_mask,
-            "cross_attn_head_mask": cross_attn_head_mask,
         }
 
     def prepare_config_and_inputs(self):
@@ -144,7 +127,7 @@ class UMT5ModelTester:
         # all pad tokens have pos id = 2 and rest are between 2..seq_length
         # and the seq_length here is seq_length - num_pad_tokens
         # but when using past, there is no way of knowing if the past input ids had
-        # pad tokens in them, which results in incorrect seq_lenth and which in turn results in
+        # pad tokens in them, which results in incorrect seq_length and which in turn results in
         # position_ids being off by num_pad_tokens in past input
         input_ids = input_ids.clamp(self.pad_token_id + 2)
         input_ids[:, -1] = self.eos_token_id  # Eos Token
@@ -222,8 +205,6 @@ class UMT5ModelTester:
         self.parent.assertEqual(decoder_output.size(), (self.batch_size, self.decoder_seq_length, self.hidden_size))
         # There should be `num_layers` key value embeddings stored in decoder_past
         self.parent.assertEqual(len(decoder_past), config.num_layers)
-        # There should be a self attn key, a self attn value, a cross attn key and a cross attn value stored in each decoder_past tuple
-        self.parent.assertEqual(len(decoder_past[0]), 4)
 
     def create_and_check_model_fp16_forward(
         self,
@@ -269,7 +250,7 @@ class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     )
     is_encoder_decoder = True
     fx_compatible = False
-    test_pruning = False
+
     test_missing_keys = True
     test_torchscript = True
     # The small UMT5 model needs higher percentages for CPU/MP tests
@@ -551,9 +532,6 @@ class UMT5EncoderOnlyModelTester:
         self.scope = None
         self.is_training = is_training
 
-    def get_large_model_config(self):
-        return UMT5Config.from_pretrained("google-t5/t5-base")
-
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
 
@@ -645,9 +623,8 @@ class UMT5EncoderOnlyModelTester:
 # Copied from tests.models.t5.test_modeling_t5.T5EncoderOnlyModelTest with T5->UMT5
 class UMT5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (UMT5EncoderModel, UMT5ForTokenClassification) if is_torch_available() else ()
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_model_parallel = True
     pipeline_model_mapping = (
         {
             "token-classification": UMT5ForTokenClassification,
@@ -655,7 +632,6 @@ class UMT5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         if is_torch_available()
         else {}
     )
-    all_parallelizable_model_classes = (UMT5EncoderModel,) if is_torch_available() else ()
 
     def setUp(self):
         self.model_tester = UMT5EncoderOnlyModelTester(self)

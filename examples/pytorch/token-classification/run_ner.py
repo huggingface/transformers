@@ -48,14 +48,13 @@ from transformers import (
     AutoTokenizer,
     DataCollatorForTokenClassification,
     HfArgumentParser,
-    PretrainedConfig,
+    PreTrainedConfig,
     PreTrainedTokenizerFast,
     Trainer,
     TrainingArguments,
     set_seed,
 )
-from transformers.trainer_utils import get_last_checkpoint
-from transformers.utils import check_min_version, send_example_telemetry
+from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 
 
@@ -238,10 +237,6 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
-    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
-    # information sent is the one passed as arguments along with your Python/PyTorch versions.
-    send_example_telemetry("run_ner", model_args, data_args)
-
     # Setup logging
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
@@ -262,25 +257,10 @@ def main():
 
     # Log on each process the small summary:
     logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}, "
+        f"Process rank: {training_args.local_process_index}, device: {training_args.device}, n_gpu: {training_args.n_gpu}, "
         + f"distributed training: {training_args.parallel_mode.value == 'distributed'}, 16-bits training: {training_args.fp16}"
     )
     logger.info(f"Training/evaluation parameters {training_args}")
-
-    # Detecting last checkpoint.
-    last_checkpoint = None
-    if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
-        last_checkpoint = get_last_checkpoint(training_args.output_dir)
-        if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
-            raise ValueError(
-                f"Output directory ({training_args.output_dir}) already exists and is not empty. "
-                "Use --overwrite_output_dir to overcome."
-            )
-        elif last_checkpoint is not None and training_args.resume_from_checkpoint is None:
-            logger.info(
-                f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
-                "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
-            )
 
     # Set seed before initializing model.
     set_seed(training_args.seed)
@@ -417,7 +397,7 @@ def main():
         )
 
     # Model has labels -> use them.
-    if model.config.label2id != PretrainedConfig(num_labels=num_labels).label2id:
+    if model.config.label2id != PreTrainedConfig(num_labels=num_labels).label2id:
         if sorted(model.config.label2id.keys()) == sorted(label_list):
             # Reorganize `label_list` to match the ordering of the model.
             if labels_are_int:
@@ -591,8 +571,6 @@ def main():
         checkpoint = None
         if training_args.resume_from_checkpoint is not None:
             checkpoint = training_args.resume_from_checkpoint
-        elif last_checkpoint is not None:
-            checkpoint = last_checkpoint
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
         metrics = train_result.metrics
         trainer.save_model()  # Saves the tokenizer too for easy upload

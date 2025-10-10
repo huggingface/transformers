@@ -149,7 +149,7 @@ class VisionTextDualEncoderProcessorTest(ProcessorTesterMixin, unittest.TestCase
 
         inputs = processor(text=input_str, images=image_input)
 
-        self.assertListEqual(list(inputs.keys()), ["input_ids", "token_type_ids", "attention_mask", "pixel_values"])
+        self.assertListEqual(list(inputs.keys()), ["pixel_values", "input_ids", "token_type_ids", "attention_mask"])
 
         # test if it raises when no input is passed
         with self.assertRaises(ValueError):

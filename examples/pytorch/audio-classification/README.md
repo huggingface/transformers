@@ -34,7 +34,6 @@ python run_audio_classification.py \
     --dataset_name superb \
     --dataset_config_name ks \
     --output_dir wav2vec2-base-ft-keyword-spotting \
-    --overwrite_output_dir \
     --remove_unused_columns False \
     --do_train \
     --do_eval \
@@ -76,7 +75,6 @@ python run_audio_classification.py \
     --audio_column_name audio \
     --label_column_name language \
     --output_dir wav2vec2-base-lang-id \
-    --overwrite_output_dir \
     --remove_unused_columns False \
     --do_train \
     --do_eval \

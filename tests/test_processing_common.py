@@ -16,6 +16,7 @@
 import inspect
 import json
 import random
+import sys
 import tempfile
 from pathlib import Path
 from typing import Optional, Union
@@ -33,7 +34,11 @@ from transformers.testing_utils import (
     require_torch,
     require_vision,
 )
-from transformers.utils import is_av_available, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
+
+
+sys.path.append(".")
+from utils.fetch_hub_objects_for_ci import url_to_local_path
 
 
 global_rng = random.Random()
@@ -59,14 +64,9 @@ MODALITY_INPUT_DATA = {
     ],
 }
 
-if is_av_available():
-    from transformers.video_utils import load_video
 
-    # load a video file in memory for testing
-    video, _ = load_video(
-        "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4"
-    )
-    MODALITY_INPUT_DATA["videos"].append(video)
+for modality, urls in MODALITY_INPUT_DATA.items():
+    MODALITY_INPUT_DATA[modality] = [url_to_local_path(url) for url in urls]
 
 
 def prepare_image_inputs():
@@ -170,6 +170,7 @@ class ProcessorTesterMixin:
     def prepare_video_inputs(self, batch_size: Optional[int] = None):
         """This function prepares a list of numpy videos."""
         video_input = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)] * 8
+        video_input = np.array(video_input)
         if batch_size is None:
             return video_input
         return [video_input] * batch_size
@@ -264,6 +265,92 @@ class ProcessorTesterMixin:
 
         self.assertSetEqual(set(inputs.keys()), set(processor.model_input_names))
 
+    def test_processor_text_has_no_visual(self):
+        """
+        Tests that multimodal models can process batch of inputs where samples can
+        be with images/videos or without. See https://github.com/huggingface/transformers/issues/40263
+        """
+        processor = self.get_processor()
+        call_signature = inspect.signature(processor.__call__)
+        input_args = [param.name for param in call_signature.parameters.values() if param.annotation != param.empty]
+
+        if not ("text" in input_args and ("images" in input_args and "videos" in input_args)):
+            self.skipTest(f"{self.processor_class} doesn't support several vision modalities with text.")
+
+        # Prepare inputs and filter by input signature. Make sure to use a high batch size, we'll set some
+        # samples to text-only later
+        text = self.prepare_text_inputs(batch_size=3, modalities=["image", "video"])
+        image_inputs = self.prepare_image_inputs(batch_size=3)
+        video_inputs = self.prepare_video_inputs(batch_size=3)
+        inputs_dict = {"text": text, "images": image_inputs, "videos": video_inputs}
+        inputs_dict = {k: v for k, v in inputs_dict.items() if k in input_args}
+
+        processing_kwargs = {"return_tensors": "pt", "padding": True}
+        if "videos" in inputs_dict:
+            processing_kwargs["do_sample_frames"] = False
+
+        # First call processor with all inputs and use nested input type, which is the format supported by all multimodal processors
+        image_inputs_nested = [[image] if not isinstance(image, list) else image for image in image_inputs]
+        video_inputs_nested = [[video] for video in video_inputs]
+        inputs_dict_nested = {"text": text, "images": image_inputs_nested, "videos": video_inputs_nested}
+        inputs_dict_nested = {k: v for k, v in inputs_dict_nested.items() if k in input_args}
+        inputs = processor(**inputs_dict_nested, **processing_kwargs)
+        self.assertTrue(self.text_input_name in inputs)
+
+        # Now call with one of the samples with no associated vision input. Let's set the first input to be a plain text
+        # with no placeholder tokens and no images/videos. The final format would be `images = [[], [image2], [image3]]`
+        plain_text = "lower newer"
+        image_inputs_nested[0] = []
+        video_inputs_nested[0] = []
+        text[0] = plain_text
+        inputs_dict_no_vision = {"text": text, "images": image_inputs_nested, "videos": video_inputs_nested}
+        inputs_dict_no_vision = {k: v for k, v in inputs_dict_no_vision.items() if k in input_args}
+        inputs_nested = processor(**inputs_dict_no_vision, **processing_kwargs)
+
+        # Check that text samples are same and are expanded with placeholder tokens correctly. First sample
+        # has no vision input associated, so we skip it and check it has no vision
+        self.assertListEqual(
+            inputs[self.text_input_name][1:].tolist(), inputs_nested[self.text_input_name][1:].tolist()
+        )
+
+        # Now test if we can apply chat templates with no vision inputs in one of the samples
+        # NOTE: we don't skip the test as we want the above to be checked even if process has to chat template
+        if processor.chat_template is not None:
+            messages = [
+                [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "What is the capital of France?"},
+                        ],
+                    },
+                ],
+                [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "What is the capital of France?"},
+                            {
+                                "type": "image",
+                                "url": url_to_local_path(
+                                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png"
+                                ),
+                            },
+                        ],
+                    },
+                ],
+            ]
+
+            inputs_chat_template = processor.apply_chat_template(
+                messages,
+                add_generation_prompt=False,
+                tokenize=True,
+                return_dict=True,
+                return_tensors="pt",
+                padding=True,
+            )
+            self.assertTrue(self.text_input_name in inputs_chat_template)
+
     # These kwargs-related tests ensure that processors are correctly instantiated.
     # they need to be applied only if an image_processor exists.
 
@@ -296,7 +383,7 @@ class ProcessorTesterMixin:
 
     def test_image_processor_defaults_preserved_by_image_kwargs(self):
         """
-        We use do_rescale=True, rescale_factor=-1 to ensure that image_processor kwargs are preserved in the processor.
+        We use do_rescale=True, rescale_factor=-1.0 to ensure that image_processor kwargs are preserved in the processor.
         We then check that the mean of the pixel_values is less than or equal to 0 after processing.
         Since the original pixel_values are in [0, 255], this is a good indicator that the rescale_factor is indeed applied.
         """
@@ -304,7 +391,7 @@ class ProcessorTesterMixin:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_components["image_processor"] = self.get_component(
-            "image_processor", do_rescale=True, rescale_factor=-1
+            "image_processor", do_rescale=True, rescale_factor=-1.0
         )
         processor_components["tokenizer"] = self.get_component("tokenizer", max_length=117, padding="max_length")
         processor_kwargs = self.prepare_processor_dict()
@@ -350,7 +437,9 @@ class ProcessorTesterMixin:
         input_str = self.prepare_text_inputs(modalities="image")
         image_input = self.prepare_image_inputs()
 
-        inputs = processor(text=input_str, images=image_input, do_rescale=True, rescale_factor=-1, return_tensors="pt")
+        inputs = processor(
+            text=input_str, images=image_input, do_rescale=True, rescale_factor=-1.0, return_tensors="pt"
+        )
         self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
 
     def test_unstructured_kwargs(self):
@@ -368,7 +457,7 @@ class ProcessorTesterMixin:
             images=image_input,
             return_tensors="pt",
             do_rescale=True,
-            rescale_factor=-1,
+            rescale_factor=-1.0,
             padding="max_length",
             max_length=76,
         )
@@ -391,7 +480,7 @@ class ProcessorTesterMixin:
             images=image_input,
             return_tensors="pt",
             do_rescale=True,
-            rescale_factor=-1,
+            rescale_factor=-1.0,
             padding="longest",
             max_length=76,
         )
@@ -416,7 +505,7 @@ class ProcessorTesterMixin:
             _ = processor(
                 text=input_str,
                 images=image_input,
-                images_kwargs={"do_rescale": True, "rescale_factor": -1},
+                images_kwargs={"do_rescale": True, "rescale_factor": -1.0},
                 do_rescale=True,
                 return_tensors="pt",
             )
@@ -447,7 +536,7 @@ class ProcessorTesterMixin:
         # Define the kwargs for each modality
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
-            "images_kwargs": {"do_rescale": True, "rescale_factor": -1},
+            "images_kwargs": {"do_rescale": True, "rescale_factor": -1.0},
             "text_kwargs": {"padding": "max_length", "max_length": 76},
         }
 
@@ -470,7 +559,7 @@ class ProcessorTesterMixin:
         # Define the kwargs for each modality
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
-            "images_kwargs": {"do_rescale": True, "rescale_factor": -1},
+            "images_kwargs": {"do_rescale": True, "rescale_factor": -1.0},
             "text_kwargs": {"padding": "max_length", "max_length": 76},
         }
 
@@ -596,7 +685,7 @@ class ProcessorTesterMixin:
 
     def test_video_processor_defaults_preserved_by_video_kwargs(self):
         """
-        We use do_rescale=True, rescale_factor=-1 to ensure that image_processor kwargs are preserved in the processor.
+        We use do_rescale=True, rescale_factor=-1.0 to ensure that image_processor kwargs are preserved in the processor.
         We then check that the mean of the pixel_values is less than or equal to 0 after processing.
         Since the original pixel_values are in [0, 255], this is a good indicator that the rescale_factor is indeed applied.
         """
@@ -604,7 +693,7 @@ class ProcessorTesterMixin:
             self.skipTest(f"video_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_components["video_processor"] = self.get_component(
-            "video_processor", do_rescale=True, rescale_factor=-1
+            "video_processor", do_rescale=True, rescale_factor=-1.0
         )
         processor_components["tokenizer"] = self.get_component("tokenizer", max_length=167, padding="max_length")
         processor_kwargs = self.prepare_processor_dict()
@@ -660,7 +749,7 @@ class ProcessorTesterMixin:
             videos=video_input,
             do_sample_frames=False,
             do_rescale=True,
-            rescale_factor=-1,
+            rescale_factor=-1.0,
             return_tensors="pt",
         )
         self.assertLessEqual(inputs[self.videos_input_name][0].mean(), 0)
@@ -681,7 +770,7 @@ class ProcessorTesterMixin:
             do_sample_frames=False,
             return_tensors="pt",
             do_rescale=True,
-            rescale_factor=-1,
+            rescale_factor=-1.0,
             padding="max_length",
             max_length=176,
         )
@@ -705,7 +794,7 @@ class ProcessorTesterMixin:
             do_sample_frames=False,
             return_tensors="pt",
             do_rescale=True,
-            rescale_factor=-1,
+            rescale_factor=-1.0,
             padding="longest",
             max_length=176,
         )
@@ -731,7 +820,7 @@ class ProcessorTesterMixin:
                 text=input_str,
                 videos=video_input,
                 do_sample_frames=False,
-                videos_kwargs={"do_rescale": True, "rescale_factor": -1},
+                videos_kwargs={"do_rescale": True, "rescale_factor": -1.0},
                 do_rescale=True,
                 return_tensors="pt",
             )
@@ -750,7 +839,7 @@ class ProcessorTesterMixin:
         # Define the kwargs for each modality
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
-            "videos_kwargs": {"do_rescale": True, "rescale_factor": -1, "do_sample_frames": False},
+            "videos_kwargs": {"do_rescale": True, "rescale_factor": -1.0, "do_sample_frames": False},
             "text_kwargs": {"padding": "max_length", "max_length": 176},
         }
 
@@ -773,7 +862,7 @@ class ProcessorTesterMixin:
         # Define the kwargs for each modality
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
-            "videos_kwargs": {"do_rescale": True, "rescale_factor": -1, "do_sample_frames": False},
+            "videos_kwargs": {"do_rescale": True, "rescale_factor": -1.0, "do_sample_frames": False},
             "text_kwargs": {"padding": "max_length", "max_length": 176},
         }
 
@@ -788,7 +877,8 @@ class ProcessorTesterMixin:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
 
         processor_components = self.prepare_components()
-        processor = self.processor_class(**processor_components)
+        processor_kwargs = self.prepare_processor_dict()
+        processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs(modalities="image")
@@ -918,10 +1008,8 @@ class ProcessorTesterMixin:
 
         batch_messages = [
             [
-                {
-                    "role": "user",
-                    "content": [{"type": "text", "text": "Describe this."}],
-                },
+                {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
+                {"role": "user", "content": [{"type": "text", "text": "Describe this."}]},
             ]
         ] * batch_size
 
@@ -968,7 +1056,7 @@ class ProcessorTesterMixin:
 
         # Test that with modality URLs and `return_dict=True`, we get modality inputs in the dict
         for idx, url in enumerate(input_data[:batch_size]):
-            batch_messages[idx][0]["content"] = [batch_messages[idx][0]["content"][0], {"type": modality, "url": url}]
+            batch_messages[idx][1]["content"] = [batch_messages[idx][1]["content"][0], {"type": modality, "url": url}]
 
         out_dict = processor.apply_chat_template(
             batch_messages,
@@ -1007,6 +1095,15 @@ class ProcessorTesterMixin:
         )
 
     @require_av
+    @parameterized.expand([(1, "pt")])
+    def test_apply_chat_template_decoded_video(self, batch_size: int, return_tensors: str):
+        dummy_preloaded_video = np.array(self.prepare_video_inputs())
+        input_data = [dummy_preloaded_video]
+        self._test_apply_chat_template(
+            "video", batch_size, return_tensors, "videos_input_name", "video_processor", input_data
+        )
+
+    @require_av
     @parameterized.expand([(1, "pt"), (2, "pt")])  # video processor supports only torchvision
     def test_apply_chat_template_video(self, batch_size: int, return_tensors: str):
         self._test_apply_chat_template(
@@ -1040,7 +1137,9 @@ class ProcessorTesterMixin:
                     "content": [
                         {
                             "type": "video",
-                            "url": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_10MB.mp4",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4"
+                            ),
                         },
                         {"type": "text", "text": "What is shown in this video?"},
                     ],
@@ -1062,7 +1161,7 @@ class ProcessorTesterMixin:
         self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), num_frames)
 
         # Load with `fps` arg
-        fps = 1
+        fps = 10
         out_dict_with_video = processor.apply_chat_template(
             messages,
             add_generation_prompt=True,
@@ -1073,10 +1172,11 @@ class ProcessorTesterMixin:
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), fps * 10)
+        # 3 frames are inferred from input video's length and FPS, so can be hardcoded
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 3)
 
-        # Whan `do_sample_frames=False` no sampling is done and whole video is loaded, even if number of frames is passed
-        fps = 1
+        # When `do_sample_frames=False` no sampling is done and whole video is loaded, even if number of frames is passed
+        fps = 10
         out_dict_with_video = processor.apply_chat_template(
             messages,
             add_generation_prompt=True,
@@ -1088,7 +1188,7 @@ class ProcessorTesterMixin:
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 300)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 11)
 
         # Load with `fps` and `num_frames` args, should raise an error
         with self.assertRaises(ValueError):
@@ -1110,16 +1210,18 @@ class ProcessorTesterMixin:
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 300)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 11)
 
         # Load video as a list of frames (i.e. images).
         # NOTE: each frame should have same size because we assume they come from one video
         messages[0][0]["content"][0] = {
             "type": "video",
             "url": [
-                "https://www.ilankelman.org/stopsigns/australia.jpg",
-                "https://www.ilankelman.org/stopsigns/australia.jpg",
-            ],
+                url_to_local_path(
+                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+                )
+            ]
+            * 2,
         }
         out_dict_with_video = processor.apply_chat_template(
             messages,

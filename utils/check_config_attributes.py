@@ -17,7 +17,7 @@ import inspect
 import os
 import re
 
-from transformers.configuration_utils import PretrainedConfig
+from transformers.configuration_utils import PreTrainedConfig
 from transformers.utils import direct_transformers_import
 
 
@@ -36,6 +36,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "Ernie4_5Config": ["tie_word_embeddings"],
     "Ernie4_5_MoeConfig": ["tie_word_embeddings"],
     "Lfm2Config": ["full_attn_idxs", "tie_word_embeddings"],
+    "Lfm2MoeConfig": ["tie_word_embeddings"],
     # used internally during generation to provide the custom logit processors with their necessary information
     "DiaConfig": [
         "delay_pattern",
@@ -54,7 +55,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "expert_layer_period",
     ],
     "Qwen2Config": ["use_sliding_window", "max_window_layers"],
-    "Qwen2MoeConfig": ["use_sliding_window"],
+    "Qwen2MoeConfig": ["use_sliding_window", "max_window_layers"],
     "Qwen2VLTextConfig": ["use_sliding_window", "max_window_layers"],
     "Qwen2_5_VLTextConfig": ["use_sliding_window", "max_window_layers"],
     "Qwen2_5OmniTextConfig": ["use_sliding_window", "max_window_layers"],
@@ -65,8 +66,10 @@ SPECIAL_CASES_TO_ALLOW = {
     # generation configs (TODO joao)
     "Gemma2Config": ["tie_word_embeddings", "cache_implementation"],
     "Cohere2Config": ["cache_implementation"],
+    "JetMoeConfig": ["output_router_logits"],
     # Dropout with this value was declared but never used
     "Phi3Config": ["embd_pdrop"],
+    "PhimoeConfig": ["max_position_embeddings"],
     # used to compute the property `self.chunk_length`
     "EncodecConfig": ["overlap"],
     # used to compute `frame_rate`
@@ -303,11 +306,10 @@ SPECIAL_CASES_TO_ALLOW = {
         "local_attention",
         "local_rope_theta",
     ],
-    # position_embedding_type not used and deprecated. Should be deleted in v4.55
-    "LayoutLMConfig": ["position_embedding_type"],
-    "MarkupLMConfig": ["position_embedding_type"],
     "SmolLM3Config": ["no_rope_layer_interval"],
     "Gemma3nVisionConfig": ["architecture", "do_pooling", "model_args"],  # this is for use in `timm`
+    "VaultGemmaConfig": ["tie_word_embeddings"],
+    "GemmaConfig": ["tie_word_embeddings"],
 }
 
 
@@ -433,10 +435,10 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
     if not attribute_used:
         case_allowed = False
         for attribute in attributes:
-            # Allow if the default value in the configuration class is different from the one in `PretrainedConfig`
-            if attribute in ["is_encoder_decoder"] and default_value is True:
+            # Allow if the default value in the configuration class is different from the one in `PreTrainedConfig`
+            if attribute == "is_encoder_decoder" and default_value is True:
                 case_allowed = True
-            elif attribute in ["tie_word_embeddings"] and default_value is False:
+            elif attribute == "tie_word_embeddings" and default_value is False:
                 case_allowed = True
 
             # Allow cases without checking the default value in the configuration class
@@ -474,7 +476,6 @@ def check_config_attributes_being_used(config_class):
     # Get the path to modeling source files
     config_source_file = inspect.getsourcefile(config_class)
     model_dir = os.path.dirname(config_source_file)
-    # Let's check against all frameworks: as long as one framework uses an attribute, we are good.
     modeling_paths = [os.path.join(model_dir, fn) for fn in os.listdir(model_dir) if fn.startswith("modeling_")]
 
     # Get the source code strings
@@ -512,7 +513,7 @@ def check_config_attributes():
             for name, cls in inspect.getmembers(
                 inspect.getmodule(_config_class),
                 lambda x: inspect.isclass(x)
-                and issubclass(x, PretrainedConfig)
+                and issubclass(x, PreTrainedConfig)
                 and inspect.getmodule(x) == inspect.getmodule(_config_class),
             )
         ]

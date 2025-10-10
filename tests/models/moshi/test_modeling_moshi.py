@@ -16,6 +16,7 @@
 import copy
 import tempfile
 import unittest
+from functools import cached_property
 
 import numpy as np
 import pytest
@@ -24,7 +25,7 @@ from parameterized import parameterized
 
 from transformers import (
     MoshiConfig,
-    PretrainedConfig,
+    PreTrainedConfig,
 )
 from transformers.integrations.deepspeed import (
     is_deepspeed_available,
@@ -38,7 +39,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -71,7 +71,7 @@ def _config_zero_init(config):
     for key in configs_no_init.__dict__:
         if "_range" in key or "_std" in key or "initializer_factor" in key or "layer_scale" in key:
             setattr(configs_no_init, key, 1e-10)
-        if isinstance(getattr(configs_no_init, key, None), PretrainedConfig):
+        if isinstance(getattr(configs_no_init, key, None), PreTrainedConfig):
             no_init_subconfig = _config_zero_init(getattr(configs_no_init, key))
             setattr(configs_no_init, key, no_init_subconfig)
     return configs_no_init
@@ -155,9 +155,8 @@ class MoshiDecoderTester:
 @require_torch
 class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MoshiModel, MoshiForCausalLM) if is_torch_available() else ()
-    test_pruning = False
+
     test_resize_embeddings = True
-    test_head_masking = False
     pipeline_model_mapping = (
         {
             "feature-extraction": MoshiModel,
@@ -532,8 +531,7 @@ class MoshiTester:
 @require_torch
 class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (MoshiForConditionalGeneration,) if is_torch_available() else ()
-    test_pruning = False  # training is not supported yet for Moshi
-    test_headmasking = False
+    # training is not supported yet for Moshi
     test_resize_embeddings = False
     test_torchscript = False
 
@@ -584,35 +582,8 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             output, config, use_cache=True, num_return_sequences=num_return_sequences, num_beams=num_beams
         )
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                uniform_init_parms = ["conv", "input_proj", "output_proj"]
-                if param.requires_grad:
-                    if any(x in name for x in uniform_init_parms):
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-
     @unittest.skip(reason="Continuing from past key values is not straightforward as we're dealing with 3 inputs")
     def test_generate_continue_from_past_key_values(self):
-        pass
-
-    @unittest.skip("Moshi doesn't support contrastive generation yet.")
-    def test_contrastive_generate(self):
-        pass
-
-    @unittest.skip("Moshi doesn't support contrastive generation yet.")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip("Moshi doesn't support contrastive generation yet.")
-    def test_contrastive_generate_low_memory(self):
         pass
 
     @unittest.skip(
@@ -641,54 +612,30 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     @pytest.mark.generate
     def test_left_padding_compatibility(self):
-        # NOTE: left-padding results in small numerical differences. This is expected.
-        # See https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535
+        # Overwrite -- Moshi needs to prepare the audio codes, and they must be padded accordingly
+        config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+        input_ids = inputs_dict["input_ids"]
+        moshi_audio_codes = inputs_dict["moshi_audio_codes"]
+        user_audio_codes = inputs_dict["user_audio_codes"]
 
-        # Then, test left-padding
+        pad_size = (input_ids.shape[0], 32)
+        padding = (
+            torch.ones((pad_size[0], self.model_tester.num_codebooks, 32), dtype=input_ids.dtype, device=torch_device)
+            * config.audio_vocab_size
+        )
+        padded_moshi_audio_codes = torch.cat((padding, moshi_audio_codes), dim=2)
+        padded_user_audio_codes = torch.cat((padding, user_audio_codes), dim=2)
 
-        for model_class in self.all_generative_model_classes:
-            config, input_ids, attention_mask, input_dict = self._get_input_ids_and_config()
-            model = model_class(config).to(torch_device).eval()
-
-            # no cache as some models require special cache classes to be init outside forward
-            model.generation_config.use_cache = False
-
-            # Without padding
-            next_logits_wo_padding = model(input_ids=input_ids, attention_mask=attention_mask, **input_dict).logits[
-                :, -1, :
-            ]
-
-            # With left-padding (length 32)
-            # can hardcode pad_token to be 0 as we'll do attn masking anyway
-            pad_token_id = (
-                config.get_text_config().pad_token_id if config.get_text_config().pad_token_id is not None else 0
-            )
-            pad_size = (input_ids.shape[0], 32)
-            padding = torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device) * pad_token_id
-            padded_input_ids = torch.cat((padding, input_ids), dim=1)
-
-            padded_attention_mask = torch.cat((torch.zeros_like(padding), attention_mask), dim=1)
-
-            padding = (
-                torch.ones(
-                    (pad_size[0], self.model_tester.num_codebooks, 32), dtype=input_ids.dtype, device=torch_device
-                )
-                * config.audio_vocab_size
-            )
-            padded_moshi_audio_codes = torch.cat((padding, input_dict["moshi_audio_codes"]), dim=2)
-            padded_user_audio_codes = torch.cat((padding, input_dict["user_audio_codes"]), dim=2)
-
-            model_kwargs = {
-                "input_ids": padded_input_ids,
-                "attention_mask": padded_attention_mask,
-                "moshi_audio_codes": padded_moshi_audio_codes,
-                "user_audio_codes": padded_user_audio_codes,
-            }
-
-            next_logits_with_padding = model(**model_kwargs).logits[:, -1, :]
-
-            # They should result in very similar logits
-            torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-5, atol=1e-5)
+        # the audio codes are randomly generated in `prepare_config_and_inputs_for_generate`, and they must match
+        # their padded version for the test to be valid -- we need to pass both
+        unpadded_custom_inputs = {"moshi_audio_codes": moshi_audio_codes, "user_audio_codes": user_audio_codes}
+        padded_custom_inputs = {
+            "moshi_audio_codes": padded_moshi_audio_codes,
+            "user_audio_codes": padded_user_audio_codes,
+        }
+        super().test_left_padding_compatibility(
+            unpadded_custom_inputs=unpadded_custom_inputs, padded_custom_inputs=padded_custom_inputs
+        )
 
     @slow
     @is_flaky(max_attempts=5, description="flaky on some models.")
@@ -879,6 +826,14 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     @is_flaky(max_attempts=5, description="flaky on some models.")
     def test_save_load(self):
         super().test_save_load()
+
+    @pytest.mark.generate
+    @unittest.skip(reason="Moshi requires setting `model.generated_audio_codes` in generate() before preparing inputs")
+    def test_prepare_inputs_for_generation_kwargs_forwards(self):
+        # If in the future `model.generated_audio_codes` is not required, this test can be re-enabled
+        super().test_prepare_inputs_for_generation_kwargs_forwards(
+            last_hidden_state=torch.randn(2, 3, 32), kwargs_depth_decoder={}
+        )
 
 
 def place_dict_on_device(dict_to_place, device):

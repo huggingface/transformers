@@ -13,7 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import itertools
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -23,7 +24,7 @@ from torch.nn import LayerNorm
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...masking_utils import create_causal_mask
@@ -32,13 +33,12 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...processing_utils import ImagesKwargs, Unpack
+from ...processing_utils import Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 from ...utils.generic import check_model_inputs
 from ...video_utils import VideoInput
 from ..glm4.modeling_glm4 import Glm4MLP, Glm4RMSNorm, eager_attention_forward
-from ..qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLConfig
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionPatchEmbed,
     Qwen2_5_VisionRotaryEmbedding,
@@ -53,17 +53,16 @@ from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLVisionAttention,
     Qwen2_5_VLVisionBlock,
 )
-from ..qwen2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLVideosProcessorKwargs
 from ..qwen2_vl.processing_qwen2_vl import (
-    Qwen2_VLProcessor,
-    Qwen2_VLProcessorKwargs,
+    Qwen2VLProcessor,
+    Qwen2VLProcessorKwargs,
 )
 
 
 logger = logging.get_logger(__name__)
 
 
-class Glm4vVisionConfig(PretrainedConfig):
+class Glm4vVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Glm4vVisionModel`]. It is used to instantiate an Glm4vVisionModel
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the defaults will yield
@@ -160,15 +159,15 @@ class Glm4vVisionConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
 
 
-class Glm4vTextConfig(PretrainedConfig):
+class Glm4vTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Glm4vModel`]. It is used to instantiate a
     GLM-4.1V model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of
     GLM-4.1V-9B-Thinking [THUDM/GLM-4.1V-9B-Thinking](https://huggingface.co/THUDM/GLM-4.1V-9B-Thinking).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 151552):
@@ -313,15 +312,15 @@ class Glm4vTextConfig(PretrainedConfig):
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 
-class Glm4vConfig(Qwen2_5_VLConfig):
+class Glm4vConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Glm4vModel`]. It is used to instantiate a
     GLM-4.1V model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of
     GLM-4.1V-9B-Thinking [THUDM/GLM-4.1V-9B-Thinking](https://huggingface.co/THUDM/GLM-4.1V-9B-Thinking).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -355,6 +354,10 @@ class Glm4vConfig(Qwen2_5_VLConfig):
     >>> configuration = model.config
     ```"""
 
+    model_type = "glm4v"
+    sub_configs = {"vision_config": Glm4vVisionConfig, "text_config": Glm4vTextConfig}
+    keys_to_ignore_at_inference = ["past_key_values"]
+
     def __init__(
         self,
         text_config=None,
@@ -367,11 +370,24 @@ class Glm4vConfig(Qwen2_5_VLConfig):
         video_end_token_id=151342,
         **kwargs,
     ):
-        super().__init__()
+        if isinstance(vision_config, dict):
+            self.vision_config = self.sub_configs["vision_config"](**vision_config)
+        elif vision_config is None:
+            self.vision_config = self.sub_configs["vision_config"]()
+
+        if isinstance(text_config, dict):
+            self.text_config = self.sub_configs["text_config"](**text_config)
+        elif text_config is None:
+            self.text_config = self.sub_configs["text_config"](**kwargs)
+
+        self.image_token_id = image_token_id
+        self.video_token_id = video_token_id
         self.video_start_token_id = video_start_token_id
         self.video_end_token_id = video_end_token_id
         self.image_start_token_id = image_start_token_id
         self.image_end_token_id = image_end_token_id
+
+        super().__init__(**kwargs)
 
 
 # Will be used for both Text and Vision modalities
@@ -680,14 +696,14 @@ class Glm4vTextDecoderLayer(GradientCheckpointingLayer):
         self.post_self_attn_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_mlp_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[torch.Tensor]] = None,
-        output_attentions: Optional[bool] = False,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
@@ -703,7 +719,6 @@ class Glm4vTextDecoderLayer(GradientCheckpointingLayer):
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
-            output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
             **kwargs,
@@ -856,13 +871,13 @@ class Glm4vTextModel(Qwen2_5_VLTextModel):
         del self.has_sliding_layers
 
     @auto_docstring
-    @check_model_inputs
+    @check_model_inputs()
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
@@ -887,17 +902,36 @@ class Glm4vTextModel(Qwen2_5_VLTextModel):
         # the hard coded `3` is for temporal, height and width.
         if position_ids is None:
             position_ids = cache_position.view(1, 1, -1).expand(3, inputs_embeds.shape[0], -1)
-        elif position_ids.dim() == 2:
+        elif position_ids.ndim == 2:
             position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
 
-        causal_mask = create_causal_mask(
-            config=self.config,
-            input_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            cache_position=cache_position,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
+        # NOTE: we need to pass text position ids for packing. Qwen2-VL uses 3D positions
+        # where each dim indicates visual spatial positions for temporal/height/width grids.
+        # There are two scenarios when FA2-like packed masking might be activated.
+        # 1. User specifically passed packed `position_ids` and no attention mask.
+        #    In this case we expect the useer to create correct position ids for all 3 grids
+        #    and prepend text-only position ids to it. The final tensor will be [4, bs, seq-len]
+        # 2. User runs forward with no attention mask and no position ids. In this case, position ids
+        #    are prepared by the model (`get_rope_index`) as `[4, bs, seq-len]` tensor. Text-only positions are
+        #    prepended by us when creating positions so that the mask is constructed correctly. NOTE: failing to pass
+        #    text-only positions will cause incorrect mask construction, do not change `prepare_input_for_generation`
+        if position_ids.ndim == 3 and position_ids.shape[0] == 4:
+            text_position_ids = position_ids[0]
+            position_ids = position_ids[1:]
+        else:
+            # If inputs are not packed (usual 3D positions), do not prepare mask from position_ids
+            text_position_ids = None
+
+        mask_kwargs = {
+            "config": self.config,
+            "input_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+            "cache_position": cache_position,
+            "past_key_values": past_key_values,
+            "position_ids": text_position_ids,
+        }
+        # Create the masks
+        causal_mask = create_causal_mask(**mask_kwargs)
 
         hidden_states = inputs_embeds
 
@@ -1150,8 +1184,8 @@ class Glm4vModel(Qwen2_5_VLModel):
         self,
         input_ids: torch.LongTensor,
         inputs_embeds: torch.FloatTensor,
-        image_features: torch.FloatTensor = None,
-        video_features: torch.FloatTensor = None,
+        image_features: Optional[torch.FloatTensor] = None,
+        video_features: Optional[torch.FloatTensor] = None,
     ):
         """
         Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
@@ -1191,10 +1225,10 @@ class Glm4vModel(Qwen2_5_VLModel):
     @can_return_tuple
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         pixel_values: Optional[torch.Tensor] = None,
         pixel_values_videos: Optional[torch.FloatTensor] = None,
@@ -1304,10 +1338,10 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
 
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.Tensor] = None,
@@ -1492,29 +1526,18 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
         return image_counts, video_counts
 
 
-class Glm4vVideosProcessorKwargs(Qwen2_5_VLVideosProcessorKwargs):
-    pass
-
-
-class Glm4vImagesKwargs(ImagesKwargs):
-    patch_size: Optional[int]
-    temporal_patch_size: Optional[int]
-    merge_size: Optional[int]
-
-
-class Glm4vProcessorKwargs(Qwen2_VLProcessorKwargs):
-    images_kwargs: Glm4vImagesKwargs
-    videos_kwargs: Glm4vVideosProcessorKwargs
+class Glm4vProcessorKwargs(Qwen2VLProcessorKwargs):
     _defaults = {
         "text_kwargs": {
             "padding": False,
+            "return_token_type_ids": False,
             "return_mm_token_type_ids": False,
         },
         "videos_kwargs": {"return_metadata": True},
     }
 
 
-class Glm4vProcessor(Qwen2_VLProcessor):
+class Glm4vProcessor(Qwen2VLProcessor):
     r"""
     Constructs a GLM-4V processor which wraps a GLM-4V image processor and a GLM-4 tokenizer into a single processor.
     [`~Glm4vProcessor.__call__`] and [`~Glm4vProcessor.decode`] for more information.
@@ -1538,9 +1561,9 @@ class Glm4vProcessor(Qwen2_VLProcessor):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        videos: VideoInput = None,
+        videos: Optional[VideoInput] = None,
         **kwargs: Unpack[Glm4vProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -1561,10 +1584,8 @@ class Glm4vProcessor(Qwen2_VLProcessor):
                 tensor, or a nested list of 3D frames. Both channels-first and channels-last formats are supported.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -1624,7 +1645,7 @@ class Glm4vProcessor(Qwen2_VLProcessor):
                     num_frames = video_grid_thw[video_index][0]
                     video_structure = ""
 
-                    metadata = video_metadata[i]
+                    metadata = video_metadata[video_index]
                     if metadata.fps is None:
                         logger.warning_once(
                             "SmolVLM requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "

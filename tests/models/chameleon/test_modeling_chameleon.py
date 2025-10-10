@@ -19,7 +19,7 @@ import unittest
 import requests
 from parameterized import parameterized
 
-from transformers import ChameleonConfig, is_torch_available, is_vision_available, set_seed
+from transformers import BitsAndBytesConfig, ChameleonConfig, is_torch_available, is_vision_available, set_seed
 from transformers.testing_utils import (
     Expectations,
     require_bitsandbytes,
@@ -76,7 +76,7 @@ class ChameleonModelTester:
         pad_token_id=0,
         vq_num_embeds=5,
         vq_embed_dim=5,
-        vq_channel_multiplier=[1, 4],
+        vq_channel_multiplier=[1, 2],
         vq_img_token_start_id=10,  # has to be less than vocab size when added with vq_num_embeds
         scope=None,
     ):
@@ -205,8 +205,7 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
-    test_pruning = False
+
     fx_compatible = False
 
     def setUp(self):
@@ -255,10 +254,6 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_batching_equivalence(self):
         pass
 
-    @unittest.skip("Chameleon VQ model cannot be squishes more due to hardcoded layer params in model code")
-    def test_model_is_small(self):
-        pass
-
 
 class ChameleonVision2SeqModelTester(ChameleonModelTester):
     def __init__(self, parent, image_size=10, **kwargs):
@@ -294,8 +289,7 @@ class ChameleonVision2SeqModelTest(ModelTesterMixin, GenerationTesterMixin, unit
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
-    test_pruning = False
+
     fx_compatible = False
 
     def setUp(self):
@@ -321,10 +315,6 @@ class ChameleonVision2SeqModelTest(ModelTesterMixin, GenerationTesterMixin, unit
     def test_disk_offload_safetensors(self):
         pass
 
-    @unittest.skip("Chameleon VQ model cannot be squishes more due to hardcoded layer params in model code")
-    def test_model_is_small(self):
-        pass
-
     @unittest.skip("Chameleon applies key/query norm which doesn't work with packing")
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass
@@ -346,6 +336,7 @@ class ChameleonVision2SeqModelTest(ModelTesterMixin, GenerationTesterMixin, unit
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
+            model.eval()
             curr_input_dict = copy.deepcopy(input_dict)  # the below tests modify dict in-place
             _ = model(**curr_input_dict)  # successful forward with no modifications
 
@@ -375,7 +366,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
     @require_read_token
     def test_model_7b(self):
         model = ChameleonForConditionalGeneration.from_pretrained(
-            "facebook/chameleon-7b", load_in_4bit=True, device_map="auto"
+            "facebook/chameleon-7b", quantization_config=BitsAndBytesConfig(load_in_4bit=True), device_map="auto"
         )
         processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
 
@@ -405,7 +396,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
     @require_read_token
     def test_model_7b_batched(self):
         model = ChameleonForConditionalGeneration.from_pretrained(
-            "facebook/chameleon-7b", load_in_4bit=True, device_map="auto"
+            "facebook/chameleon-7b", quantization_config=BitsAndBytesConfig(load_in_4bit=True), device_map="auto"
         )
         processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
 
@@ -452,7 +443,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
     @require_read_token
     def test_model_7b_multi_image(self):
         model = ChameleonForConditionalGeneration.from_pretrained(
-            "facebook/chameleon-7b", load_in_4bit=True, device_map="auto"
+            "facebook/chameleon-7b", quantization_config=BitsAndBytesConfig(load_in_4bit=True), device_map="auto"
         )
         processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
 

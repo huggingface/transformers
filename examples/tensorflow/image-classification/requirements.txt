@@ -1,3 +1,0 @@
-datasets>=1.17.0
-evaluate
-tensorflow>=2.4

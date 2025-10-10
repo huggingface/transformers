@@ -473,15 +473,15 @@ class TestAddNewModelLike(unittest.TestCase):
             )
             from ..phi4_multimodal.feature_extraction_phi4_multimodal import Phi4MultimodalFeatureExtractor
             from ..phi4_multimodal.image_processing_phi4_multimodal_fast import (
-                Phi4MultimodalFastImageProcessorKwargs,
                 Phi4MultimodalImageProcessorFast,
+                Phi4MultimodalImageProcessorKwargs,
             )
             from ..phi4_multimodal.modeling_phi4_multimodal import (
                 Phi4MultimodalAttention,
                 Phi4MultimodalAudioAttention,
                 Phi4MultimodalAudioConformerEncoderLayer,
                 Phi4MultimodalAudioConvModule,
-                Phi4MultimodalAudioDepthWiseSeperableConv1d,
+                Phi4MultimodalAudioDepthWiseSeparableConv1d,
                 Phi4MultimodalAudioEmbedding,
                 Phi4MultimodalAudioGluPointWiseConv,
                 Phi4MultimodalAudioMeanVarianceNormLayer,
@@ -567,7 +567,7 @@ class TestAddNewModelLike(unittest.TestCase):
                 pass
 
 
-            class MyTest2AudioDepthWiseSeperableConv1d(Phi4MultimodalAudioDepthWiseSeperableConv1d):
+            class MyTest2AudioDepthWiseSeparableConv1d(Phi4MultimodalAudioDepthWiseSeparableConv1d):
                 pass
 
 
@@ -643,7 +643,7 @@ class TestAddNewModelLike(unittest.TestCase):
                 pass
 
 
-            class MyTest2FastImageProcessorKwargs(Phi4MultimodalFastImageProcessorKwargs):
+            class MyTest2ImageProcessorKwargs(Phi4MultimodalImageProcessorKwargs):
                 pass
 
 

@@ -13,6 +13,9 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-06-16 and added to Hugging Face Transformers on 2025-08-20.*
+
+# Florence-2
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -21,7 +24,7 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
-# Florence-2
+## Overview
 
 [Florence-2](https://huggingface.co/papers/2311.06242) is an advanced vision foundation model that uses a prompt-based approach to handle a wide range of vision and vision-language tasks. Florence-2 can interpret simple text prompts to perform tasks like captioning, object detection, and segmentation. It leverages the FLD-5B dataset, containing 5.4 billion annotations across 126 million images, to master multi-task learning. The model's sequence-to-sequence architecture enables it to excel in both zero-shot and fine-tuned settings, proving to be a competitive vision foundation model.
 
@@ -44,7 +47,7 @@ from transformers import pipeline
 
 pipeline = pipeline(
     "image-text-to-text",
-    model="ducviet00/Florence-2-base-hf",
+    model="florence-community/Florence-2-base",
     device=0,
     dtype=torch.bfloat16
 )
@@ -135,21 +138,21 @@ print(parsed_answer)
 ## Notes
 
 - Florence-2 is a prompt-based model. You need to provide a task prompt to tell the model what to do. Supported tasks are:
-    - `<OCR>`
-    - `<OCR_WITH_REGION>`
-    - `<CAPTION>`
-    - `<DETAILED_CAPTION>`
-    - `<MORE_DETAILED_CAPTION>`
-    - `<OD>`
-    - `<DENSE_REGION_CAPTION>`
-    - `<CAPTION_TO_PHRASE_GROUNDING>`
-    - `<REFERRING_EXPRESSION_SEGMENTATION>`
-    - `<REGION_TO_SEGMENTATION>`
-    - `<OPEN_VOCABULARY_DETECTION>`
-    - `<REGION_TO_CATEGORY>`
-    - `<REGION_TO_DESCRIPTION>`
-    - `<REGION_TO_OCR>`
-    - `<REGION_PROPOSAL>`
+  - `<OCR>`
+  - `<OCR_WITH_REGION>`
+  - `<CAPTION>`
+  - `<DETAILED_CAPTION>`
+  - `<MORE_DETAILED_CAPTION>`
+  - `<OD>`
+  - `<DENSE_REGION_CAPTION>`
+  - `<CAPTION_TO_PHRASE_GROUNDING>`
+  - `<REFERRING_EXPRESSION_SEGMENTATION>`
+  - `<REGION_TO_SEGMENTATION>`
+  - `<OPEN_VOCABULARY_DETECTION>`
+  - `<REGION_TO_CATEGORY>`
+  - `<REGION_TO_DESCRIPTION>`
+  - `<REGION_TO_OCR>`
+  - `<REGION_PROPOSAL>`
 - The raw output of the model is a string that needs to be parsed. The [`Florence2Processor`] has a [`~Florence2Processor.post_process_generation`] method that can parse the string into a more usable format, like bounding boxes and labels for object detection.
 
 ## Resources

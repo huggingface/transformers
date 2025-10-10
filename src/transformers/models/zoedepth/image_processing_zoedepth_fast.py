@@ -20,13 +20,14 @@ from typing import (
 )
 
 import numpy as np
+import torch
+from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils import (
     BatchFeature,
 )
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -43,51 +44,14 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
     logging,
     requires_backends,
 )
-from .image_processing_zoedepth import get_resize_output_image_size
+from .image_processing_zoedepth import ZoeDepthImageProcessorKwargs, get_resize_output_image_size
 from .modeling_zoedepth import ZoeDepthDepthEstimatorOutput
 
 
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
-
-    from torchvision.transforms import InterpolationMode
-
-
 logger = logging.get_logger(__name__)
-
-
-class ZoeDepthFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    do_pad (`bool`, *optional*, defaults to `True`):
-        Whether to apply pad the input.
-    keep_aspect_ratio (`bool`, *optional*, defaults to `True`):
-        If `True`, the image is resized by choosing the smaller of the height and width scaling factors and using it
-        for both dimensions. This ensures that the image is scaled down as little as possible while still fitting
-        within the desired output size. In case `ensure_multiple_of` is also set, the image is further resized to a
-        size that is a multiple of this value by flooring the height and width to the nearest multiple of this value.
-        Can be overridden by `keep_aspect_ratio` in `preprocess`.
-    ensure_multiple_of (`int`, *optional*, defaults to 32):
-        If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Works by flooring
-        the height and width to the nearest multiple of this value.
-        Works both with and without `keep_aspect_ratio` being set to `True`.
-        Can be overridden by `ensure_multiple_of` in `preprocess`.
-    """
-
-    do_pad: Optional[bool]
-    keep_aspect_ratio: Optional[bool]
-    ensure_multiple_of: Optional[int]
 
 
 @auto_docstring
@@ -102,16 +66,16 @@ class ZoeDepthImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     keep_aspect_ratio = True
     ensure_multiple_of = 1 / 32
-    valid_kwargs = ZoeDepthFastImageProcessorKwargs
+    valid_kwargs = ZoeDepthImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[ZoeDepthFastImageProcessorKwargs]) -> None:
+    def __init__(self, **kwargs: Unpack[ZoeDepthImageProcessorKwargs]) -> None:
         super().__init__(**kwargs)
 
     @auto_docstring
     def preprocess(
         self,
         images: ImageInput,
-        **kwargs: Unpack[ZoeDepthFastImageProcessorKwargs],
+        **kwargs: Unpack[ZoeDepthImageProcessorKwargs],
     ) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
@@ -299,7 +263,7 @@ class ZoeDepthImageProcessorFast(BaseImageProcessorFast):
                 depth = F.resize(
                     depth,
                     size=[source_size[0] + 2 * pad_h, source_size[1] + 2 * pad_w],
-                    interpolation=InterpolationMode.BICUBIC,
+                    interpolation=F.InterpolationMode.BICUBIC,
                     antialias=False,
                 )
 
@@ -313,7 +277,7 @@ class ZoeDepthImageProcessorFast(BaseImageProcessorFast):
                 depth = F.resize(
                     depth,
                     size=target_size,
-                    interpolation=InterpolationMode.BICUBIC,
+                    interpolation=F.InterpolationMode.BICUBIC,
                     antialias=False,
                 )
             depth = depth.squeeze(0)
