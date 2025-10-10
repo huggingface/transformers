@@ -1958,7 +1958,6 @@ class MT5EncoderForSequenceClassification(MT5PreTrainedModel):
         )
 
 
-
 __all__ = [
     "MT5EncoderModel",
     "MT5ForConditionalGeneration",
@@ -1967,5 +1966,5 @@ __all__ = [
     "MT5ForTokenClassification",
     "MT5Model",
     "MT5PreTrainedModel",
-    "MT5EncoderForSequenceClassification"
+    "MT5EncoderForSequenceClassification",
 ]

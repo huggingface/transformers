@@ -1909,5 +1909,5 @@ __all__ = [
     "UMT5ForTokenClassification",
     "UMT5Model",
     "UMT5PreTrainedModel",
-    "UMT5EncoderForSequenceClassification"
+    "UMT5EncoderForSequenceClassification",
 ]

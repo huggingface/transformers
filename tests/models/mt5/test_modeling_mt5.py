@@ -1018,7 +1018,11 @@ class MT5EncoderOnlyModelTester:
 
 # Copied from tests.models.t5.test_modeling_t5.T5EncoderOnlyModelTest with T5->MT5
 class MT5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (MT5EncoderModel, MT5ForTokenClassification, MT5EncoderForSequenceClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (MT5EncoderModel, MT5ForTokenClassification, MT5EncoderForSequenceClassification)
+        if is_torch_available()
+        else ()
+    )
 
     test_resize_embeddings = False
     pipeline_model_mapping = (
