@@ -126,7 +126,9 @@ def batch_generate(
 
         # Try to decode the output
         try:
-            output_text = tokenizer.decode(batch_outputs[request].generated_tokens, skip_special_tokens=SKIP_SPECIAL_TOKENS)
+            output_text = tokenizer.decode(
+                batch_outputs[request].generated_tokens, skip_special_tokens=SKIP_SPECIAL_TOKENS
+            )
             token_count += len(batch_outputs[request].generated_tokens[1:])
             data[-1]["cb_outputs"] = output_text
         except Exception as e:

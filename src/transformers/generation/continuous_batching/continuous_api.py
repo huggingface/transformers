@@ -15,12 +15,13 @@
 # limitations under the License.
 import queue
 import threading
+from collections.abc import Generator
 from dataclasses import dataclass
 from functools import partial
 from itertools import count
 from math import ceil
 from time import perf_counter
-from typing import Generator, Optional, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -764,7 +765,6 @@ class ContinuousBatchingManager:
         self.profile = getattr(generation_config, "profile", False)  # TODO: not supported yet
         self.manual_eviction = manual_eviction
         self.batch_processor: Optional[ContinuousBatchProcessor] = None
-
 
         # If a number of cuda graphs was specified for either Q or KV, we activate cuda graphs
         if num_q_cuda_graphs > 0 or num_kv_cuda_graphs > 0:
