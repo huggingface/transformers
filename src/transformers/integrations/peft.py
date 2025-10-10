@@ -631,8 +631,6 @@ def maybe_load_adapters(
         return None
 
     token = download_kwargs.get("token")
-    if token is not None and adapter_kwargs is not None and "token" not in adapter_kwargs:
-        adapter_kwargs["token"] = token
 
     if download_kwargs.get("commit_hash") is None:
         resolved_config_file = cached_file(
@@ -644,7 +642,7 @@ def maybe_load_adapters(
             local_files_only=bool(download_kwargs.get("local_files_only", False)),
             token=token,
             revision=download_kwargs.get("revision"),
-            subfolder=download_kwargs.get("subfolder", ""),
+            subfolder=download_kwargs.get("subfolder"),
             _raise_exceptions_for_gated_repo=False,
             _raise_exceptions_for_missing_entries=False,
             _raise_exceptions_for_connection_errors=False,

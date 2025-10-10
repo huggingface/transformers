@@ -4497,15 +4497,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if adapter_kwargs is None:
             adapter_kwargs = {}
 
-        adapter_download_kwargs = download_kwargs_with_commit.copy()
-        _adapter_model_path = maybe_load_adapters(
+        _adapter_model_path, pretrained_model_name_or_path = maybe_load_adapters(
             pretrained_model_name_or_path,
-            adapter_download_kwargs,
+            download_kwargs_with_commit,
             **adapter_kwargs,
         )
-        commit_hash = adapter_download_kwargs.get("commit_hash", commit_hash)
-        download_kwargs_with_commit["commit_hash"] = commit_hash
-
         device_map = check_and_set_device_map(device_map)  # warn, error and fix the device map
 
         user_agent = {"file_type": "model", "framework": "pytorch", "from_auto_class": from_auto_class}
@@ -4643,8 +4639,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         model.tie_weights()  # make sure token embedding weights are still tied if needed
         model.eval()  # Set model in evaluation mode to deactivate DropOut modules by default
-        if use_kernels:  # check if using kernels
-            model.set_use_kernels(use_kernels, kernel_config)
+        model.set_use_kernels(use_kernels, kernel_config)
 
         # If it is a model with generation capabilities, attempt to load generation files (generation config,
         # custom generate function)
