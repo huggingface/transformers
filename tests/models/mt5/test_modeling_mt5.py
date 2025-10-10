@@ -42,6 +42,7 @@ if is_torch_available():
     from transformers import (
         AutoModelForSeq2SeqLM,
         AutoTokenizer,
+        MT5EncoderForSequenceClassification,
         MT5EncoderModel,
         MT5ForConditionalGeneration,
         MT5ForQuestionAnswering,
@@ -984,6 +985,22 @@ class MT5EncoderOnlyModelTester:
         self.parent.assertEqual(outputs["logits"].size(), (self.batch_size, self.seq_length, config.num_labels))
         self.parent.assertEqual(outputs["loss"].size(), ())
 
+    def create_and_check_with_sequence_classification_head(
+        self,
+        config,
+        input_ids,
+        attention_mask,
+    ):
+        labels = torch.tensor([1] * self.batch_size, dtype=torch.long, device=torch_device)
+        model = MT5EncoderForSequenceClassification(config=config).to(torch_device).eval()
+        outputs = model(
+            input_ids=input_ids,
+            labels=labels,
+            attention_mask=attention_mask,
+        )
+        self.parent.assertEqual(outputs["logits"].size(), (self.batch_size, config.num_labels))
+        self.parent.assertEqual(outputs["loss"].size(), ())
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -1001,12 +1018,13 @@ class MT5EncoderOnlyModelTester:
 
 # Copied from tests.models.t5.test_modeling_t5.T5EncoderOnlyModelTest with T5->MT5
 class MT5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (MT5EncoderModel, MT5ForTokenClassification) if is_torch_available() else ()
+    all_model_classes = (MT5EncoderModel, MT5ForTokenClassification, MT5EncoderForSequenceClassification) if is_torch_available() else ()
 
     test_resize_embeddings = False
     pipeline_model_mapping = (
         {
             "token-classification": MT5ForTokenClassification,
+            "sequence-classification": MT5EncoderForSequenceClassification,
         }
         if is_torch_available()
         else {}
