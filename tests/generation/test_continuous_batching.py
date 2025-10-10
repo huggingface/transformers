@@ -337,6 +337,7 @@ class ContinuousBatchingTest(unittest.TestCase):
         manager = model.init_continuous_batching()
         assert "paged|eager" == manager.model.config._attn_implementation
 
+    @require_torch_gpu
     def test_streaming_request(self) -> None:
         model_id = "Qwen/Qwen2.5-0.5B-Instruct"
         max_new_tokens = 3
@@ -368,6 +369,7 @@ class ContinuousBatchingTest(unittest.TestCase):
 
         manager.stop(block=True)
 
+    @require_torch_gpu
     def test_non_streaming_request(self) -> None:
         model_id = "Qwen/Qwen2.5-0.5B-Instruct"
         max_new_tokens = 3
@@ -394,6 +396,7 @@ class ContinuousBatchingTest(unittest.TestCase):
 
         manager.stop(block=True)
 
+    @require_torch_gpu
     def test_streaming_and_non_streaming_requests_can_alternate(self) -> None:
         model_id = "Qwen/Qwen2.5-0.5B-Instruct"
         max_new_tokens = 3
