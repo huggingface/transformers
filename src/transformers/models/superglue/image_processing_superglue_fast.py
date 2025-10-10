@@ -14,10 +14,10 @@
 # limitations under the License.
 from typing import Optional, Union
 
-
 import torch
 
 from .image_processing_superglue import SuperGlueImageProcessorKwargs
+from .modeling_superglue import KeypointMatchingOutput
 from ... import is_vision_available
 from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
@@ -30,11 +30,8 @@ from ...image_utils import (
     is_pil_image,
     is_valid_image,
 )
-from ...processing_utils import ImagesKwargs, Unpack
-
+from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_v2_available
-from .modeling_superglue import KeypointMatchingOutput
-
 
 if is_vision_available():
     from PIL import Image, ImageDraw

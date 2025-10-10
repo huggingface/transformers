@@ -39,7 +39,6 @@ from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, logging, requires_backends
 from ...utils.import_utils import requires
 
-
 if is_torch_available():
     import torch
 
