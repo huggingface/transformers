@@ -16,7 +16,6 @@ The Trainer class, to easily train a 🤗 Transformers from scratch or finetune 
 """
 
 import contextlib
-import copy
 import functools
 import glob
 import importlib.metadata
@@ -31,10 +30,10 @@ import sys
 import tempfile
 import time
 import warnings
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 
 # Integrations must be imported before ML frameworks:
@@ -212,7 +211,6 @@ if is_accelerate_available():
     from accelerate import __version__ as accelerate_version
     from accelerate.state import AcceleratorState
     from accelerate.utils import (
-        AutocastKwargs,
         DataLoaderConfiguration,
         DistributedDataParallelKwargs,
         DistributedType,
@@ -333,7 +331,7 @@ class Trainer:
             A function that instantiates the model to be used. If provided, each call to [`~Trainer.train`] will start
             from a new instance of the model as given by this function.
 
-            The function may have zero argument, or a single one containing the optuna/Ray Tune/SigOpt trial object, to
+            The function may have zero argument, or a single one containing the optuna/Ray Tune trial object, to
             be able to choose different architectures according to hyper parameters (such as layer count, sizes of
             inner layers, dropout probabilities etc).
         compute_loss_func (`Callable`, *optional*):
@@ -1792,8 +1790,6 @@ class Trainer:
         elif self.hp_search_backend == HPSearchBackend.RAY:
             params = trial
             params.pop("wandb", None)
-        elif self.hp_search_backend == HPSearchBackend.SIGOPT:
-            params = {k: int(v) if isinstance(v, str) else v for k, v in trial.assignments.items()}
         elif self.hp_search_backend == HPSearchBackend.WANDB:
             params = trial
 
@@ -1812,8 +1808,6 @@ class Trainer:
             setattr(self.args, key, value)
         if self.hp_search_backend == HPSearchBackend.OPTUNA:
             logger.info(f"Trial: {trial.params}")
-        if self.hp_search_backend == HPSearchBackend.SIGOPT:
-            logger.info(f"SigOpt Assignments: {trial.assignments}")
         if self.hp_search_backend == HPSearchBackend.WANDB:
             logger.info(f"W&B Sweep parameters: {trial}")
         if self.is_deepspeed_enabled:
@@ -1885,40 +1879,6 @@ class Trainer:
 
         return model
 
-    def torch_jit_model_eval(self, model, dataloader, training=False):
-        if not training:
-            if dataloader is None:
-                logger.warning("failed to use PyTorch jit mode due to current dataloader is none.")
-                return model
-            example_batch = next(iter(dataloader))
-            example_batch = self._prepare_inputs(example_batch)
-            try:
-                jit_model = copy.copy(model)
-                jit_model.eval()
-                original_forward = jit_model.__dict__.pop("_original_forward", None)
-                # remove mixed precision hooks from the model
-                if original_forward:
-                    jit_model.forward = original_forward
-                autocast_handler = AutocastKwargs(cache_enabled=False)
-                with self.accelerator.autocast(autocast_handler=autocast_handler), torch.no_grad():
-                    if isinstance(example_batch, dict):
-                        jit_model = torch.jit.trace(jit_model, example_kwarg_inputs=example_batch, strict=False)
-                    else:
-                        jit_model = torch.jit.trace(
-                            jit_model,
-                            example_kwarg_inputs={key: example_batch[key] for key in example_batch},
-                            strict=False,
-                        )
-                jit_model = torch.jit.freeze(jit_model)
-                with torch.no_grad():
-                    jit_model(**example_batch)
-                    jit_model(**example_batch)
-                model = jit_model
-            except (RuntimeError, TypeError, ValueError, NameError, IndexError) as e:
-                logger.warning(f"failed to use PyTorch jit mode due to: {e}.")
-
-        return model
-
     def compare_trainer_and_checkpoint_args(self, training_args, trainer_state):
         attributes_map = {
             "logging_steps": "logging_steps",
@@ -1961,11 +1921,6 @@ class Trainer:
         # Multi-gpu training, 8bit models does not support DP
         if self.args.n_gpu > 1 and not getattr(model, "is_loaded_in_8bit", False):
             model = nn.DataParallel(model)
-
-        if self.args.jit_mode_eval:
-            start_time = time.time()
-            model = self.torch_jit_model_eval(model, dataloader, training)
-            self.jit_compilation_time = round(time.time() - start_time, 4)
 
         # Note: in torch.distributed mode, there's no point in wrapping the model
         # inside a DistributedDataParallel as we'll be under `no_grad` anyways.
@@ -2438,10 +2393,6 @@ class Trainer:
             if hasattr(epoch_dataloader, "set_epoch"):
                 epoch_dataloader.set_epoch(epoch)
 
-            # Reset the past mems state at the beginning of each epoch if necessary.
-            if args.past_index >= 0:
-                self._past = None
-
             steps_in_epoch = (
                 len(epoch_dataloader)
                 if len_dataloader is not None
@@ -2650,10 +2601,6 @@ class Trainer:
             if self.control.should_training_stop:
                 break
 
-        if args.past_index and hasattr(self, "_past"):
-            # Clean the state at the end of training
-            delattr(self, "_past")
-
         logger.info("\n\nTraining completed. Do not forget to share your model on huggingface.co/models =)\n\n")
         if args.load_best_model_at_end and self.state.best_model_checkpoint is not None:
             self._load_best_model()
@@ -2709,8 +2656,6 @@ class Trainer:
                 import ray.train
 
                 run_id = ray.train.get_context().get_trial_id()
-            elif self.hp_search_backend == HPSearchBackend.SIGOPT:
-                run_id = trial.id
             elif self.hp_search_backend == HPSearchBackend.WANDB:
                 import wandb
 
@@ -3500,7 +3445,7 @@ class Trainer:
         **kwargs,
     ) -> Union[BestRun, list[BestRun]]:
         """
-        Launch an hyperparameter search using `optuna` or `Ray Tune` or `SigOpt`. The optimized quantity is determined
+        Launch an hyperparameter search using `optuna` or `Ray Tune`. The optimized quantity is determined
         by `compute_objective`, which defaults to a function returning the evaluation loss when no metric is provided,
         the sum of all metrics otherwise.
 
@@ -3516,8 +3461,8 @@ class Trainer:
         Args:
             hp_space (`Callable[["optuna.Trial"], dict[str, float]]`, *optional*):
                 A function that defines the hyperparameter search space. Will default to
-                [`~trainer_utils.default_hp_space_optuna`] or [`~trainer_utils.default_hp_space_ray`] or
-                [`~trainer_utils.default_hp_space_sigopt`] depending on your backend.
+                [`~trainer_utils.default_hp_space_optuna`] or [`~trainer_utils.default_hp_space_ray`]
+                depending on your backend.
             compute_objective (`Callable[[dict[str, float]], float]`, *optional*):
                 A function computing the objective to minimize or maximize from the metrics returned by the `evaluate`
                 method. Will default to [`~trainer_utils.default_compute_objective`].
@@ -3530,7 +3475,7 @@ class Trainer:
                 `"minimize"` and `"maximize"`, you should pick `"minimize"` when optimizing the validation loss,
                 `"maximize"` when optimizing one or several metrics.
             backend (`str` or [`~training_utils.HPSearchBackend`], *optional*):
-                The backend to use for hyperparameter search. Will default to optuna or Ray Tune or SigOpt, depending
+                The backend to use for hyperparameter search. Will default to optuna or Ray Tune, depending
                 on which one is installed. If all are installed, will default to optuna.
             hp_name (`Callable[["optuna.Trial"], str]]`, *optional*):
                 A function that defines the trial/run name. Will default to None.
@@ -3545,9 +3490,6 @@ class Trainer:
                   If `resources_per_trial` is not set in the `kwargs`, it defaults to 1 CPU core and 1 GPU (if available).
                   If `progress_reporter` is not set in the `kwargs`,
                   [ray.tune.CLIReporter](https://docs.ray.io/en/latest/tune/api/doc/ray.tune.CLIReporter.html) is used.
-                - `sigopt`: the parameter `proxies` from
-                  [sigopt.Connection.set_proxies](https://docs.sigopt.com/support/faq#how-do-i-use-sigopt-with-a-proxy).
-
         Returns:
             [`trainer_utils.BestRun` or `list[trainer_utils.BestRun]`]: All the information about the best run or best
             runs for multi-objective optimization. Experiment summary can be found in `run_summary` attribute for Ray
@@ -3628,8 +3570,6 @@ class Trainer:
                 "The batch received was empty, your model won't be able to train on it. Double-check that your "
                 f"training dataset contains keys expected by the model: {','.join(self._signature_columns)}."
             )
-        if self.args.past_index >= 0 and self._past is not None:
-            inputs["mems"] = self._past
 
         return inputs
 
@@ -3887,10 +3827,6 @@ class Trainer:
                 kwargs["num_items_in_batch"] = num_items_in_batch
             inputs = {**inputs, **kwargs}
         outputs = model(**inputs)
-        # Save past state if it exists
-        # TODO: this needs to be fixed and made cleaner later.
-        if self.args.past_index >= 0:
-            self._past = outputs[self.args.past_index]
 
         # User-defined compute_loss function
         if self.compute_loss_func is not None:
@@ -4273,8 +4209,6 @@ class Trainer:
         )
 
         total_batch_size = self.args.eval_batch_size * self.args.world_size
-        if f"{metric_key_prefix}_jit_compilation_time" in output.metrics:
-            start_time += output.metrics[f"{metric_key_prefix}_jit_compilation_time"]
         if f"{metric_key_prefix}_model_preparation_time" in output.metrics:
             start_time += output.metrics[f"{metric_key_prefix}_model_preparation_time"]
         output.metrics.update(
@@ -4343,8 +4277,6 @@ class Trainer:
             test_dataloader, description="Prediction", ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix
         )
         total_batch_size = self.args.eval_batch_size * self.args.world_size
-        if f"{metric_key_prefix}_jit_compilation_time" in output.metrics:
-            start_time += output.metrics[f"{metric_key_prefix}_jit_compilation_time"]
         if f"{metric_key_prefix}_model_preparation_time" in output.metrics:
             start_time += output.metrics[f"{metric_key_prefix}_model_preparation_time"]
         output.metrics.update(
@@ -4431,9 +4363,6 @@ class Trainer:
         # Do this before wrapping.
         eval_dataset = getattr(dataloader, "dataset", None)
 
-        if args.past_index >= 0:
-            self._past = None
-
         # Initialize containers
         all_losses = EvalLoopContainer(self.args.eval_do_concat_batches, padding_index=-100)
         all_preds = EvalLoopContainer(self.args.eval_do_concat_batches, padding_index=-100)
@@ -4518,9 +4447,6 @@ class Trainer:
 
         # After all calls to `.gather_function`, reset to `gather_for_metrics`:
         self.gather_function = self.accelerator.gather_for_metrics
-        if args.past_index and hasattr(self, "_past"):
-            # Clean the state at the end of the evaluation loop
-            delattr(self, "_past")
 
         # Gather all remaining tensors and put them back on the CPU
         all_losses = all_losses.get_arrays()
@@ -4565,8 +4491,6 @@ class Trainer:
             metrics[f"{metric_key_prefix}_loss"] = np.concatenate(all_losses).mean().item()
         elif isinstance(all_losses, np.ndarray):
             metrics[f"{metric_key_prefix}_loss"] = all_losses.mean().item()
-        if hasattr(self, "jit_compilation_time"):
-            metrics[f"{metric_key_prefix}_jit_compilation_time"] = self.jit_compilation_time
         if hasattr(self, "model_preparation_time"):
             metrics[f"{metric_key_prefix}_model_preparation_time"] = self.model_preparation_time
 
@@ -4590,9 +4514,7 @@ class Trainer:
             tensors = nested_xla_mesh_reduce(tensors, name)
         elif is_sagemaker_mp_enabled():
             tensors = smp_gather(tensors)
-        elif (self.args.distributed_state is not None and self.args.distributed_state.distributed_type != "NO") or (
-            self.args.distributed_state is None and self.args.local_rank != -1
-        ):
+        elif self.args.parallel_mode == ParallelMode.DISTRIBUTED:
             tensors = distributed_concat(tensors)
         return tensors
 
@@ -4691,9 +4613,6 @@ class Trainer:
                         logits = tuple(v for k, v in outputs.items() if k not in ignore_keys)
                     else:
                         logits = outputs
-                    # TODO: this needs to be fixed and made cleaner later.
-                    if self.args.past_index >= 0:
-                        self._past = outputs[self.args.past_index - 1]
 
         if prediction_loss_only:
             return (loss, None, None)
