@@ -724,7 +724,7 @@ def is_datasets_available() -> bool:
 
 @lru_cache
 def is_detectron2_available() -> bool:
-    return _is_package_available("detectron2")
+    return _is_package_available("detectron2") and _is_package_available("detectron2.modeling")
 
 
 @lru_cache
