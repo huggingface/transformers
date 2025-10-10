@@ -16,9 +16,10 @@
 import json
 import os
 import warnings
+from collections.abc import Callable
 from copy import deepcopy
 from functools import partial
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 from huggingface_hub.dataclasses import validate_typed_dict

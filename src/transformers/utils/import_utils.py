@@ -26,11 +26,12 @@ import shutil
 import subprocess
 import sys
 from collections import OrderedDict
+from collections.abc import Callable
 from enum import Enum
 from functools import lru_cache
 from itertools import chain
 from types import ModuleType
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 from packaging import version
 
@@ -723,7 +724,15 @@ def is_datasets_available() -> bool:
 
 @lru_cache
 def is_detectron2_available() -> bool:
-    return _is_package_available("detectron2")
+    # We need this try/except block because otherwise after uninstalling the library, it stays available for some reason
+    # i.e. `import detectron2` and `import detectron2.modeling` still work, even though the library is uninstalled
+    # (the package exists but the objects are not reachable) - so here we explicitly try to import an object from it
+    try:
+        from detectron2.modeling import META_ARCH_REGISTRY  # noqa
+
+        return True
+    except Exception:
+        return False
 
 
 @lru_cache
@@ -1509,12 +1518,6 @@ SACREMOSES_IMPORT_ERROR = """
 SCIPY_IMPORT_ERROR = """
 {0} requires the scipy library but it was not found in your environment. You can install it with pip:
 `pip install scipy`. Please note that you may need to restart your runtime after installation.
-"""
-
-# docstyle-ignore
-KERAS_NLP_IMPORT_ERROR = """
-{0} requires the keras_nlp library but it was not found in your environment. You can install it with pip.
-Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore

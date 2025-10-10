@@ -114,7 +114,7 @@ _deps = [
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
     "hf_xet",
-    "huggingface-hub==1.0.0.rc4",
+    "huggingface-hub==1.0.0.rc5",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.0",
@@ -162,7 +162,6 @@ _deps = [
     "scikit-learn",
     "scipy",
     "sentencepiece>=0.1.91,!=0.1.92",
-    "sigopt",
     "starlette",
     "sudachipy>=0.6.6",
     "sudachidict_core>=20220729",
@@ -275,7 +274,6 @@ extras["sagemaker"] = deps_list("sagemaker")
 extras["deepspeed"] = deps_list("deepspeed") + extras["accelerate"]
 extras["optuna"] = deps_list("optuna")
 extras["ray"] = deps_list("ray[tune]")
-extras["sigopt"] = deps_list("sigopt")
 extras["hub-kernels"] = deps_list("kernels")
 
 extras["integrations"] = extras["hub-kernels"] + extras["optuna"] + extras["ray"]
