@@ -20,6 +20,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ...audio_utils import istft
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
@@ -128,77 +129,6 @@ class VocosBackbone(nn.Module):
         return hidden_states
 
 
-class VocosISTFT(nn.Module):
-    """
-    As in original Vocos code:
-    https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/spectral_ops.py#L7
-
-    Custom ISTFT implementation to support "same" padding as in Vocos.
-    """
-
-    def __init__(self, config: VocosConfig):
-        super().__init__()
-        if config.istft_padding not in ["center", "same"]:
-            raise ValueError("Padding must be 'center' or 'same'.")
-        self.padding = config.istft_padding
-        self.n_fft = config.n_fft
-        self.hop_length = config.hop_length
-        self.win_length = getattr(config, "win_length", config.n_fft)
-        window = torch.hann_window(self.win_length)
-        self.register_buffer("window", window)
-
-    def forward(self, spec: torch.Tensor) -> torch.Tensor:
-        """
-        Compute the Inverse Short Time Fourier Transform (ISTFT) of a complex spectrogram.
-
-        Args:
-            spec (Tensor): Input complex spectrogram of shape (B, N, T), where B is the batch size,
-                  is the number of frequency bins, and T is the number of time frames.
-
-        Returns:
-            Tensor: Reconstructed time-domain signal of shape (B, L), where L is the length of the output signal.
-        """
-
-        if self.padding == "center":
-            # Fallback to pytorch native implementation
-            return torch.istft(spec, self.n_fft, self.hop_length, self.win_length, self.window, center=True)
-
-        elif self.padding == "same":
-            # Custom implementation from Vocos codebase
-            pad = (self.win_length - self.hop_length) // 2
-            n_frames = spec.shape[-1]
-
-            # Inverse FFT
-            ifft = torch.fft.irfft(spec, self.n_fft, dim=1, norm="backward")
-            ifft = ifft * self.window[None, :, None]
-
-            # Overlap and Add
-            output_size = (n_frames - 1) * self.hop_length + self.win_length
-            y = F.fold(
-                ifft,
-                output_size=(1, output_size),
-                kernel_size=(1, self.win_length),
-                stride=(1, self.hop_length),
-            )[:, 0, 0, pad:-pad]
-
-            # Window envelope
-            window_sq = self.window.square().expand(1, n_frames, -1).transpose(1, 2)
-            window_envelope = F.fold(
-                window_sq,
-                output_size=(1, output_size),
-                kernel_size=(1, self.win_length),
-                stride=(1, self.hop_length),
-            ).squeeze()[pad:-pad]
-
-            # Normalize
-            if not (window_envelope > 1e-11).all():
-                raise ValueError("Window envelope values are too small (<=1e-11)")
-            return y / window_envelope
-
-        else:
-            raise ValueError("Padding must be 'center' or 'same'.")
-
-
 class VocosISTFTHead(nn.Module):
     """
     As in original Vocos code:
@@ -210,7 +140,15 @@ class VocosISTFTHead(nn.Module):
     def __init__(self, config: VocosConfig):
         super().__init__()
         self.out = torch.nn.Linear(config.hidden_size, config.n_fft + 2)
-        self.istft = VocosISTFT(config)
+        # ISTFT parameters
+        if config.istft_padding not in ["center", "same"]:
+            raise ValueError("Padding must be 'center' or 'same'.")
+        self.padding = config.istft_padding
+        self.n_fft = config.n_fft
+        self.hop_length = config.hop_length
+        self.win_length = getattr(config, "win_length", config.n_fft)
+        window = torch.hann_window(self.win_length)
+        self.register_buffer("window", window)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -232,7 +170,14 @@ class VocosISTFTHead(nn.Module):
         spectrogram_real = torch.cos(p)
         spectrogram_imag = torch.sin(p)
         spectrogram_complex = mag * (spectrogram_real + 1j * spectrogram_imag)
-        audio = self.istft(spectrogram_complex)
+        audio = istft(
+            spectrogram_complex,
+            n_fft=self.n_fft,
+            hop_length=self.hop_length,
+            win_length=self.win_length,
+            window=self.window,
+            padding=self.padding,
+        )
         return audio
 
 
@@ -288,7 +233,6 @@ class VocosModel(VocosPreTrainedModel):
         audio_spectrogram: Optional[torch.FloatTensor] = None,
         input_features: Optional[torch.FloatTensor] = None,
         bandwidth: Optional[float] = None,
-        padding_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[VocosOutput, tuple[torch.FloatTensor]]:
         r"""
@@ -301,8 +245,6 @@ class VocosModel(VocosPreTrainedModel):
         bandwidth (`float`, *optional*):
             Target bandwidth for EnCodec quantizer, e.g. one of [1.5, 3, 6, 12] kbps, to be provided if
             `input_features`is not None.
-        padding_mask (`torch.BoolTensor` of shape `(batch_size, time_dim)`, *optional*):
-            Mask that indicates padded entries of audio used to prepare the model inputs (see `VocosProcessor`).
 
         Returns:
             `VocosOutput` or tuple `(audio,)`:
