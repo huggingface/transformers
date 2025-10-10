@@ -751,11 +751,7 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
     _can_compile_fullgraph = False
 
     def __init__(self, config: VideoLlama3Config):
-        PreTrainedModel.__init__(self, config)
-        self.model = VideoLlama3Model(config)
-        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-
-        self.post_init()
+        super().__init__(config)  # just to add type hint on config
 
     def visual(self):
         raise AttributeError("Not needed for VideoLLaMA3")
