@@ -20,7 +20,7 @@ import unittest
 import pytest
 from packaging import version
 
-from transformers import AutoTokenizer, DiffLlamaConfig, StaticCache, is_torch_available
+from transformers import AutoTokenizer, BitsAndBytesConfig, DiffLlamaConfig, StaticCache, is_torch_available
 from transformers.testing_utils import (
     backend_empty_cache,
     cleanup,

@@ -18,7 +18,7 @@ import unittest
 
 import requests
 
-from transformers import ChameleonConfig, is_torch_available, is_vision_available
+from transformers import BitsAndBytesConfig, ChameleonConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
     Expectations,
     require_bitsandbytes,

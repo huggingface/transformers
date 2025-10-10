@@ -82,8 +82,6 @@ class CwmConfig(LlamaConfig):
             The id of the *beginning-of-sequence* token.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to 1000000.0):
-            The base period of the RoPE embeddings.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         pretraining_tp (`int`, *optional*, defaults to 1):
@@ -92,8 +90,10 @@ class CwmConfig(LlamaConfig):
             issue](https://github.com/pytorch/pytorch/issues/76232).
         mlp_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         sliding_window (`int`, *optional*, defaults to 8192):
             Sliding window attention window size.
         layer_types (`List[str]`, *optional*):
@@ -121,18 +121,18 @@ class CwmConfig(LlamaConfig):
         eos_token_id=[128001, 128008, 128009],
         bos_token_id: int = 128000,
         tie_word_embeddings: bool = False,
-        rope_theta: float = 1_000_000.0,
         attention_dropout: float = 0.0,
         pretraining_tp: int = 1,
         mlp_bias: bool = False,
-        rope_scaling: Optional[dict] = None,
+        rope_parameters: Optional[dict] = None,
         # CWM interleaved sliding window fields
         sliding_window: int = 8192,
         layer_types: Optional[list[str]] = None,  # ["full_attention"|"sliding_attention"] per layer
         **kwargs,
     ):
-        if rope_scaling is None:
-            rope_scaling = {
+        if rope_parameters is None:
+            rope_parameters = {
+                "rope_theta": 1_000_000.0,
                 "factor": 16.0,
                 "high_freq_factor": 4.0,
                 "low_freq_factor": 1.0,
@@ -167,14 +167,17 @@ class CwmConfig(LlamaConfig):
             eos_token_id=list(eos_token_id),
             bos_token_id=bos_token_id,
             tie_word_embeddings=tie_word_embeddings,
-            rope_theta=rope_theta,
             attention_bias=False,
             attention_dropout=attention_dropout,
-            rope_scaling=rope_scaling,
+            rope_parameters=rope_parameters,
             pretraining_tp=pretraining_tp,
             mlp_bias=mlp_bias,
             **kwargs,
         )
+
+        # Validate the correctness of rotary position embeddings parameters
+        rope_theta = kwargs.get("rope_theta", 1_000_000.0)
+        standardize_rope_params(self, rope_theta=rope_theta)
 
         # CWM models don't use attention bias, remove it from config
         del self.attention_bias

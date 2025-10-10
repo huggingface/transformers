@@ -187,14 +187,6 @@ class MiniMaxConfig(PreTrainedConfig):
         mlp_beta_factor: Optional[int] = 1,
         **kwargs,
     ):
-        self.layer_types = layer_types
-        self.block_size = block_size
-        self.full_attn_alpha_factor = full_attn_alpha_factor
-        self.full_attn_beta_factor = full_attn_beta_factor
-        self.linear_attn_alpha_factor = linear_attn_alpha_factor
-        self.linear_attn_beta_factor = linear_attn_beta_factor
-        self.mlp_alpha_factor = mlp_alpha_factor
-        self.mlp_beta_factor = mlp_beta_factor
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -220,13 +212,17 @@ class MiniMaxConfig(PreTrainedConfig):
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
         self.router_jitter_noise = router_jitter_noise
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+
+        self.layer_types = layer_types
+        self.block_size = block_size
+        self.full_attn_alpha_factor = full_attn_alpha_factor
+        self.full_attn_beta_factor = full_attn_beta_factor
+        self.linear_attn_alpha_factor = linear_attn_alpha_factor
+        self.linear_attn_beta_factor = linear_attn_beta_factor
+        self.mlp_alpha_factor = mlp_alpha_factor
+        self.mlp_beta_factor = mlp_beta_factor
+        self.rope_parameters = rope_parameters
+
         if self.layer_types is None:
             self.layer_types = [
                 "full_attention" if bool((i + 1) % 2) else "linear_attention" for i in range(self.num_hidden_layers)
@@ -237,6 +233,13 @@ class MiniMaxConfig(PreTrainedConfig):
         rope_theta = getattr(self, "rope_theta", 1000000.0)
         standardize_rope_params(self, rope_theta={"full_attention": rope_theta, "linear_attention": rope_theta})
         rope_config_validation(self)
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
 
 
 __all__ = ["MiniMaxConfig"]

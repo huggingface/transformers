@@ -20,7 +20,7 @@ import pytest
 import requests
 from huggingface_hub import hf_hub_download
 
-from transformers import Emu3Config, Emu3TextConfig, is_torch_available, is_vision_available
+from transformers import BitsAndBytesConfig, Emu3Config, Emu3TextConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
     Expectations,
     require_bitsandbytes,

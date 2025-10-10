@@ -20,8 +20,9 @@
 # limitations under the License.
 
 import math
+from collections.abc import Callable
 from contextlib import nullcontext
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
