@@ -29,7 +29,6 @@ from ...image_utils import (
     get_image_size,
 )
 from ...utils import TensorType, auto_docstring, logging
-from .image_processing_molmo import make_batched_images
 
 
 logger = logging.get_logger(__name__)
@@ -67,7 +66,7 @@ def pad_to_bounding_box(
 
 @auto_docstring
 class MolmoImageProcessorFast(BaseImageProcessorFast):
-    model_input_names = ["pixel_values", "input_ids", "image_input_idx", "image_masks"]
+    model_input_names = ["pixel_values", "input_ids", "image_token_indices", "image_masks"]
     resample = PILImageResampling.BILINEAR
     image_mean = OPENAI_CLIP_MEAN
     image_std = OPENAI_CLIP_STD
@@ -448,16 +447,9 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
-        images = make_batched_images(images)
-
-        if do_convert_rgb:
-            from ...image_transforms import convert_to_rgb
-
-            images = [convert_to_rgb(image) for image in images]
-
         images_tensor = self._prepare_image_like_inputs(
             images=images,
-            do_convert_rgb=False,
+            do_convert_rgb=do_convert_rgb,
             input_data_format=input_data_format,
             device=None,
         )

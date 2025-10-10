@@ -41,6 +41,8 @@ class MolmoImagesKwargs(ImagesKwargs, total=False):
     overlap_margins: Optional[tuple[int, int]]
     tokens_per_image_height: Optional[int]
     tokens_per_image_width: Optional[int]
+    image_patch_size: Optional[int]
+    image_padding_mask: Optional[bool]
 
 
 class MolmoProcessorKwargs(ProcessingKwargs, total=False):
@@ -252,10 +254,9 @@ class MolmoProcessor(ProcessorMixin):
             for mask, offset in zip(image_inputs["image_token_indices"], total_offsets):
                 shifted.append(np.where(mask < 0, mask, mask + int(offset)))
             image_inputs["image_token_indices"] = shifted
-        # there is no bos token in Qwen tokenizer
-        return BatchFeature(
-            data={**text_inputs, **image_inputs}, tensor_type=output_kwargs["common_kwargs"]["return_tensors"]
-        )
+
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
     def batch_decode(self, *args, **kwargs):
         """

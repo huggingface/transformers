@@ -788,7 +788,7 @@ class MolmoTextModel(MolmoPreTrainedModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
-            hidden_states = decoder_layer(
+            layer_outputs = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
@@ -797,6 +797,7 @@ class MolmoTextModel(MolmoPreTrainedModel):
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
+            hidden_states = layer_outputs[0]
 
         hidden_states = self.norm(hidden_states)
         return BaseModelOutputWithPast(
@@ -1090,6 +1091,7 @@ class MolmoVisionEncoder(nn.Module):
         causal_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ) -> BaseModelOutput:
         r"""
         Args:
@@ -1124,6 +1126,7 @@ class MolmoVisionEncoder(nn.Module):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -1146,6 +1149,9 @@ class MolmoVisionEncoder(nn.Module):
 
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
+
+        if not return_dict:
+            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
 
         return BaseModelOutput(
             last_hidden_state=hidden_states,

@@ -129,7 +129,7 @@ class MolmoImageProcessor(BaseImageProcessor):
     converting them into inputs suitable for the Molmo model.
     """
 
-    model_input_names = ["pixel_values", "input_ids", "image_input_idx", "image_masks"]
+    model_input_names = ["pixel_values", "input_ids", "image_token_indices", "image_masks"]
 
     def __init__(
         self,
