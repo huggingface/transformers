@@ -392,16 +392,10 @@ class HunYuanMoEV1RotaryEmbedding(nn.Module):
         self.config = config
 
         self.rope_type = self.config.rope_parameters["rope_type"]
-        rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "default":
-            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
-
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
 
         # Diff from Llama - DynamicNTKAlphaRotary
         if self.rope_type == "dynamic" and self.config.rope_parameters.get("alpha"):
+            self.dim = config.head_dim
             base = self.config.rope_parameters["rope_theta"] * self.config.rope_parameters["alpha"] ** (
                 self.config.head_dim / (self.config.head_dim - 2)
             )
@@ -412,6 +406,9 @@ class HunYuanMoEV1RotaryEmbedding(nn.Module):
             if self.rope_type != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
             inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = inv_freq
 
     @staticmethod
     def compute_default_rope_parameters(

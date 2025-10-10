@@ -231,7 +231,7 @@ class Emu3TextConfig(PreTrainedConfig):
         self.rope_parameters = rope_scaling or rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 100000.0)
+        rope_theta = kwargs.get("rope_theta", 1000000.0)
         standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
 

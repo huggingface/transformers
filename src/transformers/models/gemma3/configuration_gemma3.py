@@ -188,7 +188,9 @@ class Gemma3TextConfig(PreTrainedConfig):
         self.layer_types = layer_types
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
         rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
+        if rope_scaling is not None:
+            rope_parameters = {"sliding_attention": {"rope_type": "default"}, "full_attention": rope_scaling}
+        self.rope_parameters = rope_parameters
         self.use_bidirectional_attention = use_bidirectional_attention
         if use_bidirectional_attention:
             self.sliding_window = (self.sliding_window // 2) + 1  # due to fa we set exclusive bounds

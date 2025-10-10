@@ -134,7 +134,7 @@ class HunYuanDenseV1PreTrainedModel(LlamaPreTrainedModel):
 
 class HunYuanDenseV1RotaryEmbedding(LlamaRotaryEmbedding):
     def __init__(self, config: HunYuanDenseV1Config, device=None):
-        super().__init__()
+        nn.Module.__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
@@ -145,6 +145,7 @@ class HunYuanDenseV1RotaryEmbedding(LlamaRotaryEmbedding):
 
         # Diff from Llama - DynamicNTKAlphaRotary
         if self.rope_type == "dynamic" and self.config.rope_parameters.get("alpha"):
+            self.dim = config.head_dim
             base = self.config.rope_parameters["rope_theta"] * self.config.rope_parameters["alpha"] ** (
                 self.config.head_dim / (self.config.head_dim - 2)
             )
