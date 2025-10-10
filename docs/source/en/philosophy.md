@@ -46,14 +46,14 @@ A longer, in-depth article with examples, visualizations and timelines is availa
 
 The following tenets solidified over time, and they're detailed in our new philosophy [blog post](https://huggingface.co/spaces/transformers-community/Transformers-tenets). They guide maintainer decisions when reviewing PRs and contributions.
 
-- **Source of Truth.** Implementations must be faithful to official results and intended behavior.
-- **One Model, One File.** Core inference/training logic is visible top-to-bottom in the model file users read.
-- **Code is the Product.** Optimize for reading and diff-ing. Prefer explicit names over clever indirection.
-- **Standardize, Don’t Abstract.** Keep model-specific behavior in the model. Use shared interfaces only for generic infra.
-- **DRY\*** (Repeat when it helps users). End-user modeling files remain self-contained. Infra is factored out.
-- **Minimal User API.** Few codepaths, predictable kwargs, stable methods.
-- **Backwards Compatibility.** Public surfaces should not break. Old Hub artifacts have to keep working..
-- **Consistent Public Surface.** Naming, outputs, and optional diagnostics are aligned and tested.
+> - **Source of Truth.** Implementations must be faithful to official results and intended behavior.
+>- **One Model, One File.** Core inference/training logic is visible top-to-bottom in the model file users read.
+>- **Code is the Product.** Optimize for reading and diff-ing. Prefer explicit names over clever indirection.
+>- **Standardize, Don’t Abstract.** Keep model-specific behavior in the model. Use shared interfaces only for generic infra.
+>- **DRY\*** (Repeat when it helps users). End-user modeling files remain self-contained. Infra is factored out.
+>- **Minimal User API.** Few codepaths, predictable kwargs, stable methods.
+>- **Backwards Compatibility.** Public surfaces should not break. Old Hub artifacts have to keep working..
+>- **Consistent Public Surface.** Naming, outputs, and optional diagnostics are aligned and tested.
 
 ## Main classes
 
