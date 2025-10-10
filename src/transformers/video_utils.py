@@ -166,6 +166,8 @@ def convert_pil_frames_to_video(videos: list[VideoInput]) -> list[Union[np.ndarr
         videos (`VideoInput`):
             Video inputs to turn into a list of videos.
     """
+    if len(videos) == 0:
+        return []
 
     if not (isinstance(videos[0], (list, tuple)) and is_valid_image(videos[0][0])):
         return videos
