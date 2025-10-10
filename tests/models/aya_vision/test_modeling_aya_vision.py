@@ -20,6 +20,7 @@ import pytest
 from transformers import (
     AutoProcessor,
     AyaVisionConfig,
+    BitsAndBytesConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -231,12 +232,14 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         load_in_4bit = (device_type == "cuda") and (major < 8)
         dtype = None if load_in_4bit else torch.float16
 
+        if load_in_4bit:
+            quantization_config = BitsAndBytesConfig(load_in_4bit=True)
+        else:
+            quantization_config = None
+
         if cls.model is None:
             cls.model = AyaVisionForConditionalGeneration.from_pretrained(
-                cls.model_checkpoint,
-                device_map=torch_device,
-                dtype=dtype,
-                load_in_4bit=load_in_4bit,
+                cls.model_checkpoint, device_map=torch_device, dtype=dtype, quantization_config=quantization_config
             )
         return cls.model
 

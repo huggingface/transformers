@@ -21,7 +21,7 @@ export MAX_TGT_LEN=142
 python finetune_trainer.py \
     --model_name_or_path $m --tokenizer_name $tok \ 
     --data_dir cnn_dm \
-    --output_dir distilbart-cnn-12-6 --overwrite_output_dir \
+    --output_dir distilbart-cnn-12-6 \
     --learning_rate=3e-5 \
     --warmup_steps 500 --sortish_sampler \
     --fp16 \

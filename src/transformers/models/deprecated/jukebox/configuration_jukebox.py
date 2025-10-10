@@ -559,14 +559,16 @@ class JukeboxConfig(PreTrainedConfig):
         **kwargs,
     ):
         if vqvae_config is None:
-            vqvae_config = {}
+            vqvae_config = JukeboxVQVAEConfig()
             logger.info("vqvae_config is None. initializing the JukeboxVQVAE with default values.")
+        elif isinstance(vqvae_config, dict):
+            vqvae_config = JukeboxVQVAEConfig(**vqvae_config)
+        self.vqvae_config = vqvae_config
 
-        self.vqvae_config = JukeboxVQVAEConfig(**vqvae_config)
-        if prior_config_list is not None:
-            self.prior_configs = [JukeboxPriorConfig(**prior_config) for prior_config in prior_config_list]
-        else:
-            self.prior_configs = []
+        if prior_config_list is not None and isinstance(prior_config_list[0], dict):
+            prior_configs = [JukeboxPriorConfig(**prior_config) for prior_config in prior_config_list]
+        elif prior_config_list is None:
+            prior_configs = []
             for prior_idx in range(nb_priors):
                 prior_config = kwargs.pop(f"prior_{prior_idx}", None)
                 if prior_config is None:
@@ -575,10 +577,10 @@ class JukeboxConfig(PreTrainedConfig):
                         f"prior_{prior_idx}'s  config is None. Initializing the JukeboxPriorConfig list with default"
                         " values."
                     )
-                self.prior_configs.append(JukeboxPriorConfig(**prior_config))
+                prior_configs.append(JukeboxPriorConfig(**prior_config))
+        self.prior_configs = prior_configs
 
         self.hop_fraction = self.vqvae_config.hop_fraction
-
         self.nb_priors = nb_priors
 
         # Metadata conditioning
@@ -590,18 +592,6 @@ class JukeboxConfig(PreTrainedConfig):
         self.metadata_conditioning = metadata_conditioning
 
         super().__init__(**kwargs)
-
-    @classmethod
-    def from_configs(cls, prior_configs: list[JukeboxPriorConfig], vqvae_config: JukeboxVQVAEConfig, **kwargs):
-        r"""
-        Instantiate a [`JukeboxConfig`] (or a derived class) from clip text model configuration and clip vision model
-        configuration.
-
-        Returns:
-            [`JukeboxConfig`]: An instance of a configuration object
-        """
-        prior_config_list = [config.to_dict() for config in prior_configs]
-        return cls(prior_config_list=prior_config_list, vqvae_config_dict=vqvae_config.to_dict(), **kwargs)
 
     def to_dict(self):
         # Override the default to_dict to apply to_dict to the list of prior configs.

@@ -19,7 +19,7 @@ from typing import Optional
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -146,6 +146,7 @@ class OneFormerConfig(PreTrainedConfig):
     """
 
     model_type = "oneformer"
+    sub_configs = {"backbone_config": AutoConfig}
     attribute_map = {"hidden_size": "hidden_dim"}
 
     def __init__(
@@ -272,14 +273,6 @@ class OneFormerConfig(PreTrainedConfig):
         self.num_hidden_layers = decoder_layers
 
         super().__init__(**kwargs)
-
-    @property
-    def sub_configs(self):
-        return (
-            {"backbone_config": type(self.backbone_config)}
-            if getattr(self, "backbone_config", None) is not None
-            else {}
-        )
 
 
 __all__ = ["OneFormerConfig"]

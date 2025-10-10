@@ -20,8 +20,9 @@ https://github.com/open-mmlab/mmsegmentation/blob/master/mmseg/models/decode_hea
 """
 
 import collections.abc
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import Optional
 
 import torch
 from torch import nn
