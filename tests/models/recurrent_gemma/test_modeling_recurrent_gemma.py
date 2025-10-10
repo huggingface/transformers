@@ -33,7 +33,7 @@ from transformers.testing_utils import (
 if is_torch_available():
     import torch
 
-    from transformers import RecurrentGemmaForCausalLM, RecurrentGemmaModel
+    from transformers import RecurrentGemmaModel
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -45,14 +45,6 @@ class RecurrentGemmaModelTester(CausalLMModelTester):
 
 @require_torch
 class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": RecurrentGemmaModel,
-            "text-generation": RecurrentGemmaForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
     has_attentions = False
     model_tester_class = RecurrentGemmaModelTester
 
