@@ -54,7 +54,6 @@ The following tenets solidified over time, and they're detailed in our new philo
 - **Minimal User API.** Few codepaths, predictable kwargs, stable methods.
 - **Backwards Compatibility.** Public surfaces should not break. Old Hub artifacts have to keep working..
 - **Consistent Public Surface.** Naming, outputs, and optional diagnostics are aligned and tested.
-- **Consistent Public Surface.** Naming, outputs, and optional diagnostics are aligned and tested.
 
 ## Main classes
 
