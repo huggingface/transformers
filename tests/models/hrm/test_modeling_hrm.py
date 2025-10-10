@@ -113,18 +113,18 @@ class HrmModelTester(CausalLMModelTester):
         if token_labels is not None:
             self.parent.assertIsNotNone(outputs.loss)
 
-    def create_and_check_forward_with_carry(
+    def create_and_check_forward_with_state(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        """Test forward pass with carry state."""
+        """Test forward pass with state."""
         model = HrmModel(config).to(torch_device)
         model.eval()
 
         batch = {"input_ids": input_ids}
-        carry = model.initial_carry(batch)
+        state = model.initial_state(batch)
 
         with torch.no_grad():
-            outputs = model(input_ids=input_ids, carry=carry)
+            outputs = model(input_ids=input_ids, state=state)
 
         self.parent.assertIsNotNone(outputs)
         self.parent.assertIsNotNone(outputs.carry)
@@ -264,10 +264,10 @@ class HrmModelTest(CausalLMModelTest, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_causal_lm(*config_and_inputs)
 
-    def test_forward_with_carry(self):
-        """Test forward pass with carry state."""
+    def test_forward_with_state(self):
+        """Test forward pass with state."""
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_forward_with_carry(*config_and_inputs)
+        self.model_tester.create_and_check_forward_with_state(*config_and_inputs)
 
     def test_model_outputs(self):
         """Test that model produces correct output structure."""
@@ -398,6 +398,238 @@ class HrmIntegrationTest(unittest.TestCase):
         # Verify Q-values for ACT mechanism
         self.assertIsNotNone(outputs.q_halt_logits)
         self.assertIsNotNone(outputs.q_continue_logits)
+
+    @slow
+    @require_torch
+    def test_pretrained_model_reasoning(self):
+        """Test that pretrained model can actually solve a simple puzzle correctly.
+
+        This is the critical test that verifies the model performs real reasoning,
+        not just that it produces non-None outputs.
+        """
+        model = HrmForCausalLM.from_pretrained("zbloss/HRM-sudoku-extreme")
+        model = model.to(torch_device)
+        model.eval()
+
+        # Simple test case: A partially filled Sudoku puzzle with a known unique solution
+        # Format: 0 = empty cell, 1-9 = filled cells
+        # This is a very simple puzzle where the model should be able to fill in the blanks
+        # Using a real example where we know what the correct answer should be
+        partial_puzzle = torch.tensor(
+            [
+                [
+                    5,
+                    3,
+                    0,
+                    0,
+                    7,
+                    0,
+                    0,
+                    0,
+                    0,  # Row 1
+                    6,
+                    0,
+                    0,
+                    1,
+                    9,
+                    5,
+                    0,
+                    0,
+                    0,  # Row 2
+                    0,
+                    9,
+                    8,
+                    0,
+                    0,
+                    0,
+                    0,
+                    6,
+                    0,  # Row 3
+                    8,
+                    0,
+                    0,
+                    0,
+                    6,
+                    0,
+                    0,
+                    0,
+                    3,  # Row 4
+                    4,
+                    0,
+                    0,
+                    8,
+                    0,
+                    3,
+                    0,
+                    0,
+                    1,  # Row 5
+                    7,
+                    0,
+                    0,
+                    0,
+                    2,
+                    0,
+                    0,
+                    0,
+                    6,  # Row 6
+                    0,
+                    6,
+                    0,
+                    0,
+                    0,
+                    0,
+                    2,
+                    8,
+                    0,  # Row 7
+                    0,
+                    0,
+                    0,
+                    4,
+                    1,
+                    9,
+                    0,
+                    0,
+                    5,  # Row 8
+                    0,
+                    0,
+                    0,
+                    0,
+                    8,
+                    0,
+                    0,
+                    7,
+                    9,  # Row 9
+                ]
+            ],
+            device=torch_device,
+        )
+
+        # Known complete solution for this puzzle
+        expected_solution = torch.tensor(
+            [
+                [
+                    5,
+                    3,
+                    4,
+                    6,
+                    7,
+                    8,
+                    9,
+                    1,
+                    2,
+                    6,
+                    7,
+                    2,
+                    1,
+                    9,
+                    5,
+                    3,
+                    4,
+                    8,
+                    1,
+                    9,
+                    8,
+                    3,
+                    4,
+                    2,
+                    5,
+                    6,
+                    7,
+                    8,
+                    5,
+                    9,
+                    7,
+                    6,
+                    1,
+                    4,
+                    2,
+                    3,
+                    4,
+                    2,
+                    6,
+                    8,
+                    5,
+                    3,
+                    7,
+                    9,
+                    1,
+                    7,
+                    1,
+                    3,
+                    9,
+                    2,
+                    4,
+                    8,
+                    5,
+                    6,
+                    9,
+                    6,
+                    1,
+                    5,
+                    3,
+                    7,
+                    2,
+                    8,
+                    4,
+                    2,
+                    8,
+                    7,
+                    4,
+                    1,
+                    9,
+                    6,
+                    3,
+                    5,
+                    3,
+                    4,
+                    5,
+                    2,
+                    8,
+                    6,
+                    1,
+                    7,
+                    9,
+                ]
+            ],
+            device=torch_device,
+        )
+
+        # Run the model through multiple ACT steps to get final predictions
+        with torch.no_grad():
+            # Initialize state
+            state = model.model.initial_state({"input_ids": partial_puzzle})
+
+            # Run through multiple reasoning steps (ACT mechanism)
+            for _ in range(model.config.halt_max_steps):
+                outputs = model(input_ids=partial_puzzle, state=state)
+                state = outputs.carry
+
+                # Check if halted
+                if state.halted.all():
+                    break
+
+            # Get final predictions
+            logits = outputs.logits
+            predictions = torch.argmax(logits, dim=-1)
+
+        # Verify that the model filled in at least some of the empty cells correctly
+        # We check positions that were originally 0 (empty) in the input
+        empty_positions = partial_puzzle[0] == 0
+        predicted_values = predictions[0][empty_positions]
+        expected_values = expected_solution[0][empty_positions]
+
+        # Calculate accuracy on empty cells only
+        correct_predictions = (predicted_values == expected_values).float().mean()
+
+        # The model should get at least 50% of empty cells correct to show it's reasoning
+        # (Random guessing would give ~11% accuracy for digits 1-9)
+        self.assertGreater(
+            correct_predictions.item(),
+            0.5,
+            f"Model only got {correct_predictions.item():.1%} of empty cells correct. "
+            f"This suggests the model is not performing meaningful reasoning. "
+            f"Expected at least 50% accuracy on empty cells.",
+        )
 
     def test_generation(self):
         """Test HRM generation capability."""

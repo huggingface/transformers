@@ -66,6 +66,7 @@ from ...modeling_flash_attention_utils import _flash_attention_forward
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
+from ..falcon_mamba.modeling_falcon_mamba import rms_forward
 from ..llama.modeling_llama import apply_rotary_pos_emb
 
 
@@ -148,8 +149,8 @@ class HrmConfig(PretrainedConfig):
             initializer_range (`float`, *optional*, defaults to 0.02):
                 The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
             use_cache (`bool`, *optional*, defaults to `False`):
-                Whether or not the model should return the carry state for recurrent computation.
-                HRM uses a unique carry state system for hierarchical processing.
+                Whether or not the model should return the state for recurrent computation.
+                HRM uses a unique state system for hierarchical processing.
 
     Example:
     ```python
@@ -236,8 +237,8 @@ class HrmModelOutput(ModelOutput):
             Q-values for halting in the Adaptive Computation Time mechanism.
         q_continue_logits (`torch.FloatTensor` of shape `(batch_size,)`):
             Q-values for continuing in the Adaptive Computation Time mechanism.
-        carry (`HrmCarry`, *optional*):
-            Carry state for recurrent computation, containing hidden states and halting information.
+        carry (`HrmState`, *optional*):
+            Model state for recurrent computation, containing hidden states and halting information.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`.
@@ -249,7 +250,7 @@ class HrmModelOutput(ModelOutput):
     logits: torch.FloatTensor = None
     q_halt_logits: torch.FloatTensor = None
     q_continue_logits: torch.FloatTensor = None
-    carry: Optional["HrmCarry"] = None
+    carry: Optional["HrmState"] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
 
@@ -268,8 +269,8 @@ class HrmCausalLMOutput(ModelOutput):
             Q-values for halting in the Adaptive Computation Time mechanism.
         q_continue_logits (`torch.FloatTensor` of shape `(batch_size,)`):
             Q-values for continuing in the Adaptive Computation Time mechanism.
-        carry (`HrmCarry`, *optional*):
-            Carry state for recurrent computation, containing hidden states and halting information.
+        carry (`HrmState`, *optional*):
+            Model state for recurrent computation, containing hidden states and halting information.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`.
@@ -282,7 +283,7 @@ class HrmCausalLMOutput(ModelOutput):
     logits: torch.FloatTensor = None
     q_halt_logits: torch.FloatTensor = None
     q_continue_logits: torch.FloatTensor = None
-    carry: Optional["HrmCarry"] = None
+    carry: Optional["HrmState"] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
 
@@ -310,13 +311,6 @@ def truncated_normal_init_(
     return tensor
 
 
-def rms_norm(hidden_states: torch.Tensor, variance_epsilon: float) -> torch.Tensor:
-    """Root Mean Square Layer Normalization."""
-    input_dtype = hidden_states.dtype
-    hidden_states = hidden_states.to(torch.float32)
-    variance = hidden_states.square().mean(-1, keepdim=True)
-    hidden_states = hidden_states * torch.rsqrt(variance + variance_epsilon)
-    return hidden_states.to(input_dtype)
 
 
 class HrmLinear(nn.Module):
@@ -518,10 +512,10 @@ class HrmBlock(nn.Module):
         self, hidden_states: torch.Tensor, cos_sin: Optional[tuple[torch.Tensor, torch.Tensor]] = None
     ) -> torch.Tensor:
         # Post-normalization
-        hidden_states = rms_norm(
+        hidden_states = rms_forward(
             hidden_states + self.self_attn(hidden_states, cos_sin=cos_sin), variance_epsilon=self.norm_eps
         )
-        hidden_states = rms_norm(hidden_states + self.mlp(hidden_states), variance_epsilon=self.norm_eps)
+        hidden_states = rms_forward(hidden_states + self.mlp(hidden_states), variance_epsilon=self.norm_eps)
         return hidden_states
 
 
@@ -547,18 +541,18 @@ class HrmReasoningModule(nn.Module):
 
 
 @dataclass
-class HrmInnerCarry:
+class HrmInnerState:
     """Internal state for the hierarchical reasoning modules."""
 
-    z_H: torch.Tensor  # High-level hidden state
-    z_L: torch.Tensor  # Low-level hidden state
+    high_level_state: torch.Tensor  # High-level hidden state for abstract reasoning
+    low_level_state: torch.Tensor  # Low-level hidden state for detailed computations
 
 
 @dataclass
-class HrmCarry:
-    """Complete carry state for HRM with ACT mechanism."""
+class HrmState:
+    """Complete state for HRM with ACT mechanism."""
 
-    inner_carry: HrmInnerCarry
+    inner_state: HrmInnerState
     steps: torch.Tensor
     halted: torch.Tensor
     current_data: dict
@@ -590,14 +584,15 @@ class HrmInner(nn.Module):
             self.puzzle_emb = nn.Embedding(config.num_puzzle_identifiers, config.puzzle_emb_ndim)
             nn.init.zeros_(self.puzzle_emb.weight)
 
-        # Positional encodings
-        if config.pos_encodings == "rope":
+        # Positional encodings - always initialize appropriate type based on config
+        self.pos_encodings = config.pos_encodings
+        if self.pos_encodings == "rope":
             self.rotary_emb = HrmRotaryEmbedding(
                 dim=config.hidden_size // config.num_attention_heads,
                 max_position_embeddings=config.max_position_embeddings + self.puzzle_emb_len,
                 base=config.rope_theta,
             )
-        elif config.pos_encodings == "learned":
+        elif self.pos_encodings == "learned":
             self.embed_pos = HrmEmbedding(
                 config.max_position_embeddings + self.puzzle_emb_len,
                 config.hidden_size,
@@ -608,25 +603,36 @@ class HrmInner(nn.Module):
             raise ValueError(f"Unknown pos_encodings: {config.pos_encodings}")
 
         # Reasoning modules
-        self.H_level = HrmReasoningModule(layers=[HrmBlock(config) for _ in range(config.h_layers)])
-        self.L_level = HrmReasoningModule(layers=[HrmBlock(config) for _ in range(config.l_layers)])
+        self.high_level_module = HrmReasoningModule(layers=[HrmBlock(config) for _ in range(config.h_layers)])
+        self.low_level_module = HrmReasoningModule(layers=[HrmBlock(config) for _ in range(config.l_layers)])
 
         # Initial states
         self.register_buffer(
-            "H_init",
+            "high_level_init_state",
             truncated_normal_init_(torch.empty(config.hidden_size, dtype=self.forward_dtype), std=1),
             persistent=True,
         )
         self.register_buffer(
-            "L_init",
+            "low_level_init_state",
             truncated_normal_init_(torch.empty(config.hidden_size, dtype=self.forward_dtype), std=1),
             persistent=True,
         )
 
-        # Q head special init
-        with torch.no_grad():
-            self.q_head.weight.zero_()
-            self.q_head.bias.fill_(-5)
+    def _init_q_head_weights(self):
+        """Apply special initialization to Q head for ACT halting mechanism.
+
+        The Q head needs zero weights and strong negative bias (-5) to encourage
+        initial exploration during Adaptive Computation Time learning.
+        This is called after standard weight initialization.
+        """
+        self.q_head.weight.data.zero_()
+        self.q_head.bias.data.fill_(-5.0)
+
+    def _get_rotary_embeddings(self) -> Optional[tuple[torch.Tensor, torch.Tensor]]:
+        """Get rotary embeddings if using RoPE, otherwise return None."""
+        if self.pos_encodings == "rope":
+            return self.rotary_emb()
+        return None
 
     def _input_embeddings(
         self, input: torch.Tensor, puzzle_identifiers: Optional[torch.Tensor] = None
@@ -646,12 +652,13 @@ class HrmInner(nn.Module):
 
         # Position embeddings
         if self.config.pos_encodings == "learned":
-            embedding = 0.707106781 * (embedding + self.embed_pos.weight.to(self.forward_dtype))
+            # Scale factor is 1/sqrt(2) to maintain variance after adding two embeddings
+            embedding = math.sqrt(0.5) * (embedding + self.embed_pos.weight.to(self.forward_dtype))
 
         return self.embed_scale * embedding
 
-    def empty_carry(self, batch_size: int, sequence_length: int, device: torch.device) -> HrmInnerCarry:
-        """Create uninitialized carry state tensors.
+    def empty_state(self, batch_size: int, sequence_length: int, device: torch.device) -> HrmInnerState:
+        """Create uninitialized state tensors.
 
         Args:
             batch_size (int): Batch size
@@ -659,17 +666,17 @@ class HrmInner(nn.Module):
             device (torch.device): Device to create tensors on
 
         Returns:
-            HrmInnerCarry: Uninitialized carry state
+            HrmInnerState: Uninitialized inner state
         """
-        return HrmInnerCarry(
-            z_H=torch.empty(
+        return HrmInnerState(
+            high_level_state=torch.empty(
                 batch_size,
                 sequence_length + self.puzzle_emb_len,
                 self.config.hidden_size,
                 dtype=self.forward_dtype,
                 device=device,
             ),
-            z_L=torch.empty(
+            low_level_state=torch.empty(
                 batch_size,
                 sequence_length + self.puzzle_emb_len,
                 self.config.hidden_size,
@@ -678,45 +685,50 @@ class HrmInner(nn.Module):
             ),
         )
 
-    def reset_carry(self, reset_flag: torch.Tensor, carry: HrmInnerCarry) -> HrmInnerCarry:
-        """Reset carry state to learned initial values based on flags."""
-        device = carry.z_H.device
-        H_init = self.H_init.to(device)
-        L_init = self.L_init.to(device)
-        return HrmInnerCarry(
-            z_H=torch.where(reset_flag.view(-1, 1, 1), H_init, carry.z_H),
-            z_L=torch.where(reset_flag.view(-1, 1, 1), L_init, carry.z_L),
+    def reset_state(self, reset_flag: torch.Tensor, state: HrmInnerState) -> HrmInnerState:
+        """Reset state to learned initial values based on flags."""
+        device = state.high_level_state.device
+        high_init = self.high_level_init_state.to(device)
+        low_init = self.low_level_init_state.to(device)
+        return HrmInnerState(
+            high_level_state=torch.where(reset_flag.view(-1, 1, 1), high_init, state.high_level_state),
+            low_level_state=torch.where(reset_flag.view(-1, 1, 1), low_init, state.low_level_state),
         )
 
     def forward(
-        self, carry: HrmInnerCarry, batch: dict
-    ) -> tuple[HrmInnerCarry, torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
+        self, state: HrmInnerState, batch: dict
+    ) -> tuple[HrmInnerState, torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
         """Execute hierarchical reasoning forward pass with 1-step gradient."""
-        cos_sin = self.rotary_emb() if hasattr(self, "rotary_emb") else None
+        # Get rotary embeddings if using RoPE (None for learned positional embeddings)
+        cos_sin = self._get_rotary_embeddings()
 
         # Input encoding
         input_embeddings = self._input_embeddings(batch["input_ids"], batch.get("puzzle_identifiers"))
 
-        # Forward iterations
+        # Forward iterations without gradients (for computational efficiency)
         with torch.no_grad():
-            z_H, z_L = carry.z_H, carry.z_L
-            for _H_step in range(self.config.h_cycles):
-                for _L_step in range(self.config.l_cycles):
-                    if not ((_H_step == self.config.h_cycles - 1) and (_L_step == self.config.l_cycles - 1)):
-                        z_L = self.L_level(z_L, z_H + input_embeddings, cos_sin=cos_sin)
-                if _H_step != self.config.h_cycles - 1:
-                    z_H = self.H_level(z_H, z_L, cos_sin=cos_sin)
+            high = state.high_level_state
+            low = state.low_level_state
 
-        # 1-step grad
-        z_L = self.L_level(z_L, z_H + input_embeddings, cos_sin=cos_sin)
-        z_H = self.H_level(z_H, z_L, cos_sin=cos_sin)
+            for high_cycle_idx in range(self.config.h_cycles):
+                for low_cycle_idx in range(self.config.l_cycles):
+                    # Skip the last L-level update (will be done with gradients)
+                    if not ((high_cycle_idx == self.config.h_cycles - 1) and (low_cycle_idx == self.config.l_cycles - 1)):
+                        low = self.low_level_module(low, high + input_embeddings, cos_sin=cos_sin)
+                # Skip the last H-level update (will be done with gradients)
+                if high_cycle_idx != self.config.h_cycles - 1:
+                    high = self.high_level_module(high, low, cos_sin=cos_sin)
 
-        # Outputs
-        new_carry = HrmInnerCarry(z_H=z_H.detach(), z_L=z_L.detach())
-        output = self.lm_head(z_H)[:, self.puzzle_emb_len :]
-        q_logits = self.q_head(z_H[:, 0]).to(torch.float32)
+        # Final iteration with 1-step gradient for backpropagation
+        low = self.low_level_module(low, high + input_embeddings, cos_sin=cos_sin)
+        high = self.high_level_module(high, low, cos_sin=cos_sin)
 
-        return new_carry, output, (q_logits[..., 0], q_logits[..., 1])
+        # Prepare outputs
+        new_state = HrmInnerState(high_level_state=high.detach(), low_level_state=low.detach())
+        output = self.lm_head(high)[:, self.puzzle_emb_len :]
+        q_logits = self.q_head(high[:, 0]).to(torch.float32)
+
+        return new_state, output, (q_logits[..., 0], q_logits[..., 1])
 
 
 class HrmPreTrainedModel(PreTrainedModel):
@@ -729,7 +741,7 @@ class HrmPreTrainedModel(PreTrainedModel):
     base_model_prefix = "hrm"
     supports_gradient_checkpointing = False
     _no_split_modules = ["HrmBlock"]
-    _skip_keys_device_placement = ["H_init", "L_init"]
+    _skip_keys_device_placement = ["high_level_init_state", "low_level_init_state"]
 
     def _init_weights(self, module):
         """Initialize the weights using truncated normal initialization."""
@@ -760,6 +772,8 @@ class HrmModel(HrmPreTrainedModel):
         self.config = config
         self.inner = HrmInner(config)
         self.post_init()
+        # Apply special Q head initialization after standard weight init
+        self.inner._init_q_head_weights()
 
     def get_input_embeddings(self):
         return self.inner.embed_tokens
@@ -767,13 +781,13 @@ class HrmModel(HrmPreTrainedModel):
     def set_input_embeddings(self, value):
         self.inner.embed_tokens = value
 
-    def initial_carry(self, batch: dict) -> HrmCarry:
-        """Initialize carry state for a new batch."""
+    def initial_state(self, batch: dict) -> HrmState:
+        """Initialize state for a new batch."""
         batch_size = batch["input_ids"].shape[0]
         sequence_length = batch["input_ids"].shape[1]
         device = batch["input_ids"].device
-        return HrmCarry(
-            inner_carry=self.inner.empty_carry(batch_size, sequence_length, device),
+        return HrmState(
+            inner_state=self.inner.empty_state(batch_size, sequence_length, device),
             steps=torch.zeros((batch_size,), dtype=torch.int32, device=device),
             halted=torch.ones((batch_size,), dtype=torch.bool, device=device),
             current_data={k: torch.empty_like(v) for k, v in batch.items()},
@@ -784,7 +798,7 @@ class HrmModel(HrmPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         puzzle_identifiers: Optional[torch.LongTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        carry: Optional[HrmCarry] = None,
+        state: Optional[HrmState] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -803,61 +817,50 @@ class HrmModel(HrmPreTrainedModel):
         if labels is not None:
             batch["labels"] = labels
 
-        # Initialize carry if not provided
-        if carry is None:
-            carry = self.initial_carry(batch)
+        # Initialize state if not provided
+        if state is None:
+            state = self.initial_state(batch)
 
-        # Update data and carry
-        new_inner_carry = self.inner.reset_carry(carry.halted, carry.inner_carry)
-        new_steps = torch.where(carry.halted, torch.zeros_like(carry.steps), carry.steps)
+        # Update data and state
+        new_inner_state = self.inner.reset_state(state.halted, state.inner_state)
+        new_steps = torch.where(state.halted, torch.zeros_like(state.steps), state.steps)
 
-        # Handle size mismatch during generation - update carry data with batch data
+        # Handle size mismatch during generation - update state data with batch data
         # Use scatter operations for efficient batch-wise updates
         new_current_data = {}
 
-        # Separate keys into common and carry-only for batch processing
-        common_keys = [k for k in carry.current_data.keys() if k in batch]
-        carry_only_keys = [k for k in carry.current_data.keys() if k not in batch]
+        # Separate keys into common and state-only for batch processing
+        common_keys = [k for k in state.current_data.keys() if k in batch]
+        state_only_keys = [k for k in state.current_data.keys() if k not in batch]
 
         # Get halted indices once for reuse across all keys
-        halted_indices = carry.halted.nonzero(as_tuple=False).squeeze(-1)
+        halted_indices = state.halted.nonzero(as_tuple=False).squeeze(-1)
 
         # Process common keys using scatter operations
         for k in common_keys:
             batch_val = batch[k]
-            carry_val = carry.current_data[k]
+            state_val = state.current_data[k]
 
-            # During generation, input_ids may be a single token while carry has full sequence
-            # Pad batch to match carry size in this expected case
-            if batch_val.shape[1] < carry_val.shape[1]:
-                # Pad batch to carry size (e.g., generation with single new token)
-                pad_size = carry_val.shape[1] - batch_val.shape[1]
+            # During generation, input_ids may be a single token while state has full sequence
+            # Pad batch to match state size in this expected case
+            if batch_val.shape[1] < state_val.shape[1]:
+                pad_size = state_val.shape[1] - batch_val.shape[1]
                 batch_val = F.pad(batch_val, (0, pad_size), value=0)
-            elif batch_val.shape[1] > carry_val.shape[1]:
-                # This should not happen in normal usage - carry is initialized from batch,
-                # so they should match initially. During generation, batch gets smaller (1 token),
-                # never larger. If this occurs, it indicates incorrect carry state reuse.
-                raise ValueError(
-                    f"Unexpected shape mismatch: batch sequence length ({batch_val.shape[1]}) "
-                    f"is greater than carry sequence length ({carry_val.shape[1]}) for key '{k}'. "
-                    f"This suggests carry state is being reused incorrectly across different input sizes. "
-                    f"Please initialize a new carry state for inputs with different sequence lengths."
-                )
 
             # Use scatter operation to update halted sequences
-            # Clone carry and scatter batch values at halted positions (dim 0 is batch dimension)
-            result = carry_val.clone()
+            # Clone state and scatter batch values at halted positions (dim 0 is batch dimension)
+            result = state_val.clone()
             if halted_indices.numel() > 0:
                 result.index_copy_(0, halted_indices, batch_val.index_select(0, halted_indices))
 
             new_current_data[k] = result
 
-        # Keep existing carry data for keys not in current batch
-        for k in carry_only_keys:
-            new_current_data[k] = carry.current_data[k]
+        # Keep existing state data for keys not in current batch
+        for k in state_only_keys:
+            new_current_data[k] = state.current_data[k]
 
         # Forward inner model
-        new_inner_carry, logits, (q_halt_logits, q_continue_logits) = self.inner(new_inner_carry, new_current_data)
+        new_inner_state, logits, (q_halt_logits, q_continue_logits) = self.inner(new_inner_state, new_current_data)
 
         # Halting logic
         with torch.no_grad():
@@ -873,7 +876,7 @@ class HrmModel(HrmPreTrainedModel):
                 ) * torch.randint_like(new_steps, low=2, high=self.config.halt_max_steps + 1)
                 halted = halted & (new_steps >= min_halt_steps)
 
-        new_carry = HrmCarry(new_inner_carry, new_steps, halted, new_current_data)
+        new_state = HrmState(new_inner_state, new_steps, halted, new_current_data)
 
         # Prepare hidden states and attentions if requested
         all_hidden_states = None
@@ -894,12 +897,12 @@ class HrmModel(HrmPreTrainedModel):
             seq_len = input_ids.shape[1]
             all_hidden_states = (
                 embeddings[:, puzzle_len : puzzle_len + seq_len] if puzzle_len > 0 else embeddings[:, :seq_len],
-                new_inner_carry.z_H[:, puzzle_len : puzzle_len + seq_len]
+                new_inner_state.high_level_state[:, puzzle_len : puzzle_len + seq_len]
                 if puzzle_len > 0
-                else new_inner_carry.z_H[:, :seq_len],
-                new_inner_carry.z_L[:, puzzle_len : puzzle_len + seq_len]
+                else new_inner_state.high_level_state[:, :seq_len],
+                new_inner_state.low_level_state[:, puzzle_len : puzzle_len + seq_len]
                 if puzzle_len > 0
-                else new_inner_carry.z_L[:, :seq_len],
+                else new_inner_state.low_level_state[:, :seq_len],
             )
 
         # Note: HRM doesn't explicitly compute attention weights in the current implementation
@@ -908,19 +911,13 @@ class HrmModel(HrmPreTrainedModel):
             all_attentions = ()  # Empty tuple as HRM doesn't expose attention weights
 
         if not return_dict:
-            # Return tuple: (logits, q_halt_logits, q_continue_logits, carry, hidden_states, attentions)
-            # Exclude None values from the tuple
-            return tuple(
-                v
-                for v in [logits, q_halt_logits, q_continue_logits, new_carry, all_hidden_states, all_attentions]
-                if v is not None
-            )
+            return (logits, q_halt_logits, q_continue_logits, new_state, all_hidden_states, all_attentions)
 
         return HrmModelOutput(
             logits=logits,
             q_halt_logits=q_halt_logits,
             q_continue_logits=q_continue_logits,
-            carry=new_carry,
+            carry=new_state,
             hidden_states=all_hidden_states,
             attentions=all_attentions,
         )
@@ -944,27 +941,17 @@ class HrmForCausalLM(HrmPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         pass  # HRM doesn't tie output embeddings
 
-    def prepare_inputs_for_generation(
-        self, input_ids, carry=None, past_key_values=None, attention_mask=None, **kwargs
-    ):
+    def prepare_inputs_for_generation(self, input_ids, state=None, **kwargs):
         """Prepare inputs for generation, handling dynamic sequence lengths."""
-        # HRM doesn't use past_key_values, attention_mask, but uses carry instead
-        # During generation, only pass the last token
-        if carry is not None:
+        # During generation, only pass the last token if state exists
+        if state is not None:
             input_ids = input_ids[:, -1:]
 
-        model_inputs = {"input_ids": input_ids, "carry": carry}
-        #  Don't pass attention_mask as HRM doesn't use it - filter it out from kwargs
-        filtered_kwargs = {k: v for k, v in kwargs.items() if k != "attention_mask"}
-        model_inputs.update(filtered_kwargs)
-        return model_inputs
+        return {"input_ids": input_ids, "state": state, **kwargs}
 
     def _update_model_kwargs_for_generation(self, outputs, model_kwargs, **kwargs):
         """Update model kwargs for next generation step."""
-        # Update carry for next generation step
-        model_kwargs["carry"] = outputs.carry
-        # Remove attention_mask as HRM doesn't use it
-        model_kwargs.pop("attention_mask", None)
+        model_kwargs["state"] = outputs.carry
         return model_kwargs
 
     @auto_docstring
@@ -973,7 +960,7 @@ class HrmForCausalLM(HrmPreTrainedModel, GenerationMixin):
         input_ids: Optional[torch.LongTensor] = None,
         puzzle_identifiers: Optional[torch.LongTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        carry: Optional[HrmCarry] = None,
+        state: Optional[HrmState] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -985,29 +972,23 @@ class HrmForCausalLM(HrmPreTrainedModel, GenerationMixin):
             input_ids=input_ids,
             puzzle_identifiers=puzzle_identifiers,
             labels=labels,
-            carry=carry,
+            state=state,
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
             return_dict=return_dict,
             **kwargs,
         )
 
-        # Extract outputs - handle both dict and tuple returns from model
+        # Extract outputs
         if return_dict:
             logits = outputs.logits
             q_halt_logits = outputs.q_halt_logits
             q_continue_logits = outputs.q_continue_logits
-            carry_out = outputs.carry
+            state_out = outputs.carry
             hidden_states = outputs.hidden_states
             attentions = outputs.attentions
         else:
-            # When return_dict=False, outputs is a tuple
-            logits = outputs[0]
-            q_halt_logits = outputs[1] if len(outputs) > 1 else None
-            q_continue_logits = outputs[2] if len(outputs) > 2 else None
-            carry_out = outputs[3] if len(outputs) > 3 else None
-            hidden_states = outputs[4] if len(outputs) > 4 else None
-            attentions = outputs[5] if len(outputs) > 5 else None
+            logits, q_halt_logits, q_continue_logits, state_out, hidden_states, attentions = outputs
 
         loss = None
         if labels is not None:
@@ -1018,20 +999,14 @@ class HrmForCausalLM(HrmPreTrainedModel, GenerationMixin):
             loss = loss_fct(shift_logits.view(-1, self.config.vocab_size), shift_labels.view(-1))
 
         if not return_dict:
-            # Return tuple: (loss, logits, q_halt_logits, q_continue_logits, carry, hidden_states, attentions)
-            # Exclude None values from the tuple
-            return tuple(
-                v
-                for v in [loss, logits, q_halt_logits, q_continue_logits, carry_out, hidden_states, attentions]
-                if v is not None
-            )
+            return (loss, logits, q_halt_logits, q_continue_logits, state_out, hidden_states, attentions)
 
         return HrmCausalLMOutput(
             loss=loss,
             logits=logits,
             q_halt_logits=q_halt_logits,
             q_continue_logits=q_continue_logits,
-            carry=carry_out,
+            carry=state_out,
             hidden_states=hidden_states,
             attentions=attentions,
         )

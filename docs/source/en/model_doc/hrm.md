@@ -110,7 +110,7 @@ outputs = model(input_ids=input_ids)
 logits = outputs["logits"]  # (batch_size, seq_len, vocab_size)
 ```
 
-### Training with Carry State
+### Training with State
 
 ```python
 from transformers import HrmForCausalLM, HrmConfig
@@ -133,14 +133,14 @@ for batch in dataloader:
     input_ids = batch["input_ids"]
     labels = batch["labels"]
 
-    # Initialize carry state
-    carry = model.model.initial_carry({"input_ids": input_ids})
+    # Initialize model state
+    state = model.model.initial_state({"input_ids": input_ids})
 
     # Forward with ACT mechanism
     outputs = model(
         input_ids=input_ids,
         labels=labels,
-        carry=carry,
+        state=state,
     )
 
     loss = outputs["loss"]
