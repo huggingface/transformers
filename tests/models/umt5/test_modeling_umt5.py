@@ -681,6 +681,10 @@ class UMT5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_with_token_classification_head(*config_and_inputs)
 
+    def test_with_sequence_classification_head(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_with_sequence_classification_head(*config_and_inputs)
+
     def is_pipeline_test_to_skip(
         self,
         pipeline_test_case_name,
