@@ -546,8 +546,10 @@ class GenerationMixin(ContinuousMixin):
         model_inputs["cache_position"] = cache_position
 
         # 2. Generic cache-dependent input preparation
+        has_non_standard_cache = kwargs.get("use_cache", False) or self.config.use_cache
         if past_key_values is not None:
             model_inputs["past_key_values"] = past_key_values
+        if past_key_values is None or has_non_standard_cache:
             # TODO (joao): handle the case where cache length == input_ids length. The function below results in an
             # exception because we get empty input_ids after slicing. In essence, we need to roll back the cache 1
             # token to recompute the logits for the first token to be generated (but not all caches support roll backs)
@@ -589,7 +591,7 @@ class GenerationMixin(ContinuousMixin):
         for model_input_name in ["position_ids", "token_type_ids", "decoder_position_ids"]:
             model_input = kwargs.get(model_input_name)
             if model_input is not None:
-                if past_key_values is not None:
+                if past_key_values is not None or has_non_standard_cache:
                     current_input_length = (
                         model_inputs["inputs_embeds"].shape[1]
                         if model_inputs.get("inputs_embeds") is not None
