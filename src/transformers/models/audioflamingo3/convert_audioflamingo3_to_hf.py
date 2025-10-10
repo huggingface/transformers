@@ -25,7 +25,6 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
-import accelerate
 from safetensors.torch import safe_open
 
 from transformers import (
@@ -63,13 +62,14 @@ def write_processor(src_root: Path, dst_root: Path):
         "{% endif %}"
     )
 
-    processor = AudioFlamingo3Processor.from_pretrained(
+    processor = AudioFlamingo3Processor(
         feature_extractor=WhisperFeatureExtractor(feature_size=128, return_attention_mask=True),
         tokenizer=AutoTokenizer.from_pretrained(str(llm_dir), chat_template=chat_template, use_fast=True),
     )
     processor.save_pretrained(str(dst_root))
 
     logger.info("processor (tokenizer + preprocessor)")
+    return processor
 
 
 PREFIX_MAP = {
@@ -139,14 +139,23 @@ def merge_and_shard_weights(src_root: Path, dst_root: Path):
         vocab_size=151672,
     )
     config = AudioFlamingo3Config(text_config=text_config)
-    with accelerate.init_empty_weights():
-        model = AudioFlamingo3ForConditionalGeneration(config)
+    model = AudioFlamingo3ForConditionalGeneration(config)
+    # Load weights into the instantiated model so we can push via `push_to_hub` later.
+    load_res = model.load_state_dict(state, strict=True)
+    # Enforce a clean load
+    if getattr(load_res, "missing_keys", None) and load_res.missing_keys:
+        mk = load_res.missing_keys
+        raise ValueError(f"Missing keys when loading: {mk[:10]}{' ...' if len(mk) > 10 else ''}")
+    if getattr(load_res, "unexpected_keys", None) and load_res.unexpected_keys:
+        uk = load_res.unexpected_keys
+        raise ValueError(f"Unexpected keys when loading: {uk[:10]}{' ...' if len(uk) > 10 else ''}")
 
-    model.save_pretrained(save_directory=str(dst_root), state_dict=state)
+    model.save_pretrained(save_directory=str(dst_root))
     logger.info("model.safetensors index and shards")
+    return model
 
 
-def write_generation_config(dst_root: Path) -> None:
+def write_generation_config(dst_root: Path) -> GenerationConfig:
     generation_config = GenerationConfig(
         bos_token_id=151643,
         do_sample=True,
@@ -159,20 +168,75 @@ def write_generation_config(dst_root: Path) -> None:
     )
     generation_config.save_pretrained(dst_root)
     logger.info("generation_config.json")
+    return generation_config
+
+
+"""
+Reproducible Usage
+==================
+
+1) Download the original AudioFlamingo-3 weights from NVIDIA (requires Git LFS):
+
+```
+git lfs install
+git clone https://huggingface.co/nvidia/audio-flamingo-3
+```
+
+This will create a folder `audio-flamingo-3/` containing the original components:
+`llm/`, `sound_tower/`, and `sound_mm_projector/`.
+
+2) Convert to the Hugging Face Transformers format (locally):
+
+```
+python src/transformers/models/audioflamingo3/convert_audioflamingo3_to_hf.py \
+  --src_dir audio-flamingo-3 \
+  --dst_dir audio-flamingo-3-hf
+```
+
+3) Convert and push directly to the Hub (requires `huggingface-cli login` or `HF_TOKEN`):
+
+```
+python src/transformers/models/audioflamingo3/convert_audioflamingo3_to_hf.py \
+  --src_dir audio-flamingo-3 \
+  --dst_dir audio-flamingo-3-hf \
+  --push_to_hub <username-or-org>/audio-flamingo-3
+```
+
+This command uploads both the processor (tokenizer + feature extractor) and the converted
+model (sharded safetensors + configs) to the specified Hub repository.
+"""
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Convert AudioFlamingo3 to Hugging Face format.")
-    ap.add_argument("src_dir", help="Source model root directory")
-    ap.add_argument("dst_dir", help="Destination directory for converted model")
+    ap.add_argument("--src_dir", required=True, help="Source model root directory")
+    ap.add_argument("--dst_dir", required=True, help="Destination directory for converted model")
+    ap.add_argument(
+        "--push_to_hub",
+        default=None,
+        type=str,
+        help=(
+            "Optional repository ID to push the converted assets to the Hugging Face Hub, "
+            "e.g. 'username/audio-flamingo-3'."
+        ),
+    )
     args = ap.parse_args()
 
     src_root = Path(args.src_dir).resolve()
     dst_root = Path(args.dst_dir).resolve()
 
-    write_processor(src_root, dst_root)
-    merge_and_shard_weights(src_root, dst_root)
-    write_generation_config(dst_root)
+    processor = write_processor(src_root, dst_root)
+    model = merge_and_shard_weights(src_root, dst_root)
+    gen_config = write_generation_config(dst_root)
+    # Ensure the same generation config is shipped when pushing to Hub
+    model.generation_config = gen_config
+
+    # Optionally push converted assets using native push_to_hub only
+    if args.push_to_hub:
+        logger.info("Pushing processor to the Hub ...")
+        processor.push_to_hub(args.push_to_hub)
+        logger.info("Pushing model to the Hub ...")
+        model.push_to_hub(args.push_to_hub)
 
 
 if __name__ == "__main__":
