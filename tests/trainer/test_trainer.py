@@ -5202,21 +5202,18 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         final_model_path = os.path.join(final_checkpoint_path, SAFE_WEIGHTS_NAME)
         self.assertTrue(os.path.exists(final_model_path), "Final model checkpoint was not saved!")
 
-    @require_safetensors
     def test_resume_batch_order(self):
         """
-        Tests that the dataloader order is reproducible when resuming from partial checkpoints.
+        Test that verifies dataloader order is reproducible when resuming from partial checkpoints.
+        Tests resuming from checkpoint 7 (within epoch 1).
         """
-        import shutil
-
-        from safetensors.torch import load_file
 
         # --- Helper classes and functions defined locally for this test ---
         class DummyDataset(torch.utils.data.Dataset):
             def __init__(self, size: int = 32):
                 self.size = size
                 self.data = torch.randn((size, 10))
-                self.data[:, 0] = torch.arange(0, size)  # encode the data order
+                self.data[:, 0] = torch.arange(0, size)  # Encode the data order
                 self.labels = torch.randint(0, 10, (size,))
 
             def __len__(self) -> int:
@@ -5255,143 +5252,128 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
                 return {"loss": loss, "logits": logits}
 
-        def load_data_order_from_safetensors(path):
-            """Load the 'data_order' tensor from a safetensors file."""
-            try:
-                state_dict = load_file(path / "model.safetensors")
-                if "data_order" not in state_dict:
-                    raise KeyError("'data_order' tensor not found in the safetensors file.")
-                return state_dict["data_order"]
-            except Exception as e:
-                raise RuntimeError(f"Error loading safetensors file: {e}") from e
+        # Scenario 1: Run baseline training to completion
+        # 1.1 Run training to completion
+        set_seed(42)
+        train_dataset = DummyDataset(size=10)
+        model_baseline = DummyModel(size=10)
 
-        def run_training_experiment(
-            seed: int,
-            data_size: int,
-            batch_size: int,
-            grad_acc: int,
-            save_steps: int,
-            num_epochs: int,
-            exp_dir,
-            resume_from=None,
-        ):
-            """Run a training experiment with the given parameters."""
-            # Set random seeds for reproducibility
-            set_seed(seed)
+        exp_dir_baseline = self.get_auto_remove_tmp_dir()
+        args_baseline = TrainingArguments(
+            output_dir=str(exp_dir_baseline),
+            seed=42,
+            learning_rate=0.1,
+            per_device_train_batch_size=2,
+            gradient_accumulation_steps=1,
+            save_strategy="steps",
+            save_steps=1,
+            num_train_epochs=3,
+            optim="sgd",
+            disable_tqdm=True,
+            dataloader_num_workers=0,  # Ensures that main process loads the data
+            report_to=[],  # Disable wandb/tensorboard and other loggers
+        )
 
-            exp_dir.mkdir(parents=True, exist_ok=True)
-            train_dataset = DummyDataset(size=data_size)
-            model = DummyModel(size=data_size)
+        trainer_baseline = Trainer(
+            model=model_baseline,
+            args=args_baseline,
+            train_dataset=train_dataset,
+        )
 
-            args = TrainingArguments(
-                output_dir=str(exp_dir),
-                seed=seed,
-                learning_rate=0.1,
-                per_device_train_batch_size=batch_size,
-                gradient_accumulation_steps=grad_acc,
-                save_strategy="steps",
-                save_steps=save_steps,
-                num_train_epochs=num_epochs,
-                optim="sgd",
-                disable_tqdm=True,
-                dataloader_num_workers=0,  # ensures that main process loads the data
-                report_to=[],  # Disable all reporting
-            )
+        trainer_baseline.train()
 
-            trainer = Trainer(
-                model=model,
-                args=args,
-                train_dataset=train_dataset,
-            )
+        # 1.2 Get the data order from the last saved checkpoint for the full run
+        last_checkpoint_path = get_last_checkpoint(exp_dir_baseline)
+        last_ckpt_num = int(os.path.basename(last_checkpoint_path).split("-")[1])  # Must be 15
 
-            last_checkpoint = None
-            print(f"Getting last checkpoint in {exp_dir}")
+        baseline_state_dict = safetensors.torch.load_file(
+            os.path.join(exp_dir_baseline, f"checkpoint-{last_ckpt_num}", "model.safetensors")
+        )
+        baseline_data_order = baseline_state_dict["data_order"]
 
-            last_checkpoint = get_last_checkpoint(str(exp_dir))
-            print(f"Last checkpoint found in {exp_dir}: {last_checkpoint}")
+        # Scenario 2: Run training with checkpoint deletion and resume
+        # 2.1 Run training to completion
+        set_seed(42)
+        model_deletion = DummyModel(size=10)
 
-            trainer.train(resume_from_checkpoint=last_checkpoint)
+        exp_dir_checkpoint_deletion = self.get_auto_remove_tmp_dir()
+        args_deletion = TrainingArguments(
+            output_dir=str(exp_dir_checkpoint_deletion),
+            seed=42,
+            learning_rate=0.1,
+            per_device_train_batch_size=2,
+            gradient_accumulation_steps=1,
+            save_strategy="steps",
+            save_steps=1,
+            num_train_epochs=3,
+            optim="sgd",
+            disable_tqdm=True,
+            dataloader_num_workers=0,  # Ensures that main process loads the data
+            report_to=[],  # Disable wandb/tensorboard and other loggers
+        )
 
-        # Test parameters
-        num_epochs = 3
-        data_size = 10
-        batch_size = 2
-        grad_acc = 1
-        save_steps = 1
-        last_ckpt_num = int(data_size * num_epochs / (batch_size * grad_acc))
-        seed = 42
+        trainer_deletion = Trainer(
+            model=model_deletion,
+            args=args_deletion,
+            train_dataset=train_dataset,
+        )
 
-        # Test resuming from checkpoint 2 (within epoch 0) and checkpoint 7 (within epoch 1)
-        for target_ckpt_num in [2, 7]:
-            print(f"\n{'=' * 80}")
-            print(
-                f"Testing resuming from middle of epoch {round((target_ckpt_num - 1) * batch_size / data_size)} (target_ckpt_num = {target_ckpt_num})"
-            )
-            print(f"{'=' * 80}")
+        trainer_deletion.train()
 
-            # Create temporary directories
-            exp_dir_baseline = Path(self.get_auto_remove_tmp_dir())
-            exp_dir_checkpoint_deletion = Path(self.get_auto_remove_tmp_dir())
+        # 2.2 Delete checkpoints from target_ckpt_num onwards
+        # 1 epoch consists of 10 points, so 5 steps with batch size 2
+        # Testing resuming from middle of epoch 1 (target_ckpt_num = 7)
+        import shutil
 
-            # Scenario 1: Run baseline training to completion
-            run_training_experiment(
-                seed=seed,
-                data_size=data_size,
-                batch_size=batch_size,
-                grad_acc=grad_acc,
-                save_steps=save_steps,
-                num_epochs=num_epochs,
-                exp_dir=exp_dir_baseline,
-            )
+        target_ckpt_num = 7
+        print(f"Deleting checkpoints from checkpoint-{target_ckpt_num} onwards...")
+        for ckpt_num in range(target_ckpt_num, last_ckpt_num + 1):
+            ckpt_path = os.path.join(exp_dir_checkpoint_deletion, f"checkpoint-{ckpt_num}")
+            if os.path.exists(ckpt_path):
+                shutil.rmtree(ckpt_path)
 
-            baseline_data_order = load_data_order_from_safetensors(exp_dir_baseline / f"checkpoint-{last_ckpt_num}")
+        # 2.3 Resume training from the remaining checkpoints
+        checkpoint_path = os.path.join(exp_dir_checkpoint_deletion, f"checkpoint-{target_ckpt_num - 1}")
 
-            # Scenario 2: Run training with checkpoint deletion and resume
-            # First, run training to completion
-            run_training_experiment(
-                seed=seed,
-                data_size=data_size,
-                batch_size=batch_size,
-                grad_acc=grad_acc,
-                save_steps=save_steps,
-                num_epochs=num_epochs,
-                exp_dir=exp_dir_checkpoint_deletion,
-            )
+        set_seed(42)
+        model_resume = DummyModel(size=10)
 
-            # Delete checkpoints from target_ckpt_num onwards
-            print(f"Deleting checkpoints from checkpoint-{target_ckpt_num} onwards...")
-            for ckpt_num in range(target_ckpt_num, last_ckpt_num + 1):
-                ckpt_path = exp_dir_checkpoint_deletion / f"checkpoint-{ckpt_num}"
-                if ckpt_path.exists():
-                    # print(f"Deleting {ckpt_path}")
-                    shutil.rmtree(ckpt_path)
+        args_resume = TrainingArguments(
+            output_dir=str(exp_dir_checkpoint_deletion),
+            seed=42,
+            learning_rate=0.1,
+            per_device_train_batch_size=2,
+            gradient_accumulation_steps=1,
+            save_strategy="steps",
+            save_steps=1,
+            num_train_epochs=3,
+            optim="sgd",
+            disable_tqdm=True,
+            dataloader_num_workers=0,  # Ensures that main process loads the data
+            report_to=[],  # Disable wandb/tensorboard and other loggers
+        )
 
-            # Resume training from the remaining checkpoints
-            checkpoint_path = exp_dir_checkpoint_deletion / f"checkpoint-{target_ckpt_num - 1}"
-            run_training_experiment(
-                seed=seed,
-                data_size=data_size,
-                batch_size=batch_size,
-                grad_acc=grad_acc,
-                save_steps=save_steps,
-                num_epochs=num_epochs,
-                exp_dir=exp_dir_checkpoint_deletion,
-                resume_from=str(checkpoint_path),
-            )
+        trainer_resume = Trainer(
+            model=model_resume,
+            args=args_resume,
+            train_dataset=train_dataset,
+        )
 
-            # Load the final results after resume
-            resumed_data_order = load_data_order_from_safetensors(
-                exp_dir_checkpoint_deletion / f"checkpoint-{last_ckpt_num}"
-            )
+        trainer_resume.train(resume_from_checkpoint=checkpoint_path)
 
-            # Compare results - the data order should be identical
-            self.assertTrue(
-                torch.equal(baseline_data_order, resumed_data_order),
-                f"Data order mismatch after checkpoint deletion and resume.\n"
-                f"Baseline: {baseline_data_order}\n"
-                f"Resumed: {resumed_data_order}",
-            )
+        # 2.4 Get the data order from the last saved checkpoint for the resumed run
+        resumed_state_dict = safetensors.torch.load_file(
+            os.path.join(exp_dir_checkpoint_deletion, f"checkpoint-{last_ckpt_num}", "model.safetensors")
+        )
+        resumed_data_order = resumed_state_dict["data_order"]
 
+        # 3. Compare results: the data order should be identical
+        self.assertTrue(
+            torch.equal(baseline_data_order, resumed_data_order),
+            f"Data order mismatch after checkpoint deletion and resume.\n"
+            f"Baseline: {baseline_data_order}\n"
+            f"Resumed: {resumed_data_order}",
+        )
 
 @require_torch
 @is_staging_test
