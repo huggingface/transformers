@@ -1,0 +1,71 @@
+# coding=utf-8
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+import argparse
+
+import json
+from transformers import VibeVoiceAcousticTokenizerConfig, VibeVoiceAcousticTokenizerModel, AutoModel
+
+
+def convert_checkpoint(vibevoice_model_id, config_path, push_to_hub):
+
+    # load config
+    with open(config_path, "r") as f:
+        config = json.load(f)
+
+    # extract acoustic tokenizer configuration
+    acoustic_tokenizer_config = config["acoustic_tokenizer_config"]
+    # -- cleanup
+    acoustic_tokenizer_config["encoder_depths"] = list(map(int, acoustic_tokenizer_config["encoder_depths"].split("-")))
+
+    # create config
+    config = VibeVoiceAcousticTokenizerConfig(**acoustic_tokenizer_config)
+
+    # create model
+    model = VibeVoiceAcousticTokenizerModel(config)
+
+    # TODO load state dict from original VibeVoice model
+    # -- load original model
+    original_model = AutoModel.from_pretrained(vibevoice_model_id)    
+
+    # TODO create audio feature extractor here??
+
+    # push to hub
+    model.push_to_hub(push_to_hub)
+
+"""
+wget https://huggingface.co/microsoft/VibeVoice-1.5B/resolve/main/config.json -P /raid/eric/vibevoice_original
+wget https://huggingface.co/microsoft/VibeVoice-1.5B/resolve/main/config.json -P /raid/eric/vibevoice_original
+
+python src/transformers/models/vibevoice_acoustic_tokenizer/convert_vibevoice_acoustic_tokenizer_to_hf.py \
+    --vibevoice_model_id microsoft/VibeVoice-1.5B \
+    --config_path /raid/eric/vibevoice_original/config.json \
+    --push_to_hub bezzam/VibeVoiceAcousticTokenizer
+"""
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--vibevoice_model_id", required=True, default=None, type=str, help="ID of the VibeVoice model to extract the acoustic tokenizer from.")
+    parser.add_argument(
+        "--config_path", required=True, default=None, type=str, help="Path to hf config.yaml of model to convert"
+    )
+    parser.add_argument(
+        "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
+    )
+
+    args = parser.parse_args()
+    convert_checkpoint(
+        args.vibevoice_model_id,
+        args.config_path,
+        args.push_to_hub,
+    )

@@ -297,7 +297,6 @@ class VibeVoiceProcessor(ProcessorMixin):
             if len(texts) != len(voice_samples_list):
                 raise ValueError(f"Got {len(texts)} texts but {len(voice_samples)} audio lists; they must match 1:1.")
 
-            # TODO switch to below to avoid processing duplicate audio samples
             # check correct number of samples per script, and extract audio for unique speakers
             speaker_to_audio = {}
             for speakers, audios in zip(speakers_per_script, voice_samples_list):
@@ -306,13 +305,15 @@ class VibeVoiceProcessor(ProcessorMixin):
                 for _speaker, _audio in zip(speakers, audios):
                     if _speaker not in speaker_to_audio:
                         speaker_to_audio[_speaker] = _audio
-            unique_audio = [speaker_to_audio[spk] for spk in sorted(speaker_to_audio)]
 
-            # # Process audio samples
+            # # # Process audio samples (TODO would like to use without duplicates)
+            # -- but tokenize only accepts batch of size [batch, 1, time] and not [batch, n_audio, time], namely needs 1D audio
+            # -- so probably better to move audio tokenizer here and then loop over to compute audio tokenizer outputs
+            # unique_audio = [speaker_to_audio[spk] for spk in sorted(speaker_to_audio)]
             # processed_audio = self.audio_processor(unique_audio, **audio_kwargs)
             # processed_audio["speech_tensors"] = processed_audio.pop("audio")
 
-            # With duplicates
+            # With duplicates (TODO would like to remove this)
             voices = [voice for _voices in voice_samples_list for voice in _voices]
             processed_audio = self.audio_processor(voices, **audio_kwargs)
             processed_audio["speech_tensors"] = processed_audio.pop("audio")
@@ -325,11 +326,6 @@ class VibeVoiceProcessor(ProcessorMixin):
                 speech_masks[i, :seq_len] = True
             processed_audio["speech_masks"] = speech_masks
             del processed_audio["padding_mask"]
-
-            # TODO would like to expand like this for proper batch dim
-            # batch_size = len(texts)
-            # batch_encoding["speech_tensors"] = processed_audio["audio"].unsqueeze(0).expand(batch_size, -1, -1) 
-            # batch_encoding["speech_masks"] = speech_masks.unsqueeze(0).expand(batch_size, -1, -1) 
 
             # Create mask to know which audio is used by a particular script
             audio_select_mask = np.zeros((len(scripts), len(speaker_to_audio)), dtype=np.bool_)
@@ -418,6 +414,11 @@ class VibeVoiceProcessor(ProcessorMixin):
             return_tensors=return_tensors,
             return_attention_mask=return_attention_mask,
         )
+        # if processed_audio is not None:
+        #     # TODO would like to expand like this for proper batch dim
+        #     batch_size = len(texts)
+        #     processed_audio["speech_tensors"] = processed_audio["speech_tensors"].unsqueeze(0).expand(batch_size, -1, -1)
+        #     processed_audio["speech_masks"] = processed_audio["speech_masks"].unsqueeze(0).expand(batch_size, -1, -1)
         batch_encoding.update(processed_audio)
 
         return batch_encoding
