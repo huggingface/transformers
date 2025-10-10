@@ -996,6 +996,12 @@ class TrainingArguments:
             )
         },
     )
+    local_rank: int = field(
+        default=-1,
+        metadata={
+            "help": "When using torch.distributed.launch (Deprecated), it will pass `local_rank` in the script, so we need this for the parser. To get the local rank, prefer using the property `local_process_index`"
+        },
+    )
     ddp_backend: Optional[str] = field(
         default=None,
         metadata={
@@ -1272,12 +1278,6 @@ class TrainingArguments:
             "help": "Whether to recursively concat inputs/losses/labels/predictions across batches. If `False`, will instead store them as lists, with each batch kept separate."
         },
     )
-    _n_gpu: int = field(init=False, repr=False, default=-1)
-    mp_parameters: str = field(
-        default="",
-        metadata={"help": "Used by the SageMaker launcher to send mp-specific args. Ignored in Trainer"},
-    )
-
     auto_find_batch_size: bool = field(
         default=False,
         metadata={

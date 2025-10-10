@@ -674,13 +674,7 @@ class BlipTextModel(BlipTextPreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds or encoder_embeds")
 
-        past_key_values_length = 0
-        if past_key_values is not None:
-            past_key_values_length = (
-                past_key_values[0][0].shape[-2]
-                if not isinstance(past_key_values, Cache)
-                else past_key_values.get_seq_length()
-            )
+        past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
 
         if attention_mask is None:
             attention_mask = torch.ones((batch_size, seq_length + past_key_values_length)).to(device)
