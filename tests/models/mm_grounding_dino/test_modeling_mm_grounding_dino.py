@@ -18,6 +18,7 @@ import inspect
 import math
 import re
 import unittest
+from functools import cached_property
 
 from datasets import load_dataset
 
@@ -27,7 +28,6 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.file_utils import cached_property
 from transformers.testing_utils import (
     is_flaky,
     require_timm,
@@ -39,7 +39,7 @@ from transformers.testing_utils import (
 )
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -250,8 +250,7 @@ class MMGroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
     all_model_classes = (MMGroundingDinoModel, MMGroundingDinoForObjectDetection) if is_torch_available() else ()
     is_encoder_decoder = True
     test_torchscript = False
-    test_pruning = False
-    test_head_masking = False
+
     test_missing_keys = False
     pipeline_model_mapping = (
         {
@@ -575,34 +574,6 @@ class MMGroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
 
             self.assertTrue(outputs)
 
-    # Ignore copy
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    if (
-                        "level_embed" in name
-                        or "sampling_offsets.bias" in name
-                        or "text_param" in name
-                        or "vision_param" in name
-                        or "value_proj" in name
-                        or "output_proj" in name
-                        or "reference_points" in name
-                        or "vision_proj" in name
-                        or "text_proj" in name
-                        or ("class_embed" in name and "bias" in name)
-                    ):
-                        continue
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
-
     # Copied from tests.models.deformable_detr.test_modeling_deformable_detr.DeformableDetrModelTest.test_two_stage_training with DeformableDetr->MMGroundingDino
     def test_two_stage_training(self):
         model_class = MMGroundingDinoForObjectDetection
@@ -645,7 +616,7 @@ class MMGroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
 
             # MMGroundingDino when sharing weights also uses the shared ones in MMGroundingDinoDecoder
             # Therefore, differently from DeformableDetr, we expect the group lens to be 2
-            # one for self.bbox_embed in MMGroundingDinoForObejectDetection and another one
+            # one for self.bbox_embed in MMGroundingDinoForObjectDetection and another one
             # in the decoder
             tied_params = [group for group in tied_params if len(group) > 2]
             self.assertListEqual(
@@ -746,7 +717,7 @@ class MMGroundingDinoModelIntegrationTests(unittest.TestCase):
         )
         # HACK: the issue happens during top-k (k=900) after the encoder
         # there are some flips between cpu and gpu query ordering (idxs 195<->196 and 267<->268 on my machine)
-        # which causes different query position embedding assingments
+        # which causes different query position embedding assignments
         # which in turn significantly changes the decoder pass due to self attention
         model.config.num_queries = 100
         model.model.query_position_embeddings.weight.data = model.model.query_position_embeddings.weight.data[:100]
@@ -788,7 +759,7 @@ class MMGroundingDinoModelIntegrationTests(unittest.TestCase):
         ).to(torch_device)
         # HACK: the issue happens during top-k (k=900) after the encoder
         # there are some flips between cpu and gpu query ordering
-        # which causes different query position embedding assingments
+        # which causes different query position embedding assignments
         # which in turn significantly changes the decoder pass due to self attention
         model.config.num_queries = 100
         model.model.query_position_embeddings.weight.data = model.model.query_position_embeddings.weight.data[:100]

@@ -96,8 +96,6 @@ rendered properly in your Markdown viewer.
 
 ## AutoModel
 
-<frameworkcontent>
-<pt>
 
 最后，`AutoModelFor`类让你可以加载给定任务的预训练模型（参见[这里](model_doc/auto)获取可用任务的完整列表）。例如，使用[`AutoModelForSequenceClassification.from_pretrained`]加载用于序列分类的模型：
 
@@ -120,30 +118,7 @@ rendered properly in your Markdown viewer.
 
 对于PyTorch模型，`from_pretrained()`方法使用`torch.load()`，它内部使用已知是不安全的`pickle`。一般来说，永远不要加载来自不可信来源或可能被篡改的模型。对于托管在Hugging Face Hub上的公共模型，这种安全风险在一定程度上得到了缓解，因为每次提交都会进行[恶意软件扫描](https://huggingface.co/docs/hub/security-malware)。请参阅[Hub文档](https://huggingface.co/docs/hub/security)以了解最佳实践，例如使用GPG进行[签名提交验证](https://huggingface.co/docs/hub/security-gpg#signing-commits-with-gpg)。
 
-TensorFlow和Flax的checkpoints不受影响，并且可以在PyTorch架构中使用`from_tf`和`from_flax`关键字参数,通过`from_pretrained`方法进行加载,来绕过此问题。
-
 </Tip>
 
 一般来说，我们建议使用`AutoTokenizer`类和`AutoModelFor`类来加载预训练的模型实例。这样可以确保每次加载正确的架构。在下一个[教程](preprocessing)中，学习如何使用新加载的`tokenizer`, `image processor`, `feature extractor`和`processor`对数据集进行预处理以进行微调。
 
-</pt>
-<tf>
-最后，`TFAutoModelFor`类允许您加载给定任务的预训练模型（请参阅[这里](model_doc/auto)获取可用任务的完整列表）。例如，使用[`TFAutoModelForSequenceClassification.from_pretrained`]加载用于序列分类的模型：
-
-```py
->>> from transformers import TFAutoModelForSequenceClassification
-
->>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
-```
-
-轻松地重复使用相同的checkpoint来为不同任务加载模型架构：
-
-```py
->>> from transformers import TFAutoModelForTokenClassification
-
->>> model = TFAutoModelForTokenClassification.from_pretrained("distilbert/distilbert-base-uncased")
-```
-一般来说，我们推荐使用`AutoTokenizer`类和`TFAutoModelFor`类来加载模型的预训练实例。这样可以确保每次加载正确的架构。在下一个[教程](preprocessing)中，学习如何使用新加载的`tokenizer`, `image processor`, `feature extractor`和`processor`对数据集进行预处理以进行微调。
-
-</tf>
-</frameworkcontent>

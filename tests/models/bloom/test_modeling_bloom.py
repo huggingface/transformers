@@ -333,7 +333,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     )
     fx_compatible = True
     test_missing_keys = False
-    test_pruning = False
+
     test_torchscript = True  # torch.autograd functions seems not to be supported
 
     def setUp(self):
@@ -446,7 +446,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     @slow
     @require_torch_accelerator
-    def test_batch_generation_padd(self):
+    def test_batch_generation_padding(self):
         path_560m = "bigscience/bloom-560m"
         model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").to(torch_device)
         model = model.eval()

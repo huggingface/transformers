@@ -54,12 +54,6 @@ MODEL_TEST_PATH = "tests/models"
 PATH_TO_DOCS = "docs/source/en"
 REPO_PATH = "."
 
-# Mapping for files that are full copies of others (keys are copies, values the file to keep them up to data with)
-FULL_COPIES = {
-    "examples/tensorflow/question-answering/utils_qa.py": "examples/pytorch/question-answering/utils_qa.py",
-    "examples/flax/question-answering/utils_qa.py": "examples/pytorch/question-answering/utils_qa.py",
-}
-
 
 LOCALIZED_READMES = {
     # If the introduction or the conclusion of the list change, the prompts may need to be updated.
@@ -510,7 +504,7 @@ def find_code_and_splits(object_name: str, base_path: str, buffer: Optional[dict
         code (`str`):
             The object's code.
         code_splits (`List[Tuple[str, int, int]]`):
-            `code` splitted into blocks. See `split_code_into_blocks`.
+            `code` split into blocks. See `split_code_into_blocks`.
     """
     if buffer is None:
         buffer = {}
@@ -803,8 +797,7 @@ def is_copy_consistent(
         orig_idx = -1
         observed_code = ""
         for name, code in observed_code_blocks.items():
-            if code.endswith("\n"):
-                code = code[:-1]
+            code = code.removesuffix("\n")
             for code_line in code.split("\n"):
                 orig_idx += 1
                 if code_line.strip() and not name.startswith(("_ignored_existing_block_", "_ignored_new_block_")):
@@ -857,37 +850,6 @@ def check_copies(overwrite: bool = False, file: Optional[str] = None):
     for filename in all_files:
         new_diffs = is_copy_consistent(filename, overwrite, buffer)
         diffs += [f"- {filename}: copy does not match {d[0]} at line {d[1]}" for d in new_diffs]
-    if not overwrite and len(diffs) > 0:
-        diff = "\n".join(diffs)
-        raise Exception(
-            "Found the following copy inconsistencies:\n"
-            + diff
-            + "\nRun `make fix-copies` or `python utils/check_copies.py --fix_and_overwrite` to fix them."
-        )
-
-
-def check_full_copies(overwrite: bool = False):
-    """
-    Check the files that are full copies of others (as indicated in `FULL_COPIES`) are copy-consistent.
-
-    Args:
-        overwrite (`bool`, *optional*, defaults to `False`):
-            Whether or not to overwrite the copies when they don't match.
-    """
-    diffs = []
-    for target, source in FULL_COPIES.items():
-        with open(source, "r", encoding="utf-8") as f:
-            source_code = f.read()
-        with open(target, "r", encoding="utf-8") as f:
-            target_code = f.read()
-        if source_code != target_code:
-            if overwrite:
-                with open(target, "w", encoding="utf-8") as f:
-                    print(f"Replacing the content of {target} by the one of {source}.")
-                    f.write(source_code)
-            else:
-                diffs.append(f"- {target}: copy does not match {source}.")
-
     if not overwrite and len(diffs) > 0:
         diff = "\n".join(diffs)
         raise Exception(
@@ -1078,4 +1040,3 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     check_copies(args.fix_and_overwrite, args.file)
-    check_full_copies(args.fix_and_overwrite)

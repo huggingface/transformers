@@ -15,6 +15,7 @@
 
 import inspect
 import unittest
+from functools import cached_property
 
 import numpy as np
 
@@ -32,10 +33,9 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init
+from ...test_modeling_common import ModelTesterMixin
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -233,8 +233,7 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     pipeline_model_mapping = {"feature-extraction": OneFormerModel} if is_torch_available() else {}
 
     is_encoder_decoder = False
-    test_pruning = False
-    test_head_masking = False
+
     test_missing_keys = False
 
     # TODO: Fix the failed tests when this model gets more usage
@@ -364,34 +363,6 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             model = model_class(config).to(torch_device)
             outputs = model(**inputs, output_attentions=True)
             self.assertTrue(outputs.attentions is not None)
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.is_training = True
-        config.contrastive_temperature = 1
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    if (
-                        "self_attn.sampling_offsets.bias" in name
-                        or "self_attn.value_proj.weight" in name
-                        or "self_attn.output_proj.weight" in name
-                        or "self_attn.in_proj_weight" in name
-                        or "self_attn.out_proj.weight" in name
-                        or "mlp.fc1.weight" in name
-                        or "mlp.fc2.weight" in name
-                        or "text_mapper.text_encoder.positional_embedding" in name
-                        or "text_mapper.text_encoder.token_embedding.weight" in name
-                    ):
-                        continue
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
 
     def test_initialization_pretrained_backbone(self):
         backbone_name = "microsoft/resnet-18"

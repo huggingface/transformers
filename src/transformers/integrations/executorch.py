@@ -11,7 +11,8 @@
 # specific language governing permissions and limitations under the License.
 
 import logging
-from typing import Callable, Optional
+from collections.abc import Callable
+from typing import Optional
 
 import torch
 
@@ -25,6 +26,7 @@ from ..cache_utils import (
 from ..generation.configuration_utils import GenerationConfig
 from ..masking_utils import (
     ALL_MASK_ATTENTION_FUNCTIONS,
+    _ignore_bidirectional_mask_sdpa,
     _ignore_causal_mask_sdpa,
     _is_torch_greater_or_equal_than_2_5,
     prepare_padding_mask,
@@ -191,6 +193,101 @@ class TorchExportableModuleForVLM:
         pass
 
 
+class TorchExportableModuleForEncoderOnlyLM(torch.nn.Module):
+    """
+    A recipe module designed to make a `PreTrainedModel` exportable with `torch.export`,
+    specifically for encoder-only LM. This module ensures that the exported model is compatible
+    with further lowering and execution in `ExecuTorch`.
+    """
+
+    def __init__(self, model: PreTrainedModel) -> None:
+        """
+        Initializes the exportable module.
+
+        Args:
+            model (`PreTrainedModel`): The pretrained model to wrap.
+        """
+        super().__init__()
+
+        self.model = model
+        # This is the same as sdpa, but mask creation does not use `vmap` which is not exportable
+        ALL_MASK_ATTENTION_FUNCTIONS.register(
+            "sdpa_bidirectional_mask_without_vmap", sdpa_bidirectional_mask_without_vmap
+        )
+        ALL_ATTENTION_FUNCTIONS.register("sdpa_bidirectional_mask_without_vmap", ALL_ATTENTION_FUNCTIONS["sdpa"])
+        self.model.config._attn_implementation = "sdpa_bidirectional_mask_without_vmap"
+
+    def forward(
+        self,
+        input_ids: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """
+        Forward pass of the module, which is compatible with the ExecuTorch llm runner.
+
+        Args:
+            input_ids (`torch.Tensor`): Tensor representing current input token id to the module.
+            inputs_embeds (`torch.Tensor`): Tensor representing current input embeddings to the module.
+            cache_position (`torch.Tensor`): Tensor representing current input position in the cache.
+
+        Returns:
+            torch.Tensor: Logits output from the model.
+        """
+        return self.model.forward(
+            input_ids=input_ids,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+        )
+
+    def export(
+        self,
+        input_ids: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        strict: Optional[bool] = None,
+    ) -> torch.export.ExportedProgram:
+        """
+        Export the wrapped module using `torch.export`.
+
+        Args:
+            input_ids (`Optional[torch.Tensor]`):
+                Tensor representing current input token id to the module. Must specify either this or inputs_embeds.
+            inputs_embeds (`Optional[torch.Tensor]`):
+                Tensor representing current input embeddings to the module. Must specify either this or input_ids.
+            strict(`Optional[bool]`):
+                Flag to instruct `torch.export` to use `torchdynamo`.
+
+        Returns:
+            torch.export.ExportedProgram: The exported program that can be used for inference.
+
+        """
+        if not (input_ids is None) ^ (inputs_embeds is None):
+            raise ValueError("Need to specify either input_ids or inputs_embeds.")
+
+        if input_ids is not None:
+            input_kwargs = {
+                "input_ids": input_ids,
+                "attention_mask": attention_mask if attention_mask is not None else torch.ones_like(input_ids),
+            }
+        else:
+            input_kwargs = {
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask
+                if attention_mask is not None
+                else torch.ones_like(inputs_embeds)[..., 0],
+            }
+
+        exported_program = torch.export.export(
+            self.model,
+            args=(),
+            kwargs=input_kwargs,
+            strict=strict if strict is not None else True,
+        )
+
+        return exported_program
+
+
 class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
     """
     A recipe module designed to make a `PreTrainedModel` exportable with `torch.export`,
@@ -201,7 +298,10 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
     def __init__(
         self,
         model: PreTrainedModel,
-    ):
+        batch_size: Optional[int] = None,
+        max_cache_len: Optional[int] = None,
+        device: Optional[torch.device] = None,
+    ) -> None:
         """
         Initializes the exportable module.
 
@@ -214,20 +314,19 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
         super().__init__()
 
         config = model.config.get_text_config()
-        _generation_config = model.generation_config
 
         if not hasattr(config, "use_cache") or config.use_cache is False:
             raise ValueError("The model must have caching enabled to be performant.")
 
         if hasattr(config, "layer_types") and getattr(config, "sliding_window", None) is not None:
-            self.model = TorchExportableModuleWithHybridCache(model)
+            self.model = TorchExportableModuleWithHybridCache(model, batch_size, max_cache_len, device)
         else:
             # If `layer_types` is not specified explicitly in the config or `sliding_window` is null,
             # there is only 1 type of layers, so export will use `StaticCache` by default.
             logging.info(
                 "Using `StaticCache` for export as `layer_types` is not specified or `sliding_window` is `null` in the config."
             )
-            self.model = TorchExportableModuleWithStaticCache(model)
+            self.model = TorchExportableModuleWithStaticCache(model, batch_size, max_cache_len, device)
         # This is the same as sdpa, but mask creation does not use `vmap` which is not exportable
         ALL_MASK_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", sdpa_mask_without_vmap)
         ALL_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", ALL_ATTENTION_FUNCTIONS["sdpa"])
@@ -471,17 +570,27 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
     def __init__(
         self,
         model: PreTrainedModel,
-    ):
+        batch_size: Optional[int] = None,
+        max_cache_len: Optional[int] = None,
+        device: Optional[torch.device] = None,
+    ) -> None:
         """
         Initializes the wrapper module with the pretrained model.
 
         Args:
             model (`PreTrainedModel`): The pretrained model to wrap. The model must have caching
                 enabled and use a 'static' caching implementation.
+            batch_size (`Optional[int]`): The batch size of the model. If not provided, we check if a value can be found
+                in `generation_config.cache_config` and otherwise we raise a ValueError.
+            max_cache_len (`Optional[int]`): The maximum cache length for generation. Same mechanism as `batch_size` if
+                not provided.
+            device (`Optional[torch.device]`): The device to use. If not provided, we check if a value can be found
+                in `generation_config.cache_config` and otherwise we use `model.device` (no error is raised).
 
         Raises:
             AssertionError: If the pretrained model does not have caching enabled or if it does
             not use a 'static' caching implementation in `model.generation_config`.
+            ValueError: If `batch_size` or `max_cache_len` is not provided, either as an argument or in `cache_config`.
         """
         super().__init__()
 
@@ -494,16 +603,6 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
                 "The model must have a generation config to be exported with static caching. "
                 "Please set `generation_config` in `model`."
             )
-        if "batch_size" not in generation_config.cache_config:
-            raise ValueError(
-                "The model's generation config must specify a batch_size in its cache_config. "
-                'Try GenerationConfig( ... cache_config={"batch_size": 1, ...} ...)'
-            )
-        if "max_cache_len" not in generation_config.cache_config:
-            raise ValueError(
-                "The model's generation config must specify a max_cache_len in its cache_config. "
-                'Try GenerationConfig( ... cache_config={"max_cache_len": 4096, ...} ...)'
-            )
         if not generation_config.use_cache:
             raise AssertionError(
                 "The model must have caching enabled to be exported with static caching. "
@@ -515,15 +614,26 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
                 "Please set `generation_config.cache_implementation='static'`."
             )
 
+        cache_config = {} if generation_config.cache_config is None else generation_config.cache_config
+
+        # Ensure batch_size and max_cache_len are set
+        if batch_size is None:
+            batch_size = cache_config.get("batch_size", None)
+            if batch_size is None:
+                raise ValueError("batch_size must be provided, either as an argument or in cache_config.")
+        if max_cache_len is None:
+            max_cache_len = cache_config.get("max_cache_len", None)
+            if max_cache_len is None:
+                raise ValueError("max_cache_len must be provided, either as an argument or in cache_config.")
+        # Infer device if not provided
+        if device is None:
+            device = cache_config.get("device", model.device)
+
+        # Initialize the static cache
         self.model = model
-        self.static_cache = StaticCache(
-            max_cache_len=generation_config.cache_config.get("max_cache_len"),
-            config=config,
-        )
-        batch_size = generation_config.cache_config.get("batch_size")
+        self.static_cache = StaticCache(max_cache_len=max_cache_len, config=config)
         head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
-        device = generation_config.cache_config.get("device")
         dtype = self.model.dtype
         # We need this call to initialize all the layers (otherwise it's done lazily, which is not exportable)
         self.static_cache.early_initialization(batch_size, num_heads, head_dim, dtype, device)
@@ -639,48 +749,60 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
     def __init__(
         self,
         model: PreTrainedModel,
-    ):
+        batch_size: Optional[int] = None,
+        max_cache_len: Optional[int] = None,
+        device: Optional[torch.device] = None,
+    ) -> None:
         """
         Initializes the exportable module.
 
         Args:
             model (`PreTrainedModel`): The pretrained model to wrap.
-
+            batch_size (`Optional[int]`): The batch size of the model. If not provided, we check if a value can be found
+                in `generation_config.cache_config` and otherwise we raise a ValueError.
+            max_cache_len (`Optional[int]`): The maximum cache length for generation. Same mechanism as `batch_size` if
+                not provided.
+            device (`Optional[torch.device]`): The device to use. If not provided, we check if a value can be found
+                in `generation_config.cache_config` and otherwise we use `model.device` (no error is raised).
         Raises:
-            AssertionError: If the model doesn't have the expected configuration for an hybrid StaticCache.
+            AssertionError: If the model doesn't have the expected configuration for hybrid StaticCache.
+            ValueError: If `batch_size` or `max_cache_len` is not provided, either as an argument or in `cache_config`.
         """
         super().__init__()
         self.model = model
         config = model.config.get_text_config()
         generation_config = model.generation_config
 
+        # Sanity checks
         if generation_config is None:
             raise AssertionError(
                 "The model must have a generation config to be exported with static caching. "
                 "Please set `generation_config` in `model`."
             )
-        if "batch_size" not in generation_config.cache_config:
-            raise ValueError(
-                "The model's generation config must specify a batch_size in its cache_config. "
-                'Try GenerationConfig( ... cache_config={"batch_size": 1, ...} ...)'
-            )
-        if "max_cache_len" not in generation_config.cache_config:
-            raise ValueError(
-                "The model's generation config must specify a max_cache_len in its cache_config. "
-                'Try GenerationConfig( ... cache_config={"max_cache_len": 4096, ...} ...)'
-            )
         if not config.use_cache:
             raise AssertionError("Model must have caching enabled.")
 
+        cache_config = {} if generation_config.cache_config is None else generation_config.cache_config
+        # Ensure batch_size and max_cache_len are set
+        if batch_size is None:
+            batch_size = cache_config.get("batch_size", None)
+            if batch_size is None:
+                raise ValueError("batch_size must be provided, either as an argument or in cache_config.")
+        if max_cache_len is None:
+            max_cache_len = cache_config.get("max_cache_len", None)
+            if max_cache_len is None:
+                raise ValueError("max_cache_len must be provided, either as an argument or in cache_config.")
+        # Infer device if not provided
+        if device is None:
+            device = cache_config.get("device", model.device)
+
         # Initialize the cache
-        self.cache = StaticCache(config=config, max_cache_len=generation_config.cache_config.get("max_cache_len"))
+        self.cache = StaticCache(config=config, max_cache_len=max_cache_len)
         head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
-        max_batch_size = generation_config.cache_config.get("batch_size")
-        device = generation_config.cache_config.get("device")
         dtype = self.model.dtype
         # We need this call to initialize all the layers (otherwise it's done lazily, which is not exportable)
-        self.cache.early_initialization(max_batch_size, num_heads, head_dim, dtype, device)
+        self.cache.early_initialization(batch_size, num_heads, head_dim, dtype, device)
 
         # Register all key and value cache tensors as buffers
         for i in range(len(self.cache)):
@@ -829,7 +951,7 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
         head_dim = getattr(self.config, "head_dim", self.config.hidden_size // self.config.num_attention_heads)
         num_heads = getattr(self.config, "num_key_value_heads", self.config.num_attention_heads)
         self.static_cache.early_initialization(batch_size, num_heads, head_dim, torch.float32, model_device)
-        self.cache = EncoderDecoderCache(self.static_cache, DynamicCache())
+        self.cache = EncoderDecoderCache(self.static_cache, DynamicCache(config=self.config))
 
         register_dynamic_cache_export_support()
 
@@ -1026,7 +1148,7 @@ def export_with_dynamic_cache(
             {
                 "input_ids": example_input_ids,
                 "attention_mask": example_attention_mask,
-                "past_key_values": DynamicCache(),
+                "past_key_values": DynamicCache(config=model.config),
                 "use_cache": True,
             },
             strict=False,
@@ -1174,3 +1296,51 @@ def sdpa_mask_without_vmap(
     if not _is_torch_greater_or_equal_than_2_5 and allow_torch_fix:
         causal_mask |= torch.all(~causal_mask, dim=-1, keepdim=True)
     return causal_mask
+
+
+def sdpa_bidirectional_mask_without_vmap(
+    kv_length: int,
+    kv_offset: int = 0,
+    attention_mask: Optional[torch.Tensor] = None,
+    allow_torch_fix: bool = True,
+    allow_is_bidirectional_skip: bool = True,
+    **kwargs,
+) -> Optional[torch.Tensor]:
+    """
+    Create a 4D boolean mask of shape `(batch_size, 1, query_length, kv_length)` where a value of True indicates that
+    the element should take part in the attention computation, and False that it should not.
+
+    This is similar to `masking_utils.sdpa_mask` but does not use `vmap` which is incompatible with export.
+    Additionally, surrounding logic for causal masks is omitted for simplicity.
+
+    Args:
+        kv_length (`int`):
+            The size that the key and value states will have during the attention computation.
+        kv_offset (`int`, optional):
+            An optional offset to indicate at which first position the key and values states will refer to.
+        attention_mask (`torch.Tensor`, optional):
+            The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length)
+        allow_torch_fix (`bool`, optional):
+            Whether to update the mask in case a query is not attending to any tokens, to solve a bug in torch's older
+            versions. We need an arg to skip it when using eager. By default `True`.
+        allow_is_bidirectional_skip (`bool`, optional):
+            Whether to allow to return `None` for the mask under conditions where we do not have to add any bias,
+            i.e. full attention without any padding. Default to `True`.
+    """
+    # Potentially pad the 2D mask, and slice it correctly
+    padding_mask = prepare_padding_mask(attention_mask, kv_length, kv_offset, _slice=False)
+
+    # Under specific conditions, we can avoid materializing the mask
+    if allow_is_bidirectional_skip and _ignore_bidirectional_mask_sdpa(padding_mask):
+        return None
+
+    bidirectional_mask = None
+    if padding_mask is not None:
+        bidirectional_mask = padding_mask[:, None, None, :]
+
+    # Due to a bug in some older torch version, we need to update the mask in case a query is not attending to any
+    # tokens (due to padding). See details in https://github.com/pytorch/pytorch/issues/110213
+    if not _is_torch_greater_or_equal_than_2_5 and allow_torch_fix and bidirectional_mask is not None:
+        bidirectional_mask |= torch.all(~bidirectional_mask, dim=-1, keepdim=True)
+
+    return bidirectional_mask

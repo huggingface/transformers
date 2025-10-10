@@ -161,7 +161,6 @@ def make_task_cmds():
         --num_train_epochs 1
         --fp16
         --report_to none
-        --overwrite_output_dir
         """.split()
 
     # try to cover as many models as possible once (it's enough to run on one task per model)

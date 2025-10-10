@@ -15,19 +15,19 @@
 
 """PyTorch Phi-3 model."""
 
-from typing import Callable, Optional
+from collections.abc import Callable
+from typing import Optional
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
+from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import logging
-from ...utils.deprecation import deprecate_kwarg
 from ..mistral.modeling_mistral import (
     MistralDecoderLayer,
     MistralForCausalLM,
@@ -114,7 +114,6 @@ class Phi3Attention(nn.Module):
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
         self.qkv_proj = nn.Linear(config.hidden_size, op_size, bias=False)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -175,7 +174,6 @@ class Phi3DecoderLayer(MistralDecoderLayer):
         self.resid_attn_dropout = nn.Dropout(config.resid_pdrop)
         self.resid_mlp_dropout = nn.Dropout(config.resid_pdrop)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -213,7 +211,7 @@ class Phi3PreTrainedModel(MistralPreTrainedModel):
     _version = "0.0.5"
 
 
-class Phi3ForCausalLM(MistralForCausalLM, Phi3PreTrainedModel):
+class Phi3ForCausalLM(MistralForCausalLM):
     def prepare_inputs_for_generation(
         self,
         input_ids,
@@ -240,7 +238,8 @@ class Phi3ForCausalLM(MistralForCausalLM, Phi3PreTrainedModel):
             if past_length <= self.config.original_max_position_embeddings:
                 past_key_values = None
 
-        model_inputs = Phi3PreTrainedModel().prepare_inputs_for_generation(
+        model_inputs = GenerationMixin.prepare_inputs_for_generation(
+            self,
             input_ids=input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,

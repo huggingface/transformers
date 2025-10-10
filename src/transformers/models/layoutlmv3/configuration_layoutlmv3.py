@@ -16,11 +16,11 @@
 
 from collections import OrderedDict
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from packaging import version
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...onnx import OnnxConfig
 from ...onnx.utils import compute_effective_axis_dimension
 from ...utils import logging
@@ -28,21 +28,20 @@ from ...utils import logging
 
 if TYPE_CHECKING:
     from ...processing_utils import ProcessorMixin
-    from ...utils import TensorType
 
 
 logger = logging.get_logger(__name__)
 
 
-class LayoutLMv3Config(PretrainedConfig):
+class LayoutLMv3Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LayoutLMv3Model`]. It is used to instantiate an
     LayoutLMv3 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the LayoutLMv3
     [microsoft/layoutlmv3-base](https://huggingface.co/microsoft/layoutlmv3-base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 50265):
@@ -227,13 +226,12 @@ class LayoutLMv3OnnxConfig(OnnxConfig):
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
-        framework: Optional["TensorType"] = None,
         num_channels: int = 3,
         image_width: int = 40,
         image_height: int = 40,
     ) -> Mapping[str, Any]:
         """
-        Generate inputs to provide to the ONNX exporter for the specific framework
+        Generate inputs to provide to the ONNX exporter
 
         Args:
             processor ([`ProcessorMixin`]):
@@ -244,8 +242,6 @@ class LayoutLMv3OnnxConfig(OnnxConfig):
                 The sequence length to export the model for (-1 means dynamic axis).
             is_pair (`bool`, *optional*, defaults to `False`):
                 Indicate if the input is a pair (sentence 1, sentence 2).
-            framework (`TensorType`, *optional*, defaults to `None`):
-                The framework (PyTorch or TensorFlow) that the processor will generate tensors for.
             num_channels (`int`, *optional*, defaults to 3):
                 The number of channels of the generated images.
             image_width (`int`, *optional*, defaults to 40):
@@ -284,7 +280,7 @@ class LayoutLMv3OnnxConfig(OnnxConfig):
                 dummy_image,
                 text=dummy_text,
                 boxes=dummy_bboxes,
-                return_tensors=framework,
+                return_tensors="pt",
             )
         )
 

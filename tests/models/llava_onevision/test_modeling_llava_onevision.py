@@ -41,7 +41,6 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
-    _config_zero_init,
     floats_tensor,
     ids_tensor,
 )
@@ -196,8 +195,7 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
     pipeline_model_mapping = (
         {"image-text-to-text": LlavaOnevisionForConditionalGeneration} if is_torch_available() else {}
     )
-    test_pruning = False
-    test_head_masking = False
+
     # MP works but offload doesn't work when the MultiheadAttention is offloaded
     # TODO: One potential solution would be to add to set preload_module_classes = ["Siglip2MultiheadAttentionPoolingHead"]
     # in the dispatch_model function
@@ -215,23 +213,6 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
 
     def test_config(self):
         self.config_tester.run_common_tests()
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                # LLaVa Onevision has SigLIP backbone which init weights differently from CLIP
-                if "image_newline" in name or "vision_tower" in name:
-                    continue
-                elif param.requires_grad:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
 
     def test_odd_sized_image(self):
         # prepare model configuration
@@ -416,7 +397,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
             device_map=torch_device,
         )
 
-        url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
         image = Image.open(requests.get(url, stream=True).raw)
         prompt = (
             "user\n<image><image>\nWhat is the difference between these images?<|im_end|>\n<|im_start|>assistant\n"
@@ -427,12 +408,18 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=40)
-        EXPECTED_DECODED_TEXT = "user\n\nWhat is the difference between these images?\nassistant\nThe images you've provided appear to be related to a graphical representation of a radar chart, which is a type of data visualization used to show the distribution of a particular variable across a geographic area. The"  # fmt: skip
-
-        self.assertEqual(
-            self.processor.decode(output[0], skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
+        output_text = self.processor.decode(output[0], skip_special_tokens=True)
+        # fmt: off
+        EXPECTED_DECODED_TEXTS = Expectations(
+            {
+                ("cuda", None): "user\n\nWhat is the difference between these images?\nassistant\nThe images you've provided appear to be related to a graphical representation of a radar chart, which is a type of data visualization used to show the distribution of a particular variable across a geographic area. The",
+                ("xpu", 3): "user\n\nWhat is the difference between these images?\nassistant\nThe images you've provided appear to be related to a graphical representation of a radar chart, which is a type of data visualization used to show the distribution of a particular variable across a geographic area. The",
+            }
         )
+        EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
+        # fmt: on
+
+        self.assertEqual(output_text, EXPECTED_DECODED_TEXT)
 
     @slow
     @require_bitsandbytes
@@ -444,7 +431,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
             device_map=torch_device,
         )
 
-        url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
         image = Image.open(requests.get(url, stream=True).raw)
         prompts = [
             "user\nTell me about the french revolution.<|im_end|>\n<|im_start|>assistant\n",  # text-only case
@@ -461,7 +448,23 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=40)
-        EXPECTED_DECODED_TEXT = ["user\nTell me about the french revolution.\nassistant\nThe French Revolution! A pivotal event in modern history that had a profound impact on the course of Western civilization. Here's a brief overview:\n\n**Background**\n\nIn the late 18th century,", "user\n\nWhat is the difference between these images?\nassistant\nThe first image shows a stop sign with a traditional Chinese architectural background, while the second image displays a radar chart with various algorithms and models, including BLIP-2, InstructBLIP, Q", "user\n\nWhat do you see in this image?\nassistant\nThe image is a radar chart that compares the performance of different models in a specific task, likely related to natural language processing or machine learning. The chart is divided into several axes, each representing a different"]  # fmt: skip
+        # fmt: off
+        EXPECTED_DECODED_TEXTS = Expectations(
+            {
+                ("cuda", None): [
+                    "user\nTell me about the french revolution.\nassistant\nThe French Revolution! A pivotal event in modern history that had a profound impact on the course of Western civilization. Here's a brief overview:\n\n**Background**\n\nIn the late 18th century,",
+                    "user\n\nWhat is the difference between these images?\nassistant\nThe first image shows a stop sign with a traditional Chinese architectural background, while the second image displays a radar chart with various algorithms and models, including BLIP-2, InstructBLIP, Q",
+                    "user\n\nWhat do you see in this image?\nassistant\nThe image is a radar chart that compares the performance of different models in a specific task, likely related to natural language processing or machine learning. The chart is divided into several axes, each representing a different"
+                    ],
+                ("xpu", 3): [
+                    "user\nTell me about the french revolution.\nassistant\nThe French Revolution! A pivotal event in modern history that had a profound impact on the course of Western civilization. Here's a brief overview:\n\n**Background**\n\nIn the late 18th century,",
+                    'user\n\nWhat is the difference between these images?\nassistant\nThe image shows a traffic light with a stop sign in the foreground, while the other images show a car driving through a street intersection.',
+                    'user\n\nWhat do you see in this image?\nassistant\nThe image is a radar chart that represents the performance of different machine learning models in terms of their ability to predict the number of users who have been infected with COVID-19. The radar chart is'
+                    ],
+            }
+        )
+        EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
+        # fmt: on
         DECODED_TEXT = self.processor.batch_decode(output, skip_special_tokens=True)
 
         self.assertListEqual(DECODED_TEXT, EXPECTED_DECODED_TEXT)

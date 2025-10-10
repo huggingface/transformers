@@ -14,7 +14,7 @@
 # limitations under the License.
 """Starcoder2 model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 
@@ -22,15 +22,15 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class Starcoder2Config(PretrainedConfig):
+class Starcoder2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Starcoder2Model`]. It is used to instantiate a
     Starcoder2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the [bigcode/starcoder2-7b](https://huggingface.co/bigcode/starcoder2-7b) model.
 
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -141,7 +141,7 @@ class Starcoder2Config(PretrainedConfig):
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.mlp.c_fc": "colwise",
-        "layers.*.mlp.c_proj": "colwise",
+        "layers.*.mlp.c_proj": "rowwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

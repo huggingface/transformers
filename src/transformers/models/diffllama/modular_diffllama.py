@@ -23,8 +23,8 @@ from torch import nn
 
 from ...cache_utils import Cache, StaticCache
 from ...modeling_flash_attention_utils import _flash_attention_forward, flash_attn_supports_top_left_mask
+from ...modeling_utils import PreTrainedModel
 from ...utils import logging
-from ...utils.deprecation import deprecate_kwarg
 from ..gemma.modeling_gemma import GemmaForCausalLM
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
@@ -91,7 +91,6 @@ class DiffLlamaAttention(nn.Module):
         self.lambda_k2 = nn.Parameter(torch.normal(0, config.lambda_std_dev, size=(self.head_dim,)))
         self.groupnorm = nn.RMSNorm(2 * self.head_dim, eps=config.rms_norm_eps, elementwise_affine=False)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -170,7 +169,6 @@ class DiffLlamaFlashAttention2(DiffLlamaAttention):
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = flash_attn_supports_top_left_mask()
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -312,7 +310,6 @@ class DiffLlamaSdpaAttention(DiffLlamaAttention):
     """
 
     # Adapted from DiffLlamaAttention.forward
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -408,7 +405,7 @@ class DiffLlamaPreTrainedModel(LlamaPreTrainedModel):
     _supports_attention_backend = False
 
     def _init_weights(self, module):
-        LlamaPreTrainedModel._init_weights(self, module)
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, DiffLlamaAttention):
             module.lambda_q1.data.normal_(0, self.config.lambda_std_dev)
             module.lambda_k1.data.normal_(0, self.config.lambda_std_dev)
@@ -438,7 +435,7 @@ class DiffLlamaForTokenClassification(LlamaForTokenClassification):
 
 __all__ = [
     "DiffLlamaPreTrainedModel",
-    "DiffLlamaModel",  # noqa: F822
+    "DiffLlamaModel",
     "DiffLlamaForCausalLM",
     "DiffLlamaForSequenceClassification",
     "DiffLlamaForQuestionAnswering",

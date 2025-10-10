@@ -75,36 +75,6 @@ generation_output[:2]
 
 [[autodoc]] generation.GenerateBeamEncoderDecoderOutput
 
-### TensorFlow
-
-[[autodoc]] generation.TFGreedySearchEncoderDecoderOutput
-
-[[autodoc]] generation.TFGreedySearchDecoderOnlyOutput
-
-[[autodoc]] generation.TFSampleEncoderDecoderOutput
-
-[[autodoc]] generation.TFSampleDecoderOnlyOutput
-
-[[autodoc]] generation.TFBeamSearchEncoderDecoderOutput
-
-[[autodoc]] generation.TFBeamSearchDecoderOnlyOutput
-
-[[autodoc]] generation.TFBeamSampleEncoderDecoderOutput
-
-[[autodoc]] generation.TFBeamSampleDecoderOnlyOutput
-
-[[autodoc]] generation.TFContrastiveSearchEncoderDecoderOutput
-
-[[autodoc]] generation.TFContrastiveSearchDecoderOnlyOutput
-
-### FLAX
-
-[[autodoc]] generation.FlaxSampleOutput
-
-[[autodoc]] generation.FlaxGreedySearchOutput
-
-[[autodoc]] generation.FlaxBeamSearchOutput
-
 ## LogitsProcessor
 
 [`LogitsProcessor`] を使用して、言語モデルのヘッドの予測スコアを変更できます。
@@ -137,9 +107,6 @@ generation_output[:2]
     - __call__
 
 [[autodoc]] ForcedEOSTokenLogitsProcessor
-    - __call__
-
-[[autodoc]] HammingDiversityLogitsProcessor
     - __call__
 
 [[autodoc]] InfNanRemoveLogitsProcessor
@@ -199,93 +166,6 @@ generation_output[:2]
 [[autodoc]] WhisperTimeStampLogitsProcessor
     - __call__
 
-### TensorFlow
-
-[[autodoc]] TFForcedBOSTokenLogitsProcessor
-    - __call__
-
-[[autodoc]] TFForcedEOSTokenLogitsProcessor
-    - __call__
-
-[[autodoc]] TFForceTokensLogitsProcessor
-    - __call__
-
-[[autodoc]] TFLogitsProcessor
-    - __call__
-
-[[autodoc]] TFLogitsProcessorList
-    - __call__
-
-[[autodoc]] TFLogitsWarper
-    - __call__
-
-[[autodoc]] TFMinLengthLogitsProcessor
-    - __call__
-
-[[autodoc]] TFNoBadWordsLogitsProcessor
-    - __call__
-
-[[autodoc]] TFNoRepeatNGramLogitsProcessor
-    - __call__
-
-[[autodoc]] TFRepetitionPenaltyLogitsProcessor
-    - __call__
-
-[[autodoc]] TFSuppressTokensAtBeginLogitsProcessor
-    - __call__
-
-[[autodoc]] TFSuppressTokensLogitsProcessor
-    - __call__
-
-[[autodoc]] TFTemperatureLogitsWarper
-    - __call__
-
-[[autodoc]] TFTopKLogitsWarper
-    - __call__
-
-[[autodoc]] TFTopPLogitsWarper
-    - __call__
-
-### FLAX
-
-[[autodoc]] FlaxForcedBOSTokenLogitsProcessor
-    - __call__
-
-[[autodoc]] FlaxForcedEOSTokenLogitsProcessor
-    - __call__
-
-[[autodoc]] FlaxForceTokensLogitsProcessor
-    - __call__
-
-[[autodoc]] FlaxLogitsProcessor
-    - __call__
-
-[[autodoc]] FlaxLogitsProcessorList
-    - __call__
-
-[[autodoc]] FlaxLogitsWarper
-    - __call__
-
-[[autodoc]] FlaxMinLengthLogitsProcessor
-    - __call__
-
-[[autodoc]] FlaxSuppressTokensAtBeginLogitsProcessor
-    - __call__
-
-[[autodoc]] FlaxSuppressTokensLogitsProcessor
-    - __call__
-
-[[autodoc]] FlaxTemperatureLogitsWarper
-    - __call__
-
-[[autodoc]] FlaxTopKLogitsWarper
-    - __call__
-
-[[autodoc]] FlaxTopPLogitsWarper
-    - __call__
-
-[[autodoc]] FlaxWhisperTimeStampLogitsProcessor
-    - __call__
 
 ## StoppingCriteria
 
@@ -302,32 +182,6 @@ generation_output[:2]
 
 [[autodoc]] MaxTimeCriteria
     - __call__
-
-## Constraints
-
-[`Constraint`] を使用すると、生成時に出力に特定のトークンまたはシーケンスが含まれるように強制できます。これは PyTorch 実装でのみ利用可能であることに注意してください。
-
-[[autodoc]] Constraint
-
-[[autodoc]] PhrasalConstraint
-
-[[autodoc]] DisjunctiveConstraint
-
-[[autodoc]] ConstraintListState
-
-## BeamSearch
-
-[[autodoc]] BeamScorer
-    - process
-    - finalize
-
-[[autodoc]] BeamSearchScorer
-    - process
-    - finalize
-
-[[autodoc]] ConstrainedBeamSearchScorer
-    - process
-    - finalize
 
 ## Streamers
 

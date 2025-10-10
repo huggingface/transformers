@@ -398,7 +398,7 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     )
     fx_compatible = False
     test_missing_keys = False
-    test_pruning = False
+
     test_torchscript = False
     multi_query = True
 
@@ -422,14 +422,6 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
     @unittest.skip(reason="MQA models does not support retain_grad")
     def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    @unittest.skip(reason="Contrastive search not supported due to non-standard caching mechanism")
-    def test_contrastive_generate(self):
-        pass
-
-    @unittest.skip(reason="Contrastive search not supported due to non-standard caching mechanism")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
         pass
 
     @unittest.skip(reason="CPU offload seems to be broken for some reason - tiny models keep hitting corner cases")

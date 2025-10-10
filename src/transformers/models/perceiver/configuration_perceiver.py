@@ -16,28 +16,28 @@
 
 from collections import OrderedDict
 from collections.abc import Mapping
-from typing import Any, Optional, Union
+from typing import Any, Union
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import FeatureExtractionMixin
 from ...onnx import OnnxConfig
 from ...onnx.utils import compute_effective_axis_dimension
 from ...tokenization_utils_base import PreTrainedTokenizerBase
-from ...utils import TensorType, logging
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class PerceiverConfig(PretrainedConfig):
+class PerceiverConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PerceiverModel`]. It is used to instantiate an
     Perceiver model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Perceiver
     [deepmind/language-perceiver](https://huggingface.co/deepmind/language-perceiver) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         num_latents (`int`, *optional*, defaults to 256):
@@ -207,7 +207,6 @@ class PerceiverOnnxConfig(OnnxConfig):
         seq_length: int = -1,
         num_choices: int = -1,
         is_pair: bool = False,
-        framework: Optional[TensorType] = None,
         num_channels: int = 3,
         image_width: int = 40,
         image_height: int = 40,
@@ -226,14 +225,14 @@ class PerceiverOnnxConfig(OnnxConfig):
             )
             # Generate dummy inputs according to compute batch and sequence
             dummy_input = [" ".join(["a"]) * seq_length] * batch_size
-            inputs = dict(preprocessor(dummy_input, return_tensors=framework))
+            inputs = dict(preprocessor(dummy_input, return_tensors="pt"))
             inputs["inputs"] = inputs.pop("input_ids")
             return inputs
         elif isinstance(preprocessor, FeatureExtractionMixin) and preprocessor.model_input_names[0] == "pixel_values":
             # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
             batch_size = compute_effective_axis_dimension(batch_size, fixed_dimension=OnnxConfig.default_fixed_batch)
             dummy_input = self._generate_dummy_images(batch_size, num_channels, image_height, image_width)
-            inputs = dict(preprocessor(images=dummy_input, return_tensors=framework))
+            inputs = dict(preprocessor(images=dummy_input, return_tensors="pt"))
             inputs["inputs"] = inputs.pop("pixel_values")
             return inputs
         else:

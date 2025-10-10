@@ -16,10 +16,12 @@
 
 from typing import Optional, Union
 
+import torch
+from torchvision.transforms.v2 import functional as F
+
 from ...image_processing_utils import BatchFeature, get_patch_output_size, select_best_resolution
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     divide_to_patches,
     group_images_by_shape,
     reorder_images,
@@ -37,35 +39,8 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
 )
-
-
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
-
-
-class LlavaNextFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    image_grid_pinpoints (`list[list[int]]`, *optional*):
-        A list of possible resolutions to use for processing high resolution images. The best resolution is selected
-        based on the original size of the image. Can be overridden by `image_grid_pinpoints` in the `preprocess`
-        method.
-    do_pad (`bool`, *optional*):
-        Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
-        number of patches in the batch. Padding will be applied to the bottom and right with zeros.
-    """
-
-    image_grid_pinpoints: Optional[list[list[int]]]
-    do_pad: Optional[bool]
+from .image_processing_llava_next import LlavaNextImageProcessorKwargs
 
 
 @auto_docstring
@@ -85,13 +60,13 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
     do_convert_rgb = True
     do_pad = True
     image_grid_pinpoints = [[336, 672], [672, 336], [672, 672], [1008, 336], [336, 1008]]
-    valid_kwargs = LlavaNextFastImageProcessorKwargs
+    valid_kwargs = LlavaNextImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[LlavaNextFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[LlavaNextImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[LlavaNextFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[LlavaNextImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def _resize_for_patching(

@@ -15,10 +15,11 @@
 
 import inspect
 import unittest
+from functools import cached_property
 
 from transformers import ImageGPTConfig
 from transformers.testing_utils import require_torch, require_vision, run_test_using_subprocess, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -126,13 +127,10 @@ class ImageGPTModelTester:
             reorder_and_upcast_attn=reorder_and_upcast_attn,
         )
 
-        head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
-
         return (
             config,
             input_ids,
             input_mask,
-            head_mask,
             token_type_ids,
             mc_token_ids,
             sequence_labels,
@@ -167,19 +165,19 @@ class ImageGPTModelTester:
         config.max_position_embeddings = 1024
         return config
 
-    def create_and_check_imagegpt_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_imagegpt_model(self, config, input_ids, input_mask, token_type_ids, *args):
         model = ImageGPTModel(config=config)
         model.to(torch_device)
         model.eval()
 
-        result = model(input_ids, token_type_ids=token_type_ids, head_mask=head_mask)
+        result = model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids)
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(len(result.past_key_values), config.n_layer)
 
-    def create_and_check_lm_head_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_lm_head_model(self, config, input_ids, input_mask, token_type_ids, *args):
         model = ImageGPTForCausalImageModeling(config)
         model.to(torch_device)
         model.eval()
@@ -191,7 +189,7 @@ class ImageGPTModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size - 1))
 
     def create_and_check_imagegpt_for_image_classification(
-        self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
+        self, config, input_ids, input_mask, token_type_ids, mc_token_ids, sequence_labels, *args
     ):
         config.num_labels = self.num_labels
         model = ImageGPTForImageClassification(config)
@@ -207,7 +205,6 @@ class ImageGPTModelTester:
             config,
             input_ids,
             input_mask,
-            head_mask,
             token_type_ids,
             mc_token_ids,
             sequence_labels,
@@ -218,7 +215,6 @@ class ImageGPTModelTester:
         inputs_dict = {
             "input_ids": input_ids,
             "token_type_ids": token_type_ids,
-            "head_mask": head_mask,
         }
 
         return config, inputs_dict
@@ -314,10 +310,6 @@ class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
             expected_arg_names = ["input_ids"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
-
-    @unittest.skip(reason="The model doesn't support left padding")  # and it's not used enough to be worth fixing :)
-    def test_left_padding_compatibility(self):
-        pass
 
     @unittest.skip(reason="Model inputs don't fit test pattern")  # and it's not used enough to be worth fixing :)
     def test_past_key_values_format(self):

@@ -18,22 +18,22 @@ import math
 
 import numpy as np
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class MimiConfig(PretrainedConfig):
+class MimiConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`MimiModel`]. It is used to instantiate a
     Mimi model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the
     [kyutai/mimi](https://huggingface.co/kyutai/mimi) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         sampling_rate (`int`, *optional*, defaults to 24000):
@@ -120,7 +120,7 @@ class MimiConfig(PretrainedConfig):
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         layer_scale_initial_scale (`float`, *optional*, defaults to 0.01):
-            Initiale scale of the residual rescaling operation done in the Transformer models.
+            Initial scale of the residual rescaling operation done in the Transformer models.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
     Example:

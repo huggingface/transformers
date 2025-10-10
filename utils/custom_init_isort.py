@@ -38,7 +38,8 @@ python utils/custom_init_isort.py --check_only
 import argparse
 import os
 import re
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any, Optional
 
 
 # Path is defined with the intent you should run this script from the root of the repo.
@@ -252,7 +253,7 @@ def sort_imports(file: str, check_only: bool = True):
         code, start_prompt="_import_structure = {", end_prompt="if TYPE_CHECKING:"
     )
 
-    # We ignore block 0 (everything untils start_prompt) and the last block (everything after end_prompt).
+    # We ignore block 0 (everything until start_prompt) and the last block (everything after end_prompt).
     for block_idx in range(1, len(main_blocks) - 1):
         # Check if the block contains some `_import_structure`s thingy to sort.
         block = main_blocks[block_idx]

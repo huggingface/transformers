@@ -94,23 +94,18 @@ test.target
 ```
 The `.source` files are the input, the `.target` files are the desired output.
 
-### Potential issues
-
-- native AMP (`--fp16` and no apex) may lead to a huge memory leak and require 10x gpu memory. This has been fixed in pytorch-nightly and the minimal official version to have this fix will be pytorch-1.7.1. Until then if you have to use mixed precision please use AMP only with pytorch-nightly or NVIDIA's apex. Reference: https://github.com/huggingface/transformers/issues/8403
-
-
 ### Tips and Tricks
 
 General Tips:
 - since you need to run from `examples/legacy/seq2seq`, and likely need to modify code, the easiest workflow is fork transformers, clone your fork, and run `pip install -e .` before you get started.
 - try `--freeze_encoder` or `--freeze_embeds` for faster training/larger batch size.  (3hr per epoch with bs=8, see the "xsum_shared_task" command below)
-- `fp16_opt_level=O1` (the default works best).
+
 - In addition to the pytorch-lightning .ckpt checkpoint, a transformers checkpoint will be saved.
 Load it with `BartForConditionalGeneration.from_pretrained(f'{output_dir}/best_tfmr)`.
 - At the moment, `--do_predict` does not work in a multi-gpu setting. You need to use `evaluate_checkpoint` or the `run_eval.py` code.
 - This warning can be safely ignored:
     > "Some weights of BartForConditionalGeneration were not initialized from the model checkpoint at facebook/bart-large-xsum and are newly initialized: ['final_logits_bias']"
-- Both finetuning and eval are 30% faster with `--fp16`. For that you need to [install apex](https://github.com/NVIDIA/apex#quick-start).
+- Both finetuning and eval are 30% faster with `--fp16`.
 - Read scripts before you run them!
 
 Summarization Tips:
@@ -129,8 +124,6 @@ Future work/help wanted: A new dataset to support multilingual tasks.
 
 ### Fine-tuning using Seq2SeqTrainer
 To use `Seq2SeqTrainer` for fine-tuning you should use the `finetune_trainer.py` script. It subclasses `Trainer` to extend it for seq2seq training. Except the `Trainer`-related `TrainingArguments`, it shares the same argument names as that of `finetune.py` file. One notable difference is that calculating generative metrics (BLEU, ROUGE) is optional and is controlled using the `--predict_with_generate` argument.
-
-With PyTorch 1.6+ it'll automatically use `native AMP` when `--fp16` is set.
 
 To see all the possible command line options, run:
 
