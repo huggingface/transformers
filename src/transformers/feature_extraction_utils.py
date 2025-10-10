@@ -512,7 +512,10 @@ class FeatureExtractionMixin(PushToHubMixin):
             with open(resolved_feature_extractor_file, encoding="utf-8") as reader:
                 text = reader.read()
             feature_extractor_dict = json.loads(text)
-            feature_extractor_dict = feature_extractor_dict.get("feature_extractor", feature_extractor_dict)
+            if "audio_processor" in feature_extractor_dict:
+                feature_extractor_dict = feature_extractor_dict["audio_processor"]
+            else:
+                feature_extractor_dict = feature_extractor_dict.get("feature_extractor", feature_extractor_dict)
 
         except json.JSONDecodeError:
             raise OSError(

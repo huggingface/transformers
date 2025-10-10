@@ -648,7 +648,7 @@ class ProcessorMixin(PushToHubMixin):
 
         return proper_class
 
-    def to_dict(self, legacy_serialization=True) -> dict[str, Any]:
+    def to_dict(self, legacy_serialization=False) -> dict[str, Any]:
         """
         Serializes this instance to a Python dictionary.
 
@@ -675,16 +675,18 @@ class ProcessorMixin(PushToHubMixin):
             del output["qformer_tokenizer"]
         if "protein_tokenizer" in output:
             del output["protein_tokenizer"]
+        if "char_tokenizer" in output:
+            del output["char_tokenizer"]
         if "chat_template" in output:
             del output["chat_template"]
 
-        def save_processor_class(dictionary):
+        def set_processor_class(dictionary):
             _processor_class = dictionary.pop("_processor_class", self.__class__.__name__)
             dictionary["processor_class"] = _processor_class
 
             for key, value in dictionary.items():
                 if key in self.__class__.attributes and isinstance(value, dict):
-                    dictionary[key] = save_processor_class(value)
+                    dictionary[key] = set_processor_class(value)
             return dictionary
 
         def cast_array_to_list(dictionary):
@@ -721,11 +723,11 @@ class ProcessorMixin(PushToHubMixin):
             )
         }
         output = cast_array_to_list(output)
-        output = save_processor_class(output)
+        output = set_processor_class(output)
 
         return output
 
-    def to_json_string(self, legacy_serialization=True) -> str:
+    def to_json_string(self, legacy_serialization=False) -> str:
         """
         Serializes this instance to a JSON string.
 
@@ -736,7 +738,7 @@ class ProcessorMixin(PushToHubMixin):
 
         return json.dumps(dictionary, indent=2, sort_keys=True) + "\n"
 
-    def to_json_file(self, json_file_path: Union[str, os.PathLike], legacy_serialization=True):
+    def to_json_file(self, json_file_path: Union[str, os.PathLike], legacy_serialization=False):
         """
         Save this instance to a JSON file.
 
