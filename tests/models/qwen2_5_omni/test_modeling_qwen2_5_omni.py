@@ -95,7 +95,7 @@ class Qwen2_5OmniThinkerForConditionalGenerationTester:
             "output_dim": 32,
         },
         text_config={
-            "rope_scaling": {"mrope_section": [1, 1, 2], "rope_type": "default", "type": "default"},
+            "rope_parameters": {"mrope_section": [1, 1, 2], "rope_type": "default", "type": "default"},
             "vocab_size": 99,
             "hidden_size": 32,
             "intermediate_size": 37,

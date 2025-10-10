@@ -35,6 +35,7 @@ from ...utils.import_utils import (
     is_flash_linear_attention_available,
 )
 from ..bamba.modeling_bamba import apply_mask_to_padding_states, apply_rotary_pos_emb
+from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..gemma3.modeling_gemma3 import Gemma3RMSNorm
 from ..llama.modeling_llama import (
     LlamaForQuestionAnswering,
@@ -47,7 +48,6 @@ from ..qwen3_moe.modeling_qwen3_moe import (
     Qwen3MoeAttention,
     Qwen3MoeDecoderLayer,
     Qwen3MoeMLP,
-    Qwen3MoeRotaryEmbedding,
     eager_attention_forward,
 )
 from .configuration_qwen3_next import Qwen3NextConfig
@@ -181,7 +181,7 @@ class Qwen3NextDynamicCache:
         return self.conv_states[self.last_linear_layer] is not None
 
 
-class Qwen3NextRotaryEmbedding(Qwen3MoeRotaryEmbedding):
+class Qwen3NextRotaryEmbedding(Gemma2RotaryEmbedding):
     pass
 
 
@@ -766,16 +766,16 @@ class Qwen3NextModel(Qwen3NextPreTrainedModel):
         linear_attn_mask = self._update_linear_attn_mask(attention_mask, cache_position)
 
         hidden_states = inputs_embeds
-
-        # create position embeddings to be shared across the decoder layers
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        position_embeddings = {}
+        for layer_type in self.config.layer_types:
+            position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             layer_mask = linear_attn_mask if decoder_layer.layer_type == "linear_attention" else causal_mask
 
             hidden_states = decoder_layer(
                 hidden_states,
-                position_embeddings=position_embeddings,
+                position_embeddings=position_embeddings[decoder_layer.layer_type],
                 attention_mask=layer_mask,
                 position_ids=position_ids,
                 past_key_values=past_key_values,

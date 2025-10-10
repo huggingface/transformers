@@ -23,15 +23,15 @@ from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaForCausalLM,
     LlamaMLP,
-    LlamaRotaryEmbedding,
 )
+from ..olmo.modeling_olmo import OlmoRotaryEmbedding
 from .configuration_ernie4_5 import Ernie4_5Config
 
 
-class Ernie4_5RotaryEmbedding(LlamaRotaryEmbedding):
+class Ernie4_5RotaryEmbedding(OlmoRotaryEmbedding):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
+    def forward(self, x, position_ids, layer_type=None):
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
 

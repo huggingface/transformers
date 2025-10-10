@@ -363,6 +363,10 @@ class LightGluePositionalEncoder(nn.Module):
 
 
 class LightGlueAttention(LlamaAttention):
+    def __init__(self, config: LightGlueConfig, layer_idx: int):
+        super().__init__()
+        del self.rotary_emb
+
     def forward(
         self,
         hidden_states: torch.Tensor,

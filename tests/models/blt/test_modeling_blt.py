@@ -18,7 +18,7 @@ import unittest
 import pytest
 from parameterized import parameterized
 
-from transformers import AutoTokenizer, is_torch_available, set_seed
+from transformers import AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     cleanup,
     require_read_token,
@@ -33,7 +33,6 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     _test_eager_matches_sdpa_inference,
-    ids_tensor,
 )
 
 
@@ -71,7 +70,7 @@ class BltModelTester(CausalLMModelTester):
         self.max_position_embeddings = 32
         self.vocab_size = 32
         self.rope_theta = 500000.0
-        self.rope_scaling = {"rope_type": "default"}
+        self.rope_parameters = {"rope_type": "default"}
         self.rms_norm_eps = 1e-5
         self.dropout = 0.0
         self.encoder_hash_byte_group_size = [2, 3]
@@ -86,7 +85,7 @@ class BltModelTester(CausalLMModelTester):
             "intermediate_size": self.intermediate_size,
             "max_position_embeddings": self.max_position_embeddings,
             "rope_theta": self.rope_theta,
-            "rope_scaling": self.rope_scaling,
+            "rope_parameters": self.rope_parameters,
             "hidden_act": self.hidden_act,
             "rms_norm_eps": self.rms_norm_eps,
             "dropout": self.dropout,
@@ -100,7 +99,7 @@ class BltModelTester(CausalLMModelTester):
             "intermediate_size": self.intermediate_size,
             "max_position_embeddings": self.max_position_embeddings,
             "rope_theta": self.rope_theta,
-            "rope_scaling": self.rope_scaling,
+            "rope_parameters": self.rope_parameters,
             "hidden_act": self.hidden_act,
             "rms_norm_eps": self.rms_norm_eps,
             "dropout": self.dropout,
@@ -116,7 +115,7 @@ class BltModelTester(CausalLMModelTester):
             "intermediate_size": self.intermediate_size,
             "max_position_embeddings": self.max_position_embeddings,
             "rope_theta": self.rope_theta,
-            "rope_scaling": self.rope_scaling,
+            "rope_parameters": self.rope_parameters,
             "hidden_act": self.hidden_act,
             "rms_norm_eps": self.rms_norm_eps,
             "dropout": self.dropout,
@@ -130,7 +129,7 @@ class BltModelTester(CausalLMModelTester):
             "intermediate_size": self.intermediate_size,
             "max_position_embeddings": self.max_position_embeddings,
             "rope_theta": self.rope_theta,
-            "rope_scaling": self.rope_scaling,
+            "rope_parameters": self.rope_parameters,
             "hidden_act": self.hidden_act,
             "rms_norm_eps": self.rms_norm_eps,
             "dropout": self.dropout,
@@ -156,7 +155,7 @@ class BltModelTester(CausalLMModelTester):
             encoder_config=self.encoder_config,
             decoder_config=self.decoder_config,
             global_config=self.global_config,
-            rope_scaling=self.rope_scaling,
+            rope_parameters=self.rope_parameters,
             tie_word_embeddings=False,
         )
 
@@ -222,43 +221,6 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
         _test_eager_matches_sdpa_inference(
             self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels, atols=atols
         )
-
-    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
-    def test_model_rope_scaling_from_config(self, scaling_type):
-        """Override rope scaling from config test to handle Blt's sub-config structure."""
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        short_input = ids_tensor([1, 10], config.vocab_size)
-        long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
-
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        original_model = self.model_tester_class.base_model_class(config)
-        original_model.to(torch_device)
-        original_model.eval()
-        original_short_output = original_model(short_input).last_hidden_state
-        original_long_output = original_model(long_input).last_hidden_state
-
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        config.rope_scaling = {"rope_type": scaling_type, "factor": 10.0}
-        # Propagate rope_scaling to sub-configs for Blt
-        config.encoder_config.rope_scaling = config.rope_scaling
-        config.decoder_config.rope_scaling = config.rope_scaling
-        config.global_config.rope_scaling = config.rope_scaling
-        config.patcher_config.rope_scaling = config.rope_scaling
-
-        scaled_model = self.model_tester_class.base_model_class(config)
-        scaled_model.to(torch_device)
-        scaled_model.eval()
-        scaled_short_output = scaled_model(short_input).last_hidden_state
-        scaled_long_output = scaled_model(long_input).last_hidden_state
-
-        # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
-        # maximum sequence length, so the outputs for the short input should match.
-        if scaling_type == "dynamic":
-            torch.testing.assert_close(original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5)
-        else:
-            self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
-
-        self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
 
 @require_torch_accelerator
