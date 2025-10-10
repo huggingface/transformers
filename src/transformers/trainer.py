@@ -2390,8 +2390,6 @@ class Trainer:
 
         for epoch in range(epochs_trained, num_train_epochs):
             epoch_dataloader = train_dataloader
-            if hasattr(epoch_dataloader, "set_epoch"):
-                epoch_dataloader.set_epoch(epoch)
 
             steps_in_epoch = (
                 len(epoch_dataloader)
