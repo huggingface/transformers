@@ -151,8 +151,8 @@ class IsaacImageProcessorKwargs(ImagesKwargs):
 
 @auto_docstring
 class IsaacImageProcessorFast(BaseImageProcessorFast):
-    slow_image_processor_class = None
     r"""Fast torch-based image processor for Isaac vision inputs."""
+    slow_image_processor_class = "IsaacImageProcessor"
 
     resample = PILImageResampling.BILINEAR
     model_input_names = ["patches", "token_grids"]
@@ -1287,11 +1287,6 @@ def create_text_event(tokenizer: AutoTokenizer, text: str, time: float = 0.0) ->
 # Processor
 # ============================================================================
 
-
-IsaacImageProcessorFast.slow_image_processor_class = IsaacImageProcessor
-
-
-
 class IsaacProcessor(ProcessorMixin):
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = ("IsaacImageProcessor", "IsaacImageProcessorFast")
@@ -1299,7 +1294,7 @@ class IsaacProcessor(ProcessorMixin):
 
     def __init__(
         self,
-        image_processor: IsaacImageProcessor | IsaacImageProcessorFast | None = None,
+        image_processor: IsaacImageProcessor | BaseImageProcessorFast | None = None,
         tokenizer: Qwen2Tokenizer | None = None,
         *,
         vision_token: str = "<image>",
@@ -1613,7 +1608,7 @@ class IsaacModel(Qwen3PreTrainedModel):
     supports_gradient_checkpointing = True
 
     def __init__(self, config: IsaacConfig):
-        super().__init__(config)
+        Qwen3PreTrainedModel.__init__(self, config)
 
         text_cfg_source = getattr(config, "get_text_config", lambda: config)()
         text_cfg = copy.deepcopy(text_cfg_source)
@@ -1974,14 +1969,13 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
     config_class = IsaacConfig
 
     def __init__(self, config: IsaacConfig):
-        Qwen3PreTrainedModel.__init__(self, config)
+        super().__init__(config)
+
         self.model = IsaacModel(config)  # Use our custom model
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         # Tracks rotary position offsets computed during a full forward pass so decode steps can reuse them.
         self.rope_deltas = None
-
-        self.config = config
 
     def get_rope_index(
         self,
@@ -2138,10 +2132,18 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
         return True
 
 
+
+def _load_isaac_fast_image_processor():
+    try:
+        from .image_processing_isaac_fast import IsaacImageProcessorFast as fast_cls
+    except ImportError:
+        fast_cls = None
+    return fast_cls
+
 AutoImageProcessor.register(
     IsaacConfig,
     slow_image_processor_class=IsaacImageProcessor,
-    fast_image_processor_class=IsaacImageProcessorFast,
+    fast_image_processor_class=_load_isaac_fast_image_processor(),
     exist_ok=True,
 )
 
