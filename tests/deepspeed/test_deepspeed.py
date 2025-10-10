@@ -1222,7 +1222,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
 
         # this is just inference, so no optimizer should be loaded
         # it only works for z3 (makes no sense with z1-z2)
-        fp32 = True if dtype == "fp32" else False
+        fp32 = dtype == "fp32"
         self.run_and_check(
             stage=ZERO3,
             dtype=dtype,
@@ -1303,7 +1303,6 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             --train_file {data_dir}/train.json
             --validation_file {data_dir}/val.json
             --output_dir {output_dir}
-            --overwrite_output_dir
             --max_source_length {max_len}
             --max_target_length {max_len}
             --val_max_target_length {max_len}
@@ -1337,13 +1336,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
 
         if do_eval:
             actions += 1
-            args.extend(
-                """
-            --do_eval
-            --max_eval_samples 16
-            --per_device_eval_batch_size 2
-            """.split()
-            )
+            args.extend(["--do_eval", "--max_eval_samples", "16", "--per_device_eval_batch_size", "2"])
 
         assert actions > 0, "need at least do_train or do_eval for the test to run"
 
@@ -1379,7 +1372,6 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             --train_file {data_dir}/sample_text.txt
             --validation_file {data_dir}/sample_text.txt
             --output_dir {output_dir}
-            --overwrite_output_dir
             --do_train
             --do_eval
             --max_train_samples 16
@@ -1416,7 +1408,6 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             --train_file {data_dir}/sample_text.txt
             --validation_file {data_dir}/sample_text.txt
             --output_dir {output_dir}
-            --overwrite_output_dir
             --do_train
             --max_train_samples 4
             --per_device_train_batch_size 2

@@ -41,6 +41,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, is_vision_available, logging
 
 
@@ -50,6 +51,24 @@ if is_vision_available():
 
 
 logger = logging.get_logger(__name__)
+
+
+class SmolVLMImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    do_image_splitting (`bool`, *optional*, defaults to `True`):
+        Whether to split the image into sub-images concatenated with the original image. They are split into patches
+        such that each patch has a size of `max_image_size["height"]` x `max_image_size["width"]`.
+    max_image_size (`Dict`, *optional*, defaults to `{"longest_edge": 364}`):
+        Maximum resolution of the patches of images accepted by the model. This is a dictionary containing the key "longest_edge".
+    return_row_col_info (`bool`, *optional*, defaults to `False`):
+        Whether to return the row and column information of the images.
+    """
+
+    do_image_splitting: bool
+    max_image_size: dict[str, int]
+    return_row_col_info: bool
+
+
 MAX_IMAGE_SIZE = 4096  # 4k resolution as absolute maximum
 
 
@@ -288,6 +307,7 @@ class SmolVLMImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values", "pixel_attention_mask"]
+    valid_kwargs = SmolVLMImageProcessorKwargs
 
     def __init__(
         self,
@@ -523,7 +543,7 @@ class SmolVLMImageProcessor(BaseImageProcessor):
 
     def pad(
         self,
-        images: list[np.ndarray],
+        images: list[list[np.ndarray]],
         constant_values: Union[float, Iterable[float]] = 0,
         return_pixel_mask: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -534,7 +554,7 @@ class SmolVLMImageProcessor(BaseImageProcessor):
         For a list of images, for each images, pads a batch of images to the bottom and right of the image with zeros to the size of largest height and width.
         For each sample in the batch, pads the sample with empty images to the max_number of images per sample in the batch. Optionally returns a pixel mask.
         Args:
-            images (`list[np.ndarray]`):
+            images (`list[list[np.ndarray]]`):
                 List of list of images to pad. Pads to the largest height and width in the batch.
             constant_values (`float` or `Iterable[float]`, *optional*):
                 The value to use for the padding if `mode` is `"constant"`.
@@ -543,10 +563,8 @@ class SmolVLMImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
             input_data_format (`ChannelDimension` or `str`, *optional*):
@@ -562,11 +580,13 @@ class SmolVLMImageProcessor(BaseImageProcessor):
             else input_data_format
         )
         data_format = input_data_format if data_format is None else data_format
+        # filter out empty image lists, then take first image of the first sample
+        first_image_in_list = [sample_images for sample_images in images if sample_images][0][0]
 
         if input_data_format == ChannelDimension.FIRST:
-            n_channels = images[0][0].shape[0]
+            n_channels = first_image_in_list.shape[0]
         elif input_data_format == ChannelDimension.LAST:
-            n_channels = images[0][0].shape[-1]
+            n_channels = first_image_in_list.shape[-1]
         else:
             raise ValueError("Invalid channel dimension format.")
 
@@ -603,7 +623,7 @@ class SmolVLMImageProcessor(BaseImageProcessor):
         do_convert_rgb: Optional[bool] = None,
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_image_splitting: Optional[bool] = None,
         do_rescale: Optional[bool] = None,
         max_image_size: Optional[dict[str, int]] = None,
@@ -652,10 +672,8 @@ class SmolVLMImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
-                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                 - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                 - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             return_row_col_info (`bool`, *optional*, default to `False`):
                 Whether to return the number of rows and columns of the split images. This is used for the
                 `SmolVLMProcessor` to generate prompt strings based on the number of rows and columns.
@@ -684,13 +702,11 @@ class SmolVLMImageProcessor(BaseImageProcessor):
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
         do_pad = do_pad if do_pad is not None else self.do_pad
 
+        images = self.fetch_images(images)
         images_list = make_nested_list_of_images(images)
 
         if not valid_images(images_list[0]):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         validate_preprocess_arguments(
             do_rescale=do_rescale,
@@ -711,6 +727,9 @@ class SmolVLMImageProcessor(BaseImageProcessor):
 
         # All transformations expect numpy arrays.
         images_list = [[to_numpy_array(image) for image in images] for images in images_list]
+        # Search for the first image in the image list.
+        # NOTE: we can't slice the first image with images_list[0][0] if the first batch contains no images. See #36682
+        first_image_in_list = [images for images in images_list if images][0][0]
 
         # Extra channel dimension for grayscale images
         if input_data_format in [ChannelDimension.LAST, None]:
@@ -722,7 +741,7 @@ class SmolVLMImageProcessor(BaseImageProcessor):
                 [np.expand_dims(img, axis=0) if img.ndim == 2 else img for img in images] for images in images_list
             ]
 
-        if do_rescale and is_scaled_image(images_list[0][0]):
+        if do_rescale and is_scaled_image(first_image_in_list):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -730,7 +749,7 @@ class SmolVLMImageProcessor(BaseImageProcessor):
 
         # We assume that all images have the same channel dimension format.
         if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(images_list[0][0], num_channels=(1, 3, 4))
+            input_data_format = infer_channel_dimension_format(first_image_in_list, num_channels=(1, 3, 4))
 
         if do_resize:
             images_list = [
@@ -863,10 +882,11 @@ class SmolVLMImageProcessor(BaseImageProcessor):
         Returns:
             `int`: Number of patches per image.
         """
-        do_image_splitting = images_kwargs.get("do_image_splitting", None) or self.do_image_splitting
-        max_image_size = images_kwargs.get("max_image_size", None) or self.max_image_size
-        size = images_kwargs.get("size", None) or self.size
+        do_image_splitting = images_kwargs.get("do_image_splitting", self.do_image_splitting)
+        max_image_size = images_kwargs.get("max_image_size", self.max_image_size)
+        size = images_kwargs.get("size", self.size)
 
+        num_patches = num_rows = num_cols = 1
         if do_image_splitting:
             height, width = _resize_output_size_rescale_to_max_len(height, width, max_len=size["longest_edge"])
             height, width = _resize_output_size_scale_below_upper_bound(height, width, max_len=4096)
@@ -888,7 +908,7 @@ class SmolVLMImageProcessor(BaseImageProcessor):
                 num_cols = math.ceil(resized_width / max_width)
                 num_patches = num_rows * num_cols + 1
 
-        return num_patches
+        return num_patches, num_rows, num_cols
 
 
 __all__ = ["SmolVLMImageProcessor"]

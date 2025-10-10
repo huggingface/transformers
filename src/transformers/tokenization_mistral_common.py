@@ -15,10 +15,10 @@
 import os
 import shutil
 import warnings
-from collections.abc import Mapping, Sized
+from collections.abc import Callable, Mapping, Sized
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Optional, Union, overload
+from typing import Any, Optional, Union, overload
 
 import numpy as np
 
@@ -433,7 +433,7 @@ class MistralCommonTokenizer(PushToHubMixin):
 
     def decode(
         self,
-        token_ids: Union[int, list[int], "np.ndarray", "torch.Tensor"],
+        token_ids: Union[int, list[int], np.ndarray, "torch.Tensor"],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: Optional[bool] = None,
         **kwargs,
@@ -475,7 +475,7 @@ class MistralCommonTokenizer(PushToHubMixin):
 
     def batch_decode(
         self,
-        sequences: Union[list[int], list[list[int]], "np.ndarray", "torch.Tensor"],
+        sequences: Union[list[int], list[list[int]], np.ndarray, "torch.Tensor"],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: Optional[bool] = None,
         **kwargs,
@@ -1203,7 +1203,7 @@ class MistralCommonTokenizer(PushToHubMixin):
         # If we have a list of dicts, let's convert it in a dict of lists
         # We do this to allow using this method as a collate_fn function in PyTorch Dataloader
         if isinstance(encoded_inputs, (list, tuple)) and isinstance(encoded_inputs[0], Mapping):
-            encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0].keys()}
+            encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0]}
 
         # The model's main input name, usually `input_ids`, has been passed for padding
         if self.model_input_names[0] not in encoded_inputs:
@@ -1219,7 +1219,7 @@ class MistralCommonTokenizer(PushToHubMixin):
                 encoded_inputs["attention_mask"] = []
             return encoded_inputs
 
-        # If we have PyTorch/TF/NumPy tensors/arrays as inputs, we cast them as python objects
+        # If we have PyTorch/NumPy tensors/arrays as inputs, we cast them as python objects
         # and rebuild them afterwards if no return_tensors is specified
         # Note that we lose the specific device the tensor may be on for PyTorch
 
@@ -1239,7 +1239,7 @@ class MistralCommonTokenizer(PushToHubMixin):
             else:
                 raise ValueError(
                     f"type of {first_element} unknown: {type(first_element)}. "
-                    "Should be one of a python, numpy, pytorch or tensorflow object."
+                    "Should be one of a python, numpy, or pytorch object."
                 )
 
             for key, value in encoded_inputs.items():
@@ -1433,7 +1433,7 @@ class MistralCommonTokenizer(PushToHubMixin):
                 f"Kwargs {list(kwargs.keys())} are not supported by `MistralCommonTokenizer.apply_chat_template`."
             )
         if not isinstance(truncation, bool):
-            raise ValueError("`truncation` must be a boolean for `apply_chat_template` method.")
+            raise TypeError("`truncation` must be a boolean for `apply_chat_template` method.")
 
         if isinstance(conversation, (list, tuple)) and (
             isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "messages")
@@ -1449,7 +1449,7 @@ class MistralCommonTokenizer(PushToHubMixin):
             if not isinstance(message, dict):
                 return
             maybe_list_content: Optional[Union[str, list[dict[str, Union[str, dict[str, Any]]]]]] = message.get(
-                "content", None
+                "content"
             )
             if not maybe_list_content or isinstance(maybe_list_content, str):
                 return
@@ -1607,11 +1607,6 @@ class MistralCommonTokenizer(PushToHubMixin):
                 "`text_pair`, `text_target` and `text_pair_target` are not supported by `MistralCommonTokenizer`."
             )
 
-        if return_tensors in ("tf", "jax"):
-            raise ValueError(
-                "`MistralCommonTokenizer` does not support `return_tensors='tf'` or `return_tensors='jax'`."
-            )
-
         def _is_valid_text_input(t):
             if isinstance(t, str):
                 # Strings are fine
@@ -1726,7 +1721,7 @@ class MistralCommonTokenizer(PushToHubMixin):
                 exist.
             token (`str` or *bool*, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-                when running `huggingface-cli login` (stored in `~/.huggingface`).
+                when running `hf auth login` (stored in `~/.huggingface`).
             local_files_only (`bool`, *optional*, defaults to `False`):
                 Whether or not to only rely on local files and not to attempt to download any files.
             revision (`str`, *optional*, defaults to `"main"`):
@@ -1784,9 +1779,7 @@ class MistralCommonTokenizer(PushToHubMixin):
                 pathlib_repo_file = Path(path)
                 file_name = pathlib_repo_file.name
                 suffix = "".join(pathlib_repo_file.suffixes)
-                if file_name == "tekken.json":
-                    valid_tokenizer_files.append(file_name)
-                elif suffix in sentencepiece_suffixes:
+                if file_name == "tekken.json" or suffix in sentencepiece_suffixes:
                     valid_tokenizer_files.append(file_name)
 
             if len(valid_tokenizer_files) == 0:
@@ -1796,7 +1789,7 @@ class MistralCommonTokenizer(PushToHubMixin):
                 if "tekken.json" in valid_tokenizer_files:
                     tokenizer_file = "tekken.json"
                 else:
-                    tokenizer_file = sorted(valid_tokenizer_files)[-1]
+                    tokenizer_file = max(valid_tokenizer_files)
                 logger.warning(
                     f"Multiple tokenizer files found in directory: {pretrained_model_name_or_path}. Using {tokenizer_file}."
                 )
@@ -1826,7 +1819,7 @@ class MistralCommonTokenizer(PushToHubMixin):
         repo_url: Optional[str] = None,
         organization: Optional[str] = None,
         **kwargs,
-    ) -> tuple[str]:
+    ) -> tuple[str, ...]:
         """
         Save the full tokenizer state.
 

@@ -14,19 +14,19 @@
 # limitations under the License.
 """Config class for Granite Speech."""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-class GraniteSpeechEncoderConfig(PretrainedConfig):
+class GraniteSpeechEncoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GraniteSpeechCTCEncoder`]. It is used to instantiate
     a Granite Speech audio encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the dfefaults will yield a similar configuration to that of the audio encoder of the Granite Speech
     architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         input_dim (`int`, *optional*, defaults to 160):
@@ -104,13 +104,13 @@ class GraniteSpeechEncoderConfig(PretrainedConfig):
         self.max_pos_emb = max_pos_emb
 
 
-class GraniteSpeechConfig(PretrainedConfig):
+class GraniteSpeechConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GraniteSpeechForConditionalGeneration`]. It is used to instantiate an
     Granite Speech model according to the specified arguments, defining the model architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `GraniteConfig`):
@@ -169,15 +169,13 @@ class GraniteSpeechConfig(PretrainedConfig):
         **kwargs,
     ):
         if isinstance(text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "granite"
+            text_config["model_type"] = text_config.get("model_type", "granite")
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             text_config = CONFIG_MAPPING["granite"]()
 
         if isinstance(projector_config, dict):
-            projector_config["model_type"] = (
-                projector_config["model_type"] if "model_type" in projector_config else "blip_2_qformer"
-            )
+            projector_config["model_type"] = projector_config.get("model_type", "blip_2_qformer")
             projector_config = CONFIG_MAPPING[projector_config["model_type"]](**projector_config)
         elif projector_config is None:
             projector_config = CONFIG_MAPPING["blip_2_qformer"]()

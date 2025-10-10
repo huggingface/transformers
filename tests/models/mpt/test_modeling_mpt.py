@@ -16,7 +16,7 @@
 import math
 import unittest
 
-from transformers import MptConfig, is_torch_available
+from transformers import BitsAndBytesConfig, MptConfig, is_torch_available
 from transformers.testing_utils import (
     Expectations,
     require_bitsandbytes,
@@ -310,7 +310,7 @@ class MptModelTester:
     def create_and_check_mpt_weight_initialization(self, config, *args):
         model = MptModel(config)
         model_std = model.config.initializer_range / math.sqrt(2 * model.config.n_layers)
-        for key in model.state_dict().keys():
+        for key in model.state_dict():
             if "c_proj" in key and "weight" in key:
                 self.parent.assertLessEqual(abs(torch.std(model.state_dict()[key]) - model_std), 0.001)
                 self.parent.assertLessEqual(abs(torch.mean(model.state_dict()[key]) - 0.0), 0.01)
@@ -355,9 +355,8 @@ class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     fx_compatible = False
     test_missing_keys = False
-    test_pruning = False
+
     test_torchscript = False
-    test_head_masking = False
     pipeline_model_mapping = (
         {
             "feature-extraction": MptModel,
@@ -441,7 +440,10 @@ class MptIntegrationTests(unittest.TestCase):
 
         # Load in 4bit to fit the daily CI runner GPU RAM
         model = MptForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, device_map={"": 0}, load_in_4bit=True
+            model_id,
+            dtype=torch.bfloat16,
+            device_map={"": 0},
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
         )
 
         input_text = "Hello"
@@ -464,7 +466,10 @@ class MptIntegrationTests(unittest.TestCase):
 
         # Load in 4bit to fit the daily CI runner GPU RAM
         model = MptForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, device_map={"": 0}, load_in_4bit=True
+            model_id,
+            dtype=torch.bfloat16,
+            device_map={"": 0},
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
         )
 
         input_text = "Hello"
@@ -489,7 +494,10 @@ class MptIntegrationTests(unittest.TestCase):
 
         # Load in 4bit to fit the daily CI runner GPU RAM
         model = MptForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, device_map={"": 0}, load_in_4bit=True
+            model_id,
+            dtype=torch.bfloat16,
+            device_map={"": 0},
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
         )
 
         input_texts = ["Hello my name is", "Today I am going at the gym and"]
@@ -530,7 +538,10 @@ class MptIntegrationTests(unittest.TestCase):
 
         # Load in 4bit to fit the daily CI runner GPU RAM
         model = MptForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, device_map={"": 0}, load_in_4bit=True
+            model_id,
+            dtype=torch.bfloat16,
+            device_map={"": 0},
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
         )
 
         dummy_input = torch.LongTensor([[1, 2, 3, 4, 5]]).to(torch_device)

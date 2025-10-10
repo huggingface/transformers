@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -22,7 +22,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class ShieldGemma2Config(PretrainedConfig):
+class ShieldGemma2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ShieldGemma2ForImageClassification`]. It is used to instantiate an
     ShieldGemma2ForImageClassification according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -30,8 +30,8 @@ class ShieldGemma2Config(PretrainedConfig):
 
     e.g. [google/gemma-3-4b](https://huggingface.co/google/gemma-3-4b)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`Union[ShieldGemma2TextConfig, dict]`, *optional*):
@@ -91,9 +91,7 @@ class ShieldGemma2Config(PretrainedConfig):
         **kwargs,
     ):
         if isinstance(vision_config, dict):
-            vision_config["model_type"] = (
-                vision_config["model_type"] if "model_type" in vision_config else "siglip_vision_model"
-            )
+            vision_config["model_type"] = vision_config.get("model_type", "siglip_vision_model")
             vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
         elif vision_config is None:
             vision_config = CONFIG_MAPPING["siglip_vision_model"]()
@@ -101,7 +99,7 @@ class ShieldGemma2Config(PretrainedConfig):
         self.vision_config = vision_config
 
         if isinstance(text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "gemma3_text"
+            text_config["model_type"] = text_config.get("model_type", "gemma3_text")
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             text_config = CONFIG_MAPPING["gemma3_text"]()

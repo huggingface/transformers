@@ -20,7 +20,6 @@ from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from torch import nn
 
 from ...modeling_outputs import BaseModelOutput
@@ -37,11 +36,6 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
-    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
-    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
-    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
-    argument.
     """
     if drop_prob == 0.0 or not training:
         return input
@@ -91,7 +85,7 @@ class MgpstrModelOutput(ModelOutput):
         heads.
     """
 
-    logits: tuple[torch.FloatTensor] = None
+    logits: Optional[tuple[torch.FloatTensor]] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
     a3_attentions: Optional[tuple[torch.FloatTensor]] = None
@@ -290,13 +284,14 @@ class MgpstrPreTrainedModel(PreTrainedModel):
     base_model_prefix = "mgp_str"
     _no_split_modules = []
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
+    def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
+        std = self.config.initializer_range
         if isinstance(module, MgpstrEmbeddings):
-            nn.init.trunc_normal_(module.pos_embed, mean=0.0, std=self.config.initializer_range)
-            nn.init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
+            nn.init.trunc_normal_(module.pos_embed, mean=0.0, std=std)
+            nn.init.trunc_normal_(module.cls_token, mean=0.0, std=std)
         elif isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data = nn.init.trunc_normal_(module.weight.data, mean=0.0, std=self.config.initializer_range)
+            nn.init.trunc_normal_(module.weight.data, mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.LayerNorm):
@@ -311,6 +306,9 @@ class MgpstrModel(MgpstrPreTrainedModel):
         self.config = config
         self.embeddings = MgpstrEmbeddings(config)
         self.encoder = MgpstrEncoder(config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
         return self.embeddings.proj
@@ -373,6 +371,9 @@ class MgpstrForSceneTextRecognition(MgpstrPreTrainedModel):
         self.char_head = nn.Linear(config.hidden_size, config.num_character_labels)
         self.bpe_head = nn.Linear(config.hidden_size, config.num_bpe_labels)
         self.wp_head = nn.Linear(config.hidden_size, config.num_wordpiece_labels)
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @auto_docstring
     def forward(

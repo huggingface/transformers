@@ -16,10 +16,12 @@
 
 from typing import Optional, Union
 
+import torch
+from torchvision.transforms.v2 import functional as F
+
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -29,42 +31,13 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
     is_torch_tensor,
-    make_list_of_images,
-    pil_torch_interpolation_mapping,
-    validate_kwargs,
 )
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
 )
-
-
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
-
-
-class MobileVitFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    do_flip_channel_order (`bool`, *optional*, defaults to `self.do_flip_channel_order`):
-        Whether to flip the color channels from RGB to BGR or vice versa.
-    do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
-        Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
-        is used for background, and background itself is not included in all classes of a dataset (e.g.
-        ADE20k). The background label will be replaced by 255.
-    """
-
-    do_flip_channel_order: Optional[bool]
-    do_reduce_labels: Optional[bool]
+from .image_processing_mobilevit import MobileVitImageProcessorKwargs
 
 
 @auto_docstring
@@ -80,9 +53,9 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
     do_convert_rgb = None
     do_flip_channel_order = True
     do_reduce_labels = False
-    valid_kwargs = MobileVitFastImageProcessorKwargs
+    valid_kwargs = MobileVitImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[MobileVitFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[MobileVitImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     # Copied from transformers.models.beit.image_processing_beit_fast.BeitImageProcessorFast.reduce_label
@@ -95,6 +68,63 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
             labels[idx] = label
 
         return label
+
+    @auto_docstring
+    def preprocess(
+        self,
+        images: ImageInput,
+        segmentation_maps: Optional[ImageInput] = None,
+        **kwargs: Unpack[MobileVitImageProcessorKwargs],
+    ) -> BatchFeature:
+        r"""
+        segmentation_maps (`ImageInput`, *optional*):
+            The segmentation maps to preprocess.
+        """
+        return super().preprocess(images, segmentation_maps, **kwargs)
+
+    def _preprocess_image_like_inputs(
+        self,
+        images: ImageInput,
+        segmentation_maps: Optional[ImageInput],
+        do_convert_rgb: bool,
+        input_data_format: ChannelDimension,
+        device: Optional[Union[str, "torch.device"]] = None,
+        **kwargs: Unpack[MobileVitImageProcessorKwargs],
+    ) -> BatchFeature:
+        """
+        Preprocess image-like inputs.
+        """
+        images = self._prepare_image_like_inputs(
+            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
+        )
+        images_kwargs = kwargs.copy()
+        images_kwargs["do_reduce_labels"] = False
+        batch_feature = self._preprocess(images, **images_kwargs)
+
+        if segmentation_maps is not None:
+            processed_segmentation_maps = self._prepare_image_like_inputs(
+                images=segmentation_maps,
+                expected_ndims=2,
+                do_convert_rgb=False,
+                input_data_format=ChannelDimension.FIRST,
+            )
+
+            segmentation_maps_kwargs = kwargs.copy()
+            segmentation_maps_kwargs.update(
+                {
+                    "do_rescale": False,
+                    "do_flip_channel_order": False,
+                    # Nearest interpolation is used for segmentation maps instead of BILINEAR.
+                    "interpolation": F.InterpolationMode.NEAREST_EXACT,
+                }
+            )
+
+            processed_segmentation_maps = self._preprocess(
+                images=processed_segmentation_maps, **segmentation_maps_kwargs
+            ).pixel_values
+            batch_feature["labels"] = processed_segmentation_maps.squeeze(1).to(torch.int64)
+
+        return batch_feature
 
     def _preprocess(
         self,
@@ -154,104 +184,7 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
         # Stack all processed images if return_tensors is specified
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
-        return processed_images
-
-    def _preprocess_images(
-        self,
-        images,
-        **kwargs,
-    ):
-        """Preprocesses images."""
-        kwargs["do_reduce_labels"] = False
-        processed_images = self._preprocess(images=images, **kwargs)
-        return processed_images
-
-    def _preprocess_segmentation_maps(
-        self,
-        segmentation_maps,
-        **kwargs,
-    ):
-        """Preprocesses segmentation maps."""
-        processed_segmentation_maps = []
-        for segmentation_map in segmentation_maps:
-            segmentation_map = self._process_image(
-                segmentation_map, do_convert_rgb=False, input_data_format=ChannelDimension.FIRST
-            )
-
-            if segmentation_map.ndim == 2:
-                segmentation_map = segmentation_map[None, ...]
-
-            processed_segmentation_maps.append(segmentation_map)
-
-        kwargs["do_rescale"] = False
-        kwargs["do_flip_channel_order"] = False
-        kwargs["interpolation"] = pil_torch_interpolation_mapping[PILImageResampling.NEAREST]
-        processed_segmentation_maps = self._preprocess(images=processed_segmentation_maps, **kwargs)
-
-        processed_segmentation_maps = processed_segmentation_maps.squeeze(1)
-
-        processed_segmentation_maps = processed_segmentation_maps.to(torch.int64)
-        return processed_segmentation_maps
-
-    @auto_docstring
-    def preprocess(
-        self,
-        images: ImageInput,
-        segmentation_maps: Optional[ImageInput] = None,
-        **kwargs: Unpack[MobileVitFastImageProcessorKwargs],
-    ) -> BatchFeature:
-        r"""
-        segmentation_maps (`ImageInput`, *optional*):
-            The segmentation maps to preprocess.
-        """
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_kwargs.__annotations__.keys())
-        # Set default kwargs from self. This ensures that if a kwarg is not provided
-        # by the user, it gets its default value from the instance, or is set to None.
-        for kwarg_name in self.valid_kwargs.__annotations__:
-            kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
-
-        # Extract parameters that are only used for preparing the input images
-        do_convert_rgb = kwargs.pop("do_convert_rgb")
-        input_data_format = kwargs.pop("input_data_format")
-        device = kwargs.pop("device")
-        # Prepare input images
-        images = self._prepare_input_images(
-            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
-        )
-
-        # Prepare segmentation maps
-        if segmentation_maps is not None:
-            segmentation_maps = make_list_of_images(images=segmentation_maps, expected_ndims=2)
-
-        # Update kwargs that need further processing before being validated
-        kwargs = self._further_process_kwargs(**kwargs)
-
-        # Validate kwargs
-        self._validate_preprocess_kwargs(**kwargs)
-
-        # torch resize uses interpolation instead of resample
-        resample = kwargs.pop("resample")
-        kwargs["interpolation"] = (
-            pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
-        )
-
-        # Pop kwargs that are not needed in _preprocess
-        kwargs.pop("default_to_square")
-        kwargs.pop("data_format")
-
-        images = self._preprocess_images(
-            images=images,
-            **kwargs,
-        )
-
-        if segmentation_maps is not None:
-            segmentation_maps = self._preprocess_segmentation_maps(
-                segmentation_maps=segmentation_maps,
-                **kwargs,
-            )
-            return BatchFeature(data={"pixel_values": images, "labels": segmentation_maps})
-
-        return BatchFeature(data={"pixel_values": images})
+        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
     def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[list[tuple]] = None):
         """

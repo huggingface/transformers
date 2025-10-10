@@ -55,7 +55,7 @@ def get_xclip_config(model_name, num_frames):
     if model_name == "xclip-large-patch14-16-frames":
         vision_config.image_size = 336
 
-    config = XCLIPConfig.from_text_vision_configs(text_config, vision_config)
+    config = XCLIPConfig(text_config=text_config, vision_config=vision_config)
 
     if "large" in model_name:
         config.projection_dim = 768
@@ -118,7 +118,7 @@ def rename_key(name):
 
 
 def convert_state_dict(orig_state_dict, config):
-    for key in orig_state_dict.copy().keys():
+    for key in orig_state_dict.copy():
         val = orig_state_dict.pop(key)
 
         if "attn.in_proj" in key:

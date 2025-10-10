@@ -14,7 +14,7 @@ if is_cython_available():
     import pyximport
 
     pyximport.install(setup_args={"include_dirs": np.get_include()})
-    from . import algos_graphormer  # noqa E402
+    from . import algos_graphormer
 
 
 def convert_to_single_emb(x, offset: int = 512):
@@ -27,12 +27,12 @@ def convert_to_single_emb(x, offset: int = 512):
 def preprocess_item(item, keep_features=True):
     requires_backends(preprocess_item, ["cython"])
 
-    if keep_features and "edge_attr" in item.keys():  # edge_attr
+    if keep_features and "edge_attr" in item:  # edge_attr
         edge_attr = np.asarray(item["edge_attr"], dtype=np.int64)
     else:
         edge_attr = np.ones((len(item["edge_index"][0]), 1), dtype=np.int64)  # same embedding for all
 
-    if keep_features and "node_feat" in item.keys():  # input_nodes
+    if keep_features and "node_feat" in item:  # input_nodes
         node_feature = np.asarray(item["node_feat"], dtype=np.int64)
     else:
         node_feature = np.ones((item["num_nodes"], 1), dtype=np.int64)  # same embedding for all

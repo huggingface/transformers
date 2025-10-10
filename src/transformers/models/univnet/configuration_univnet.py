@@ -13,14 +13,14 @@
 # limitations under the License.
 """UnivNetModel model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class UnivNetConfig(PretrainedConfig):
+class UnivNetConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`UnivNetModel`]. It is used to instantiate a
     UnivNet vocoder model according to the specified arguments, defining the model architecture. Instantiating a
@@ -28,8 +28,8 @@ class UnivNetConfig(PretrainedConfig):
     [dg845/univnet-dev](https://huggingface.co/dg845/univnet-dev) architecture, which corresponds to the 'c32'
     architecture in [maum-ai/univnet](https://github.com/maum-ai/univnet/blob/master/config/default_c32.yaml).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         model_in_channels (`int`, *optional*, defaults to 64):

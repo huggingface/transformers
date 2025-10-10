@@ -30,13 +30,13 @@ def process_file(
     file_type="modeling_",
     show_diff=True,
 ):
-    file_name_prefix = file_type.split("*")[0]
-    file_name_suffix = file_type.split("*")[-1] if "*" in file_type else ""
+    file_name_prefix = file_type.split(".*")[0]
+    file_name_suffix = file_type.split(".*")[-1] if ".*" in file_type else ""
     file_path = modular_file_path.replace("modular_", f"{file_name_prefix}_").replace(".py", f"{file_name_suffix}.py")
     # Read the actual modeling file
     with open(file_path, "r", encoding="utf-8") as modeling_file:
         content = modeling_file.read()
-    output_buffer = StringIO(generated_modeling_content[file_type][0])
+    output_buffer = StringIO(generated_modeling_content[file_type])
     output_buffer.seek(0)
     output_content = output_buffer.read()
     diff = difflib.unified_diff(
@@ -54,7 +54,7 @@ def process_file(
             shutil.copy(file_path, file_path + BACKUP_EXT)
         # we always save the generated content, to be able to update dependant files
         with open(file_path, "w", encoding="utf-8", newline="\n") as modeling_file:
-            modeling_file.write(generated_modeling_content[file_type][0])
+            modeling_file.write(generated_modeling_content[file_type])
         console.print(f"[bold blue]Overwritten {file_path} with the generated content.[/bold blue]")
         if show_diff:
             console.print(f"\n[bold red]Differences found between the generated code and {file_path}:[/bold red]\n")
@@ -71,7 +71,7 @@ def compare_files(modular_file_path, show_diff=True):
     # Generate the expected modeling content
     generated_modeling_content = convert_modular_file(modular_file_path)
     diff = 0
-    for file_type in generated_modeling_content.keys():
+    for file_type in generated_modeling_content:
         diff += process_file(modular_file_path, generated_modeling_content, file_type, show_diff)
     return diff
 
@@ -179,7 +179,7 @@ if __name__ == "__main__":
     # we start applying modular conversion to each list in parallel, starting from the first list
 
     console.print(f"[bold yellow]Number of dependency levels: {len(ordered_files)}[/bold yellow]")
-    console.print(f"[bold yellow]Files per level: {tuple([len(x) for x in ordered_files])}[/bold yellow]")
+    console.print(f"[bold yellow]Files per level: {tuple(len(x) for x in ordered_files)}[/bold yellow]")
 
     try:
         for dependency_level_files in ordered_files:
@@ -197,10 +197,25 @@ if __name__ == "__main__":
             # Process files with diff
             num_workers = min(args.num_workers, len(files_to_check))
             with multiprocessing.Pool(num_workers) as p:
-                is_changed_flags = p.map(
-                    partial(compare_files, show_diff=not args.fix_and_overwrite),
-                    files_to_check,
-                )
+                try:
+                    is_changed_flags = p.map(
+                        partial(compare_files, show_diff=not args.fix_and_overwrite),
+                        files_to_check,
+                    )
+                except Exception as e:
+                    console.print(
+                        f"[bold red]Failed to convert one or more files in batch: {files_to_check}[/bold red]"
+                    )
+                    console.print(f"[bold red]Error: {e}[/bold red]")
+                    # Try to process files individually to identify which one failed
+                    is_changed_flags = []
+                    for file_path in files_to_check:
+                        try:
+                            result = compare_files(file_path, show_diff=not args.fix_and_overwrite)
+                            is_changed_flags.append(result)
+                        except Exception as individual_error:
+                            console.print(f"[bold red]Failed to convert {file_path}: {individual_error}[/bold red]")
+                            is_changed_flags.append(0)  # Mark as no change to continue processing
 
             # Collect changed files and their original paths
             for is_changed, file_path in zip(is_changed_flags, files_to_check):

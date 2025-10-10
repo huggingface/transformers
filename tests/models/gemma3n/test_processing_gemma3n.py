@@ -29,6 +29,7 @@ if is_speech_available():
     from transformers.models.gemma3n import Gemma3nAudioFeatureExtractor, Gemma3nProcessor
 
 
+# TODO: omni-modal processor can't run tests from `ProcessorTesterMixin`
 @require_torch
 @require_torchaudio
 @require_vision
@@ -65,15 +66,12 @@ class Gemma3nProcessorTest(unittest.TestCase):
             tokenizer=tokenizer, feature_extractor=feature_extractor, image_processor=image_processor
         )
 
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(self.tmpdirname, legacy_serialization=False)
         processor = Gemma3nProcessor.from_pretrained(self.tmpdirname)
 
         self.assertIsInstance(processor.tokenizer, GemmaTokenizerFast)
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
 
-        # `disable_grouping` is a new attribute that got added on main while gemma3n was being released - so was
-        # not part of the saved processor
-        del processor.feature_extractor.disable_grouping
         self.assertIsInstance(processor.feature_extractor, Gemma3nAudioFeatureExtractor)
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
 
@@ -85,7 +83,7 @@ class Gemma3nProcessorTest(unittest.TestCase):
         processor = Gemma3nProcessor(
             tokenizer=tokenizer, feature_extractor=feature_extractor, image_processor=image_processor
         )
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(self.tmpdirname, legacy_serialization=False)
 
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS-BOS)", eos_token="(EOS-EOS)")
         feature_extractor_add_kwargs = self.get_feature_extractor(dither=5.0, padding_value=1.0)
@@ -97,9 +95,6 @@ class Gemma3nProcessorTest(unittest.TestCase):
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
         self.assertIsInstance(processor.tokenizer, GemmaTokenizerFast)
 
-        # `disable_grouping` is a new attribute that got added on main while gemma3n was being released - so was
-        # not part of the saved processor
-        del processor.feature_extractor.disable_grouping
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.feature_extractor, Gemma3nAudioFeatureExtractor)
 
@@ -116,7 +111,7 @@ class Gemma3nProcessorTest(unittest.TestCase):
         input_image_processor = image_processor(raw_image, return_tensors="pt")
         input_processor = processor(text="Describe:", images=raw_image, return_tensors="pt")
 
-        for key in input_image_processor.keys():
+        for key in input_image_processor:
             self.assertAlmostEqual(input_image_processor[key].sum(), input_processor[key].sum(), delta=1e-2)
             if "pixel_values" in key:
                 # NOTE: all images should be re-scaled to 768x768
@@ -135,7 +130,7 @@ class Gemma3nProcessorTest(unittest.TestCase):
         input_feat_extract = feature_extractor(raw_speech, return_tensors="pt")
         input_processor = processor(text="Transcribe:", audio=raw_speech, return_tensors="pt")
 
-        for key in input_feat_extract.keys():
+        for key in input_feat_extract:
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
 
     def test_tokenizer(self):
@@ -152,7 +147,7 @@ class Gemma3nProcessorTest(unittest.TestCase):
 
         encoded_tok = tokenizer(input_str)
 
-        for key in encoded_tok.keys():
+        for key in encoded_tok:
             self.assertListEqual(encoded_tok[key], encoded_processor[key][0])
 
     def test_tokenizer_decode(self):
@@ -169,23 +164,3 @@ class Gemma3nProcessorTest(unittest.TestCase):
         decoded_tok = tokenizer.batch_decode(predicted_ids)
 
         self.assertListEqual(decoded_tok, decoded_processor)
-
-    def test_model_input_names(self):
-        feature_extractor = self.get_feature_extractor()
-        tokenizer = self.get_tokenizer()
-        image_processor = self.get_image_processor()
-        processor = Gemma3nProcessor(
-            tokenizer=tokenizer, feature_extractor=feature_extractor, image_processor=image_processor
-        )
-
-        for key in feature_extractor.model_input_names:
-            self.assertIn(
-                key,
-                processor.model_input_names,
-            )
-
-        for key in image_processor.model_input_names:
-            self.assertIn(
-                key,
-                processor.model_input_names,
-            )

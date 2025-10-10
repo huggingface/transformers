@@ -53,14 +53,15 @@ class TimmWrapperModelTester:
     def __init__(
         self,
         parent,
-        model_name="timm/resnet18.a1_in1k",
         batch_size=3,
         image_size=32,
         num_channels=3,
         is_training=True,
     ):
         self.parent = parent
-        self.model_name = model_name
+        self.architecture = "resnet26"
+        # We need this to make the model smaller
+        self.model_args = {"channels": (16, 16, 16, 16)}
         self.batch_size = batch_size
         self.image_size = image_size
         self.num_channels = num_channels
@@ -73,7 +74,7 @@ class TimmWrapperModelTester:
         return config, pixel_values
 
     def get_config(self):
-        return TimmWrapperConfig.from_pretrained(self.model_name)
+        return TimmWrapperConfig(architecture=self.architecture, model_args=self.model_args)
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -93,10 +94,8 @@ class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     )
 
     test_resize_embeddings = False
-    test_head_masking = False
-    test_pruning = False
+
     has_attentions = False
-    test_model_parallel = False
 
     def setUp(self):
         self.config_class = TimmWrapperConfig
@@ -158,17 +157,15 @@ class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_can_init_all_missing_weights(self):
         pass
 
-    @unittest.skip(reason="TimmWrapper initialization is managed on the timm side")
-    def test_initialization(self):
-        pass
+    def test_gradient_checkpointing(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = TimmWrapperModel._from_config(config)
+        self.assertTrue(model.supports_gradient_checkpointing)
 
-    @unittest.skip(reason="TimmWrapper initialization is managed on the timm side")
-    def test_mismatched_shapes_have_properly_initialized_weights(self):
-        pass
-
-    @unittest.skip(reason="Need to use a timm model and there is no tiny model available.")
-    def test_model_is_small(self):
-        pass
+    def test_gradient_checkpointing_on_non_supported_model(self):
+        config = TimmWrapperConfig.from_pretrained("timm/hrnet_w18.ms_aug_in1k")
+        model = TimmWrapperModel._from_config(config)
+        self.assertFalse(model.supports_gradient_checkpointing)
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()

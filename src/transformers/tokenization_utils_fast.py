@@ -93,7 +93,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    slow_tokenizer_class: PreTrainedTokenizer = None
+    slow_tokenizer_class: Optional[type[PreTrainedTokenizer]] = None
 
     def __init__(self, *args, **kwargs):
         tokenizer_object = kwargs.pop("tokenizer_object", None)
@@ -134,7 +134,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             fast_tokenizer = convert_slow_tokenizer(slow_tokenizer)
         elif not slow_tokenizer:
             # We tried loading a slow_tokenizer with spm and failed, try to load with tiktoken
-            self.vocab_file = kwargs.get("vocab_file", None)
+            self.vocab_file = kwargs.get("vocab_file")
             self.additional_special_tokens = kwargs.get("additional_special_tokens", [])
             fast_tokenizer = convert_slow_tokenizer(self, from_tiktoken=True)
             slow_tokenizer = None
@@ -583,7 +583,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         # To match each overflowing sample with the original sample in the batch
         # we add an overflow_to_sample_mapping array (see below)
         sanitized_tokens = {}
-        for key in tokens_and_encodings[0][0].keys():
+        for key in tokens_and_encodings[0][0]:
             stack = [e for item, _ in tokens_and_encodings for e in item[key]]
             sanitized_tokens[key] = stack
         sanitized_encodings = [e for _, item in tokens_and_encodings for e in item]
@@ -695,10 +695,10 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     def _save_pretrained(
         self,
         save_directory: Union[str, os.PathLike],
-        file_names: tuple[str],
+        file_names: tuple[str, ...],
         legacy_format: Optional[bool] = None,
         filename_prefix: Optional[str] = None,
-    ) -> tuple[str]:
+    ) -> tuple[str, ...]:
         """
         Save a tokenizer using the slow-tokenizer/legacy format: vocabulary + added tokens as well as in a unique JSON
         file containing {config + vocab + added-tokens}.

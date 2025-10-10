@@ -625,7 +625,7 @@ def get_scheduler(
         optimizer_dict = optimizer.optimizer_dict
         scheduler_dict = {}
 
-        for param in optimizer_dict.keys():
+        for param in optimizer_dict:
             scheduler_dict[param] = get_scheduler(
                 name,
                 optimizer=optimizer_dict[param],
@@ -639,7 +639,7 @@ def get_scheduler(
             # attach the scheduler hook, the gradients have been zeroed here
             scheduler_dict[param].step()
 
-        for param in optimizer_dict.keys():
+        for param in optimizer_dict:
             if param.requires_grad:
                 param.register_post_accumulate_grad_hook(scheduler_hook)
 

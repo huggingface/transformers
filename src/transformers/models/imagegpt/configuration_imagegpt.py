@@ -16,28 +16,28 @@
 
 from collections import OrderedDict
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
 
 
 if TYPE_CHECKING:
-    from ... import FeatureExtractionMixin, TensorType
+    from ... import FeatureExtractionMixin
 
 logger = logging.get_logger(__name__)
 
 
-class ImageGPTConfig(PretrainedConfig):
+class ImageGPTConfig(PreTrainedConfig):
     """
     This is the configuration class to store the configuration of a [`ImageGPTModel`] or a [`TFImageGPTModel`]. It is
     used to instantiate a GPT-2 model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the ImageGPT
     [openai/imagegpt-small](https://huggingface.co/openai/imagegpt-small) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -159,13 +159,12 @@ class ImageGPTOnnxConfig(OnnxConfig):
         batch_size: int = 1,
         seq_length: int = -1,
         is_pair: bool = False,
-        framework: Optional["TensorType"] = None,
         num_channels: int = 3,
         image_width: int = 32,
         image_height: int = 32,
     ) -> Mapping[str, Any]:
         """
-        Generate inputs to provide to the ONNX exporter for the specific framework
+        Generate inputs to provide to the ONNX exporter.
 
         Args:
             preprocessor ([`PreTrainedTokenizerBase`] or [`FeatureExtractionMixin`]):
@@ -178,8 +177,6 @@ class ImageGPTOnnxConfig(OnnxConfig):
                 The sequence length to export the model for (-1 means dynamic axis).
             is_pair (`bool`, *optional*, defaults to `False`):
                 Indicate if the input is a pair (sentence 1, sentence 2)
-            framework (`TensorType`, *optional*, defaults to `None`):
-                The framework (PyTorch or TensorFlow) that the tokenizer will generate tensors for.
             num_channels (`int`, *optional*, defaults to 3):
                 The number of channels of the generated images.
             image_width (`int`, *optional*, defaults to 40):
@@ -192,7 +189,7 @@ class ImageGPTOnnxConfig(OnnxConfig):
         """
 
         input_image = self._generate_dummy_images(batch_size, num_channels, image_height, image_width)
-        inputs = dict(preprocessor(images=input_image, return_tensors=framework))
+        inputs = dict(preprocessor(images=input_image, return_tensors="pt"))
 
         return inputs
 

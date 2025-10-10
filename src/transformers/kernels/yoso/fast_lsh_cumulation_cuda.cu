@@ -779,12 +779,12 @@ __global__ void lsh_weighted_cumulation_ver4_step2_cuda_kernel(
 
     __syncthreads();
 
-    int num_distint_query = query_counter[0];
+    int num_distinct_query = query_counter[0];
 
-    if (num_distint_query > 0) {
-      for (int idx_base = 0; idx_base < num_distint_query; idx_base = idx_base + num_warps) {
+    if (num_distinct_query > 0) {
+      for (int idx_base = 0; idx_base < num_distinct_query; idx_base = idx_base + num_warps) {
         int idx = idx_base + warp_idx;
-        if (idx < num_distint_query) {
+        if (idx < num_distinct_query) {
           int query_idx = inserted_query[idx];
           int batch_idx__query_idx = batch_idx * num_query + query_idx;
 
@@ -813,7 +813,7 @@ __global__ void lsh_weighted_cumulation_ver4_step2_cuda_kernel(
       }
     } else {
 
-      // all computation is completed if num_distint_query == 0
+      // all computation is completed if num_distinct_query == 0
       break;
 
     }

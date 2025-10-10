@@ -159,7 +159,7 @@ class MarkupLMFeatureExtractor(FeatureExtractionMixin):
                 f"but is of type {type(html_strings)}."
             )
 
-        is_batched = bool(isinstance(html_strings, (list, tuple)) and (isinstance(html_strings[0], str)))
+        is_batched = isinstance(html_strings, (list, tuple)) and (isinstance(html_strings[0], str))
 
         if not is_batched:
             html_strings = [html_strings]

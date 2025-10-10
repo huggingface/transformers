@@ -22,7 +22,6 @@ import torch
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     BatchFeature,
-    DefaultFastImageProcessorKwargs,
     SizeDict,
     group_images_by_shape,
     reorder_images,
@@ -36,6 +35,7 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_available, logging
+from .image_processing_idefics3 import Idefics3ImageProcessorKwargs
 
 
 if is_torchvision_available():
@@ -169,26 +169,6 @@ def make_pixel_mask(image: "torch.Tensor", output_size: tuple[int, int]) -> "tor
     return mask
 
 
-class Idefics3FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    do_pad (`bool`, *optional*):
-        Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
-        number of patches in the batch. Padding will be applied to the bottom and right with zeros.
-    do_image_splitting (`bool`, *optional*, defaults to `True`):
-        Whether to split the image into sub-images concatenated with the original image. They are split into patches
-        such that each patch has a size of `max_image_size["height"]` x `max_image_size["width"]`.
-    max_image_size (`Dict`, *optional*, defaults to `{"longest_edge": 364}`):
-        Maximum resolution of the patches of images accepted by the model. This is a dictionary containing the key "longest_edge".
-    return_row_col_info (`bool`, *optional*, defaults to `False`):
-        Whether to return the row and column information of the images.
-    """
-
-    do_pad: Optional[bool]
-    do_image_splitting: Optional[bool]
-    max_image_size: Optional[dict[str, int]]
-    return_row_col_info: Optional[bool]
-
-
 @auto_docstring
 class Idefics3ImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.LANCZOS
@@ -203,22 +183,19 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
     do_image_splitting = True
     do_pad = True
     return_row_col_info = False
-    valid_kwargs = Idefics3FastImageProcessorKwargs
+    valid_kwargs = Idefics3ImageProcessorKwargs
 
-    def _prepare_images_structure(
-        self,
-        images: ImageInput,
-    ) -> ImageInput:
+    def _prepare_images_structure(self, images: ImageInput, expected_ndims: int = 3) -> ImageInput:
         """
         Prepare a nested images structure for processing.
         """
-        return make_nested_list_of_images(images)
+        return make_nested_list_of_images(images, expected_ndims=expected_ndims)
 
     def resize(
         self,
         image: "torch.Tensor",
         size: SizeDict,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
         antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":
@@ -257,7 +234,7 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
         self,
         images: torch.Tensor,
         max_image_size: dict[str, int],
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
     ):
         """
         Split an image into squares of side max_image_size and the original image resized to max_image_size.
@@ -316,7 +293,7 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
         self,
         image: torch.Tensor,
         vision_encoder_max_size: int,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
     ):
         """
         Resize images to be multiples of `vision_encoder_max_size` while preserving the aspect ratio.
@@ -374,7 +351,7 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
         return image, pixel_mask
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[Idefics3FastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[Idefics3ImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def _preprocess(
@@ -502,6 +479,48 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
         encoder_dict.pop("_valid_processor_keys", None)
         encoder_dict.pop("return_row_col_info", None)
         return encoder_dict
+
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
+        """
+        A utility that returns number of image patches for a given image size.
+
+        Args:
+            height (`int`):
+                Height of the input image.
+            width (`int`):
+                Width of the input image.
+            images_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the image processor.
+        Returns:
+            `int`: Number of patches per image.
+        """
+        do_image_splitting = images_kwargs.get("do_image_splitting", self.do_image_splitting)
+        max_image_size = images_kwargs.get("max_image_size", self.max_image_size)
+        size = images_kwargs.get("size", self.size)
+
+        num_patches = num_rows = num_cols = 1
+        if do_image_splitting:
+            height, width = _resize_output_size_rescale_to_max_len(height, width, max_len=size["longest_edge"])
+            height, width = _resize_output_size_scale_below_upper_bound(height, width, max_len=MAX_IMAGE_SIZE)
+            aspect_ratio = width / height
+
+            if width >= height:
+                resized_width = math.ceil(width / max_image_size["longest_edge"]) * max_image_size["longest_edge"]
+                resized_height = int(width / aspect_ratio)
+                resized_height = math.ceil(height / max_image_size["longest_edge"]) * max_image_size["longest_edge"]
+            elif height > width:
+                resized_height = math.ceil(height / max_image_size["longest_edge"]) * max_image_size["longest_edge"]
+                resized_width = int(height * aspect_ratio)
+                resized_width = math.ceil(width / max_image_size["longest_edge"]) * max_image_size["longest_edge"]
+
+            max_height = max_width = max_image_size["longest_edge"]
+            if resized_height > max_height or resized_width > max_width:
+                # Calculate the number of splits
+                num_rows = math.ceil(resized_height / max_height)
+                num_cols = math.ceil(resized_width / max_width)
+                num_patches = num_rows * num_cols + 1
+
+        return num_patches, num_rows, num_cols
 
 
 __all__ = ["Idefics3ImageProcessorFast"]

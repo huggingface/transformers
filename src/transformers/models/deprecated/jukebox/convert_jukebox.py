@@ -231,7 +231,7 @@ def convert_openai_checkpoint(model_name=None, pytorch_dump_folder_path=None):
         old_dic = torch.load(f"{pytorch_dump_folder_path}/{dict_name.split('/')[-1]}", weights_only=True)["model"]
 
         new_dic = {}
-        for k in old_dic.keys():
+        for k in old_dic:
             if k.endswith(".b"):
                 new_dic[k.replace("b", "bias")] = old_dic[k]
             elif k.endswith(".w"):

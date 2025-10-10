@@ -48,7 +48,7 @@ class ByteRewriter:
             with open(rewriting_rules, "r") as f:
                 rewriting_rules = json.load(f)
         elif not isinstance(rewriting_rules, dict):
-            raise ValueError(
+            raise TypeError(
                 f"rewriting_rules should be either a path to json file or a dict, got {type(rewriting_rules)}"
             )
 

@@ -153,11 +153,11 @@ def convert_convnextv2_checkpoint(checkpoint_url, pytorch_dump_folder_path, save
 
     print("Converting model parameters...")
     # rename keys
-    for key in state_dict.copy().keys():
+    for key in state_dict.copy():
         val = state_dict.pop(key)
         state_dict[rename_key(key)] = val
     # add prefix to all keys expect classifier head
-    for key in state_dict.copy().keys():
+    for key in state_dict.copy():
         val = state_dict.pop(key)
         if not key.startswith("classifier"):
             key = "convnextv2." + key

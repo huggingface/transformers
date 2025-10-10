@@ -50,19 +50,13 @@ class BitNetHfQuantizer(HfQuantizer):
         if not is_accelerate_available():
             raise ImportError("Loading a BitNet quantized model requires accelerate (`pip install accelerate`)")
 
-        if kwargs.get("from_tf", False) or kwargs.get("from_flax", False):
-            raise ValueError(
-                "Loading ternary weights from tf/flax is currently not supported, please make"
-                " sure the weights are in PyTorch format."
-            )
-
         if not torch.cuda.is_available():
             logger.warning_once(
                 "You don't have a GPU available to load the model, the inference will be slow because of weight unpacking"
             )
             return
 
-        device_map = kwargs.get("device_map", None)
+        device_map = kwargs.get("device_map")
         if device_map is None:
             logger.warning_once(
                 "You have loaded a BitNet model on CPU and have a CUDA device available, make sure to set "

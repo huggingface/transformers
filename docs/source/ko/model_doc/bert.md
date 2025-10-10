@@ -58,7 +58,7 @@ Pytorch는 `torch.nn.functional`의 일부로 Scaled Dot Product Attention(SDPA)
 ```
 from transformers import BertModel
 
-model = BertModel.from_pretrained("bert-base-uncased", torch_dtype=torch.float16, attn_implementation="sdpa")
+model = BertModel.from_pretrained("bert-base-uncased", dtype=torch.float16, attn_implementation="sdpa")
 ...
 ```
 
@@ -164,34 +164,16 @@ BERT를 시작하는 데 도움이 되는 Hugging Face와 community 자료 목�
     - create_token_type_ids_from_sequences
     - save_vocabulary
 
-<frameworkcontent>
-<pt>
 
 ## BertTokenizerFast
 
 [[autodoc]] BertTokenizerFast
 
-</pt>
-<tf>
-
-## TFBertTokenizer
-
-[[autodoc]] TFBertTokenizer
-
-</tf>
-</frameworkcontent>
 
 ## Bert specific outputs
 
 [[autodoc]] models.bert.modeling_bert.BertForPreTrainingOutput
 
-[[autodoc]] models.bert.modeling_tf_bert.TFBertForPreTrainingOutput
-
-[[autodoc]] models.bert.modeling_flax_bert.FlaxBertForPreTrainingOutput
-
-
-<frameworkcontent>
-<pt>
 
 ## BertModel
 
@@ -238,103 +220,5 @@ BERT를 시작하는 데 도움이 되는 Hugging Face와 community 자료 목�
 [[autodoc]] BertForQuestionAnswering
     - forward
 
-</pt>
-<tf>
-
-## TFBertModel
-
-[[autodoc]] TFBertModel
-    - call
-
-## TFBertForPreTraining
-
-[[autodoc]] TFBertForPreTraining
-    - call
-
-## TFBertModelLMHeadModel
-
-[[autodoc]] TFBertLMHeadModel
-    - call
-
-## TFBertForMaskedLM
-
-[[autodoc]] TFBertForMaskedLM
-    - call
-
-## TFBertForNextSentencePrediction
-
-[[autodoc]] TFBertForNextSentencePrediction
-    - call
-
-## TFBertForSequenceClassification
-
-[[autodoc]] TFBertForSequenceClassification
-    - call
-
-## TFBertForMultipleChoice
-
-[[autodoc]] TFBertForMultipleChoice
-    - call
-
-## TFBertForTokenClassification
-
-[[autodoc]] TFBertForTokenClassification
-    - call
-
-## TFBertForQuestionAnswering
-
-[[autodoc]] TFBertForQuestionAnswering
-    - call
-
-</tf>
-<jax>
-
-## FlaxBertModel
-
-[[autodoc]] FlaxBertModel
-    - __call__
-
-## FlaxBertForPreTraining
-
-[[autodoc]] FlaxBertForPreTraining
-    - __call__
-
-## FlaxBertForCausalLM
-
-[[autodoc]] FlaxBertForCausalLM
-    - __call__
-
-## FlaxBertForMaskedLM
-
-[[autodoc]] FlaxBertForMaskedLM
-    - __call__
-
-## FlaxBertForNextSentencePrediction
-
-[[autodoc]] FlaxBertForNextSentencePrediction
-    - __call__
-
-## FlaxBertForSequenceClassification
-
-[[autodoc]] FlaxBertForSequenceClassification
-    - __call__
-
-## FlaxBertForMultipleChoice
-
-[[autodoc]] FlaxBertForMultipleChoice
-    - __call__
-
-## FlaxBertForTokenClassification
-
-[[autodoc]] FlaxBertForTokenClassification
-    - __call__
-
-## FlaxBertForQuestionAnswering
-
-[[autodoc]] FlaxBertForQuestionAnswering
-    - __call__
-
-</jax>
-</frameworkcontent>
 
 

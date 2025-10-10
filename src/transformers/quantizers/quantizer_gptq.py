@@ -79,20 +79,20 @@ class GptqHfQuantizer(HfQuantizer):
         ):
             raise ImportError("The gptqmodel version should be >= 1.4.3, optimum version should >= 1.24.0")
 
-    def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
-        if torch_dtype is None:
-            torch_dtype = torch.float16
-            logger.info("Loading the model in `torch.float16`. To overwrite it, set `torch_dtype` manually.")
-        elif torch_dtype != torch.float16:
-            logger.info("We suggest you to set `torch_dtype=torch.float16` for better efficiency with GPTQ.")
-        return torch_dtype
+    def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
+        if dtype is None:
+            dtype = torch.float16
+            logger.info("Loading the model in `torch.float16`. To overwrite it, set `dtype` manually.")
+        elif dtype != torch.float16:
+            logger.info("We suggest you to set `dtype=torch.float16` for better efficiency with GPTQ.")
+        return dtype
 
     def update_device_map(self, device_map):
         if device_map is None:
             device_map = {"": torch.device("cpu")}
         # Only with auto-gptq do not support CPU, we should move the model to cuda if available.
         if not is_gptqmodel_available() and device_map in ("cpu", {"": torch.device("cpu")}):
-            device_map == {"": 0}
+            device_map = {"": 0}
         return device_map
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):

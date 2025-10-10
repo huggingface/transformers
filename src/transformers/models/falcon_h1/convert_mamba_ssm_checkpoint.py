@@ -41,7 +41,7 @@ CONVERSION_MAPPING = {
 def convert_falcon_h1_to_hf(input_model_path, output_path):
     tokenizer = AutoTokenizer.from_pretrained(input_model_path)
 
-    model = AutoModelForCausalLM.from_pretrained(input_model_path, torch_dtype=torch.bfloat16, trust_remote_code=True)
+    model = AutoModelForCausalLM.from_pretrained(input_model_path, dtype=torch.bfloat16, trust_remote_code=True)
 
     intermediate_size = int(model.config.expansion_factor * model.config.hidden_size)
 

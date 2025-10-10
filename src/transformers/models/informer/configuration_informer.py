@@ -16,22 +16,22 @@
 
 from typing import Optional, Union
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class InformerConfig(PretrainedConfig):
+class InformerConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`InformerModel`]. It is used to instantiate an
     Informer model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Informer
     [huggingface/informer-tourism-monthly](https://huggingface.co/huggingface/informer-tourism-monthly) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         prediction_length (`int`):
@@ -132,6 +132,7 @@ class InformerConfig(PretrainedConfig):
         "hidden_size": "d_model",
         "num_attention_heads": "encoder_attention_heads",
         "num_hidden_layers": "encoder_layers",
+        "initializer_range": "init_std",
     }
 
     def __init__(

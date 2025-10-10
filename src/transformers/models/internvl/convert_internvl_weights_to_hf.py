@@ -128,7 +128,7 @@ def get_lm_type(path: str) -> Literal["qwen2", "llama"]:
     """
     Determine the type of language model (either 'qwen2' or 'llama') based on a given model path.
     """
-    if path not in LM_TYPE_CORRESPONDENCE.keys():
+    if path not in LM_TYPE_CORRESPONDENCE:
         base_config = AutoModel.from_pretrained(path, trust_remote_code=True).config
 
         lm_arch = base_config.llm_config.architectures[0]
@@ -186,7 +186,7 @@ def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None, path: O
 def load_original_state_dict(input_base_path):
     model = AutoModel.from_pretrained(
         input_base_path,
-        torch_dtype=torch.bfloat16,
+        dtype=torch.bfloat16,
         use_flash_attn=False,
         trust_remote_code=True,
     ).eval()
@@ -337,7 +337,7 @@ def write_model(
     # # Safety check: reload the converted model
     gc.collect()
     print("Reloading the model to check if it's saved correctly.")
-    model = InternVLForConditionalGeneration.from_pretrained(model_path, device_map="auto", torch_dtype=torch.bfloat16)
+    model = InternVLForConditionalGeneration.from_pretrained(model_path, device_map="auto", dtype=torch.bfloat16)
     print("Model reloaded successfully.")
     del model
 

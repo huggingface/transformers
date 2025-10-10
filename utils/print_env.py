@@ -64,15 +64,6 @@ try:
 except ImportError:
     print("DeepSpeed version:", None)
 
-try:
-    import tensorflow as tf
-
-    print("TensorFlow version:", tf.__version__)
-    print("TF GPUs available:", bool(tf.config.list_physical_devices("GPU")))
-    print("Number of TF GPUs available:", len(tf.config.list_physical_devices("GPU")))
-except ImportError:
-    print("TensorFlow version:", None)
-
 
 try:
     import torchcodec
@@ -81,5 +72,5 @@ try:
     print("FFmpeg version:", versions["ffmpeg_version"])
 except ImportError:
     print("FFmpeg version:", None)
-except (AttributeError, KeyError):
+except (AttributeError, KeyError, RuntimeError):
     print("Failed to get FFmpeg version")

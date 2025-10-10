@@ -1,10 +1,7 @@
-FROM rocm/pytorch:rocm6.4_ubuntu22.04_py3.10_pytorch_release_2.6.0
+FROM rocm/pytorch:rocm6.4.1_ubuntu24.04_py3.12_pytorch_release_2.7.1
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
-
-ARG TORCH_VISION='0.21.0'
-ARG TORCH_AUDIO='2.6.0'
 
 RUN apt update && \
     apt install -y --no-install-recommends git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-dev python3-pip python3-dev ffmpeg git-lfs && \
@@ -23,10 +20,8 @@ WORKDIR /
 ADD https://api.github.com/repos/huggingface/transformers/git/refs/heads/main version.json
 RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
 
-RUN python3 -m pip install --no-cache-dir torchvision==$TORCH_VISION torchaudio==$TORCH_AUDIO
-RUN python3 -m pip install --no-cache-dir -e ./transformers[dev-torch,testing,video]
-
-RUN python3 -m pip uninstall -y tensorflow flax
+# Install transformers
+RUN python3 -m pip install --no-cache-dir -e ./transformers[dev-torch,testing,video,audio]
 
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.
@@ -37,3 +32,13 @@ RUN python3 -m pip uninstall py3nvml pynvml nvidia-ml-py apex -y
 
 # `kernels` may causes many failing tests
 RUN python3 -m pip uninstall -y kernels
+
+# On ROCm, torchcodec is required to decode audio files and 0.4 or 0.6 fails
+RUN python3 -m pip install --no-cache-dir "torchcodec==0.5"
+
+# Install flash attention from source. Tested with commit 6387433156558135a998d5568a9d74c1778666d8
+RUN git clone https://github.com/ROCm/flash-attention/ -b tridao && \
+    cd flash-attention && \
+    GPU_ARCHS="gfx942" python setup.py install
+
+RUN python3 -m pip install --no-cache-dir einops

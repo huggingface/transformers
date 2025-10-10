@@ -77,6 +77,44 @@ class RopeTest(unittest.TestCase):
                     self.assertEqual(len(logs.output), 1)
                     self.assertIn(model_specific_kwarg, logs.output[0])
 
+    def test_yarn_original_original_max_position_embeddings_validation(self):
+        """Tests that models with no/bad `original_max_position_embeddings` raise a warning"""
+        config = LlamaConfig()
+
+        # good rope config: has a factor AND original_max_position_embeddings -> no warnings
+        rope_config = {
+            "rope_type": "yarn",
+            "factor": 2.0,
+            "original_max_position_embeddings": int(config.max_position_embeddings / 2.0),
+        }
+        config.rope_scaling = rope_config
+        with self.assertRaises(AssertionError):  # confirm that no warnings are thrown
+            with self.assertLogs("transformers.modeling_rope_utils", level="WARNING") as logs:
+                rope_config_validation(config)
+
+        # bad rope config, no `original_max_position_embeddings` -> warning
+        rope_config = {
+            "rope_type": "yarn",
+            "factor": 2.0,
+        }
+        config.rope_scaling = rope_config
+        with self.assertLogs("transformers.modeling_rope_utils", level="WARNING") as logs:
+            rope_config_validation(config)
+            self.assertEqual(len(logs.output), 1)
+            self.assertIn("is unset", logs.output[0])
+
+        # bad rope config, bad implicit fator -> warning
+        rope_config = {
+            "rope_type": "yarn",
+            "factor": 2.0,
+            "original_max_position_embeddings": 1,
+        }
+        config.rope_scaling = rope_config
+        with self.assertLogs("transformers.modeling_rope_utils", level="WARNING") as logs:
+            rope_config_validation(config)
+            self.assertEqual(len(logs.output), 1)
+            self.assertIn("implicit factor", logs.output[0])
+
     def test_default_rope_numerically(self):
         # Note: some RoPE scaling methods start off by calling the default RoPE frequencies. If this test fails, then
         # multiple RoPE strategies will fail.

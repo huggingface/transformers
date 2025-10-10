@@ -105,7 +105,7 @@ def rename_key(old_name, num_meta4D_last_stage):
 
 
 def convert_torch_checkpoint(checkpoint, num_meta4D_last_stage):
-    for key in checkpoint.copy().keys():
+    for key in checkpoint.copy():
         val = checkpoint.pop(key)
         checkpoint[rename_key(key, num_meta4D_last_stage)] = val
 

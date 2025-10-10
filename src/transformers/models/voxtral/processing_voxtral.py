@@ -88,7 +88,7 @@ class VoxtralProcessor(ProcessorMixin):
 
         super().__init__(feature_extractor, tokenizer)
 
-    def _retreive_input_features(self, audio, max_source_positions, **kwargs):
+    def _retrieve_input_features(self, audio, max_source_positions, **kwargs):
         """
         Handles specific logic of Voxtral expected input features: audio arrays should be padded to next multiple of 480000 (duration is a multiple of 30s), see VoxtralProcessorKwargs' default audio_kwargs.
         Then mel input features are extracted and stacked along batch dimension, splitting into chunks of max_source_positions.
@@ -165,7 +165,7 @@ class VoxtralProcessor(ProcessorMixin):
         }
 
         for kwarg_type in processed_kwargs:
-            for key in AllKwargsForChatTemplate.__annotations__[kwarg_type].__annotations__.keys():
+            for key in AllKwargsForChatTemplate.__annotations__[kwarg_type].__annotations__:
                 kwarg_type_defaults = AllKwargsForChatTemplate.__annotations__[kwarg_type]
                 default_value = getattr(kwarg_type_defaults, key, None)
                 value = kwargs.pop(key, default_value)
@@ -198,9 +198,8 @@ class VoxtralProcessor(ProcessorMixin):
         )
         text_kwargs = output_kwargs["text_kwargs"]
         audio_kwargs = output_kwargs["audio_kwargs"]
-        common_kwargs = output_kwargs["common_kwargs"]
+        return_tensors = text_kwargs.get("return_tensors", None)
 
-        return_tensors = common_kwargs.pop("return_tensors", None)
         if return_tensors != "pt":
             raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
 
@@ -222,7 +221,7 @@ class VoxtralProcessor(ProcessorMixin):
                 data = dict(encoded_instruct_inputs)
                 if audio is not None:
                     max_source_positions = audio_kwargs.pop("max_source_positions")
-                    data["input_features"] = self._retreive_input_features(audio, max_source_positions, **audio_kwargs)
+                    data["input_features"] = self._retrieve_input_features(audio, max_source_positions, **audio_kwargs)
 
                 return BatchFeature(data=data, tensor_type=return_tensors)
 
@@ -242,7 +241,7 @@ class VoxtralProcessor(ProcessorMixin):
         the text. Please refer to the docstring of the above methods for more information.
         This methods does not support audio. To prepare the audio, please use:
         1. `apply_chat_template` [`~VoxtralProcessor.apply_chat_template`] method.
-        2. `apply_transcrition_request` [`~VoxtralProcessor.apply_transcrition_request`] method.
+        2. `apply_transcription_request` [`~VoxtralProcessor.apply_transcription_request`] method.
 
         Args:
             text (`str`, `list[str]`, `list[list[str]]`):
@@ -251,10 +250,8 @@ class VoxtralProcessor(ProcessorMixin):
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
-                    - `'tf'`: Return TensorFlow `tf.constant` objects.
                     - `'pt'`: Return PyTorch `torch.Tensor` objects.
                     - `'np'`: Return NumPy `np.ndarray` objects.
-                    - `'jax'`: Return JAX `jnp.ndarray` objects.
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
@@ -272,19 +269,13 @@ class VoxtralProcessor(ProcessorMixin):
                 f"{self.audio_token} is present in the provided text which is not supported by VoxtralProcessor. Please use the `apply_chat_template` method instead."
             )
 
-        output_kwargs = self._merge_kwargs(
-            VoxtralProcessorKwargs,
-            **kwargs,
-        )
-        text_kwargs = output_kwargs["text_kwargs"]
-        common_kwargs = output_kwargs["common_kwargs"]
+        output_kwargs = self._merge_kwargs(VoxtralProcessorKwargs, **kwargs)
+        out = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
-        out = self.tokenizer(text, **text_kwargs)
-
-        return BatchFeature(data=out, tensor_type=common_kwargs.pop("return_tensors", None))
+        return BatchFeature(data=out, tensor_type=output_kwargs["text_kwargs"].get("return_tensors", None))
 
     # TODO: @eustlb, this should be moved to mistral_common + testing
-    def apply_transcrition_request(
+    def apply_transcription_request(
         self,
         language: Union[str, list[str]],
         audio: Union[str, list[str], AudioInput],
@@ -306,7 +297,7 @@ class VoxtralProcessor(ProcessorMixin):
         language = "en"
         audio = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3"
 
-        inputs = processor.apply_transcrition_request(language=language, audio=audio, model_id=model_id)
+        inputs = processor.apply_transcription_request(language=language, audio=audio, model_id=model_id)
         ```
 
         Args:
@@ -329,7 +320,6 @@ class VoxtralProcessor(ProcessorMixin):
         )
         text_kwargs = output_kwargs["text_kwargs"]
         audio_kwargs = output_kwargs["audio_kwargs"]
-        common_kwargs = output_kwargs["common_kwargs"]
 
         is_str = isinstance(audio, str)
         is_list_of_str = all(isinstance(el, str) for el in audio)
@@ -346,15 +336,14 @@ class VoxtralProcessor(ProcessorMixin):
                 )
 
         sampling_rate = audio_kwargs["sampling_rate"]
-        return_dict = common_kwargs.pop("return_dict", False)
-        tokenize = common_kwargs.pop("tokenize", False)
 
         # make sure to remove from text_kwargs and audio_kwargs
-        for k in ("return_dict", "tokenize"):
-            text_kwargs.pop(k, None)
-            audio_kwargs.pop(k, None)
+        return_dict = text_kwargs.pop("return_dict", False)
+        tokenize = text_kwargs.pop("tokenize", False)
+        _ = audio_kwargs.pop("return_dict", False)
+        _ = audio_kwargs.pop("tokenize", False)
 
-        return_tensors = common_kwargs.pop("return_tensors", None)
+        return_tensors = text_kwargs.pop("return_tensors", None)
         if return_tensors != "pt":
             raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
 
@@ -423,27 +412,13 @@ class VoxtralProcessor(ProcessorMixin):
 
                 # extract the input features
                 max_source_positions = audio_kwargs.pop("max_source_positions")
-                data["input_features"] = self._retreive_input_features(
+                data["input_features"] = self._retrieve_input_features(
                     audio_arrays, max_source_positions, **audio_kwargs
                 )
 
                 return BatchFeature(data=data, tensor_type=return_tensors)
 
         return texts
-
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to MistralCommonTokenizer's [`~MistralCommonTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to MistralCommonTokenizer's [`~MistralCommonTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
 
 
 __all__ = ["VoxtralProcessor"]

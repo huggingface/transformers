@@ -36,7 +36,7 @@ jobs:
       group: '${{ matrix.machine_type }}'
     container:
       image: huggingface/transformers-all-latest-gpu-push-ci
-      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       test_map: ${{ steps.set-matrix.outputs.test_map }}
@@ -136,7 +136,7 @@ jobs:
       group: '${{ matrix.machine_type }}'
     container:
       image: huggingface/transformers-all-latest-gpu-push-ci
-      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     env:
       # For the meaning of these environment variables, see the job `Setup`
       CI_BRANCH_PUSH: ${{ github.event.ref }}
@@ -362,7 +362,7 @@ jobs:
       group: '${{ matrix.machine_type }}'
     container:
       image: huggingface/transformers-pytorch-deepspeed-latest-gpu-push-ci
-      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     env:
       # For the meaning of these environment variables, see the job `Setup`
       CI_BRANCH_PUSH: ${{ github.event.ref }}

@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-10-07 and added to Hugging Face Transformers on 2025-01-07.*
 
 # DiffLlama
 
@@ -33,7 +34,6 @@ The abstract from the paper is the following:
 
 ### Usage tips
 The hyperparameters of this model is the same as Llama model.
-
 
 ## DiffLlamaConfig
 

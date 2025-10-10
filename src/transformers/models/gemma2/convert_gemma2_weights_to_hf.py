@@ -147,7 +147,7 @@ def write_model(save_path, input_base_path, config, safe_serialization=True, pus
         model = Gemma2ForCausalLM(config)
     model.load_state_dict(state_dict, assign=True, strict=False)
 
-    model.config.torch_dtype = torch.float32
+    model.config.dtype = torch.float32
     del model.config._name_or_path
     print("Saving in the Transformers format.")
 
@@ -222,7 +222,7 @@ def main():
 
         spm_path = os.path.join(args.tokenizer_checkpoint)
         write_tokenizer(spm_path, args.output_dir, args.push_to_hub)
-    if not args.model_size == "tokenizer_only":
+    if args.model_size != "tokenizer_only":
         config = CONFIG_MAPPING[args.model_size]
         dtype = getattr(torch, args.dtype)
         write_model(

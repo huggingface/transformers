@@ -14,7 +14,7 @@
 # limitations under the License.
 """Fuyu model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -22,15 +22,15 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class FuyuConfig(PretrainedConfig):
+class FuyuConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FuyuForCausalLM`]. It is used to instantiate an
     Fuyu model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the
     [adept/fuyu-8b](https://huggingface.co/adept/fuyu-8b).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -158,7 +158,7 @@ class FuyuConfig(PretrainedConfig):
                 "tie_word_embeddings": tie_word_embeddings,
             }
             logger.info("text_config is None. initializing the text model with default values.")
-        text_model_type = text_config["model_type"] if "model_type" in text_config else "persimmon"
+        text_model_type = text_config.get("model_type", "persimmon")
         self.text_config = CONFIG_MAPPING[text_model_type](**text_config)
 
         self._vocab_size = vocab_size

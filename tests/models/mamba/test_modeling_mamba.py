@@ -13,18 +13,18 @@
 # limitations under the License.
 
 
-import math
 import unittest
 from unittest.util import safe_repr
 
+import pytest
 from parameterized import parameterized
 
 from transformers import AutoTokenizer, MambaConfig, is_torch_available
-from transformers.testing_utils import require_torch, require_torch_multi_gpu, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -241,9 +241,7 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     fx_compatible = False  # FIXME let's try to support this @ArthurZucker
     test_torchscript = False  # FIXME let's try to support this @ArthurZucker
     test_missing_keys = False
-    test_model_parallel = False
-    test_pruning = False
-    test_head_masking = False  # Mamba does not have attention heads
+
     pipeline_model_mapping = (
         {"feature-extraction": MambaModel, "text-generation": MambaForCausalLM} if is_torch_available() else {}
     )
@@ -254,13 +252,25 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             self, config_class=MambaConfig, n_embd=37, common_properties=["hidden_size", "num_hidden_layers"]
         )
 
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+        self.assertIsInstance(past_key_values, MambaCache)
+
+        conv_shape = (batch_size, config.intermediate_size, config.conv_kernel)
+        ssm_shape = (batch_size, config.intermediate_size, config.state_size)
+
+        self.assertTrue(config.num_hidden_layers, len(past_key_values.conv_states))
+
+        for idx in range(len(past_key_values.conv_states)):
+            self.assertEqual(past_key_values.conv_states[idx].shape, conv_shape)
+            self.assertEqual(past_key_values.ssm_states[idx].shape, ssm_shape)
+
     def assertInterval(self, member, container, msg=None):
         r"""
         Simple utility function to check if a member is inside an interval.
         """
         if isinstance(member, torch.Tensor):
             max_value, min_value = member.max().item(), member.min().item()
-        elif isinstance(member, list) or isinstance(member, tuple):
+        elif isinstance(member, (list, tuple)):
             max_value, min_value = max(member), min(member)
 
         if not isinstance(container, list):
@@ -278,31 +288,6 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     def test_config(self):
         self.config_tester.run_common_tests()
-
-    @require_torch_multi_gpu
-    def test_multi_gpu_data_parallel_forward(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        # some params shouldn't be scattered by nn.DataParallel
-        # so just remove them if they are present.
-        blacklist_non_batched_params = ["cache_params"]
-        for k in blacklist_non_batched_params:
-            inputs_dict.pop(k, None)
-
-        # move input tensors to cuda:O
-        for k, v in inputs_dict.items():
-            if torch.is_tensor(v):
-                inputs_dict[k] = v.to(0)
-
-        for model_class in self.all_model_classes:
-            model = model_class(config=config)
-            model.to(0)
-            model.eval()
-
-            # Wrap model in nn.DataParallel
-            model = torch.nn.DataParallel(model)
-            with torch.no_grad():
-                _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
     def test_mamba_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -323,45 +308,6 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_mamba_lm_head_forward_and_backwards(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba_lm_head_forward_and_backwards(*config_and_inputs)
-
-    def test_initialization(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        config.rescale_prenorm_residual = True
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if "dt_proj.bias" in name:
-                    dt = torch.exp(
-                        torch.tensor([0, 1]) * (math.log(config.time_step_max) - math.log(config.time_step_min))
-                        + math.log(config.time_step_min)
-                    ).clamp(min=config.time_step_floor)
-                    inv_dt = dt + torch.log(-torch.expm1(-dt))
-                    if param.requires_grad:
-                        self.assertTrue(param.data.max().item() <= inv_dt[1])
-                        self.assertTrue(param.data.min().item() >= inv_dt[0])
-                elif "A_log" in name:
-                    A = torch.arange(1, config.state_size + 1, dtype=torch.float32)[None, :]
-                    A = A.expand(config.intermediate_size, -1).contiguous()
-                    torch.testing.assert_close(param.data, torch.log(A), rtol=1e-5, atol=1e-5)
-                elif "D" in name:
-                    if param.requires_grad:
-                        # check if it's a ones like
-                        torch.testing.assert_close(param.data, torch.ones_like(param.data), rtol=1e-5, atol=1e-5)
-                else:
-                    if param.requires_grad:
-                        if (
-                            "mixer.conv1d.weight" in name
-                            or "mixer.dt_proj.weight" in name
-                            or "mixer.out_proj.weight" in name
-                        ):
-                            continue
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
 
     @slow
     def test_model_from_pretrained(self):
@@ -452,6 +398,10 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.hidden_size),
         )
 
+    @unittest.skip("Mamba models do not support DDP.")
+    def test_multi_gpu_data_parallel_forward(self):
+        pass
+
 
 @require_torch
 class MambaIntegrationTests(unittest.TestCase):
@@ -464,7 +414,7 @@ class MambaIntegrationTests(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("state-spaces/mamba-130m-hf")
         tokenizer.pad_token = tokenizer.eos_token
 
-        model = MambaForCausalLM.from_pretrained("state-spaces/mamba-130m-hf", torch_dtype=torch.float32)
+        model = MambaForCausalLM.from_pretrained("state-spaces/mamba-130m-hf", dtype=torch.float32)
         model.to(device)
         input_ids = tokenizer("Hey how are you doing?", return_tensors="pt")["input_ids"].to(device)
 
@@ -492,7 +442,7 @@ class MambaIntegrationTests(unittest.TestCase):
         expected_output = "Hello my name is John and I am a newbie to the world"
 
         input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(device)
-        model = MambaForCausalLM.from_pretrained("state-spaces/mamba-130m-hf", torch_dtype=torch.float16).to(device)
+        model = MambaForCausalLM.from_pretrained("state-spaces/mamba-130m-hf", dtype=torch.float16).to(device)
 
         output = model.generate(input_ids, max_new_tokens=10)
         output_sentence = self.tokenizer.decode(output[0].tolist())
@@ -505,7 +455,7 @@ class MambaIntegrationTests(unittest.TestCase):
         expected_output = "Hello my name is\n\nI am a\n\nI am a"
 
         input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(device)
-        model = MambaForCausalLM.from_pretrained("state-spaces/mamba-790m-hf", torch_dtype=torch.float16).to(device)
+        model = MambaForCausalLM.from_pretrained("state-spaces/mamba-790m-hf", dtype=torch.float16).to(device)
 
         output = model.generate(input_ids, max_new_tokens=10)
         output_sentence = self.tokenizer.decode(output[0].tolist())
@@ -518,7 +468,7 @@ class MambaIntegrationTests(unittest.TestCase):
         expected_output = "Hello my name is John and I am a\n\nI am a single father of a beautiful daughter. I am a"
 
         input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(device)
-        model = MambaForCausalLM.from_pretrained("state-spaces/mamba-1.4b-hf", torch_dtype=torch.float16).to(device)
+        model = MambaForCausalLM.from_pretrained("state-spaces/mamba-1.4b-hf", dtype=torch.float16).to(device)
 
         output = model.generate(input_ids, max_new_tokens=20)
         output_sentence = self.tokenizer.decode(output[0].tolist())
@@ -531,7 +481,7 @@ class MambaIntegrationTests(unittest.TestCase):
         expected_output = "Hello my name is John and I am a new member of this forum. I am a retired Marine and I am a member of the Marine Corps League. I am a"
 
         input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(device)
-        model = MambaForCausalLM.from_pretrained("state-spaces/mamba-2.8b-hf", torch_dtype=torch.float16).to(device)
+        model = MambaForCausalLM.from_pretrained("state-spaces/mamba-2.8b-hf", dtype=torch.float16).to(device)
 
         output = model.generate(input_ids, max_new_tokens=30)
         output_sentence = self.tokenizer.decode(output[0].tolist())
@@ -539,19 +489,18 @@ class MambaIntegrationTests(unittest.TestCase):
         self.assertEqual(output_sentence, expected_output)
 
     @slow
+    @pytest.mark.torch_compile_test
     def test_compile_mamba_cache(self):
         expected_output = "Hello my name is John and I am a\n\nI am a single father of a beautiful daughter. I am a"
 
         input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(torch_device)
-        model = MambaForCausalLM.from_pretrained("state-spaces/mamba-1.4b-hf", torch_dtype=torch.float16).to(
-            torch_device
-        )
+        model = MambaForCausalLM.from_pretrained("state-spaces/mamba-1.4b-hf", dtype=torch.float16).to(torch_device)
 
-        output = model.generate(input_ids, max_new_tokens=20, cache_implementation="mamba")
+        output = model.generate(input_ids, max_new_tokens=20)
         output_sentence = self.tokenizer.decode(output[0].tolist())
         self.assertEqual(output_sentence, expected_output)
 
         model.forward = torch.compile(model.forward, fullgraph=True, mode="reduce-overhead")
-        output = model.generate(input_ids, max_new_tokens=20, cache_implementation="mamba")
+        output = model.generate(input_ids, max_new_tokens=20)
         output_sentence = self.tokenizer.decode(output[0].tolist())
         self.assertEqual(output_sentence, expected_output)

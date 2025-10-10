@@ -44,7 +44,6 @@ Alternatively, one can decide to further pre-train an already pre-trained (or fi
 !python run_mim.py \
     --model_type vit \
     --output_dir ./outputs/ \
-    --overwrite_output_dir \
     --remove_unused_columns False \
     --label_names bool_masked_pos \
     --do_train \
@@ -95,7 +94,6 @@ Next, we can run the script by providing the path to this custom configuration (
     --config_name_or_path path_to_config \
     --model_type swin \
     --output_dir ./outputs/ \
-    --overwrite_output_dir \
     --remove_unused_columns False \
     --label_names bool_masked_pos \
     --do_train \
@@ -239,10 +237,10 @@ $ git config --global user.email "you@example.com"
 $ git config --global user.name "Your Name"
 ```
 
-2. Log in with your HuggingFace account credentials using `huggingface-cli`
+2. Log in with your HuggingFace account credentials using `hf`
 
 ```bash
-$ huggingface-cli login
+$ hf auth login
 # ...follow the prompts
 ```
 
