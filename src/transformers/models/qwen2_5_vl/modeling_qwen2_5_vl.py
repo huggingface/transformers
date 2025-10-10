@@ -301,6 +301,24 @@ class Qwen2_5_VLPreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
+    def _init_weights(self, module):
+        """
+        Initialize the weights safely. Skip quantized tensors (like int8) that cannot be initialized normally.
+        """
+        if isinstance(module, nn.Linear):
+            # Skip int8 tensors or tensors without float dtype
+            if hasattr(module.weight, "dtype") and not torch.is_floating_point(module.weight):
+                return
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            if hasattr(module.weight, "dtype") and not torch.is_floating_point(module.weight):
+                return
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+    
 
 
 class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
