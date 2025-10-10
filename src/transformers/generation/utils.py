@@ -1999,17 +1999,15 @@ class GenerationMixin(ContinuousMixin):
             elif "dynamic" in generation_config.cache_implementation:
                 model_kwargs[cache_name] = DynamicCache(**dynamic_cache_kwargs)
 
-        # TODO (joao): remove this `else` when we remove the last traces of the legacy cache format (v4.58.0, search
-        # for `instance(past_key_values, Cache)` as well). In general, if `cache_implementation` is unset, cache
-        # initialization should happen inside the model at prefill time.
-        else:
-            model_kwargs[cache_name] = DynamicCache(**dynamic_cache_kwargs)
-
         # TODO (joao): this logic is incomplete, e.g. `offloaded` should apply to both caches. Refactor this function
         # to correctly pass parameterization to both caches.
-        if requires_cross_attention_cache and not isinstance(model_kwargs[cache_name], EncoderDecoderCache):
-            model_kwargs[cache_name] = EncoderDecoderCache(
-                model_kwargs[cache_name],  # self-attention cache
+        if (
+            requires_cross_attention_cache
+            and "past_key_values" in model_kwargs
+            and not isinstance(model_kwargs["past_key_values"], EncoderDecoderCache)
+        ):
+            model_kwargs["past_key_values"] = EncoderDecoderCache(
+                model_kwargs["past_key_values"],  # self-attention cache
                 DynamicCache(**dynamic_cache_kwargs),  # cross-attention cache
             )
 
