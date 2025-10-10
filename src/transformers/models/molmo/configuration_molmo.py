@@ -19,7 +19,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...configuration_utils import PretrainedConfig, layer_type_validation
+from ...configuration_utils import PreTrainedConfig, PretrainedConfig, layer_type_validation
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 
@@ -210,7 +210,7 @@ class MolmoPoolingConfig(PretrainedConfig):
         self.projector_hidden_act = projector_hidden_act
 
 
-class MolmoTextConfig(PretrainedConfig):
+class MolmoTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MolmoModel`]. It is used to instantiate a
     Molmo model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -370,13 +370,6 @@ class MolmoTextConfig(PretrainedConfig):
         layer_types=None,
         **kwargs,
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
         self.head_dim = head_dim
         self.additional_embedding_size = additional_embedding_size
         self.attention_bias = attention_bias
@@ -406,6 +399,14 @@ class MolmoTextConfig(PretrainedConfig):
 
         # Validate the correctness of rotary position embeddings parameters
         rope_config_validation(self)
+
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
         self.layer_types = layer_types
         if self.layer_types is None:
             self.layer_types = ["full_attention" for i in range(self.num_hidden_layers)]
