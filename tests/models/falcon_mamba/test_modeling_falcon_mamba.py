@@ -90,10 +90,6 @@ class FalconMambaModelTester:
         self.pad_token_id = vocab_size - 1
         self.tie_word_embeddings = tie_word_embeddings
 
-    # Ignore copy
-    def get_large_model_config(self):
-        return FalconMambaConfig.from_pretrained("tiiuae/falcon-mamba-7b")
-
     def prepare_config_and_inputs(
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
     ):
