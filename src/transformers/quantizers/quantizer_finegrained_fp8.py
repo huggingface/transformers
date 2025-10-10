@@ -167,9 +167,6 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
         model.config.quantization_config = self.quantization_config
 
-    def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        return model
-
     def update_missing_keys(self, model, missing_keys: list[str], prefix: str) -> list[str]:
         from ..integrations import FP8Linear
 

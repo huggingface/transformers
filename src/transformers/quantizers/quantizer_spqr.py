@@ -79,9 +79,6 @@ class SpQRHfQuantizer(HfQuantizer):
         )
         model.config.quantization_config = self.quantization_config
 
-    def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        return model
-
     @property
     def is_trainable(self):
         return False

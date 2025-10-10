@@ -137,9 +137,6 @@ class EetqHfQuantizer(HfQuantizer):
         module._buffers[tensor_name] = new_value.to(target_device)
         module.register("weight_scales", weight_scale.to(target_device))
 
-    def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        return model
-
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
