@@ -156,7 +156,7 @@ class AudioFlamingo3Encoder(WhisperEncoder):
             dtype=self.conv1.weight.dtype,
         )
 
-        return attn_mask.to(device=self.conv1.weight.device)
+        return attn_mask
 
     def forward(
         self,
@@ -179,7 +179,8 @@ class AudioFlamingo3Encoder(WhisperEncoder):
 
         # Add positions, dropout
         x = x.permute(0, 2, 1)  # (B, S_in, C)
-        pos = self.embed_positions.weight
+        positions = torch.arange(x.shape[1], device=x.device).unsqueeze(0)
+        pos = self.embed_positions(positions).squeeze(0)
         if pos.shape[0] < x.shape[1]:
             raise ValueError(f"embed_positions shorter than sequence length: {pos.shape[0]} < {x.shape[1]}")
         x = nn.functional.dropout(x + pos[: x.shape[1]], p=self.dropout, training=self.training)
