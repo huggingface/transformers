@@ -17,8 +17,11 @@ from typing import Optional, Union
 import numpy as np
 import torch
 
+from ..efficientloftr.image_processing_efficientloftr_fast import flatten_pair_images
 from ... import is_vision_available
-from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature, get_size_dict
+from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature, get_size_dict, \
+    DefaultFastImageProcessorKwargs
+from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     ChannelDimension,
     ImageInput,
@@ -34,6 +37,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_v2_available
 from .modeling_superglue import KeypointMatchingOutput
 
@@ -48,75 +52,10 @@ else:
     from torchvision.transforms import functional as F
 
 
-def is_grayscale(
-    images: torch.Tensor,
-    input_data_format: ChannelDimension,
-) -> bool:
-    if input_data_format == ChannelDimension.FIRST:
-        if images.shape[1] == 1:
-            return True
-        result = (images[:, 0, ...] == images[:, 1, ...]) & (images[:, 1, ...] == images[:, 2, ...])
-    elif input_data_format == ChannelDimension.LAST:
-        if images.shape[-1] == 1:
-            return True
-        result = (images[..., 0] == images[..., 1]) & (images[..., 1] == images[..., 2])
-    else:
-        raise ValueError(f"Unsupported input_data_format: {input_data_format}")
-    return result.all().item()
-
-
-
-def convert_to_grayscale(
-    images: torch.Tensor,
-    input_data_format: ChannelDimension,
-) -> ImageInput:
-    """
-    Converts an image to grayscale format.
-
-    This function returns a 3-channel image with the same value in each
-    channel, because of an issue that is discussed in :
-    https://github.com/huggingface/transformers/pull/25786#issuecomment-1730176446
-
-    Args:
-        images (torch.Tensor):
-            A list of image to convert, the tensor dimension is supposed to be 4 -> (B,C,H,W).
-        input_data_format (`ChannelDimension`):
-            The channel dimension format of the input image.
-    """
-
-    if is_grayscale(images, input_data_format=input_data_format):
-        return images
-
-    if input_data_format == ChannelDimension.LAST:
-        images = images.permute(0, 3, 1, 2)  # B,H,W,C -> B,C,H,W
-
-    images = F.rgb_to_grayscale(images, num_output_channels=3)
-
-    if input_data_format == ChannelDimension.LAST:
-        images = images.permute(0, 2, 3, 1)  # B,C,H,W -> B,H,W,C
-
-    return images
-
-
-def pil_resampling_to_interpolation(
-        mode: Union[PIL.Image.Resampling, F.InterpolationMode]
-) -> F.InterpolationMode:
-    """
-    Convert a PIL.Image.Resampling or torchvision InterpolationMode
-    to torchvision InterpolationMode.
-    Args:
-        mode: PIL.Image.Resampling, InterpolationMode
-
-    Returns:
-        InterpolationMode
-    """
-
-    if isinstance(mode, F.InterpolationMode):
-        return mode
-    if mode not in pil_torch_interpolation_mapping:
-        raise ValueError(f"Unsupported interpolation mode: {mode}")
-    return pil_torch_interpolation_mapping[mode]
-
+def _is_valid_image(image):
+    return is_pil_image(image) or (
+        is_valid_image(image) and get_image_type(image) != ImageType.PIL and len(image.shape) == 3
+    )
 
 def validate_and_format_image_pairs(images: ImageInput):
     error_message = (
@@ -145,58 +84,65 @@ def validate_and_format_image_pairs(images: ImageInput):
             return [image for image_pair in images for image in image_pair]
     raise ValueError(error_message)
 
-def images_to_torch_tensor(
-        images: ImageInput,
-        data_format: ChannelDimension = ChannelDimension.LAST,
-        input_data_format: Optional[ChannelDimension] = None
-   ) -> torch.Tensor:
+def flatten_pair_images(images):
+    # Handle the pair validation and flattening similar to slow processor
+    if isinstance(images, list):
+        if len(images) == 2 and all((_is_valid_image(image) or isinstance(image, torch.Tensor)) for image in images):
+            # Single pair of images - keep as is, they'll be processed by the base class
+            return images
+        elif all(
+            isinstance(image_pair, list)
+            and len(image_pair) == 2
+            and all(_is_valid_image(image) or isinstance(image, torch.Tensor) for image in image_pair)
+            for image_pair in images
+        ):
+            # Multiple pairs - flatten them
+            images = [image for image_pair in images for image in image_pair]
+            return images
+    raise ValueError(
+        "Input images must be a one of the following :",
+        " - A pair of PIL images.",
+        " - A pair of 3D arrays.",
+        " - A list of pairs of PIL images.",
+        " - A list of pairs of 3D arrays.",
+    )
+
+
+def is_grayscale(
+    image: "torch.Tensor",
+):
+    """Checks if an image is grayscale (all RGB channels are identical)."""
+    if image.ndim < 3 or image.shape[0 if image.ndim == 3 else 1] == 1:
+        return True
+    return torch.all(image[..., 0, :, :] == image[..., 1, :, :]) and torch.all(
+        image[..., 1, :, :] == image[..., 2, :, :]
+    )
+
+
+def convert_to_grayscale(
+    image: "torch.Tensor",
+) -> "torch.Tensor":
     """
-    Convert a list of images to a list of torch.Tensor in C,H,W format.
+    Converts an image to grayscale format using the NTSC formula. Only support torch.Tensor.
+
+    This function is supposed to return a 1-channel image, but it returns a 3-channel image with the same value in each
+    channel, because of an issue that is discussed in :
+    https://github.com/huggingface/transformers/pull/25786#issuecomment-1730176446
 
     Args:
-        images (`List[PIL.Image.Image | np.ndarray | torch.Tensor]`):
-            Input images.
-        data_format (`ChannelDimension`, optional, default ChannelDimension.LAST):
-            If "channels_first", output tensors will be (C,H,W). If "channels_last", (H,W,C).
-        input_data_format (ChannelDimension or None)
-            references the input images channel dimension.
-
-    Returns:
-        List[torch.Tensor]: Converted images as torch tensors.
+        image (torch.Tensor):
+            The image to convert.
     """
+    if is_grayscale(image):
+        return image
+    return F.rgb_to_grayscale(image, num_output_channels=3)
 
-    # Assuming they all are the same type
-    if isinstance(images[0], np.ndarray):
-        all_images = [torch.from_numpy(img) for img in images]
-    elif isinstance(images[0], Image.Image) :
-        all_images = [F.to_dtype(F.to_image(img), dtype=torch.float32, scale=True) for img in images]
-    elif isinstance(images[0], torch.Tensor):
-        all_images = images
-    else:
-        raise ValueError(f"Unsupported image type: {type(images)}")
-
-
-    if input_data_format is None:
-        input_data_format = infer_channel_dimension_format(all_images[0].numpy())
-
-    if input_data_format != data_format:
-        if input_data_format == ChannelDimension.LAST and data_format == ChannelDimension.FIRST:
-            all_images = [img.permute(2, 0, 1) for img in all_images]
-        elif input_data_format == ChannelDimension.FIRST and data_format == ChannelDimension.LAST:
-            all_images = [img.permute(1, 2, 0) for img in all_images]
-        else:
-            raise ValueError(f"Unsupported conversion: {input_data_format} -> {data_format}")
-
-    return all_images
-
-# Copied from transformers.models.efficientloftr.image_processing_efficientloftr.EfficientLoFTRImageProcessor._get_color
-def _get_color(score):
-    """Maps a score to a color."""
-    r = int(255 * (1 - score))
-    g = int(255 * score)
-    b = 0
-    return r, g, b
-
+class SuperGlueFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    r"""
+    do_grayscale (`bool`, *optional*, defaults to `True`):
+        Whether to convert the image to grayscale. Can be overridden by `do_grayscale` in the `preprocess` method.
+    """
+    do_grayscale: Optional[bool] = True
 
 @auto_docstring
 class SuperGlueImageProcessorFast(BaseImageProcessorFast):
@@ -205,77 +151,72 @@ class SuperGlueImageProcessorFast(BaseImageProcessorFast):
     default_to_square = False
     do_resize = True
     do_rescale = True
-    do_grayscale = False
+    rescale_factor = 1 / 255
+    do_normalize = None
+    valid_kwargs = SuperGlueFastImageProcessorKwargs
 
-    def preprocess(
+    def __init__(self, **kwargs: Unpack[SuperGlueFastImageProcessorKwargs]):
+        super().__init__(**kwargs)
+
+    @auto_docstring
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[SuperGlueFastImageProcessorKwargs]) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
+
+    def _prepare_images_structure(
         self,
         images: ImageInput,
-        do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
-        resample: Optional[Union["PILImageResampling", "F.InterpolationMode"]] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_grayscale: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: ChannelDimension = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs,
+    ) -> ImageInput:
+        # we need to handle image pairs validation and flattening
+        return flatten_pair_images(images)
+
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        size: Union[dict[str, int], SizeDict],
+        rescale_factor: float,
+        do_rescale: bool,
+        do_resize: bool,
+        interpolation: Optional["F.InterpolationMode"],
+        do_grayscale: bool,
+        disable_grouping: bool,
+        return_tensors: Union[str, TensorType],
         **kwargs,
     ) -> BatchFeature:
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
 
-        # Handle input
-        do_resize       = do_resize         if do_resize        is not None else self.do_resize
-        resample        = resample          if resample         is not None else self.resample
-        do_rescale      = do_rescale        if do_rescale       is not None else self.do_rescale
-        rescale_factor  = rescale_factor    if rescale_factor   is not None else self.rescale_factor
-        do_grayscale    = do_grayscale      if do_grayscale     is not None else self.do_grayscale
-        size            = size              if size             is not None else self.size
-        data_format     = data_format       if data_format      is not None else self.data_format
+        for shape, stacked_images in grouped_images.items():
+            if do_resize:
+                stacked_images = self.resize(stacked_images, size=size, interpolation=interpolation)
+            processed_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(processed_images_grouped, grouped_images_index)
 
-        resample = pil_resampling_to_interpolation(resample)
-        size = get_size_dict(size, default_to_square=False)
-        if isinstance(input_data_format, str):
-            input_data_format = ChannelDimension(input_data_format)
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_rescale:
+                stacked_images = self.rescale(stacked_images, rescale_factor)
+            if do_grayscale:
+                stacked_images = convert_to_grayscale(stacked_images)
+            processed_images_grouped[shape] = stacked_images
 
-        validate_preprocess_arguments(
-            do_resize=do_resize,
-            size=size,
-            interpolation=resample,
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-        )
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
-        # Format Images
-        images = validate_and_format_image_pairs(images)
-        if not valid_images(images):
-            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
+        # Convert back to pairs format
+        image_pairs = [processed_images[i : i + 2] for i in range(0, len(processed_images), 2)]
 
-        # All transformations expect torch tensors, using ChannelDimension.FIRST dataformat for processing.
-        images = images_to_torch_tensor(images, data_format=ChannelDimension.FIRST, input_data_format=input_data_format)
+        # Stack each pair into a single tensor to match slow processor format
+        stacked_pairs = [torch.stack(pair, dim=0) for pair in image_pairs]
 
-        if do_resize:
-            images = torch.stack([
-                self.resize(img, size=SizeDict(**size), interpolation=resample)
-                for img in images
-            ], dim=0)
-        if do_rescale:
-            images = self.rescale(images, scale=rescale_factor)
-        if do_grayscale:
-            images = convert_to_grayscale(images, input_data_format=ChannelDimension.FIRST)
-        if data_format == ChannelDimension.LAST:
-            images = images.permute(0, 2, 3, 1)
-        images = [img.numpy() for img in images]
+        # Return in same format as slow processor
+        image_pairs = torch.stack(stacked_pairs, dim=0) if return_tensors else stacked_pairs
 
-        # Convert back the flattened list of images into a list of pairs of images.
-        image_pairs = [images[i: i + 2] for i in range(0, len(images), 2)]
-
-        data = {"pixel_values": image_pairs}
-
-        return BatchFeature(data=data, tensor_type=return_tensors)
-
+        return BatchFeature(data={"pixel_values": image_pairs})
 
     def post_process_keypoint_matching(
         self,
-        outputs: KeypointMatchingOutput,
+        outputs: "KeypointMatchingOutput",
         target_sizes: Union[TensorType, list[tuple]],
         threshold: float = 0.0,
     ) -> list[dict[str, torch.Tensor]]:
@@ -285,23 +226,23 @@ class SuperGlueImageProcessorFast(BaseImageProcessorFast):
         Args:
             outputs ([`KeypointMatchingOutput`]):
                 Raw outputs of the model.
-            target_sizes (`torch.Tensor` or `list[tuple[tuple[int, int]]]`, *optional*):
-                Tensor of shape `(batch_size, 2, 2)` or list of tuples of tuples (`tuple[int, int]`) containing the
+            target_sizes (`torch.Tensor` or `List[Tuple[Tuple[int, int]]]`, *optional*):
+                Tensor of shape `(batch_size, 2, 2)` or list of tuples of tuples (`Tuple[int, int]`) containing the
                 target size `(height, width)` of each image in the batch. This must be the original image size (before
                 any processing).
             threshold (`float`, *optional*, defaults to 0.0):
                 Threshold to filter out the matches with low scores.
         Returns:
-            `list[Dict]`: A list of dictionaries, each dictionary containing the keypoints in the first and second image
+            `List[Dict]`: A list of dictionaries, each dictionary containing the keypoints in the first and second image
             of the pair, the matching scores and the matching indices.
         """
-        if outputs.mask.shape[0] != len(target_sizes):
+        if outputs.matches.shape[0] != len(target_sizes):
             raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the mask")
         if not all(len(target_size) == 2 for target_size in target_sizes):
             raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
 
         if isinstance(target_sizes, list):
-            image_pair_sizes = torch.tensor(target_sizes, device=outputs.mask.device)
+            image_pair_sizes = torch.tensor(target_sizes, device=outputs.matches.device)
         else:
             if target_sizes.shape[1] != 2 or target_sizes.shape[2] != 2:
                 raise ValueError(
@@ -314,22 +255,13 @@ class SuperGlueImageProcessorFast(BaseImageProcessorFast):
         keypoints = keypoints.to(torch.int32)
 
         results = []
-        for mask_pair, keypoints_pair, matches, scores in zip(
-            outputs.mask, keypoints, outputs.matches[:, 0], outputs.matching_scores[:, 0]
-        ):
-            mask0 = mask_pair[0] > 0
-            mask1 = mask_pair[1] > 0
-            keypoints0 = keypoints_pair[0][mask0]
-            keypoints1 = keypoints_pair[1][mask1]
-            matches0 = matches[mask0]
-            scores0 = scores[mask0]
-
+        for keypoints_pair, matches, scores in zip(keypoints, outputs.matches, outputs.matching_scores):
             # Filter out matches with low scores
-            valid_matches = torch.logical_and(scores0 > threshold, matches0 > -1)
+            valid_matches = torch.logical_and(scores > threshold, matches > -1)
 
-            matched_keypoints0 = keypoints0[valid_matches]
-            matched_keypoints1 = keypoints1[matches0[valid_matches]]
-            matching_scores = scores0[valid_matches]
+            matched_keypoints0 = keypoints_pair[0][valid_matches[0]]
+            matched_keypoints1 = keypoints_pair[1][valid_matches[1]]
+            matching_scores = scores[0][valid_matches[0]]
 
             results.append(
                 {
@@ -341,18 +273,17 @@ class SuperGlueImageProcessorFast(BaseImageProcessorFast):
 
         return results
 
-    # Copied from transformers.models.efficientloftr.image_processing_efficientloftr.EfficientLoFTRImageProcessor.visualize_keypoint_matching with EfficientLoFTR->SuperGlue
     def visualize_keypoint_matching(
         self,
-        images: ImageInput,
+        images,
         keypoint_matching_output: list[dict[str, torch.Tensor]],
     ) -> list["Image.Image"]:
         """
         Plots the image pairs side by side with the detected keypoints as well as the matching between them.
 
         Args:
-            images (`ImageInput`):
-                Image pairs to plot. Same as `SuperGlueImageProcessor.preprocess`. Expects either a list of 2
+            images:
+                Image pairs to plot. Same as `EfficientLoFTRImageProcessor.preprocess`. Expects either a list of 2
                 images or a list of list of 2 images list with pixel values ranging from 0 to 255.
             keypoint_matching_output (List[Dict[str, torch.Tensor]]]):
                 A post processed keypoint matching output
@@ -361,6 +292,8 @@ class SuperGlueImageProcessorFast(BaseImageProcessorFast):
             `List[PIL.Image.Image]`: A list of PIL images, each containing the image pairs side by side with the detected
             keypoints as well as the matching between them.
         """
+        from ...image_utils import to_numpy_array
+
         images = validate_and_format_image_pairs(images)
         images = [to_numpy_array(image) for image in images]
         image_pairs = [images[i : i + 2] for i in range(0, len(images), 2)]
@@ -369,11 +302,11 @@ class SuperGlueImageProcessorFast(BaseImageProcessorFast):
         for image_pair, pair_output in zip(image_pairs, keypoint_matching_output):
             height0, width0 = image_pair[0].shape[:2]
             height1, width1 = image_pair[1].shape[:2]
-            plot_image = np.zeros((max(height0, height1), width0 + width1, 3), dtype=np.uint8)
-            plot_image[:height0, :width0] = image_pair[0]
-            plot_image[:height1, width0:] = image_pair[1]
+            plot_image = torch.zeros((max(height0, height1), width0 + width1, 3), dtype=torch.uint8)
+            plot_image[:height0, :width0] = torch.from_numpy(image_pair[0])
+            plot_image[:height1, width0:] = torch.from_numpy(image_pair[1])
 
-            plot_image_pil = Image.fromarray(plot_image)
+            plot_image_pil = Image.fromarray(plot_image.numpy())
             draw = ImageDraw.Draw(plot_image_pil)
 
             keypoints0_x, keypoints0_y = pair_output["keypoints0"].unbind(1)
@@ -381,7 +314,7 @@ class SuperGlueImageProcessorFast(BaseImageProcessorFast):
             for keypoint0_x, keypoint0_y, keypoint1_x, keypoint1_y, matching_score in zip(
                 keypoints0_x, keypoints0_y, keypoints1_x, keypoints1_y, pair_output["matching_scores"]
             ):
-                color = _get_color(matching_score)
+                color = self._get_color(matching_score)
                 draw.line(
                     (keypoint0_x, keypoint0_y, keypoint1_x + width0, keypoint1_y),
                     fill=color,
@@ -396,6 +329,12 @@ class SuperGlueImageProcessorFast(BaseImageProcessorFast):
             results.append(plot_image_pil)
         return results
 
+    def _get_color(self, score):
+        """Maps a score to a color."""
+        r = int(255 * (1 - score))
+        g = int(255 * score)
+        b = 0
+        return (r, g, b)
 
 
 __all__ = ["SuperGlueImageProcessorFast"]
