@@ -233,7 +233,9 @@ class ModernBertConfig(PreTrainedConfig):
         self.sparse_pred_ignore_index = sparse_pred_ignore_index
         self.reference_compile = reference_compile
         self.repad_logits_with_grad = repad_logits_with_grad
-        self.rope_parameters = rope_parameters
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
 
         if self.classifier_pooling not in ["cls", "mean"]:
             raise ValueError(

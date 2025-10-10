@@ -153,9 +153,13 @@ class GPTNeoXConfig(PreTrainedConfig):
         self.use_cache = use_cache
         self.tie_word_embeddings = tie_word_embeddings
         self.use_parallel_residual = use_parallel_residual
-        self.rope_parameters = rope_parameters
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
         self.attention_bias = attention_bias
-        self.rope_parameters = rope_parameters
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rotary_emb_base", 10000.0)

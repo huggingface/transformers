@@ -174,10 +174,12 @@ class CwmConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
-        self.rope_parameters = rope_parameters
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 1_000_000.0)
+        rope_theta = kwargs.get("rope_theta", {"full_attention": 1_000_000.0, "sliding_attention": 1_000_000.0})
         standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
 

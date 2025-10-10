@@ -148,7 +148,9 @@ class Lfm2Config(PreTrainedConfig):
         self.block_multiple_of = block_multiple_of
         self.block_ffn_dim_multiplier = block_ffn_dim_multiplier
         self.block_auto_adjust_ff_dim = block_auto_adjust_ff_dim
-        self.rope_parameters = rope_parameters
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
 
         self.layer_types = layer_types
         if self.layer_types is None:

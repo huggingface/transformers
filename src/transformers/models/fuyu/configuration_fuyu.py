@@ -174,7 +174,9 @@ class FuyuConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.partial_rotary_factor = partial_rotary_factor
         self.image_token_id = image_token_id
-        self.rope_parameters = rope_parameters
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 25000.0)

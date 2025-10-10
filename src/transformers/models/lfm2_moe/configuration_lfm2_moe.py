@@ -136,7 +136,9 @@ class Lfm2MoeConfig(PreTrainedConfig):
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
-        self.rope_parameters = rope_parameters
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
         self.max_position_embeddings = max_position_embeddings
         self.use_cache = use_cache
         self.norm_eps = norm_eps

@@ -164,7 +164,9 @@ class GraniteMoeSharedConfig(PreTrainedConfig):
         self.use_cache = use_cache
         # this model has rope embedding type, hardcoded for BC
         self.position_embedding_type = "rope"
-        self.rope_parameters = rope_parameters
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)

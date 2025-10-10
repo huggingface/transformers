@@ -194,7 +194,10 @@ class Dots1Config(PreTrainedConfig):
         self.routed_scaling_factor = routed_scaling_factor
         self.sliding_window = sliding_window
         self.max_window_layers = max_window_layers
-        self.rope_parameters = rope_parameters
+
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
 
         self.layer_types = layer_types
         if self.layer_types is None:

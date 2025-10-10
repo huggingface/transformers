@@ -130,7 +130,9 @@ class OpenLlamaConfig(PreTrainedConfig):
         self.use_stable_embedding = use_stable_embedding
         self.shared_input_output_embedding = shared_input_output_embedding
         self.rope_theta = rope_theta
-        self.rope_parameters = rope_parameters
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
         self._rope_parameters_validation()
 
         super().__init__(

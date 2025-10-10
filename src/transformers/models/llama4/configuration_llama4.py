@@ -125,7 +125,9 @@ class Llama4VisionConfig(PreTrainedConfig):
         self.projector_dropout = projector_dropout
         self.attention_dropout = attention_dropout
         self.vision_feature_select_strategy = vision_feature_select_strategy
-        self.rope_parameters = rope_parameters
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
 
         # Validate the correctness of rotary position embeddings parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)
@@ -328,7 +330,9 @@ class Llama4TextConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
         self.use_qk_norm = use_qk_norm
-        self.rope_parameters = rope_parameters
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
 
         self.num_experts_per_tok = num_experts_per_tok
         self.num_local_experts = num_local_experts

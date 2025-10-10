@@ -207,7 +207,9 @@ class ModernBertDecoderConfig(PreTrainedConfig):
         self.classifier_activation = classifier_activation
         self.use_cache = use_cache
         self.global_attn_every_n_layers = global_attn_every_n_layers
-        self.rope_parameters = rope_parameters
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or rope_parameters
         # for consistency with ModernBert
         self.reference_compile = False
 
