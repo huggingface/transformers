@@ -331,7 +331,6 @@ class EomtDinov3ForUniversalSegmentation(EomtDinov3PreTrainedModel, EomtForUnive
 
         self.embeddings = EomtDinov3ViTEmbeddings(config)
         self.embeddings.register_parameter("mask_token", None)
-        self.embeddings.num_prefix_tokens = self.num_prefix_tokens
 
         self.rope_embeddings = EomtDinov3RopePositionEmbedding(config)
         self.layers = nn.ModuleList([EomtDinov3Layer(config) for _ in range(config.num_hidden_layers)])
