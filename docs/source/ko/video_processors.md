@@ -32,7 +32,7 @@ from transformers import AutoVideoProcessor
 processor = AutoVideoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-0.5b-ov-hf")
 ```
 
-현재 비디오에 기본 이미지 프로세서를 사용할 경우, 비디오 데이터를 각 프레임마다 개별 이미지로 처리하여 변환을 적용합니다. 이 방식도 잘 동작하긴 하지만 효율이 좋지 않습니다. 이 대신 `AutoVideoProcessor`를 사용하면 [torchvision](https://pytorch.org/vision/stable/index.html) 라이브러리를 활용한 **fast video processors**의 이점을 누릴 수 있습니다. Fast processors는 각 비디오나 프레임을 하나씩 처리하지 않고, 전체 비디오 배치를 한 번에 처리합니다. 이는 GPU 가속을 도입하며, 특히 높은 처리량이 필요한 작업에서 처리 속도를 크게 향상시킵니다.
+현재 비디오에 기본 이미지 프로세서를 사용할 경우, 비디오 데이터의 각 프레임이 개별 이미지로 처리되어 변환이 적용됩니다. 이 방식도 잘 동작하긴 하지만 효율이 좋지 않습니다. 이 대신 `AutoVideoProcessor`를 사용하면 [torchvision](https://pytorch.org/vision/stable/index.html) 라이브러리를 활용한 **fast video processors**의 이점을 누릴 수 있습니다. Fast processors는 각 비디오나 프레임을 하나씩 처리하지 않고, 전체 비디오 배치를 한 번에 처리합니다. 이는 GPU 가속을 도입하며, 특히 높은 처리량이 필요한 작업에서 처리 속도를 크게 향상시킵니다.
 
 Fast video processors는 모든 모델에서 사용할 수 있으며 `AutoVideoProcessor`가 초기화될 때 같이 로드됩니다. Fast video processors를 사용할 때는 `device` 인수를 설정하여 어떤 장치에서 처리를 수행할지 지정할 수 있습니다. 텐서를 입력으로 하는 경우, 기본적으로 입력과 동일한 장치에서 처리되며, 그렇지 않은 경우 CPU에서 처리됩니다. 장치로 'cuda'를 사용하는 경우, 추가적인 속도 향상을 위해 프로세서를 컴파일하여 사용할 수 있습니다.
 
