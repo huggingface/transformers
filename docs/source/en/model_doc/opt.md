@@ -81,9 +81,10 @@ The example below uses [bitsandbytes](..quantization/bitsandbytes) to quantize t
 
 ```py
 import torch
-from transformers import BitsAndBytesConfig, AutoTokenizer, AutoModelForCausalLM, infer_device
+from transformers import BitsAndBytesConfig, AutoTokenizer, AutoModelForCausalLM
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 
 bnb_config = BitsAndBytesConfig(load_in_8bit=True)
 model = AutoModelForCausalLM.from_pretrained("facebook/opt-13b", dtype=torch.float16, attn_implementation="sdpa", quantization_config=bnb_config).to(device)
@@ -100,8 +101,6 @@ tokenizer.batch_decode(generated_ids)[0]
 ## Notes
 
 - OPT adds an `EOS` token `</s>` to the beginning of every prompt.
-
-- The `head_mask` argument is ignored if the attention implementation isn't `"eager"`. Set `attn_implementation="eager"` to enable the `head_mask`.
 
 ## Resources
 

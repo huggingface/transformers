@@ -321,9 +321,7 @@ def mel_to_hertz(mels: Union[float, np.ndarray], mel_scale: str = "htk") -> Unio
     return freq
 
 
-def hertz_to_octave(
-    freq: Union[float, np.ndarray], tuning: Optional[float] = 0.0, bins_per_octave: Optional[int] = 12
-):
+def hertz_to_octave(freq: Union[float, np.ndarray], tuning: float = 0.0, bins_per_octave: int = 12):
     """
     Convert frequency from hertz to fractional octave numbers.
     Adapted from *librosa*.
@@ -589,7 +587,7 @@ def window_function(
         window = np.hamming(length)
     elif name in ["hann", "hann_window"]:
         window = np.hanning(length)
-    elif name in ["povey"]:
+    elif name == "povey":
         window = np.power(np.hanning(length), 0.85)
     else:
         raise ValueError(f"Unknown window function '{name}'")

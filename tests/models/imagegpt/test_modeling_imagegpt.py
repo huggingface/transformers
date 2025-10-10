@@ -93,9 +93,6 @@ class ImageGPTModelTester:
         self.num_choices = num_choices
         self.scope = None
 
-    def get_large_model_config(self):
-        return ImageGPTConfig.from_pretrained("imagegpt")
-
     def prepare_config_and_inputs(
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
     ):
@@ -127,13 +124,10 @@ class ImageGPTModelTester:
             reorder_and_upcast_attn=reorder_and_upcast_attn,
         )
 
-        head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
-
         return (
             config,
             input_ids,
             input_mask,
-            head_mask,
             token_type_ids,
             mc_token_ids,
             sequence_labels,
@@ -168,19 +162,19 @@ class ImageGPTModelTester:
         config.max_position_embeddings = 1024
         return config
 
-    def create_and_check_imagegpt_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_imagegpt_model(self, config, input_ids, input_mask, token_type_ids, *args):
         model = ImageGPTModel(config=config)
         model.to(torch_device)
         model.eval()
 
-        result = model(input_ids, token_type_ids=token_type_ids, head_mask=head_mask)
+        result = model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids)
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(len(result.past_key_values), config.n_layer)
 
-    def create_and_check_lm_head_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_lm_head_model(self, config, input_ids, input_mask, token_type_ids, *args):
         model = ImageGPTForCausalImageModeling(config)
         model.to(torch_device)
         model.eval()
@@ -192,7 +186,7 @@ class ImageGPTModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size - 1))
 
     def create_and_check_imagegpt_for_image_classification(
-        self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
+        self, config, input_ids, input_mask, token_type_ids, mc_token_ids, sequence_labels, *args
     ):
         config.num_labels = self.num_labels
         model = ImageGPTForImageClassification(config)
@@ -208,7 +202,6 @@ class ImageGPTModelTester:
             config,
             input_ids,
             input_mask,
-            head_mask,
             token_type_ids,
             mc_token_ids,
             sequence_labels,
@@ -219,7 +212,6 @@ class ImageGPTModelTester:
         inputs_dict = {
             "input_ids": input_ids,
             "token_type_ids": token_type_ids,
-            "head_mask": head_mask,
         }
 
         return config, inputs_dict

@@ -85,8 +85,6 @@ class ImageToImagePipeline(Pipeline):
 
         if "timeout" in kwargs:
             preprocess_params["timeout"] = kwargs["timeout"]
-        if "head_mask" in kwargs:
-            forward_params["head_mask"] = kwargs["head_mask"]
 
         return preprocess_params, forward_params, postprocess_params
 

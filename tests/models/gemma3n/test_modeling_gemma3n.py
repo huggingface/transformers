@@ -31,8 +31,6 @@ from transformers import (
     Gemma3nAudioConfig,
     Gemma3nAudioFeatureExtractor,
     Gemma3nConfig,
-    Gemma3nTextConfig,
-    GenerationConfig,
     StaticCache,
     is_torch_available,
 )
@@ -50,6 +48,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_flash_attn_2_available
 
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...generation.test_utils import GenerationTesterMixin, has_similar_generate_outputs
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -59,7 +58,6 @@ from ...test_modeling_common import (
     floats_tensor,
     ids_tensor,
 )
-from ..gemma.test_modeling_gemma import GemmaModelTester
 
 
 if is_torch_available():
@@ -143,13 +141,11 @@ class Gemma3nAudioModelTester:
 @require_torch
 class Gemma3nAudioModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Gemma3nAudioEncoder,) if is_torch_available() else ()
-    test_pruning = False
-    test_head_masking = False
+
     test_missing_keys = False
     is_generative = False
     _is_stateful = True
     main_input_name = "audio_mel"
-    test_initialization = False
 
     def setUp(self):
         self.model_tester = Gemma3nAudioModelTester(self)
@@ -248,9 +244,10 @@ class Gemma3nAudioModelTest(ModelTesterMixin, unittest.TestCase):
         torch.testing.assert_close(encoder_mask[1, :], self.expected_encoder_mask_slice.to(torch_device))
 
 
-class Gemma3nTextModelTester(GemmaModelTester):
-    activation_sparsity_pattern = None
-    forced_config_args = ["activation_sparsity_pattern"]
+class Gemma3nTextModelTester(CausalLMModelTester):
+    if is_torch_available():
+        base_model_class = Gemma3nTextModel
+        causal_lm_class = Gemma3nForCausalLM
 
     def __init__(
         self,
@@ -289,7 +286,7 @@ class Gemma3nTextModelTester(GemmaModelTester):
         eos_token_id=2,
         is_decoder=False,
     ):
-        self._verify_model_attributes()
+        self._verify_and_infer_model_attributes()
         self.parent = parent
         self.batch_size = batch_size
         self.seq_length = seq_length
@@ -321,29 +318,12 @@ class Gemma3nTextModelTester(GemmaModelTester):
         self.head_dim = self.hidden_size // self.num_attention_heads
         self.is_decoder = is_decoder
 
-    if is_torch_available():
-        config_class = Gemma3nTextConfig
-        model_class = Gemma3nTextModel
-        for_causal_lm_class = Gemma3nForCausalLM
-
 
 @require_torch
-class Gemma3nTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (Gemma3nTextModel, Gemma3nForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (Gemma3nForCausalLM,) if is_torch_available() else ()
-    test_headmasking = False
-    test_pruning = False
+class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
+    model_tester_class = Gemma3nTextModelTester
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
-
-    def setUp(self):
-        self.model_tester = Gemma3nTextModelTester(self)
-        self.config_tester = ConfigTester(
-            self,
-            config_class=Gemma3nConfig,
-            hidden_size=37,
-            text_config={"activation_sparsity_pattern": None},
-        )
 
     def _check_hidden_states_for_generate(
         self, batch_size, hidden_states, prompt_length, output_length, config, use_cache=False
@@ -458,7 +438,7 @@ class Gemma3nTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
 
-            if config.get_text_config(decoder=True).is_encoder_decoder:
+            if config.is_encoder_decoder:
                 self.skipTest(reason="This model is encoder-decoder and has Encoder-Decoder Cache")
 
             model = model_class(config).to(torch_device).eval()
@@ -519,7 +499,7 @@ class Gemma3nTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
             set_config_for_less_flaky_test(config)
             main_input = inputs_dict[model_class.main_input_name]
 
-            if config.get_text_config(decoder=True).is_encoder_decoder:
+            if config.is_encoder_decoder:
                 self.skipTest(reason="This model is encoder-decoder and has Encoder-Decoder Cache")
 
             config.is_decoder = True
@@ -677,8 +657,7 @@ class Gemma3nVision2TextModelTester:
 class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (Gemma3nModel, Gemma3nForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (Gemma3nForConditionalGeneration,) if is_torch_available() else ()
-    test_headmasking = False
-    test_pruning = False
+
     test_missing_keys = False
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
@@ -709,10 +688,6 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
 
     @unittest.skip(reason="SiglipVisionModel (vision backbone) does not support standalone training")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="Siglip (vision backbone) uses a non-standard initialization scheme")
-    def test_initialization(self):
         pass
 
     @unittest.skip(
@@ -764,7 +739,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         audio_ds = load_dataset(
             "etechgrid/28.5k_wavfiles_dataset", "default", data_files="wav_dataset/103-1240-0000.wav"
         )
-        self.audio_file_path = audio_ds["train"][0]["audio"]["path"]
+        self.audio_file_path = audio_ds["train"][0]["audio"].metadata.path
         cleanup(torch_device, gc_collect=True)
 
     def tearDown(self):
@@ -1012,15 +987,13 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         input_size = inputs.input_ids.shape[-1]
         self.assertTrue(input_size > model.config.get_text_config().sliding_window)
 
-        out = model.generate(**inputs, generation_config=GenerationConfig(max_new_tokens=20, do_sample=False))[
-            :, input_size:
-        ]
+        out = model.generate(**inputs, max_new_tokens=20, do_sample=False)[:, input_size:]
         output_text = tokenizer.batch_decode(out)
 
         EXPECTED_COMPLETIONS = Expectations({
             # FIXME: This test is VERY flaky on ROCm
             ("cuda", None): [" and I am glad to be here. This is a nice place. This is a nice place.", ", green, yellow, purple, orange, pink, brown, black, white.\n\nHere are"],
             ("rocm", (9, 4)): [' and I think it makes this place special. This is a nice place. This is a nice place', ', green, yellow, purple, orange, pink, brown, black, white.\n\nHere are'],
-            ("xpu", None): [" and I think it is very nice. I think it is nice. This is a nice place.", ", green, yellow, purple, orange, pink, brown, black, white.\n\nHere are"],
+            ("xpu", None): [" and I think it's a nice place to visit. This is a nice place. This is", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
         }).get_expectation()  # fmt: skip
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)

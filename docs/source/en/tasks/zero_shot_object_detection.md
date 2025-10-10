@@ -29,6 +29,7 @@ as a list of candidate classes, and output the bounding boxes and labels where t
 > Hugging Face houses many such [open vocabulary zero shot object detectors](https://huggingface.co/models?pipeline_tag=zero-shot-object-detection).
 
 In this guide, you will learn how to use such models:
+
 - to detect objects based on text prompts
 - for batch object detection
 - for image-guided object detection

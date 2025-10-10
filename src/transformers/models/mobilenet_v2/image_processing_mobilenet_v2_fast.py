@@ -17,11 +17,11 @@
 from typing import Optional, Union
 
 import torch
+from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -38,25 +38,8 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_v2_available,
 )
-
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
-
-
-class MobileNetV2FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
-        Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
-        is used for background, and background itself is not included in all classes of a dataset (e.g.
-        ADE20k). The background label will be replaced by 255.
-    """
-
-    do_reduce_labels: Optional[bool]
+from .image_processing_mobilenet_v2 import MobileNetV2ImageProcessorKwargs
 
 
 @auto_docstring
@@ -72,9 +55,9 @@ class MobileNetV2ImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     do_reduce_labels = False
-    valid_kwargs = MobileNetV2FastImageProcessorKwargs
+    valid_kwargs = MobileNetV2ImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[MobileNetV2FastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[MobileNetV2ImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     # Copied from transformers.models.beit.image_processing_beit_fast.BeitImageProcessorFast.reduce_label
@@ -93,7 +76,7 @@ class MobileNetV2ImageProcessorFast(BaseImageProcessorFast):
         self,
         images: ImageInput,
         segmentation_maps: Optional[ImageInput] = None,
-        **kwargs: Unpack[MobileNetV2FastImageProcessorKwargs],
+        **kwargs: Unpack[MobileNetV2ImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
         segmentation_maps (`ImageInput`, *optional*):
@@ -108,7 +91,7 @@ class MobileNetV2ImageProcessorFast(BaseImageProcessorFast):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         device: Optional[Union[str, "torch.device"]] = None,
-        **kwargs: Unpack[MobileNetV2FastImageProcessorKwargs],
+        **kwargs: Unpack[MobileNetV2ImageProcessorKwargs],
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.
@@ -134,9 +117,7 @@ class MobileNetV2ImageProcessorFast(BaseImageProcessorFast):
                     "do_normalize": False,
                     "do_rescale": False,
                     # Nearest interpolation is used for segmentation maps instead of BILINEAR.
-                    "interpolation": F.InterpolationMode.NEAREST_EXACT
-                    if is_torchvision_v2_available()
-                    else F.InterpolationMode.NEAREST,
+                    "interpolation": F.InterpolationMode.NEAREST_EXACT,
                 }
             )
 
