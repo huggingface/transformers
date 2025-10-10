@@ -21,6 +21,9 @@ on:
       report_repo_id:
         required: true
         type: string
+      commit_sha:
+        required: false
+        type: string
 
 
 env:
@@ -41,7 +44,7 @@ jobs:
   check_new_failures:
     name: " "
     runs-on:
-      group: aws-g4dn-4xlarge-cache
+      group: aws-g5-4xlarge-cache
     container:
       image: ${{ inputs.docker }}
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -87,7 +90,7 @@ jobs:
       - name: Update clone
         working-directory: /transformers
         if: ${{ env.process == 'true' }}
-        run: git fetch && git checkout ${{ github.sha }}
+        run: git fetch && git checkout ${{ inputs.commit_sha || github.sha }}
 
       - name: Get target commit
         working-directory: /transformers/utils

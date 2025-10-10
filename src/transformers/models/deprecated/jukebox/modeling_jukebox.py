@@ -598,7 +598,7 @@ Ringer, Tom Ash, John Hughes, David MacLeod, Jamie Dougherty](https://huggingfac
     JUKEBOX_START_DOCSTRING,
 )
 class JukeboxVQVAE(PreTrainedModel):
-    config_class = JukeboxVQVAEConfig
+    config: JukeboxVQVAEConfig
     base_model_prefix = "vqvae"
 
     def _init_weights(self, module):
@@ -907,7 +907,7 @@ class JukeboxAttention(nn.Module):
     def merge_heads(self, hidden_states):
         hidden_states = hidden_states.permute(0, 2, 1, 3).contiguous()
         new_hidden_states_shape = (*hidden_states.size()[:-2], hidden_states.size(-2) * hidden_states.size(-1))
-        return hidden_states.view(*new_hidden_states_shape)  # in Tensorflow implem: fct merge_states
+        return hidden_states.view(*new_hidden_states_shape)
 
     def split_heads(self, hidden_states, is_key=False):
         new_hidden_states_shape = (
@@ -915,7 +915,7 @@ class JukeboxAttention(nn.Module):
             self.n_heads,
             hidden_states.size(-1) // self.n_heads,
         )
-        hidden_states = hidden_states.view(*new_hidden_states_shape)  # in Tensorflow implem: fct split_states
+        hidden_states = hidden_states.view(*new_hidden_states_shape)
         if is_key:
             return hidden_states.permute(0, 2, 3, 1)
         else:
@@ -1788,7 +1788,7 @@ class JukeboxPrior(PreTrainedModel):
             the vqvae module to avoid getting the parameters.
     """
 
-    config_class = JukeboxPriorConfig
+    config: JukeboxPriorConfig
 
     def _init_weights(self, module):
         init_scale = self.config.init_scale
@@ -2264,12 +2264,12 @@ class JukeboxPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = JukeboxConfig
+    config: JukeboxConfig
     base_model_prefix = "jukebox"
     supports_gradient_checkpointing = False
 
     def _init_weights(self, module):
-        if isinstance(module, JukeboxPrior) or isinstance(module, JukeboxVQVAE):
+        if isinstance(module, (JukeboxPrior, JukeboxVQVAE)):
             module.apply(module._init_weights)
 
     def __init__(self, *inputs, **kwargs):

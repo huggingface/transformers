@@ -31,13 +31,13 @@ def get_last_stable_minor_release():
     url = "https://pypi.org/pypi/transformers/json"
     release_data = requests.get(url).json()
 
-    # Find the last stable release of of transformers (version below current version)
+    # Find the last stable release of transformers (version below current version)
     major_version, minor_version, patch_version, _ = current_version.split(".")
     last_major_minor = f"{major_version}.{int(minor_version) - 1}"
     last_stable_minor_releases = [
         release for release in release_data["releases"] if release.startswith(last_major_minor)
     ]
-    last_stable_release = sorted(last_stable_minor_releases, key=version.parse)[-1]
+    last_stable_release = max(last_stable_minor_releases, key=version.parse)
 
     return last_stable_release
 

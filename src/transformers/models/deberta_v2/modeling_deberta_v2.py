@@ -18,11 +18,11 @@ from collections.abc import Sequence
 from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
@@ -253,7 +253,6 @@ class DisentangledSelfAttention(nn.Module):
 
         if rel_att is not None:
             attention_scores = attention_scores + rel_att
-        attention_scores = attention_scores
         attention_scores = attention_scores.view(
             -1, self.num_attention_heads, attention_scores.size(-2), attention_scores.size(-1)
         )
@@ -418,7 +417,7 @@ class DebertaV2Output(nn.Module):
 
 
 # Copied from transformers.models.deberta.modeling_deberta.DebertaLayer with Deberta->DebertaV2
-class DebertaV2Layer(nn.Module):
+class DebertaV2Layer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.attention = DebertaV2Attention(config)
@@ -655,25 +654,14 @@ class DebertaV2Encoder(nn.Module):
         next_kv = hidden_states
         rel_embeddings = self.get_rel_embedding()
         for i, layer_module in enumerate(self.layer):
-            if self.gradient_checkpointing and self.training:
-                output_states, attn_weights = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    next_kv,
-                    attention_mask,
-                    query_states,
-                    relative_pos,
-                    rel_embeddings,
-                    output_attentions,
-                )
-            else:
-                output_states, attn_weights = layer_module(
-                    next_kv,
-                    attention_mask,
-                    query_states=query_states,
-                    relative_pos=relative_pos,
-                    rel_embeddings=rel_embeddings,
-                    output_attentions=output_attentions,
-                )
+            output_states, attn_weights = layer_module(
+                next_kv,
+                attention_mask,
+                query_states=query_states,
+                relative_pos=relative_pos,
+                rel_embeddings=rel_embeddings,
+                output_attentions=output_attentions,
+            )
 
             if output_attentions:
                 all_attentions = all_attentions + (attn_weights,)
@@ -700,7 +688,7 @@ class DebertaV2Encoder(nn.Module):
 
 @auto_docstring
 class DebertaV2PreTrainedModel(PreTrainedModel):
-    config_class = DebertaV2Config
+    config: DebertaV2Config
     base_model_prefix = "deberta"
     _keys_to_ignore_on_load_unexpected = ["position_embeddings"]
     supports_gradient_checkpointing = True
@@ -708,8 +696,6 @@ class DebertaV2PreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -742,13 +728,6 @@ class DebertaV2Model(DebertaV2PreTrainedModel):
 
     def set_input_embeddings(self, new_embeddings):
         self.embeddings.word_embeddings = new_embeddings
-
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        raise NotImplementedError("The prune function is not implemented in DeBERTa model.")
 
     @auto_docstring
     def forward(
@@ -925,7 +904,7 @@ class DebertaV2OnlyMLMHead(nn.Module):
 @auto_docstring
 class DebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
-    _keys_to_ignore_on_load_unexpected = r"mask_predictions.*"
+    _keys_to_ignore_on_load_unexpected = [r"mask_predictions.*"]
 
     def __init__(self, config):
         super().__init__(config)

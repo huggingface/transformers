@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-04-18 and added to Hugging Face Transformers on 2023-07-03.*
 
 # UMT5
 
@@ -22,7 +23,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The UMT5 model was proposed in [UniMax: Fairer and More Effective Language Sampling for Large-Scale Multilingual Pretraining](https://openreview.net/forum?id=kXwdL1cWOAi) by Hyung Won Chung, Xavier Garcia, Adam Roberts, Yi Tay, Orhan Firat, Sharan Narang, Noah Constant.
+The UMT5 model was proposed in [UniMax: Fairer and More Effective Language Sampling for Large-Scale Multilingual Pretraining](https://huggingface.co/papers/2304.09151) by Hyung Won Chung, Xavier Garcia, Adam Roberts, Yi Tay, Orhan Firat, Sharan Narang, Noah Constant.
 
 The abstract from the paper is the following:
 
@@ -38,7 +39,7 @@ Google has released the following variants:
 This model was contributed by [agemagician](https://huggingface.co/agemagician) and [stefan-it](https://huggingface.co/stefan-it). The original code can be
 found [here](https://github.com/google-research/t5x).
 
-## Usage tips 
+## Usage tips
 
 - UMT5 was only pre-trained on [mC4](https://huggingface.co/datasets/mc4) excluding any supervised training.
 Therefore, this model has to be fine-tuned before it is usable on a downstream task, unlike the original T5 model.
@@ -66,7 +67,7 @@ The conversion script is also different because the model was saved in t5x's lat
 ['<pad><extra_id_0>nyone who<extra_id_1> drink<extra_id_2> a<extra_id_3> alcohol<extra_id_4> A<extra_id_5> A. This<extra_id_6> I<extra_id_7><extra_id_52><extra_id_53></s>']
 ```
 
-<Tip> 
+<Tip>
 
 Refer to [T5's documentation page](t5) for more tips, code examples and notebooks.
 </Tip>
@@ -104,4 +105,3 @@ Refer to [T5's documentation page](t5) for more tips, code examples and notebook
 
 [[autodoc]] UMT5ForQuestionAnswering
     - forward
-

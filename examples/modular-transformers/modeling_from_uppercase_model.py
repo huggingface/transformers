@@ -4,18 +4,16 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_from_uppercase_model.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 import torch
 from torch import nn
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...utils import logging
 from .configuration_from_uppercase_model import FromUppercaseModelTextConfig, FromUppercaseModelVisionConfig
-
-
-logger = logging.get_logger(__name__)
 
 
 def eager_attention_forward(
@@ -95,13 +93,7 @@ class FromUppercaseModelAttention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and output_attentions:
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -138,7 +130,7 @@ class FromUppercaseModelMLP(nn.Module):
         return hidden_states
 
 
-class FromUppercaseModelEncoderLayer(nn.Module):
+class FromUppercaseModelEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Union[FromUppercaseModelVisionConfig, FromUppercaseModelTextConfig]):
         super().__init__()
         self.embed_dim = config.hidden_size

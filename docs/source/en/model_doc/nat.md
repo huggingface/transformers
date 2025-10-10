@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2022-04-14 and added to Hugging Face Transformers on 2023-06-20.*
 
 # Neighborhood Attention Transformer
 
@@ -67,6 +68,7 @@ The `reshaped_hidden_states` have a shape of `(batch, num_channels, height, widt
 `(batch_size, height, width, num_channels)`.
 
 Notes:
+
 - NAT depends on [NATTEN](https://github.com/SHI-Labs/NATTEN/)'s implementation of Neighborhood Attention.
 You can install it with pre-built wheels for Linux by referring to [shi-labs.com/natten](https://shi-labs.com/natten),
 or build on your system by running `pip install natten`.

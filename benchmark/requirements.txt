@@ -3,3 +3,4 @@ psutil==6.0.0
 psycopg2==2.9.9
 torch>=2.4.0
 hf_transfer
+pandas>=1.5.0

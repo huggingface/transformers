@@ -29,13 +29,15 @@ import argparse
 
 # utilities to import the model weights and config file
 import os
-import pickle as pkl
+import pickle
 
 # PyTorch + new model classes
 import torch
 from torch import nn
 
 from transformers import AutoTokenizer, MegaConfig, MegaForMaskedLM
+
+from ....utils import strtobool
 
 
 # import the EncoderLayer class used to pretrain
@@ -122,8 +124,15 @@ class OriginalMegaForMaskedLM(nn.Module):
 
 # code to convert the checkpoint located in the user-specified location
 def convert_checkpoint_to_huggingface(pretrained_checkpoint_path, output_path, includes_tokenizer):
+    if not strtobool(os.environ.get("TRUST_REMOTE_CODE", "False")):
+        raise ValueError(
+            "This part uses `pickle.load` which is insecure and will execute arbitrary code that is potentially "
+            "malicious. It's recommended to never unpickle data that could have come from an untrusted source, or "
+            "that could have been tampered with. If you already verified the pickle data and decided to use it, "
+            "you can set the environment variable `TRUST_REMOTE_CODE` to `True` to allow it."
+        )
     with open(os.path.join(pretrained_checkpoint_path, "model_args.pkl"), "rb") as f:
-        mega_original_args = pkl.load(f)
+        mega_original_args = pickle.load(f)
 
     # load the original encoder
     original_mlm = OriginalMegaForMaskedLM(**mega_original_args).eval()
@@ -179,7 +188,7 @@ def convert_checkpoint_to_huggingface(pretrained_checkpoint_path, output_path, i
 
     hf_mlm = MegaForMaskedLM(hf_config).eval()
 
-    # the originl checkpoint just uses nn.Embedding for the word embeddings
+    # the original checkpoint just uses nn.Embedding for the word embeddings
     # we use a wrapper module for embeddings to add support for positional embeddings
     hf_mlm.mega.embedding_layer.word_embeddings.weight = original_mlm.mega.embedding_layer.weight
 
@@ -188,7 +197,7 @@ def convert_checkpoint_to_huggingface(pretrained_checkpoint_path, output_path, i
     # also renaming previously confusing parameter names
     original_state_dict = original_mlm.mega.encoders.state_dict()
     updated_keys = {}
-    for module_name in original_state_dict.keys():
+    for module_name in original_state_dict:
         new_module_name = None
         # have to handle gamma, beta, and alpha differently due to their use
         # in multiple modules within the original repository;

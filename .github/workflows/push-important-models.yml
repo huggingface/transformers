@@ -4,17 +4,6 @@ on:
   push:
     branches: [ main ]
 
-env:
-  OUTPUT_SLACK_CHANNEL_ID: "C06L2SGMEEA"
-  HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
-  HF_HOME: /mnt/cache
-  TRANSFORMERS_IS_CI: yes
-  OMP_NUM_THREADS: 8
-  MKL_NUM_THREADS: 8
-  RUN_SLOW: yes # For gated repositories, we still need to agree to share information on the Hub repo. page in order to get access. # This token is created under the bot `hf-transformers-bot`.
-  SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }}
-  TF_FORCE_GPU_ALLOW_GROWTH: true
-
 jobs:
   get_modified_models:
     name: "Get all modified files"
@@ -25,111 +14,144 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v4
 
-      - name: Get changed files
-        id: changed-files
-        uses: tj-actions/changed-files@1c8e6069583811afb28f97afeaf8e7da80c6be5c
+      - name: Get changed files using `actions/github-script`
+        id: get-changed-files
+        uses: actions/github-script@v7
         with:
-          files: src/transformers/models/**
+          script: |
+            let files = [];
+            
+            // Only handle push events
+            if (context.eventName === 'push') {
+              const afterSha = context.payload.after;
+              const branchName = context.payload.ref.replace('refs/heads/', '');
+              
+              let baseSha;
+              
+              if (branchName === 'main') {
+                console.log('Push to main branch, comparing to parent commit');
+                // Get the parent commit of the pushed commit
+                const { data: commit } = await github.rest.repos.getCommit({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ref: afterSha
+                });
+                baseSha = commit.parents[0]?.sha;
+                if (!baseSha) {
+                  throw new Error('No parent commit found for the pushed commit');
+                }
+              } else {
+                console.log(`Push to branch ${branchName}, comparing to main`);
+                baseSha = 'main';
+              }
+              
+              const { data: comparison } = await github.rest.repos.compareCommits({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                base: baseSha,
+                head: afterSha
+              });
+              
+              // Include added, modified, and renamed files
+              files = comparison.files
+                .filter(file => file.status === 'added' || file.status === 'modified' || file.status === 'renamed')
+                .map(file => file.filename);
+            }
+            
+            // Include all files under src/transformers/ (not just models subdirectory)
+            const filteredFiles = files.filter(file => 
+              file.startsWith('src/transformers/')
+            );
+            
+            core.setOutput('changed_files', filteredFiles.join(' '));
+            core.setOutput('any_changed', filteredFiles.length > 0 ? 'true' : 'false');
 
-      - name: Run step if only the files listed above change
-        if: steps.changed-files.outputs.any_changed == 'true'
-        id: set-matrix
+      - name: Parse changed files with Python
+        if: steps.get-changed-files.outputs.any_changed == 'true'
         env:
-          ALL_CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
+          CHANGED_FILES: ${{ steps.get-changed-files.outputs.changed_files }}
+        id: set-matrix
         run: |
-            model_arrays=()
-            for file in $ALL_CHANGED_FILES; do
-                model_path="${file#*models/}"
-                model_path="models/${model_path%%/*}"
-                if grep -qFx "$model_path" utils/important_models.txt; then
-                    # Append the file to the matrix string
-                    model_arrays+=("$model_path")
-                fi
-            done
-            matrix_string=$(printf '"%s", ' "${model_arrays[@]}" | sed 's/, $//')
-            echo "matrix=[$matrix_string]" >> $GITHUB_OUTPUT
-  test_modified_files:
+          python3 - << 'EOF'
+          import os
+          import sys
+          import json
+          
+          # Add the utils directory to Python path
+          sys.path.insert(0, 'utils')
+          
+          # Import the important models list
+          from important_files import IMPORTANT_MODELS
+          
+          print(f"Important models: {IMPORTANT_MODELS}")
+          
+          # Get the changed files from the previous step
+          changed_files_str = os.environ.get('CHANGED_FILES', '')
+          changed_files = changed_files_str.split() if changed_files_str else []
+          
+          # Filter to only Python files
+          python_files = [f for f in changed_files if f.endswith('.py')]
+          print(f"Python files changed: {python_files}")
+          
+          result_models = set()
+          
+          # Specific files that trigger all models
+          transformers_utils_files = [
+              'modeling_utils.py',
+              'modeling_rope_utils.py', 
+              'modeling_flash_attention_utils.py',
+              'modeling_attn_mask_utils.py',
+              'cache_utils.py',
+              'masking_utils.py',
+              'pytorch_utils.py'
+          ]
+          
+          # Single loop through all Python files
+          for file in python_files:
+              # Check for files under src/transformers/models/
+              if file.startswith('src/transformers/models/'):
+                  remaining_path = file[len('src/transformers/models/'):]
+                  if '/' in remaining_path:
+                      model_dir = remaining_path.split('/')[0]
+                      if model_dir in IMPORTANT_MODELS:
+                          result_models.add(model_dir)
+                          print(f"Added model directory: {model_dir}")
+              
+              # Check for specific files under src/transformers/ or src/transformers/generation/ files
+              elif file.startswith('src/transformers/generation/') or \
+                   (file.startswith('src/transformers/') and os.path.basename(file) in transformers_utils_files):
+                  print(f"Found core file: {file} - including all important models")
+                  result_models.update(IMPORTANT_MODELS)
+                  break  # No need to continue once we include all models
+          
+          # Convert to sorted list and create matrix
+          result_list = sorted(list(result_models))
+          print(f"Final model list: {result_list}")
+          
+          if result_list:
+              matrix_json = json.dumps(result_list)
+              print(f"matrix={matrix_json}")
+              
+              # Write to GITHUB_OUTPUT
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                  f.write(f"matrix={matrix_json}\n")
+          else:
+              print("matrix=[]")
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                  f.write("matrix=[]\n")
+          EOF
+
+  model-ci:
+    name: Model CI
+    uses: ./.github/workflows/self-scheduled.yml
     needs: get_modified_models
-    name: Slow & FA2 tests
-    runs-on:
-      group: aws-g5-4xlarge-cache
-    container:
-      image: huggingface/transformers-all-latest-gpu
-      options: --gpus all --privileged --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    if: ${{ needs.get_modified_models.outputs.matrix != '[]' && needs.get_modified_models.outputs.matrix != '' && fromJson(needs.get_modified_models.outputs.matrix)[0] != null }}
-    strategy:
-      fail-fast: false
-      matrix:
-        model-name: ${{ fromJson(needs.get_modified_models.outputs.matrix) }}
-
-    steps:
-      - name: Check out code
-        uses: actions/checkout@v4
-
-      - name: Install locally transformers & other libs
-        run: |
-          apt install sudo
-          sudo -H pip install --upgrade pip
-          sudo -H pip uninstall -y transformers
-          sudo -H pip install -U -e ".[testing]"
-          MAX_JOBS=4 pip install flash-attn --no-build-isolation
-          pip install bitsandbytes
-
-      - name: NVIDIA-SMI
-        run: |
-          nvidia-smi
-
-      - name: Show installed libraries and their versions
-        run: pip freeze
-
-      - name: Run FA2 tests
-        id: run_fa2_tests
-        run:
-          pytest -rsfE -m "flash_attn_test" --make-reports=${{ matrix.model-name }}_fa2_tests/ tests/${{ matrix.model-name }}/test_modeling_*
-
-      - name: "Test suite reports artifacts: ${{ matrix.model-name }}_fa2_tests"
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.model-name }}_fa2_tests
-          path: /transformers/reports/${{ matrix.model-name }}_fa2_tests
-
-      - name: Post to Slack
-        if: always()
-        uses: huggingface/hf-workflows/.github/actions/post-slack@main
-        with:
-          slack_channel: ${{ env.OUTPUT_SLACK_CHANNEL_ID }}
-          title: 🤗 Results of the FA2 tests - ${{ matrix.model-name }}
-          status: ${{ steps.run_fa2_tests.conclusion}}
-          slack_token: ${{ secrets.CI_SLACK_BOT_TOKEN }}
-
-      - name: Run integration tests
-        id: run_integration_tests
-        if: always()
-        run:
-          pytest -rsfE -k "IntegrationTest"  --make-reports=tests_integration_${{ matrix.model-name }} tests/${{ matrix.model-name }}/test_modeling_*
-
-      - name: "Test suite reports artifacts: tests_integration_${{ matrix.model-name }}"
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: tests_integration_${{ matrix.model-name }}
-          path: /transformers/reports/tests_integration_${{ matrix.model-name }}
-
-      - name: Post to Slack
-        if: always()
-        uses: huggingface/hf-workflows/.github/actions/post-slack@main
-        with:
-          slack_channel: ${{ env.OUTPUT_SLACK_CHANNEL_ID }}
-          title: 🤗 Results of the Integration tests - ${{ matrix.model-name }}
-          status: ${{ steps.run_integration_tests.conclusion}}
-          slack_token: ${{ secrets.CI_SLACK_BOT_TOKEN }}
-
-      - name: Tailscale # In order to be able to SSH when a test fails
-        if: ${{ runner.debug == '1'}}
-        uses: huggingface/tailscale-action@v1
-        with:
-          authkey: ${{ secrets.TAILSCALE_SSH_AUTHKEY }}
-          slackChannel: ${{ secrets.SLACK_CIFEEDBACK_CHANNEL }}
-          slackToken: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
-          waitForSSH: true
+    if: needs.get_modified_models.outputs.matrix != '' && needs.get_modified_models.outputs.matrix != '[]'
+    with:
+      job: run_models_gpu
+      slack_report_channel: "#transformers-ci-push"
+      docker: huggingface/transformers-all-latest-gpu
+      ci_event: push
+      report_repo_id: hf-internal-testing/transformers_ci_push
+      commit_sha: ${{ github.sha }}
+      models: ${{ needs.get_modified_models.outputs.matrix }}
+    secrets: inherit

@@ -25,8 +25,10 @@ from torch import Tensor, nn
 
 from ...activations import ACT2FN
 from ...file_utils import ModelOutput, is_scipy_available, requires_backends
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import auto_docstring, is_accelerate_available, logging
 from ...utils.backbone_utils import load_backbone
 from .configuration_mask2former import Mask2FormerConfig
@@ -43,125 +45,131 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class Mask2FormerPixelDecoderOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Mask2Former's pixel decoder module output, practically a Multi-Scale Deformable Attention based decoder. It returns
     the mask features and the multiscale features.
-
-    Args:
-        multi_scale_features (`tuple(torch.FloatTensor)`):
-            Tuple of multi-scale features of scales [1/8, 1/16, 1/32] and shape `(batch_size, num_channels, height,
-            width)`from the Multi-Scale Deformable Attenntion based Pixel Decoder.
-        mask_features (`torch.FloatTensor`):
-            Tensor of shape `(batch_size, num_channels, height, width)`, 1/4 scale features from the last Pixel Decoder
-            Layer.
-        attentions (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights from pixel decoder. Returned when `output_attentions=True` is passed
-            or when `config.output_attentions=True`
+    """
+)
+class Mask2FormerPixelDecoderOutput(ModelOutput):
+    r"""
+    multi_scale_features (`tuple(torch.FloatTensor)`):
+        Tuple of multi-scale features of scales [1/8, 1/16, 1/32] and shape `(batch_size, num_channels, height,
+        width)`from the Multi-Scale Deformable Attenntion based Pixel Decoder.
+    mask_features (`torch.FloatTensor`):
+        Tensor of shape `(batch_size, num_channels, height, width)`, 1/4 scale features from the last Pixel Decoder
+        Layer.
+    attentions (`tuple(torch.FloatTensor)`, *optional*):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`. Attentions weights from pixel decoder. Returned when `output_attentions=True` is passed
+        or when `config.output_attentions=True`
     """
 
-    multi_scale_features: tuple[torch.FloatTensor] = None
+    multi_scale_features: Optional[tuple[torch.FloatTensor]] = None
     mask_features: Optional[torch.FloatTensor] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
-class Mask2FormerMaskedAttentionDecoderOutput(BaseModelOutputWithCrossAttentions):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for outputs of the Transformer decoder. This class adds two attributes to
     BaseModelOutputWithCrossAttentions for mask predictions logits and a tuple of intermediate decoder activations,
     i.e. the output of each decoder layer, each of them gone through a layernorm.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
-            plus the initial embedding outputs. Returned when `output_hidden_states=True`.
-        attentions (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention heads. Returned when `output_attentions=True`.
-        masks_queries_logits (`tuple(torch.FloatTensor)` of shape `(batch_size, num_queries, height, width)`):
-            Tuple of mask predictions from all layers of the transformer decoder.
-        intermediate_hidden_states (`tuple(torch.FloatTensor)` of shape `(num_queries, 1, hidden_size)`):
-            Intermediate decoder activations, i.e. the output of each decoder layer, each of them gone through a
-            layernorm.
+    """
+)
+class Mask2FormerMaskedAttentionDecoderOutput(BaseModelOutputWithCrossAttentions):
+    r"""
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+        shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
+        plus the initial embedding outputs. Returned when `output_hidden_states=True`.
+    attentions (`tuple(torch.FloatTensor)`, *optional*):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+        the self-attention heads. Returned when `output_attentions=True`.
+    masks_queries_logits (`tuple(torch.FloatTensor)` of shape `(batch_size, num_queries, height, width)`):
+        Tuple of mask predictions from all layers of the transformer decoder.
+    intermediate_hidden_states (`tuple(torch.FloatTensor)` of shape `(num_queries, 1, hidden_size)`):
+        Intermediate decoder activations, i.e. the output of each decoder layer, each of them gone through a
+        layernorm.
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[torch.FloatTensor] = None
-    masks_queries_logits: tuple[torch.FloatTensor] = None
-    intermediate_hidden_states: tuple[torch.FloatTensor] = None
+    masks_queries_logits: Optional[tuple[torch.FloatTensor]] = None
+    intermediate_hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
-class Mask2FormerPixelLevelModuleOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Mask2Former's pixel level module output. It returns the output of the encoder (optional) and all hidden states
     (multi-scale features) from the `decoder`. By default, the `encoder` is a Swin Backbone and the `decoder` is a
     Multi-Scale Deformable Attention based decoder.
 
     The `decoder_last_hidden_state` are the **per-pixel embeddings** while `decoder_hidden_states` refer to multi-scale
     feature maps produced using **multi-scaling strategy** defined in the paper.
-
-    Args:
-        encoder_last_hidden_state (`torch.FloatTensor`):
-            Last hidden states (final feature map of shape `(batch_size, num_channels, height, width)`) of the last
-            stage of the encoder.
-        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of `torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`. Hidden states (also
-            called feature maps) of the model at the output of each stage. Returned if output_hidden_states is set to
-            True.
-        decoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)):
-            1/4 scale features from the last Pixel Decoder Layer.
-        decoder_hidden_states (`tuple(torch.FloatTensor)`):
-            Tuple of `torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`. Hidden states (also
-            called feature maps) of the model at the output of each stage.
+    """
+)
+class Mask2FormerPixelLevelModuleOutput(ModelOutput):
+    r"""
+    encoder_last_hidden_state (`torch.FloatTensor`):
+        Last hidden states (final feature map of shape `(batch_size, num_channels, height, width)`) of the last
+        stage of the encoder.
+    encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+        Tuple of `torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`. Hidden states (also
+        called feature maps) of the model at the output of each stage. Returned if output_hidden_states is set to
+        True.
+    decoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)):
+        1/4 scale features from the last Pixel Decoder Layer.
+    decoder_hidden_states (`tuple(torch.FloatTensor)`):
+        Tuple of `torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`. Hidden states (also
+        called feature maps) of the model at the output of each stage.
     """
 
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
     decoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    decoder_hidden_states: tuple[torch.FloatTensor] = None
+    decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
-class Mask2FormerModelOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Class for outputs of [`Mask2FormerModel`]. This class returns all the needed hidden states to compute the logits.
-
-    Args:
-        encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`, *optional*):
-            Last hidden states (final feature map) of the last stage of the encoder model (backbone). Returned when
-            `output_hidden_states=True` is passed.
-        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the encoder
-            model at the output of each stage. Returned when `output_hidden_states=True` is passed.
-        pixel_decoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`, *optional*):
-            Last hidden states (final feature map) of the last stage of the pixel decoder model.
-        pixel_decoder_hidden_states (`tuple(torch.FloatTensor)`, , *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the pixel
-            decoder model at the output of each stage. Returned when `output_hidden_states=True` is passed.
-        transformer_decoder_last_hidden_state (`tuple(torch.FloatTensor)`):
-            Final output of the transformer decoder `(batch_size, sequence_length, hidden_size)`.
-        transformer_decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states (also called feature maps) of the
-            transformer decoder at the output of each stage. Returned when `output_hidden_states=True` is passed.
-        transformer_decoder_intermediate_states (`tuple(torch.FloatTensor)` of shape `(num_queries, 1, hidden_size)`):
-            Intermediate decoder activations, i.e. the output of each decoder layer, each of them gone through a
-            layernorm.
-        masks_queries_logits (`tuple(torch.FloatTensor)` of shape `(batch_size, num_queries, height, width)`)
-            Mask Predictions from each layer in the transformer decoder.
-        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed):
-            Tuple of `tuple(torch.FloatTensor)` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Self attentions weights from transformer decoder.
+    """
+)
+class Mask2FormerModelOutput(ModelOutput):
+    r"""
+    encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`, *optional*):
+        Last hidden states (final feature map) of the last stage of the encoder model (backbone). Returned when
+        `output_hidden_states=True` is passed.
+    pixel_decoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`, *optional*):
+        Last hidden states (final feature map) of the last stage of the pixel decoder model.
+    transformer_decoder_last_hidden_state (`tuple(torch.FloatTensor)`):
+        Final output of the transformer decoder `(batch_size, sequence_length, hidden_size)`.
+    encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+        shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the encoder
+        model at the output of each stage. Returned when `output_hidden_states=True` is passed.
+    pixel_decoder_hidden_states (`tuple(torch.FloatTensor)`, , *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+        shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the pixel
+        decoder model at the output of each stage. Returned when `output_hidden_states=True` is passed.
+    transformer_decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+        shape `(batch_size, sequence_length, hidden_size)`. Hidden-states (also called feature maps) of the
+        transformer decoder at the output of each stage. Returned when `output_hidden_states=True` is passed.
+    transformer_decoder_intermediate_states (`tuple(torch.FloatTensor)` of shape `(num_queries, 1, hidden_size)`):
+        Intermediate decoder activations, i.e. the output of each decoder layer, each of them gone through a
+        layernorm.
+    masks_queries_logits (`tuple(torch.FloatTensor)` of shape `(batch_size, num_queries, height, width)`)
+        Mask Predictions from each layer in the transformer decoder.
+    attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed):
+        Tuple of `tuple(torch.FloatTensor)` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`. Self attentions weights from transformer decoder.
     """
 
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
@@ -170,53 +178,55 @@ class Mask2FormerModelOutput(ModelOutput):
     encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
     pixel_decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
     transformer_decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    transformer_decoder_intermediate_states: tuple[torch.FloatTensor] = None
-    masks_queries_logits: tuple[torch.FloatTensor] = None
+    transformer_decoder_intermediate_states: Optional[tuple[torch.FloatTensor]] = None
+    masks_queries_logits: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
-class Mask2FormerForUniversalSegmentationOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Class for outputs of [`Mask2FormerForUniversalSegmentationOutput`].
 
     This output can be directly passed to [`~Mask2FormerImageProcessor.post_process_semantic_segmentation`] or
     [`~Mask2FormerImageProcessor.post_process_instance_segmentation`] or
     [`~Mask2FormerImageProcessor.post_process_panoptic_segmentation`] to compute final segmentation maps. Please, see
     [`~Mask2FormerImageProcessor] for details regarding usage.
-
-    Args:
-        loss (`torch.Tensor`, *optional*):
-            The computed loss, returned when labels are present.
-        class_queries_logits (`torch.FloatTensor`):
-            A tensor of shape `(batch_size, num_queries, num_labels + 1)` representing the proposed classes for each
-            query. Note the `+ 1` is needed because we incorporate the null class.
-        masks_queries_logits (`torch.FloatTensor`):
-            A tensor of shape `(batch_size, num_queries, height, width)` representing the proposed masks for each
-            query.
-        auxiliary_logits (`list[Dict(str, torch.FloatTensor)]`, *optional*):
-            List of class and mask predictions from each layer of the transformer decoder.
-        encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Last hidden states (final feature map) of the last stage of the encoder model (backbone).
-        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the encoder
-            model at the output of each stage.
-        pixel_decoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Last hidden states (final feature map) of the last stage of the pixel decoder model.
-        pixel_decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the pixel
-            decoder model at the output of each stage.
-        transformer_decoder_last_hidden_state (`tuple(torch.FloatTensor)`):
-            Final output of the transformer decoder `(batch_size, sequence_length, hidden_size)`.
-        transformer_decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states (also called feature maps) of the
-            transformer decoder at the output of each stage.
-        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `tuple(torch.FloatTensor)` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Self and Cross Attentions weights from transformer decoder.
+    """
+)
+class Mask2FormerForUniversalSegmentationOutput(ModelOutput):
+    r"""
+    loss (`torch.Tensor`, *optional*):
+        The computed loss, returned when labels are present.
+    class_queries_logits (`torch.FloatTensor`):
+        A tensor of shape `(batch_size, num_queries, num_labels + 1)` representing the proposed classes for each
+        query. Note the `+ 1` is needed because we incorporate the null class.
+    masks_queries_logits (`torch.FloatTensor`):
+        A tensor of shape `(batch_size, num_queries, height, width)` representing the proposed masks for each
+        query.
+    auxiliary_logits (`list[Dict(str, torch.FloatTensor)]`, *optional*):
+        List of class and mask predictions from each layer of the transformer decoder.
+    encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        Last hidden states (final feature map) of the last stage of the encoder model (backbone).
+    pixel_decoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        Last hidden states (final feature map) of the last stage of the pixel decoder model.
+    transformer_decoder_last_hidden_state (`tuple(torch.FloatTensor)`):
+        Final output of the transformer decoder `(batch_size, sequence_length, hidden_size)`.
+    encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+        shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the encoder
+        model at the output of each stage.
+    pixel_decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+        shape `(batch_size, num_channels, height, width)`. Hidden-states (also called feature maps) of the pixel
+        decoder model at the output of each stage.
+    transformer_decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+        shape `(batch_size, sequence_length, hidden_size)`. Hidden-states (also called feature maps) of the
+        transformer decoder at the output of each stage.
+    attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `tuple(torch.FloatTensor)` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`. Self and Cross Attentions weights from transformer decoder.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -503,7 +513,7 @@ class Mask2FormerLoss(nn.Module):
         self.importance_sample_ratio = config.importance_sample_ratio
 
         self.matcher = Mask2FormerHungarianMatcher(
-            cost_class=1.0,
+            cost_class=config.class_weight,
             cost_dice=config.dice_weight,
             cost_mask=config.mask_weight,
             num_points=self.num_points,
@@ -773,7 +783,7 @@ class Mask2FormerLoss(nn.Module):
         """
         Computes the average number of target masks across the batch, for normalization purposes.
         """
-        num_masks = sum([len(classes) for classes in class_labels])
+        num_masks = sum(len(classes) for classes in class_labels)
         num_masks = torch.as_tensor(num_masks, dtype=torch.float, device=device)
         world_size = 1
         if is_accelerate_available():
@@ -846,10 +856,17 @@ class Mask2FormerSinePositionEmbedding(nn.Module):
         self.normalize = normalize
         self.scale = 2 * math.pi if scale is None else scale
 
-    def forward(self, x: Tensor, mask: Optional[Tensor] = None) -> Tensor:
+    @compile_compatible_method_lru_cache(maxsize=1)
+    def forward(
+        self,
+        shape: torch.Size,
+        device: Union[torch.device, str],
+        dtype: torch.dtype,
+        mask: Optional[Tensor] = None,
+    ) -> Tensor:
         if mask is None:
-            mask = torch.zeros((x.size(0), x.size(2), x.size(3)), device=x.device, dtype=torch.bool)
-        not_mask = (~mask).to(x.dtype)
+            mask = torch.zeros((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
+        not_mask = (~mask).to(dtype)
         y_embed = not_mask.cumsum(1)
         x_embed = not_mask.cumsum(2)
         if self.normalize:
@@ -857,7 +874,7 @@ class Mask2FormerSinePositionEmbedding(nn.Module):
             y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
             x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
 
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=x.device).type_as(x)
+        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=device).to(dtype)
         dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_pos_feats)
 
         pos_x = x_embed[:, :, :, None] / dim_t
@@ -1286,7 +1303,7 @@ class Mask2FormerPixelDecoder(nn.Module):
         position_embeddings = []
         for level, x in enumerate(features[::-1][: self.num_feature_levels]):
             input_embeds.append(self.input_projections[level](x))
-            position_embeddings.append(self.position_embedding(x))
+            position_embeddings.append(self.position_embedding(x.shape, x.device, x.dtype))
 
         masks = [
             torch.zeros((x.size(0), x.size(2), x.size(3)), device=x.device, dtype=torch.bool) for x in input_embeds
@@ -1535,7 +1552,7 @@ class Mask2FormerAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
-class Mask2FormerMaskedAttentionDecoderLayer(nn.Module):
+class Mask2FormerMaskedAttentionDecoderLayer(GradientCheckpointingLayer):
     """
     The Mask2FormerMaskedAttentionDecoderLayer is made up of self-attention, cross (masked) attention as well as FFN
     blocks. The cross attention block used as part of `Mask2FormerMaskedAttentionDecoderLayer` is actually a `masked
@@ -1858,46 +1875,35 @@ class Mask2FormerMaskedAttentionDecoder(nn.Module):
             if self.training and (dropout_probability < self.layerdrop):
                 continue
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                    encoder_hidden_states,
-                    None,
-                    None,
-                    output_attentions,
-                )
+            level_index = idx % self.num_feature_levels
 
-            else:
-                level_index = idx % self.num_feature_levels
+            where = (attention_mask.sum(-1) != attention_mask.shape[-1]).to(attention_mask.dtype)
+            # Multiply the attention mask instead of indexing to avoid issue in torch.export.
+            attention_mask = attention_mask * where.unsqueeze(-1)
 
-                where = (attention_mask.sum(-1) != attention_mask.shape[-1]).to(attention_mask.dtype)
-                # Multiply the attention mask instead of indexing to avoid issue in torch.export.
-                attention_mask = attention_mask * where.unsqueeze(-1)
+            layer_outputs = decoder_layer(
+                hidden_states,
+                level_index,
+                None,  # attention_mask
+                multi_stage_positional_embeddings,
+                query_position_embeddings,
+                encoder_hidden_states,  # as a positional argument for gradient checkpointing
+                encoder_attention_mask=attention_mask,
+                output_attentions=output_attentions,
+            )
 
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    level_index=level_index,
-                    position_embeddings=multi_stage_positional_embeddings,
-                    query_position_embeddings=query_position_embeddings,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=attention_mask,
-                    output_attentions=output_attentions,
-                )
+            intermediate_hidden_states = self.layernorm(layer_outputs[0])
 
-                intermediate_hidden_states = self.layernorm(layer_outputs[0])
+            predicted_mask, attention_mask = self.mask_predictor(
+                intermediate_hidden_states,
+                pixel_embeddings,
+                feature_size_list[(idx + 1) % self.num_feature_levels],
+            )
 
-                predicted_mask, attention_mask = self.mask_predictor(
-                    intermediate_hidden_states,
-                    pixel_embeddings,
-                    feature_size_list[(idx + 1) % self.num_feature_levels],
-                )
+            intermediate_mask_predictions += (predicted_mask,)
 
-                intermediate_mask_predictions += (predicted_mask,)
-
-                # add intermediate hidden states with layer norm applied which will be used for predicting class logits
-                intermediate += (intermediate_hidden_states,)
+            # add intermediate hidden states with layer norm applied which will be used for predicting class logits
+            intermediate += (intermediate_hidden_states,)
 
             hidden_states = layer_outputs[0]
 
@@ -2054,7 +2060,11 @@ class Mask2FormerTransformerModule(nn.Module):
 
         for i in range(self.num_feature_levels):
             size_list.append(multi_scale_features[i].shape[-2:])
-            multi_stage_positional_embeddings.append(self.position_embedder(multi_scale_features[i], None).flatten(2))
+            multi_stage_positional_embeddings.append(
+                self.position_embedder(
+                    multi_scale_features[i].shape, multi_scale_features[i].device, multi_scale_features[i].dtype, None
+                ).flatten(2)
+            )
             multi_stage_features.append(
                 self.input_projections[i](multi_scale_features[i]).flatten(2)
                 + self.level_embed.weight[i][None, :, None]
@@ -2087,7 +2097,7 @@ class Mask2FormerTransformerModule(nn.Module):
 
 @auto_docstring
 class Mask2FormerPreTrainedModel(PreTrainedModel):
-    config_class = Mask2FormerConfig
+    config: Mask2FormerConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
 

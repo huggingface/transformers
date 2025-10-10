@@ -60,7 +60,7 @@ def rename_key(orig_key):
 
 
 def convert_checkpoint_helper(max_position_embeddings, orig_state_dict):
-    for key in orig_state_dict.copy().keys():
+    for key in orig_state_dict.copy():
         val = orig_state_dict.pop(key)
 
         if ("pooler" in key) or ("sen_class" in key):

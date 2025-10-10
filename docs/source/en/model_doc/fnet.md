@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-05-09 and added to Hugging Face Transformers on 2021-09-20.*
 
 # FNet
 
@@ -45,8 +46,8 @@ This model was contributed by [gchhablani](https://huggingface.co/gchhablani). T
 
 ## Usage tips
 
-The model was trained without an attention mask as it is based on Fourier Transform. The model was trained with 
-maximum sequence length 512 which includes pad tokens. Hence, it is highly recommended to use the same maximum 
+The model was trained without an attention mask as it is based on Fourier Transform. The model was trained with
+maximum sequence length 512 which includes pad tokens. Hence, it is highly recommended to use the same maximum
 sequence length for fine-tuning and inference.
 
 ## Resources

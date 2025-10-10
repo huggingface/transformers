@@ -167,27 +167,14 @@ To apply the preprocessing function over the entire dataset, use 🤗 Datasets [
 
 Now create a batch of examples using [`DefaultDataCollator`]. Unlike other data collators in 🤗 Transformers, the [`DefaultDataCollator`] does not apply any additional preprocessing such as padding.
 
-<frameworkcontent>
-<pt>
 ```py
 >>> from transformers import DefaultDataCollator
 
 >>> data_collator = DefaultDataCollator()
 ```
-</pt>
-<tf>
-```py
->>> from transformers import DefaultDataCollator
-
->>> data_collator = DefaultDataCollator(return_tensors="tf")
-```
-</tf>
-</frameworkcontent>
 
 ## Train
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
@@ -237,87 +224,11 @@ Once training is completed, share your model to the Hub with the [`~transformers
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-<tf>
-<Tip>
-
-If you aren't familiar with finetuning a model with Keras, take a look at the basic tutorial [here](../training#train-a-tensorflow-model-with-keras)!
-
-</Tip>
-To finetune a model in TensorFlow, start by setting up an optimizer function, learning rate schedule, and some training hyperparameters:
-
-```py
->>> from transformers import create_optimizer
-
->>> batch_size = 16
->>> num_epochs = 2
->>> total_train_steps = (len(tokenized_squad["train"]) // batch_size) * num_epochs
->>> optimizer, schedule = create_optimizer(
-...     init_lr=2e-5,
-...     num_warmup_steps=0,
-...     num_train_steps=total_train_steps,
-... )
-```
-
-Then you can load DistilBERT with [`TFAutoModelForQuestionAnswering`]:
-
-```py
->>> from transformers import TFAutoModelForQuestionAnswering
-
->>> model = TFAutoModelForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
-```
-
-Convert your datasets to the `tf.data.Dataset` format with [`~transformers.TFPreTrainedModel.prepare_tf_dataset`]:
-
-```py
->>> tf_train_set = model.prepare_tf_dataset(
-...     tokenized_squad["train"],
-...     shuffle=True,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-
->>> tf_validation_set = model.prepare_tf_dataset(
-...     tokenized_squad["test"],
-...     shuffle=False,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-```
-
-Configure the model for training with [`compile`](https://keras.io/api/models/model_training_apis/#compile-method):
-
-```py
->>> import tensorflow as tf
-
->>> model.compile(optimizer=optimizer)
-```
-
-The last thing to setup before you start training is to provide a way to push your model to the Hub. This can be done by specifying where to push your model and tokenizer in the [`~transformers.PushToHubCallback`]:
-
-```py
->>> from transformers.keras_callbacks import PushToHubCallback
-
->>> callback = PushToHubCallback(
-...     output_dir="my_awesome_qa_model",
-...     tokenizer=tokenizer,
-... )
-```
-
-Finally, you're ready to start training your model! Call [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) with your training and validation datasets, the number of epochs, and your callback to finetune the model:
-
-```py
->>> model.fit(x=tf_train_set, validation_data=tf_validation_set, epochs=3, callbacks=[callback])
-```
-Once training is completed, your model is automatically uploaded to the Hub so everyone can use it!
-</tf>
-</frameworkcontent>
 
 <Tip>
 
 For a more in-depth example of how to finetune a model for question answering, take a look at the corresponding
-[PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb)
-or [TensorFlow notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering-tf.ipynb).
+[PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb).
 
 </Tip>
 
@@ -353,8 +264,6 @@ The simplest way to try out your finetuned model for inference is to use it in a
 
 You can also manually replicate the results of the `pipeline` if you'd like:
 
-<frameworkcontent>
-<pt>
 Tokenize the text and return PyTorch tensors:
 
 ```py
@@ -389,39 +298,3 @@ Decode the predicted tokens to get the answer:
 >>> tokenizer.decode(predict_answer_tokens)
 '176 billion parameters and can generate text in 46 languages natural languages and 13'
 ```
-</pt>
-<tf>
-Tokenize the text and return TensorFlow tensors:
-
-```py
->>> from transformers import AutoTokenizer
-
->>> tokenizer = AutoTokenizer.from_pretrained("my_awesome_qa_model")
->>> inputs = tokenizer(question, context, return_tensors="tf")
-```
-
-Pass your inputs to the model and return the `logits`:
-
-```py
->>> from transformers import TFAutoModelForQuestionAnswering
-
->>> model = TFAutoModelForQuestionAnswering.from_pretrained("my_awesome_qa_model")
->>> outputs = model(**inputs)
-```
-
-Get the highest probability from the model output for the start and end positions:
-
-```py
->>> answer_start_index = int(tf.math.argmax(outputs.start_logits, axis=-1)[0])
->>> answer_end_index = int(tf.math.argmax(outputs.end_logits, axis=-1)[0])
-```
-
-Decode the predicted tokens to get the answer:
-
-```py
->>> predict_answer_tokens = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
->>> tokenizer.decode(predict_answer_tokens)
-'176 billion parameters and can generate text in 46 languages natural languages and 13'
-```
-</tf>
-</frameworkcontent>

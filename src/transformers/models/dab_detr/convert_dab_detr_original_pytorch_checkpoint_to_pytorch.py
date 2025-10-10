@@ -180,7 +180,7 @@ def write_model(model_name, pretrained_model_weights_path, pytorch_dump_folder_p
     gc.collect()
     # important: we need to prepend a prefix to each of the base model keys as the head models use different attributes for them
     prefix = "model."
-    for key in state_dict.copy().keys():
+    for key in state_dict.copy():
         if not key.startswith("class_embed") and not key.startswith("bbox_predictor"):
             val = state_dict.pop(key)
             state_dict[prefix + key] = val

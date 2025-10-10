@@ -143,10 +143,8 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (GroupViTVisionModel,) if is_torch_available() else ()
 
-    test_pruning = False
     test_torchscript = False
     test_resize_embeddings = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = GroupViTVisionModelTester(self)
@@ -247,7 +245,7 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
                     continue
 
                 self.assertListEqual(
-                    list(self_attentions[i].shape[-2:]),
+                    list(self_attn.shape[-2:]),
                     [
                         self.model_tester.num_output_groups[i],
                         self.model_tester.num_output_groups[i - 1] if i > 0 else seq_len,
@@ -430,8 +428,6 @@ class GroupViTTextModelTester:
 @require_torch
 class GroupViTTextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (GroupViTTextModel,) if is_torch_available() else ()
-    test_pruning = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = GroupViTTextModelTester(self)
@@ -497,8 +493,10 @@ class GroupViTModelTester:
         return config, input_ids, attention_mask, pixel_values
 
     def get_config(self):
-        return GroupViTConfig.from_text_vision_configs(
-            self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64
+        return GroupViTConfig(
+            text_config=self.text_model_tester.get_config().to_dict(),
+            vision_config=self.vision_model_tester.get_config().to_dict(),
+            projection_dim=64,
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
@@ -528,8 +526,7 @@ class GroupViTModelTester:
 class GroupViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (GroupViTModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": GroupViTModel} if is_torch_available() else {}
-    test_head_masking = False
-    test_pruning = False
+
     test_resize_embeddings = False
     test_attention_outputs = False
 
@@ -566,30 +563,6 @@ class GroupViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     @unittest.skip(reason="GroupViTModel does not have input/output embeddings")
     def test_model_get_set_embeddings(self):
         pass
-
-    # override as the `logit_scale` parameter initialization is different for GROUPVIT
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    # check if `logit_scale` is initialized as per the original implementation
-                    if name == "logit_scale":
-                        self.assertAlmostEqual(
-                            param.data.item(),
-                            np.log(1 / 0.07),
-                            delta=1e-3,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
@@ -633,8 +606,8 @@ class GroupViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             loaded_model_state_dict = loaded_model.state_dict()
 
             non_persistent_buffers = {}
-            for key in loaded_model_state_dict.keys():
-                if key not in model_state_dict.keys():
+            for key in loaded_model_state_dict:
+                if key not in model_state_dict:
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {

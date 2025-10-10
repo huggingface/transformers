@@ -46,12 +46,13 @@ class ImageToImagePipeline(Pipeline):
 
     ```python
     >>> from PIL import Image
-    >>> import requests
+    >>> import httpx
+    >>> import io
 
     >>> from transformers import pipeline
 
     >>> upscaler = pipeline("image-to-image", model="caidas/swin2SR-classical-sr-x2-64")
-    >>> img = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+    >>> img = Image.open(io.BytesIO(httpx.get("http://images.cocodataset.org/val2017/000000039769.jpg").content))
     >>> img = img.resize((64, 64))
     >>> upscaled_img = upscaler(img)
     >>> img.size
@@ -67,6 +68,11 @@ class ImageToImagePipeline(Pipeline):
     See the list of available models on [huggingface.co/models](https://huggingface.co/models?filter=image-to-image).
     """
 
+    _load_processor = False
+    _load_image_processor = True
+    _load_feature_extractor = False
+    _load_tokenizer = False
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         requires_backends(self, "vision")
@@ -79,8 +85,6 @@ class ImageToImagePipeline(Pipeline):
 
         if "timeout" in kwargs:
             preprocess_params["timeout"] = kwargs["timeout"]
-        if "head_mask" in kwargs:
-            forward_params["head_mask"] = kwargs["head_mask"]
 
         return preprocess_params, forward_params, postprocess_params
 
@@ -125,13 +129,12 @@ class ImageToImagePipeline(Pipeline):
     def preprocess(self, image, timeout=None):
         image = load_image(image, timeout=timeout)
         inputs = self.image_processor(images=[image], return_tensors="pt")
-        if self.framework == "pt":
-            inputs = inputs.to(self.torch_dtype)
+        inputs = inputs.to(self.dtype)
         return inputs
 
     def postprocess(self, model_outputs):
         images = []
-        if "reconstruction" in model_outputs.keys():
+        if "reconstruction" in model_outputs:
             outputs = model_outputs.reconstruction
         for output in outputs:
             output = output.data.squeeze().float().cpu().clamp_(0, 1).numpy()

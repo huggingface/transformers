@@ -26,7 +26,7 @@ from transformers.testing_utils import (
 from transformers.utils import is_detectron2_available, is_torch_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -70,7 +70,7 @@ class LayoutLMv2ModelTester:
         type_vocab_size=16,
         type_sequence_label_size=2,
         initializer_range=0.02,
-        image_feature_pool_shape=[7, 7, 256],
+        image_feature_pool_shape=[7, 7, 32],
         coordinate_size=6,
         shape_size=6,
         num_labels=3,
@@ -106,6 +106,14 @@ class LayoutLMv2ModelTester:
         self.num_choices = num_choices
         self.scope = scope
         self.range_bbox = range_bbox
+        detectron2_config = LayoutLMv2Config.get_default_detectron2_config()
+        # We need to make the model smaller
+        detectron2_config["MODEL.RESNETS.DEPTH"] = 50
+        detectron2_config["MODEL.RESNETS.RES2_OUT_CHANNELS"] = 4
+        detectron2_config["MODEL.RESNETS.STEM_OUT_CHANNELS"] = 4
+        detectron2_config["MODEL.FPN.OUT_CHANNELS"] = 32
+        detectron2_config["MODEL.RESNETS.NUM_GROUPS"] = 1
+        self.detectron2_config = detectron2_config
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -158,12 +166,8 @@ class LayoutLMv2ModelTester:
             image_feature_pool_shape=self.image_feature_pool_shape,
             coordinate_size=self.coordinate_size,
             shape_size=self.shape_size,
+            detectron2_config_args=self.detectron2_config,
         )
-
-        # use smaller resnet backbone to make tests faster
-        config.detectron2_config_args["MODEL.RESNETS.DEPTH"] = 18
-        config.detectron2_config_args["MODEL.RESNETS.RES2_OUT_CHANNELS"] = 64
-        config.detectron2_config_args["MODEL.RESNETS.NUM_GROUPS"] = 1
 
         return config, input_ids, bbox, image, token_type_ids, input_mask, sequence_labels, token_labels
 
@@ -261,7 +265,6 @@ class LayoutLMv2ModelTester:
 @require_torch
 @require_detectron2
 class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    test_pruning = False
     test_torchscript = True
     test_mismatched_shapes = False
 
@@ -301,12 +304,6 @@ class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     )
     def test_multi_gpu_data_parallel_forward(self):
         pass
-
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -422,32 +419,11 @@ class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    @unittest.skip(reason="We cannot configure detectron2 to output a smaller backbone")
-    def test_model_is_small(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "microsoft/layoutlmv2-base-uncased"
         model = LayoutLMv2Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if "backbone" in name or "visual_segment_embedding" in name:
-                    continue
-
-                if param.requires_grad:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
 
     def test_batching_equivalence(self):
         def equivalence(tensor1, tensor2):

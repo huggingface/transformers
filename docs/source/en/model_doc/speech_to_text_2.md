@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-04-14 and added to Hugging Face Transformers on 2023-06-20.*
 
 # Speech2Text2
 
@@ -61,19 +62,16 @@ predicted token ids.
 - Step-by-step Speech Translation
 
 ```python
->>> import torch
 >>> from transformers import Speech2Text2Processor, SpeechEncoderDecoderModel
 >>> from datasets import load_dataset
->>> import soundfile as sf
 
 >>> model = SpeechEncoderDecoderModel.from_pretrained("facebook/s2t-wav2vec2-large-en-de")
 >>> processor = Speech2Text2Processor.from_pretrained("facebook/s2t-wav2vec2-large-en-de")
 
 
->>> def map_to_array(batch):
-...     speech, _ = sf.read(batch["file"])
-...     batch["speech"] = speech
-...     return batch
+>>> def map_to_array(example):
+...     example["speech"] = example["audio"]["array"]
+...     return example
 
 
 >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")

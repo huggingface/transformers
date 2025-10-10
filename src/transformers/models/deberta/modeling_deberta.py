@@ -17,11 +17,11 @@
 from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
@@ -38,7 +38,7 @@ logger = logging.get_logger(__name__)
 
 
 class DebertaLayerNorm(nn.Module):
-    """LayerNorm module in the TF style (epsilon inside the square root)."""
+    """LayerNorm module (epsilon inside the square root)."""
 
     def __init__(self, size, eps=1e-12):
         super().__init__()
@@ -492,7 +492,7 @@ class DebertaOutput(nn.Module):
         return hidden_states
 
 
-class DebertaLayer(nn.Module):
+class DebertaLayer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.attention = DebertaAttention(config)
@@ -580,25 +580,14 @@ class DebertaEncoder(nn.Module):
 
         rel_embeddings = self.get_rel_embedding()
         for i, layer_module in enumerate(self.layer):
-            if self.gradient_checkpointing and self.training:
-                hidden_states, att_m = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    next_kv,
-                    attention_mask,
-                    query_states,
-                    relative_pos,
-                    rel_embeddings,
-                    output_attentions,
-                )
-            else:
-                hidden_states, att_m = layer_module(
-                    next_kv,
-                    attention_mask,
-                    query_states=query_states,
-                    relative_pos=relative_pos,
-                    rel_embeddings=rel_embeddings,
-                    output_attentions=output_attentions,
-                )
+            hidden_states, att_m = layer_module(
+                next_kv,
+                attention_mask,
+                query_states=query_states,
+                relative_pos=relative_pos,
+                rel_embeddings=rel_embeddings,
+                output_attentions=output_attentions,
+            )
 
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -620,7 +609,7 @@ class DebertaEncoder(nn.Module):
 
 @auto_docstring
 class DebertaPreTrainedModel(PreTrainedModel):
-    config_class = DebertaConfig
+    config: DebertaConfig
     base_model_prefix = "deberta"
     _keys_to_ignore_on_load_unexpected = ["position_embeddings"]
     supports_gradient_checkpointing = True
@@ -628,8 +617,6 @@ class DebertaPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -664,13 +651,6 @@ class DebertaModel(DebertaPreTrainedModel):
 
     def set_input_embeddings(self, new_embeddings):
         self.embeddings.word_embeddings = new_embeddings
-
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        raise NotImplementedError("The prune function is not implemented in DeBERTa model.")
 
     @auto_docstring
     def forward(

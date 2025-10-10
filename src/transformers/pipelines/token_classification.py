@@ -8,16 +8,11 @@ from ..models.bert.tokenization_bert import BasicTokenizer
 from ..utils import (
     ExplicitEnum,
     add_end_docstrings,
-    is_tf_available,
     is_torch_available,
 )
 from .base import ArgumentHandler, ChunkPipeline, Dataset, build_pipeline_init_args
 
 
-if is_tf_available():
-    import tensorflow as tf
-
-    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES
 if is_torch_available():
     import torch
 
@@ -30,6 +25,9 @@ class TokenClassificationArgumentHandler(ArgumentHandler):
     """
 
     def __call__(self, inputs: Union[str, list[str]], **kwargs):
+        is_split_into_words = kwargs.get("is_split_into_words", False)
+        delimiter = kwargs.get("delimiter")
+
         if inputs is not None and isinstance(inputs, (list, tuple)) and len(inputs) > 0:
             inputs = list(inputs)
             batch_size = len(inputs)
@@ -37,7 +35,7 @@ class TokenClassificationArgumentHandler(ArgumentHandler):
             inputs = [inputs]
             batch_size = 1
         elif Dataset is not None and isinstance(inputs, Dataset) or isinstance(inputs, types.GeneratorType):
-            return inputs, None
+            return inputs, is_split_into_words, None, delimiter
         else:
             raise ValueError("At least one input is required.")
 
@@ -47,7 +45,7 @@ class TokenClassificationArgumentHandler(ArgumentHandler):
                 offset_mapping = [offset_mapping]
             if len(offset_mapping) != batch_size:
                 raise ValueError("offset_mapping should have the same batch size as the input")
-        return inputs, offset_mapping
+        return inputs, is_split_into_words, offset_mapping, delimiter
 
 
 class AggregationStrategy(ExplicitEnum):
@@ -133,13 +131,15 @@ class TokenClassificationPipeline(ChunkPipeline):
 
     default_input_names = "sequences"
 
-    def __init__(self, args_parser=TokenClassificationArgumentHandler(), *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.check_model_type(
-            TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES
-            if self.framework == "tf"
-            else MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES
-        )
+    _load_processor = False
+    _load_image_processor = False
+    _load_feature_extractor = False
+    _load_tokenizer = True
+
+    def __init__(self, args_parser=TokenClassificationArgumentHandler(), **kwargs):
+        super().__init__(**kwargs)
+
+        self.check_model_type(MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES)
 
         self._basic_tokenizer = BasicTokenizer(do_lower_case=False)
         self._args_parser = args_parser
@@ -151,9 +151,16 @@ class TokenClassificationPipeline(ChunkPipeline):
         ignore_subwords: Optional[bool] = None,
         aggregation_strategy: Optional[AggregationStrategy] = None,
         offset_mapping: Optional[list[tuple[int, int]]] = None,
+        is_split_into_words: bool = False,
         stride: Optional[int] = None,
+        delimiter: Optional[str] = None,
     ):
         preprocess_params = {}
+        preprocess_params["is_split_into_words"] = is_split_into_words
+
+        if is_split_into_words:
+            preprocess_params["delimiter"] = " " if delimiter is None else delimiter
+
         if offset_mapping is not None:
             preprocess_params["offset_mapping"] = offset_mapping
 
@@ -230,8 +237,9 @@ class TokenClassificationPipeline(ChunkPipeline):
         Classify each token of the text(s) given as inputs.
 
         Args:
-            inputs (`str` or `list[str]`):
-                One or several texts (or one list of texts) for token classification.
+            inputs (`str` or `List[str]`):
+                One or several texts (or one list of texts) for token classification. Can be pre-tokenized when
+                `is_split_into_words=True`.
 
         Return:
             A list or a list of list of `dict`: Each result comes as a list of dictionaries (one for each token in the
@@ -251,7 +259,11 @@ class TokenClassificationPipeline(ChunkPipeline):
               exists if the offsets are available within the tokenizer
         """
 
-        _inputs, offset_mapping = self._args_parser(inputs, **kwargs)
+        _inputs, is_split_into_words, offset_mapping, delimiter = self._args_parser(inputs, **kwargs)
+        kwargs["is_split_into_words"] = is_split_into_words
+        kwargs["delimiter"] = delimiter
+        if is_split_into_words and not all(isinstance(input, list) for input in inputs):
+            return super().__call__([inputs], **kwargs)
         if offset_mapping:
             kwargs["offset_mapping"] = offset_mapping
 
@@ -259,27 +271,57 @@ class TokenClassificationPipeline(ChunkPipeline):
 
     def preprocess(self, sentence, offset_mapping=None, **preprocess_params):
         tokenizer_params = preprocess_params.pop("tokenizer_params", {})
-        truncation = True if self.tokenizer.model_max_length and self.tokenizer.model_max_length > 0 else False
+        truncation = self.tokenizer.model_max_length and self.tokenizer.model_max_length > 0
+
+        word_to_chars_map = None
+        is_split_into_words = preprocess_params["is_split_into_words"]
+        if is_split_into_words:
+            delimiter = preprocess_params["delimiter"]
+            if not isinstance(sentence, list):
+                raise ValueError("When `is_split_into_words=True`, `sentence` must be a list of tokens.")
+            words = sentence
+            sentence = delimiter.join(words)  # Recreate the sentence string for later display and slicing
+            # This map will allows to convert back word => char indices
+            word_to_chars_map = []
+            delimiter_len = len(delimiter)
+            char_offset = 0
+            for word in words:
+                word_to_chars_map.append((char_offset, char_offset + len(word)))
+                char_offset += len(word) + delimiter_len
+
+            # We use `words` as the actual input for the tokenizer
+            text_to_tokenize = words
+            tokenizer_params["is_split_into_words"] = True
+        else:
+            if not isinstance(sentence, str):
+                raise ValueError("When `is_split_into_words=False`, `sentence` must be an untokenized string.")
+            text_to_tokenize = sentence
+
         inputs = self.tokenizer(
-            sentence,
-            return_tensors=self.framework,
+            text_to_tokenize,
+            return_tensors="pt",
             truncation=truncation,
             return_special_tokens_mask=True,
             return_offsets_mapping=self.tokenizer.is_fast,
             **tokenizer_params,
         )
+
+        if is_split_into_words and not self.tokenizer.is_fast:
+            raise ValueError("is_split_into_words=True is only supported with fast tokenizers.")
+
         inputs.pop("overflow_to_sample_mapping", None)
         num_chunks = len(inputs["input_ids"])
 
         for i in range(num_chunks):
-            if self.framework == "tf":
-                model_inputs = {k: tf.expand_dims(v[i], 0) for k, v in inputs.items()}
-            else:
-                model_inputs = {k: v[i].unsqueeze(0) for k, v in inputs.items()}
+            model_inputs = {k: v[i].unsqueeze(0) for k, v in inputs.items()}
             if offset_mapping is not None:
                 model_inputs["offset_mapping"] = offset_mapping
+
             model_inputs["sentence"] = sentence if i == 0 else None
             model_inputs["is_last"] = i == num_chunks - 1
+            if word_to_chars_map is not None:
+                model_inputs["word_ids"] = inputs.word_ids(i)
+                model_inputs["word_to_chars_map"] = word_to_chars_map
 
             yield model_inputs
 
@@ -289,11 +331,11 @@ class TokenClassificationPipeline(ChunkPipeline):
         offset_mapping = model_inputs.pop("offset_mapping", None)
         sentence = model_inputs.pop("sentence")
         is_last = model_inputs.pop("is_last")
-        if self.framework == "tf":
-            logits = self.model(**model_inputs)[0]
-        else:
-            output = self.model(**model_inputs)
-            logits = output["logits"] if isinstance(output, dict) else output[0]
+        word_ids = model_inputs.pop("word_ids", None)
+        word_to_chars_map = model_inputs.pop("word_to_chars_map", None)
+
+        output = self.model(**model_inputs)
+        logits = output["logits"] if isinstance(output, dict) else output[0]
 
         return {
             "logits": logits,
@@ -301,6 +343,8 @@ class TokenClassificationPipeline(ChunkPipeline):
             "offset_mapping": offset_mapping,
             "sentence": sentence,
             "is_last": is_last,
+            "word_ids": word_ids,
+            "word_to_chars_map": word_to_chars_map,
             **model_inputs,
         }
 
@@ -308,8 +352,12 @@ class TokenClassificationPipeline(ChunkPipeline):
         if ignore_labels is None:
             ignore_labels = ["O"]
         all_entities = []
+
+        # Get map from the first output, it's the same for all chunks
+        word_to_chars_map = all_outputs[0].get("word_to_chars_map")
+
         for model_outputs in all_outputs:
-            if self.framework == "pt" and model_outputs["logits"][0].dtype in (torch.bfloat16, torch.float16):
+            if model_outputs["logits"][0].dtype in (torch.bfloat16, torch.float16):
                 logits = model_outputs["logits"][0].to(torch.float32).numpy()
             else:
                 logits = model_outputs["logits"][0].numpy()
@@ -320,17 +368,21 @@ class TokenClassificationPipeline(ChunkPipeline):
                 model_outputs["offset_mapping"][0] if model_outputs["offset_mapping"] is not None else None
             )
             special_tokens_mask = model_outputs["special_tokens_mask"][0].numpy()
+            word_ids = model_outputs.get("word_ids")
 
             maxes = np.max(logits, axis=-1, keepdims=True)
             shifted_exp = np.exp(logits - maxes)
             scores = shifted_exp / shifted_exp.sum(axis=-1, keepdims=True)
 
-            if self.framework == "tf":
-                input_ids = input_ids.numpy()
-                offset_mapping = offset_mapping.numpy() if offset_mapping is not None else None
-
             pre_entities = self.gather_pre_entities(
-                sentence, input_ids, scores, offset_mapping, special_tokens_mask, aggregation_strategy
+                sentence,
+                input_ids,
+                scores,
+                offset_mapping,
+                special_tokens_mask,
+                aggregation_strategy,
+                word_ids=word_ids,
+                word_to_chars_map=word_to_chars_map,
             )
             grouped_entities = self.aggregate(pre_entities, aggregation_strategy)
             # Filter anything that is in self.ignore_labels
@@ -356,9 +408,11 @@ class TokenClassificationPipeline(ChunkPipeline):
             if previous_entity["start"] <= entity["start"] < previous_entity["end"]:
                 current_length = entity["end"] - entity["start"]
                 previous_length = previous_entity["end"] - previous_entity["start"]
-                if current_length > previous_length:
-                    previous_entity = entity
-                elif current_length == previous_length and entity["score"] > previous_entity["score"]:
+                if (
+                    current_length > previous_length
+                    or current_length == previous_length
+                    and entity["score"] > previous_entity["score"]
+                ):
                     previous_entity = entity
             else:
                 aggregated_entities.append(previous_entity)
@@ -374,6 +428,8 @@ class TokenClassificationPipeline(ChunkPipeline):
         offset_mapping: Optional[list[tuple[int, int]]],
         special_tokens_mask: np.ndarray,
         aggregation_strategy: AggregationStrategy,
+        word_ids: Optional[list[Optional[int]]] = None,
+        word_to_chars_map: Optional[list[tuple[int, int]]] = None,
     ) -> list[dict]:
         """Fuse various numpy arrays into dicts with all the information needed for aggregation"""
         pre_entities = []
@@ -385,10 +441,18 @@ class TokenClassificationPipeline(ChunkPipeline):
             word = self.tokenizer.convert_ids_to_tokens(int(input_ids[idx]))
             if offset_mapping is not None:
                 start_ind, end_ind = offset_mapping[idx]
+
+                # If the input is pre-tokenized, we need to rescale the offsets to the absolute sentence.
+                if word_ids is not None and word_to_chars_map is not None:
+                    word_index = word_ids[idx]
+                    if word_index is not None:
+                        start_char, _ = word_to_chars_map[word_index]
+                        start_ind += start_char
+                        end_ind += start_char
+
                 if not isinstance(start_ind, int):
-                    if self.framework == "pt":
-                        start_ind = start_ind.item()
-                        end_ind = end_ind.item()
+                    start_ind = start_ind.item()
+                    end_ind = end_ind.item()
                 word_ref = sentence[start_ind:end_ind]
                 if getattr(self.tokenizer, "_tokenizer", None) and getattr(
                     self.tokenizer._tokenizer.model, "continuing_subword_prefix", None

@@ -15,16 +15,16 @@
 """PyTorch TrajectoryTransformer model."""
 
 import math
-import os
 from dataclasses import dataclass
 from typing import Optional, Union
 
 import numpy as np
 import torch
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import functional as F
 
+from ....cache_utils import Cache
+from ....modeling_layers import GradientCheckpointingLayer
 from ....modeling_utils import PreTrainedModel
 from ....utils import (
     ModelOutput,
@@ -40,79 +40,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "CarlCochet/trajectory-transformer-halfcheetah-medium-v2"
 _CONFIG_FOR_DOC = "TrajectoryTransformerConfig"
-
-
-def load_tf_weights_in_trajectory_transformer(model, config, tf_checkpoint_path):
-    """Load tf checkpoints in a pytorch model."""
-    try:
-        import re
-
-        import numpy as np
-        import tensorflow as tf
-    except ImportError:
-        logger.error(
-            "Loading a TensorFlow model in PyTorch, requires TensorFlow to be installed. Please see "
-            "https://www.tensorflow.org/install/ for installation instructions."
-        )
-        raise
-    tf_path = os.path.abspath(tf_checkpoint_path)
-    logger.info(f"Converting TensorFlow checkpoint from {tf_path}")
-    # Load weights from TF model
-    init_vars = tf.train.list_variables(tf_path)
-    names = []
-    arrays = []
-    for name, shape in init_vars:
-        logger.info(f"Loading TF weight {name} with shape {shape}")
-        array = tf.train.load_variable(tf_path, name)
-        names.append(name)
-        arrays.append(array)
-
-    for name, array in zip(names, arrays):
-        name = name.split("/")
-        # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
-        # which are not required for using pretrained model
-        if any(
-            n in ["adam_v", "adam_m", "AdamWeightDecayOptimizer", "AdamWeightDecayOptimizer_1", "global_step"]
-            for n in name
-        ):
-            logger.info(f"Skipping {'/'.join(name)}")
-            continue
-        pointer = model
-        for m_name in name:
-            if re.fullmatch(r"[A-Za-z]+_\d+", m_name):
-                scope_names = re.split(r"_(\d+)", m_name)
-            else:
-                scope_names = [m_name]
-            if scope_names[0] == "kernel" or scope_names[0] == "gamma":
-                pointer = getattr(pointer, "weight")
-            elif scope_names[0] == "output_bias" or scope_names[0] == "beta":
-                pointer = getattr(pointer, "bias")
-            elif scope_names[0] == "output_weights":
-                pointer = getattr(pointer, "weight")
-            elif scope_names[0] == "squad":
-                pointer = getattr(pointer, "classifier")
-            else:
-                try:
-                    pointer = getattr(pointer, scope_names[0])
-                except AttributeError:
-                    logger.info(f"Skipping {'/'.join(name)}")
-                    continue
-            if len(scope_names) >= 2:
-                num = int(scope_names[1])
-                pointer = pointer[num]
-        if m_name[-11:] == "_embeddings":
-            pointer = getattr(pointer, "weight")
-        elif m_name == "kernel":
-            array = np.transpose(array)
-        try:
-            if pointer.shape != array.shape:
-                raise ValueError(f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
-        except AssertionError as e:
-            e.args += (pointer.shape, array.shape)
-            raise
-        logger.info(f"Initialize PyTorch weight {name}")
-        pointer.data = torch.from_numpy(array)
-    return model
 
 
 @dataclass
@@ -141,7 +68,7 @@ class TrajectoryTransformerOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Cache] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
 
@@ -152,8 +79,7 @@ class TrajectoryTransformerPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = TrajectoryTransformerConfig
-    load_tf_weights = load_tf_weights_in_trajectory_transformer
+    config: TrajectoryTransformerConfig
     base_model_prefix = "trajectory_transformer"
     main_input_name = "trajectories"
     supports_gradient_checkpointing = True
@@ -346,7 +272,7 @@ class CausalSelfAttention(nn.Module):
         return outputs
 
 
-class Block(nn.Module):
+class Block(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.ln1 = nn.LayerNorm(config.n_embd)
@@ -463,7 +389,7 @@ class TrajectoryTransformerModel(TrajectoryTransformerPreTrainedModel):
     def forward(
         self,
         trajectories: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         targets: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
@@ -540,16 +466,7 @@ class TrajectoryTransformerModel(TrajectoryTransformerPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                outputs = self._gradient_checkpointing_func(
-                    block.__call__,
-                    hidden_states,
-                    layer_past,
-                    use_cache,
-                    output_attentions,
-                )
-            else:
-                outputs = block(hidden_states, layer_past, use_cache, output_attentions)
+            outputs = block(hidden_states, layer_past, use_cache, output_attentions)
 
             hidden_states = outputs[0]
             if use_cache is True:
@@ -606,5 +523,4 @@ class TrajectoryTransformerModel(TrajectoryTransformerPreTrainedModel):
 __all__ = [
     "TrajectoryTransformerModel",
     "TrajectoryTransformerPreTrainedModel",
-    "load_tf_weights_in_trajectory_transformer",
 ]

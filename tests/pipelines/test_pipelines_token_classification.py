@@ -18,7 +18,6 @@ import numpy as np
 
 from transformers import (
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
-    TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
     AutoModelForTokenClassification,
     AutoTokenizer,
     TokenClassificationPipeline,
@@ -29,7 +28,6 @@ from transformers.testing_utils import (
     is_pipeline_test,
     is_torch_available,
     nested_simplify,
-    require_tf,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -52,14 +50,9 @@ _TO_SKIP = {"LayoutLMv2Config", "LayoutLMv3Config"}
 @is_pipeline_test
 class TokenClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
-    tf_model_mapping = TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
 
     if not hasattr(model_mapping, "is_dummy"):
         model_mapping = {config: model for config, model in model_mapping.items() if config.__name__ not in _TO_SKIP}
-    if not hasattr(tf_model_mapping, "is_dummy"):
-        tf_model_mapping = {
-            config: model for config, model in tf_model_mapping.items() if config.__name__ not in _TO_SKIP
-        }
 
     def get_test_pipeline(
         self,
@@ -68,7 +61,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        torch_dtype="float32",
+        dtype="float32",
     ):
         token_classifier = TokenClassificationPipeline(
             model=model,
@@ -76,7 +69,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             processor=processor,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
         )
         return token_classifier, ["A simple string", "A simple string that is quite a bit longer"]
 
@@ -309,6 +302,56 @@ class TokenClassificationPipelineTests(unittest.TestCase):
         )
 
     @require_torch
+    @slow
+    def test_is_split_into_words(self):
+        """
+        Tests the pipeline with pre-tokenized inputs (is_split_into_words=True)
+        and validates that the character offsets are correct.
+        """
+        token_classifier = pipeline(task="ner", model="dslim/bert-base-NER", aggregation_strategy="simple")
+
+        # Input is a list of words
+        words = ["Hello", "Sarah", "lives", "in", "New", "York"]
+
+        # The reconstructed sentence will be "Hello Sarah lives in New York"
+        # - "Sarah": starts at index 6, ends at 11
+        # - "New York": starts at index 21, ends at 29
+
+        output = token_classifier(words, is_split_into_words=True)
+
+        self.assertEqual(
+            nested_simplify(output),
+            [
+                [
+                    {"entity_group": "PER", "score": ANY(float), "word": "Sarah", "start": 6, "end": 11},
+                    {"entity_group": "LOC", "score": ANY(float), "word": "New York", "start": 21, "end": 29},
+                ]
+            ],
+        )
+
+        # Also test batching with pre-tokenized inputs
+        words2 = ["My", "name", "is", "Wolfgang", "and", "I", "live", "in", "Berlin"]
+        batch_output = token_classifier([words, words2], is_split_into_words=True)
+
+        # Expected for second sentence ("My name is Wolfgang and I live in Berlin")
+        # - "Wolfgang": starts at 12, ends at 20
+        # - "Berlin": starts at 36, ends at 42
+
+        self.assertEqual(
+            nested_simplify(batch_output),
+            [
+                [
+                    {"entity_group": "PER", "score": ANY(float), "word": "Sarah", "start": 6, "end": 11},
+                    {"entity_group": "LOC", "score": ANY(float), "word": "New York", "start": 21, "end": 29},
+                ],
+                [
+                    {"entity_group": "PER", "score": ANY(float), "word": "Wolfgang", "start": 11, "end": 19},
+                    {"entity_group": "LOC", "score": ANY(float), "word": "Berlin", "start": 34, "end": 40},
+                ],
+            ],
+        )
+
+    @require_torch
     def test_chunking_fast(self):
         # Note: We cannot run the test on "conflicts" on the chunking.
         # The problem is that the model is random, and thus the results do heavily
@@ -501,7 +544,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
     def test_aggregation_strategy_no_b_i_prefix(self):
         model_name = "sshleifer/tiny-dbmdz-bert-large-cased-finetuned-conll03-english"
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-        token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer, framework="pt")
+        token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer)
         # Just to understand scores indexes in this test
         token_classifier.model.config.id2label = {0: "O", 1: "MISC", 2: "PER", 3: "ORG", 4: "LOC"}
         example = [
@@ -550,7 +593,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
     def test_aggregation_strategy(self):
         model_name = "sshleifer/tiny-dbmdz-bert-large-cased-finetuned-conll03-english"
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-        token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer, framework="pt")
+        token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer)
         # Just to understand scores indexes in this test
         self.assertEqual(
             token_classifier.model.config.id2label,
@@ -623,7 +666,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
     def test_aggregation_strategy_example2(self):
         model_name = "sshleifer/tiny-dbmdz-bert-large-cased-finetuned-conll03-english"
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-        token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer, framework="pt")
+        token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer)
         # Just to understand scores indexes in this test
         self.assertEqual(
             token_classifier.model.config.id2label,
@@ -699,7 +742,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
     def test_gather_pre_entities(self):
         model_name = "sshleifer/tiny-dbmdz-bert-large-cased-finetuned-conll03-english"
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-        token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer, framework="pt")
+        token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer)
 
         sentence = "Hello there"
 
@@ -744,7 +787,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
     def test_word_heuristic_leading_space(self):
         model_name = "hf-internal-testing/tiny-random-deberta-v2"
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-        token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer, framework="pt")
+        token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer)
 
         sentence = "I play the theremin"
 
@@ -775,31 +818,11 @@ class TokenClassificationPipelineTests(unittest.TestCase):
             [("▁I", False), ("▁play", False), ("▁the", False), ("▁there", False), ("min", True)],
         )
 
-    @require_tf
-    def test_tf_only(self):
-        model_name = "hf-internal-testing/tiny-random-bert-tf-only"  # This model only has a TensorFlow version
-        # We test that if we don't specify framework='tf', it gets detected automatically
-        token_classifier = pipeline(task="ner", model=model_name)
-        self.assertEqual(token_classifier.framework, "tf")
-
-    @require_tf
-    def test_small_model_tf(self):
-        model_name = "hf-internal-testing/tiny-bert-for-token-classification"
-        token_classifier = pipeline(task="token-classification", model=model_name, framework="tf")
-        outputs = token_classifier("This is a test !")
-        self.assertEqual(
-            nested_simplify(outputs),
-            [
-                {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 4},
-                {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
-            ],
-        )
-
     @require_torch
     def test_no_offset_tokenizer(self):
         model_name = "hf-internal-testing/tiny-bert-for-token-classification"
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=False)
-        token_classifier = pipeline(task="token-classification", model=model_name, tokenizer=tokenizer, framework="pt")
+        token_classifier = pipeline(task="token-classification", model=model_name, tokenizer=tokenizer)
         outputs = token_classifier("This is a test !")
         self.assertEqual(
             nested_simplify(outputs),
@@ -812,7 +835,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
     @require_torch
     def test_small_model_pt(self):
         model_name = "hf-internal-testing/tiny-bert-for-token-classification"
-        token_classifier = pipeline(task="token-classification", model=model_name, framework="pt")
+        token_classifier = pipeline(task="token-classification", model=model_name)
         outputs = token_classifier("This is a test !")
         self.assertEqual(
             nested_simplify(outputs),
@@ -822,16 +845,14 @@ class TokenClassificationPipelineTests(unittest.TestCase):
             ],
         )
 
-        token_classifier = pipeline(
-            task="token-classification", model=model_name, framework="pt", ignore_labels=["O", "I-MISC"]
-        )
+        token_classifier = pipeline(task="token-classification", model=model_name, ignore_labels=["O", "I-MISC"])
         outputs = token_classifier("This is a test !")
         self.assertEqual(
             nested_simplify(outputs),
             [],
         )
 
-        token_classifier = pipeline(task="token-classification", model=model_name, framework="pt")
+        token_classifier = pipeline(task="token-classification", model=model_name)
         # Overload offset_mapping
         outputs = token_classifier(
             "This is a test !", offset_mapping=[(0, 0), (0, 1), (0, 2), (0, 0), (0, 0), (0, 0), (0, 0)]
@@ -864,9 +885,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
     @require_torch
     def test_small_model_pt_fp16(self):
         model_name = "hf-internal-testing/tiny-bert-for-token-classification"
-        token_classifier = pipeline(
-            task="token-classification", model=model_name, framework="pt", torch_dtype=torch.float16
-        )
+        token_classifier = pipeline(task="token-classification", model=model_name, dtype=torch.float16)
         outputs = token_classifier("This is a test !")
         self.assertEqual(
             nested_simplify(outputs),
@@ -879,9 +898,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
     @require_torch
     def test_small_model_pt_bf16(self):
         model_name = "hf-internal-testing/tiny-bert-for-token-classification"
-        token_classifier = pipeline(
-            task="token-classification", model=model_name, framework="pt", torch_dtype=torch.bfloat16
-        )
+        token_classifier = pipeline(task="token-classification", model=model_name, dtype=torch.bfloat16)
         outputs = token_classifier("This is a test !")
         self.assertEqual(
             nested_simplify(outputs),
@@ -953,19 +970,24 @@ class TokenClassificationArgumentHandlerTestCase(unittest.TestCase):
     def test_simple(self):
         string = "This is a simple input"
 
-        inputs, offset_mapping = self.args_parser(string)
+        inputs, is_split_into_words, offset_mapping, delimiter = self.args_parser(string)
         self.assertEqual(inputs, [string])
+        self.assertFalse(is_split_into_words)
         self.assertEqual(offset_mapping, None)
 
-        inputs, offset_mapping = self.args_parser([string, string])
+        inputs, is_split_into_words, offset_mapping, delimiter = self.args_parser([string, string])
         self.assertEqual(inputs, [string, string])
+        self.assertFalse(is_split_into_words)
         self.assertEqual(offset_mapping, None)
 
-        inputs, offset_mapping = self.args_parser(string, offset_mapping=[(0, 1), (1, 2)])
+        inputs, is_split_into_words, offset_mapping, delimiter = self.args_parser(
+            string, offset_mapping=[(0, 1), (1, 2)]
+        )
         self.assertEqual(inputs, [string])
+        self.assertFalse(is_split_into_words)
         self.assertEqual(offset_mapping, [[(0, 1), (1, 2)]])
 
-        inputs, offset_mapping = self.args_parser(
+        inputs, is_split_into_words, offset_mapping, delimiter = self.args_parser(
             [string, string], offset_mapping=[[(0, 1), (1, 2)], [(0, 2), (2, 3)]]
         )
         self.assertEqual(inputs, [string, string])

@@ -19,7 +19,7 @@ import unittest
 import requests
 from parameterized import parameterized
 
-from transformers import ChameleonConfig, is_torch_available, is_vision_available, set_seed
+from transformers import BitsAndBytesConfig, ChameleonConfig, is_torch_available, is_vision_available, set_seed
 from transformers.testing_utils import (
     Expectations,
     require_bitsandbytes,
@@ -76,7 +76,7 @@ class ChameleonModelTester:
         pad_token_id=0,
         vq_num_embeds=5,
         vq_embed_dim=5,
-        vq_channel_multiplier=[1, 4],
+        vq_channel_multiplier=[1, 2],
         vq_img_token_start_id=10,  # has to be less than vocab size when added with vq_num_embeds
         scope=None,
     ):
@@ -205,8 +205,7 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
-    test_pruning = False
+
     fx_compatible = False
 
     def setUp(self):
@@ -255,10 +254,6 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_batching_equivalence(self):
         pass
 
-    @unittest.skip("Chameleon VQ model cannot be squishes more due to hardcoded layer params in model code")
-    def test_model_is_small(self):
-        pass
-
 
 class ChameleonVision2SeqModelTester(ChameleonModelTester):
     def __init__(self, parent, image_size=10, **kwargs):
@@ -270,7 +265,7 @@ class ChameleonVision2SeqModelTester(ChameleonModelTester):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         input_ids[input_ids == self.image_token_id] = self.pad_token_id
         input_ids[:, : self.image_seq_length] = self.image_token_id
-        attention_mask = torch.tril(torch.ones_like(input_ids).to(torch_device))
+        attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
         pixel_values = floats_tensor([self.batch_size, 3, self.image_size, self.image_size])
 
         config = self.get_config()
@@ -294,8 +289,7 @@ class ChameleonVision2SeqModelTest(ModelTesterMixin, GenerationTesterMixin, unit
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
-    test_pruning = False
+
     fx_compatible = False
 
     def setUp(self):
@@ -321,8 +315,16 @@ class ChameleonVision2SeqModelTest(ModelTesterMixin, GenerationTesterMixin, unit
     def test_disk_offload_safetensors(self):
         pass
 
-    @unittest.skip("Chameleon VQ model cannot be squishes more due to hardcoded layer params in model code")
-    def test_model_is_small(self):
+    @unittest.skip("Chameleon applies key/query norm which doesn't work with packing")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Chameleon applies key/query norm which doesn't work with packing")
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Chameleon applies key/query norm which doesn't work with packing")
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
         pass
 
     def test_mismatching_num_image_tokens(self):
@@ -334,6 +336,7 @@ class ChameleonVision2SeqModelTest(ModelTesterMixin, GenerationTesterMixin, unit
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
+            model.eval()
             curr_input_dict = copy.deepcopy(input_dict)  # the below tests modify dict in-place
             _ = model(**curr_input_dict)  # successful forward with no modifications
 
@@ -355,49 +358,6 @@ class ChameleonVision2SeqModelTest(ModelTesterMixin, GenerationTesterMixin, unit
             pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
             _ = model(input_ids=input_ids, pixel_values=pixel_values)
 
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            wte = model.get_input_embeddings()
-            inputs["inputs_embeds"] = wte(input_ids)
-
-            with torch.no_grad():
-                model(**inputs)
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    # while some other models require pixel_values to be present
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-
-            with torch.no_grad():
-                out_ids = model(input_ids=input_ids, **inputs)[0]
-                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            torch.testing.assert_close(out_embeds, out_ids)
-
 
 @require_torch
 class ChameleonIntegrationTest(unittest.TestCase):
@@ -406,7 +366,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
     @require_read_token
     def test_model_7b(self):
         model = ChameleonForConditionalGeneration.from_pretrained(
-            "facebook/chameleon-7b", load_in_4bit=True, device_map="auto"
+            "facebook/chameleon-7b", quantization_config=BitsAndBytesConfig(load_in_4bit=True), device_map="auto"
         )
         processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
 
@@ -436,7 +396,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
     @require_read_token
     def test_model_7b_batched(self):
         model = ChameleonForConditionalGeneration.from_pretrained(
-            "facebook/chameleon-7b", load_in_4bit=True, device_map="auto"
+            "facebook/chameleon-7b", quantization_config=BitsAndBytesConfig(load_in_4bit=True), device_map="auto"
         )
         processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
 
@@ -459,7 +419,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
         EXPECTED_TEXT_COMPLETIONS = Expectations(
             {
                 ("xpu", 3): [
-                    'Describe what do you see here and tell me about the history behind it?The image depicts a star map, with a bright blue dot in the center representing the star Altair. The star map is set against a black background, with the constellations visible in the night',
+                    'Describe what do you see here and tell me about the history behind it?The image depicts a star map, with a bright blue dot in the center representing the star Alpha Centauri. The star map is a representation of the night sky, showing the positions of stars in',
                     'What constellation is this image showing?The image shows the constellation of Orion.The image shows the constellation of Orion.The image shows the constellation of Orion.The image shows the constellation of Orion.',
                 ],
                 ("cuda", 7): [
@@ -483,7 +443,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
     @require_read_token
     def test_model_7b_multi_image(self):
         model = ChameleonForConditionalGeneration.from_pretrained(
-            "facebook/chameleon-7b", load_in_4bit=True, device_map="auto"
+            "facebook/chameleon-7b", quantization_config=BitsAndBytesConfig(load_in_4bit=True), device_map="auto"
         )
         processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
 

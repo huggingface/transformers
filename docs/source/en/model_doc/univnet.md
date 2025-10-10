@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-06-15 and added to Hugging Face Transformers on 2023-11-22.*
 
 # UnivNet
 
@@ -67,7 +68,6 @@ write("sample_audio.wav", feature_extractor.sampling_rate, audio)
 
 This model was contributed by [dg845](https://huggingface.co/dg845).
 To the best of my knowledge, there is no official code release, but an unofficial implementation can be found at [maum-ai/univnet](https://github.com/maum-ai/univnet) with pretrained checkpoints [here](https://github.com/maum-ai/univnet#pre-trained-model).
-
 
 ## UnivNetConfig
 

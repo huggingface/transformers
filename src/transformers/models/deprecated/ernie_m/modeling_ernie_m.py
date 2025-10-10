@@ -18,11 +18,11 @@ import math
 from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn, tensor
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ....activations import ACT2FN
+from ....cache_utils import Cache
 from ....modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -32,7 +32,6 @@ from ....modeling_outputs import (
     TokenClassifierOutput,
 )
 from ....modeling_utils import PreTrainedModel
-from ....pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ....utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_ernie_m import ErnieMConfig
 
@@ -122,10 +121,9 @@ class ErnieMSelfAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
         mixed_query_layer = self.q_proj(hidden_states)
@@ -135,27 +133,27 @@ class ErnieMSelfAttention(nn.Module):
         # such that the encoder's padding tokens are not attended to.
         is_cross_attention = encoder_hidden_states is not None
 
-        if is_cross_attention and past_key_value is not None:
+        if is_cross_attention and past_key_values is not None:
             # reuse k,v, cross_attentions
-            key_layer = past_key_value[0]
-            value_layer = past_key_value[1]
+            key_layer = past_key_values[0]
+            value_layer = past_key_values[1]
             attention_mask = encoder_attention_mask
         elif is_cross_attention:
             key_layer = self.transpose_for_scores(self.k_proj(encoder_hidden_states))
             value_layer = self.transpose_for_scores(self.v_proj(encoder_hidden_states))
             attention_mask = encoder_attention_mask
-        elif past_key_value is not None:
+        elif past_key_values is not None:
             key_layer = self.transpose_for_scores(self.k_proj(hidden_states))
             value_layer = self.transpose_for_scores(self.v_proj(hidden_states))
-            key_layer = torch.cat([past_key_value[0], key_layer], dim=2)
-            value_layer = torch.cat([past_key_value[1], value_layer], dim=2)
+            key_layer = torch.cat([past_key_values[0], key_layer], dim=2)
+            value_layer = torch.cat([past_key_values[1], value_layer], dim=2)
         else:
             key_layer = self.transpose_for_scores(self.k_proj(hidden_states))
             value_layer = self.transpose_for_scores(self.v_proj(hidden_states))
 
         query_layer = self.transpose_for_scores(mixed_query_layer)
 
-        use_cache = past_key_value is not None
+        use_cache = past_key_values is not None
         if self.is_decoder:
             # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
             # Further calls to cross_attention layer can then reuse all cross-attention
@@ -163,8 +161,8 @@ class ErnieMSelfAttention(nn.Module):
             # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
             # all previous decoder key/value_states. Further calls to uni-directional self-attention
             # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
-            # if encoder bi-directional self-attention `past_key_value` is always `None`
-            past_key_value = (key_layer, value_layer)
+            # if encoder bi-directional self-attention `past_key_values` is always `None`
+            past_key_values = (key_layer, value_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -203,10 +201,6 @@ class ErnieMSelfAttention(nn.Module):
         # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
 
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
-
         context_layer = torch.matmul(attention_probs, value_layer)
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
@@ -216,7 +210,7 @@ class ErnieMSelfAttention(nn.Module):
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
         if self.is_decoder:
-            outputs = outputs + (past_key_value,)
+            outputs = outputs + (past_key_values,)
         return outputs
 
 
@@ -225,43 +219,22 @@ class ErnieMAttention(nn.Module):
         super().__init__()
         self.self_attn = ErnieMSelfAttention(config, position_embedding_type=position_embedding_type)
         self.out_proj = nn.Linear(config.hidden_size, config.hidden_size)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.self_attn.num_attention_heads, self.self_attn.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.self_attn.q_proj = prune_linear_layer(self.self_attn.q_proj, index)
-        self.self_attn.k_proj = prune_linear_layer(self.self_attn.k_proj, index)
-        self.self_attn.v_proj = prune_linear_layer(self.self_attn.v_proj, index)
-        self.out_proj = prune_linear_layer(self.out_proj, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.self_attn.num_attention_heads = self.self_attn.num_attention_heads - len(heads)
-        self.self_attn.all_head_size = self.self_attn.attention_head_size * self.self_attn.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
         self_outputs = self.self_attn(
             hidden_states,
             attention_mask,
-            head_mask,
             encoder_hidden_states,
             encoder_attention_mask,
-            past_key_value,
+            past_key_values,
             output_attentions,
         )
         attention_output = self.out_proj(self_outputs[0])
@@ -293,8 +266,7 @@ class ErnieMEncoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = True,
     ):
         residual = hidden_states
@@ -302,8 +274,7 @@ class ErnieMEncoderLayer(nn.Module):
             hidden_states, attention_opt_weights = self.self_attn(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
-                head_mask=head_mask,
-                past_key_value=past_key_value,
+                past_key_values=past_key_values,
                 output_attentions=output_attentions,
             )
 
@@ -311,8 +282,7 @@ class ErnieMEncoderLayer(nn.Module):
             hidden_states = self.self_attn(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
-                head_mask=head_mask,
-                past_key_value=past_key_value,
+                past_key_values=past_key_values,
                 output_attentions=output_attentions,
             )
         hidden_states = residual + self.dropout1(hidden_states)
@@ -342,8 +312,7 @@ class ErnieMEncoder(nn.Module):
         self,
         input_embeds: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
@@ -355,14 +324,10 @@ class ErnieMEncoder(nn.Module):
         if output_hidden_states:
             hidden_states = hidden_states + (output,)
         for i, layer in enumerate(self.layers):
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-            past_key_value = past_key_values[i] if past_key_values is not None else None
-
             output, opt_attn_weights = layer(
                 hidden_states=output,
                 attention_mask=attention_mask,
-                head_mask=layer_head_mask,
-                past_key_value=past_key_value,
+                past_key_values=past_key_values[i] if past_key_values is not None else None,
             )
 
             if output_hidden_states:
@@ -400,14 +365,12 @@ class ErnieMPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = ErnieMConfig
+    config: ErnieMConfig
     base_model_prefix = "ernie_m"
 
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -457,12 +420,6 @@ ERNIE_M_INPUTS_DOCSTRING = r"""
             config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
         inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
@@ -517,7 +474,6 @@ class ErnieMModel(ErnieMPreTrainedModel):
         input_ids: Optional[tensor] = None,
         position_ids: Optional[tensor] = None,
         attention_mask: Optional[tensor] = None,
-        head_mask: Optional[tensor] = None,
         inputs_embeds: Optional[tensor] = None,
         past_key_values: Optional[tuple[tuple[tensor]]] = None,
         use_cache: Optional[bool] = None,
@@ -535,11 +491,9 @@ class ErnieMModel(ErnieMPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
         past_key_values_length = 0
         if past_key_values is not None:
-            past_key_values_length = past_key_values[0][0].shape[2]
+            past_key_values_length = past_key_values.get_seq_length()
 
         # Adapted from paddlenlp.transformers.ernie_m.ErnieMModel
         if attention_mask is None:
@@ -566,7 +520,6 @@ class ErnieMModel(ErnieMPreTrainedModel):
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
-            head_mask=head_mask,
             past_key_values=past_key_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -624,9 +577,8 @@ class ErnieMForSequenceClassification(ErnieMPreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
-        past_key_values: Optional[list[torch.Tensor]] = None,
+        past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -645,7 +597,6 @@ class ErnieMForSequenceClassification(ErnieMPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             past_key_values=past_key_values,
             output_hidden_states=output_hidden_states,
@@ -722,7 +673,6 @@ class ErnieMForMultipleChoice(ErnieMPreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
@@ -751,7 +701,6 @@ class ErnieMForMultipleChoice(ErnieMPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -813,9 +762,8 @@ class ErnieMForTokenClassification(ErnieMPreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
-        past_key_values: Optional[list[torch.Tensor]] = None,
+        past_key_values: Optional[Cache] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = True,
@@ -831,7 +779,6 @@ class ErnieMForTokenClassification(ErnieMPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             past_key_values=past_key_values,
             output_attentions=output_attentions,
@@ -889,7 +836,6 @@ class ErnieMForQuestionAnswering(ErnieMPreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         start_positions: Optional[torch.Tensor] = None,
         end_positions: Optional[torch.Tensor] = None,
@@ -913,7 +859,6 @@ class ErnieMForQuestionAnswering(ErnieMPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -977,7 +922,6 @@ class ErnieMForInformationExtraction(ErnieMPreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         start_positions: Optional[torch.Tensor] = None,
         end_positions: Optional[torch.Tensor] = None,
@@ -998,7 +942,6 @@ class ErnieMForInformationExtraction(ErnieMPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,

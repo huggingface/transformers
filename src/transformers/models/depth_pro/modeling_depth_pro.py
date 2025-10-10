@@ -32,26 +32,17 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class DepthProOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for DepthPro's outputs.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, n_patches_per_batch, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        features (`Union[torch.FloatTensor, list[torch.FloatTensor]]`, *optional*):
-            Features from encoders. Can be a single feature or a list of features.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, n_patches_per_batch, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer and the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, n_patches_per_batch, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    """
+)
+class DepthProOutput(ModelOutput):
+    r"""
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, n_patches_per_batch, sequence_length, hidden_size)`):
+        Sequence of hidden-states at the output of the last layer of the model.
+    features (`Union[torch.FloatTensor, List[torch.FloatTensor]]`, *optional*):
+        Features from encoders. Can be a single feature or a list of features.
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
@@ -61,28 +52,17 @@ class DepthProOutput(ModelOutput):
 
 
 @dataclass
-class DepthProDepthEstimatorOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for DepthProForDepthEstimation's output.
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Classification (or regression if config.num_labels==1) loss.
-        predicted_depth (`torch.FloatTensor` of shape `(batch_size, height, width)`):
-            Predicted depth for each pixel.
-        field_of_view (`torch.FloatTensor` of shape `(batch_size,)`, *optional*, returned when `use_fov_model` is provided):
-            Field of View Scaler.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, n_patches_per_batch, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer and the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, n_patches_per_batch, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+    """
+)
+class DepthProDepthEstimatorOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Classification (or regression if config.num_labels==1) loss.
+    field_of_view (`torch.FloatTensor` of shape `(batch_size,)`, *optional*, returned when `use_fov_model` is provided):
+        Field of View Scaler.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -259,7 +239,6 @@ class DepthProPatchEncoder(nn.Module):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
     ) -> list[torch.Tensor]:
         batch_size, num_channels, height, width = pixel_values.shape
 
@@ -299,7 +278,6 @@ class DepthProPatchEncoder(nn.Module):
         encodings = self.model(
             # each patch is processed as a separate batch
             patches,
-            head_mask=head_mask,
             # required for intermediate features
             output_hidden_states=self.n_intermediate_hooks > 0,
         )
@@ -319,7 +297,6 @@ class DepthProPatchEncoder(nn.Module):
         scaled_images_features = []
         for i in range(self.n_scaled_images):
             hidden_state = scaled_images_last_hidden_state[i]
-            batch_size = batch_size
             padding = torch_int(self.merge_padding_value * (1 / self.scaled_images_ratios[i]))
             output_height = base_height * 2**i
             output_width = base_width * 2**i
@@ -365,7 +342,6 @@ class DepthProImageEncoder(nn.Module):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
@@ -382,7 +358,6 @@ class DepthProImageEncoder(nn.Module):
         )
         encodings = self.model(
             pixel_values=pixel_values,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
         )
@@ -431,7 +406,6 @@ class DepthProEncoder(nn.Module):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
@@ -440,11 +414,9 @@ class DepthProEncoder(nn.Module):
 
         patch_features = self.patch_encoder(
             pixel_values,
-            head_mask=head_mask,
         )
         image_encodings = self.image_encoder(
             pixel_values,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -627,7 +599,7 @@ class DepthProNeck(nn.Module):
 
 @auto_docstring
 class DepthProPreTrainedModel(PreTrainedModel):
-    config_class = DepthProConfig
+    config: DepthProConfig
     base_model_prefix = "depth_pro"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
@@ -638,8 +610,6 @@ class DepthProPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -669,7 +639,6 @@ class DepthProModel(DepthProPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -707,7 +676,6 @@ class DepthProModel(DepthProPreTrainedModel):
 
         encodings = self.encoder(
             pixel_values,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -736,7 +704,7 @@ class DepthProPreActResidualLayer(nn.Module):
             Model configuration class defining the model architecture.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: DepthProConfig):
         super().__init__()
 
         self.use_batch_norm = config.use_batch_norm_in_fusion_residual
@@ -875,7 +843,6 @@ class DepthProFovEncoder(nn.Module):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
 
@@ -889,7 +856,6 @@ class DepthProFovEncoder(nn.Module):
         )
         encodings = self.model(
             pixel_values=pixel_values,
-            head_mask=head_mask,
         )
         hidden_state = encodings[0]
         hidden_state = self.neck(hidden_state)
@@ -968,9 +934,8 @@ class DepthProFovModel(nn.Module):
         self,
         pixel_values: torch.Tensor,
         global_features: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        fov_features = self.fov_encoder(pixel_values, head_mask)
+        fov_features = self.fov_encoder(pixel_values)
 
         global_features = self.conv(global_features)
         global_features = self.activation(global_features)
@@ -1055,7 +1020,6 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        head_mask: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1116,7 +1080,6 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
 
         depth_pro_outputs = self.depth_pro(
             pixel_values=pixel_values,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=True,
@@ -1131,7 +1094,6 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
             fov = self.fov_model(
                 pixel_values=pixel_values,
                 global_features=features_for_fov,
-                head_mask=head_mask,
             )
         else:
             fov = None

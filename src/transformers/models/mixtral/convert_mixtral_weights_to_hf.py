@@ -206,7 +206,7 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
         model = MixtralForCausalLM(config)
     # Avoid saving this as part of the config.
     del model.config._name_or_path
-    model.config.torch_dtype = torch.float16
+    model.config.dtype = torch.float16
     print("Saving in the Transformers format.")
 
     model.load_state_dict(state_dict, strict=True, assign=True)

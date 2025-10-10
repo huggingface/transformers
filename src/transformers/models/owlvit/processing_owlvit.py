@@ -28,10 +28,9 @@ from ...processing_utils import (
     ProcessingKwargs,
     ProcessorMixin,
     Unpack,
-    _validate_images_text_input_order,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import TensorType, is_flax_available, is_tf_available, is_torch_available
+from ...utils import TensorType, is_torch_available
 
 
 if TYPE_CHECKING:
@@ -48,7 +47,6 @@ class OwlViTProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {
             "padding": "max_length",
         },
-        "images_kwargs": {},
         "common_kwargs": {
             "return_tensors": "np",
         },
@@ -71,45 +69,20 @@ class OwlViTProcessor(ProcessorMixin):
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "OwlViTImageProcessor"
     tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
-    # For backward compatibility. See transformers.processing_utils.ProcessorMixin.prepare_and_validate_optional_call_args for more details.
-    optional_call_args = ["query_images"]
 
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
-        feature_extractor = None
-        if "feature_extractor" in kwargs:
-            warnings.warn(
-                "The `feature_extractor` argument is deprecated and will be removed in v5, use `image_processor`"
-                " instead.",
-                FutureWarning,
-            )
-            feature_extractor = kwargs.pop("feature_extractor")
-
-        image_processor = image_processor if image_processor is not None else feature_extractor
-        if image_processor is None:
-            raise ValueError("You need to specify an `image_processor`.")
-        if tokenizer is None:
-            raise ValueError("You need to specify a `tokenizer`.")
-
         super().__init__(image_processor, tokenizer)
 
     def __call__(
         self,
         images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        # The following is to capture `query_images` argument that may be passed as a positional argument.
-        # See transformers.processing_utils.ProcessorMixin.prepare_and_validate_optional_call_args for more details,
-        # or this conversation for more context: https://github.com/huggingface/transformers/pull/32544#discussion_r1720208116
-        # This behavior is only needed for backward compatibility and will be removed in future versions.
-        #
-        *args,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[OwlViTProcessorKwargs],
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several text(s) and image(s). This method forwards the `text` and
         `kwargs` arguments to CLIPTokenizerFast's [`~CLIPTokenizerFast.__call__`] if `text` is not `None` to encode:
-        the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
+        the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
         CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
@@ -128,10 +101,8 @@ class OwlViTProcessor(ProcessorMixin):
                 should be of shape (C, H, W), where C is a number of channels, H and W are image height and width.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -146,17 +117,14 @@ class OwlViTProcessor(ProcessorMixin):
             OwlViTProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
-            **self.prepare_and_validate_optional_call_args(*args),
         )
         query_images = output_kwargs["images_kwargs"].pop("query_images", None)
-        return_tensors = output_kwargs["common_kwargs"]["return_tensors"]
+        return_tensors = output_kwargs["text_kwargs"]["return_tensors"]
 
         if text is None and query_images is None and images is None:
             raise ValueError(
                 "You have to specify at least one text or query image or image. All three cannot be none."
             )
-        # check if images and text inputs are reversed for BC
-        images, text = _validate_images_text_input_order(images, text)
 
         data = {}
         if text is not None:
@@ -167,7 +135,7 @@ class OwlViTProcessor(ProcessorMixin):
                 encodings = []
 
                 # Maximum number of queries across batch
-                max_num_queries = max([len(text_single) for text_single in text])
+                max_num_queries = max(len(text_single) for text_single in text)
 
                 # Pad all batch samples to max number of text queries
                 for text_single in text:
@@ -182,25 +150,11 @@ class OwlViTProcessor(ProcessorMixin):
             if return_tensors == "np":
                 input_ids = np.concatenate([encoding["input_ids"] for encoding in encodings], axis=0)
                 attention_mask = np.concatenate([encoding["attention_mask"] for encoding in encodings], axis=0)
-
-            elif return_tensors == "jax" and is_flax_available():
-                import jax.numpy as jnp
-
-                input_ids = jnp.concatenate([encoding["input_ids"] for encoding in encodings], axis=0)
-                attention_mask = jnp.concatenate([encoding["attention_mask"] for encoding in encodings], axis=0)
-
             elif return_tensors == "pt" and is_torch_available():
                 import torch
 
                 input_ids = torch.cat([encoding["input_ids"] for encoding in encodings], dim=0)
                 attention_mask = torch.cat([encoding["attention_mask"] for encoding in encodings], dim=0)
-
-            elif return_tensors == "tf" and is_tf_available():
-                import tensorflow as tf
-
-                input_ids = tf.stack([encoding["input_ids"] for encoding in encodings], axis=0)
-                attention_mask = tf.stack([encoding["attention_mask"] for encoding in encodings], axis=0)
-
             else:
                 raise ValueError("Target return tensor type could not be returned")
 
@@ -317,36 +271,6 @@ class OwlViTProcessor(ProcessorMixin):
         return self.image_processor.post_process_image_guided_detection(
             outputs=outputs, threshold=threshold, nms_threshold=nms_threshold, target_sizes=target_sizes
         )
-
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to CLIPTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to CLIPTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
-    @property
-    def feature_extractor_class(self):
-        warnings.warn(
-            "`feature_extractor_class` is deprecated and will be removed in v5. Use `image_processor_class` instead.",
-            FutureWarning,
-        )
-        return self.image_processor_class
-
-    @property
-    def feature_extractor(self):
-        warnings.warn(
-            "`feature_extractor` is deprecated and will be removed in v5. Use `image_processor` instead.",
-            FutureWarning,
-        )
-        return self.image_processor
 
 
 __all__ = ["OwlViTProcessor"]

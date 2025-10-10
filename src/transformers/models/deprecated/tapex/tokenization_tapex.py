@@ -93,7 +93,6 @@ TAPEX_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
             return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
 """
@@ -1354,12 +1353,12 @@ class TapexTokenizer(PreTrainedTokenizer):
         # modify the answer list
         if answer is not None:
             for i, case in enumerate(answer):
-                if case in cell_mapping.keys():
+                if case in cell_mapping:
                     answer[i] = cell_mapping[case]
 
     def truncate_cell(self, cell_value):
         # do not process on these cases
-        if isinstance(cell_value, int) or isinstance(cell_value, float):
+        if isinstance(cell_value, (int, float)):
             return cell_value
         if cell_value.strip() != "":
             try_tokens = self.tokenize(cell_value)

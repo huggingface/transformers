@@ -48,11 +48,13 @@ class ObjectDetectionPipeline(Pipeline):
     See the list of available models on [huggingface.co/models](https://huggingface.co/models?filter=object-detection).
     """
 
+    _load_processor = False
+    _load_image_processor = True
+    _load_feature_extractor = False
+    _load_tokenizer = None
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-        if self.framework == "tf":
-            raise ValueError(f"The {self.__class__} is only available in PyTorch.")
 
         requires_backends(self, "vision")
         mapping = MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES.copy()
@@ -116,8 +118,7 @@ class ObjectDetectionPipeline(Pipeline):
         image = load_image(image, timeout=timeout)
         target_size = torch.IntTensor([[image.height, image.width]])
         inputs = self.image_processor(images=[image], return_tensors="pt")
-        if self.framework == "pt":
-            inputs = inputs.to(self.torch_dtype)
+        inputs = inputs.to(self.dtype)
         if self.tokenizer is not None:
             inputs = self.tokenizer(text=inputs["words"], boxes=inputs["boxes"], return_tensors="pt")
         inputs["target_size"] = target_size
@@ -186,8 +187,6 @@ class ObjectDetectionPipeline(Pipeline):
         Returns:
             bbox (`dict[str, int]`): Dict containing the coordinates in corners format.
         """
-        if self.framework != "pt":
-            raise ValueError("The ObjectDetectionPipeline is only available in PyTorch.")
         xmin, ymin, xmax, ymax = box.int().tolist()
         bbox = {
             "xmin": xmin,

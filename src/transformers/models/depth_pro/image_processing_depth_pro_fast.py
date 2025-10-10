@@ -16,24 +16,20 @@
 
 from typing import TYPE_CHECKING, Optional, Union
 
+import torch
+
 from ...image_processing_base import BatchFeature
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-    group_images_by_shape,
-    reorder_images,
-)
+from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
     PILImageResampling,
     SizeDict,
+    pil_torch_interpolation_mapping,
 )
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
     logging,
     requires_backends,
 )
@@ -43,20 +39,11 @@ from ...utils.import_utils import requires
 if TYPE_CHECKING:
     from .modeling_depth_pro import DepthProDepthEstimatorOutput
 
+
+from torchvision.transforms.v2 import functional as F
+
+
 logger = logging.get_logger(__name__)
-
-
-if is_torch_available():
-    import torch
-
-
-if is_torchvision_available():
-    from ...image_utils import pil_torch_interpolation_mapping
-
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
 
 
 @auto_docstring
@@ -85,10 +72,12 @@ class DepthProImageProcessorFast(BaseImageProcessorFast):
         do_normalize: bool,
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
+        disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
+        **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched scaling
-        grouped_images, grouped_images_index = group_images_by_shape(images)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             # Fused rescale and normalize
@@ -114,7 +103,7 @@ class DepthProImageProcessorFast(BaseImageProcessorFast):
         self,
         outputs: "DepthProDepthEstimatorOutput",
         target_sizes: Optional[Union[TensorType, list[tuple[int, int]], None]] = None,
-    ) -> dict[str, list[TensorType]]:
+    ) -> list[dict[str, TensorType]]:
         """
         Post-processes the raw depth predictions from the model to generate
         final depth predictions which is caliberated using the field of view if provided

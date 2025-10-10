@@ -1,5 +1,7 @@
 from typing import Union
 
+import torch
+
 from transformers.models.detr.image_processing_detr_fast import DetrImageProcessorFast
 
 from ...image_transforms import (
@@ -7,13 +9,8 @@ from ...image_transforms import (
 )
 from ...utils import (
     TensorType,
-    is_torch_available,
     logging,
 )
-
-
-if is_torch_available():
-    import torch
 
 
 logger = logging.get_logger(__name__)
@@ -124,13 +121,13 @@ class ConditionalDetrImageProcessorFast(DetrImageProcessorFast):
 
         return results
 
-    def post_process_segmentation():
+    def post_process_segmentation(self):
         raise NotImplementedError("Segmentation post-processing is not implemented for Conditional DETR yet.")
 
-    def post_process_instance():
+    def post_process_instance(self):
         raise NotImplementedError("Instance post-processing is not implemented for Conditional DETR yet.")
 
-    def post_process_panoptic():
+    def post_process_panoptic(self):
         raise NotImplementedError("Panoptic post-processing is not implemented for Conditional DETR yet.")
 
 

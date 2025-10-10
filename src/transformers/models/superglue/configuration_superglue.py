@@ -13,9 +13,9 @@
 # limitations under the License.
 from typing import TYPE_CHECKING, Optional
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 if TYPE_CHECKING:
@@ -24,15 +24,15 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-class SuperGlueConfig(PretrainedConfig):
+class SuperGlueConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SuperGlueModel`]. It is used to instantiate a
     SuperGlue model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the SuperGlue
     [magic-leap-community/superglue_indoor](https://huggingface.co/magic-leap-community/superglue_indoor) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         keypoint_detector_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `SuperPointConfig`):
@@ -68,6 +68,7 @@ class SuperGlueConfig(PretrainedConfig):
     """
 
     model_type = "superglue"
+    sub_configs = {"keypoint_detector_config": AutoConfig}
 
     def __init__(
         self,
@@ -100,9 +101,7 @@ class SuperGlueConfig(PretrainedConfig):
         self.matching_threshold = matching_threshold
 
         if isinstance(keypoint_detector_config, dict):
-            keypoint_detector_config["model_type"] = (
-                keypoint_detector_config["model_type"] if "model_type" in keypoint_detector_config else "superpoint"
-            )
+            keypoint_detector_config["model_type"] = keypoint_detector_config.get("model_type", "superpoint")
             keypoint_detector_config = CONFIG_MAPPING[keypoint_detector_config["model_type"]](
                 **keypoint_detector_config
             )

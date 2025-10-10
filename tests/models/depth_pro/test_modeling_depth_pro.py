@@ -15,12 +15,14 @@
 
 import unittest
 
+import pytest
+
 from transformers import DepthProConfig
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -208,9 +210,7 @@ class DepthProModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         else {}
     )
 
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     test_torch_exportable = True
 
     def setUp(self):
@@ -219,6 +219,11 @@ class DepthProModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    @unittest.skip(reason="Inductor error: name 'OpaqueUnaryFn_log2' is not defined")
+    @pytest.mark.torch_compile_test
+    def test_sdpa_can_compile_dynamic(self):
+        pass
 
     @unittest.skip(reason="DepthPro does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -293,34 +298,6 @@ class DepthProModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                non_uniform_init_parms = [
-                    # these encoders are vision transformers
-                    # any layer outside these encoders is either Conv2d or ConvTranspose2d
-                    # which use kaiming initialization
-                    "patch_encoder",
-                    "image_encoder",
-                    "fov_model.encoder",
-                ]
-                if param.requires_grad:
-                    if any(x in name for x in non_uniform_init_parms):
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
 
     # this started when switched from normal initialization to kaiming_normal initialization
     # maybe because the magnitude of offset values from ViT-encoders increases when followed by many convolution layers

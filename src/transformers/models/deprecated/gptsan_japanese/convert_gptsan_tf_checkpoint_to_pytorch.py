@@ -38,7 +38,7 @@ def convert_tf_gptsan_to_pt(args):
     with tf.device("/CPU:0"):
         reader = tf.train.load_checkpoint(args.tf_model_dir)
         shapes = reader.get_variable_to_shape_map()
-        for key_name in shapes.keys():
+        for key_name in shapes:
             vnp = reader.get_tensor(key_name).astype(np.float16)
             if key_name.endswith("/adam_m") or key_name.endswith("/adam_v"):
                 continue
