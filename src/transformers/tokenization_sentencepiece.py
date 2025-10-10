@@ -615,38 +615,12 @@ class PreTrainedSentencePieceTokenizer(PreTrainedTokenizerBase):
         return tokens[unk_token_length :] if len(tokens) >= unk_token_length else tokens
 
 
-    def convert_tokens_to_ids(self, tokens: Union[str, list[str]]) -> Union[int, list[int]]:
-        """
-        Converts a token string (or a sequence of tokens) in a single integer id (or a sequence of ids), using the
-        vocabulary.
-
-        Args:
-            tokens (`str` or `list[str]`): One or several token(s) to convert to token id(s).
-
-        Returns:
-            `int` or `list[int]`: The token id or list of token ids.
-        """
-        if tokens is None:
-            return None
-
-        if isinstance(tokens, str):
-            return self._convert_token_to_id_with_added_voc(tokens)
-
-        ids = []
-        for token in tokens:
-            ids.append(self._convert_token_to_id_with_added_voc(token))
-        return ids
-
     def _convert_token_to_id_with_added_voc(self, token):
         if token is None:
             return None
 
         if token in self._added_tokens_encoder:
             return self._added_tokens_encoder[token]
-        return self._convert_token_to_id(token)
-
-    def _convert_token_to_id(self, token):
-        """Converts a token (str) in an id using the vocab."""
         return self.sp_model.piece_to_id(token)
 
     def _encode_plus(

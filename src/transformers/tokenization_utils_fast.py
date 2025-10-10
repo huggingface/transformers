@@ -40,7 +40,6 @@ from .tokenization_utils_base import (
     BatchEncoding,
     PreTokenizedInput,
     PreTrainedTokenizerBase,
-    SpecialTokensMixin,
     TextInput,
     TruncationStrategy,
 )
@@ -410,21 +409,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         return encoding_dict, encodings
 
-    def convert_tokens_to_ids(self, tokens: Union[str, Iterable[str]]) -> Union[int, list[int]]:
-        """
-        Converts a token string (or a sequence of tokens) in a single integer id (or a Iterable of ids), using the
-        vocabulary.
-
-        Args:
-            tokens (`str` or `Iterable[str]`): One or several token(s) to convert to token id(s).
-
-        Returns:
-            `int` or `list[int]`: The token id or list of token ids.
-        """
-        if isinstance(tokens, str):
-            return self._convert_token_to_id_with_added_voc(tokens)
-
-        return [self._convert_token_to_id_with_added_voc(token) for token in tokens]
 
     def _convert_token_to_id_with_added_voc(self, token: str) -> int:
         index = self._tokenizer.token_to_id(token)
@@ -905,7 +889,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         kwargs = self.init_kwargs.copy()
         # Map pad/cls/mask token at the Transformers level
-        special_tokens_list = SpecialTokensMixin.SPECIAL_TOKENS_ATTRIBUTES.copy()
+        special_tokens_list = PreTrainedTokenizerBase.SPECIAL_TOKENS_ATTRIBUTES.copy()
         special_tokens_list.remove("additional_special_tokens")
         for token in special_tokens_list:
             if getattr(self, token) is not None:

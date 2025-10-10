@@ -772,16 +772,14 @@ class ProcessorMixin(PushToHubMixin):
             # Save the tokenizer in its own vocab file. The other attributes are saved as part of `processor_config.json`
             if attribute_name == "tokenizer":
                 attribute = getattr(self, attribute_name)
-                if hasattr(attribute, "_set_processor_class"):
-                    attribute._set_processor_class(self.__class__.__name__)
+                attribute._processor_class = self.__class__.__name__
 
                 # Propagate save_jinja_files to tokenizer to ensure we don't get conflicts
                 attribute.save_pretrained(save_directory, save_jinja_files=save_jinja_files)
             elif legacy_serialization:
                 attribute = getattr(self, attribute_name)
                 # Include the processor class in attribute config so this processor can then be reloaded with `AutoProcessor` API.
-                if hasattr(attribute, "_set_processor_class"):
-                    attribute._set_processor_class(self.__class__.__name__)
+                attribute._processor_class = self.__class__.__name__
                 attribute.save_pretrained(save_directory)
 
         if self._auto_class is not None:

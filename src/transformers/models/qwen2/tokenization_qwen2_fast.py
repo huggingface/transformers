@@ -23,7 +23,6 @@ from tokenizers.models import BPE
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
-from ...create_fast_tokenizer import generate_merges
 
 
 logger = logging.get_logger(__name__)

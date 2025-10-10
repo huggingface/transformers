@@ -717,7 +717,6 @@ if TYPE_CHECKING:
     from .tokenization_utils_base import BatchEncoding as BatchEncoding
     from .tokenization_utils_base import CharSpan as CharSpan
     from .tokenization_utils_base import PreTrainedTokenizerBase as PreTrainedTokenizerBase
-    from .tokenization_utils_base import SpecialTokensMixin as SpecialTokensMixin
     from .tokenization_utils_base import TokenSpan as TokenSpan
     from .tokenization_utils_fast import PreTrainedTokenizerFast as PreTrainedTokenizerFast
 
