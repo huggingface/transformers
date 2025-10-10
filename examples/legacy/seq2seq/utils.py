@@ -279,7 +279,7 @@ class Seq2SeqDataset(AbstractSeq2SeqDataset):
 
 
 class Seq2SeqDataCollator:
-    def __init__(self, tokenizer, data_args, decoder_start_token_id, tpu_num_cores=None):
+    def __init__(self, tokenizer, data_args, decoder_start_token_id):
         self.tokenizer = tokenizer
         self.pad_token_id = tokenizer.pad_token_id
         self.decoder_start_token_id = decoder_start_token_id
@@ -287,7 +287,6 @@ class Seq2SeqDataCollator:
             f"pad_token_id is not defined for ({self.tokenizer.__class__.__name__}), it must be defined."
         )
         self.data_args = data_args
-        self.tpu_num_cores = tpu_num_cores
         self.dataset_kwargs = {"add_prefix_space": True} if isinstance(tokenizer, BartTokenizer) else {}
         if data_args.src_lang is not None:
             self.dataset_kwargs["src_lang"] = data_args.src_lang
@@ -336,7 +335,7 @@ class Seq2SeqDataCollator:
             tgt_texts=[x["tgt_texts"] for x in batch],
             max_length=self.data_args.max_source_length,
             max_target_length=self.data_args.max_target_length,
-            padding="max_length" if self.tpu_num_cores is not None else "longest",  # TPU hack
+            padding="longest",
             return_tensors="pt",
             **self.dataset_kwargs,
         )

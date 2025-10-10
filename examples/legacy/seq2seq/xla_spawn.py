@@ -73,9 +73,9 @@ def main():
     mod = importlib.import_module(mod_name)
 
     # Patch sys.argv
-    sys.argv = [args.training_script] + args.training_script_args + ["--tpu_num_cores", str(args.num_cores)]
+    sys.argv = [args.training_script] + args.training_script_args
 
-    xmp.spawn(mod._mp_fn, args=(), nprocs=args.num_cores)
+    xmp.spawn(mod._mp_fn, args=())
 
 
 if __name__ == "__main__":
