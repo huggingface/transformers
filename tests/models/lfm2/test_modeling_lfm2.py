@@ -15,8 +15,6 @@
 
 import unittest
 
-import pytest
-
 from transformers import is_torch_available
 from transformers.testing_utils import (
     require_read_token,
@@ -51,37 +49,26 @@ class Lfm2ModelTester(CausalLMModelTester):
 
 @require_torch
 class Lfm2ModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": Lfm2Model,
-            "text-generation": Lfm2ForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
     fx_compatible = False
     model_tester_class = Lfm2ModelTester
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = Lfm2ForCausalLM if is_torch_available() else None
 
-    def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
-        self.assertIsInstance(decoder_past_key_values, Lfm2HybridConvCache)
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+        self.assertIsInstance(past_key_values, Lfm2HybridConvCache)
 
-        # (batch, head, seq_length, head_features)
-        attention_shape = (
-            batch_size,
-            config.num_key_value_heads if hasattr(config, "num_key_value_heads") else config.num_attention_heads,
-            cache_length,
-            config.hidden_size // config.num_attention_heads,
-        )
+        # (batch, kv heads, seq_length, head_dim)
+        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
+        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        attention_shape = (batch_size, num_heads, seq_length, head_dim)
         conv_shape = (batch_size, config.hidden_size, config.conv_L_cache)
 
         for i in range(config.num_hidden_layers):
             if config.layer_types[i] == "full_attention":
-                self.assertEqual(decoder_past_key_values.key_cache[i].shape, attention_shape)
-                self.assertEqual(decoder_past_key_values.value_cache[i].shape, attention_shape)
+                self.assertEqual(past_key_values.key_cache[i].shape, attention_shape)
+                self.assertEqual(past_key_values.value_cache[i].shape, attention_shape)
             else:
-                self.assertEqual(decoder_past_key_values.conv_cache[i], conv_shape)
+                self.assertEqual(past_key_values.conv_cache[i].shape, conv_shape)
 
     def _check_caches_are_equal(self, cache1: Lfm2HybridConvCache, cache2: Lfm2HybridConvCache):
         if not isinstance(cache1, Lfm2HybridConvCache) or not isinstance(cache2, Lfm2HybridConvCache):
@@ -137,41 +124,6 @@ class Lfm2ModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertEqual(out_len + 1, len(outputs))
             self.assertEqual(len(self_attentions), sum(layer == "full_attention" for layer in config.layer_types))
             self.assertListEqual(list(self_attentions[0].shape[-3:]), [config.num_attention_heads, seq_len, seq_len])
-
-    @pytest.mark.generate
-    def test_past_key_values_format(self):
-        """Lfm2Moe has a special cache format as it alternates between attention and conv layers"""
-        for model_class in self.all_generative_model_classes:
-            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-
-            model = model_class(config).to(torch_device).eval()
-            if "use_cache" not in inputs:
-                inputs["use_cache"] = True
-            outputs = model(**inputs)
-
-            past_kv = outputs["past_key_values"]
-
-            num_query_attention_heads = config.num_attention_heads
-            embed_dim = config.hidden_size
-            per_head_embed_dim = embed_dim // num_query_attention_heads
-            num_key_value_heads = getattr(config, "num_key_value_heads", num_query_attention_heads)
-
-            batch_size, seq_length = inputs["input_ids"].shape[:2]
-            default_self_attention_shape = (batch_size, num_key_value_heads, seq_length, per_head_embed_dim)
-            default_conv_shape = (batch_size, config.hidden_size, config.conv_L_cache)
-
-            num_cache_decoder_layers = len(past_kv)
-            self.assertEqual(num_cache_decoder_layers, config.num_hidden_layers)
-
-            for i in range(config.num_hidden_layers):
-                if config.layer_types[i] == "full_attention":
-                    self_attention_layer_keys = past_kv.key_cache[i]
-                    self_attention_layer_values = past_kv.value_cache[i]
-                    self.assertEqual(self_attention_layer_keys.shape, default_self_attention_shape)
-                    self.assertEqual(self_attention_layer_values.shape, default_self_attention_shape)
-                else:
-                    conv_layer = past_kv.conv_cache[i]
-                    self.assertEqual(conv_layer.shape, default_conv_shape)
 
 
 @require_torch_accelerator

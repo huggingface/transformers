@@ -36,12 +36,12 @@ import traceback
 import types
 import unittest
 from collections import UserDict, defaultdict
-from collections.abc import Generator, Iterable, Iterator, Mapping
+from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
 from dataclasses import MISSING, fields
 from functools import cache, wraps
 from io import StringIO
 from pathlib import Path
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 from unittest import mock
 from unittest.mock import patch
 
@@ -57,7 +57,6 @@ from .integrations import (
     is_clearml_available,
     is_optuna_available,
     is_ray_available,
-    is_sigopt_available,
     is_swanlab_available,
     is_tensorboard_available,
     is_trackio_available,
@@ -1158,16 +1157,6 @@ def require_ray(test_case):
 
     """
     return unittest.skipUnless(is_ray_available(), "test requires Ray/tune")(test_case)
-
-
-def require_sigopt(test_case):
-    """
-    Decorator marking a test that requires SigOpt.
-
-    These tests are skipped when SigOpt isn't installed.
-
-    """
-    return unittest.skipUnless(is_sigopt_available(), "test requires SigOpt")(test_case)
 
 
 def require_swanlab(test_case):
@@ -3533,8 +3522,15 @@ def _patched_tearDown(self, *args, **kwargs):
     # We still record those failures not handled by the patched methods, and add custom messages along with the usual
     # pytest failure report.
     regular_failures_info = []
-    if hasattr(self, "_outcome") and self._outcome.errors:
-        for error_entry in self._outcome.errors:
+
+    errors = None
+    if hasattr(self._outcome, "errors"):
+        errors = self._outcome.errors
+    elif hasattr(self._outcome, "result") and hasattr(self._outcome.result, "errors"):
+        errors = self._outcome.result.errors
+
+    if hasattr(self, "_outcome") and errors:
+        for error_entry in errors:
             test_instance, (exc_type, exc_obj, exc_tb) = error_entry
             # breakpoint()
             regular_failures_info.append(
@@ -3547,7 +3543,10 @@ def _patched_tearDown(self, *args, **kwargs):
             )
 
         # Clear the regular failure (i.e. that is not from any of our patched assertion methods) from pytest's records.
-        self._outcome.errors.clear()
+        if hasattr(self._outcome, "errors"):
+            self._outcome.errors.clear()
+        elif hasattr(self._outcome, "result") and hasattr(self._outcome.result, "errors"):
+            self._outcome.result.errors.clear()
 
     # reset back to the original tearDown method, so `_patched_tearDown` won't be run by the subsequent tests if they
     # have only test failures that are not handle by the patched methods (or no test failure at all).

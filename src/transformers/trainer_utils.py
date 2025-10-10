@@ -24,7 +24,8 @@ import random
 import re
 import threading
 import time
-from typing import Any, Callable, NamedTuple, Optional, Union
+from collections.abc import Callable
+from typing import Any, NamedTuple, Optional, Union
 
 import numpy as np
 
@@ -268,9 +269,7 @@ def default_compute_objective(metrics: dict[str, float]) -> float:
     loss = metrics.pop("eval_loss", None)
     _ = metrics.pop("epoch", None)
     # Remove speed metrics
-    speed_metrics = [
-        m for m in metrics if m.endswith("_runtime") or m.endswith("_per_second") or m.endswith("_compilation_time")
-    ]
+    speed_metrics = [m for m in metrics if m.endswith("_runtime") or m.endswith("_per_second")]
     for sm in speed_metrics:
         _ = metrics.pop(sm, None)
     return loss if len(metrics) == 0 else sum(metrics.values())
@@ -302,19 +301,6 @@ def default_hp_space_ray(trial) -> dict[str, Any]:
     }
 
 
-def default_hp_space_sigopt(trial):
-    return [
-        {"bounds": {"min": 1e-6, "max": 1e-4}, "name": "learning_rate", "type": "double", "transformation": "log"},
-        {"bounds": {"min": 1, "max": 6}, "name": "num_train_epochs", "type": "int"},
-        {"bounds": {"min": 1, "max": 40}, "name": "seed", "type": "int"},
-        {
-            "categorical_values": ["4", "8", "16", "32", "64"],
-            "name": "per_device_train_batch_size",
-            "type": "categorical",
-        },
-    ]
-
-
 def default_hp_space_wandb(trial) -> dict[str, Any]:
     from .integrations import is_wandb_available
 
@@ -336,7 +322,6 @@ def default_hp_space_wandb(trial) -> dict[str, Any]:
 class HPSearchBackend(ExplicitEnum):
     OPTUNA = "optuna"
     RAY = "ray"
-    SIGOPT = "sigopt"
     WANDB = "wandb"
 
 

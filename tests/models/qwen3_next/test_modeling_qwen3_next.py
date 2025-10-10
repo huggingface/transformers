@@ -16,7 +16,6 @@
 import tempfile
 import unittest
 
-import pytest
 from parameterized import parameterized
 
 from transformers import is_torch_available
@@ -28,10 +27,6 @@ if is_torch_available():
 
     from transformers import (
         Cache,
-        Qwen3NextForCausalLM,
-        Qwen3NextForQuestionAnswering,
-        Qwen3NextForSequenceClassification,
-        Qwen3NextForTokenClassification,
         Qwen3NextModel,
     )
     from transformers.models.qwen3_next.modeling_qwen3_next import Qwen3NextDynamicCache
@@ -59,39 +54,24 @@ class Qwen3NextModelTester(CausalLMModelTester):
 
 @require_torch
 class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": Qwen3NextModel,
-            "text-classification": Qwen3NextForSequenceClassification,
-            "token-classification": Qwen3NextForTokenClassification,
-            "text-generation": Qwen3NextForCausalLM,
-            "question-answering": Qwen3NextForQuestionAnswering,
-        }
-        if is_torch_available()
-        else {}
-    )
-
     model_tester_class = Qwen3NextModelTester
 
-    def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         "Qwen3-Next has a special Cache as it alternates with gated deltanet layers"
-        self.assertIsInstance(decoder_past_key_values, Qwen3NextDynamicCache)
+        self.assertIsInstance(past_key_values, Qwen3NextDynamicCache)
 
-        # (batch, head, seq_length, head_features)
-        expected_shape = (
-            batch_size,
-            config.num_key_value_heads if hasattr(config, "num_key_value_heads") else config.num_attention_heads,
-            cache_length,
-            config.hidden_size // config.num_attention_heads,
-        )
+        # (batch, kv heads, seq_length, head_dim)
+        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
+        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        expected_shape = (batch_size, num_heads, seq_length, head_dim)
 
-        attention_layer_indices = decoder_past_key_values.transformer_layers
+        attention_layer_indices = past_key_values.transformer_layers
         self.assertListEqual(
-            [decoder_past_key_values.key_cache[idx].shape for idx in attention_layer_indices],
+            [past_key_values.key_cache[idx].shape for idx in attention_layer_indices],
             [expected_shape] * len(attention_layer_indices),
         )
         self.assertListEqual(
-            [decoder_past_key_values.value_cache[idx].shape for idx in attention_layer_indices],
+            [past_key_values.value_cache[idx].shape for idx in attention_layer_indices],
             [expected_shape] * len(attention_layer_indices),
         )
 
@@ -105,38 +85,6 @@ class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
             if cache1.key_cache[idx] is not None:
                 torch.testing.assert_close(cache1.key_cache[idx], cache2.key_cache[idx])
                 torch.testing.assert_close(cache1.value_cache[idx], cache2.value_cache[idx])
-
-    @pytest.mark.generate
-    def test_past_key_values_format(self):
-        "Needs to be overwritten as Qwen3-Next alternates between attention layers and gated deltanet layers."
-        for model_class in self.all_generative_model_classes:
-            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-
-            model = model_class(config).to(torch_device)
-            model = model.eval()
-            if "use_cache" not in inputs:
-                inputs["use_cache"] = True
-            outputs = model(**inputs)
-
-            past_kv = outputs["past_key_values"]
-
-            num_query_attention_heads = config.num_attention_heads
-            embed_dim = config.hidden_size
-            per_head_embed_dim = embed_dim // num_query_attention_heads
-            num_key_value_heads = getattr(config, "num_key_value_heads", num_query_attention_heads)
-
-            batch_size, seq_length = inputs["input_ids"].shape[:2]
-            default_self_attention_shape = (batch_size, num_key_value_heads, seq_length, per_head_embed_dim)
-
-            num_cache_decoder_layers = len(past_kv)
-            self.assertEqual(num_cache_decoder_layers, config.num_hidden_layers)
-
-            for i in range(config.num_hidden_layers):
-                if config.layer_types[i] == "full_attention":
-                    self_attention_layer_keys = past_kv.key_cache[i]
-                    self_attention_layer_values = past_kv.value_cache[i]
-                    self.assertEqual(self_attention_layer_keys.shape, default_self_attention_shape)
-                    self.assertEqual(self_attention_layer_values.shape, default_self_attention_shape)
 
     def test_attention_outputs(self):
         "Needs to be overwritten as Qwen3-Next alternates between attention layers and gated deltanet layers."

@@ -15,7 +15,6 @@
 """PyTorch YOSO model."""
 
 import math
-from pathlib import Path
 from typing import Optional, Union
 
 import torch
@@ -36,6 +35,7 @@ from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import (
     auto_docstring,
+    is_kernels_available,
     is_ninja_available,
     is_torch_cuda_available,
     logging,
@@ -51,17 +51,12 @@ lsh_cumulation = None
 
 def load_cuda_kernels():
     global lsh_cumulation
-    from torch.utils.cpp_extension import load
+    if not is_kernels_available():
+        raise ImportError("kernels is not installed, please install it with `pip install kernels`")
+    from kernels import get_kernel
 
-    def append_root(files):
-        src_folder = Path(__file__).resolve().parent.parent.parent / "kernels" / "yoso"
-        return [src_folder / file for file in files]
-
-    src_files = append_root(["fast_lsh_cumulation_torch.cpp", "fast_lsh_cumulation.cu", "fast_lsh_cumulation_cuda.cu"])
-
-    load("fast_lsh_cumulation", src_files, verbose=True)
-
-    import fast_lsh_cumulation as lsh_cumulation
+    yoso = get_kernel("kernels-community/yoso")
+    lsh_cumulation = yoso.lsh_cumulation
 
 
 def to_contiguous(input_tensors):
