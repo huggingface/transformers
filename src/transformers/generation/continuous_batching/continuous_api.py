@@ -339,11 +339,13 @@ class ContinuousBatchProcessor:
             "use_cache": False,
         }
 
-        # If there is padding, we need to make sure all padding tokens are attended to, to avoid NaNs
+        # If we use constant-sized slicing, there are some "padding" queries tokens which FA has some issues with. In
+        # some models like Qwen3-4B-Instruct-2507, if we don't include these tokens in cumulative_seqlens_q, there are
+        # some NaNs in the output logits even for non-padded tokens.
         if use_padding:
             self.max_seqlen_q = max(self.max_seqlen_q, q_len - self.total_seqlen_q)
             self.cumulative_seqlens_q[self.actual_batch_size + 1 :] = q_len
-            # TODO: can this be avoided with setting tokens to non-nan after the foward? might be faster.
+            # FIXME: is there another way to avoid this? It has a very slight impact on performance (~5 tok/s)
 
         # For the attributes that are lists of tensors, we construct list of tensor references
         for i, (read_index_size, write_index_size) in enumerate(self.actual_index_sizes):
