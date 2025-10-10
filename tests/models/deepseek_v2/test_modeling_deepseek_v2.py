@@ -27,7 +27,7 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 if is_torch_available():
     import torch
 
-    from transformers import AutoTokenizer, DeepseekV2ForCausalLM, DeepseekV2ForSequenceClassification, DeepseekV2Model
+    from transformers import AutoTokenizer, DeepseekV2ForCausalLM, DeepseekV2Model
     from transformers.models.deepseek_v2.modeling_deepseek_v2 import DeepseekV2RotaryEmbedding
 
 
@@ -54,16 +54,6 @@ class DeepseekV2ModelTester(CausalLMModelTester):
 
 @require_torch
 class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": DeepseekV2Model,
-            "text-classification": DeepseekV2ForSequenceClassification,
-            "text-generation": DeepseekV2ForCausalLM,
-            "zero-shot": DeepseekV2ForSequenceClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
     fx_compatible = False
     test_torchscript = False
     test_all_params_have_gradient = False
@@ -72,6 +62,23 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
 
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = DeepseekV2ForCausalLM if is_torch_available() else None
+
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+        """Needs to be overridden as deepseek has special MLA cache format (though we don't really use the MLA)"""
+        self.assertIsInstance(past_key_values, Cache)
+
+        # (batch, head, seq_length, head_features)
+        expected_common_shape = (
+            batch_size,
+            getattr(config, "num_key_value_heads", config.num_attention_heads),
+            seq_length,
+        )
+        expected_key_shape = expected_common_shape + (config.qk_nope_head_dim + config.qk_rope_head_dim,)
+        expected_value_shape = expected_common_shape + (config.v_head_dim,)
+
+        for layer in past_key_values.layers:
+            self.assertEqual(layer.keys.shape, expected_key_shape)
+            self.assertEqual(layer.values.shape, expected_value_shape)
 
     def test_model_rope_scaling_frequencies(self):
         """
@@ -129,42 +136,6 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
             torch.testing.assert_close(yarn_freqs_cis_short, original_freqs_cis_short)
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(yarn_freqs_cis_long, original_freqs_cis_long)
-
-    def test_past_key_values_format(self):
-        """
-        Overwriting to pass the expected cache shapes (Deepseek-V3 uses MLA so the cache shapes are non-standard)
-        """
-        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        batch_size, seq_length = inputs["input_ids"].shape
-        # difference: last dim
-        k_embed_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
-        v_embed_dim = config.v_head_dim
-        self_attention_key_cache_shape = (batch_size, config.num_key_value_heads, seq_length, k_embed_dim)
-        self_attention_value_cache_shape = (batch_size, config.num_key_value_heads, seq_length, v_embed_dim)
-        # build the full cache shapes
-        num_hidden_layers = config.num_hidden_layers
-        all_cache_shapes = [
-            [self_attention_key_cache_shape, self_attention_value_cache_shape] for _ in range(num_hidden_layers)
-        ]
-        super().test_past_key_values_format(custom_all_cache_shapes=all_cache_shapes)
-
-    def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
-        """Needs to be overridden as deepseek has special MLA cache format (though we don't really use the MLA)"""
-        self.assertIsInstance(decoder_past_key_values, Cache)
-
-        # (batch, head, seq_length, head_features)
-        expected_common_shape = (
-            batch_size,
-            config.num_key_value_heads if hasattr(config, "num_key_value_heads") else config.num_attention_heads,
-            cache_length,
-        )
-        expected_key_shape = expected_common_shape + (config.qk_nope_head_dim + config.qk_rope_head_dim,)
-        expected_value_shape = expected_common_shape + (config.v_head_dim,)
-
-        if isinstance(decoder_past_key_values, Cache):
-            for layer in decoder_past_key_values.layers:
-                self.assertEqual(layer.keys.shape, expected_key_shape)
-                self.assertEqual(layer.values.shape, expected_value_shape)
 
     @unittest.skip("Dynamic control flow in MoE")
     @pytest.mark.torch_compile_test

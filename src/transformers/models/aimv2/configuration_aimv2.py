@@ -264,21 +264,25 @@ class Aimv2Config(PreTrainedConfig):
     def __init__(
         self, text_config=None, vision_config=None, projection_dim=512, logit_scale_init_value=2.6592, **kwargs
     ):
-        super().__init__(**kwargs)
-
-        if text_config is None:
-            text_config = {}
-            logger.info("`text_config` is `None`. Initializing the `Aimv2TextConfig` with default values.")
-
-        if vision_config is None:
-            vision_config = {}
-            logger.info("`vision_config` is `None`. initializing the `Aimv2VisionConfig` with default values.")
-
-        self.text_config = Aimv2TextConfig(**text_config)
-        self.vision_config = Aimv2VisionConfig(**vision_config)
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
         self.max_logit_scale = 100.0
+        if text_config is None:
+            text_config = Aimv2TextConfig()
+            logger.info("`text_config` is `None`. Initializing the `Aimv2TextConfig` with default values.")
+        elif isinstance(text_config, dict):
+            text_config = Aimv2TextConfig(**text_config)
+
+        if vision_config is None:
+            vision_config = Aimv2VisionConfig()
+            logger.info("`vision_config` is `None`. initializing the `Aimv2VisionConfig` with default values.")
+        elif isinstance(vision_config, dict):
+            vision_config = Aimv2VisionConfig(**vision_config)
+
+        self.text_config = text_config
+        self.vision_config = vision_config
+
+        super().__init__(**kwargs)
 
 
 __all__ = ["Aimv2Config", "Aimv2VisionConfig", "Aimv2TextConfig"]

@@ -302,14 +302,6 @@ class CsmConfig(PreTrainedConfig):
         if kwargs.pop("tie_word_embeddings", False):
             raise ValueError("`tie_word_embeddings=True` is not supported for CsmConfig")
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=False,
-            **kwargs,
-        )
-
         if depth_decoder_config is None:
             self.depth_decoder_config = CsmDepthDecoderConfig()
             logger.info("depth_decoder_config is None, using default depth decoder config.")
@@ -360,6 +352,14 @@ class CsmConfig(PreTrainedConfig):
         rope_theta = kwargs.get("rope_theta", 500000.0)
         standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
+
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            tie_word_embeddings=False,
+            **kwargs,
+        )
 
 
 __all__ = [

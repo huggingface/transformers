@@ -26,11 +26,12 @@ import shutil
 import subprocess
 import sys
 from collections import OrderedDict
+from collections.abc import Callable
 from enum import Enum
 from functools import lru_cache
 from itertools import chain
 from types import ModuleType
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 from packaging import version
 
@@ -1509,12 +1510,6 @@ SACREMOSES_IMPORT_ERROR = """
 SCIPY_IMPORT_ERROR = """
 {0} requires the scipy library but it was not found in your environment. You can install it with pip:
 `pip install scipy`. Please note that you may need to restart your runtime after installation.
-"""
-
-# docstyle-ignore
-KERAS_NLP_IMPORT_ERROR = """
-{0} requires the keras_nlp library but it was not found in your environment. You can install it with pip.
-Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore

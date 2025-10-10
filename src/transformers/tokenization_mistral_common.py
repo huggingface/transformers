@@ -13,12 +13,13 @@
 # limitations under the License.
 
 import os
+import re
 import shutil
 import warnings
-from collections.abc import Mapping, Sized
+from collections.abc import Callable, Mapping, Sized
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Optional, Union, overload
+from typing import Any, Optional, Union, overload
 
 import numpy as np
 
@@ -470,6 +471,12 @@ class MistralCommonTokenizer(PushToHubMixin):
         decoded_string = self.tokenizer.decode(token_ids, special_token_policy=special_token_policy)
         if clean_up_tokenization_spaces:
             decoded_string = PreTrainedTokenizerBase.clean_up_tokenization(decoded_string)
+
+        # in the specific case of Voxtral, the added f"lang:xx" (always a two char language code since it follows ISO 639-1 alpha-2 format)
+        # is not considered as a special token by mistral-common and is encoded/ decoded as normal text.
+        # Nevertheless we should remove it to ease users life.
+        if skip_special_tokens:
+            decoded_string = re.sub(r"^lang:[a-z]{2}", "", decoded_string)
 
         return decoded_string
 

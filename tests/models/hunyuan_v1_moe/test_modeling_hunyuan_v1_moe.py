@@ -30,8 +30,6 @@ if is_torch_available():
     from transformers import (
         AutoModelForCausalLM,
         AutoTokenizer,
-        HunYuanMoEV1ForCausalLM,
-        HunYuanMoEV1ForSequenceClassification,
         HunYuanMoEV1Model,
     )
 
@@ -47,15 +45,6 @@ class HunYuanMoEV1ModelTester(CausalLMModelTester):
 class HunYuanMoEV1ModelTest(CausalLMModelTest, unittest.TestCase):
     test_all_params_have_gradient = False
     model_tester_class = HunYuanMoEV1ModelTester
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": HunYuanMoEV1Model,
-            "text-generation": HunYuanMoEV1ForCausalLM,
-            "text-classification": HunYuanMoEV1ForSequenceClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
 
     def is_pipeline_test_to_skip(
         self,

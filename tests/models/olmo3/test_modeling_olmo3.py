@@ -52,19 +52,10 @@ class Olmo3ModelTester(CausalLMModelTester):
 
 @require_torch
 class Olmo3ModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": Olmo3Model,
-            "text-generation": Olmo3ForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
     fx_compatible = False
     test_torchscript = False
     test_all_params_have_gradient = False
     model_tester_class = Olmo3ModelTester
-    rotary_embedding_layer = Olmo3RotaryEmbedding
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
@@ -75,8 +66,6 @@ class Olmo3ModelTest(CausalLMModelTest, unittest.TestCase):
 
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     def test_model_rope_scaling_from_config(self, scaling_type):
-        if self.rotary_embedding_layer is None:
-            self.skipTest("Rotary embedding layer not set")
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         # Rope only gets applied to full attention layers in Olmo3, so make all layers full attention.

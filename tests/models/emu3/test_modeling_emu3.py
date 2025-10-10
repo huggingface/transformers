@@ -326,7 +326,9 @@ class Emu3IntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_model_generation(self):
-        model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Chat-hf", load_in_4bit=True)
+        model = Emu3ForConditionalGeneration.from_pretrained(
+            "BAAI/Emu3-Chat-hf", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
         processor = Emu3Processor.from_pretrained("BAAI/Emu3-Chat-hf")
 
         image = Image.open(requests.get("https://picsum.photos/id/237/200/200", stream=True).raw)
@@ -344,7 +346,9 @@ class Emu3IntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     @require_torch_large_accelerator
     def test_model_generation_batched(self):
-        model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Chat-hf", load_in_4bit=True)
+        model = Emu3ForConditionalGeneration.from_pretrained(
+            "BAAI/Emu3-Chat-hf", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
         processor = Emu3Processor.from_pretrained("BAAI/Emu3-Chat-hf")
         processor.tokenizer.padding_side = "left"
 
@@ -387,7 +391,9 @@ class Emu3IntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     @require_torch_large_accelerator
     def test_model_generation_multi_image(self):
-        model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Chat-hf", load_in_4bit=True)
+        model = Emu3ForConditionalGeneration.from_pretrained(
+            "BAAI/Emu3-Chat-hf", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
         processor = Emu3Processor.from_pretrained("BAAI/Emu3-Chat-hf")
 
         image = Image.open(requests.get("https://picsum.photos/id/237/50/50", stream=True).raw)
@@ -414,7 +420,9 @@ class Emu3IntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     @require_torch_large_accelerator
     def test_model_generate_images(self):
-        model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Gen-hf", load_in_4bit=True)
+        model = Emu3ForConditionalGeneration.from_pretrained(
+            "BAAI/Emu3-Gen-hf", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
         processor = Emu3Processor.from_pretrained("BAAI/Emu3-Gen-hf")
 
         inputs = processor(

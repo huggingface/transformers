@@ -21,8 +21,9 @@
 # limitations under the License.
 import math
 import re
+from collections.abc import Callable
 from itertools import cycle
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 import torch
 from torch import nn

@@ -40,7 +40,6 @@ if is_torch_available():
     import torch
 
     from transformers import BltConfig, BltForCausalLM, BltModel
-from transformers.models.blt.modeling_blt import BltRotaryEmbedding
 
 
 class BltModelTester(CausalLMModelTester):
@@ -169,26 +168,8 @@ class BltModelTester(CausalLMModelTester):
 
 @require_torch
 class BltModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            BltModel,
-            BltForCausalLM,
-        )
-        if is_torch_available()
-        else ()
-    )
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": BltModel,
-            "text-generation": BltForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
-
     fx_compatible = False
     model_tester_class = BltModelTester
-    rotary_embedding_layer = BltRotaryEmbedding  # Enables RoPE tests if set
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer

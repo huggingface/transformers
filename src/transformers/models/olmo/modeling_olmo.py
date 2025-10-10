@@ -25,6 +25,7 @@
 # limitations under the License.
 
 from typing import Callable, Optional, Union
+from collections.abc import Callable
 
 import torch
 import torch.nn as nn

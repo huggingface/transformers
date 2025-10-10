@@ -254,6 +254,7 @@ class MiniMaxConfig(PreTrainedConfig):
         self.mlp_beta_factor = mlp_beta_factor
         self.rope_parameters = rope_parameters
 
+        super().__init__(**super_kwargs)
         if self.layer_types is None:
             self.layer_types = [
                 "full_attention" if bool((i + 1) % 2) else "linear_attention" for i in range(self.num_hidden_layers)

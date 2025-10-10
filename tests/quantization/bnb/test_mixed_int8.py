@@ -126,7 +126,9 @@ class MixedInt8Test(BaseMixedInt8Test):
 
         # Models and tokenizer
         self.model_fp16 = AutoModelForCausalLM.from_pretrained(self.model_name, dtype=torch.float16, device_map="auto")
-        self.model_8bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
+        self.model_8bit = AutoModelForCausalLM.from_pretrained(
+            self.model_name, quantization_config=BitsAndBytesConfig(load_in_8bit=True), device_map="auto"
+        )
 
     def tearDown(self):
         r"""
@@ -297,21 +299,6 @@ class MixedInt8Test(BaseMixedInt8Test):
 
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
-    def test_raise_if_config_and_load_in_8bit(self):
-        r"""
-        Test that loading the model with the config and `load_in_8bit` raises an error
-        """
-        bnb_config = BitsAndBytesConfig()
-
-        with self.assertRaises(ValueError):
-            _ = AutoModelForCausalLM.from_pretrained(
-                self.model_name,
-                quantization_config=bnb_config,
-                load_in_8bit=True,
-                device_map="auto",
-                llm_int8_enable_fp32_cpu_offload=True,
-            )
-
     def test_device_and_dtype_assignment(self):
         r"""
         Test whether attempting to change the device or cast the dtype of a model
@@ -360,7 +347,9 @@ class MixedInt8Test(BaseMixedInt8Test):
         r"""
         Test whether it is possible to mix both `int8` and `fp32` weights when using `keep_in_fp32_modules` correctly.
         """
-        model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-small", load_in_8bit=True, device_map="auto")
+        model = AutoModelForSeq2SeqLM.from_pretrained(
+            "google-t5/t5-small", quantization_config=BitsAndBytesConfig(load_in_8bit=True), device_map="auto"
+        )
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
 
     def test_int8_serialization(self):
@@ -376,7 +365,9 @@ class MixedInt8Test(BaseMixedInt8Test):
             config = AutoConfig.from_pretrained(tmpdirname)
             self.assertTrue(hasattr(config, "quantization_config"))
 
-            model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname, load_in_8bit=True, device_map="auto")
+            model_from_saved = AutoModelForCausalLM.from_pretrained(
+                tmpdirname, quantization_config=BitsAndBytesConfig(load_in_8bit=True), device_map="auto"
+            )
 
             linear = get_some_linear_layer(model_from_saved)
             self.assertTrue(linear.weight.__class__ == Int8Params)
@@ -403,7 +394,9 @@ class MixedInt8Test(BaseMixedInt8Test):
             config = AutoConfig.from_pretrained(tmpdirname)
             self.assertTrue(hasattr(config, "quantization_config"))
 
-            model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname, load_in_8bit=True, device_map="auto")
+            model_from_saved = AutoModelForCausalLM.from_pretrained(
+                tmpdirname, quantization_config=BitsAndBytesConfig(load_in_8bit=True), device_map="auto"
+            )
 
             linear = get_some_linear_layer(model_from_saved)
             self.assertTrue(linear.weight.__class__ == Int8Params)
@@ -497,13 +490,15 @@ class MixedInt8T5Test(unittest.TestCase):
         T5ForConditionalGeneration._keep_in_fp32_modules = None
 
         # test with `google-t5/t5-small`
-        model = T5ForConditionalGeneration.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
+        model = T5ForConditionalGeneration.from_pretrained(
+            self.model_name, quantization_config=BitsAndBytesConfig(load_in_8bit=True), device_map="auto"
+        )
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(model.device)
         _ = model.generate(**encoded_input)
 
         # test with `flan-t5-small`
         model = T5ForConditionalGeneration.from_pretrained(
-            self.dense_act_model_name, load_in_8bit=True, device_map="auto"
+            self.dense_act_model_name, quantization_config=BitsAndBytesConfig(load_in_8bit=True), device_map="auto"
         )
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(model.device)
         _ = model.generate(**encoded_input)
@@ -519,7 +514,9 @@ class MixedInt8T5Test(unittest.TestCase):
         from transformers import T5ForConditionalGeneration
 
         # test with `google-t5/t5-small`
-        model = T5ForConditionalGeneration.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
+        model = T5ForConditionalGeneration.from_pretrained(
+            self.model_name, quantization_config=BitsAndBytesConfig(load_in_8bit=True), device_map="auto"
+        )
 
         # there was a bug with decoders - this test checks that it is fixed
         self.assertTrue(isinstance(model.decoder.block[0].layer[0].SelfAttention.q, bnb.nn.Linear8bitLt))
@@ -529,7 +526,7 @@ class MixedInt8T5Test(unittest.TestCase):
 
         # test with `flan-t5-small`
         model = T5ForConditionalGeneration.from_pretrained(
-            self.dense_act_model_name, load_in_8bit=True, device_map="auto"
+            self.dense_act_model_name, quantization_config=BitsAndBytesConfig(load_in_8bit=True), device_map="auto"
         )
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(model.device)
         _ = model.generate(**encoded_input)
@@ -545,7 +542,9 @@ class MixedInt8T5Test(unittest.TestCase):
         from transformers import T5ForConditionalGeneration
 
         # test with `google-t5/t5-small`
-        model = T5ForConditionalGeneration.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
+        model = T5ForConditionalGeneration.from_pretrained(
+            self.model_name, quantization_config=BitsAndBytesConfig(load_in_8bit=True), device_map="auto"
+        )
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             model.save_pretrained(tmp_dir)
@@ -560,7 +559,7 @@ class MixedInt8T5Test(unittest.TestCase):
 
             # test with `flan-t5-small`
             model = T5ForConditionalGeneration.from_pretrained(
-                self.dense_act_model_name, load_in_8bit=True, device_map="auto"
+                self.dense_act_model_name, quantization_config=BitsAndBytesConfig(load_in_8bit=True), device_map="auto"
             )
             encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(model.device)
             _ = model.generate(**encoded_input)
@@ -575,16 +574,20 @@ class MixedInt8ModelClassesTest(BaseMixedInt8Test):
 
         # Different types of model
 
-        self.base_model = AutoModel.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
+        self.base_model = AutoModel.from_pretrained(
+            self.model_name, quantization_config=BitsAndBytesConfig(load_in_8bit=True), device_map="auto"
+        )
         # Sequence classification model
         self.sequence_model = AutoModelForSequenceClassification.from_pretrained(
-            self.model_name, load_in_8bit=True, device_map="auto"
+            self.model_name, quantization_config=BitsAndBytesConfig(load_in_8bit=True), device_map="auto"
         )
         # CausalLM model
-        self.model_8bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
+        self.model_8bit = AutoModelForCausalLM.from_pretrained(
+            self.model_name, quantization_config=BitsAndBytesConfig(load_in_8bit=True), device_map="auto"
+        )
         # Seq2seq model
         self.seq_to_seq_model = AutoModelForSeq2SeqLM.from_pretrained(
-            self.seq_to_seq_name, load_in_8bit=True, device_map="auto"
+            self.seq_to_seq_name, quantization_config=BitsAndBytesConfig(load_in_8bit=True), device_map="auto"
         )
 
     def tearDown(self):
@@ -696,7 +699,7 @@ class MixedInt8TestMultiGpu(BaseMixedInt8Test):
         }
 
         model_parallel = AutoModelForCausalLM.from_pretrained(
-            self.model_name, load_in_8bit=True, device_map=device_map
+            self.model_name, quantization_config=BitsAndBytesConfig(load_in_8bit=True), device_map=device_map
         )
 
         # Check correct device map
@@ -848,7 +851,7 @@ class MixedInt8TestCpuGpu(BaseMixedInt8Test):
             model_8bit = AutoModelForCausalLM.from_pretrained(
                 self.model_name,
                 device_map=device_map,
-                load_in_8bit=True,
+                quantization_config=BitsAndBytesConfig(load_in_8bit=True),
                 llm_int8_enable_fp32_cpu_offload=True,
                 offload_folder=tmpdirname,
             )
@@ -867,7 +870,9 @@ class MixedInt8TestTraining(BaseMixedInt8Test):
 
     def test_training(self):
         # Step 1: freeze all parameters
-        model = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_name, quantization_config=BitsAndBytesConfig(load_in_8bit=True)
+        )
         model.train()
 
         if torch_device in ["cuda", "xpu"]:
@@ -984,7 +989,9 @@ class Bnb8bitCompile(unittest.TestCase):
     def setUp(self):
         # Models and tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-        self.model_8bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True)
+        self.model_8bit = AutoModelForCausalLM.from_pretrained(
+            self.model_name, quantization_config=BitsAndBytesConfig(load_in_8bit=True)
+        )
 
     @pytest.mark.torch_compile_test
     def test_generate_compile(self):

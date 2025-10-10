@@ -15,7 +15,8 @@
 
 """PyTorch Phi-3 model."""
 
-from typing import Callable, Optional
+from collections.abc import Callable
+from typing import Optional
 
 import torch
 from torch import nn

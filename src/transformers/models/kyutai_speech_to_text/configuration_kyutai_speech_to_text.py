@@ -147,10 +147,6 @@ class KyutaiSpeechToTextConfig(PreTrainedConfig):
         codec_config: Optional[dict] = None,
         **kwargs,
     ):
-        super().__init__(
-            pad_token_id=pad_token_id, bos_token_id=bos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
-        )
-
         if codec_config is None:
             self.codec_config = AutoConfig.for_model("mimi")
             logger.info("codec_config is None, using default audio encoder config.")
@@ -193,6 +189,10 @@ class KyutaiSpeechToTextConfig(PreTrainedConfig):
         rope_theta = kwargs.get("rope_theta", 10000.0)
         standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
+
+        super().__init__(
+            pad_token_id=pad_token_id, bos_token_id=bos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
+        )
 
 
 __all__ = ["KyutaiSpeechToTextConfig"]

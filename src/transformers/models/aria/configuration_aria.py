@@ -144,13 +144,10 @@ class AriaTextConfig(PreTrainedConfig):
         moe_num_shared_experts: int = 2,
         **kwargs,
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.intermediate_size = intermediate_size
+        self.moe_num_experts = moe_num_experts
+        self.moe_topk = moe_topk
+        self.moe_num_shared_experts = moe_num_shared_experts
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -178,9 +175,14 @@ class AriaTextConfig(PreTrainedConfig):
         rope_theta = kwargs.get("rope_theta", 10000.0)
         standardize_rope_params(self, rope_theta=rope_theta)
         rope_config_validation(self)
-        self.moe_num_experts = moe_num_experts
-        self.moe_topk = moe_topk
-        self.moe_num_shared_experts = moe_num_shared_experts
+
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
 
 
 class AriaConfig(PreTrainedConfig):
