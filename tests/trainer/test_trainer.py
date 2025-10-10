@@ -5375,6 +5375,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             f"Resumed: {resumed_data_order}",
         )
 
+
 @require_torch
 @is_staging_test
 class TrainerIntegrationWithHubTester(unittest.TestCase):
