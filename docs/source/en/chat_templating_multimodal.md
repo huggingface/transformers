@@ -109,6 +109,10 @@ print(processor.decode(out[0]))
 
 The decoded output contains the full conversation so far, including the user message and the placeholder tokens that contain the image information. You may need to trim the previous conversation from the output before displaying it to the user.
 
+## Response parsing
+
+TODO section on response parsing with a processor here
+
 ## Video inputs
 
 Some vision models also support video inputs. The message format is very similar to the format for [image inputs](#image-inputs).
