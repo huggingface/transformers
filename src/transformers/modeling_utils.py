@@ -4511,15 +4511,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Load config if we don't provide a configuration
         if not isinstance(config, PreTrainedConfig):
             config_path = config if config is not None else pretrained_model_name_or_path
-            config_download_kwargs = {key: value for key, value in download_kwargs.items() if key != "subfolder"}
             config, model_kwargs = cls.config_class.from_pretrained(
                 config_path,
                 return_unused_kwargs=True,
-                subfolder=subfolder,
                 gguf_file=gguf_file,
                 _from_auto=from_auto_class,
                 _from_pipeline=from_pipeline,
-                **config_download_kwargs,
+                **download_kwargs,
                 **kwargs,
             )
             if "gguf_file" in model_kwargs:
