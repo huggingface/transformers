@@ -15,13 +15,11 @@
 """PyTorch MRA model."""
 
 import math
-from pathlib import Path
 from typing import Optional, Union
 
 import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-from torch.utils.cpp_extension import load
 
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
@@ -35,7 +33,14 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward
-from ...utils import auto_docstring, is_cuda_platform, is_kernels_available, is_ninja_available, is_torch_cuda_available, logging
+from ...utils import (
+    auto_docstring,
+    is_cuda_platform,
+    is_kernels_available,
+    is_ninja_available,
+    is_torch_cuda_available,
+    logging,
+)
 from .configuration_mra import MraConfig
 
 
@@ -49,6 +54,7 @@ def load_cuda_kernels():
     if not is_kernels_available():
         raise ImportError("kernels is not installed, please install it with `pip install kernels`")
     from kernels import get_kernel
+
     mra_cuda_kernel = get_kernel("kernels-community/mra")
 
 
