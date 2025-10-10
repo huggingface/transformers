@@ -343,61 +343,58 @@ class SentencePieceBackendTesterMixin:
             self.assertEqual(tokenizer_2.additional_special_tokens, ["<other>", "<another>", "<tok>"])
 
     def test_alignment_methods(self):
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+        tokenizer_r = self.get_tokenizer()
+        words = ["Wonderful", "no", "inspiration", "example", "with", "subtoken"]
+        text = " ".join(words)
+        batch_size = 3
 
-                words = ["Wonderful", "no", "inspiration", "example", "with", "subtoken"]
-                text = " ".join(words)
-                batch_size = 3
+        encoding = tokenizer_r(text, add_special_tokens=False)
 
-                encoding = tokenizer_r.encode_plus(text, add_special_tokens=False)
+        batch_encoding = tokenizer_r([text] * batch_size, add_special_tokens=False)
+        num_tokens = len(encoding["input_ids"])
 
-                batch_encoding = tokenizer_r([text] * batch_size, add_special_tokens=False)
-                num_tokens = len(encoding["input_ids"])
+        last_word_index = len(words) - 1
+        last_token_index = num_tokens - 1
+        last_batch_index = batch_size - 1
+        last_char_index = len(text) - 1
 
-                last_word_index = len(words) - 1
-                last_token_index = num_tokens - 1
-                last_batch_index = batch_size - 1
-                last_char_index = len(text) - 1
+        # words, tokens
+        self.assertEqual(len(encoding.words(0)), num_tokens)
+        self.assertEqual(max(encoding.words(0)), last_word_index)
+        self.assertEqual(min(encoding.words(0)), 0)
+        self.assertEqual(len(batch_encoding.words(last_batch_index)), num_tokens)
+        self.assertEqual(max(batch_encoding.words(last_batch_index)), last_word_index)
+        self.assertEqual(min(batch_encoding.words(last_batch_index)), 0)
+        self.assertEqual(len(encoding.tokens(0)), num_tokens)
 
-                # words, tokens
-                self.assertEqual(len(encoding.words(0)), num_tokens)
-                self.assertEqual(max(encoding.words(0)), last_word_index)
-                self.assertEqual(min(encoding.words(0)), 0)
-                self.assertEqual(len(batch_encoding.words(last_batch_index)), num_tokens)
-                self.assertEqual(max(batch_encoding.words(last_batch_index)), last_word_index)
-                self.assertEqual(min(batch_encoding.words(last_batch_index)), 0)
-                self.assertEqual(len(encoding.tokens(0)), num_tokens)
+        # Assert token_to_word
+        self.assertEqual(encoding.token_to_word(0), 0)
+        self.assertEqual(encoding.token_to_word(0, 0), 0)
+        self.assertEqual(encoding.token_to_word(last_token_index), last_word_index)
+        self.assertEqual(encoding.token_to_word(0, last_token_index), last_word_index)
+        self.assertEqual(batch_encoding.token_to_word(1, 0), 0)
+        self.assertEqual(batch_encoding.token_to_word(0, last_token_index), last_word_index)
+        self.assertEqual(batch_encoding.token_to_word(last_batch_index, last_token_index), last_word_index)
 
-                # Assert token_to_word
-                self.assertEqual(encoding.token_to_word(0), 0)
-                self.assertEqual(encoding.token_to_word(0, 0), 0)
-                self.assertEqual(encoding.token_to_word(last_token_index), last_word_index)
-                self.assertEqual(encoding.token_to_word(0, last_token_index), last_word_index)
-                self.assertEqual(batch_encoding.token_to_word(1, 0), 0)
-                self.assertEqual(batch_encoding.token_to_word(0, last_token_index), last_word_index)
-                self.assertEqual(batch_encoding.token_to_word(last_batch_index, last_token_index), last_word_index)
+        # Assert word_to_tokens
+        self.assertEqual(encoding.word_to_tokens(0).start, 0)
+        self.assertEqual(encoding.word_to_tokens(0, 0).start, 0)
+        self.assertEqual(encoding.word_to_tokens(last_word_index).end, last_token_index + 1)
+        self.assertEqual(encoding.word_to_tokens(0, last_word_index).end, last_token_index + 1)
+        self.assertEqual(batch_encoding.word_to_tokens(1, 0).start, 0)
+        self.assertEqual(batch_encoding.word_to_tokens(0, last_word_index).end, last_token_index + 1)
+        self.assertEqual(
+            batch_encoding.word_to_tokens(last_batch_index, last_word_index).end, last_token_index + 1
+        )
 
-                # Assert word_to_tokens
-                self.assertEqual(encoding.word_to_tokens(0).start, 0)
-                self.assertEqual(encoding.word_to_tokens(0, 0).start, 0)
-                self.assertEqual(encoding.word_to_tokens(last_word_index).end, last_token_index + 1)
-                self.assertEqual(encoding.word_to_tokens(0, last_word_index).end, last_token_index + 1)
-                self.assertEqual(batch_encoding.word_to_tokens(1, 0).start, 0)
-                self.assertEqual(batch_encoding.word_to_tokens(0, last_word_index).end, last_token_index + 1)
-                self.assertEqual(
-                    batch_encoding.word_to_tokens(last_batch_index, last_word_index).end, last_token_index + 1
-                )
-
-                # Assert token_to_chars
-                self.assertEqual(encoding.token_to_chars(0).start, 0)
-                self.assertEqual(encoding.token_to_chars(0, 0).start, 0)
-                self.assertEqual(encoding.token_to_chars(last_token_index).end, last_char_index + 1)
-                self.assertEqual(encoding.token_to_chars(0, last_token_index).end, last_char_index + 1)
-                self.assertEqual(batch_encoding.token_to_chars(1, 0).start, 0)
-                self.assertEqual(batch_encoding.token_to_chars(0, last_token_index).end, last_char_index + 1)
-                self.assertEqual(
-                    batch_encoding.token_to_chars(last_batch_index, last_token_index).end, last_char_index + 1
-                )
+        # Assert token_to_chars
+        self.assertEqual(encoding.token_to_chars(0).start, 0)
+        self.assertEqual(encoding.token_to_chars(0, 0).start, 0)
+        self.assertEqual(encoding.token_to_chars(last_token_index).end, last_char_index + 1)
+        self.assertEqual(encoding.token_to_chars(0, last_token_index).end, last_char_index + 1)
+        self.assertEqual(batch_encoding.token_to_chars(1, 0).start, 0)
+        self.assertEqual(batch_encoding.token_to_chars(0, last_token_index).end, last_char_index + 1)
+        self.assertEqual(
+            batch_encoding.token_to_chars(last_batch_index, last_token_index).end, last_char_index + 1
+        )
     

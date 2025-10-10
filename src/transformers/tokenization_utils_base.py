@@ -1045,6 +1045,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         self.extra_special_tokens = kwargs.pop("extra_special_tokens", {})
         self._set_model_specific_special_tokens(special_tokens=self.extra_special_tokens)
 
+        self.deprecation_warnings = {}
     # ---- Special tokens API (moved from SpecialTokensMixin) ----
     def add_special_tokens(
         self,
@@ -2159,12 +2160,21 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 the `tokenize` method) or a list of integers (tokenized string ids using the `convert_tokens_to_ids`
                 method).
         """
-        encoded_inputs = self.encode_plus(
+        padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
+            padding=padding,
+            truncation=truncation,
+            max_length=max_length,
+            pad_to_multiple_of=kwargs.get("pad_to_multiple_of", None),
+            verbose=kwargs.get("verbose", True),
+            **kwargs,
+        )
+        
+        encoded_inputs = self._encode_plus(
             text,
             text_pair=text_pair,
             add_special_tokens=add_special_tokens,
-            padding=padding,
-            truncation=truncation,
+            padding_strategy=padding_strategy,
+            truncation_strategy=truncation_strategy,
             max_length=max_length,
             stride=stride,
             padding_side=padding_side,
@@ -2332,6 +2342,8 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             "verbose": verbose,
         }
 
+        max_target_length = kwargs.pop("max_target_length", None)
+        
         # First merge tokenizer_kwargs, then other kwargs (explicit params take precedence)
         if tokenizer_kwargs is not None:
             all_kwargs.update(tokenizer_kwargs)
@@ -2360,22 +2372,21 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 truncation_strategy=truncation_strategy,
                 max_length=max_length,
                 **all_kwargs,
-                **kwargs,
             )
-        if text_target is not None and hasattr(self, '_switch_to_target_mode'):
-            self._switch_to_target_mode()
+        if text_target is not None:
+            if hasattr(self, '_switch_to_target_mode'):
+                self._switch_to_target_mode()
             target_encodings = self._encode_plus(
                 text=text_target,
                 text_pair=text_pair_target,
                 padding_strategy=padding_strategy,
                 truncation_strategy=truncation_strategy,
-                max_length=max_length,
+                max_length=max_target_length if max_target_length is not None else max_length,
                 **all_kwargs,
-                **kwargs,
             )
-        # Leave back tokenizer in input mode
-        if hasattr(self, '_switch_to_input_mode'):
-            self._switch_to_input_mode()
+            # Leave back tokenizer in input mode
+            if hasattr(self, '_switch_to_input_mode'):
+                self._switch_to_input_mode()
 
         if text_target is None:
             return encodings
@@ -2415,20 +2426,30 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
     def pad(
         self,
-        encoded_inputs,
-        padding=True,
-        max_length=None,
-        pad_to_multiple_of=None,
-        padding_side=None,
-        return_attention_mask=None,
-        return_tensors=None,
-        verbose=True,
-    ):
+        encoded_inputs: Union[
+            BatchEncoding,
+            list[BatchEncoding],
+            dict[str, EncodedInput],
+            dict[str, list[EncodedInput]],
+            list[dict[str, EncodedInput]],
+        ],
+        padding: Union[bool, str, PaddingStrategy] = True,
+        max_length: Optional[int] = None,
+        pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[str] = None,
+        return_attention_mask: Optional[bool] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        verbose: bool = True,
+    ) -> BatchEncoding:
         """
-        Pad single or batched encoded input up to predefined length or to the max sequence length in the batch.
+        Pad a single encoded input or a batch of encoded inputs up to predefined length or to the max sequence length
+        in the batch.
 
         Padding side (left/right) padding token ids are defined at the tokenizer level (with `self.padding_side`,
         `self.pad_token_id` and `self.pad_token_type_id`).
+
+        Please note that with a fast tokenizer, using the `__call__` method is faster than using a method to encode the
+        text followed by a call to the `pad` method to get a padded encoding.
 
         <Tip>
 
@@ -2481,46 +2502,59 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 Whether or not to print more information and warnings.
         """
 
-        # Convert list of dicts → dict of lists
+        # If we have a list of dicts, let's convert it in a dict of lists
+        # We do this to allow using this method as a collate_fn function in PyTorch Dataloader
         if isinstance(encoded_inputs, (list, tuple)) and isinstance(encoded_inputs[0], Mapping):
-            encoded_inputs = {k: [ex[k] for ex in encoded_inputs] for k in encoded_inputs[0]}
+            encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0]}
 
-        # Check for required input key (usually 'input_ids')
-        main_input_name = self.model_input_names[0]
-        if main_input_name not in encoded_inputs:
-            raise ValueError(f"Missing key '{main_input_name}' in encoded_inputs.")
+        # The model's main input name, usually `input_ids`, has been passed for padding
+        if self.model_input_names[0] not in encoded_inputs:
+            raise ValueError(
+                "You should supply an encoding or a list of encodings to this method "
+                f"that includes {self.model_input_names[0]}, but you provided {list(encoded_inputs.keys())}"
+            )
 
-        main_input = encoded_inputs[main_input_name]
-        if not main_input or (isinstance(main_input, Sized) and len(main_input) == 0):
+        required_input = encoded_inputs[self.model_input_names[0]]
+
+        if required_input is None or (isinstance(required_input, Sized) and len(required_input) == 0):
             if return_attention_mask:
                 encoded_inputs["attention_mask"] = []
             return encoded_inputs
 
-        # Determine tensor type if inputs are tensors
-        first_elem = main_input[0]
-        if isinstance(first_elem, (list, tuple)):
-            for item in main_input:
-                if item:
-                    first_elem = item[0]
+        # If we have PyTorch/NumPy tensors/arrays as inputs, we cast them as python objects
+        # and rebuild them afterwards if no return_tensors is specified
+        # Note that we lose the specific device the tensor may be on for PyTorch
+
+        first_element = required_input[0]
+        if isinstance(first_element, (list, tuple)):
+            # first_element might be an empty list/tuple in some edge cases so we grab the first non empty element.
+            for item in required_input:
+                if len(item) != 0:
+                    first_element = item[0]
                     break
-
-        if not isinstance(first_elem, (int, list, tuple)):
-            if is_torch_tensor(first_elem):
-                return_tensors = return_tensors or "pt"
-            elif isinstance(first_elem, np.ndarray):
-                return_tensors = return_tensors or "np"
+        # At this state, if `first_element` is still a list/tuple, it's an empty one so there is nothing to do.
+        if not isinstance(first_element, (int, list, tuple)):
+            if is_torch_tensor(first_element):
+                return_tensors = "pt" if return_tensors is None else return_tensors
+            elif isinstance(first_element, np.ndarray):
+                return_tensors = "np" if return_tensors is None else return_tensors
             else:
-                raise ValueError(f"Unsupported element type: {type(first_elem)}")
-            encoded_inputs = {k: to_py_obj(v) for k, v in encoded_inputs.items()}
+                raise ValueError(
+                    f"type of {first_element} unknown: {type(first_element)}. "
+                    "Should be one of a python, numpy, or pytorch object."
+                )
 
-        # Resolve padding strategy and max_length
+            for key, value in encoded_inputs.items():
+                encoded_inputs[key] = to_py_obj(value)
+
+        # Convert padding_strategy in PaddingStrategy
         padding_strategy, _, max_length, _ = self._get_padding_truncation_strategies(
             padding=padding, max_length=max_length, verbose=verbose
         )
 
-        # Case 1: single sequence (not batched)
-        if main_input and not isinstance(main_input[0], (list, tuple)):
-            padded = self._pad(
+        required_input = encoded_inputs[self.model_input_names[0]]
+        if required_input and not isinstance(required_input[0], (list, tuple)):
+            encoded_inputs = self._pad(
                 encoded_inputs,
                 max_length=max_length,
                 padding_strategy=padding_strategy,
@@ -2528,41 +2562,44 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 padding_side=padding_side,
                 return_attention_mask=return_attention_mask,
             )
-            return BatchEncoding(padded, tensor_type=return_tensors)
+            return BatchEncoding(encoded_inputs, tensor_type=return_tensors)
 
-        # Case 2: batch of sequences
-        batch_size = len(main_input)
-        assert all(len(v) == batch_size for v in encoded_inputs.values()), "Inconsistent batch sizes in inputs."
+        batch_size = len(required_input)
+        assert all(len(v) == batch_size for v in encoded_inputs.values()), (
+            "Some items in the output dictionary have a different batch size than others."
+        )
 
         if padding_strategy == PaddingStrategy.LONGEST:
-            max_length = max(len(seq) for seq in main_input)
+            max_length = max(len(inputs) for inputs in required_input)
             padding_strategy = PaddingStrategy.MAX_LENGTH
 
         batch_outputs = {}
         for i in range(batch_size):
-            sample = {k: v[i] for k, v in encoded_inputs.items()}
-            padded = self._pad(
-                sample,
+            inputs = {k: v[i] for k, v in encoded_inputs.items()}
+            outputs = self._pad(
+                inputs,
                 max_length=max_length,
                 padding_strategy=padding_strategy,
                 pad_to_multiple_of=pad_to_multiple_of,
                 padding_side=padding_side,
                 return_attention_mask=return_attention_mask,
             )
-            for k, v in padded.items():
-                batch_outputs.setdefault(k, []).append(v)
+
+            for key, value in outputs.items():
+                if key not in batch_outputs:
+                    batch_outputs[key] = []
+                batch_outputs[key].append(value)
 
         return BatchEncoding(batch_outputs, tensor_type=return_tensors)
 
-
     def _pad(
-        self,
-        encoded_inputs: Union[dict[str, EncodedInput], BatchEncoding],
-        max_length: Optional[int] = None,
-        padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_attention_mask: Optional[bool] = None,
+            self,
+            encoded_inputs: Union[dict[str, EncodedInput], BatchEncoding],
+            max_length: Optional[int] = None,
+            padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
+            pad_to_multiple_of: Optional[int] = None,
+            padding_side: Optional[str] = None,
+            return_attention_mask: Optional[bool] = None,
     ) -> dict:
         """
         Pad encoded inputs (on left/right and up to predefined length or max length in the batch)
@@ -2617,7 +2654,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                     encoded_inputs["attention_mask"] = encoded_inputs["attention_mask"] + [0] * difference
                 if "token_type_ids" in encoded_inputs:
                     encoded_inputs["token_type_ids"] = (
-                        encoded_inputs["token_type_ids"] + [self.pad_token_type_id] * difference
+                            encoded_inputs["token_type_ids"] + [self.pad_token_type_id] * difference
                     )
                 if "special_tokens_mask" in encoded_inputs:
                     encoded_inputs["special_tokens_mask"] = encoded_inputs["special_tokens_mask"] + [1] * difference
@@ -2697,7 +2734,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         return self._decode(
             token_ids=token_ids,
             skip_special_tokens=skip_special_tokens,
-            clean_up_tokenization_spaces=False,
             **kwargs,
         )
 

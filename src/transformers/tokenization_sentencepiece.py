@@ -312,8 +312,7 @@ class PreTrainedSentencePieceTokenizer(PreTrainedTokenizerBase):
         self.tokens_trie = Trie()
 
         # 2. init `_added_tokens_decoder` if child class did not
-        if not hasattr(self, "_added_tokens_decoder"):
-            self._added_tokens_decoder: dict[int, AddedToken] = {}
+        self._added_tokens_decoder: dict[int, AddedToken] = {}
 
         # 3. if a `added_tokens_decoder` is passed, we are loading from a saved tokenizer, we overwrite
         self._added_tokens_decoder.update(kwargs.pop("added_tokens_decoder", {}))

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from parameterized import parameterized
 
-from transformers import PreTrainedTokenizerFast, SpecialTokensMixin
+from transformers import PreTrainedTokenizerFast
 from transformers.testing_utils import require_tokenizers
 from transformers.tokenization_utils import AddedToken
 
