@@ -66,9 +66,39 @@ def write_processor(src_root: Path, dst_root: Path):
     )
     # fmt: on
 
+    # fmt: off
+    processor_chat_template = (
+        "{% if messages[0]['role'] != 'system' %}"
+            "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n"
+        "{% endif %}"
+        "{% for m in messages if m['content'] is not none %}"
+            "<|im_start|>{{ m['role'] }}\n"
+            "{% if m['content'] is string %}"
+                "{{ m['content'] }}"
+            "{% else %}"
+                "{% set audio = namespace(found=False) %}"
+                "{% set text_buf = namespace(v='') %}"
+                "{% for c in m['content'] %}"
+                    "{% if c.get('type') == 'audio' or 'audio' in c %}"
+                        "{% set audio.found = True %}"
+                    "{% elif c.get('type') == 'text' or 'text' in c %}"
+                        "{% set text_buf.v = text_buf.v + c['text'] %}"
+                    "{% endif %}"
+                "{% endfor %}"
+                "{% if audio.found %}{{ '<sound>' }}{% endif %}{{ text_buf.v }}"
+            "{% endif %}"
+            "<|im_end|>\n"
+        "{% endfor %}"
+        "{% if add_generation_prompt %}"
+            "<|im_start|>assistant\n"
+        "{% endif %}"
+    )
+    # fmt: on
+
     processor = AudioFlamingo3Processor(
         feature_extractor=WhisperFeatureExtractor(feature_size=128, return_attention_mask=True),
         tokenizer=AutoTokenizer.from_pretrained(str(llm_dir), chat_template=tokenizer_chat_template, use_fast=True),
+        chat_template=processor_chat_template,
     )
     processor.save_pretrained(str(dst_root))
 
