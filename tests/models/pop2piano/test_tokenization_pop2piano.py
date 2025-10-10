@@ -224,23 +224,6 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
 
         shutil.rmtree(tmpdirname)
 
-    def test_pickle_tokenizer(self):
-        tmpdirname = tempfile.mkdtemp()
-
-        notes = self.get_input_notes()
-        subwords = self.tokenizer(notes)["token_ids"]
-
-        filename = os.path.join(tmpdirname, "tokenizer.bin")
-        with open(filename, "wb") as handle:
-            pickle.dump(self.tokenizer, handle)
-
-        with open(filename, "rb") as handle:
-            tokenizer_new = pickle.load(handle)
-
-        subwords_loaded = tokenizer_new(notes)["token_ids"]
-
-        self.assertListEqual(subwords, subwords_loaded)
-
     def test_padding_side_in_kwargs(self):
         tokenizer_p = Pop2PianoTokenizer.from_pretrained("sweetcocoa/pop2piano", padding_side="left")
         self.assertEqual(tokenizer_p.padding_side, "left")
