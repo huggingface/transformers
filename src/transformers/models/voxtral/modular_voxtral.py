@@ -49,7 +49,6 @@ class VoxtralPreTrainedModel(Qwen2AudioPreTrainedModel):
     _supports_cache_class = True
     _supports_attention_backend = True
     _can_compile_fullgraph = True
-    _supports_attention_backend = True
     _no_split_modules = None
 
 
@@ -65,7 +64,7 @@ class VoxtralEncoder(Qwen2AudioEncoder):
         "hidden_states": VoxtralEncoderLayer,
     }
 
-    @check_model_inputs
+    @check_model_inputs()
     def forward(
         self,
         input_features,
@@ -103,7 +102,6 @@ class VoxtralEncoder(Qwen2AudioEncoder):
             layer_outputs = encoder_layer(
                 hidden_states,
                 attention_mask=attention_mask,
-                layer_head_mask=None,
             )
             hidden_states = layer_outputs[0]
 

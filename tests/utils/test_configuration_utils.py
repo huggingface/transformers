@@ -24,7 +24,7 @@ from pathlib import Path
 import httpx
 
 from transformers import AutoConfig, BertConfig, Florence2Config, GPT2Config
-from transformers.configuration_utils import PretrainedConfig
+from transformers.configuration_utils import PreTrainedConfig
 from transformers.testing_utils import TOKEN, TemporaryHubRepo, is_staging_test, require_torch
 
 
@@ -39,7 +39,6 @@ config_common_kwargs = {
     "output_attentions": True,
     "torchscript": True,
     "dtype": "float16",
-    "pruned_heads": {"a": 1},
     "tie_word_embeddings": False,
     "is_decoder": True,
     "cross_attention_hidden_size": 128,
@@ -179,7 +178,7 @@ class ConfigTestUtils(unittest.TestCase):
         self.assertEqual(summary_type, c.summary_type, "mismatch for key: summary_type")
 
     def test_config_common_kwargs_is_complete(self):
-        base_config = PretrainedConfig()
+        base_config = PreTrainedConfig()
         missing_keys = [key for key in base_config.__dict__ if key not in config_common_kwargs]
         # If this part of the test fails, you have arguments to add in config_common_kwargs above.
         self.assertListEqual(
@@ -297,7 +296,7 @@ class ConfigTestUtils(unittest.TestCase):
         # Loading config should not raise a FutureWarning. It was the case before.
         with warnings.catch_warnings():
             warnings.simplefilter("error")
-            PretrainedConfig.from_pretrained("bert-base-uncased")
+            PreTrainedConfig.from_pretrained("bert-base-uncased")
 
     def test_get_text_config(self):
         """Tests the `get_text_config` method."""
@@ -335,24 +334,24 @@ class ConfigTestUtils(unittest.TestCase):
     def test_bc_torch_dtype(self):
         import torch
 
-        config = PretrainedConfig(dtype="bfloat16")
+        config = PreTrainedConfig(dtype="bfloat16")
         self.assertEqual(config.dtype, torch.bfloat16)
 
-        config = PretrainedConfig(torch_dtype="bfloat16")
+        config = PreTrainedConfig(torch_dtype="bfloat16")
         self.assertEqual(config.dtype, torch.bfloat16)
 
         # Check that if we pass both, `dtype` is used
-        config = PretrainedConfig(dtype="bfloat16", torch_dtype="float32")
+        config = PreTrainedConfig(dtype="bfloat16", torch_dtype="float32")
         self.assertEqual(config.dtype, torch.bfloat16)
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             config.save_pretrained(tmpdirname)
 
-            config = PretrainedConfig.from_pretrained(tmpdirname)
+            config = PreTrainedConfig.from_pretrained(tmpdirname)
             self.assertEqual(config.dtype, torch.bfloat16)
 
-            config = PretrainedConfig.from_pretrained(tmpdirname, dtype="float32")
+            config = PreTrainedConfig.from_pretrained(tmpdirname, dtype="float32")
             self.assertEqual(config.dtype, "float32")
 
-            config = PretrainedConfig.from_pretrained(tmpdirname, torch_dtype="float32")
+            config = PreTrainedConfig.from_pretrained(tmpdirname, torch_dtype="float32")
             self.assertEqual(config.dtype, "float32")

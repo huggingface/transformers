@@ -21,22 +21,22 @@ import numpy as np
 
 from transformers import AutoConfig, DacConfig, HubertConfig, WavLMConfig
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class XcodecConfig(PretrainedConfig):
+class XcodecConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`XcodecModel`]. It is used to instantiate a
     Xcodec model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the
     [Manel/X-Codec](https://huggingface.co/Manel/X-Codec) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         target_bandwidths (`List[float]`, *optional*, defaults to `[0.5, 1, 1.5, 2, 4]`):
@@ -102,8 +102,6 @@ class XcodecConfig(PretrainedConfig):
         semantic_model_config: Union[dict, HubertConfig] = None,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         if acoustic_model_config is None:
             self.acoustic_model_config = DacConfig(
                 encoder_hidden_size=64,
@@ -157,6 +155,8 @@ class XcodecConfig(PretrainedConfig):
         if codebook_dim is None:
             codebook_dim = self.acoustic_model_config.hidden_size + self.semantic_model_config.hidden_size
         self.codebook_dim = codebook_dim
+
+        super().__init__(**kwargs)
 
     @property
     def frame_rate(self) -> int:

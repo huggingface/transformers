@@ -17,22 +17,22 @@
 import os
 from typing import Union
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class ClvpEncoderConfig(PretrainedConfig):
+class ClvpEncoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ClvpEncoder`]. It is used to instantiate a CLVP
     text or CLVP speech encoder according to the specified arguments. Instantiating a configuration with the defaults
     will yield a similar configuration to that of the encoder of the CLVP
     [susnato/clvp_dev](https://huggingface.co/susnato/clvp_dev) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 256):
@@ -156,15 +156,15 @@ class ClvpEncoderConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
-class ClvpDecoderConfig(PretrainedConfig):
+class ClvpDecoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ClvpDecoder`]. It is used to instantiate a CLVP
     Decoder Model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Decoder part of the CLVP
     [susnato/clvp_dev](https://huggingface.co/susnato/clvp_dev) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     The architecture is similar to GPT2.
 
@@ -313,15 +313,15 @@ class ClvpDecoderConfig(PretrainedConfig):
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
 
-class ClvpConfig(PretrainedConfig):
+class ClvpConfig(PreTrainedConfig):
     r"""
     [`ClvpConfig`] is the configuration class to store the configuration of a [`ClvpModelForConditionalGeneration`]. It
     is used to instantiate a CLVP model according to the specified arguments, defining the text model, speech model and
     decoder model configs. Instantiating a configuration with the defaults will yield a similar configuration to that
     of the CLVP [susnato/clvp_dev](https://huggingface.co/susnato/clvp_dev) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`dict`, *optional*):
@@ -362,7 +362,7 @@ class ClvpConfig(PretrainedConfig):
     >>> config_speech = ClvpEncoderConfig()
     >>> decoder_config = ClvpDecoderConfig()
 
-    >>> config = ClvpConfig.from_sub_model_configs(config_text, config_speech, decoder_config)
+    >>> config = ClvpConfig(config_text, config_speech, decoder_config)
     ```"""
 
     model_type = "clvp"
@@ -382,58 +382,32 @@ class ClvpConfig(PretrainedConfig):
         initializer_factor=1.0,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         if text_config is None:
-            text_config = {}
-            logger.info("`text_config` is `None`. Initializing the `ClvpEncoderConfig` with default values.")
+            text_config = ClvpEncoderConfig()
+            logger.info("`text_config` is `None`. initializing the `ClvpEncoderConfig` with default values.")
+        elif isinstance(text_config, dict):
+            text_config = ClvpEncoderConfig(**text_config)
 
         if speech_config is None:
-            speech_config = {}
+            speech_config = ClvpEncoderConfig()
             logger.info("`speech_config` is `None`. initializing the `ClvpEncoderConfig` with default values.")
+        elif isinstance(speech_config, dict):
+            speech_config = ClvpEncoderConfig(**speech_config)
 
         if decoder_config is None:
-            decoder_config = {}
-            logger.info("`decoder_config` is `None`. initializing the `ClvpDecoderConfig` with default values.")
+            decoder_config = ClvpDecoderConfig()
+            logger.info("`image_config` is `None`. initializing the `ClvpDecoderConfig` with default values.")
+        elif isinstance(decoder_config, dict):
+            decoder_config = ClvpDecoderConfig(**decoder_config)
 
-        self.text_config = ClvpEncoderConfig(**text_config)
-        self.speech_config = ClvpEncoderConfig(**speech_config)
-        self.decoder_config = ClvpDecoderConfig(**decoder_config)
+        self.text_config = text_config
+        self.speech_config = speech_config
+        self.decoder_config = decoder_config
 
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
         self.initializer_factor = initializer_factor
-
-    @classmethod
-    def from_sub_model_configs(
-        cls,
-        text_config: ClvpEncoderConfig,
-        speech_config: ClvpEncoderConfig,
-        decoder_config: ClvpDecoderConfig,
-        **kwargs,
-    ):
-        r"""
-        Instantiate a [`ClvpConfig`] (or a derived class) from CLVP text model configuration, CLVP speech model
-        configuration and CLVP decoder model configuration.
-
-        Args:
-            text_config (`ClvpEncoderConfig`):
-                Text model configuration of type [`ClvpEncoderConfig`].
-            speech_config (`ClvpEncoderConfig`):
-                Speech model configuration of type [`ClvpEncoderConfig`].
-            decoder_config (`ClvpDecoderConfig`):
-                Decoder model configuration of type [`ClvpDecoderConfig`].
-
-        Returns:
-            [`ClvpConfig`]: An instance of a configuration object
-        """
-
-        return cls(
-            text_config=text_config.to_dict(),
-            speech_config=speech_config.to_dict(),
-            decoder_config=decoder_config.to_dict(),
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
 
 __all__ = ["ClvpConfig", "ClvpDecoderConfig", "ClvpEncoderConfig"]

@@ -188,7 +188,7 @@ deepspeed --num_gpus=2 your_program.py <normal cl args> --deepspeed ds_config.js
 deepspeed examples/pytorch/translation/run_translation.py \
 --deepspeed tests/deepspeed/ds_config_zero3.json \
 --model_name_or_path google-t5/t5-small --per_device_train_batch_size 1 \
---output_dir output_dir --overwrite_output_dir --fp16 \
+--output_dir output_dir --fp16 \
 --do_train --max_train_samples 500 --num_train_epochs 1 \
 --dataset_name wmt16 --dataset_config "ro-en" \
 --source_lang en --target_lang ro
@@ -211,7 +211,7 @@ DeepSpeed 関連の引数が 2 つありますが、簡単にするためであ�
 deepspeed --num_gpus=1 examples/pytorch/translation/run_translation.py \
 --deepspeed tests/deepspeed/ds_config_zero2.json \
 --model_name_or_path google-t5/t5-small --per_device_train_batch_size 1 \
---output_dir output_dir --overwrite_output_dir --fp16 \
+--output_dir output_dir --fp16 \
 --do_train --max_train_samples 500 --num_train_epochs 1 \
 --dataset_name wmt16 --dataset_config "ro-en" \
 --source_lang en --target_lang ro
@@ -1390,8 +1390,6 @@ Ampere アーキテクチャ ベースの GPU を使用している場合、pyto
 
 ### Automatic Mixed Precision
 
-pytorch のような AMP の方法または apex のような方法で自動混合精度を使用できます。
-
 ### fp16
 
 fp16 (float16) を設定して pytorch AMP のようなモードを設定するには:
@@ -1490,40 +1488,6 @@ bf16 が有効な状態で [勾配累積](#gradient-accumulation) を使用す�
 この記事の執筆時点での有効な値は、"fp16"、"bfp16"、"fp32"です。
 
 注: ステージ ゼロ 3 には、bf16 通信タイプに関するバグがあり、`deepspeed==0.8.1`で修正されました。
-
-### apex
-
-apex AMP のようなモード セットを設定するには:
-
-```json
-"amp": {
-    "enabled": "auto",
-    "opt_level": "auto"
-}
-```
-
-[`Trainer`] は `args.fp16_backend` の値に基づいて自動的に設定します。
-`args.fp16_opt_level`。
-
-このモードは、`--fp16 --fp16_backend apex --fp16_opt_level 01`コマンド ライン引数が渡されると有効になります。
-
-このモードを明示的に構成することもできます。
-
-```json
-{
-    "amp": {
-        "enabled": true,
-        "opt_level": "O1"
-    }
-}
-```
-
-ただし、[`Trainer`] コマンドライン引数と DeepSpeed を自分で同期することになります。
-構成。
-
-これは[ドキュメント](https://www.deepspeed.ai/docs/config-json/#automatic-mixed-precision-amp-training-options)です。
-
-<a id='deepspeed-bs'></a>
 
 ### Batch Size
 
@@ -1825,7 +1789,7 @@ deepspeed examples/pytorch/translation/run_translation.py \
 --model_name_or_path google-t5/t5-small --output_dir output_dir \
 --do_eval --max_eval_samples 50 --warmup_steps 50  \
 --max_source_length 128 --val_max_target_length 128 \
---overwrite_output_dir --per_device_eval_batch_size 4 \
+--per_device_eval_batch_size 4 \
 --predict_with_generate --dataset_config "ro-en" --fp16 \
 --source_lang en --target_lang ro --dataset_name wmt16 \
 --source_prefix "translate English to Romanian: "

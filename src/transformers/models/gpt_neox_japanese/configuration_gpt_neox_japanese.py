@@ -14,7 +14,7 @@
 # limitations under the License.
 """GPTNeoX Japanese model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 
@@ -22,15 +22,15 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class GPTNeoXJapaneseConfig(PretrainedConfig):
+class GPTNeoXJapaneseConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GPTNeoXModelJapanese`]. It is used to instantiate
     a GPTNeoX model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the GPTNeoXJapanese
     [abeja/gpt-neox-japanese-2.7b](https://huggingface.co/abeja/gpt-neox-japanese-2.7b) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information. Default configs is set as 2.7B model
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information. Default configs is set as 2.7B model
 
     Args:
         vocab_size (`int`, *optional*, defaults to 32000):

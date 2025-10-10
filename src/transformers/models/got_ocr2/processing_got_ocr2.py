@@ -18,11 +18,10 @@ from typing import Optional, Union
 
 import numpy as np
 
-from transformers.processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
-from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
-
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_vision_available, logging
 
 
@@ -37,13 +36,13 @@ class GotOcr2TextKwargs(TextKwargs, total=False):
 
 
 class GotOcr2ImagesKwargs(ImagesKwargs, total=False):
+    crop_to_patches: bool
+    min_patches: int
+    max_patches: int
     box: Optional[Union[list, tuple[float, float], tuple[float, float, float, float]]]
     color: Optional[str]
-    num_image_tokens: Optional[int]
-    multi_page: Optional[bool]
-    crop_to_patches: Optional[bool]
-    min_patches: Optional[int]
-    max_patches: Optional[int]
+    num_image_tokens: int
+    multi_page: bool
 
 
 class GotOcr2ProcessorKwargs(ProcessingKwargs, total=False):
@@ -136,8 +135,6 @@ class GotOcr2Processor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[GotOcr2ProcessorKwargs],
     ) -> BatchFeature:
         """

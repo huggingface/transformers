@@ -16,20 +16,20 @@
 
 from typing import Union
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class ParakeetEncoderConfig(PretrainedConfig):
+class ParakeetEncoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ParakeetEncoder`]. It is used to instantiate a
     `ParakeetEncoder` model according to the specified arguments, defining the model architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 1024):
@@ -150,13 +150,13 @@ class ParakeetEncoderConfig(PretrainedConfig):
         self.initializer_range = initializer_range
 
 
-class ParakeetCTCConfig(PretrainedConfig):
+class ParakeetCTCConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ParakeetForCTC`]. It is used to instantiate a
     Parakeet CTC model according to the specified arguments, defining the model architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
             vocab_size (`int`, *optional*, defaults to 1025):

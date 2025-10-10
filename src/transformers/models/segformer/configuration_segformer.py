@@ -20,7 +20,7 @@ from collections.abc import Mapping
 
 from packaging import version
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
 
@@ -28,7 +28,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class SegformerConfig(PretrainedConfig):
+class SegformerConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SegformerModel`]. It is used to instantiate an
     SegFormer model according to the specified arguments, defining the model architecture. Instantiating a
@@ -36,8 +36,8 @@ class SegformerConfig(PretrainedConfig):
     [nvidia/segformer-b0-finetuned-ade-512-512](https://huggingface.co/nvidia/segformer-b0-finetuned-ade-512-512)
     architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         num_channels (`int`, *optional*, defaults to 3):

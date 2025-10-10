@@ -278,13 +278,14 @@ are working on it).<br>
 useful to avoid duplicated work, and to differentiate it from PRs ready to be merged.<br>
 ☐ Make sure existing tests pass.<br>
 ☐ If adding a new feature, also add tests for it.<br>
-   - If you are adding a new model, make sure you use
+
+- If you are adding a new model, make sure you use
      `ModelTester.all_model_classes = (MyModel, MyModelWithLMHead,...)` to trigger the common tests.
-   - If you are adding new `@slow` tests, make sure they pass using
+- If you are adding new `@slow` tests, make sure they pass using
      `RUN_SLOW=1 python -m pytest tests/models/my_new_model/test_my_new_model.py`.
-   - If you are adding a new tokenizer, write tests and make sure
+- If you are adding a new tokenizer, write tests and make sure
      `RUN_SLOW=1 python -m pytest tests/models/{your_model_name}/test_tokenization_{your_model_name}.py` passes.
-   - CircleCI does not run the slow tests, but GitHub Actions does every night!<br>
+- CircleCI does not run the slow tests, but GitHub Actions does every night!<br>
 
 ☐ All public methods must have informative docstrings (see
 [`modeling_bert.py`](https://github.com/huggingface/transformers/blob/main/src/transformers/models/bert/modeling_bert.py)
@@ -340,6 +341,7 @@ RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/t
 ```
 
 Like the slow tests, there are other environment variables available which are not enabled by default during testing:
+
 - `RUN_CUSTOM_TOKENIZERS`: Enables tests for custom tokenizers.
 
 More environment variables and additional information can be found in the [testing_utils.py](https://github.com/huggingface/transformers/blob/main/src/transformers/testing_utils.py).

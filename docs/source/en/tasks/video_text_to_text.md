@@ -25,6 +25,7 @@ These models have nearly the same architecture as [image-text-to-text](../image_
 In this guide, we provide a brief overview of video LMs and show how to use them with Transformers for inference.
 
 To begin with, there are multiple types of video LMs:
+
 - base models used for fine-tuning
 - chat fine-tuned models for conversation
 - instruction fine-tuned models

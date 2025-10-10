@@ -39,9 +39,10 @@ import torch
 from torchvision import io
 from typing import Dict
 from transformers.image_utils import load_images, load_video
-from transformers import AutoModelForVision2Seq, AutoTokenizer, AutoProcessor, infer_device
+from transformers import AutoModelForVision2Seq, AutoTokenizer, AutoProcessor
+from accelerate import Accelerator
 
-device = f"{infer_device()}:0"
+device = Accelerator().device
 
 model = AutoModelForVision2Seq.from_pretrained(
     "thisisiron/Ovis2-2B-hf",

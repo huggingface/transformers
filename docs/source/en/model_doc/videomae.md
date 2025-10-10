@@ -75,6 +75,7 @@ you're interested in submitting a resource to be included here, please feel free
 review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
 **Video classification**
+
 - [A notebook](https://github.com/huggingface/notebooks/blob/main/examples/video_classification.ipynb) that shows how
 to fine-tune a VideoMAE model on a custom dataset.
 - [Video classification task guide](../tasks/video_classification)
@@ -83,11 +84,6 @@ to fine-tune a VideoMAE model on a custom dataset.
 ## VideoMAEConfig
 
 [[autodoc]] VideoMAEConfig
-
-## VideoMAEFeatureExtractor
-
-[[autodoc]] VideoMAEFeatureExtractor
-    - __call__
 
 ## VideoMAEImageProcessor
 

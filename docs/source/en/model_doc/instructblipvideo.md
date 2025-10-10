@@ -45,7 +45,6 @@ The attributes can be obtained from model config, as `model.config.num_query_tok
 ## InstructBlipVideoConfig
 
 [[autodoc]] InstructBlipVideoConfig
-    - from_vision_qformer_text_configs
 
 ## InstructBlipVideoVisionConfig
 

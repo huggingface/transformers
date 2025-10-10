@@ -44,9 +44,10 @@ The example below demonstrates how to reconstruct the missing pixels with the [`
 import torch
 import requests
 from PIL import Image
-from transformers import infer_device, ViTImageProcessor, ViTMAEForPreTraining
+from transformers import ViTImageProcessor, ViTMAEForPreTraining
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
@@ -66,6 +67,7 @@ reconstruction = outputs.logits
 </hfoptions>
 
 ## Notes
+
 - ViTMAE is typically used in two stages. Self-supervised pretraining with [`ViTMAEForPreTraining`], and then discarding the decoder and fine-tuning the encoder. After fine-tuning, the weights can be plugged into a model like [`ViTForImageClassification`].
 - Use [`ViTImageProcessor`] for input preparation.
 

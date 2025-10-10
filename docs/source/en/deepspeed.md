@@ -452,7 +452,7 @@ For Ampere GPUs and PyTorch 1.7+, the more efficient [tf32](https://pytorch.org/
 </hfoption>
 <hfoption id="fp16">
 
-To configure AMP-like fp16 mixed precision, set up the config as shown below with `"auto"` or your own values. [`Trainer`] automatically enables or disables fp16 based on the value of `fp16_backend`, and the rest of the config can be set by you. fp16 is enabled from the command line when the following arguments are passed: `--fp16`, `--fp16_backend amp` or `--fp16_full_eval`.
+To configure fp16 mixed precision, set up the config as shown below with `"auto"` or your own values. [`Trainer`] automatically enables or disables fp16 based on the value of `fp16` or `fp16_full_eval`, and the rest of the config can be set by you. fp16 is enabled from the command line when the following arguments are passed: `--fp16` or `--fp16_full_eval` also.
 
 ```json
 {
@@ -468,17 +468,6 @@ To configure AMP-like fp16 mixed precision, set up the config as shown below wit
 ```
 
 For additional DeepSpeed fp16 training options, take a look at the [FP16 Training Options](https://www.deepspeed.ai/docs/config-json/#fp16-training-options) reference.
-
-To configure Apex-like fp16 mixed precision, set up the config as shown below with `"auto"` or your own values. [`Trainer`] automatically configures `amp` based on the values of `fp16_backend` and `fp16_opt_level`. It can also be enabled from the command line when the following arguments are passed: `--fp16`, `--fp16_backend apex` or `--fp16_opt_level 01`.
-
-```json
-{
-    "amp": {
-        "enabled": "auto",
-        "opt_level": "auto"
-    }
-}
-```
 
 </hfoption>
 <hfoption id="bf16">
@@ -604,7 +593,7 @@ To deploy DeepSpeed on multiple GPUs, add `--num_gpus`. You don't need to add `-
 deepspeed --num_gpus=2 examples/pytorch/translation/run_translation.py \
 --deepspeed tests/deepspeed/ds_config_zero3.json \
 --model_name_or_path google-t5/t5-small --per_device_train_batch_size 1 \
---output_dir output_dir --overwrite_output_dir --fp16 \
+--output_dir output_dir --fp16 \
 --do_train --max_train_samples 500 --num_train_epochs 1 \
 --dataset_name wmt16 --dataset_config "ro-en" \
 --source_lang en --target_lang ro
@@ -627,7 +616,7 @@ To deploy DeepSpeed on a single GPU, add `--num_gpus`. You don't need to add `--
 deepspeed --num_gpus=1 examples/pytorch/translation/run_translation.py \
 --deepspeed tests/deepspeed/ds_config_zero2.json \
 --model_name_or_path google-t5/t5-small --per_device_train_batch_size 1 \
---output_dir output_dir --overwrite_output_dir --fp16 \
+--output_dir output_dir --fp16 \
 --do_train --max_train_samples 500 --num_train_epochs 1 \
 --dataset_name wmt16 --dataset_config "ro-en" \
 --source_lang en --target_lang ro

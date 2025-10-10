@@ -42,7 +42,6 @@ BLIP은 여러 멀티모달 작업을 수행할 수 있는 모델입니다:
 ## BlipConfig[[transformers.BlipConfig]]
 
 [[autodoc]] BlipConfig
-    - from_text_vision_configs
 
 ## BlipTextConfig[[transformers.BlipTextConfig]]
 

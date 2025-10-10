@@ -36,7 +36,6 @@ class BlipProcessorKwargs(ProcessingKwargs, total=False):
             "return_length": False,
             "verbose": True,
         },
-        "images_kwargs": {},
     }
 
 
@@ -61,14 +60,11 @@ class BlipProcessor(ProcessorMixin):
     def __init__(self, image_processor, tokenizer, **kwargs):
         tokenizer.return_token_type_ids = False
         super().__init__(image_processor, tokenizer)
-        self.current_processor = self.image_processor
 
     def __call__(
         self,
         images: Optional[ImageInput] = None,
         text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[BlipProcessorKwargs],
     ) -> BatchEncoding:
         """

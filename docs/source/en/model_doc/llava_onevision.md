@@ -59,6 +59,7 @@ Tips:
 Each **checkpoint** is trained with a specific prompt format, depending on the underlying large language model backbone. To ensure correct formatting, use the processor’s `apply_chat_template` method.  
 
 **Important:**  
+
 - You must construct a conversation history — passing a plain string won't work.  
 - Each message should be a dictionary with `"role"` and `"content"` keys.  
 - The `"content"` should be a list of dictionaries for different modalities like `"text"` and `"image"`.  
@@ -111,10 +112,11 @@ The original code can be found [here](https://github.com/LLaVA-VL/LLaVA-NeXT/tre
 Here's how to load the model and perform inference in half-precision (`torch.float16`):
 
 ```python
-from transformers import AutoProcessor, LlavaOnevisionForConditionalGeneration, infer_device
+from transformers import AutoProcessor, LlavaOnevisionForConditionalGeneration
+from accelerate import Accelerator
 import torch
 
-device = f"{infer_device}:0"
+device = Accelerator().device
 
 processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf") 
 model = LlavaOnevisionForConditionalGeneration.from_pretrained(

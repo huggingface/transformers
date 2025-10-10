@@ -43,8 +43,3 @@ rendered properly in your Markdown viewer.
 ## ONNX 특징[[onnx-features]]
 
 각 ONNX 설정은 다양한 유형의 토폴로지나 작업에 대해 모델을 내보낼 수 있게(exporting) 해주는 _features_ 세트와 연관되어 있습니다.
-
-### FeaturesManager[[transformers.onnx.FeaturesManager]]
-
-[[autodoc]] onnx.features.FeaturesManager
-

@@ -144,9 +144,7 @@ class PromptDepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
         {"depth-estimation": PromptDepthAnythingForDepthEstimation} if is_torch_available() else {}
     )
 
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = PromptDepthAnythingModelTester(self)

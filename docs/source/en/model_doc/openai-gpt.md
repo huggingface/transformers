@@ -84,22 +84,22 @@ echo -e "The future of AI is" | transformers run --task text-generation --model 
 ## OpenAIGPTModel
 
 [[autodoc]] OpenAIGPTModel
-- forward
+    - forward
 
 ## OpenAIGPTLMHeadModel
 
 [[autodoc]] OpenAIGPTLMHeadModel
-- forward
+    - forward
 
 ## OpenAIGPTDoubleHeadsModel
 
 [[autodoc]] OpenAIGPTDoubleHeadsModel
-- forward
+    - forward
 
 ## OpenAIGPTForSequenceClassification
 
 [[autodoc]] OpenAIGPTForSequenceClassification
-- forward
+    - forward
 
 ## OpenAIGPTTokenizer
 

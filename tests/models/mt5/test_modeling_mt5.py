@@ -100,9 +100,6 @@ class MT5ModelTester:
         self.scope = None
         self.decoder_layers = decoder_layers
 
-    def get_large_model_config(self):
-        return MT5Config.from_pretrained("google-t5/t5-base")
-
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size).clamp(2)
         input_ids[:, -1] = self.eos_token_id  # Eos Token
@@ -231,8 +228,6 @@ class MT5ModelTester:
         self.parent.assertEqual(decoder_output.size(), (self.batch_size, self.decoder_seq_length, self.hidden_size))
         # There should be `num_layers` key value embeddings stored in decoder_past
         self.parent.assertEqual(len(decoder_past), config.num_layers)
-        # There should be a self attn key, a self attn value, a cross attn key and a cross attn value stored in each decoder_past tuple
-        self.parent.assertEqual(len(decoder_past[0]), 4)
 
     def create_and_check_with_lm_head(
         self,
@@ -562,11 +557,9 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         if is_torch_available()
         else {}
     )
-    all_parallelizable_model_classes = (MT5Model, MT5ForConditionalGeneration) if is_torch_available() else ()
     fx_compatible = True
-    test_pruning = False
+
     test_resize_embeddings = True
-    test_model_parallel = True
     is_encoder_decoder = True
     # The small MT5 model needs higher percentages for CPU/MP tests
     model_split_percents = [0.5, 0.8, 0.9]
@@ -912,9 +905,6 @@ class MT5EncoderOnlyModelTester:
         self.scope = None
         self.is_training = is_training
 
-    def get_large_model_config(self):
-        return MT5Config.from_pretrained("google-t5/t5-base")
-
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
 
@@ -1006,9 +996,8 @@ class MT5EncoderOnlyModelTester:
 # Copied from tests.models.t5.test_modeling_t5.T5EncoderOnlyModelTest with T5->MT5
 class MT5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MT5EncoderModel, MT5ForTokenClassification) if is_torch_available() else ()
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_model_parallel = True
     pipeline_model_mapping = (
         {
             "token-classification": MT5ForTokenClassification,
@@ -1016,7 +1005,6 @@ class MT5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
         if is_torch_available()
         else {}
     )
-    all_parallelizable_model_classes = (MT5EncoderModel,) if is_torch_available() else ()
 
     def setUp(self):
         self.model_tester = MT5EncoderOnlyModelTester(self)

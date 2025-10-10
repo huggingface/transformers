@@ -29,11 +29,10 @@ line-length = 119
 # UP028: Checks for for loops that can be replaced with yield from expressions
 # UP045: Use `X | None` for type annotations
 # UP007: Use `X | Y` for type annotations
-# UP035: temporarily disabled to minimize upgrade changes
-ignore = ["C901", "E501", "E741", "F402", "F823", "SIM1", "SIM300", "SIM212", "SIM905", "UP009", "UP015", "UP031", "UP028", "UP004", "UP045", "UP007", "UP035"]
+ignore = ["C901", "E501", "E741", "F402", "F823", "SIM1", "SIM300", "SIM212", "SIM905", "UP009", "UP015", "UP031", "UP028", "UP004", "UP045", "UP007"]
 # RUF013: Checks for the use of implicit Optional
 #  in type annotations when the default parameter value is None.
-select = ["C", "E", "F", "I", "W", "RUF013", "PERF102", "PLC1802", "PLC0208", "SIM", "UP"]
+select = ["C", "E", "F", "I", "W", "RUF013", "PERF102", "PLC1802", "PLC0208", "SIM", "UP", "PIE794"]
 extend-safe-fixes = ["UP006"]
 
 # Ignore import violations in all `__init__.py` files.

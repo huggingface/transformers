@@ -307,13 +307,6 @@ class AlbertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
 
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            config_and_inputs[0]._attn_implementation = "eager"
-            self.model_tester.create_and_check_model(*config_and_inputs)
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "albert/albert-base-v1"
@@ -344,6 +337,8 @@ class AlbertModelIntegrationTest(unittest.TestCase):
         if version.parse(torch.__version__) < version.parse("2.4.0"):
             self.skipTest(reason="This test requires torch >= 2.4 to run.")
 
+        from transformers.integrations.executorch import TorchExportableModuleForEncoderOnlyLM
+
         distilbert_model = "albert/albert-base-v2"
         device = "cpu"
         attn_implementation = "sdpa"
@@ -370,13 +365,15 @@ class AlbertModelIntegrationTest(unittest.TestCase):
             ["capital", "capitol", "comune", "arrondissement", "bastille"],
         )
 
-        exported_program = torch.export.export(
-            model,
-            args=(inputs["input_ids"],),
-            kwargs={"attention_mask": inputs["attention_mask"]},
+        exportable_module = TorchExportableModuleForEncoderOnlyLM(model)
+        exported_program = exportable_module.export(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
             strict=True,
         )
 
-        result = exported_program.module().forward(inputs["input_ids"], inputs["attention_mask"])
+        result = exported_program.module().forward(
+            input_ids=inputs["input_ids"], attention_mask=inputs["attention_mask"]
+        )
         ep_predicted_mask = tokenizer.decode(result.logits[0, 4].topk(5).indices)
         self.assertEqual(eg_predicted_mask, ep_predicted_mask)

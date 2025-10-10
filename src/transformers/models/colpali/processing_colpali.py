@@ -105,7 +105,8 @@ class ColPaliProcessor(ProcessorMixin):
         visual_prompt_prefix: str = "Describe the image.",
         query_prefix: str = "Question: ",
     ):
-        super().__init__(image_processor, tokenizer, chat_template=chat_template)
+        self.visual_prompt_prefix = visual_prompt_prefix
+        self.query_prefix = query_prefix
         if not hasattr(image_processor, "image_seq_length"):
             raise ValueError("Image processor is missing an `image_seq_length` attribute.")
 
@@ -124,15 +125,13 @@ class ColPaliProcessor(ProcessorMixin):
         tokenizer.add_tokens(EXTRA_TOKENS)
         tokenizer.add_bos_token = False
         tokenizer.add_eos_token = False
-        self.visual_prompt_prefix = visual_prompt_prefix
-        self.query_prefix = query_prefix
+
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
         self,
         images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[ColPaliProcessorKwargs],
     ) -> BatchFeature:
         """

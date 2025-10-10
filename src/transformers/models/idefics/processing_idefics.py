@@ -16,13 +16,12 @@
 Processor class for IDEFICS.
 """
 
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 from urllib.parse import urlparse
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import (
-    ImagesKwargs,
     ProcessingKwargs,
     ProcessorMixin,
     TextKwargs,
@@ -40,13 +39,6 @@ if is_torch_available():
 IMAGE_TOKEN = "<image>"
 
 
-class IdeficsImagesKwargs(ImagesKwargs, total=False):
-    transform: Optional[Callable]
-    image_size: Optional[dict[str, int]]
-    image_mean: Optional[Union[float, list[float]]]
-    image_std: Optional[Union[float, list[float]]]
-
-
 class IdeficsTextKwargs(TextKwargs, total=False):
     add_eos_token: Optional[bool]
     add_end_of_utterance_token: Optional[bool]
@@ -54,14 +46,12 @@ class IdeficsTextKwargs(TextKwargs, total=False):
 
 class IdeficsProcessorKwargs(ProcessingKwargs, total=False):
     text_kwargs: IdeficsTextKwargs
-    images_kwargs: IdeficsImagesKwargs
     _defaults = {
         "text_kwargs": {
             "add_special_tokens": False,
             "padding": "longest",
             "add_eos_token": False,
         },
-        "images_kwargs": {},
         "common_kwargs": {"return_tensors": "pt"},
     }
 
@@ -169,7 +159,6 @@ class IdeficsProcessor(ProcessorMixin):
 
     def __init__(self, image_processor, tokenizer=None, image_size=224, add_end_of_utterance_token=None, **kwargs):
         super().__init__(image_processor, tokenizer)
-        self.current_processor = self.image_processor
         self.image_token_id = (
             tokenizer.image_token_id
             if hasattr(tokenizer, "image_token")
@@ -198,8 +187,6 @@ class IdeficsProcessor(ProcessorMixin):
             list[list[TextInput]],
             list[list[PreTokenizedInput]],
         ] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[IdeficsProcessorKwargs],
     ) -> BatchFeature:
         """This method takes batched or non-batched prompts made of text and images and converts them into prompts that

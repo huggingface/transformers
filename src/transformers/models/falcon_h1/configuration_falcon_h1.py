@@ -14,22 +14,22 @@
 # limitations under the License.
 """FalconH1 model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class FalconH1Config(PretrainedConfig):
+class FalconH1Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FalconH1Model`]. It is used to instantiate a
     FalconH1Model model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with defaults taken from [ibm-fms/FalconH1-9.8b-2.2T-hf](https://huggingface.co/ibm-fms/FalconH1-9.8b-2.2T-hf).
     The FalconH1Model is a hybrid [mamba2](https://github.com/state-spaces/mamba) architecture with SwiGLU.
     The checkpoints are  jointly trained by IBM, Princeton, and UIUC.
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
     Args:
         vocab_size (`int`, *optional*, defaults to 128000):
             Vocabulary size of the FalconH1 model. Defines the number of different tokens that can be represented by the

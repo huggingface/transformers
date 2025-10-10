@@ -65,13 +65,6 @@ class QuantoQuantizedCache(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class SinkCache(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class SlidingWindowCache(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -594,10 +587,6 @@ class Conv1D(metaclass=DummyObject):
 
 def apply_chunking_to_forward(*args, **kwargs):
     requires_backends(apply_chunking_to_forward, ["torch"])
-
-
-def prune_layer(*args, **kwargs):
-    requires_backends(prune_layer, ["torch"])
 
 
 class Trainer(metaclass=DummyObject):

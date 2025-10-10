@@ -41,7 +41,6 @@ class Blip2ProcessorKwargs(ProcessingKwargs, total=False):
             "return_length": False,
             "verbose": True,
         },
-        "images_kwargs": {},
     }
 
 
@@ -67,7 +66,6 @@ class Blip2Processor(ProcessorMixin):
 
     def __init__(self, image_processor, tokenizer, num_query_tokens=None, **kwargs):
         tokenizer.return_token_type_ids = False
-        self.current_processor = image_processor
         if not hasattr(tokenizer, "image_token"):
             self.image_token = AddedToken("<image>", normalized=False, special=True)
             tokenizer.add_tokens([self.image_token], special_tokens=True)
@@ -81,8 +79,6 @@ class Blip2Processor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[Blip2ProcessorKwargs],
     ) -> BatchEncoding:
         """

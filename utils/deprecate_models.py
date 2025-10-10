@@ -37,7 +37,7 @@ def get_last_stable_minor_release():
     last_stable_minor_releases = [
         release for release in release_data["releases"] if release.startswith(last_major_minor)
     ]
-    last_stable_release = sorted(last_stable_minor_releases, key=version.parse)[-1]
+    last_stable_release = max(last_stable_minor_releases, key=version.parse)
 
     return last_stable_release
 

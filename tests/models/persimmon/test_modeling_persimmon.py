@@ -16,7 +16,7 @@
 import gc
 import unittest
 
-from transformers import PersimmonConfig, is_torch_available
+from transformers import is_torch_available
 from transformers.testing_utils import (
     backend_empty_cache,
     require_bitsandbytes,
@@ -33,6 +33,7 @@ if is_torch_available():
 
     from transformers import (
         AutoTokenizer,
+        BitsAndBytesConfig,
         PersimmonForCausalLM,
         PersimmonForSequenceClassification,
         PersimmonForTokenClassification,
@@ -44,21 +45,12 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 class PersimmonModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = PersimmonConfig
         base_model_class = PersimmonModel
-        causal_lm_class = PersimmonForCausalLM
-        sequence_class = PersimmonForSequenceClassification
-        token_class = PersimmonForTokenClassification
 
 
 @require_torch
 class PersimmonModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = PersimmonModelTester
-    all_model_classes = (
-        (PersimmonModel, PersimmonForCausalLM, PersimmonForSequenceClassification, PersimmonForTokenClassification)
-        if is_torch_available()
-        else ()
-    )
     pipeline_model_mapping = (
         {
             "feature-extraction": PersimmonModel,
@@ -71,10 +63,6 @@ class PersimmonModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    model_tester_class = PersimmonModelTester
-
-    test_headmasking = False
-    test_pruning = False
 
     @unittest.skip("Persimmon applies key/query norm which doesn't work with packing")
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
@@ -97,7 +85,10 @@ class PersimmonIntegrationTest(unittest.TestCase):
     def test_model_8b_chat_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
         model = PersimmonForCausalLM.from_pretrained(
-            "adept/persimmon-8b-chat", load_in_8bit=True, device_map={"": 0}, dtype=torch.float16
+            "adept/persimmon-8b-chat",
+            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
+            device_map={"": 0},
+            dtype=torch.float16,
         )
         out = model(torch.tensor([input_ids], device=torch_device)).logits.float()
 
@@ -128,7 +119,10 @@ class PersimmonIntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("adept/persimmon-8b-chat", use_fast=False)
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(torch_device)
         model = PersimmonForCausalLM.from_pretrained(
-            "adept/persimmon-8b-chat", load_in_8bit=True, device_map={"": 0}, dtype=torch.float16
+            "adept/persimmon-8b-chat",
+            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
+            device_map={"": 0},
+            dtype=torch.float16,
         )
 
         # greedy generation outputs

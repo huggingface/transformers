@@ -84,19 +84,19 @@ DistilBertConfig {
 }
 ```
 
-预训练模型的属性可以在 [`~PretrainedConfig.from_pretrained`] 函数中进行修改：
+预训练模型的属性可以在 [`~PreTrainedConfig.from_pretrained`] 函数中进行修改：
 
 ```py
 >>> my_config = DistilBertConfig.from_pretrained("distilbert/distilbert-base-uncased", activation="relu", attention_dropout=0.4)
 ```
 
-当你对模型配置满意时，可以使用 [`~PretrainedConfig.save_pretrained`] 来保存配置。你的配置文件将以 JSON 文件的形式存储在指定的保存目录中：
+当你对模型配置满意时，可以使用 [`~PreTrainedConfig.save_pretrained`] 来保存配置。你的配置文件将以 JSON 文件的形式存储在指定的保存目录中：
 
 ```py
 >>> my_config.save_pretrained(save_directory="./your_model_save_path")
 ```
 
-要重用配置文件，请使用 [`~PretrainedConfig.from_pretrained`] 进行加载：
+要重用配置文件，请使用 [`~PreTrainedConfig.from_pretrained`] 进行加载：
 
 ```py
 >>> my_config = DistilBertConfig.from_pretrained("./your_model_save_path/config.json")

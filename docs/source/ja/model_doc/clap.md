@@ -33,7 +33,6 @@ CLAP (Contrastive Language-Audio Pretraining) は、さまざまな (音声、�
 ## ClapConfig
 
 [[autodoc]] ClapConfig
-    - from_text_audio_configs
 
 ## ClapTextConfig
 

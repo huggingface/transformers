@@ -14,22 +14,22 @@
 # limitations under the License.
 """Siglip model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class SiglipTextConfig(PretrainedConfig):
+class SiglipTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SiglipTextModel`]. It is used to instantiate a
     Siglip text encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the text encoder of the Siglip
     [google/siglip-base-patch16-224](https://huggingface.co/google/siglip-base-patch16-224) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 32000):
@@ -113,15 +113,15 @@ class SiglipTextConfig(PretrainedConfig):
         self.projection_size = projection_size if projection_size is not None else hidden_size
 
 
-class SiglipVisionConfig(PretrainedConfig):
+class SiglipVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SiglipVisionModel`]. It is used to instantiate a
     Siglip vision encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the vision encoder of the Siglip
     [google/siglip-base-patch16-224](https://huggingface.co/google/siglip-base-patch16-224) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -192,15 +192,15 @@ class SiglipVisionConfig(PretrainedConfig):
         self.hidden_act = hidden_act
 
 
-class SiglipConfig(PretrainedConfig):
+class SiglipConfig(PreTrainedConfig):
     r"""
     [`SiglipConfig`] is the configuration class to store the configuration of a [`SiglipModel`]. It is used to
     instantiate a Siglip model according to the specified arguments, defining the text model and vision model configs.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the Siglip
     [google/siglip-base-patch16-224](https://huggingface.co/google/siglip-base-patch16-224) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`dict`, *optional*):
@@ -231,27 +231,30 @@ class SiglipConfig(PretrainedConfig):
     >>> config_text = SiglipTextConfig()
     >>> config_vision = SiglipVisionConfig()
 
-    >>> config = SiglipConfig.from_text_vision_configs(config_text, config_vision)
+    >>> config = SiglipConfig(text_config=config_text, vision_config=config_vision)
     ```"""
 
     model_type = "siglip"
     sub_configs = {"text_config": SiglipTextConfig, "vision_config": SiglipVisionConfig}
 
     def __init__(self, text_config=None, vision_config=None, **kwargs):
-        super().__init__(**kwargs)
-
         if text_config is None:
-            text_config = {}
+            text_config = SiglipTextConfig()
             logger.info("`text_config` is `None`. Initializing the `SiglipTextConfig` with default values.")
+        elif isinstance(text_config, dict):
+            text_config = SiglipTextConfig(**text_config)
 
         if vision_config is None:
-            vision_config = {}
+            vision_config = SiglipVisionConfig()
             logger.info("`vision_config` is `None`. initializing the `SiglipVisionConfig` with default values.")
+        elif isinstance(vision_config, dict):
+            vision_config = SiglipVisionConfig(**vision_config)
 
-        self.text_config = SiglipTextConfig(**text_config)
-        self.vision_config = SiglipVisionConfig(**vision_config)
-
+        self.text_config = text_config
+        self.vision_config = vision_config
         self.initializer_factor = 1.0
+
+        super().__init__(**kwargs)
 
 
 __all__ = ["SiglipConfig", "SiglipTextConfig", "SiglipVisionConfig"]

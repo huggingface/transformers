@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from ...processing_utils import ProcessorMixin
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
 
@@ -30,15 +30,15 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class OwlViTTextConfig(PretrainedConfig):
+class OwlViTTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`OwlViTTextModel`]. It is used to instantiate an
     OwlViT text encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the OwlViT
     [google/owlvit-base-patch32](https://huggingface.co/google/owlvit-base-patch32) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -126,15 +126,15 @@ class OwlViTTextConfig(PretrainedConfig):
         self.initializer_factor = initializer_factor
 
 
-class OwlViTVisionConfig(PretrainedConfig):
+class OwlViTVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`OwlViTVisionModel`]. It is used to instantiate
     an OWL-ViT image encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the OWL-ViT
     [google/owlvit-base-patch32](https://huggingface.co/google/owlvit-base-patch32) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -214,15 +214,15 @@ class OwlViTVisionConfig(PretrainedConfig):
         self.initializer_factor = initializer_factor
 
 
-class OwlViTConfig(PretrainedConfig):
+class OwlViTConfig(PreTrainedConfig):
     r"""
     [`OwlViTConfig`] is the configuration class to store the configuration of an [`OwlViTModel`]. It is used to
     instantiate an OWL-ViT model according to the specified arguments, defining the text model and vision model
     configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the OWL-ViT
     [google/owlvit-base-patch32](https://huggingface.co/google/owlvit-base-patch32) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`dict`, *optional*):
@@ -252,38 +252,26 @@ class OwlViTConfig(PretrainedConfig):
         return_dict=True,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         if text_config is None:
-            text_config = {}
-            logger.info("text_config is None. Initializing the OwlViTTextConfig with default values.")
+            text_config = OwlViTTextConfig()
+            logger.info("`text_config` is `None`. initializing the `OwlViTTextConfig` with default values.")
+        elif isinstance(text_config, dict):
+            text_config = OwlViTTextConfig(**text_config)
 
         if vision_config is None:
-            vision_config = {}
-            logger.info("vision_config is None. initializing the OwlViTVisionConfig with default values.")
+            vision_config = OwlViTVisionConfig()
+            logger.info("`vision_config` is `None`. initializing the `OwlViTVisionConfig` with default values.")
+        elif isinstance(vision_config, dict):
+            vision_config = OwlViTVisionConfig(**vision_config)
 
-        self.text_config = OwlViTTextConfig(**text_config)
-        self.vision_config = OwlViTVisionConfig(**vision_config)
+        self.text_config = text_config
+        self.vision_config = vision_config
 
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
         self.return_dict = return_dict
         self.initializer_factor = 1.0
-
-    @classmethod
-    def from_text_vision_configs(cls, text_config: dict, vision_config: dict, **kwargs):
-        r"""
-        Instantiate a [`OwlViTConfig`] (or a derived class) from owlvit text model configuration and owlvit vision
-        model configuration.
-
-        Returns:
-            [`OwlViTConfig`]: An instance of a configuration object
-        """
-        config_dict = {}
-        config_dict["text_config"] = text_config
-        config_dict["vision_config"] = vision_config
-
-        return cls.from_dict(config_dict, **kwargs)
+        super().__init__(**kwargs)
 
 
 class OwlViTOnnxConfig(OnnxConfig):

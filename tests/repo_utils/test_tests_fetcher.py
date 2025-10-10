@@ -130,7 +130,7 @@ def create_tmp_repo(tmp_dir, models=None):
         with open(model_dir / "__init__.py", "w") as f:
             f.write(f"from .configuration_{model} import {cls}Config\nfrom .modeling_{model} import {cls}Model\n")
         with open(model_dir / f"configuration_{model}.py", "w") as f:
-            f.write("from ...configuration_utils import PretrainedConfig\ncode")
+            f.write("from ...configuration_utils import PreTrainedConfig\ncode")
         with open(model_dir / f"modeling_{model}.py", "w") as f:
             modeling_code = BERT_MODEL_FILE.replace("bert", model).replace("Bert", cls)
             f.write(modeling_code)
@@ -638,7 +638,7 @@ src/transformers/configuration_utils.py
             with open(model_dir / "__init__.py", "w") as f:
                 f.write("from .configuration_t5 import T5Config\nfrom .modeling_t5 import T5Model\n")
             with open(model_dir / "configuration_t5.py", "w") as f:
-                f.write("from ...configuration_utils import PretrainedConfig\ncode")
+                f.write("from ...configuration_utils import PreTrainedConfig\ncode")
             with open(model_dir / "modeling_t5.py", "w") as f:
                 modeling_code = BERT_MODEL_FILE.replace("bert", "t5").replace("Bert", "T5")
                 f.write(modeling_code)

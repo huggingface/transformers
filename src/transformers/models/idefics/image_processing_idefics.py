@@ -14,7 +14,8 @@
 # limitations under the License.
 """Image processor class for Idefics."""
 
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 from PIL import Image
 
@@ -28,11 +29,26 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, is_torch_available
 
 
 IDEFICS_STANDARD_MEAN = [0.48145466, 0.4578275, 0.40821073]
 IDEFICS_STANDARD_STD = [0.26862954, 0.26130258, 0.27577711]
+
+
+class IdeficsImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    transform (`Callable`, *optional*):
+        A custom transform function that accepts a single image can be passed for training. For example,
+        `torchvision.Compose` can be used to compose multiple transforms. If `None` - an inference mode is
+        assumed - and then a preset of inference-specific transforms will be applied to the images
+    image_size (`dict[str, int]`, *optional*):
+        Resize to image size
+    """
+
+    transform: Optional[Callable]
+    image_size: dict[str, int]
 
 
 def convert_to_rgb(image):
@@ -74,6 +90,7 @@ class IdeficsImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
+    valid_kwargs = IdeficsImageProcessorKwargs
 
     def __init__(
         self,

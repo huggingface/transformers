@@ -20,7 +20,6 @@ env:
   OMP_NUM_THREADS: 8
   MKL_NUM_THREADS: 8
   RUN_SLOW: yes # For gated repositories, we still need to agree to share information on the Hub repo. page in order to get access. # This token is created under the bot `hf-transformers-bot`.
-  SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }}
   TF_FORCE_GPU_ALLOW_GROWTH: true
   CUDA_VISIBLE_DEVICES: 0,1
 
@@ -33,14 +32,17 @@ jobs:
     steps:
       - name: Get runner to use
         shell: bash
+        env:
+          NUM_GPUS: ${{ github.event.inputs.num_gpus }}
+          RUNNER_TYPE: ${{ github.event.inputs.runner_type }}
         run: |
-          if [[ "${{ github.event.inputs.num_gpus }}" == "single" && "${{ github.event.inputs.runner_type }}" == "t4" ]]; then
+          if [[ "$NUM_GPUS" == "single" && "$RUNNER_TYPE" == "t4" ]]; then
             echo "RUNNER=aws-g4dn-4xlarge-cache" >> $GITHUB_ENV
-          elif [[ "${{ github.event.inputs.num_gpus }}" == "multi" && "${{ github.event.inputs.runner_type }}" == "t4" ]]; then
+          elif [[ "$NUM_GPUS" == "multi" && "$RUNNER_TYPE" == "t4" ]]; then
             echo "RUNNER=aws-g4dn-12xlarge-cache" >> $GITHUB_ENV
-          elif [[ "${{ github.event.inputs.num_gpus }}" == "single" && "${{ github.event.inputs.runner_type }}" == "a10" ]]; then
+          elif [[ "$NUM_GPUS" == "single" && "$RUNNER_TYPE" == "a10" ]]; then
             echo "RUNNER=aws-g5-4xlarge-cache" >> $GITHUB_ENV
-          elif [[ "${{ github.event.inputs.num_gpus }}" == "multi" && "${{ github.event.inputs.runner_type }}" == "a10" ]]; then
+          elif [[ "$NUM_GPUS" == "multi" && "$RUNNER_TYPE" == "a10" ]]; then
             echo "RUNNER=aws-g5-12xlarge-cache" >> $GITHUB_ENV
           else
             echo "RUNNER=" >> $GITHUB_ENV
@@ -85,9 +87,11 @@ jobs:
       - name: Store Slack infos
         #because the SSH can be enabled dynamically if the workflow failed, so we need to store slack infos to be able to retrieve them during the waitforssh step
         shell: bash
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
         run: |
-          echo "${{ github.actor }}"
-          github_actor=${{ github.actor }}
+          echo "$GITHUB_ACTOR"
+          github_actor=$GITHUB_ACTOR
           github_actor=${github_actor/'-'/'_'}
           echo "$github_actor"
           echo "github_actor=$github_actor" >> $GITHUB_ENV

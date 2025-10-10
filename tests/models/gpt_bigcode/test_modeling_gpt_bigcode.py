@@ -95,9 +95,6 @@ class GPTBigCodeModelTester:
         self.pad_token_id = vocab_size - 3
         self.multi_query = multi_query
 
-    def get_large_model_config(self):
-        return GPTBigCodeConfig.from_pretrained("bigcode/gpt_bigcode-santacoder")
-
     def prepare_config_and_inputs(
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
     ):
@@ -398,7 +395,7 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     )
     fx_compatible = False
     test_missing_keys = False
-    test_pruning = False
+
     test_torchscript = False
     multi_query = True
 

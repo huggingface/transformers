@@ -52,7 +52,7 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
     Any combination of sequences and labels can be passed and each combination will be posed as a premise/hypothesis
     pair and passed to the pretrained model. Then, the logit for *entailment* is taken as the logit for the candidate
     label being valid. Any NLI model can be used, but the id of the *entailment* label must be included in the model
-    config's :attr:*~transformers.PretrainedConfig.label2id*.
+    config's :attr:*~transformers.PreTrainedConfig.label2id*.
 
     Example:
 

@@ -25,8 +25,9 @@ import torch
 from torch import nn
 from tqdm import tqdm
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...generation.configuration_utils import GenerationConfig
+from ...integrations.hub_kernels import load_and_register_attn_kernel
 from ...utils.logging import logging
 from ...utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
 from .cache import PagedAttentionCache
@@ -42,7 +43,56 @@ def build_attention_mask(
 ) -> None:
     """Builds an attention mask inplace using the cumulative seqlens of the query and key. If given a sliding window, it
     will also apply a sliding window mask on top. The attention mask is not boolean, it uses zeroes and -inf (or its
-    equivalent) so it's more of an attention score bias tensor."""
+    equivalent) so it's more of an attention score bias tensor.
+    The attention mask is a block-diagonal matrix, with each block an attention mask for a single query-key pair.
+    Each of those block is built from a causal mask and, if there is a sliding window, a sliding window mask.
+
+    An example is represented below, with seqlen_k = 8, seqlen_q = 4 and sliding_window = 6:
+
+    CAUSAL MASK:
+
+           █ █ █ █ █ ░ ░ ░
+           █ █ █ █ █ █ ░ ░
+           █ █ █ █ █ █ █ ░
+           █ █ █ █ █ █ █ █
+
+    SLIDING WINDOW MASK:
+         ┌──────────────────────── seqlen_k - seqlen_q - sliding_window = 8 - 4 - 6 = -2 offset to the right
+       <─┴─>
+     ░ █ | █ █ █ █ █ █ █ █
+     ░ ░ | █ █ █ █ █ █ █ █
+     ░ ░ | ░ █ █ █ █ █ █ █
+     ░ ░ | ░ ░ █ █ █ █ █ █
+
+    ATTENTION MASK (sum of causal and sliding window masks):
+
+           █ █ █ █ █ ░ ░ ░
+           █ █ █ █ █ █ ░ ░
+           ░ █ █ █ █ █ █ ░
+           ░ ░ █ █ █ █ █ █
+
+    Another example with seqlen_k = 5, seqlen_q = 3 and sliding_window = 2:
+
+    CAUSAL MASK:
+
+           █ █ █ ░ ░
+           █ █ █ █ ░
+           █ █ █ █ █
+
+    SLIDING WINDOW MASK:
+         ┌──────────────────────── seqlen_k - seqlen_q - sliding_window = 5 - 3 - 2 = 0 offset to the right
+        <┴>
+         | ░ █ █ █ █
+         | ░ ░ █ █ █
+         | ░ ░ ░ █ █
+
+    ATTENTION MASK (sum of causal and sliding window masks):
+
+           ░ █ █ ░ ░
+           ░ ░ █ █ ░
+           ░ ░ ░ █ █
+
+    """
     min_value = torch.finfo(attention_mask.dtype).min
     for i in range(len(cumulative_seqlens_q) - 1):
         seqlen_q = cumulative_seqlens_q[i + 1] - cumulative_seqlens_q[i]
@@ -63,8 +113,8 @@ def build_attention_mask(
         masked = torch.triu(minus_inf, diagonal=causal_diagonal)
         # Apply sliding window mask if needed
         if sliding_window > 1:
-            sliding_diagonal = seqlen_k - seqlen_q + sliding_window
-            masked = torch.tril(masked, diagonal=sliding_diagonal)
+            sliding_diagonal = seqlen_k - seqlen_q - sliding_window
+            masked += torch.tril(minus_inf, diagonal=sliding_diagonal)
         # Replace in attention mask
         attention_mask[..., query_range, key_range] = masked
 
@@ -91,7 +141,7 @@ class ContinuousBatchProcessor:
     def __init__(
         self,
         cache: PagedAttentionCache,
-        config: PretrainedConfig,
+        config: PreTrainedConfig,
         generation_config: GenerationConfig,
         input_queue: queue.Queue,
         output_queue: queue.Queue,
@@ -99,7 +149,6 @@ class ContinuousBatchProcessor:
         model_device: torch.device,
         model_dtype: torch.dtype,
         scheduler: Scheduler,
-        streaming: bool = False,
         manual_eviction: bool = False,
         slice_inputs: bool = True,  # TODO: There should be an heuristic to decide on slicing, compile, cuda graphs...
     ) -> None:
@@ -115,7 +164,6 @@ class ContinuousBatchProcessor:
             model_device: Device for model inputs/outputs
             model_dtype: Data type for model inputs/outputs
             scheduler: The [`Scheduler`] to use
-            streaming: Whether to stream tokens as they're generated
             manual_eviction: Whether to manually evict blocks from the cache
             slice_inputs: Whether to slice the inputs to the model
         """
@@ -128,7 +176,6 @@ class ContinuousBatchProcessor:
         self.model_device = model_device
         self.model_dtype = model_dtype
         self.scheduler = scheduler
-        self.streaming = streaming
         self.manual_eviction = manual_eviction
         self.slice_inputs = slice_inputs
 
@@ -192,7 +239,10 @@ class ContinuousBatchProcessor:
         self.reset_static_tensors(full_reset=True)
 
     def return_attention_mask(self) -> bool:
-        return self.config._attn_implementation != "paged_attention"  # we set `is_causal` to True in paged call
+        return self.config._attn_implementation in [
+            "paged|eager",
+            "paged|sdpa",
+        ]  # we set `is_causal` to True in paged call
 
     @traced
     @torch.no_grad()
@@ -466,7 +516,7 @@ class ContinuousBatchProcessor:
     @traced
     def _maybe_send_output(self, state: RequestState, token: int):
         """Send output to the queue based on streaming mode and request state."""
-        if self.streaming:
+        if state.streaming:
             self.output_queue.put(state.to_generation_output())
         elif state.status == RequestStatus.FINISHED:
             self.output_queue.put(state.to_generation_output())
@@ -543,24 +593,33 @@ class ContinuousBatchingManager:
         generation_config: GenerationConfig,
         manual_eviction: bool = False,
         max_queue_size=0,
-        streaming: bool = True,
         slice_inputs: bool = True,
     ):
-        """Initialize the continuous batching manager.
+        """
+        Initialize the continuous batching manager.
 
         Args:
             model: The language model for generation
             generation_config: Configuration for generation parameters
             max_queue_size: Maximum size of the request queue (0 = unlimited)
-            streaming: Whether to stream tokens as they are generated
         """
+        if "paged|" not in model.config._attn_implementation:
+            attn_implementation = f"paged|{model.config._attn_implementation}"
+
+            from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+
+            if attn_implementation not in ALL_ATTENTION_FUNCTIONS._global_mapping:  # when its a kernel
+                from ...integrations.flash_paged import paged_attention_forward
+
+                load_and_register_attn_kernel(attn_implementation, paged_attention_forward)
+
+            model.config._attn_implementation = attn_implementation
         self.model = model.eval()
         generation_config = model.generation_config if generation_config is None else generation_config
         self.generation_config = generation_config
         self.input_queue = queue.Queue(maxsize=max_queue_size)
         self.output_queue = queue.Queue()
         self.stop_event = threading.Event()
-        self.streaming = streaming
         self.log_prob_generation = getattr(generation_config, "log_prob_generation", False)
         self._generation_thread = None
         self._request_counter = 0
@@ -625,7 +684,11 @@ class ContinuousBatchingManager:
                 self._generation_thread = None
 
     def add_request(
-        self, input_ids: list[int], request_id: Optional[str] = None, max_new_tokens: Optional[int] = None
+        self,
+        input_ids: list[int],
+        request_id: Optional[str] = None,
+        max_new_tokens: Optional[int] = None,
+        streaming: bool = False,
     ) -> str:
         """Add a new generation request to the queue.
 
@@ -651,6 +714,7 @@ class ContinuousBatchingManager:
             full_prompt_ids=list(input_ids),
             max_new_tokens=max_new_tokens,
             eos_token_id=self.generation_config.eos_token_id,
+            streaming=streaming,
         )
 
         # Use block=True with timeout to handle backpressure if queue is full
@@ -708,14 +772,6 @@ class ContinuousBatchingManager:
                 yield result
             if self.batch_processor is not None:
                 request_cancelled = self.batch_processor.scheduler.request_is_cancelled(request_id)
-
-    @staticmethod
-    def supported_attention_implementations() -> set[str]:
-        return {"eager_paged", "sdpa_paged", "flash_attention_2"}
-
-    @staticmethod
-    def default_attention_implementation() -> str:
-        return "sdpa_paged"
 
     @traced
     def warmup(self, batch_processor):
@@ -815,7 +871,6 @@ class ContinuousBatchingManager:
                 self.model.device,
                 self.model.dtype,
                 scheduler(paged_attention_cache, self.manual_eviction),
-                self.streaming,
                 self.manual_eviction,
                 slice_inputs=self.slice_inputs,
             )
@@ -899,7 +954,6 @@ class ContinuousMixin:
         generation_config: Optional[GenerationConfig] = None,
         manual_eviction: bool = False,
         max_queue_size: int = 0,
-        streaming: bool = False,
         slice_inputs: bool = True,
     ) -> ContinuousBatchingManager:
         """Initialize a manager for continuous batching inference.
@@ -907,7 +961,6 @@ class ContinuousMixin:
         Args:
             generation_config: Custom generation configuration
             max_queue_size: Maximum size of the input request queue
-            streaming: Whether to stream tokens as they are generated
 
         Returns:
             `ContinuousBatchingManager`: The manager instance to add requests and retrieve results.
@@ -929,7 +982,6 @@ class ContinuousMixin:
             generation_config=gen_config,
             manual_eviction=manual_eviction,
             max_queue_size=max_queue_size,
-            streaming=streaming,
             slice_inputs=slice_inputs,
         )
 

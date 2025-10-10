@@ -4,10 +4,10 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_ministral.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 
 
-class MinistralConfig(PretrainedConfig):
+class MinistralConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MinistralModel`]. It is used to instantiate an
     Ministral model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -16,8 +16,8 @@ class MinistralConfig(PretrainedConfig):
     [mistralai/Ministral-8B-Instruct-2410](https://huggingface.co/mistralai/Ministral-8B-Instruct-2410)
     [mistralai/Ministral-8B-Instruct-2410](https://huggingface.co/mistralai/Ministral-8B-Instruct-2410)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:

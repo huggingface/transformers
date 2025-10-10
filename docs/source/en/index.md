@@ -34,6 +34,10 @@ There are over 1M+ Transformers [model checkpoints](https://huggingface.co/model
 
 Explore the [Hub](https://huggingface.com/) today to find a model and use Transformers to help you get started right away.
 
+Explore the [Models Timeline](./models_timeline) to discover the latest text, vision, audio and multimodal model architectures in Transformers.
+
+
+
 ## Features
 
 Transformers provides everything you need for inference or training with state-of-the-art pretrained models. Some of the main features include:

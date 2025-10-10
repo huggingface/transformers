@@ -30,8 +30,10 @@ from transformers.models.aya_vision.modeling_aya_vision import (
 from transformers.models.got_ocr2.image_processing_got_ocr2_fast import GotOcr2ImageProcessorFast
 
 from ...cache_utils import Cache
+from ...image_processing_utils import BatchFeature
+from ...image_utils import ImageInput
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import check_model_inputs
 from .configuration_cohere2_vision import Cohere2VisionConfig
@@ -107,7 +109,7 @@ class Cohere2VisionModel(AyaVisionModel):
         image_features = self.multi_modal_projector(selected_image_feature)
         return image_features
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
@@ -160,7 +162,7 @@ class Cohere2VisionForConditionalGeneration(AyaVisionForConditionalGeneration):
     def get_image_features(self, pixel_values: torch.FloatTensor):
         return self.model.get_image_features(pixel_values=pixel_values)
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
@@ -301,6 +303,24 @@ def get_optimal_tiled_canvas(
     return best_grid
 
 
+class Cohere2VisionFastImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    crop_to_patches (`bool`, *optional*, defaults to `False`):
+        Whether to crop the image to patches. Can be overridden by the `crop_to_patches` parameter in the
+        `preprocess` method.
+    min_patches (`int`, *optional*, defaults to 1):
+        The minimum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
+        set to `True`. Can be overridden by the `min_patches` parameter in the `preprocess` method.
+    max_patches (`int`, *optional*, defaults to 12):
+        The maximum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
+        set to `True`. Can be overridden by the `max_patches` parameter in the `preprocess` method.
+    """
+
+    crop_to_patches: bool
+    min_patches: int
+    max_patches: int
+
+
 @auto_docstring
 class Cohere2VisionImageProcessorFast(GotOcr2ImageProcessorFast):
     size = {"height": 512, "width": 512}
@@ -308,6 +328,14 @@ class Cohere2VisionImageProcessorFast(GotOcr2ImageProcessorFast):
     max_patches = 12
     crop_to_patches = True
     patch_size = 16
+    valid_kwargs = Cohere2VisionFastImageProcessorKwargs
+
+    def __init__(self, **kwargs: Unpack[Cohere2VisionFastImageProcessorKwargs]):
+        super().__init__(**kwargs)
+
+    @auto_docstring
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[Cohere2VisionFastImageProcessorKwargs]) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
 
 
 __all__ = [

@@ -57,13 +57,14 @@ The following code provides an example of how to load the Minitron-4B model and 
 
 ```python
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, infer_device
+from transformers import AutoTokenizer, AutoModelForCausalLM
+from accelerate import Accelerator
 
 # Load the tokenizer and model
 model_path = 'nvidia/Minitron-4B-Base'
 tokenizer  = AutoTokenizer.from_pretrained(model_path)
 
-device = infer_device()
+device = Accelerator().device
 dtype  = torch.bfloat16
 model  = AutoModelForCausalLM.from_pretrained(model_path, dtype=dtype, device_map=device)
 

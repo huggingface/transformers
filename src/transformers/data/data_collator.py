@@ -14,10 +14,10 @@
 
 import multiprocessing as mp
 import warnings
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from random import randint
-from typing import Any, Callable, NewType, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 
@@ -25,17 +25,17 @@ from ..tokenization_utils_base import PreTrainedTokenizerBase
 from ..utils import PaddingStrategy
 
 
-InputDataClass = NewType("InputDataClass", Any)
+InputDataClass = Any
 
 """
 A DataCollator is a function that takes a list of samples from a Dataset and collate them into a batch, as a dictionary
 of PyTorch tensors or NumPy arrays.
 """
-DataCollator = NewType("DataCollator", Callable[[list[InputDataClass]], dict[str, Any]])
+DataCollator = Callable[[list[InputDataClass]], dict[str, Any]]
 
 
 class DataCollatorMixin:
-    def __call__(self, features, return_tensors=None):
+    def __call__(self, features, return_tensors: Optional[str] = None):
         if return_tensors is None:
             return_tensors = self.return_tensors
         if return_tensors == "pt":

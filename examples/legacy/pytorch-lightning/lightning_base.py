@@ -17,7 +17,7 @@ from transformers import (
     AutoModelForTokenClassification,
     AutoModelWithLMHead,
     AutoTokenizer,
-    PretrainedConfig,
+    PreTrainedConfig,
     PreTrainedTokenizer,
     is_torch_available,
 )
@@ -93,7 +93,7 @@ class BaseTransformer(pl.LightningModule):
                 **config_kwargs,
             )
         else:
-            self.config: PretrainedConfig = config
+            self.config: PreTrainedConfig = config
 
         extra_model_params = ("encoder_layerdrop", "decoder_layerdrop", "dropout", "attention_dropout")
         for p in extra_model_params:

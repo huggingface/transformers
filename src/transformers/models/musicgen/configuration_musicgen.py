@@ -14,7 +14,7 @@
 # limitations under the License.
 """MusicGen model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 
@@ -22,15 +22,15 @@ from ..auto.configuration_auto import AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class MusicgenDecoderConfig(PretrainedConfig):
+class MusicgenDecoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`MusicgenDecoder`]. It is used to instantiate a
     MusicGen decoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the MusicGen
     [facebook/musicgen-small](https://huggingface.co/facebook/musicgen-small) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -132,25 +132,22 @@ class MusicgenDecoderConfig(PretrainedConfig):
         )
 
 
-class MusicgenConfig(PretrainedConfig):
+class MusicgenConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MusicgenModel`]. It is used to instantiate a
     MusicGen model according to the specified arguments, defining the text encoder, audio encoder and MusicGen decoder
     configs.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        kwargs (*optional*):
-            Dictionary of keyword arguments. Notably:
-
-                - **text_encoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
-                  defines the text encoder config.
-                - **audio_encoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
-                  defines the audio encoder config.
-                - **decoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that defines
-                  the decoder config.
+        text_encoder (`Union[dict, `PretrainedConfig`]`):
+            An instance of a configuration object that defines the text encoder config.
+        audio_encoder (`Union[dict, `PretrainedConfig`]`):
+            An instance of a configuration object that defines the audio encoder config.
+        decoder (`Union[dict, `PretrainedConfig`]`):
+            An instance of a configuration object that defines the decoder config.
 
     Example:
 
@@ -168,8 +165,10 @@ class MusicgenConfig(PretrainedConfig):
     >>> audio_encoder_config = EncodecConfig()
     >>> decoder_config = MusicgenDecoderConfig()
 
-    >>> configuration = MusicgenConfig.from_sub_models_config(
-    ...     text_encoder_config, audio_encoder_config, decoder_config
+    >>> configuration = MusicgenConfig(
+    ...     text_encoder=text_encoder_config,
+    ...     audio_encoder=audio_encoder_config,
+    ...     decoder=decoder_config,
     ... )
 
     >>> # Initializing a MusicgenForConditionalGeneration (with random weights) from the facebook/musicgen-small style configuration
@@ -197,47 +196,25 @@ class MusicgenConfig(PretrainedConfig):
     }
     has_no_defaults_at_init = True
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        if "text_encoder" not in kwargs or "audio_encoder" not in kwargs or "decoder" not in kwargs:
-            raise ValueError("Config has to be initialized with text_encoder, audio_encoder and decoder config")
+    def __init__(self, text_encoder, audio_encoder, decoder, **kwargs):
+        if isinstance(text_encoder, dict):
+            text_encoder_model_type = text_encoder.pop("model_type")
+            text_encoder = AutoConfig.for_model(text_encoder_model_type, **text_encoder)
 
-        text_encoder_config = kwargs.pop("text_encoder")
-        text_encoder_model_type = text_encoder_config.pop("model_type")
+        if isinstance(audio_encoder, dict):
+            audio_encoder_model_type = audio_encoder.pop("model_type")
+            audio_encoder = AutoConfig.for_model(audio_encoder_model_type, **audio_encoder)
 
-        audio_encoder_config = kwargs.pop("audio_encoder")
-        audio_encoder_model_type = audio_encoder_config.pop("model_type")
+        if isinstance(decoder, dict):
+            decoder = MusicgenDecoderConfig(**decoder)
 
-        decoder_config = kwargs.pop("decoder")
-
-        self.text_encoder = AutoConfig.for_model(text_encoder_model_type, **text_encoder_config)
-        self.audio_encoder = AutoConfig.for_model(audio_encoder_model_type, **audio_encoder_config)
-        self.decoder = MusicgenDecoderConfig(**decoder_config)
-        self.is_encoder_decoder = True
+        self.text_encoder = text_encoder
+        self.audio_encoder = audio_encoder
+        self.decoder = decoder
         self.initializer_factor = self.decoder.initializer_factor
 
-    @classmethod
-    def from_sub_models_config(
-        cls,
-        text_encoder_config: PretrainedConfig,
-        audio_encoder_config: PretrainedConfig,
-        decoder_config: MusicgenDecoderConfig,
-        **kwargs,
-    ):
-        r"""
-        Instantiate a [`MusicgenConfig`] (or a derived class) from text encoder, audio encoder and decoder
-        configurations.
-
-        Returns:
-            [`MusicgenConfig`]: An instance of a configuration object
-        """
-
-        return cls(
-            text_encoder=text_encoder_config.to_dict(),
-            audio_encoder=audio_encoder_config.to_dict(),
-            decoder=decoder_config.to_dict(),
-            **kwargs,
-        )
+        kwargs["is_encoder_decoder"] = True
+        super().__init__(**kwargs)
 
     @property
     # This is a property because you might want to change the codec model on the fly

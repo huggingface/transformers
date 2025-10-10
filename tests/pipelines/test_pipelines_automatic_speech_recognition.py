@@ -615,7 +615,8 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             {"text": " Nor is Mr. Quilters' manner less interesting than his matter."},
         ]
 
-        output = speech_recognizer(ds["audio"], batch_size=2)
+        audio_arrays = [x.get_all_samples().data for x in ds["audio"]]
+        output = speech_recognizer(audio_arrays, batch_size=2)
         self.assertEqual(output, EXPECTED_OUTPUT)
 
     @slow
@@ -1103,7 +1104,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     def test_speculative_decoding_whisper_non_distil(self):
         # Load data:
         dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:1]")
-        sample = dataset[0]["audio"]
+        sample = dataset[0]["audio"].get_all_samples().data
 
         # Load model:
         model_id = "openai/whisper-large-v2"
@@ -1132,8 +1133,8 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             num_beams=1,
         )
 
-        transcription_non_ass = pipe(sample.copy(), generate_kwargs={"assistant_model": assistant_model})["text"]
-        transcription_ass = pipe(sample)["text"]
+        transcription_ass = pipe(sample.clone().detach(), generate_kwargs={"assistant_model": assistant_model})["text"]
+        transcription_non_ass = pipe(sample)["text"]
 
         self.assertEqual(transcription_ass, transcription_non_ass)
         self.assertEqual(
@@ -1421,13 +1422,13 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         )
 
         dataset = load_dataset("distil-whisper/librispeech_long", "clean", split="validation")
-        sample = dataset[0]["audio"]
+        sample = dataset[0]["audio"].get_all_samples().data
 
         # prompt the model to misspell "Mr Quilter" as "Mr Quillter"
         whisper_prompt = "Mr. Quillter."
         prompt_ids = pipe.tokenizer.get_prompt_ids(whisper_prompt, return_tensors="pt").to(torch_device)
 
-        unprompted_result = pipe(sample.copy())["text"]
+        unprompted_result = pipe(sample.clone().detach())["text"]
         prompted_result = pipe(sample, generate_kwargs={"prompt_ids": prompt_ids})["text"]
 
         # fmt: off
@@ -1763,11 +1764,11 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         pipe = pipeline("automatic-speech-recognition", model=model, assistant_model=model)
 
         # We can run the pipeline
-        prompt = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:1]")["audio"]
-        _ = pipe(prompt)
+        prompt = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:1]")[0]["audio"]
+        _ = pipe(prompt, generate_kwargs={"num_beams": 1})
 
         # It is running assisted generation under the hood (e.g. flags incompatible with assisted gen will crash)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             _ = pipe(prompt, generate_kwargs={"num_beams": 2})
 
     @require_torch

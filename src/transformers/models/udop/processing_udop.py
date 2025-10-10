@@ -31,7 +31,7 @@ logger = logging.get_logger(__name__)
 
 class UdopTextKwargs(TextKwargs, total=False):
     word_labels: Optional[Union[list[int], list[list[int]]]]
-    boxes: Union[list[list[int]], list[list[list[int]]]]
+    boxes: Optional[Union[list[list[int]], list[list[list[int]]]]]
 
 
 class UdopProcessorKwargs(ProcessingKwargs, total=False):
@@ -48,7 +48,6 @@ class UdopProcessorKwargs(ProcessingKwargs, total=False):
             "return_length": False,
             "verbose": True,
         },
-        "images_kwargs": {},
     }
 
 
@@ -85,8 +84,6 @@ class UdopProcessor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[UdopProcessorKwargs],
     ) -> BatchFeature:
         """

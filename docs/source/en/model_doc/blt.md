@@ -25,7 +25,7 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
-# Byte Lantet Transformer (BLT)
+# Byte Latent Transformer (BLT)
 
 ## Overview
 

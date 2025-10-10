@@ -65,7 +65,6 @@ class OmDetTurboProcessorKwargs(ProcessingKwargs, total=False):
             "verbose": True,
             "task": None,
         },
-        "images_kwargs": {},
     }
 
 
@@ -227,8 +226,6 @@ class OmDetTurboProcessor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Optional[Union[list[str], list[list[str]]]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[OmDetTurboProcessorKwargs],
     ) -> BatchFeature:
         """

@@ -14,22 +14,22 @@
 # limitations under the License.
 """RetriBERT model configuration"""
 
-from ....configuration_utils import PretrainedConfig
+from ....configuration_utils import PreTrainedConfig
 from ....utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class RetriBertConfig(PretrainedConfig):
+class RetriBertConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`RetriBertModel`]. It is used to instantiate a
     RetriBertModel model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the RetriBERT
     [yjernite/retribert-base-uncased](https://huggingface.co/yjernite/retribert-base-uncased) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:

@@ -18,7 +18,7 @@ import unittest
 
 from parameterized import parameterized
 
-from transformers import PhimoeConfig, StaticCache, is_torch_available
+from transformers import StaticCache, is_torch_available
 from transformers.testing_utils import (
     cleanup,
     require_torch,
@@ -35,7 +35,6 @@ if is_torch_available():
     from transformers import (
         AutoTokenizer,
         PhimoeForCausalLM,
-        PhimoeForSequenceClassification,
         PhimoeModel,
     )
 
@@ -86,32 +85,13 @@ if is_torch_available():
 
 class PhimoeModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = PhimoeConfig
         base_model_class = PhimoeModel
-        causal_lm_class = PhimoeForCausalLM
-        sequence_class = PhimoeForSequenceClassification
 
 
 @require_torch
 class PhimoeModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (PhimoeModel, PhimoeForCausalLM, PhimoeForSequenceClassification) if is_torch_available() else ()
-    )
-
-    test_headmasking = False
-    test_pruning = False
     test_all_params_have_gradient = False
     model_tester_class = PhimoeModelTester
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": PhimoeModel,
-            "text-classification": PhimoeForSequenceClassification,
-            "text-generation": PhimoeForCausalLM,
-            "zero-shot": PhimoeForSequenceClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79292/workflows/fa2ba644-8953-44a6-8f67-ccd69ca6a476/jobs/1012905
     def is_pipeline_test_to_skip(

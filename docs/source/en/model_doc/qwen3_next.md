@@ -19,6 +19,7 @@ rendered properly in your Markdown viewer.
 
 The Qwen3-Next series represents our next-generation foundation models, optimized for extreme context length and large-scale parameter efficiency.
 The series introduces a suite of architectural innovations designed to maximize performance while minimizing computational cost:
+
 - **Hybrid Attention**: Replaces standard attention with the combination of **Gated DeltaNet** and **Gated Attention**, enabling efficient context modeling.
 - **High-Sparsity MoE**: Achieves an extreme low activation ratio as 1:50 in MoE layers — drastically reducing FLOPs per token while preserving model capacity.
 - **Multi-Token Prediction(MTP)**: Boosts pretraining model performance, and accelerates inference.

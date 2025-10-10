@@ -16,13 +16,12 @@
 Processor class for Grounding DINO.
 """
 
-import pathlib
 import warnings
 from typing import TYPE_CHECKING, Optional, Union
 
 from ...image_transforms import center_to_corners_format
-from ...image_utils import AnnotationFormat, ImageInput
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
+from ...image_utils import ImageInput
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 from ...utils import TensorType, is_torch_available
 
@@ -99,16 +98,7 @@ class DictWithDeprecationWarning(dict):
         return super().get(key, *args, **kwargs)
 
 
-class GroundingDinoImagesKwargs(ImagesKwargs, total=False):
-    annotations: Optional[Union[AnnotationType, list[AnnotationType]]]
-    return_segmentation_masks: Optional[bool]
-    masks_path: Optional[Union[str, pathlib.Path]]
-    do_convert_annotations: Optional[bool]
-    format: Optional[Union[str, AnnotationFormat]]
-
-
 class GroundingDinoProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: GroundingDinoImagesKwargs
     _defaults = {
         "text_kwargs": {
             "add_special_tokens": True,

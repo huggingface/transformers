@@ -496,7 +496,7 @@ class MllamaConverter(TikTokenConverter):
 
 def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
     model_max_length = CONTEXT_LENGTH
-    pattern = r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+"  # noqa: W605
+    pattern = r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+"
 
     # Special tokens
     num_reserved_special_tokens = 256

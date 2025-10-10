@@ -31,7 +31,7 @@ from transformers.models.instructblip.modeling_instructblip import (
     TransformersKwargs,
 )
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from ...processing_utils import Unpack
@@ -50,7 +50,7 @@ class InstructBlipVideoQFormerConfig(InstructBlipQFormerConfig):
     pass
 
 
-class InstructBlipVideoConfig(PretrainedConfig):
+class InstructBlipVideoConfig(PreTrainedConfig):
     r"""
     [`InstructBlipVideoConfig`] is the configuration class to store the configuration of a
     [`InstructBlipVideoForConditionalGeneration`]. It is used to instantiate a Instructblipvideo model according to the specified
@@ -58,8 +58,8 @@ class InstructBlipVideoConfig(PretrainedConfig):
     the defaults will yield a similar configuration to that of the Instructblipvideo
     [Salesforce/instruct-blip-flan-t5](https://huggingface.co/Salesforce/instruct-blip-flan-t5) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vision_config (`dict`, *optional*):
@@ -67,7 +67,7 @@ class InstructBlipVideoConfig(PretrainedConfig):
         qformer_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`InstructBlipVideoQFormerConfig`].
         text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize any [`PretrainedConfig`].
+            Dictionary of configuration options used to initialize any [`PreTrainedConfig`].
         num_query_tokens (`int`, *optional*, defaults to 32):
             The number of query tokens passed through the Transformer.
 
@@ -96,14 +96,14 @@ class InstructBlipVideoConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
 
-    >>> # We can also initialize a InstructBlipVideoConfig from a InstructBlipVideoVisionConfig, InstructBlipVideoQFormerConfig and any PretrainedConfig
+    >>> # We can also initialize a InstructBlipVideoConfig from a InstructBlipVideoVisionConfig, InstructBlipVideoQFormerConfig and any PreTrainedConfig
 
     >>> # Initializing Instructblipvideo vision, Instructblipvideo Q-Former and language model configurations
     >>> vision_config = InstructBlipVideoVisionConfig()
     >>> qformer_config = InstructBlipVideoQFormerConfig()
     >>> text_config = OPTConfig()
 
-    >>> config = InstructBlipVideoConfig.from_text_vision_configs(vision_config, qformer_config, text_config)
+    >>> config = InstructBlipVideoConfig(vision_config=vision_config, qformer_config=qformer_config, text_config=text_config)
     ```"""
 
     model_type = "instructblipvideo"
@@ -125,24 +125,30 @@ class InstructBlipVideoConfig(PretrainedConfig):
         video_token_index=None,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
-        if vision_config is None:
-            vision_config = {}
-            logger.info("vision_config is None. initializing the InstructBlipVideoVisionConfig with default values.")
+        if text_config is None:
+            text_config = CONFIG_MAPPING["opt"]()
+            logger.info("text_config is None. Initializing the text config with default values (`OPTConfig`).")
+        elif isinstance(text_config, dict):
+            text_model_type = text_config.get("model_type", "opt")
+            text_config = CONFIG_MAPPING[text_model_type](**text_config)
 
         if qformer_config is None:
-            qformer_config = {}
+            qformer_config = InstructBlipVideoQFormerConfig()
             logger.info("qformer_config is None. Initializing the InstructBlipVideoQFormerConfig with default values.")
+        elif isinstance(qformer_config, dict):
+            qformer_config = InstructBlipVideoQFormerConfig(**qformer_config)
 
-        if text_config is None:
-            text_config = {}
-            logger.info("text_config is None. Initializing the text config with default values (`OPTConfig`).")
+        if vision_config is None:
+            vision_config = InstructBlipVideoVisionConfig()
+            logger.info(
+                "`vision_config` is `None`. initializing the `InstructBlipVideoVisionConfig` with default values."
+            )
+        elif isinstance(vision_config, dict):
+            vision_config = InstructBlipVideoVisionConfig(**vision_config)
 
-        self.vision_config = InstructBlipVideoVisionConfig(**vision_config)
-        self.qformer_config = InstructBlipVideoQFormerConfig(**qformer_config)
-        text_model_type = text_config.get("model_type", "opt")
-        self.text_config = CONFIG_MAPPING[text_model_type](**text_config)
+        self.text_config = text_config
+        self.vision_config = vision_config
+        self.qformer_config = qformer_config
 
         self.num_query_tokens = num_query_tokens
         self.video_token_index = video_token_index
@@ -150,29 +156,7 @@ class InstructBlipVideoConfig(PretrainedConfig):
         self.use_decoder_only_language_model = self.text_config.model_type in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
         self.initializer_factor = 1.0
         self.initializer_range = 0.02
-
-    @classmethod
-    def from_vision_qformer_text_configs(
-        cls,
-        vision_config: InstructBlipVideoVisionConfig,
-        qformer_config: InstructBlipVideoQFormerConfig,
-        text_config: PretrainedConfig,
-        **kwargs,
-    ):
-        r"""
-        Instantiate a [`InstructBlipVideoConfig`] (or a derived class) from a InstructBlipVideo vision model, Q-Former and
-        language model configurations.
-
-        Returns:
-            [`InstructBlipVideoConfig`]: An instance of a configuration object
-        """
-
-        return cls(
-            vision_config=vision_config.to_dict(),
-            qformer_config=qformer_config.to_dict(),
-            text_config=text_config.to_dict(),
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
 
 class InstructBlipVideoPreTrainedModel(InstructBlipPreTrainedModel):

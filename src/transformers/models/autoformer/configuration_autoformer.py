@@ -16,14 +16,14 @@
 
 from typing import Optional
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class AutoformerConfig(PretrainedConfig):
+class AutoformerConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`AutoformerModel`]. It is used to instantiate an
     Autoformer model according to the specified arguments, defining the model architecture. Instantiating a
@@ -31,8 +31,8 @@ class AutoformerConfig(PretrainedConfig):
     [huggingface/autoformer-tourism-monthly](https://huggingface.co/huggingface/autoformer-tourism-monthly)
     architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         prediction_length (`int`):

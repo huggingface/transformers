@@ -72,9 +72,10 @@ predictions at each step.
 Let's demonstrate this process with GPT-2.
 
 ```python
-from transformers import GPT2LMHeadModel, GPT2TokenizerFast, infer_device
+from transformers import GPT2LMHeadModel, GPT2TokenizerFast
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 model_id = "openai-community/gpt2-large"
 model = GPT2LMHeadModel.from_pretrained(model_id).to(device)
 tokenizer = GPT2TokenizerFast.from_pretrained(model_id)

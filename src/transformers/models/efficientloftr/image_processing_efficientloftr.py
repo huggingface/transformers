@@ -34,6 +34,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, logging, requires_backends
 
 
@@ -47,6 +48,15 @@ if is_vision_available():
     from .modeling_efficientloftr import KeypointMatchingOutput
 
 logger = logging.get_logger(__name__)
+
+
+class EfficientLoFTRImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    do_grayscale (`bool`, *optional*, defaults to `True`):
+        Whether to convert the image to grayscale. Can be overridden by `do_grayscale` in the `preprocess` method.
+    """
+
+    do_grayscale: bool
 
 
 # Copied from transformers.models.superpoint.image_processing_superpoint.is_grayscale
@@ -155,6 +165,7 @@ class EfficientLoFTRImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
+    valid_kwargs = EfficientLoFTRImageProcessorKwargs
 
     def __init__(
         self,

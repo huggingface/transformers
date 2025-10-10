@@ -13,9 +13,10 @@
 # limitations under the License.
 
 import contextlib
+from collections.abc import Callable
 from copy import deepcopy
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 import torch
 from torch import nn
@@ -27,7 +28,6 @@ from .integrations.deepspeed import is_deepspeed_zero3_enabled
 from .integrations.fsdp import is_fsdp_managed_module
 from .trainer import Trainer
 from .utils import is_datasets_available, logging
-from .utils.deprecation import deprecate_kwarg
 
 
 if is_datasets_available():
@@ -51,7 +51,6 @@ logger = logging.get_logger(__name__)
 
 
 class Seq2SeqTrainer(Trainer):
-    @deprecate_kwarg("tokenizer", new_name="processing_class", version="5.0.0", raise_if_both_names=True)
     def __init__(
         self,
         model: Optional[Union["PreTrainedModel", nn.Module]] = None,

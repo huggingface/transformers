@@ -67,7 +67,7 @@ Tenendo questi principi in mente, immergiamoci nel design generale della libreri
 ### Panoramica sui modelli
 
 Per aggiungere con successo un modello, é importante capire l'interazione tra il tuo modello e la sua configurazione,
-[`PreTrainedModel`], e [`PretrainedConfig`]. Per dare un esempio, chiameremo il modello da aggiungere a 🤗 Transformers
+[`PreTrainedModel`], e [`PreTrainedConfig`]. Per dare un esempio, chiameremo il modello da aggiungere a 🤗 Transformers
 `BrandNewBert`.
 
 Diamo un'occhiata:
@@ -94,9 +94,9 @@ model.config  # il modello ha accesso al suo config
 ```
 
 Analogamente al modello, la configurazione eredita le funzionalità base di serializzazione e deserializzazione da
-[`PretrainedConfig`]. É da notare che la configurazione e il modello sono sempre serializzati in due formati differenti -
+[`PreTrainedConfig`]. É da notare che la configurazione e il modello sono sempre serializzati in due formati differenti -
 il modello é serializzato in un file *pytorch_model.bin* mentre la configurazione con *config.json*. Chiamando
-[`~PreTrainedModel.save_pretrained`] automaticamente chiamerà [`~PretrainedConfig.save_pretrained`], cosicché sia il
+[`~PreTrainedModel.save_pretrained`] automaticamente chiamerà [`~PreTrainedConfig.save_pretrained`], cosicché sia il
 modello che la configurazione siano salvati.
 
 
