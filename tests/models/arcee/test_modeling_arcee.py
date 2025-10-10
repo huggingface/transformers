@@ -34,9 +34,6 @@ if is_torch_available():
     from transformers import (
         ArceeConfig,
         ArceeForCausalLM,
-        ArceeForQuestionAnswering,
-        ArceeForSequenceClassification,
-        ArceeForTokenClassification,
         ArceeModel,
     )
 
@@ -48,18 +45,6 @@ class ArceeModelTester(CausalLMModelTester):
 
 @require_torch
 class ArceeModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": ArceeModel,
-            "text-classification": ArceeForSequenceClassification,
-            "text-generation": ArceeForCausalLM,
-            "zero-shot": ArceeForSequenceClassification,
-            "question-answering": ArceeForQuestionAnswering,
-            "token-classification": ArceeForTokenClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
     fx_compatible = False
     model_tester_class = ArceeModelTester
 
