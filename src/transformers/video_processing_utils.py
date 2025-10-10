@@ -378,7 +378,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             do_sample_frames=do_sample_frames,
             sample_indices_fn=sample_indices_fn,
         )
-        videos = self._prepare_input_videos(videos=videos, input_data_format=input_data_format, device=device)
+        videos = self._prepare_input_videos(videos=videos, input_data_format=input_data_format, device=device, video_metadata=video_metadata)
 
         kwargs = self._further_process_kwargs(**kwargs)
         self._validate_preprocess_kwargs(**kwargs)

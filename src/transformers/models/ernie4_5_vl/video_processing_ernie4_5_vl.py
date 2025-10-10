@@ -18,9 +18,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import math
-from typing import Optional, Union
+import os
+from pathlib import Path
+from typing import List, Optional, Union
 
+import numpy as np
+import requests
 import torch
 import torch.nn.functional as F
 
@@ -37,11 +40,30 @@ from ...processing_utils import Unpack, VideosKwargs
 from ...utils import (
     TensorType,
     add_start_docstrings,
+    is_vision_available,
 )
 from ...utils.import_utils import requires
 from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
-from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
+from ...video_utils import (
+    VideoInput,
+    VideoMetadata,
+    group_videos_by_shape,
+    reorder_videos,
+    to_channel_dimension_format,
+)
 from .image_processing_ernie4_5_vl import smart_resize
+
+
+if is_vision_available():
+    from PIL import ImageDraw, ImageFont
+    from torchvision.transforms.functional import pil_to_tensor, to_pil_image
+
+
+# TODO: how do we move this
+FONT_PATH = os.path.join(Path(__file__).parent.absolute(), "Roboto-Regular.ttf")
+if not os.path.exists(FONT_PATH):
+    ttf = requests.get("https://paddlenlp.bj.bcebos.com/vision-language-models/materials/Roboto-Regular.ttf")
+    open(FONT_PATH, "wb").write(ttf.content)
 
 
 class Ernie4_5_VLVideoProcessorInitKwargs(VideosKwargs):
@@ -77,25 +99,29 @@ class Ernie4_5_VLVideoProcessorInitKwargs(VideosKwargs):
 @requires(backends=("torchvision",))
 class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
-    size = {"shortest_edge": 128 * 28 * 28, "longest_edge": 28 * 28 * 768}
+    size = {"shortest_edge": 299 * 28 * 28, "longest_edge": 1196 * 28 * 28}
     image_mean = OPENAI_CLIP_MEAN
     image_std = OPENAI_CLIP_STD
     do_resize = True
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
-    min_pixels = 128 * 28 * 28
-    max_pixels = 28 * 28 * 768
+    min_pixels = 299 * 28 * 28
+    max_pixels = 1196 * 28 * 28
     patch_size = 14
     temporal_patch_size = 2
     merge_size = 2
-    min_frames = 4
-    max_frames = 768
-    do_sample_frames = False  # Set to False for BC, recommended to set `True` in new models
+    min_frames = 16
+    max_frames = 180
+    do_sample_frames = True
     valid_kwargs = Ernie4_5_VLVideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
 
     def __init__(self, **kwargs: Unpack[Ernie4_5_VLVideoProcessorInitKwargs]):
+        temporal_patch_size = kwargs.get("temporal_patch_size", None)
+        if temporal_patch_size is None or temporal_patch_size != 2:
+            raise ValueError("TODO: only supports == 2")
+
         size = kwargs.pop("size", None)
         min_pixels = kwargs.pop("min_pixels", None)
         max_pixels = kwargs.pop("max_pixels", None)
@@ -115,72 +141,97 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
     def sample_frames(
         self,
         metadata: VideoMetadata,
-        temporal_patch_size: Optional[int] = None,
         min_frames: Optional[int] = None,
         max_frames: Optional[int] = None,
-        num_frames: Optional[int] = None,
-        fps: Optional[Union[int, float]] = None,
         **kwargs,
     ):
-        """
-        Default sampling function which uniformly samples the desired number of frames between 0 and total number of frames.
-        If `fps` is passed along with metadata, `fps` frames per second are sampled uniformty. Arguments `num_frames`
-        and `fps` are mutually exclusive.
+        if getattr(metadata, "total_num_frames", None) is None:
+            raise ValueError()
 
-        Args:
-            metadata (`VideoMetadata`):
-                Metadata of the video containing information about total duration, fps and total number of frames.
-            temporal_patch_size (`int`, *optional*):
-                The temporal patch size of the vision encoder. Number of sampled frames will be rounded to be divisible by frame factor.
-            min_frames (`int`, *optional*):
-                The minimum number of frames that can be sampled.
-            max_frames (`int`, *optional*):
-                The maximum number of frames that can be sampled.
-            num_frames (`int`, *optional*):
-                Maximum number of frames to sample. Defaults to `self.num_frames`.
-            fps (`int` or `float`, *optional*):
-                Target frames to sample per second. Defaults to `self.fps`.
-
-        Returns:
-            np.ndarray:
-                Indices to sample video frames.
-        """
-        if fps is not None and num_frames is not None:
-            raise ValueError("`num_frames` and `fps` are mutually exclusive arguments, please use only one!")
-
-        num_frames = num_frames if num_frames is not None else self.num_frames
-        fps = fps if fps is not None else self.fps
-        temporal_patch_size = temporal_patch_size if temporal_patch_size is not None else self.temporal_patch_size
-        min_frames = min_frames if min_frames is not None else self.min_frames
-        max_frames = max_frames if max_frames is not None else self.max_frames
         total_num_frames = metadata.total_num_frames
 
-        # If num_frames is not given but fps is, calculate num_frames from fps
-        if num_frames is not None:
-            num_frames = round(num_frames / temporal_patch_size) * temporal_patch_size
-        elif fps is not None:
-            if metadata is None or metadata.fps is None:
-                raise ValueError(
-                    "Asked to sample `fps` frames per second but no video metadata was provided which is required when sampling with `fps`. "
-                    "Please pass in `VideoMetadata` object or use a fixed `num_frames` per input video"
-                )
-            max_frames = math.floor(min(max_frames, total_num_frames) / temporal_patch_size) * temporal_patch_size
-            num_frames = total_num_frames / metadata.fps * fps
-            num_frames = min(min(max(num_frames, min_frames), max_frames), total_num_frames)
-            num_frames = math.floor(num_frames / temporal_patch_size) * temporal_patch_size
+        min_frames = min_frames if min_frames is not None else self.min_frames
+        max_frames = max_frames if max_frames is not None else self.max_frames
 
-        if num_frames > total_num_frames:
-            raise ValueError(
-                f"Video can't be sampled. The inferred `num_frames={num_frames}` exceeds `total_num_frames={total_num_frames}`. "
-                "Decrease `num_frames` or `fps` for sampling."
-            )
+        max_frames = min(max_frames, total_num_frames)
+        num_frames = min(max(total_num_frames, min_frames), max_frames)
 
-        if num_frames is not None:
-            indices = torch.arange(0, total_num_frames, total_num_frames / num_frames).int()
-        else:
-            indices = torch.arange(0, total_num_frames).int()
+        indices = torch.arange(0, total_num_frames, total_num_frames / num_frames).int()
+        #test = np.linspace(start=0, stop=total_num_frames, num=num_frames + 1).astype(int)[:-1]
 
         return indices
+
+    def _convert_timestamp(self, time_stamp_in_seconds):
+        """Convert to `time: hr:min:sec` format"""
+        hours = 0
+        while time_stamp_in_seconds >= 3600:
+            hours += 1
+            time_stamp_in_seconds -= 3600
+        mins = 0
+        while time_stamp_in_seconds >= 60:
+            mins += 1
+            time_stamp_in_seconds -= 60
+        return f"time: {int(hours):02d}:{int(mins):02d}:{time_stamp_in_seconds:05.02f}"
+
+    def _render_image_with_timestamp(self, image: torch.Tensor, timestamp: str):
+        """
+        TODO: I have not found a function in torchvision to do this
+        """
+        image = to_pil_image(image)
+
+        font_size = int(min(*image.size) * 0.1)
+        outline_size = int(font_size * 0.1)
+        font = ImageFont.truetype(FONT_PATH, font_size)
+
+        # Draw a black timestamp with a white border
+        draw = ImageDraw.Draw(image)
+        draw.text(
+            (0, 0),
+            timestamp,
+            font=font,
+            fill=(0, 0, 0),
+            stroke_width=outline_size,
+            stroke_fill=(255, 255, 255),
+        )
+
+        return pil_to_tensor(image)
+
+    def _prepare_input_videos(
+        self,
+        videos: VideoInput,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        device: Optional[str] = None,
+        video_metadata: Optional[List[VideoMetadata]] = None,
+    ) -> list["torch.Tensor"]:
+        """
+        Prepare the input videos for processing.
+        """
+        processed_videos = []
+        for video, metadata in zip(videos, video_metadata):
+            # Check for attributes that are necessary to draw timestamps on frames
+            if metadata is None or (metadata.fps is None or metadata.frames_indices is None):
+                raise ValueError()
+
+            # `make_batched_videos` always returns a 4D array per video
+            if isinstance(video, np.ndarray):
+                video = to_channel_dimension_format(video, ChannelDimension.FIRST, input_data_format)
+                # not using F.to_tensor as it doesn't handle (C, H, W) numpy arrays
+                video = torch.from_numpy(video).contiguous()
+
+            # TODO: check for correctness
+            # See `timestamp_converting` and `render_single_image_with_timestamp` in og
+            for idx, frame in enumerate(video):
+                video[idx] = self._render_image_with_timestamp(frame, self._convert_timestamp(metadata.timestamps[idx]))
+
+            # last frame is copied if uneven (mitigating issues for temporal patch size)
+            if video.shape[0] % 2 != 0:
+                video = torch.cat((video, video[-1].detach().clone()[None, ...]), dim=0)
+
+            if device is not None:
+                video = video.to(device)
+
+            processed_videos.append(video)
+        return processed_videos
 
     def _preprocess(
         self,
@@ -194,19 +245,20 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
         do_normalize: bool,
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
-        min_pixels: Optional[int] = None,
-        max_pixels: Optional[int] = None,
         patch_size: Optional[int] = None,
-        temporal_patch_size: Optional[int] = None,
         merge_size: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        device: Optional["torch.Tensor"] = None,
         **kwargs,
     ):
+        # TODO: failing as min/max pixels is None
+
         # Group videos by size for batched resizing
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
         resized_videos_grouped = {}
         for shape, stacked_videos in grouped_videos.items():
+            if do_convert_rgb:
+                stacked_videos = self.convert_to_rgb(stacked_videos)
+
             height, width = get_image_size(stacked_videos[0], channel_dim=ChannelDimension.FIRST)
             resized_height, resized_width = height, width
             if do_resize:
@@ -214,8 +266,8 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
                     height,
                     width,
                     factor=patch_size * merge_size,
-                    min_pixels=min_pixels,
-                    max_pixels=max_pixels,
+                    min_pixels=size["shortest_edge"],
+                    max_pixels=size["longest_edge"],
                 )
                 stacked_videos = self.resize(
                     image=stacked_videos,
@@ -239,19 +291,12 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
             )
             patches = stacked_videos
 
-            # Check that videos have `num_frames` divisible by `temporal_patch_size`
-            if patches.shape[1] % temporal_patch_size != 0:
-                repeats = patches[:, -1:].repeat(1, self.temporal_patch_size - 1, 1, 1, 1)
-                patches = torch.cat([patches, repeats], dim=1)
-
             batch_size, grid_t, channel = patches.shape[:3]
-            grid_t = grid_t // temporal_patch_size
             grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
 
             patches = patches.view(
                 batch_size,
                 grid_t,
-                temporal_patch_size,
                 channel,
                 grid_h // merge_size,
                 merge_size,
@@ -260,11 +305,14 @@ class Ernie4_5_VLVideoProcessor(BaseVideoProcessor):
                 merge_size,
                 patch_size,
             )
-            patches = patches.permute(0, 1, 4, 7, 5, 8, 3, 2, 6, 9)
+            # Reorder dimensions to group grid and patch information for subsequent flattening.
+            # [batch, grid_t, grid_h/merge, grid_w/merge, merge, merge, channel, patch, patch]
+            patches = patches.permute(0, 1, 3, 6, 4, 7, 2, 5, 8)
+
             flatten_patches = patches.reshape(
                 batch_size,
                 grid_t * grid_h * grid_w,
-                channel * temporal_patch_size * patch_size * patch_size,
+                channel * patch_size * patch_size,
             )
 
             processed_videos_grouped[shape] = flatten_patches

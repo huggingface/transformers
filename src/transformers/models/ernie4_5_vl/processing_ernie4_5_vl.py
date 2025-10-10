@@ -24,7 +24,7 @@ import numpy as np
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...video_utils import VideoInput
 
@@ -36,13 +36,26 @@ class Ernie4_5_VLImagesKwargs(ImagesKwargs):
     merge_size: Optional[int]
 
 
+class Ernie4_5_VLVideosKwargs(VideosKwargs):
+    min_pixels: Optional[int]
+    max_pixels: Optional[int]
+    patch_size: Optional[int]
+    merge_size: Optional[int]
+    min_frames: Optional[int]
+    max_frames: Optional[int]
+
+
 class Ernie4_5_VLProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: Ernie4_5_VLImagesKwargs
+    videos_kwargs: Ernie4_5_VLVideosKwargs
     _defaults = {
         "text_kwargs": {
             "padding": False,
             "return_mm_token_type_ids": False,
         },
+        "videos_kwargs": {
+            "do_sample_frames": True,
+        }
     }
 
 
