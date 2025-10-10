@@ -115,13 +115,10 @@ class Pop2PianoConfig(PreTrainedConfig):
         self.hidden_size = self.d_model
         self.num_attention_heads = num_heads
         self.num_hidden_layers = num_layers
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            **kwargs,
-        )
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
 __all__ = ["Pop2PianoConfig"]

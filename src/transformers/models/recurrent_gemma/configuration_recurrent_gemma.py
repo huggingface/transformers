@@ -146,12 +146,10 @@ class RecurrentGemmaConfig(PreTrainedConfig):
         self.attention_bias = attention_bias
         self.w_init_variance_scale = w_init_variance_scale
         self.final_w_init_variance_scale = 2.0 / self.num_hidden_layers
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
 
     @property
     def layers_block_type(self):

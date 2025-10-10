@@ -128,7 +128,10 @@ class BioGptConfig(PreTrainedConfig):
         self.use_cache = use_cache
         self.layerdrop = layerdrop
         self.activation_dropout = activation_dropout
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(**kwargs)
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
 
 
 __all__ = ["BioGptConfig"]

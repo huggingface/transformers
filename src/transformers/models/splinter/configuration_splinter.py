@@ -102,7 +102,8 @@ class SplinterConfig(PreTrainedConfig):
         question_token_id=104,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, **kwargs)
+        super().__init__(**kwargs)
+        self.pad_token_id = pad_token_id
 
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings

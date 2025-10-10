@@ -149,7 +149,8 @@ class RoCBertConfig(PreTrainedConfig):
         self.shape_vocab_size = shape_vocab_size
         self.concat_input = concat_input
         self.classifier_dropout = classifier_dropout
-        super().__init__(pad_token_id=pad_token_id, **kwargs)
+        super().__init__(**kwargs)
+        self.pad_token_id = pad_token_id
 
 
 __all__ = ["RoCBertConfig"]

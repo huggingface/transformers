@@ -232,10 +232,8 @@ class DogeConfig(PreTrainedConfig):
         if num_key_value_heads is None:
             self.num_key_value_heads = num_attention_heads
 
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 __all__ = ["DogeConfig"]

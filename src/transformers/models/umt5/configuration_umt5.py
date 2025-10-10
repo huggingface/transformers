@@ -136,13 +136,14 @@ class UMT5Config(PreTrainedConfig):
         if feed_forward_proj == "gated-gelu":
             self.dense_act_fn = "gelu_new"
 
+        self.tokenizer_class = tokenizer_class
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
+        self.decoder_start_token_id = decoder_start_token_id
+
         super().__init__(
             is_encoder_decoder=is_encoder_decoder,
-            tokenizer_class=tokenizer_class,
-            tie_word_embeddings=tie_word_embeddings,
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            decoder_start_token_id=decoder_start_token_id,
             **kwargs,
         )
 

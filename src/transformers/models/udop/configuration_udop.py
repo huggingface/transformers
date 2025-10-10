@@ -128,6 +128,8 @@ class UdopConfig(PreTrainedConfig):
         self.initializer_factor = initializer_factor
         self.feed_forward_proj = feed_forward_proj
         self.use_cache = use_cache
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
 
         # UDOP attributes
         self.max_2d_position_embeddings = max_2d_position_embeddings
@@ -150,8 +152,6 @@ class UdopConfig(PreTrainedConfig):
             )
 
         super().__init__(
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
             **kwargs,
         )

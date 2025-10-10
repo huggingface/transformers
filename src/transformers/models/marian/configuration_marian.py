@@ -154,11 +154,11 @@ class MarianConfig(PreTrainedConfig):
         self.num_hidden_layers = encoder_layers
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.share_encoder_decoder_embeddings = share_encoder_decoder_embeddings
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
+        self.decoder_start_token_id = decoder_start_token_id
         super().__init__(
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
-            decoder_start_token_id=decoder_start_token_id,
             forced_eos_token_id=forced_eos_token_id,
             **kwargs,
         )

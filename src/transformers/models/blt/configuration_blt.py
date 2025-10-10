@@ -411,7 +411,8 @@ class BltConfig(PreTrainedConfig):
 
         # Remove tie_word_embeddings from kwargs to avoid duplicate parameter error
         kwargs.pop("tie_word_embeddings", None)
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 __all__ = [

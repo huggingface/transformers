@@ -149,13 +149,11 @@ class HunYuanDenseV1Config(PreTrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
     def _rope_scaling_validation(self):
         """

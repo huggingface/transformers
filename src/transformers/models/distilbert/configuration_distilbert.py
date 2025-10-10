@@ -120,7 +120,8 @@ class DistilBertConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.qa_dropout = qa_dropout
         self.seq_classif_dropout = seq_classif_dropout
-        super().__init__(**kwargs, pad_token_id=pad_token_id)
+        self.pad_token_id = pad_token_id
+        super().__init__(**kwargs)
 
 
 class DistilBertOnnxConfig(OnnxConfig):

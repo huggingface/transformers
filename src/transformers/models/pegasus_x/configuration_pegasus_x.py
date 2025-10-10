@@ -155,12 +155,12 @@ class PegasusXConfig(PreTrainedConfig):
         self.num_global_tokens = num_global_tokens
         self.block_size = block_size
         self.stagger_local_blocks = stagger_local_blocks
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
+        self.decoder_start_token_id = decoder_start_token_id
 
         super().__init__(
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
-            decoder_start_token_id=decoder_start_token_id,
             forced_eos_token_id=forced_eos_token_id,
             **kwargs,
         )

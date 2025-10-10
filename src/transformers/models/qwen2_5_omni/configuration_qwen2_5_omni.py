@@ -364,10 +364,8 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig):
         attention_dropout=0.0,
         **kwargs,
     ):
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -789,7 +787,8 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig):
             ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 class Qwen2_5OmniDiTConfig(PreTrainedConfig):

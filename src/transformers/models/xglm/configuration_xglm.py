@@ -126,14 +126,12 @@ class XGLMConfig(PreTrainedConfig):
         self.init_std = init_std
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.use_cache = use_cache
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.decoder_start_token_id = decoder_start_token_id
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            decoder_start_token_id=decoder_start_token_id,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
 
 __all__ = ["XGLMConfig"]

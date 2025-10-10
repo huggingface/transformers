@@ -128,6 +128,8 @@ class LongT5Config(PreTrainedConfig):
         self.feed_forward_proj = feed_forward_proj
         self.encoder_attention_type = encoder_attention_type
         self.use_cache = use_cache
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
 
         act_info = self.feed_forward_proj.split("-")
         self.dense_act_fn = act_info[-1]
@@ -144,12 +146,7 @@ class LongT5Config(PreTrainedConfig):
         if feed_forward_proj == "gated-gelu":
             self.dense_act_fn = "gelu_new"
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            **kwargs,
-        )
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
 class LongT5OnnxConfig(OnnxSeq2SeqConfigWithPast):

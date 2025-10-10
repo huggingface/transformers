@@ -144,7 +144,8 @@ class LlavaNextConfig(PreTrainedConfig):
 
         self.text_config = text_config
 
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 __all__ = ["LlavaNextConfig"]

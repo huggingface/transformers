@@ -111,7 +111,8 @@ class RoFormerConfig(PreTrainedConfig):
         use_cache=True,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, **kwargs)
+        super().__init__(**kwargs)
+        self.pad_token_id = pad_token_id
 
         self.vocab_size = vocab_size
         self.embedding_size = hidden_size if embedding_size is None else embedding_size

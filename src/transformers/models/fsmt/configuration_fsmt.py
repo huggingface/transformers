@@ -206,13 +206,14 @@ class FSMTConfig(PreTrainedConfig):
         self.dropout = dropout
 
         self.use_cache = use_cache
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.decoder_start_token_id = decoder_start_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+
         super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            decoder_start_token_id=decoder_start_token_id,
             is_encoder_decoder=is_encoder_decoder,
-            tie_word_embeddings=tie_word_embeddings,
             forced_eos_token_id=forced_eos_token_id,
             max_length=max_length,
             num_beams=num_beams,

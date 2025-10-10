@@ -173,13 +173,10 @@ class SwitchTransformersConfig(PreTrainedConfig):
         self.router_z_loss_coef = router_z_loss_coef
         self.router_aux_loss_coef = router_aux_loss_coef
         self.dense_act_fn = dense_act_fn
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            **kwargs,
-        )
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
 __all__ = ["SwitchTransformersConfig"]

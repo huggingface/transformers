@@ -324,14 +324,11 @@ class SpeechT5Config(PreTrainedConfig):
         self.use_cache = use_cache
         self.is_encoder_decoder = is_encoder_decoder
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            decoder_start_token_id=decoder_start_token_id,
-            **kwargs,
-        )
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.decoder_start_token_id = decoder_start_token_id
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     def inputs_to_logits_ratio(self):
         return functools.reduce(operator.mul, self.conv_stride, 1)

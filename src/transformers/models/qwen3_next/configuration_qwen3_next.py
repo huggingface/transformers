@@ -221,7 +221,8 @@ class Qwen3NextConfig(PreTrainedConfig):
         layer_types=None,
         **kwargs,
     ):
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size

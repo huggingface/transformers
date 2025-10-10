@@ -1063,7 +1063,7 @@ def pipeline(
             else:
                 processor = None
 
-    if task == "translation" and model.config.task_specific_params:
+    if task == "translation" and getattr(model.config, "task_specific_params"):
         for key in model.config.task_specific_params:
             if key.startswith("translation"):
                 task = key

@@ -218,7 +218,10 @@ class XLNetConfig(PreTrainedConfig):
 
         self.use_mems_eval = use_mems_eval
         self.use_mems_train = use_mems_train
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(**kwargs)
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
 
     @property
     def max_position_embeddings(self):

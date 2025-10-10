@@ -135,14 +135,12 @@ class Pix2StructTextConfig(PreTrainedConfig):
         # for backwards compatibility
         self.dense_act_fn = dense_act_fn
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            decoder_start_token_id=decoder_start_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            is_decoder=is_decoder,
-            **kwargs,
-        )
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
+        self.decoder_start_token_id = decoder_start_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        self.is_decoder = is_decoder
+        super().__init__(**kwargs)
 
 
 class Pix2StructVisionConfig(PreTrainedConfig):
@@ -336,7 +334,8 @@ class Pix2StructConfig(PreTrainedConfig):
         self.vision_config.initializer_range = self.initializer_range
 
         self.is_vqa = is_vqa
-        super().__init__(tie_word_embeddings=tie_word_embeddings, is_encoder_decoder=is_encoder_decoder, **kwargs)
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
 __all__ = ["Pix2StructConfig", "Pix2StructTextConfig", "Pix2StructVisionConfig"]

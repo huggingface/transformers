@@ -376,10 +376,8 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
         self.router_aux_loss_coef = router_aux_loss_coef
         self.mlp_only_layers = [] if mlp_only_layers is None else mlp_only_layers
 
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 class Qwen3OmniMoeThinkerConfig(PreTrainedConfig):
@@ -675,10 +673,8 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
             ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
         self.num_code_groups = num_code_groups
 
 
@@ -889,10 +885,8 @@ class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
         self.router_aux_loss_coef = router_aux_loss_coef
         self.mlp_only_layers = [] if mlp_only_layers is None else mlp_only_layers
 
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):

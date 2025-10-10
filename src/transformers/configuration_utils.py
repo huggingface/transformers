@@ -110,19 +110,6 @@ class PreTrainedConfig(PushToHubMixin):
             Whether or not the model should return a [`~transformers.utils.ModelOutput`] instead of a plain tuple.
         is_encoder_decoder (`bool`, *optional*, defaults to `False`):
             Whether the model is used as an encoder/decoder or not.
-        is_decoder (`bool`, *optional*, defaults to `False`):
-            Whether to only use the decoder in an encoder-decoder architecture, otherwise it has no effect on
-            decoder-only or encoder-only architectures.
-        cross_attention_hidden_size (`bool`, *optional*):
-            The hidden size of the cross-attention layer in case the model is used as a decoder in an encoder-decoder
-            setting and the cross-attention hidden dimension differs from `self.config.hidden_size`.
-        add_cross_attention (`bool`, *optional*, defaults to `False`):
-            Whether cross-attention layers should be added to the model. Note, this option is only relevant for models
-            that can be used as decoder models within the [`EncoderDecoderModel`] class, which consists of all models
-            in `AUTO_MODELS_FOR_CAUSAL_LM`.
-        tie_encoder_decoder (`bool`, *optional*, defaults to `False`):
-            Whether all encoder weights should be tied to their equivalent decoder weights. This requires the encoder
-            and decoder model to have the exact same parameter names.
         chunk_size_feed_forward (`int`, *optional*, defaults to `0`):
             The chunk size of all feed forward layers in the residual attention blocks. A chunk size of `0` means that
             the feed forward layer is not chunked. A chunk size of n means that the feed forward layer processes `n` <
@@ -133,45 +120,20 @@ class PreTrainedConfig(PushToHubMixin):
 
         architectures (`list[str]`, *optional*):
             Model architectures that can be used with the model pretrained weights.
-        finetuning_task (`str`, *optional*):
-            Name of the task used to fine-tune the model.
         id2label (`dict[int, str]`, *optional*):
             A map from index (for instance prediction index, or target index) to label.
         label2id (`dict[str, int]`, *optional*):
             A map from label to index for the model.
         num_labels (`int`, *optional*):
             Number of labels to use in the last layer added to the model, typically for a classification task.
-        task_specific_params (`dict[str, Any]`, *optional*):
-            Additional keyword arguments to store for the current task.
         problem_type (`str`, *optional*):
             Problem type for `XxxForSequenceClassification` models. Can be one of `"regression"`,
             `"single_label_classification"` or `"multi_label_classification"`.
-
-        > Parameters linked to the tokenizer
-
-        tokenizer_class (`str`, *optional*):
-            The name of the associated tokenizer class to use (if none is set, will use the tokenizer associated to the
-            model by default).
-        prefix (`str`, *optional*):
-            A specific prompt that should be added at the beginning of each text before calling the model.
-        bos_token_id (`int`, *optional*):
-            The id of the _beginning-of-stream_ token.
-        pad_token_id (`int`, *optional*):
-            The id of the _padding_ token.
-        eos_token_id (`int`, *optional*):
-            The id of the _end-of-stream_ token.
-        decoder_start_token_id (`int`, *optional*):
-            If an encoder-decoder model starts decoding with a different token than _bos_, the id of that token.
-        sep_token_id (`int`, *optional*):
-            The id of the _separation_ token.
 
         > PyTorch specific parameters
 
         torchscript (`bool`, *optional*, defaults to `False`):
             Whether or not the model should be used with Torchscript.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether the model's input and output word embeddings should be tied. Note that this is only relevant if the
-            model has a output word embedding layer.
         dtype (`str`, *optional*):
             The `dtype` of the weights. This attribute can be used to initialize the model to a non-default `dtype`
             (which is normally `float32`) and thus allow for optimal storage allocation. For example, if the saved
@@ -209,29 +171,14 @@ class PreTrainedConfig(PushToHubMixin):
         torchscript: bool = False,
         dtype: Optional[Union[str, "torch.dtype"]] = None,
         # Common arguments
-        tie_word_embeddings: bool = True,
         chunk_size_feed_forward: int = 0,
         is_encoder_decoder: bool = False,
-        is_decoder: bool = False,
-        cross_attention_hidden_size: Optional[int] = None,
-        add_cross_attention: bool = False,
-        tie_encoder_decoder: bool = False,
         # Fine-tuning task arguments
         architectures: Optional[list[str]] = None,
-        finetuning_task: Optional[str] = None,
         id2label: Optional[dict[int, str]] = None,
         label2id: Optional[dict[str, int]] = None,
         num_labels: Optional[int] = None,
-        task_specific_params: Optional[dict[str, Any]] = None,
         problem_type: Optional[str] = None,
-        # Tokenizer kwargs
-        tokenizer_class: Optional[str] = None,
-        prefix: Optional[str] = None,
-        bos_token_id: Optional[int] = None,
-        pad_token_id: Optional[int] = None,
-        eos_token_id: Optional[int] = None,
-        sep_token_id: Optional[int] = None,
-        decoder_start_token_id: Optional[int] = None,
         **kwargs,
     ):
         # Validation for some arguments
@@ -273,22 +220,15 @@ class PreTrainedConfig(PushToHubMixin):
         self._output_attentions = output_attentions  # has public property
 
         # Less common kwargs, only used by some models
-        self.tie_word_embeddings = tie_word_embeddings
         self.chunk_size_feed_forward = chunk_size_feed_forward
 
         # Encoder-decoder models attributes
         self.is_encoder_decoder = is_encoder_decoder
-        self.is_decoder = is_decoder  # used in encoder-decoder models to differentiate encoder from decoder
-        self.cross_attention_hidden_size = cross_attention_hidden_size
-        self.add_cross_attention = add_cross_attention
-        self.tie_encoder_decoder = tie_encoder_decoder
 
         # Fine-tuning task attributes
         self.architectures = architectures
-        self.finetuning_task = finetuning_task
         self.id2label = id2label
         self.label2id = label2id
-        self.task_specific_params = task_specific_params
         self.problem_type = problem_type
 
         if self.id2label is None:
@@ -296,15 +236,6 @@ class PreTrainedConfig(PushToHubMixin):
         else:
             # Keys are always strings in JSON so convert ids to int here.
             self.id2label = {int(key): value for key, value in self.id2label.items()}
-
-        # Tokenizer attributes
-        self.tokenizer_class = tokenizer_class
-        self.prefix = prefix
-        self.bos_token_id = bos_token_id
-        self.pad_token_id = pad_token_id
-        self.eos_token_id = eos_token_id
-        self.sep_token_id = sep_token_id
-        self.decoder_start_token_id = decoder_start_token_id
 
         # Retrocompatibility: Parameters for sequence generation. While we will keep the ability to load these
         # parameters, saving them will be deprecated. In a distant future, we won't need to load them.

@@ -210,11 +210,13 @@ class FlaubertConfig(PreTrainedConfig):
         self.end_n_top = end_n_top
         self.mask_token_id = mask_token_id
         self.lang_id = lang_id
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
 
         if "n_words" in kwargs:
             self.n_words = kwargs["n_words"]
 
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, **kwargs)
+        super().__init__(**kwargs)
 
 
 class FlaubertOnnxConfig(OnnxConfig):

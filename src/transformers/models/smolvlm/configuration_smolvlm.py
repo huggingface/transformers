@@ -184,13 +184,13 @@ class SmolVLMConfig(PreTrainedConfig):
             text_config = CONFIG_MAPPING["llama"](
                 rms_norm_eps=1e-5,
                 pad_token_id=pad_token_id,
-                tie_word_embeddings=False,
+                tie_word_embeddings=tie_word_embeddings,
             )
 
         self.text_config = text_config
         self.scale_factor = scale_factor
 
-        super().__init__(**kwargs, pad_token_id=pad_token_id, tie_word_embeddings=tie_word_embeddings)
+        super().__init__(**kwargs)
 
 
 __all__ = ["SmolVLMVisionConfig", "SmolVLMConfig"]

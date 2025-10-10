@@ -143,7 +143,8 @@ class MoshiDepthConfig(PreTrainedConfig):
         self.num_codebooks = num_codebooks
         self.audio_vocab_size = audio_vocab_size
 
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 class MoshiConfig(PreTrainedConfig):
@@ -305,7 +306,8 @@ class MoshiConfig(PreTrainedConfig):
 
         self.depth_decoder_config = MoshiDepthConfig(**depth_decoder_config)
 
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
     @property
     def sampling_rate(self):

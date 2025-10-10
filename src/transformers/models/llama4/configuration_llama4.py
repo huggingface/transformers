@@ -328,13 +328,11 @@ class Llama4TextConfig(PreTrainedConfig):
         attn_scale=0.1,
         **kwargs,
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
         self.attn_temperature_tuning = attn_temperature_tuning
         self.attn_scale = attn_scale
         self.floor_scale = floor_scale
@@ -473,7 +471,8 @@ class Llama4Config(PreTrainedConfig):
         elif isinstance(text_config, Llama4TextConfig):
             self.text_config = text_config
 
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 __all__ = ["Llama4Config", "Llama4TextConfig", "Llama4VisionConfig"]

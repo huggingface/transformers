@@ -118,7 +118,8 @@ class LongformerConfig(PreTrainedConfig):
         **kwargs,
     ):
         """Constructs LongformerConfig."""
-        super().__init__(pad_token_id=pad_token_id, **kwargs)
+        super().__init__(**kwargs)
+        self.pad_token_id = pad_token_id
 
         self.attention_window = attention_window
         self.sep_token_id = sep_token_id

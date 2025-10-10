@@ -166,13 +166,10 @@ class CsmDepthDecoderConfig(PreTrainedConfig):
         if kwargs.pop("tie_word_embeddings", False):
             raise ValueError("`tie_word_embeddings=True` is not supported for CsmDepthDecoderConfig")
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=False,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.num_codebooks = num_codebooks
         self.vocab_size = vocab_size
         self.backbone_hidden_size = backbone_hidden_size
@@ -425,13 +422,10 @@ class CsmConfig(PreTrainedConfig):
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self)
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=False,
-            **kwargs,
-        )
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
 __all__ = [

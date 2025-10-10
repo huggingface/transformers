@@ -269,7 +269,8 @@ class Glm4vTextConfig(PreTrainedConfig):
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id
 
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 class Glm4vConfig(PreTrainedConfig):

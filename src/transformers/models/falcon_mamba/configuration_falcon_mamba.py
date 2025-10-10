@@ -163,8 +163,11 @@ class FalconMambaConfig(PreTrainedConfig):
         self.residual_in_fp32 = residual_in_fp32
         self.use_cache = use_cache
         self.use_falcon_mambapy = use_falcon_mambapy
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
 
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, pad_token_id=pad_token_id, **kwargs)
+        super().__init__(**kwargs)
         self.mixer_rms_eps = mixer_rms_eps
 
 

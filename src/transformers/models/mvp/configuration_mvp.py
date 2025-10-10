@@ -162,12 +162,12 @@ class MvpConfig(PreTrainedConfig):
         self.prompt_length = prompt_length
         self.prompt_mid_dim = prompt_mid_dim
 
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.decoder_start_token_id = decoder_start_token_id
         super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
-            decoder_start_token_id=decoder_start_token_id,
             forced_eos_token_id=forced_eos_token_id,
             **kwargs,
         )
