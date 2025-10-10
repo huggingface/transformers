@@ -16,9 +16,10 @@ import os
 import re
 import subprocess
 import textwrap
+from collections.abc import Callable
 from datetime import date
 from pathlib import Path
-from typing import Annotated, Any, Callable, Optional, Union
+from typing import Annotated, Any, Optional, Union
 
 import typer
 

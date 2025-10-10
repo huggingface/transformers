@@ -1637,7 +1637,7 @@ class serve:
         model = architecture.from_pretrained(model_id, **model_kwargs)
 
         if getattr(model, "hf_device_map", None) is None:
-            model = model.to(args.device)
+            model = model.to(self.device)
 
         has_default_max_length = (
             model.generation_config.max_new_tokens is None and model.generation_config.max_length == 20
