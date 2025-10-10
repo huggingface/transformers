@@ -115,6 +115,12 @@ try:
                 )
             },
         },
+        "ScatterMoEGatedMLP": {
+            "cuda": {
+                Mode.TRAINING: LayerRepository(repo_id="shawntan/scattermoe", layer_name="ScatterMoEGatedMLP"),
+                Mode.INFERENCE: LayerRepository(repo_id="shawntan/scattermoe", layer_name="ScatterMoEGatedMLP"),
+            },
+        },
         "FastGELU": {
             "cuda": {
                 Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
