@@ -76,13 +76,12 @@ class AudioFlamingo3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(reloaded.feature_extractor, WhisperFeatureExtractor)
 
     def test_tokenizer_integration(self):
-        # Always test fast tokenizer
-        fast_tokenizer = AutoTokenizer.from_pretrained(self.checkpoint)
-        self.assertTrue(getattr(fast_tokenizer, "is_fast", False))
+        slow_tokenizer = AutoTokenizer.from_pretrained(self.checkpoint, use_fast=False)
+        fast_tokenizer = AutoTokenizer.from_pretrained(self.checkpoint, from_slow=True, legacy=False)
 
         prompt = (
             "<|im_start|>system\nAnswer the questions.<|im_end|>"
-            "<|im_start|>user\nWhat is it?<|im_end|>"
+            "<|im_start|>user\n<sound>What is it?<|im_end|>"
             "<|im_start|>assistant\n"
         )
         EXPECTED_OUTPUT = [
@@ -97,6 +96,7 @@ class AudioFlamingo3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "<|im_start|>",
             "user",
             "Ċ",
+            "<sound>",
             "What",
             "Ġis",
             "Ġit",
@@ -107,32 +107,32 @@ class AudioFlamingo3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "Ċ",
         ]
 
-        # Fast tokenizer should produce the expected pieces
+        self.assertEqual(slow_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
         self.assertEqual(fast_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
-
-        # If a slow tokenizer exists, also verify parity with a fast tokenizer
-        # instantiated from the slow files.
-        try:
-            slow_tokenizer = AutoTokenizer.from_pretrained(self.checkpoint, use_fast=False)
-        except Exception:
-            slow_tokenizer = None
-
-        if slow_tokenizer is not None:
-            fast_from_slow = AutoTokenizer.from_pretrained(self.checkpoint, from_slow=True, legacy=False)
-            self.assertEqual(slow_tokenizer.tokenize(prompt), fast_from_slow.tokenize(prompt))
 
     def test_chat_template(self):
         processor = AutoProcessor.from_pretrained(self.checkpoint)
         expected_prompt = (
             "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n"
-            "<|im_start|>user\nSay hello.<|im_end|>\n"
+            "<|im_start|>user\n<sound>What is surprising about the relationship between the barking and the music?<|im_end|>\n"
             "<|im_start|>assistant\n"
         )
 
-        messages = [
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": "Say hello."},
+        conversations = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "What is surprising about the relationship between the barking and the music?",
+                    },
+                    {
+                        "type": "audio",
+                        "path": "audio_1.wav",
+                    },
+                ],
+            }
         ]
 
-        formatted = processor.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        formatted = processor.tokenizer.apply_chat_template(conversations, tokenize=False, add_generation_prompt=True)
         self.assertEqual(expected_prompt, formatted)

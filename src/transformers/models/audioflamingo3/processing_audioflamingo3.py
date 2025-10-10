@@ -114,8 +114,6 @@ class AudioFlamingo3Processor(ProcessorMixin):
         audio_kwargs = call_kwargs["audio_kwargs"]
         common_kwargs = call_kwargs["common_kwargs"]
         return_tensors = common_kwargs.pop("return_tensors", None)
-        if return_tensors != "pt":
-            raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
 
         # Handle text
         if isinstance(text, str):
