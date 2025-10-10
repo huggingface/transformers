@@ -45,14 +45,6 @@ class Ernie4_5ModelTester(CausalLMModelTester):
 
 @require_torch
 class Ernie4_5ModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": Ernie4_5Model,
-            "text-generation": Ernie4_5ForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
     fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
     model_tester_class = Ernie4_5ModelTester
 
