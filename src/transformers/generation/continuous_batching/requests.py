@@ -102,6 +102,7 @@ class RequestState:
                                 SPLIT_PENDING_REMAINDER, DECODING, FINISHED, FAILED
         max_new_tokens (int): The maximum number of new tokens to generate.
         eos_token_id (int): The ID of the end-of-sequence token.
+        streaming (bool): Whether to stream tokens as they're generated
         created_time (float): The time the request was created.
         error (Optional[str]): Any error message associated with the request. When None, has had no error yet.
     """
@@ -117,6 +118,7 @@ class RequestState:
     _status: RequestStatus = RequestStatus.PENDING  # Status of the request, hidden behind a property
     max_new_tokens: int = 20  # Maximum number of new tokens to generate
     eos_token_id: int = -1  # ID of the end-of-sequence token
+    streaming: bool = False  # Whether to stream tokens as they're generated
     created_time: float = field(default_factory=time.time)  # Time the request was created
     error: Optional[str] = None  # Error message if the request failed
     lifespan: tuple[float, float] = (-1, -1)  # (time request was no longer pending, time request finished)

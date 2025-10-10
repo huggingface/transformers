@@ -81,9 +81,6 @@ class XGLMModelTester:
         self.eos_token_id = 2
         self.pad_token_id = 1
 
-    def get_large_model_config(self):
-        return XGLMConfig.from_pretrained("facebook/xglm-564M")
-
     def prepare_config_and_inputs(
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
     ):

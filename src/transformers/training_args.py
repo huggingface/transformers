@@ -367,8 +367,6 @@ class TrainingArguments:
             Random seed to be used with data samplers. If not set, random generators for data sampling will use the
             same seed as `seed`. This can be used to ensure reproducibility of data sampling, independent of the model
             seed.
-        jit_mode_eval (`bool`, *optional*, defaults to `False`):
-            Whether or not to use PyTorch jit trace for inference.
         bf16 (`bool`, *optional*, defaults to `False`):
             Whether to use bf16 16-bit (mixed) precision training instead of 32-bit training. Requires Ampere or higher
             NVIDIA architecture or Intel XPU or using CPU (use_cpu) or Ascend NPU.
@@ -385,8 +383,6 @@ class TrainingArguments:
             on PyTorch's version default of `torch.backends.cuda.matmul.allow_tf32`. For more details please refer to
             the [TF32](https://huggingface.co/docs/transformers/perf_train_gpu_one#tf32) documentation. This is an
             experimental API and it may change.
-        local_rank (`int`, *optional*, defaults to -1):
-            Rank of the process during distributed training.
         ddp_backend (`str`, *optional*):
             The backend to use for distributed training. Must be one of `"nccl"`, `"mpi"`, `"ccl"`, `"gloo"`, `"hccl"`.
         dataloader_drop_last (`bool`, *optional*, defaults to `False`):
@@ -688,12 +684,6 @@ class TrainingArguments:
         full_determinism (`bool`, *optional*, defaults to `False`)
             If `True`, [`enable_full_determinism`] is called instead of [`set_seed`] to ensure reproducible results in
             distributed training. Important: this will negatively impact the performance, so only use it for debugging.
-        ray_scope (`str`, *optional*, defaults to `"last"`):
-            The scope to use when doing hyperparameter search with Ray. By default, `"last"` will be used. Ray will
-            then use the last checkpoint of all trials, compare those, and select the best one. However, other options
-            are also available. See the [Ray documentation](
-            https://docs.ray.io/en/latest/tune/api_docs/analysis.html#ray.tune.ExperimentAnalysis.get_best_trial) for
-            more options.
         ddp_timeout (`int`, *optional*, defaults to 1800):
             The timeout for `torch.distributed.init_process_group` calls, used to avoid GPU socket timeouts when
             performing slow operations in distributed runnings. Please refer the [PyTorch documentation]
@@ -968,9 +958,6 @@ class TrainingArguments:
     )
     seed: int = field(default=42, metadata={"help": "Random seed that will be set at the beginning of training."})
     data_seed: Optional[int] = field(default=None, metadata={"help": "Random seed to be used with data samplers."})
-    jit_mode_eval: bool = field(
-        default=False, metadata={"help": "Whether or not to use PyTorch jit trace for inference"}
-    )
     bf16: bool = field(
         default=False,
         metadata={
@@ -1007,7 +994,6 @@ class TrainingArguments:
             )
         },
     )
-    local_rank: int = field(default=-1, metadata={"help": "For distributed training: local_rank"})
     ddp_backend: Optional[str] = field(
         default=None,
         metadata={
@@ -1306,9 +1292,10 @@ class TrainingArguments:
         },
     )
     ray_scope: str = field(
-        default="last",
+        default=None,
         metadata={
             "help": (
+                "This argument is deprecated and will be removed in v5.2. Set env var RAY_SCOPE instead."
                 'The scope to use when doing hyperparameter search with Ray. By default, `"last"` will be used. Ray'
                 " will then use the last checkpoint of all trials, compare those, and select the best one. However,"
                 " other options are also available. See the Ray documentation"
@@ -1905,8 +1892,7 @@ class TrainingArguments:
             self._n_gpu = 0
         elif is_sagemaker_mp_enabled():
             accelerator_state_kwargs["enabled"] = False
-            local_rank = smp.local_rank()
-            device = torch.device("cuda", local_rank)
+            device = torch.device("cuda", smp.local_rank())
             torch.cuda.set_device(device)
         elif is_sagemaker_dp_enabled():
             accelerator_state_kwargs["_use_sagemaker_dp"] = True
@@ -1930,7 +1916,6 @@ class TrainingArguments:
                 del os.environ["ACCELERATE_USE_DEEPSPEED"]
         if not is_sagemaker_mp_enabled():
             device = self.distributed_state.device
-            self.local_rank = self.distributed_state.local_process_index
         if dist.is_available() and dist.is_initialized() and self.parallel_mode != ParallelMode.DISTRIBUTED:
             logger.warning(
                 "torch.distributed process group is initialized, but parallel_mode != ParallelMode.DISTRIBUTED. "
@@ -2020,9 +2005,7 @@ class TrainingArguments:
             return ParallelMode.SAGEMAKER_MODEL_PARALLEL
         elif is_sagemaker_dp_enabled():
             return ParallelMode.SAGEMAKER_DATA_PARALLEL
-        elif (
-            self.distributed_state is not None and self.distributed_state.distributed_type != DistributedType.NO
-        ) or (self.distributed_state is None and self.local_rank != -1):
+        elif self.distributed_state is not None and self.distributed_state.distributed_type != DistributedType.NO:
             return ParallelMode.DISTRIBUTED
         elif self.n_gpu > 1:
             return ParallelMode.NOT_DISTRIBUTED
@@ -2335,7 +2318,6 @@ class TrainingArguments:
         accumulation_steps: Optional[int] = None,
         delay: Optional[float] = None,
         loss_only: bool = False,
-        jit_mode: bool = False,
     ):
         """
         A method that regroups all arguments linked to evaluation.
@@ -2362,8 +2344,6 @@ class TrainingArguments:
                 eval_strategy.
             loss_only (`bool`, *optional*, defaults to `False`):
                 Ignores all outputs except the loss.
-            jit_mode (`bool`, *optional*):
-                Whether or not to use PyTorch jit trace for inference.
 
         Example:
 
@@ -2385,14 +2365,12 @@ class TrainingArguments:
         self.eval_accumulation_steps = accumulation_steps
         self.eval_delay = delay
         self.prediction_loss_only = loss_only
-        self.jit_mode_eval = jit_mode
         return self
 
     def set_testing(
         self,
         batch_size: int = 8,
         loss_only: bool = False,
-        jit_mode: bool = False,
     ):
         """
         A method that regroups all basic arguments linked to testing on a held-out dataset.
@@ -2408,8 +2386,6 @@ class TrainingArguments:
                 The batch size per device (GPU/TPU core/CPU...) used for testing.
             loss_only (`bool`, *optional*, defaults to `False`):
                 Ignores all outputs except the loss.
-            jit_mode (`bool`, *optional*):
-                Whether or not to use PyTorch jit trace for inference.
 
         Example:
 
@@ -2425,7 +2401,6 @@ class TrainingArguments:
         self.do_predict = True
         self.per_device_eval_batch_size = batch_size
         self.prediction_loss_only = loss_only
-        self.jit_mode_eval = jit_mode
         return self
 
     def set_save(
