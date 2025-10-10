@@ -126,6 +126,12 @@ class AutoQuantizationConfig:
                 "The model's quantization config from the arguments has no `quant_method` attribute. Make sure that the model has been correctly quantized"
             )
 
+        if quant_method == QuantizationMethod.BITS_AND_BYTES:
+            if quantization_config_dict.get("load_in_8bit"):
+                quant_method += "_8bit"
+            else:
+                quant_method += "_4bit"
+
         if quant_method not in AUTO_QUANTIZATION_CONFIG_MAPPING:
             raise ValueError(
                 f"Unknown quantization type, got {quant_method} - supported types are:"

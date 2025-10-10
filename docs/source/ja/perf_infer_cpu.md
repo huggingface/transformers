@@ -32,39 +32,3 @@ Intel® Extension for PyTorchは、Transformersシリーズモデルのjitモー
 #### IPEX installation:
 
 IPEXのリリースはPyTorchに従っています。[IPEXのインストール方法](https://intel.github.io/intel-extension-for-pytorch/)を確認してください。
-
-### Usage of JIT-mode
-Trainerで評価または予測のためにJITモードを有効にするには、ユーザーはTrainerコマンド引数に`jit_mode_eval`を追加する必要があります。
-
-<Tip warning={true}>
-
-PyTorch >= 1.14.0の場合、jitモードはjit.traceでdict入力がサポートされているため、予測と評価に任意のモデルに利益をもたらす可能性があります。
-
-PyTorch < 1.14.0の場合、jitモードはforwardパラメーターの順序がjit.traceのタプル入力の順序と一致するモデルに利益をもたらす可能性があります（質問応答モデルなど）。jit.traceがタプル入力の順序と一致しない場合、テキスト分類モデルなど、jit.traceは失敗し、これをフォールバックさせるために例外でキャッチしています。ログはユーザーに通知するために使用されます。
-
-</Tip>
-
-[Transformers質問応答の使用例](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering)を参考にしてください。
-
-- Inference using jit mode on CPU:
-<pre>python run_qa.py \
---model_name_or_path csarron/bert-base-uncased-squad-v1 \
---dataset_name squad \
---do_eval \
---max_seq_length 384 \
---doc_stride 128 \
---output_dir /tmp/ \
---no_cuda \
-<b>--jit_mode_eval </b></pre> 
-
-- Inference with IPEX using jit mode on CPU:
-<pre>python run_qa.py \
---model_name_or_path csarron/bert-base-uncased-squad-v1 \
---dataset_name squad \
---do_eval \
---max_seq_length 384 \
---doc_stride 128 \
---output_dir /tmp/ \
---no_cuda \
-<b>--use_ipex \</b>
-<b>--jit_mode_eval</b></pre> 
