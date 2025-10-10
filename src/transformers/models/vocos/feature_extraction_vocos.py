@@ -178,7 +178,7 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
         if padding and truncation:
             raise ValueError("Both padding and truncation were set. Make sure you only set one.")
 
-        if pad_to_multiple_of is None:
+        if pad_to_multiple_of is None and len(audio) > 1 and padding:
             pad_to_multiple_of = self.hop_length
 
         # Ensure batch

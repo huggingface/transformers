@@ -233,5 +233,5 @@ class VocosFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Te
         speech = ds[0]["audio"]["array"]
         feature_extractor = VocosFeatureExtractor.from_pretrained("hf-audio/vocos-mel-24khz")
         audio_spectrogram = feature_extractor(speech, return_tensors="pt").audio_spectrogram
-        self.assertEqual(audio_spectrogram.shape, (1, 100, 550))
+        self.assertEqual(audio_spectrogram.shape, (1, 100, 549))
         torch.testing.assert_close(audio_spectrogram[0, 0, :30], self.EXPECTED_INPUT_FEATURES, rtol=1e-6, atol=1e-6)

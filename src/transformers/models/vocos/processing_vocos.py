@@ -17,7 +17,7 @@
 from collections.abc import Sequence
 from typing import Optional
 
-from ...audio_utils import AudioInput
+from ...audio_utils import AudioInput, make_list_of_audio
 from ...processing_utils import AudioKwargs, BatchFeature, ProcessingKwargs, ProcessorMixin, Unpack
 from ...utils import is_torch_available
 
@@ -116,10 +116,13 @@ class VocosProcessor(ProcessorMixin):
         if audio is not None:
             if bandwidth is not None:
                 # pad audio into batch
+                pad_to_multiple_of = (
+                    None if len(make_list_of_audio(audio)) == 1 else self.audio_tokenizer.config.hop_length
+                )
                 fe_outputs = self.feature_extractor(
                     audio,
                     return_audio_only=True,
-                    pad_to_multiple_of=self.audio_tokenizer.config.hop_length,
+                    pad_to_multiple_of=pad_to_multiple_of,
                     device=device,
                     **audio_kwargs,
                 )
