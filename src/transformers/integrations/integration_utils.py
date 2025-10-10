@@ -268,7 +268,9 @@ def run_hp_search_optuna(trainer, n_trials: int, direction: str, **kwargs) -> Be
         directions = direction if isinstance(direction, list) else None
         direction = None if directions is not None else direction
         study = optuna.create_study(direction=direction, directions=directions, **kwargs)
-        study.optimize(_objective, n_trials=n_trials, timeout=timeout, n_jobs=n_jobs, gc_after_trial=gc_after_trial, catch=catch)
+        study.optimize(
+            _objective, n_trials=n_trials, timeout=timeout, n_jobs=n_jobs, gc_after_trial=gc_after_trial, catch=catch
+        )
         if not study._is_multi_objective():
             best_trial = study.best_trial
             return BestRun(str(best_trial.number), best_trial.value, best_trial.params)
