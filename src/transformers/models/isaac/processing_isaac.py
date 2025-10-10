@@ -6,27 +6,21 @@
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 import math
 import re
-from typing import Any, Union
+from collections.abc import Sequence
 
-import numpy as np
 import PIL.Image
 import torch
-import torch.nn.functional as F
-from perceptron.tensorstream import Event, Stream, TensorStream, TextType, VisionType, create_stream
-from perceptron.tensorstream.ops import slice as ts_slice
-from perceptron.tensorstream.ops import tensor_stream_token_view
+from genesis.public.tensorstream.tensor_stream import Event, Stream, TensorStream, TextType, VisionType, create_stream
+from genesis.public.tensorstream.tensor_stream_utils import slice as ts_slice
+from genesis.public.tensorstream.tensor_stream_utils import tensor_stream_token_view
 
-from ...processing_utils import BatchFeature, ProcessorMixin
+from ...feature_extraction_utils import BatchFeature
+from ...image_processing_utils_fast import BaseImageProcessorFast
+from ...processing_utils import ProcessorMixin
 from ...tokenization_utils import TensorType
-from ..auto import AutoTokenizer
 from .configuration_isaac import IsaacConfig
+from .image_processing_isaac import IsaacImageProcessor
 
-
-# ============================================================================
-# Configuration
-# ============================================================================
-
-MAX_PIXELS = 60_000_000  # 60-megapixel ceiling ≈ 8200 × 7300 px
 
 # Vision preprocessing constants
 VISION_MEAN = (0.5, 0.5, 0.5)
@@ -34,247 +28,22 @@ VISION_STD = (0.5, 0.5, 0.5)
 VISION_SCALE = 1 / 255
 
 
-def _make_writeable(arr: np.ndarray) -> np.ndarray:
-    """Return *arr* itself if it is already writeable, otherwise try to flip the
-    write flag in-place and finally fall back to `arr.copy()`.
-    This guarantees the buffer handed to `torch.from_numpy()` is always
-    writeable, silencing the PyTorch warning about undefined behaviour.
-    """
-    if arr.flags.writeable:
-        return arr
+def _normalize_rgb_values(
+    values: float | Sequence[float] | tuple[float, ...],
+    *,
+    name: str,
+) -> tuple[float, float, float]:
+    """Coerce RGB normalization parameters into a 3-tuple of floats."""
+    if isinstance(values, (list, tuple)):
+        if len(values) == 3:
+            return tuple(float(v) for v in values)
+        if len(values) == 1:
+            value = float(values[0])
+            return (value, value, value)
+        raise ValueError(f"`{name}` must have length 1 or 3 when provided as a sequence. Got length {len(values)}.")
 
-    # First, try the cheap path — in-place flag toggle (works for mmap'd arrays
-    # and some shared memory buffers):
-    try:
-        arr.setflags(write=True)
-        return arr  # success: no data copy
-    except ValueError:
-        # Buffer is inherently read-only (e.g. backed by PyAV / PIL): make copy
-        return arr.copy()
-
-
-def extract_image_pil(image: PIL.Image.Image) -> torch.Tensor | None:
-    if image.width * image.height > MAX_PIXELS:
-        raise ValueError(f"Image (w={image.width}, h={image.height}) > MAX=`{MAX_PIXELS}`")
-    img = image if image.mode == "RGB" else image.convert("RGB")
-    arr = np.asarray(img)
-    arr = _make_writeable(arr)
-    return torch.from_numpy(arr)
-
-
-def get_image_size_for_max_num_patches(
-    image_height: int,
-    image_width: int,
-    patch_size: int,
-    max_num_patches: int,
-    min_num_patches: int | None = None,
-    eps: float = 1e-5,
-    pixel_shuffle_scale: int = 1,
-) -> tuple[int, int]:
-    r"""Compute a target resolution whose patch grid satisfies patching parametrization.
-
-    Args:
-        image_height (`int`):
-            Height in pixels of the source image prior to any resizing.
-        image_width (`int`):
-            Width in pixels of the source image prior to any resizing.
-        patch_size (`int`):
-            Size of the square patch used by the vision encoder.
-        max_num_patches (`int`):
-            Upper bound on `(height / patch_size) * (width / patch_size)` after resizing.
-        min_num_patches (`int`, *optional*):
-            Lower bound on the number of patches. When provided the image will be scaled up if necessary.
-        eps (`float`, *optional*, defaults to 1e-5):
-            Convergence tolerance for the internal binary search to determing the target dimensions.
-        pixel_shuffle_scale (`int`, *optional*, defaults to 1):
-            Additional stride multiplier applied when pixel shuffle later reduces spatial resolution.
-
-    Returns:
-        `tuple[int, int]`: Height and width (in pixels) that are multiples of `patch_size * pixel_shuffle_scale`
-        and respect both the maximum and optional minimum patch-count constraints.
-    """
-
-    def get_scaled_image_size(scale, original_size, patch_size, pixel_shuffle_scale):
-        scaled_size = scale * original_size
-        divisor = patch_size * pixel_shuffle_scale
-        scaled_size = math.ceil(scaled_size / divisor) * divisor
-        scaled_size = max(divisor, scaled_size)
-        return int(scaled_size)
-
-    # Ensure divisibility
-    divisor = patch_size * pixel_shuffle_scale
-    adjusted_height = math.ceil(image_height / divisor) * divisor
-    adjusted_height = max(divisor, adjusted_height)
-    adjusted_width = math.ceil(image_width / divisor) * divisor
-    adjusted_width = max(divisor, adjusted_width)
-
-    num_patches = (adjusted_height / patch_size) * (adjusted_width / patch_size)
-
-    if min_num_patches is not None and num_patches < min_num_patches:
-        # Scale up
-        scale_min, scale_max = 1.0, 100.0
-        while (scale_max - scale_min) >= eps:
-            scale = (scale_min + scale_max) / 2
-            target_height = get_scaled_image_size(scale, image_height, patch_size, pixel_shuffle_scale)
-            target_width = get_scaled_image_size(scale, image_width, patch_size, pixel_shuffle_scale)
-            num_patches = (target_height / patch_size) * (target_width / patch_size)
-            if num_patches >= min_num_patches:
-                scale_max = scale
-            else:
-                scale_min = scale
-        scale = scale_max
-        target_height = get_scaled_image_size(scale, image_height, patch_size, pixel_shuffle_scale)
-        target_width = get_scaled_image_size(scale, image_width, patch_size, pixel_shuffle_scale)
-        return target_height, target_width
-    elif num_patches <= max_num_patches:
-        return adjusted_height, adjusted_width
-    else:
-        # Scale down
-        scale_min, scale_max = eps / 10, 1.0
-        while (scale_max - scale_min) >= eps:
-            scale = (scale_min + scale_max) / 2
-            target_height = get_scaled_image_size(scale, image_height, patch_size, pixel_shuffle_scale)
-            target_width = get_scaled_image_size(scale, image_width, patch_size, pixel_shuffle_scale)
-            num_patches = (target_height / patch_size) * (target_width / patch_size)
-            if num_patches <= max_num_patches:
-                scale_min = scale
-            else:
-                scale_max = scale
-        scale = scale_min
-        target_height = get_scaled_image_size(scale, image_height, patch_size, pixel_shuffle_scale)
-        target_width = get_scaled_image_size(scale, image_width, patch_size, pixel_shuffle_scale)
-        return target_height, target_width
-
-
-_MEAN_TENSOR = torch.tensor(VISION_MEAN, dtype=torch.float32).view(1, 1, 1, -1)
-_STD_TENSOR = torch.tensor(VISION_STD, dtype=torch.float32).view(1, 1, 1, -1)
-
-
-def prepare_image_tensor(
-    image: torch.Tensor,
-    scale: float = VISION_SCALE,
-) -> torch.Tensor:
-    r"""Standardize RGB images prior to patch extraction via rescaling and whitening.
-
-    Args:
-        image (`torch.Tensor`):
-            Tensor with shape `(..., height, width, 3)` containing RGB values. The tensor is converted to floating
-            point if needed.
-        scale (`float`, *optional*, defaults to `VISION_SCALE`):
-            Scalar multiplier applied before normalization.
-    Returns:
-        `torch.Tensor`: Normalized tensor with the same shape as the input and dtype `torch.float32`.
-    """
-    if not torch.is_floating_point(image):
-        image = image.float()
-    rescaled = image * scale
-
-    # Use precomputed tensors and move to the correct device if needed
-    mean_tensor = _MEAN_TENSOR.to(image.device)
-    std_tensor = _STD_TENSOR.to(image.device)
-
-    normalized = (rescaled - mean_tensor) / std_tensor
-    return normalized
-
-
-def patchify_vision(image: torch.Tensor, patch_size: int) -> torch.Tensor:
-    r"""Convert normalized images into flattened ViT-style patches.
-
-    Args:
-        image (`torch.Tensor`):
-            Tensor of shape `(num_images, height, width, channels)`.
-        patch_size (`int`):
-            Edge length of the square patches
-
-    Returns:
-        `torch.Tensor`:
-            Patch tensor where each position stores the flattened pixels belonging to that patch.
-
-    Raises:
-        ValueError: If `height` or `width` is not divisible by `patch_size`.
-    """
-    num_images, height, width, channels = image.shape
-    if height % patch_size or width % patch_size:
-        raise ValueError(f"Dimensions of images {image.shape} are not divisible by patch_size={patch_size}.")
-    patches = image.reshape(num_images, height // patch_size, patch_size, width // patch_size, patch_size, channels)
-    patches = patches.permute(0, 1, 3, 2, 4, 5)
-    patches = patches.reshape(
-        num_images, height // patch_size, width // patch_size, channels * patch_size * patch_size
-    )
-    return patches
-
-
-def process_vision_for_patches(
-    images: torch.Tensor,
-    patch_size: int,
-    max_num_patches: int,
-    min_num_patches: int | None = None,
-    pixel_shuffle_scale: int = 1,
-) -> tuple[torch.Tensor, list[int]]:
-    r"""Resize, normalize, and patchify RGB images for the vision encoder.
-
-    Args:
-        images (`torch.Tensor`):
-            Either `(height, width, channels)` for a single image or `(num_images, height, width, channels)` for a
-            batch. Channels are expected to be RGB.
-        patch_size (`int`):
-            Edge length of square patches; implictly controls resize grid granularity.
-        max_num_patches (`int`):
-            Maximum number of patches allowed after resizing.
-        min_num_patches (`int`, *optional*):
-            Minimum number of patches. If provided, the routine upsamples images as needed to satisfy the lower bound.
-        pixel_shuffle_scale (`int`, *optional*, defaults to 1):
-            pixel shuffle scale factor; influences the target grid that the function produces.
-
-    Returns:
-        `tuple[torch.Tensor, list[int]]`: A pair `(patches, dims_virtual)` where `patches` has shape
-        `(num_images, target_h / patch_size, target_w / patch_size, channels * patch_size**2)` and `dims_virtual`
-        encodes effective `(images, height, width)` dimensions after optional pixel shuffling.
-    """
-    # Add batch dim if single image
-    if images.dim() == 3:
-        images = images.unsqueeze(0)
-
-    # Permute to channel first for resize
-    images = images.permute(0, 3, 1, 2)
-
-    # Get target dimensions
-    _, _, orig_height, orig_width = images.shape
-    target_height, target_width = get_image_size_for_max_num_patches(
-        orig_height,
-        orig_width,
-        patch_size,
-        max_num_patches,
-        min_num_patches=min_num_patches,
-        pixel_shuffle_scale=pixel_shuffle_scale,
-    )
-
-    # Resize
-    images = F.interpolate(
-        images,
-        size=(target_height, target_width),
-        mode="bilinear",
-        align_corners=False,
-    )
-
-    # Back to channel last
-    images = images.permute(0, 2, 3, 1)
-
-    # Normalize
-    images = prepare_image_tensor(images)
-
-    # Patchify
-    patches = patchify_vision(images, patch_size=patch_size)
-
-    # Calculate dimensions for the patches
-    n_images, h_patches, w_patches, _ = patches.shape
-    dims_virtual = (
-        [1, h_patches, w_patches]
-        if pixel_shuffle_scale == 1
-        else [1, h_patches // pixel_shuffle_scale, w_patches // pixel_shuffle_scale]
-    )
-
-    return patches, dims_virtual
+    value = float(values)
+    return (value, value, value)
 
 
 # ============================================================================
@@ -326,40 +95,104 @@ def create_text_event(tokenizer: AutoTokenizer, text: str, time: float = 0.0) ->
 
 
 class IsaacProcessor(ProcessorMixin):
-    attributes = []
-    tokenizer_class = ("AutoTokenizer",)
+    attributes = ["image_processor", "tokenizer"]
+    image_processor_class = ("IsaacImageProcessor", "IsaacImageProcessorFast")
+    tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
 
     def __init__(
         self,
-        tokenizer: AutoTokenizer,
-        config: IsaacConfig,
-    ):
-        super().__init__()
-        self.tokenizer = tokenizer
+        image_processor: IsaacImageProcessor | BaseImageProcessorFast | None = None,
+        tokenizer: Qwen2Tokenizer | None = None,
+        *,
+        vision_token: str = "<image>",
+        max_sequence_length: int = 16384,
+        vision_patch_size: int = 16,
+        vision_max_num_patches: int = 256,
+        vision_min_num_patches: int | None = None,
+        pixel_shuffle_scale: int = 1,
+        rescale_factor: float | None = None,
+        image_mean: float | Sequence[float] | None = None,
+        image_std: float | Sequence[float] | None = None,
+        vision_attn_implementation: str | None = None,
+        config: IsaacConfig | dict | None = None,
+        **kwargs,
+    ) -> None:
+        if tokenizer is None:
+            raise ValueError("`tokenizer` must be provided to initialize IsaacProcessor.")
+
+        if isinstance(config, dict):
+            config = IsaacConfig(**config)
+
+        if config is not None:
+            vision_patch_size = config.video_patch_size
+            vision_max_num_patches = config.vision_max_num_patches
+            vision_min_num_patches = config.vision_min_num_patches
+            pixel_shuffle_scale = config.pixel_shuffle_scale
+            max_sequence_length = config.max_sequence_length
+            vision_token = config.vision_token
+            vision_attn_implementation = config.vision_attn_implementation
+            rescale_factor = config.vision_rescale_factor
+            image_mean = tuple(config.vision_mean)
+            image_std = tuple(config.vision_std)
+
+        resolved_rescale_factor = float(rescale_factor) if rescale_factor is not None else float(VISION_SCALE)
+        resolved_image_mean = _normalize_rgb_values(
+            image_mean if image_mean is not None else VISION_MEAN,
+            name="image_mean",
+        )
+        resolved_image_std = _normalize_rgb_values(
+            image_std if image_std is not None else VISION_STD,
+            name="image_std",
+        )
+
+        if image_processor is None:
+            image_processor = IsaacImageProcessor(
+                patch_size=vision_patch_size,
+                max_num_patches=vision_max_num_patches,
+                min_num_patches=vision_min_num_patches,
+                pixel_shuffle_scale=pixel_shuffle_scale,
+                rescale_factor=resolved_rescale_factor,
+                image_mean=resolved_image_mean,
+                image_std=resolved_image_std,
+            )
+        else:
+            vision_patch_size = getattr(image_processor, "patch_size", vision_patch_size)
+            vision_max_num_patches = getattr(image_processor, "max_num_patches", vision_max_num_patches)
+            vision_min_num_patches = getattr(image_processor, "min_num_patches", vision_min_num_patches)
+            pixel_shuffle_scale = getattr(image_processor, "pixel_shuffle_scale", pixel_shuffle_scale)
+            resolved_rescale_factor = getattr(image_processor, "rescale_factor", resolved_rescale_factor)
+            resolved_image_mean = _normalize_rgb_values(
+                getattr(image_processor, "image_mean", resolved_image_mean),
+                name="image_mean",
+            )
+            resolved_image_std = _normalize_rgb_values(
+                getattr(image_processor, "image_std", resolved_image_std),
+                name="image_std",
+            )
+
+        if config is not None:
+            config.vision_rescale_factor = resolved_rescale_factor
+            config.vision_mean = resolved_image_mean
+            config.vision_std = resolved_image_std
+
+        super().__init__(image_processor, tokenizer)
+        self.current_processor = self.image_processor
         self.config = config
 
-        # Use vision token from config
-        self.vision_token = config.vision_token
+        # Mirror tokenizer chat template so ProcessorMixin.apply_chat_template works.
+        self.chat_template = getattr(self.tokenizer, "chat_template", None)
 
-        # Processing parameters
-        self.max_sequence_length = config.max_sequence_length
+        self.vision_token = vision_token
+        self.max_sequence_length = max_sequence_length
+        self.vision_attn_implementation = vision_attn_implementation
 
-        # Vision processing parameters
-        self.patch_size = config.video_patch_size
-        self.max_num_patches = config.vision_max_num_patches
-        self.min_num_patches = config.vision_min_num_patches
-        self.pixel_shuffle_scale = config.pixel_shuffle_scale
-
-    def apply_chat_template(
-        self,
-        messages: list[dict[str, Any]],
-        tokenize: bool = False,
-        add_generation_prompt: bool = False,
-        **kwargs,
-    ) -> Any:
-        return self.tokenizer.apply_chat_template(
-            messages, tokenize=tokenize, add_generation_prompt=add_generation_prompt, **kwargs
-        )
+        self.patch_size = getattr(self.image_processor, "patch_size", vision_patch_size)
+        self.max_num_patches = getattr(self.image_processor, "max_num_patches", vision_max_num_patches)
+        self.min_num_patches = getattr(self.image_processor, "min_num_patches", vision_min_num_patches)
+        self.pixel_shuffle_scale = getattr(self.image_processor, "pixel_shuffle_scale", pixel_shuffle_scale)
+        self.rescale_factor = getattr(self.image_processor, "rescale_factor", resolved_rescale_factor)
+        self.image_mean = tuple(getattr(self.image_processor, "image_mean", resolved_image_mean))
+        self.image_std = tuple(getattr(self.image_processor, "image_std", resolved_image_std))
 
     def build_event_stream_simple(
         self,
@@ -377,68 +210,40 @@ class IsaacProcessor(ProcessorMixin):
         for current_time, part in enumerate(parts):
             if part == self.vision_token:
                 # Replace vision token with image event
-                if image_idx < len(images):
-                    # Create vision event from PIL image
-                    image_tensor = extract_image_pil(images[image_idx])
-                    if image_tensor is not None:
-                        # Create a vision event with the image tensor
-                        vision_event = Event(
-                            data=image_tensor.unsqueeze(0),  # HWC format from extract_image_pil
-                            type=VisionType.image,  # I-frame
-                            time=(current_time, current_time),
-                        )
-                        events.append(vision_event)
-                    image_idx += 1
+                if images is None or image_idx >= len(images):
+                    raise ValueError("Encountered vision token without a corresponding image.")
+
+                features = self.image_processor(
+                    images=images[image_idx],
+                    return_tensors=TensorType.PYTORCH,
+                )
+
+                patches = features["patches"][0]  # (H_tokens, W_tokens, embed)
+                virtual_dims = features["virtual_pixel_size"][0].tolist()
+                real_dims = features["real_pixel_size"][0].tolist()
+
+                vision_event = Event(
+                    data=patches.reshape(-1, patches.shape[-1]),
+                    type=VisionType.image,
+                    time=(current_time, current_time),
+                    dims_virtual=virtual_dims,
+                    dims_real=real_dims,
+                    idx_range=(0, math.prod(virtual_dims)),
+                )
+                events.append(vision_event)
+                image_idx += 1
             elif part:  # Non-empty text part
                 # tokens = self.text_processor.tokenize(part, add_special_tokens=False)
                 text_event = create_text_event(self.tokenizer, part, time=current_time)
                 events.append(text_event)
-
-        # Process vision events if any
-        if any(event.type == VisionType.image for event in events):
-            # Separate text and vision events for processing
-            text_events = [event for event in events if event.type == TextType.text]
-            vision_events = [event for event in events if event.type == VisionType.image]
-
-            # Process vision events using functional approach
-            processed_vision_events = []
-            for vision_event in vision_events:
-                # Process the vision data
-                patches, dims_virtual = process_vision_for_patches(
-                    vision_event.data.squeeze(0),  # Remove the extra dimension
-                    patch_size=self.patch_size,
-                    max_num_patches=self.max_num_patches,
-                    min_num_patches=self.min_num_patches,
-                    pixel_shuffle_scale=self.pixel_shuffle_scale,
-                )
-
-                # Update event with processed data
-                vision_event.data = patches.unsqueeze(1)  # Add back frame dimension
-                vision_event.dims_virtual = dims_virtual
-                vision_event.dims_real = (
-                    dims_virtual
-                    if self.pixel_shuffle_scale == 1
-                    else [
-                        dims_virtual[0],
-                        dims_virtual[1] * self.pixel_shuffle_scale,
-                        dims_virtual[2] * self.pixel_shuffle_scale,
-                    ]
-                )
-                vision_event.idx_range = (0, math.prod(dims_virtual))
-
-                # Flatten the patches
-                vision_event.data = vision_event.data.reshape(-1, vision_event.data.shape[-1])
-                processed_vision_events.append(vision_event)
-
-            events = text_events + processed_vision_events
 
         # Create stream without scheduling (events already in order)
         return create_stream(events, priority=[TextType.text, VisionType.image], schedule=True)
 
     def __call__(
         self,
-        text: Union[str, list[str]],
-        images: Union[PIL.Image.Image, list[PIL.Image.Image], None] = None,
+        text: str | list[str],
+        images: PIL.Image.Image | list[PIL.Image.Image] | None = None,
         return_tensors: str | TensorType | None = TensorType.PYTORCH,
         **kwargs,
     ) -> BatchFeature:

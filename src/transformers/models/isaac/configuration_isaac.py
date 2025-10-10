@@ -5,17 +5,27 @@
 #                          modular_isaac.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 
+import copy
+from collections.abc import Sequence
+
+# Build the list of all image processors
 from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...modeling_rope_utils import rope_config_validation
 
 
-class PixelShuffleSiglip2VisionConfig(PretrainedConfig):
+class IsaacVisionConfig(PretrainedConfig):
     """Vision configuration for Isaac with Pixel Shuffle support.
 
     Extends Siglip2VisionConfig with additional fields for pixel shuffle.
+
+    Args:
+        pixel_shuffle_scale_factor (`int`, *optional*, defaults to 1):
+            Spatial factor applied before pixel shuffle reduces the resolution.
+        num_patches (`int`, *optional*, defaults to 256):
+            Maximum number of learnable positional embeddings to initialize.
     """
 
-    model_type = "pixel_shuffle_siglip2"
+    model_type = "isaac_vision"
     base_config_key = "vision_config"
 
     def __init__(
@@ -41,6 +51,30 @@ class PixelShuffleSiglip2VisionConfig(PretrainedConfig):
         self.pixel_shuffle_scale_factor = pixel_shuffle_scale_factor
 
 
+# Vision preprocessing constants
+VISION_MEAN = (0.5, 0.5, 0.5)
+VISION_STD = (0.5, 0.5, 0.5)
+VISION_SCALE = 1 / 255
+
+
+def _normalize_rgb_values(
+    values: float | Sequence[float] | tuple[float, ...],
+    *,
+    name: str,
+) -> tuple[float, float, float]:
+    """Coerce RGB normalization parameters into a 3-tuple of floats."""
+    if isinstance(values, (list, tuple)):
+        if len(values) == 3:
+            return tuple(float(v) for v in values)
+        if len(values) == 1:
+            value = float(values[0])
+            return (value, value, value)
+        raise ValueError(f"`{name}` must have length 1 or 3 when provided as a sequence. Got length {len(values)}.")
+
+    value = float(values)
+    return (value, value, value)
+
+
 class IsaacConfig(PretrainedConfig):
     """Configuration class for Isaac multimodal model."""
 
@@ -62,23 +96,36 @@ class IsaacConfig(PretrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
-    sub_configs = {"vision_config": PixelShuffleSiglip2VisionConfig}
+    sub_configs = {"vision_config": IsaacVisionConfig, "text_config": Qwen3Config}
+    image_processor_type = "IsaacImageProcessor"
 
     def __init__(
         self,
         vision_config=None,
+        text_config: Qwen3Config | dict | None = None,
         vision_patch_size: int = 16,
         vision_max_num_patches: int = 256,
         vision_min_num_patches: int | None = None,
         pixel_shuffle_scale: int = 1,
+        vision_rescale_factor: float = VISION_SCALE,
+        vision_mean: float | Sequence[float] = VISION_MEAN,
+        vision_std: float | Sequence[float] = VISION_STD,
         max_sequence_length: int = 16384,
         vision_token: str = "<image>",
+        vision_attn_implementation: str | None = None,
         **kwargs,
     ):
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        resolved_text_config = kwargs.pop("text_config", text_config)
+        if isinstance(resolved_text_config, Qwen3Config):
+            text_config_kwargs = copy.deepcopy(resolved_text_config.to_dict())
+        elif isinstance(resolved_text_config, dict):
+            text_config_kwargs = copy.deepcopy(resolved_text_config)
+        elif resolved_text_config is None:
+            text_config_kwargs = {}
+        else:
+            raise TypeError("`text_config` must be a mapping or `Qwen3Config` instance when provided.")
+
+        text_config_kwargs.update(kwargs)
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -117,9 +164,15 @@ class IsaacConfig(PretrainedConfig):
                 else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types, self.num_hidden_layers)
+        layer_type_validation(self.layer_types)
 
-        # Handle vision config - either dict or PixelShuffleSiglip2VisionConfig instance
+        super().__init__(
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
+        self.text_config = Qwen3Config(**text_config_kwargs)
+
+        # Handle vision config - either dict or IsaacVisionConfig instance
         if isinstance(vision_config, dict):
             self.vision_config = self.sub_configs["vision_config"](**vision_config)
         elif vision_config is None:
@@ -133,9 +186,21 @@ class IsaacConfig(PretrainedConfig):
         self.vision_min_num_patches = vision_min_num_patches
         self.pixel_shuffle_scale = pixel_shuffle_scale
 
+        # Vision normalization parameters
+        self.vision_rescale_factor = float(vision_rescale_factor)
+        self.vision_mean = _normalize_rgb_values(vision_mean, name="vision_mean")
+        self.vision_std = _normalize_rgb_values(vision_std, name="vision_std")
+
         # Processing parameters
         self.max_sequence_length = max_sequence_length
         self.vision_token = vision_token
+        self.vision_attn_implementation = vision_attn_implementation
+
+    def get_text_config(self, *_, **kwargs) -> Qwen3Config:
+        # Accept optional decoder/encoder flags to align with HF composite configs
+        kwargs.pop("decoder", None)
+        kwargs.pop("encoder", None)
+        return self.text_config
 
 
 __all__ = ["IsaacConfig"]
