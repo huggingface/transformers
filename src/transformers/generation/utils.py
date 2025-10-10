@@ -546,7 +546,7 @@ class GenerationMixin(ContinuousMixin):
         model_inputs["cache_position"] = cache_position
 
         # 2. Generic cache-dependent input preparation
-        has_non_standard_cache = kwargs.get("use_cache", False) or self.config.use_cache
+        has_non_standard_cache = kwargs.get("use_cache", False) or getattr(self.config, "use_cache", False)
         if past_key_values is not None:
             model_inputs["past_key_values"] = past_key_values
         if past_key_values is None or has_non_standard_cache:
