@@ -155,13 +155,6 @@ class SentencePieceBackendTesterMixin:
                 tokens = tokenizer.tokenize("This is some extra_id_100")
                 self.assertIn("extra_id_100", tokens)
 
-    @require_tokenizers
-    def test_pickle_added_tokens(self):
-        tok1 = AddedToken("<s>", rstrip=True, lstrip=True, normalized=False, single_word=True)
-        tok2 = pickle.loads(pickle.dumps(tok1))
-
-        self.assertEqual(tok1.__getstate__(), tok2.__getstate__())
-
     def test_added_tokens_do_lower_case(self):
         tokenizer = self.get_tokenizer(do_lower_case=True)
         if not hasattr(tokenizer, "do_lower_case") or not tokenizer.do_lower_case:

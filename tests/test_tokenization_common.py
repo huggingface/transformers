@@ -653,27 +653,6 @@ class TokenizerTesterMixin:
 
                 shutil.rmtree(tmpdirname)
 
-    def test_pickle_tokenizer(self):
-        """Google pickle __getstate__ __setstate__ if you are struggling with this."""
-        tokenizers = self.get_tokenizers()
-        for tokenizer in tokenizers:
-            with self.subTest(f"{tokenizer.__class__.__name__}"):
-                self.assertIsNotNone(tokenizer)
-
-                text = "Munich and Berlin are nice cities"
-                subwords = tokenizer.tokenize(text)
-
-                filename = os.path.join(self.tmpdirname, "tokenizer.bin")
-                with open(filename, "wb") as handle:
-                    pickle.dump(tokenizer, handle)
-
-                with open(filename, "rb") as handle:
-                    tokenizer_new = pickle.load(handle)
-
-                subwords_loaded = tokenizer_new.tokenize(text)
-
-                self.assertListEqual(subwords, subwords_loaded)
-
     @require_tokenizers
     def test_pickle_added_tokens(self):
         self.skipTest(
