@@ -814,11 +814,11 @@ class FlavaModelTester:
         }
 
     def get_config(self):
-        return FlavaConfig.from_configs(
-            self.image_model_tester.get_config(),
-            self.text_model_tester.get_config(),
-            self.multimodal_model_tester.get_config(),
-            self.image_codebook_tester.get_config(),
+        return FlavaConfig(
+            image_config=self.image_model_tester.get_config(),
+            text_config=self.text_model_tester.get_config(),
+            multimodal_config=self.multimodal_model_tester.get_config(),
+            image_codebook_config=self.image_codebook_tester.get_config(),
             hidden_size=self.hidden_size,
             projection_dim=self.projection_dim,
             initializer_range=self.initializer_range,

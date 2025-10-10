@@ -119,14 +119,15 @@ print(answer)
 
     ```py
     >>> import re
-    >>> from transformers import DonutProcessor, VisionEncoderDecoderModel, infer_device
+    >>> from transformers import DonutProcessor, VisionEncoderDecoderModel
+from accelerate import Accelerator
     >>> from datasets import load_dataset
     >>> import torch
 
     >>> processor = DonutProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-rvlcdip")
     >>> model = VisionEncoderDecoderModel.from_pretrained("naver-clova-ix/donut-base-finetuned-rvlcdip")
 
-    >>> device = infer_device()
+    >>> device = Accelerator().device
     >>> model.to(device)  # doctest: +IGNORE_RESULT
 
     >>> # load document image
@@ -161,14 +162,15 @@ print(answer)
 
     ```py
     >>> import re
-    >>> from transformers import DonutProcessor, VisionEncoderDecoderModel, infer_device
+    >>> from transformers import DonutProcessor, VisionEncoderDecoderModel
+from accelerate import Accelerator
     >>> from datasets import load_dataset
     >>> import torch
 
     >>> processor = DonutProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-cord-v2")
     >>> model = VisionEncoderDecoderModel.from_pretrained("naver-clova-ix/donut-base-finetuned-cord-v2")
 
-    >>> device = infer_device()
+    >>> device = Accelerator().device
     >>> model.to(device)  # doctest: +IGNORE_RESULT
 
     >>> # load document image

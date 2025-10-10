@@ -43,13 +43,13 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 
 
-class Sam2FastImageProcessorKwargs(ImagesKwargs):
+class Sam2FastImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     mask_size (`dict[str, int]`, *optional*):
         The size `{"height": int, "width": int}` to resize the segmentation maps to.
     """
 
-    mask_size: Optional[dict[str, int]]
+    mask_size: dict[str, int]
 
 
 def _compute_stability_score(masks: "torch.Tensor", mask_threshold: float, stability_score_offset: int):

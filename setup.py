@@ -114,7 +114,7 @@ _deps = [
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
     "hf_xet",
-    "huggingface-hub==1.0.0.rc2",
+    "huggingface-hub==1.0.0.rc4",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.0",
@@ -162,7 +162,6 @@ _deps = [
     "scikit-learn",
     "scipy",
     "sentencepiece>=0.1.91,!=0.1.92",
-    "sigopt",
     "starlette",
     "sudachipy>=0.6.6",
     "sudachidict_core>=20220729",
@@ -274,7 +273,6 @@ extras["sagemaker"] = deps_list("sagemaker")
 extras["deepspeed"] = deps_list("deepspeed") + extras["accelerate"]
 extras["optuna"] = deps_list("optuna")
 extras["ray"] = deps_list("ray[tune]")
-extras["sigopt"] = deps_list("sigopt")
 extras["hub-kernels"] = deps_list("kernels")
 
 extras["integrations"] = extras["hub-kernels"] + extras["optuna"] + extras["ray"]
@@ -434,7 +432,7 @@ setup(
             "transformers=transformers.commands.transformers_cli:main",
         ]
     },
-    python_requires=">=3.9.0",
+    python_requires=">=3.10.0",
     install_requires=list(install_requires),
     classifiers=[
         "Development Status :: 5 - Production/Stable",
@@ -444,7 +442,6 @@ setup(
         "License :: OSI Approved :: Apache Software License",
         "Operating System :: OS Independent",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
