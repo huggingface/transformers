@@ -14,36 +14,29 @@
 # limitations under the License.
 from typing import Optional, Union
 
-import numpy as np
+
 import torch
 
-from ..efficientloftr.image_processing_efficientloftr_fast import flatten_pair_images
+from .image_processing_superglue import SuperGlueImageProcessorKwargs
 from ... import is_vision_available
-from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature, get_size_dict, \
-    DefaultFastImageProcessorKwargs
+from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
-    ChannelDimension,
     ImageInput,
     ImageType,
     PILImageResampling,
     SizeDict,
     get_image_type,
-    infer_channel_dimension_format,
     is_pil_image,
     is_valid_image,
-    pil_torch_interpolation_mapping,
-    to_numpy_array,
-    valid_images,
-    validate_preprocess_arguments,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
+
 from ...utils import TensorType, auto_docstring, is_torchvision_v2_available
 from .modeling_superglue import KeypointMatchingOutput
 
 
 if is_vision_available():
-    import PIL
     from PIL import Image, ImageDraw
 
 if is_torchvision_v2_available():
@@ -137,13 +130,6 @@ def convert_to_grayscale(
         return image
     return F.rgb_to_grayscale(image, num_output_channels=3)
 
-class SuperGlueFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    r"""
-    do_grayscale (`bool`, *optional*, defaults to `True`):
-        Whether to convert the image to grayscale. Can be overridden by `do_grayscale` in the `preprocess` method.
-    """
-    do_grayscale: Optional[bool] = True
-
 @auto_docstring
 class SuperGlueImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
@@ -153,13 +139,13 @@ class SuperGlueImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     rescale_factor = 1 / 255
     do_normalize = None
-    valid_kwargs = SuperGlueFastImageProcessorKwargs
+    valid_kwargs = SuperGlueImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[SuperGlueFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[SuperGlueImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[SuperGlueFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[SuperGlueImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def _prepare_images_structure(
@@ -334,7 +320,6 @@ class SuperGlueImageProcessorFast(BaseImageProcessorFast):
         r = int(255 * (1 - score))
         g = int(255 * score)
         b = 0
-        return (r, g, b)
-
+        return r, g, b
 
 __all__ = ["SuperGlueImageProcessorFast"]
