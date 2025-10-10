@@ -174,7 +174,7 @@ def write_model(
         vocab_size=original_config["vocab_size"] if variant == "7B-D" else original_config["embedding_size"],
         additional_embedding_size=128,
         tie_word_embeddings=original_config["tie_word_embeddings"],
-        use_qk_norm=True if variant == "7B-O" else False,
+        use_qk_norm=variant == "7B-O",
     )
 
     # vision and pooling args should be same across al model checkpoints which are the default values
