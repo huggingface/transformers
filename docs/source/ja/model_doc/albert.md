@@ -27,7 +27,7 @@ rendered properly in your Markdown viewer.
 
 ## 概要
 
-ALBERTモデルは、「[ALBERT: A Lite BERT for Self-supervised Learning of Language Representations](https://arxiv.org/abs/1909.11942)」という論文でZhenzhong Lan、Mingda Chen、Sebastian Goodman、Kevin Gimpel、Piyush Sharma、Radu Soricutによって提案されました。BERTのメモリ消費を減らしトレーニングを高速化するためのパラメータ削減技術を2つ示しています：
+ALBERTモデルは、「[ALBERT: A Lite BERT for Self-supervised Learning of Language Representations](https://huggingface.co/papers/1909.11942)」という論文でZhenzhong Lan、Mingda Chen、Sebastian Goodman、Kevin Gimpel、Piyush Sharma、Radu Soricutによって提案されました。BERTのメモリ消費を減らしトレーニングを高速化するためのパラメータ削減技術を2つ示しています：
 
 - 埋め込み行列を2つの小さな行列に分割する。
 - グループ間で分割された繰り返し層を使用する。
@@ -47,7 +47,7 @@ ALBERTモデルは、「[ALBERT: A Lite BERT for Self-supervised Learning of Lan
 
 ## 参考資料
 
-- [テキスト分類タスクガイド](../tasks/sequence_classification)
+- [テキスト分類タスクガイド(英語版)](../../en/tasks/sequence_classification)
 - [トークン分類タスクガイド](../tasks/token_classification)
 - [質問応答タスクガイド](../tasks/question_answering)
 - [マスクされた言語モデルタスクガイド](../tasks/masked_language_modeling)
@@ -73,10 +73,6 @@ ALBERTモデルは、「[ALBERT: A Lite BERT for Self-supervised Learning of Lan
 
 [[autodoc]] models.albert.modeling_albert.AlbertForPreTrainingOutput
 
-[[autodoc]] models.albert.modeling_tf_albert.TFAlbertForPreTrainingOutput
-
-<frameworkcontent>
-<pt>
 
 ## AlbertModel
 
@@ -112,82 +108,3 @@ ALBERTモデルは、「[ALBERT: A Lite BERT for Self-supervised Learning of Lan
 [[autodoc]] AlbertForQuestionAnswering
     - forward
 
-</pt>
-
-<tf>
-
-## TFAlbertModel
-
-[[autodoc]] TFAlbertModel
-    - call
-
-## TFAlbertForPreTraining
-
-[[autodoc]] TFAlbertForPreTraining
-    - call
-
-## TFAlbertForMaskedLM
-
-[[autodoc]] TFAlbertForMaskedLM
-    - call
-
-## TFAlbertForSequenceClassification
-
-[[autodoc]] TFAlbertForSequenceClassification
-    - call
-
-## TFAlbertForMultipleChoice
-
-[[autodoc]] TFAlbertForMultipleChoice
-    - call
-
-## TFAlbertForTokenClassification
-
-[[autodoc]] TFAlbertForTokenClassification
-    - call
-
-## TFAlbertForQuestionAnswering
-
-[[autodoc]] TFAlbertForQuestionAnswering
-    - call
-
-</tf>
-<jax>
-
-## FlaxAlbertModel
-
-[[autodoc]] FlaxAlbertModel
-    - __call__
-
-## FlaxAlbertForPreTraining
-
-[[autodoc]] FlaxAlbertForPreTraining
-    - __call__
-
-## FlaxAlbertForMaskedLM
-
-[[autodoc]] FlaxAlbertForMaskedLM
-    - __call__
-
-## FlaxAlbertForSequenceClassification
-
-[[autodoc]] FlaxAlbertForSequenceClassification
-    - __call__
-
-## FlaxAlbertForMultipleChoice
-
-[[autodoc]] FlaxAlbertForMultipleChoice
-    - __call__
-
-## FlaxAlbertForTokenClassification
-
-[[autodoc]] FlaxAlbertForTokenClassification
-    - __call__
-
-## FlaxAlbertForQuestionAnswering
-
-[[autodoc]] FlaxAlbertForQuestionAnswering
-    - __call__
-
-</jax>
-</frameworkcontent>

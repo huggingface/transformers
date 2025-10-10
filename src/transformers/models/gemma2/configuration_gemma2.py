@@ -19,38 +19,37 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from ...configuration_utils import PreTrainedConfig, layer_type_validation
 
 
-from ...configuration_utils import PretrainedConfig
-
-
-class Gemma2Config(PretrainedConfig):
+class Gemma2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Gemma2Model`]. It is used to instantiate an Gemma2
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Gemma2-7B.
     e.g. [google/gemma2-7b](https://huggingface.co/google/gemma2-7b)
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+
     Args:
         vocab_size (`int`, *optional*, defaults to 256000):
             Vocabulary size of the Gemma2 model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`Gemma2Model`]
-        hidden_size (`int`, *optional*, defaults to 3072):
+        hidden_size (`int`, *optional*, defaults to 2304):
             Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 24576):
+        intermediate_size (`int`, *optional*, defaults to 9216):
             Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 28):
+        num_hidden_layers (`int`, *optional*, defaults to 26):
             Number of hidden layers in the Transformer decoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
+        num_attention_heads (`int`, *optional*, defaults to 8):
             Number of attention heads for each attention layer in the Transformer decoder.
-        num_key_value_heads (`int`, *optional*, defaults to 16):
+        num_key_value_heads (`int`, *optional*, defaults to 4):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
+            by meanpooling all the original heads within that group. For more details, check out [this
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
             `num_attention_heads`.
         head_dim (`int`, *optional*, defaults to 256):
             The attention head dimension.
@@ -80,12 +79,18 @@ class Gemma2Config(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        query_pre_attn_scalar (`float`, *optional*, defaults to 224): scaling factor used on the attention scores
-        sliding_window (`int`, *optional*, defaults to 4096): in Gemma2, every other layer uses sliding window attention. This is the
-            size of the sliding window.
-        final_logit_softcapping (`float`, *optional*, defaults to 30.0): scaling factor when applying tanh softcapping on the logits.
-        attn_logit_softcapping (`float`, *optional*, defaults to 50.0): scaling factor when applying tanh softcapping on the attention scores.
-        cache_implementation (`str`, *optional*, defaults to `"hybrid"`): the cache type to be used with `generate`.
+        query_pre_attn_scalar (`float`, *optional*, defaults to 256):
+            scaling factor used on the attention scores
+        sliding_window (`int`, *optional*, defaults to 4096):
+            in Gemma2, every other layer uses sliding window attention. This is the size of the sliding window.
+        layer_types (`list`, *optional*):
+            Attention pattern for each layer.
+        final_logit_softcapping (`float`, *optional*, defaults to 30.0):
+            scaling factor when applying tanh softcapping on the logits.
+        attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
+            scaling factor when applying tanh softcapping on the attention scores.
+        use_bidirectional_attention (`bool`, *optional*):
+            If True, the model will attend to all text tokens instead of using a causal mask.
 
     ```python
     >>> from transformers import Gemma2Model, Gemma2Config
@@ -99,15 +104,29 @@ class Gemma2Config(PretrainedConfig):
 
     model_type = "gemma2"
     keys_to_ignore_at_inference = ["past_key_values"]
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
 
     def __init__(
         self,
         vocab_size=256000,
-        hidden_size=3072,
-        intermediate_size=24576,
-        num_hidden_layers=28,
-        num_attention_heads=16,
-        num_key_value_heads=16,
+        hidden_size=2304,
+        intermediate_size=9216,
+        num_hidden_layers=26,
+        num_attention_heads=8,
+        num_key_value_heads=4,
         head_dim=256,
         hidden_activation="gelu_pytorch_tanh",
         max_position_embeddings=8192,
@@ -121,11 +140,12 @@ class Gemma2Config(PretrainedConfig):
         rope_theta=10000.0,
         attention_bias=False,
         attention_dropout=0.0,
-        query_pre_attn_scalar=224,
+        query_pre_attn_scalar=256,
         sliding_window=4096,
+        layer_types=None,
         final_logit_softcapping=30.0,
         attn_logit_softcapping=50.0,
-        cache_implementation="hybrid",
+        use_bidirectional_attention=None,
         **kwargs,
     ):
         super().__init__(
@@ -154,4 +174,14 @@ class Gemma2Config(PretrainedConfig):
         self.sliding_window = sliding_window
         self.final_logit_softcapping = final_logit_softcapping
         self.attn_logit_softcapping = attn_logit_softcapping
-        self.cache_implementation = cache_implementation
+        self.layer_types = layer_types
+        self.use_bidirectional_attention = use_bidirectional_attention
+
+        if self.layer_types is None:
+            self.layer_types = [
+                "sliding_attention" if bool((i + 1) % 2) else "full_attention" for i in range(self.num_hidden_layers)
+            ]
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
+
+
+__all__ = ["Gemma2Config"]

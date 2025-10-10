@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING, Dict, List, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 from .base import HfQuantizer
 
@@ -34,7 +34,7 @@ class BitNetHfQuantizer(HfQuantizer):
     1.58-bit quantization from BitNet quantization method:
     Before loading: it converts the linear layers into BitLinear layers during loading.
 
-    Checkout the paper introducing this method : https://arxiv.org/pdf/2402.17764
+    Check out the paper introducing this method: https://huggingface.co/papers/2402.17764
     """
 
     requires_parameters_quantization = False
@@ -50,19 +50,13 @@ class BitNetHfQuantizer(HfQuantizer):
         if not is_accelerate_available():
             raise ImportError("Loading a BitNet quantized model requires accelerate (`pip install accelerate`)")
 
-        if kwargs.get("from_tf", False) or kwargs.get("from_flax", False):
-            raise ValueError(
-                "Loading ternary weights from tf/flax is currently not supported, please make"
-                " sure the weights are in PyTorch format."
-            )
-
         if not torch.cuda.is_available():
             logger.warning_once(
                 "You don't have a GPU available to load the model, the inference will be slow because of weight unpacking"
             )
             return
 
-        device_map = kwargs.get("device_map", None)
+        device_map = kwargs.get("device_map")
         if device_map is None:
             logger.warning_once(
                 "You have loaded a BitNet model on CPU and have a CUDA device available, make sure to set "
@@ -81,16 +75,14 @@ class BitNetHfQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
-        device_map,
-        keep_in_fp32_modules: List[str] = [],
+        keep_in_fp32_modules: Optional[list[str]] = None,
         **kwargs,
     ):
-        from ..integrations import get_keys_to_not_convert, replace_with_bitnet_linear
+        from ..integrations import replace_with_bitnet_linear
 
-        self.modules_to_not_convert = get_keys_to_not_convert(model)
-
-        if self.quantization_config.modules_to_not_convert is not None:
-            self.modules_to_not_convert.extend(self.quantization_config.modules_to_not_convert)
+        self.modules_to_not_convert = self.get_modules_to_not_convert(
+            model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
+        )
 
         model = replace_with_bitnet_linear(
             model,
@@ -99,7 +91,7 @@ class BitNetHfQuantizer(HfQuantizer):
             pre_quantized=self.pre_quantized,
         )
 
-    def adjust_max_memory(self, max_memory: Dict[str, Union[int, str]]) -> Dict[str, Union[int, str]]:
+    def adjust_max_memory(self, max_memory: dict[str, Union[int, str]]) -> dict[str, Union[int, str]]:
         max_memory = {key: val * 0.90 for key, val in max_memory.items()}
         return max_memory
 
@@ -112,4 +104,15 @@ class BitNetHfQuantizer(HfQuantizer):
 
     @property
     def is_trainable(self) -> bool:
-        return False
+        return (
+            self.quantization_config.linear_class == "autobitlinear"
+            and self.quantization_config.quantization_mode == "online"
+        )
+
+    @property
+    def is_qat_trainable(self) -> bool:
+        """Flag indicating whether the quantized model can carry out quantization aware training"""
+        return (
+            self.quantization_config.linear_class == "autobitlinear"
+            and self.quantization_config.quantization_mode == "online"
+        )

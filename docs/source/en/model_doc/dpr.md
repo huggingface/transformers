@@ -13,22 +13,19 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-04-10 and added to Hugging Face Transformers on 2020-11-16.*
 
 # DPR
 
 <div class="flex flex-wrap space-x-1">
-<a href="https://huggingface.co/models?filter=dpr">
-<img alt="Models" src="https://img.shields.io/badge/All_model_pages-dpr-blueviolet">
-</a>
-<a href="https://huggingface.co/spaces/docs-demos/dpr-question_encoder-bert-base-multilingual">
-<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
-</a>
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
 ## Overview
 
 Dense Passage Retrieval (DPR) is a set of tools and models for state-of-the-art open-domain Q&A research. It was
-introduced in [Dense Passage Retrieval for Open-Domain Question Answering](https://arxiv.org/abs/2004.04906) by
+introduced in [Dense Passage Retrieval for Open-Domain Question Answering](https://huggingface.co/papers/2004.04906) by
 Vladimir Karpukhin, Barlas Oğuz, Sewon Min, Patrick Lewis, Ledell Wu, Sergey Edunov, Danqi Chen, Wen-tau Yih.
 
 The abstract from the paper is the following:
@@ -47,9 +44,9 @@ This model was contributed by [lhoestq](https://huggingface.co/lhoestq). The ori
 
 - DPR consists in three models:
 
-    * Question encoder: encode questions as vectors
-    * Context encoder: encode contexts as vectors
-    * Reader: extract the answer of the questions inside retrieved contexts, along with a relevance score (high if the inferred span actually answers the question).
+  * Question encoder: encode questions as vectors
+  * Context encoder: encode contexts as vectors
+  * Reader: extract the answer of the questions inside retrieved contexts, along with a relevance score (high if the inferred span actually answers the question).
 
 ## DPRConfig
 
@@ -87,9 +84,6 @@ This model was contributed by [lhoestq](https://huggingface.co/lhoestq). The ori
 
 [[autodoc]] models.dpr.modeling_dpr.DPRReaderOutput
 
-<frameworkcontent>
-<pt>
-
 ## DPRContextEncoder
 
 [[autodoc]] DPRContextEncoder
@@ -104,25 +98,3 @@ This model was contributed by [lhoestq](https://huggingface.co/lhoestq). The ori
 
 [[autodoc]] DPRReader
     - forward
-
-</pt>
-<tf>
-
-## TFDPRContextEncoder
-
-[[autodoc]] TFDPRContextEncoder
-    - call
-
-## TFDPRQuestionEncoder
-
-[[autodoc]] TFDPRQuestionEncoder
-    - call
-
-## TFDPRReader
-
-[[autodoc]] TFDPRReader
-    - call
-
-</tf>
-</frameworkcontent>
-

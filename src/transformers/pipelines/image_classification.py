@@ -11,15 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import warnings
-from typing import List, Union
+from typing import Any, Union, overload
 
 import numpy as np
 
 from ..utils import (
     ExplicitEnum,
     add_end_docstrings,
-    is_tf_available,
     is_torch_available,
     is_vision_available,
     logging,
@@ -32,9 +30,6 @@ if is_vision_available():
     from PIL import Image
 
     from ..image_utils import load_image
-
-if is_tf_available():
-    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES
 
 if is_torch_available():
     import torch
@@ -100,22 +95,19 @@ class ImageClassificationPipeline(Pipeline):
     """
 
     function_to_apply: ClassificationFunction = ClassificationFunction.NONE
+    _load_processor = False
+    _load_image_processor = True
+    _load_feature_extractor = False
+    _load_tokenizer = False
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         requires_backends(self, "vision")
-        self.check_model_type(
-            TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES
-            if self.framework == "tf"
-            else MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES
-        )
+        self.check_model_type(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES)
 
     def _sanitize_parameters(self, top_k=None, function_to_apply=None, timeout=None):
         preprocess_params = {}
         if timeout is not None:
-            warnings.warn(
-                "The `timeout` argument is deprecated and will be removed in version 5 of Transformers", FutureWarning
-            )
             preprocess_params["timeout"] = timeout
         postprocess_params = {}
         if top_k is not None:
@@ -126,12 +118,20 @@ class ImageClassificationPipeline(Pipeline):
             postprocess_params["function_to_apply"] = function_to_apply
         return preprocess_params, {}, postprocess_params
 
-    def __call__(self, inputs: Union[str, List[str], "Image.Image", List["Image.Image"]] = None, **kwargs):
+    @overload
+    def __call__(self, inputs: Union[str, "Image.Image"], **kwargs: Any) -> list[dict[str, Any]]: ...
+
+    @overload
+    def __call__(self, inputs: Union[list[str], list["Image.Image"]], **kwargs: Any) -> list[list[dict[str, Any]]]: ...
+
+    def __call__(
+        self, inputs: Union[str, list[str], "Image.Image", list["Image.Image"]], **kwargs: Any
+    ) -> Union[list[dict[str, Any]], list[list[dict[str, Any]]]]:
         """
         Assign labels to the image(s) passed as inputs.
 
         Args:
-            inputs (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
+            inputs (`str`, `list[str]`, `PIL.Image` or `list[PIL.Image]`):
                 The pipeline handles three types of images:
 
                 - A string containing a http link pointing to an image
@@ -159,6 +159,9 @@ class ImageClassificationPipeline(Pipeline):
             top_k (`int`, *optional*, defaults to 5):
                 The number of top labels that will be returned by the pipeline. If the provided number is higher than
                 the number of labels available in the model configuration, it will default to the number of labels.
+            timeout (`float`, *optional*, defaults to None):
+                The maximum time in seconds to wait for fetching images from the web. If None, no timeout is set and
+                the call may block forever.
 
         Return:
             A dictionary or a list of dictionaries containing result. If the input is a single image, will return a
@@ -179,9 +182,8 @@ class ImageClassificationPipeline(Pipeline):
 
     def preprocess(self, image, timeout=None):
         image = load_image(image, timeout=timeout)
-        model_inputs = self.image_processor(images=image, return_tensors=self.framework)
-        if self.framework == "pt":
-            model_inputs = model_inputs.to(self.torch_dtype)
+        model_inputs = self.image_processor(images=image, return_tensors="pt")
+        model_inputs = model_inputs.to(self.dtype)
         return model_inputs
 
     def _forward(self, model_inputs):
@@ -190,9 +192,9 @@ class ImageClassificationPipeline(Pipeline):
 
     def postprocess(self, model_outputs, function_to_apply=None, top_k=5):
         if function_to_apply is None:
-            if self.model.config.problem_type == "single_label_classification" or self.model.config.num_labels == 1:
+            if self.model.config.problem_type == "multi_label_classification" or self.model.config.num_labels == 1:
                 function_to_apply = ClassificationFunction.SIGMOID
-            elif self.model.config.problem_type == "multi_label_classification" or self.model.config.num_labels > 1:
+            elif self.model.config.problem_type == "single_label_classification" or self.model.config.num_labels > 1:
                 function_to_apply = ClassificationFunction.SOFTMAX
             elif hasattr(self.model.config, "function_to_apply") and function_to_apply is None:
                 function_to_apply = self.model.config.function_to_apply
@@ -203,7 +205,7 @@ class ImageClassificationPipeline(Pipeline):
             top_k = self.model.config.num_labels
 
         outputs = model_outputs["logits"][0]
-        if self.framework == "pt" and outputs.dtype in (torch.bfloat16, torch.float16):
+        if outputs.dtype in (torch.bfloat16, torch.float16):
             outputs = outputs.to(torch.float32).numpy()
         else:
             outputs = outputs.numpy()

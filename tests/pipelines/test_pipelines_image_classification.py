@@ -14,11 +14,11 @@
 
 import unittest
 
+import datasets
 from huggingface_hub import ImageClassificationOutputElement
 
 from transformers import (
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
-    TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
     PreTrainedTokenizerBase,
     is_torch_available,
     is_vision_available,
@@ -28,9 +28,7 @@ from transformers.testing_utils import (
     compare_pipeline_output_to_hub_spec,
     is_pipeline_test,
     nested_simplify,
-    require_tf,
     require_torch,
-    require_torch_or_tf,
     require_vision,
     slow,
 )
@@ -52,11 +50,21 @@ else:
 
 
 @is_pipeline_test
-@require_torch_or_tf
+@require_torch
 @require_vision
 class ImageClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
-    tf_model_mapping = TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
+    _dataset = None
+
+    @classmethod
+    def _load_dataset(cls):
+        # Lazy loading of the dataset. Because it is a class method, it will only be loaded once per pytest process.
+        if cls._dataset is None:
+            # we use revision="refs/pr/1" until the PR is merged
+            # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
+            cls._dataset = datasets.load_dataset(
+                "hf-internal-testing/fixtures_image_utils", split="test", revision="refs/pr/1"
+            )
 
     def get_test_pipeline(
         self,
@@ -65,7 +73,7 @@ class ImageClassificationPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        torch_dtype="float32",
+        dtype="float32",
     ):
         image_classifier = ImageClassificationPipeline(
             model=model,
@@ -73,7 +81,7 @@ class ImageClassificationPipelineTests(unittest.TestCase):
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             processor=processor,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
             top_k=2,
         )
         examples = [
@@ -83,6 +91,7 @@ class ImageClassificationPipelineTests(unittest.TestCase):
         return image_classifier, examples
 
     def run_pipeline_test(self, image_classifier, examples):
+        self._load_dataset()
         outputs = image_classifier("./tests/fixtures/tests_samples/COCO/000000039769.png")
 
         self.assertEqual(
@@ -93,23 +102,17 @@ class ImageClassificationPipelineTests(unittest.TestCase):
             ],
         )
 
-        import datasets
-
-        # we use revision="refs/pr/1" until the PR is merged
-        # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
-        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", split="test", revision="refs/pr/1")
-
         # Accepts URL + PIL.Image + lists
         outputs = image_classifier(
             [
                 Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
                 "http://images.cocodataset.org/val2017/000000039769.jpg",
                 # RGBA
-                dataset[0]["image"],
+                self._dataset[0]["image"],
                 # LA
-                dataset[1]["image"],
+                self._dataset[1]["image"],
                 # L
-                dataset[2]["image"],
+                self._dataset[2]["image"],
             ]
         )
         self.assertEqual(
@@ -168,32 +171,6 @@ class ImageClassificationPipelineTests(unittest.TestCase):
             ],
         )
 
-    @require_tf
-    def test_small_model_tf(self):
-        small_model = "hf-internal-testing/tiny-random-vit"
-        image_classifier = pipeline("image-classification", model=small_model, framework="tf")
-
-        outputs = image_classifier("http://images.cocodataset.org/val2017/000000039769.jpg")
-        self.assertEqual(
-            nested_simplify(outputs, decimals=4),
-            [{"label": "LABEL_1", "score": 0.574}, {"label": "LABEL_0", "score": 0.426}],
-        )
-
-        outputs = image_classifier(
-            [
-                "http://images.cocodataset.org/val2017/000000039769.jpg",
-                "http://images.cocodataset.org/val2017/000000039769.jpg",
-            ],
-            top_k=2,
-        )
-        self.assertEqual(
-            nested_simplify(outputs, decimals=4),
-            [
-                [{"label": "LABEL_1", "score": 0.574}, {"label": "LABEL_0", "score": 0.426}],
-                [{"label": "LABEL_1", "score": 0.574}, {"label": "LABEL_0", "score": 0.426}],
-            ],
-        )
-
     def test_custom_tokenizer(self):
         tokenizer = PreTrainedTokenizerBase()
 
@@ -207,7 +184,7 @@ class ImageClassificationPipelineTests(unittest.TestCase):
     @require_torch
     def test_torch_float16_pipeline(self):
         image_classifier = pipeline(
-            "image-classification", model="hf-internal-testing/tiny-random-vit", torch_dtype=torch.float16
+            "image-classification", model="hf-internal-testing/tiny-random-vit", dtype=torch.float16
         )
         outputs = image_classifier("http://images.cocodataset.org/val2017/000000039769.jpg")
 
@@ -219,7 +196,7 @@ class ImageClassificationPipelineTests(unittest.TestCase):
     @require_torch
     def test_torch_bfloat16_pipeline(self):
         image_classifier = pipeline(
-            "image-classification", model="hf-internal-testing/tiny-random-vit", torch_dtype=torch.bfloat16
+            "image-classification", model="hf-internal-testing/tiny-random-vit", dtype=torch.bfloat16
         )
         outputs = image_classifier("http://images.cocodataset.org/val2017/000000039769.jpg")
 

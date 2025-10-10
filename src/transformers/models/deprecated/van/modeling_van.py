@@ -16,12 +16,10 @@
 
 import math
 from collections import OrderedDict
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ....activations import ACT2FN
 from ....modeling_outputs import (
@@ -52,11 +50,6 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
-    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
-    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
-    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
-    argument.
     """
     if drop_prob == 0.0 or not training:
         return input
@@ -79,14 +72,14 @@ class VanDropPath(nn.Module):
         return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
+        return f"p={self.drop_prob}"
 
 
 class VanOverlappingPatchEmbedder(nn.Module):
     """
     Downsamples the input using a patchify operation with a `stride` of 4 by default making adjacent windows overlap by
     half of the area. From [PVTv2: Improved Baselines with Pyramid Vision
-    Transformer](https://arxiv.org/abs/2106.13797).
+    Transformer](https://huggingface.co/papers/2106.13797).
     """
 
     def __init__(self, in_channels: int, hidden_size: int, patch_size: int = 7, stride: int = 4):
@@ -105,7 +98,7 @@ class VanOverlappingPatchEmbedder(nn.Module):
 class VanMlpLayer(nn.Module):
     """
     MLP with depth-wise convolution, from [PVTv2: Improved Baselines with Pyramid Vision
-    Transformer](https://arxiv.org/abs/2106.13797).
+    Transformer](https://huggingface.co/papers/2106.13797).
     """
 
     def __init__(
@@ -204,7 +197,7 @@ class VanLayerScaling(nn.Module):
 
     def __init__(self, hidden_size: int, initial_value: float = 1e-2):
         super().__init__()
-        self.weight = nn.Parameter(initial_value * torch.ones((hidden_size)), requires_grad=True)
+        self.weight = nn.Parameter(initial_value * torch.ones(hidden_size), requires_grad=True)
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         # unsqueezing for broadcasting
@@ -311,9 +304,11 @@ class VanEncoder(nn.Module):
         hidden_sizes = config.hidden_sizes
         depths = config.depths
         mlp_ratios = config.mlp_ratios
-        drop_path_rates = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
+        drop_path_rates = [
+            x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths), device="cpu")
+        ]
 
-        for num_stage, (patch_size, stride, hidden_size, depth, mlp_expantion, drop_path_rate) in enumerate(
+        for num_stage, (patch_size, stride, hidden_size, depth, mlp_expansion, drop_path_rate) in enumerate(
             zip(patch_sizes, strides, hidden_sizes, depths, mlp_ratios, drop_path_rates)
         ):
             is_first_stage = num_stage == 0
@@ -328,7 +323,7 @@ class VanEncoder(nn.Module):
                     patch_size=patch_size,
                     stride=stride,
                     depth=depth,
-                    mlp_ratio=mlp_expantion,
+                    mlp_ratio=mlp_expansion,
                     drop_path_rate=drop_path_rate,
                 )
             )
@@ -338,7 +333,7 @@ class VanEncoder(nn.Module):
         hidden_state: torch.Tensor,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
-    ) -> Union[Tuple, BaseModelOutputWithNoAttention]:
+    ) -> Union[tuple, BaseModelOutputWithNoAttention]:
         all_hidden_states = () if output_hidden_states else None
 
         for _, stage_module in enumerate(self.stages):
@@ -359,7 +354,7 @@ class VanPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = VanConfig
+    config: VanConfig
     base_model_prefix = "van"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
@@ -434,7 +429,7 @@ class VanModel(VanPreTrainedModel):
         pixel_values: Optional[torch.FloatTensor],
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPoolingAndNoAttention]:
+    ) -> Union[tuple, BaseModelOutputWithPoolingAndNoAttention]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -491,7 +486,7 @@ class VanForImageClassification(VanPreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, ImageClassifierOutputWithNoAttention]:
+    ) -> Union[tuple, ImageClassifierOutputWithNoAttention]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -508,29 +503,13 @@ class VanForImageClassification(VanPreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.config.problem_type is None:
-                if self.config.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.config.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.config.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
+            loss = self.loss_function(labels, logits, self.config)
 
         if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
+
+
+__all__ = ["VanForImageClassification", "VanModel", "VanPreTrainedModel"]

@@ -13,8 +13,13 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-06-12 and added to Hugging Face Transformers on 2023-06-20.*
 
 # RetriBERT
+
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
 
 <Tip warning={true}>
 
@@ -27,13 +32,12 @@ You can do so by running the following command: `pip install -U transformers==4.
 
 ## Overview
 
-The RetriBERT model was proposed in the blog post [Explain Anything Like I'm Five: A Model for Open Domain Long Form
+The [RetriBERT](https://huggingface.co/yjernite/retribert-base-uncased/tree/main) model was proposed in the blog post [Explain Anything Like I'm Five: A Model for Open Domain Long Form
 Question Answering](https://yjernite.github.io/lfqa.html). RetriBERT is a small model that uses either a single or
 pair of BERT encoders with lower-dimension projection for dense semantic indexing of text.
 
 This model was contributed by [yjernite](https://huggingface.co/yjernite). Code to train and use the model can be
 found [here](https://github.com/huggingface/transformers/tree/main/examples/research-projects/distillation).
-
 
 ## RetriBertConfig
 

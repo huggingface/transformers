@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2022 The HuggingFace Team All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,6 +12,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+# /// script
+# dependencies = [
+#     "transformers @ git+https://github.com/huggingface/transformers.git",
+#     "torch>=1.5.0",
+#     "torchvision>=0.6.0",
+#     "datasets>=1.8.0",
+# ]
+# ///
+
 """
 Training a CLIP like dual encoder models using text and vision encoders in the library.
 
@@ -46,15 +55,14 @@ from transformers import (
     TrainingArguments,
     set_seed,
 )
-from transformers.trainer_utils import get_last_checkpoint
-from transformers.utils import check_min_version, send_example_telemetry
+from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 
 
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.46.0.dev0")
+check_min_version("4.57.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/contrastive-image-text/requirements.txt")
 
@@ -91,7 +99,7 @@ class ModelArguments:
         metadata={
             "help": (
                 "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
-                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+                "generated when running `hf auth login` (stored in `~/.huggingface`)."
             )
         },
     )
@@ -141,10 +149,6 @@ class DataTrainingArguments:
         default=None,
         metadata={"help": "An optional input evaluation data file (a jsonlines file)."},
     )
-    test_file: Optional[str] = field(
-        default=None,
-        metadata={"help": "An optional input testing data file (a jsonlines file)."},
-    )
     max_seq_length: Optional[int] = field(
         default=128,
         metadata={
@@ -190,9 +194,6 @@ class DataTrainingArguments:
             if self.validation_file is not None:
                 extension = self.validation_file.split(".")[-1]
                 assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
-            if self.test_file is not None:
-                extension = self.test_file.split(".")[-1]
-                assert extension in ["csv", "json"], "`test_file` should be a csv or a json file."
 
 
 dataset_name_mapping = {
@@ -245,10 +246,6 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
-    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
-    # information sent is the one passed as arguments along with your Python/PyTorch versions.
-    send_example_telemetry("run_clip", model_args, data_args)
-
     # 2. Setup logging
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
@@ -268,25 +265,10 @@ def main():
 
     # Log on each process the small summary:
     logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}, "
+        f"Process rank: {training_args.local_process_index}, device: {training_args.device}, n_gpu: {training_args.n_gpu}, "
         + f"distributed training: {training_args.parallel_mode.value == 'distributed'}, 16-bits training: {training_args.fp16}"
     )
     logger.info(f"Training/evaluation parameters {training_args}")
-
-    # 3. Detecting last checkpoint and eventually continue from last checkpoint
-    last_checkpoint = None
-    if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
-        last_checkpoint = get_last_checkpoint(training_args.output_dir)
-        if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
-            raise ValueError(
-                f"Output directory ({training_args.output_dir}) already exists and is not empty. "
-                "Use --overwrite_output_dir to overcome."
-            )
-        elif last_checkpoint is not None and training_args.resume_from_checkpoint is None:
-            logger.info(
-                f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
-                "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
-            )
 
     # 4. Load dataset
     # Get the datasets: you can either provide your own CSV/JSON training and evaluation files (see below)
@@ -315,9 +297,6 @@ def main():
         if data_args.validation_file is not None:
             data_files["validation"] = data_args.validation_file
             extension = data_args.validation_file.split(".")[-1]
-        if data_args.test_file is not None:
-            data_files["test"] = data_args.test_file
-            extension = data_args.test_file.split(".")[-1]
         dataset = load_dataset(
             extension,
             data_files=data_files,
@@ -387,14 +366,12 @@ def main():
         column_names = dataset["train"].column_names
     elif training_args.do_eval:
         column_names = dataset["validation"].column_names
-    elif training_args.do_predict:
-        column_names = dataset["test"].column_names
     else:
         logger.info("There is nothing to do. Please pass `do_train`, `do_eval` and/or `do_predict`.")
         return
 
     # 6. Get the column names for input/target.
-    dataset_columns = dataset_name_mapping.get(data_args.dataset_name, None)
+    dataset_columns = dataset_name_mapping.get(data_args.dataset_name)
     if data_args.image_column is None:
         image_column = dataset_columns[0] if dataset_columns is not None else column_names[0]
     else:
@@ -490,29 +467,6 @@ def main():
         # Transform images on the fly as doing it on the whole dataset takes too much time.
         eval_dataset.set_transform(transform_images)
 
-    if training_args.do_predict:
-        if "test" not in dataset:
-            raise ValueError("--do_predict requires a test dataset")
-        test_dataset = dataset["test"]
-        if data_args.max_eval_samples is not None:
-            max_eval_samples = min(len(test_dataset), data_args.max_eval_samples)
-            test_dataset = test_dataset.select(range(max_eval_samples))
-
-        test_dataset = test_dataset.filter(
-            filter_corrupt_images, batched=True, num_proc=data_args.preprocessing_num_workers
-        )
-        test_dataset = test_dataset.map(
-            function=tokenize_captions,
-            batched=True,
-            num_proc=data_args.preprocessing_num_workers,
-            remove_columns=[col for col in column_names if col != image_column],
-            load_from_cache_file=not data_args.overwrite_cache,
-            desc="Running tokenizer on test dataset",
-        )
-
-        # Transform images on the fly as doing it on the whole dataset takes too much time.
-        test_dataset.set_transform(transform_images)
-
     # 8. Initialize our trainer
     trainer = Trainer(
         model=model,
@@ -527,8 +481,6 @@ def main():
         checkpoint = None
         if training_args.resume_from_checkpoint is not None:
             checkpoint = training_args.resume_from_checkpoint
-        elif last_checkpoint is not None:
-            checkpoint = last_checkpoint
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
         trainer.save_model()
         tokenizer.save_pretrained(training_args.output_dir)

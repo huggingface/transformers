@@ -15,10 +15,11 @@
 """GPT Neo model configuration"""
 
 from collections import OrderedDict
-from typing import Any, Mapping, Optional
+from collections.abc import Mapping
+from typing import Any
 
-from ... import PreTrainedTokenizer, TensorType, is_torch_available
-from ...configuration_utils import PretrainedConfig
+from ... import PreTrainedTokenizer, is_torch_available
+from ...configuration_utils import PreTrainedConfig
 from ...onnx import OnnxConfigWithPast
 from ...utils import logging
 
@@ -26,15 +27,15 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class GPTNeoConfig(PretrainedConfig):
+class GPTNeoConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GPTNeoModel`]. It is used to instantiate a GPT
     Neo model according to the specified arguments, defining the model architecture. Instantiating a configuration with
     the defaults will yield a similar configuration to that of the GPTNeo
     [EleutherAI/gpt-neo-1.3B](https://huggingface.co/EleutherAI/gpt-neo-1.3B) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -226,10 +227,12 @@ class GPTNeoOnnxConfig(OnnxConfigWithPast):
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
-        framework: Optional[TensorType] = None,
     ) -> Mapping[str, Any]:
         common_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
-            tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
+            tokenizer,
+            batch_size=batch_size,
+            seq_length=seq_length,
+            is_pair=is_pair,
         )
 
         # We need to order the input in the way they appears in the forward()
@@ -267,3 +270,6 @@ class GPTNeoOnnxConfig(OnnxConfigWithPast):
     @property
     def default_onnx_opset(self) -> int:
         return 13
+
+
+__all__ = ["GPTNeoConfig", "GPTNeoOnnxConfig"]

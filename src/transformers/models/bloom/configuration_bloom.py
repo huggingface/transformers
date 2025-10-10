@@ -15,15 +15,16 @@
 """Bloom configuration"""
 
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, List, Mapping, Optional
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any, Optional
 
 from packaging import version
 
 
 if TYPE_CHECKING:
-    from ... import PreTrainedTokenizer, TensorType
+    from ... import PreTrainedTokenizer
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...onnx import OnnxConfigWithPast, PatchingSpec
 from ...utils import is_torch_available, logging
 
@@ -31,15 +32,15 @@ from ...utils import is_torch_available, logging
 logger = logging.get_logger(__name__)
 
 
-class BloomConfig(PretrainedConfig):
+class BloomConfig(PreTrainedConfig):
     """
     This is the configuration class to store the configuration of a [`BloomModel`]. It is used to instantiate a Bloom
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to the Bloom architecture
     [bigscience/bloom](https://huggingface.co/bigscience/bloom).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -146,9 +147,9 @@ class BloomOnnxConfig(OnnxConfigWithPast):
 
     def __init__(
         self,
-        config: PretrainedConfig,
+        config: PreTrainedConfig,
         task: str = "default",
-        patching_specs: List[PatchingSpec] = None,
+        patching_specs: Optional[list[PatchingSpec]] = None,
         use_past: bool = False,
     ):
         super().__init__(config, task=task, patching_specs=patching_specs, use_past=use_past)
@@ -186,10 +187,12 @@ class BloomOnnxConfig(OnnxConfigWithPast):
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
-        framework: Optional["TensorType"] = None,
     ) -> Mapping[str, Any]:
         common_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
-            tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
+            tokenizer,
+            batch_size=batch_size,
+            seq_length=seq_length,
+            is_pair=is_pair,
         )
 
         # We need to order the input in the way they appears in the forward()
@@ -232,3 +235,6 @@ class BloomOnnxConfig(OnnxConfigWithPast):
     @property
     def default_onnx_opset(self) -> int:
         return 13
+
+
+__all__ = ["BloomConfig", "BloomOnnxConfig"]

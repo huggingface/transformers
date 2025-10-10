@@ -66,7 +66,7 @@ rendered properly in your Markdown viewer.
 
 [跨语言NLI语料库（XNLI）](https://www.nyu.edu/projects/bowman/xnli/) 是一个评估跨语言文本表示质量的基准测试。XNLI是一个基于[*MultiNLI*](http://www.nyu.edu/projects/bowman/multinli/)的众包数据集：”文本对“被标记为包含15种不同语言（包括英语等高资源语言和斯瓦希里语等低资源语言）的文本蕴涵注释。
 
-它与论文 [XNLI: Evaluating Cross-lingual Sentence Representations](https://arxiv.org/abs/1809.05053) 一同发布。
+它与论文 [XNLI: Evaluating Cross-lingual Sentence Representations](https://huggingface.co/papers/1809.05053) 一同发布。
 
 该库提供了加载XNLI数据的processor：
 
@@ -79,7 +79,7 @@ rendered properly in your Markdown viewer.
 
 ## SQuAD
 
-[斯坦福问答数据集（SQuAD）](https://rajpurkar.github.io/SQuAD-explorer//) 是一个评估模型在问答上性能的基准测试。有两个版本，v1.1 和 v2.0。第一个版本（v1.1）与论文 [SQuAD: 100,000+ Questions for Machine Comprehension of Text](https://arxiv.org/abs/1606.05250) 一同发布。第二个版本（v2.0）与论文 [Know What You Don't Know: Unanswerable Questions for SQuAD](https://arxiv.org/abs/1806.03822) 一同发布。
+[斯坦福问答数据集（SQuAD）](https://rajpurkar.github.io/SQuAD-explorer//) 是一个评估模型在问答上性能的基准测试。有两个版本，v1.1 和 v2.0。第一个版本（v1.1）与论文 [SQuAD: 100,000+ Questions for Machine Comprehension of Text](https://huggingface.co/papers/1606.05250) 一同发布。第二个版本（v2.0）与论文 [Know What You Don't Know: Unanswerable Questions for SQuAD](https://huggingface.co/papers/1806.03822) 一同发布。
 
 该库为两个版本各自提供了一个processor：
 
