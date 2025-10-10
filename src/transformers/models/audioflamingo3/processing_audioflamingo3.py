@@ -215,5 +215,11 @@ class AudioFlamingo3Processor(ProcessorMixin):
 
         return BatchFeature(data={**text_inputs, **audio_inputs}, tensor_type=return_tensors)
 
+    @property
+    def model_input_names(self) -> list[str]:
+        tok_names = self.tokenizer.model_input_names
+        fea_names = self.feature_extractor.model_input_names
+        return list(dict.fromkeys(tok_names + fea_names + ["feature_attention_mask"]))
+
 
 __all__ = ["AudioFlamingo3Processor"]
