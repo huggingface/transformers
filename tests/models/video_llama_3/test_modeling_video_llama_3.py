@@ -518,6 +518,10 @@ class VideoLlama3VisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
+    @unittest.skip("Vision model requires additional positional inputs (grid_thw and merge_sizes)")
+    def test_flash_attn_kernels_inference_equivalence(self):
+        pass
+
 
 class VideoLlama3VisionText2TextModelTester:
     def __init__(
