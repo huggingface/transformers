@@ -534,7 +534,6 @@ python examples/pytorch/text-classification/run_glue.py \
   --learning_rate 2e-5 \
   --num_train_epochs 3 \
   --output_dir /tmp/$TASK_NAME/ \
-  --overwrite_output_dir
 ```
 
 **注意すべきいくつかの注意事項**
@@ -669,7 +668,6 @@ accelerate launch \
 --learning_rate 5e-5 \
 --num_train_epochs 3 \
 --output_dir /tmp/$TASK_NAME/ \
---overwrite_output_dir
 ```
 
 4. `accelerate launch`するための cmd 引数を直接使用することもできます。上の例は次のようにマッピングされます。
@@ -694,7 +692,6 @@ accelerate launch --num_processes=2 \
 --learning_rate 5e-5 \
 --num_train_epochs 3 \
 --output_dir /tmp/$TASK_NAME/ \
---overwrite_output_dir
 ```
 
 詳細については、🤗 Accelerate CLI ガイドを参照してください: [🤗 Accelerate スクリプトの起動](https://huggingface.co/docs/accelerate/basic_tutorials/launch)。

@@ -105,7 +105,6 @@ _import_structure = {
         "is_optuna_available",
         "is_ray_available",
         "is_ray_tune_available",
-        "is_sigopt_available",
         "is_swanlab_available",
         "is_tensorboard_available",
         "is_trackio_available",
@@ -113,7 +112,6 @@ _import_structure = {
         "rewrite_logs",
         "run_hp_search_optuna",
         "run_hp_search_ray",
-        "run_hp_search_sigopt",
         "run_hp_search_wandb",
     ],
     "mxfp4": [
@@ -247,7 +245,6 @@ if TYPE_CHECKING:
         is_optuna_available,
         is_ray_available,
         is_ray_tune_available,
-        is_sigopt_available,
         is_swanlab_available,
         is_tensorboard_available,
         is_trackio_available,
@@ -255,7 +252,6 @@ if TYPE_CHECKING:
         rewrite_logs,
         run_hp_search_optuna,
         run_hp_search_ray,
-        run_hp_search_sigopt,
         run_hp_search_wandb,
     )
     from .mxfp4 import (

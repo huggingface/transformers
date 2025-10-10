@@ -86,15 +86,6 @@ class DbrxModelTester(CausalLMModelTester):
 
 @require_torch
 class DbrxModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (DbrxModel, DbrxForCausalLM) if is_torch_available() else ()
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": DbrxModel,
-            "text-generation": DbrxForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
     model_tester_class = DbrxModelTester
 
     @slow

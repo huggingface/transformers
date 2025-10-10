@@ -210,15 +210,6 @@ class LongcatFlashModelTester(CausalLMModelTester):
 
 @require_torch
 class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": LongcatFlashModel,
-            "text-generation": LongcatFlashForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
-
     model_split_percents = [0.5, 0.8]
 
     model_tester_class = LongcatFlashModelTester

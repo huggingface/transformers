@@ -149,7 +149,6 @@ class ContinuousBatchProcessor:
         model_device: torch.device,
         model_dtype: torch.dtype,
         scheduler: Scheduler,
-        streaming: bool = False,
         manual_eviction: bool = False,
         slice_inputs: bool = True,  # TODO: There should be an heuristic to decide on slicing, compile, cuda graphs...
     ) -> None:
@@ -165,7 +164,6 @@ class ContinuousBatchProcessor:
             model_device: Device for model inputs/outputs
             model_dtype: Data type for model inputs/outputs
             scheduler: The [`Scheduler`] to use
-            streaming: Whether to stream tokens as they're generated
             manual_eviction: Whether to manually evict blocks from the cache
             slice_inputs: Whether to slice the inputs to the model
         """
@@ -178,7 +176,6 @@ class ContinuousBatchProcessor:
         self.model_device = model_device
         self.model_dtype = model_dtype
         self.scheduler = scheduler
-        self.streaming = streaming
         self.manual_eviction = manual_eviction
         self.slice_inputs = slice_inputs
 
@@ -519,7 +516,7 @@ class ContinuousBatchProcessor:
     @traced
     def _maybe_send_output(self, state: RequestState, token: int):
         """Send output to the queue based on streaming mode and request state."""
-        if self.streaming:
+        if state.streaming:
             self.output_queue.put(state.to_generation_output())
         elif state.status == RequestStatus.FINISHED:
             self.output_queue.put(state.to_generation_output())
@@ -596,7 +593,6 @@ class ContinuousBatchingManager:
         generation_config: GenerationConfig,
         manual_eviction: bool = False,
         max_queue_size=0,
-        streaming: bool = True,
         slice_inputs: bool = True,
     ):
         """
@@ -606,7 +602,6 @@ class ContinuousBatchingManager:
             model: The language model for generation
             generation_config: Configuration for generation parameters
             max_queue_size: Maximum size of the request queue (0 = unlimited)
-            streaming: Whether to stream tokens as they are generated
         """
         if "paged|" not in model.config._attn_implementation:
             attn_implementation = f"paged|{model.config._attn_implementation}"
@@ -625,7 +620,6 @@ class ContinuousBatchingManager:
         self.input_queue = queue.Queue(maxsize=max_queue_size)
         self.output_queue = queue.Queue()
         self.stop_event = threading.Event()
-        self.streaming = streaming
         self.log_prob_generation = getattr(generation_config, "log_prob_generation", False)
         self._generation_thread = None
         self._request_counter = 0
@@ -690,7 +684,11 @@ class ContinuousBatchingManager:
                 self._generation_thread = None
 
     def add_request(
-        self, input_ids: list[int], request_id: Optional[str] = None, max_new_tokens: Optional[int] = None
+        self,
+        input_ids: list[int],
+        request_id: Optional[str] = None,
+        max_new_tokens: Optional[int] = None,
+        streaming: bool = False,
     ) -> str:
         """Add a new generation request to the queue.
 
@@ -716,6 +714,7 @@ class ContinuousBatchingManager:
             full_prompt_ids=list(input_ids),
             max_new_tokens=max_new_tokens,
             eos_token_id=self.generation_config.eos_token_id,
+            streaming=streaming,
         )
 
         # Use block=True with timeout to handle backpressure if queue is full
@@ -872,7 +871,6 @@ class ContinuousBatchingManager:
                 self.model.device,
                 self.model.dtype,
                 scheduler(paged_attention_cache, self.manual_eviction),
-                self.streaming,
                 self.manual_eviction,
                 slice_inputs=self.slice_inputs,
             )
@@ -956,7 +954,6 @@ class ContinuousMixin:
         generation_config: Optional[GenerationConfig] = None,
         manual_eviction: bool = False,
         max_queue_size: int = 0,
-        streaming: bool = False,
         slice_inputs: bool = True,
     ) -> ContinuousBatchingManager:
         """Initialize a manager for continuous batching inference.
@@ -964,7 +961,6 @@ class ContinuousMixin:
         Args:
             generation_config: Custom generation configuration
             max_queue_size: Maximum size of the input request queue
-            streaming: Whether to stream tokens as they are generated
 
         Returns:
             `ContinuousBatchingManager`: The manager instance to add requests and retrieve results.
@@ -986,7 +982,6 @@ class ContinuousMixin:
             generation_config=gen_config,
             manual_eviction=manual_eviction,
             max_queue_size=max_queue_size,
-            streaming=streaming,
             slice_inputs=slice_inputs,
         )
 

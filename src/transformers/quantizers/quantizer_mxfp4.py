@@ -365,7 +365,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
                 )
         return config
 
-    def update_param_name(self, param_name: str) -> str:
+    def get_param_name(self, param_name: str) -> str:
         if self.quantization_config.dequantize:
             if "_blocks" in param_name:
                 return param_name.replace("_blocks", "")

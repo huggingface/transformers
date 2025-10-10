@@ -144,6 +144,23 @@ class CausalLMModelTester:
             if model_class is not None
         ]
 
+    @property
+    def pipeline_model_mapping(self):
+        # This is the default pipeline mapping.
+        mapping = {
+            "feature-extraction": self.base_model_class,
+            "text-generation": self.causal_lm_class,
+        }
+        if self.question_answering_class is not None:
+            mapping["question-answering"] = self.question_answering_class
+        if self.sequence_classification_class is not None:
+            mapping["text-classification"] = self.sequence_classification_class
+        if self.token_classification_class is not None:
+            mapping["token-classification"] = self.token_classification_class
+        if self.sequence_classification_class is not None:
+            mapping["zero-shot"] = self.sequence_classification_class
+        return mapping
+
     def __init__(
         self,
         parent,
@@ -298,12 +315,20 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             )
         self.model_tester = self.model_tester_class(self)
         self.config_tester = ConfigTester(self, config_class=self.model_tester.config_class)
+
+        if self.pipeline_model_mapping is None:
+            # If `all_model_classes` is not the default, maybe there are more pipeline mappings to be set.
+            if self.all_model_classes is not None:
+                raise ValueError(
+                    "Testes that inherit from `CausalLMModelTest` and set `all_model_classes` must manually set "
+                    "`pipeline_model_mapping`."
+                )
+            # Otherwise, we know the pipeline mapping is the default.
+            else:
+                self.pipeline_model_mapping = self.model_tester.pipeline_model_mapping
+
         if self.all_model_classes is None:
             self.all_model_classes = self.model_tester.all_model_classes
-        if self.pipeline_model_mapping is None:
-            raise ValueError(
-                "You have inherited from CausalLMModelTest but did not set the pipeline_model_mapping attribute."
-            )
 
     def test_config(self):
         self.config_tester.run_common_tests()

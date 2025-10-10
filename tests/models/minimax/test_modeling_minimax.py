@@ -30,9 +30,6 @@ if is_torch_available():
 
     from transformers import (
         MiniMaxForCausalLM,
-        MiniMaxForQuestionAnswering,
-        MiniMaxForSequenceClassification,
-        MiniMaxForTokenClassification,
         MiniMaxModel,
     )
     from transformers.models.minimax.modeling_minimax import MiniMaxCache
@@ -51,17 +48,6 @@ class MiniMaxModelTester(CausalLMModelTester):
 
 @require_torch
 class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": MiniMaxModel,
-            "text-classification": MiniMaxForSequenceClassification,
-            "token-classification": MiniMaxForTokenClassification,
-            "text-generation": MiniMaxForCausalLM,
-            "question-answering": MiniMaxForQuestionAnswering,
-        }
-        if is_torch_available()
-        else {}
-    )
     model_tester_class = MiniMaxModelTester
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146

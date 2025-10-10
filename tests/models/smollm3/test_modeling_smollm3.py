@@ -66,17 +66,6 @@ class SmolLM3ModelTester(CausalLMModelTester):
 @require_torch
 class SmolLM3ModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = SmolLM3ModelTester
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": SmolLM3Model,
-            "text-classification": SmolLM3ForSequenceClassification,
-            "token-classification": SmolLM3ForTokenClassification,
-            "text-generation": SmolLM3ForCausalLM,
-            "question-answering": SmolLM3ForQuestionAnswering,
-        }
-        if is_torch_available()
-        else {}
-    )
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @is_flaky()

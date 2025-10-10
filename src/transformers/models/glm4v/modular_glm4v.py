@@ -54,8 +54,8 @@ from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLVisionBlock,
 )
 from ..qwen2_vl.processing_qwen2_vl import (
-    Qwen2_VLProcessor,
-    Qwen2_VLProcessorKwargs,
+    Qwen2VLProcessor,
+    Qwen2VLProcessorKwargs,
 )
 
 
@@ -1526,7 +1526,7 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
         return image_counts, video_counts
 
 
-class Glm4vProcessorKwargs(Qwen2_VLProcessorKwargs):
+class Glm4vProcessorKwargs(Qwen2VLProcessorKwargs):
     _defaults = {
         "text_kwargs": {
             "padding": False,
@@ -1537,7 +1537,7 @@ class Glm4vProcessorKwargs(Qwen2_VLProcessorKwargs):
     }
 
 
-class Glm4vProcessor(Qwen2_VLProcessor):
+class Glm4vProcessor(Qwen2VLProcessor):
     r"""
     Constructs a GLM-4V processor which wraps a GLM-4V image processor and a GLM-4 tokenizer into a single processor.
     [`~Glm4vProcessor.__call__`] and [`~Glm4vProcessor.decode`] for more information.

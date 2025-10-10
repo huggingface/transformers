@@ -28,8 +28,6 @@ from transformers.testing_utils import (
 
 if is_torch_available():
     from transformers import (
-        HunYuanDenseV1ForCausalLM,
-        HunYuanDenseV1ForSequenceClassification,
         HunYuanDenseV1Model,
     )
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -43,15 +41,6 @@ class HunYuanDenseV1ModelTester(CausalLMModelTester):
 @require_torch
 class HunYuanDenseV1ModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = HunYuanDenseV1ModelTester
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": HunYuanDenseV1Model,
-            "text-generation": HunYuanDenseV1ForCausalLM,
-            "text-classification": HunYuanDenseV1ForSequenceClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
 
     def is_pipeline_test_to_skip(
         self,

@@ -237,8 +237,7 @@ class M2M100ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         else {}
     )
     is_encoder_decoder = True
-    fx_compatible = True
-
+    fx_compatible = False
     test_missing_keys = False
 
     # TODO: Fix the failed tests

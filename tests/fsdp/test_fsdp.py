@@ -447,7 +447,6 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             --model_name_or_path google-bert/bert-base-cased
             --task_name mrpc
             --output_dir {output_dir}
-            --overwrite_output_dir
             --do_train
             --max_seq_length 128
             --per_device_train_batch_size 16

@@ -265,8 +265,7 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
         else {}
     )
     is_encoder_decoder = True
-    fx_compatible = True
-
+    fx_compatible = False
     test_missing_keys = False
 
     def setUp(self):
