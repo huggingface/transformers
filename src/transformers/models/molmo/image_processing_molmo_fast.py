@@ -13,60 +13,38 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Optional, Union
 
-from typing import TYPE_CHECKING, Optional, Union
+import torch
+from torchvision.transforms.v2 import functional as F
 
-from ...feature_extraction_utils import BatchFeature
-from ...image_processing_utils import get_size_dict
+from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import BaseImageProcessorFast
-from ...image_transforms import convert_to_rgb
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
     ChannelDimension,
     ImageInput,
-    ImageType,
     PILImageResampling,
     get_image_size,
-    get_image_type,
-    infer_channel_dimension_format,
-    is_torch_available,
-    is_torchvision_available,
-    is_vision_available,
 )
-from ...utils import TensorType, is_torchvision_v2_available, logging
+from ...utils import TensorType, auto_docstring, logging
 from .image_processing_molmo import make_batched_images
 
-
-if is_torch_available:
-    import torch
-
-if is_vision_available:
-    pass
-
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
-
-if TYPE_CHECKING:
-    from ...utils import TensorType
 
 logger = logging.get_logger(__name__)
 
 
 def get_resize_output_image_size(
-    image: torch.tensor,
+    image: torch.Tensor,
     size: Union[int, tuple[int, int], list[int], tuple[int]],
-) -> tuple:
-    original_height, original_width = get_image_size(image)
+) -> dict:
+    original_height, original_width = get_image_size(image, ChannelDimension.FIRST)
 
     scale_y = size["height"] / original_height
     scale_x = size["width"] / original_width
     scale = min(scale_x, scale_y)
 
-    # Compute new dimensions
     new_height = int(original_height * scale)
     new_width = int(original_width * scale)
     return {"height": new_height, "width": new_width}
@@ -75,46 +53,39 @@ def get_resize_output_image_size(
 def pad_to_bounding_box(
     image: torch.Tensor, offset_height: int, offset_width: int, target_height: int, target_width: int, value: int = 0
 ) -> torch.Tensor:
-    """
-    Pad the input image to the target height and width.
-
-    Args:
-        image: The input image to be padded. Shape: (H, W, C)
-        offset_height: The number of pixels to add to the top of the image.
-        offset_width: The number of pixels to add to the left of the image.
-        target_height: The target height of the padded image.
-        target_width: The target width of the padded image.
-        value: The constant value used for padding (default is 0).
-
-    Returns:
-        A padded image of size (target_height, target_width, C).
-    """
     height, width = image.shape[:2]
     top_padding = offset_height
     bottom_padding = max(0, target_height - height - offset_height)
     left_padding = offset_width
     right_padding = max(0, target_width - width - offset_width)
-    image = image.permute(2, 0, 1)  # Now (C, H, W)
+    image = image.permute(2, 0, 1)
     padding = [left_padding, top_padding, right_padding, bottom_padding]
     padded_image = F.pad(image, padding=padding, padding_mode="constant", fill=value)
-    padded_image = padded_image.permute(1, 2, 0)  # Back to (H, W, C)
+    padded_image = padded_image.permute(1, 2, 0)
     return padded_image
 
 
+@auto_docstring
 class MolmoImageProcessorFast(BaseImageProcessorFast):
-    """
-    Image processor for the Molmo model.
-
-    This processor handles resizing, padding, grid shape, and patch extraction from images,
-    converting them into inputs suitable for the Molmo model.
-    """
-
     model_input_names = ["pixel_values", "input_ids", "image_input_idx", "image_masks"]
+    resample = PILImageResampling.BILINEAR
+    image_mean = OPENAI_CLIP_MEAN
+    image_std = OPENAI_CLIP_STD
+    size = {"height": 336, "width": 336}
+    do_resize = True
+    do_pad = True
+    padding_value = 1.0
+    padding_mode = "constant"
+    do_split_into_crops = True
+    do_rescale = True
+    rescale_factor = 1 / 255
+    do_normalize = True
+    do_convert_rgb = True
 
     def __init__(
         self,
         max_num_crops: int = 12,
-        overlap_margins: tuple[int, int] = [4, 4],
+        overlap_margins: tuple[int, int] = (4, 4),
         size: Optional[dict[str, int]] = None,
         tokens_per_image_width: int = 12,
         tokens_per_image_height: int = 12,
@@ -152,7 +123,9 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.max_num_crops = max_num_crops
-        self.overlap_margins = overlap_margins
+        self.overlap_margins = (
+            overlap_margins if isinstance(overlap_margins, (tuple, list)) else [overlap_margins, overlap_margins]
+        )
         self.tokens_per_image_width = tokens_per_image_width
         self.tokens_per_image_height = tokens_per_image_height
         self.image_patch_size = image_patch_size
@@ -165,35 +138,13 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
         self.image_column_token = image_column_token
         self.image_start_token = image_start_token
         self.image_end_token = image_end_token
-        self._valid_processor_keys = [
-            "images",
-            "do_resize",
-            "resample",
-            "do_rescale",
-            "rescale_factor",
-            "do_normalize",
-            "image_mean",
-            "image_std",
-            "do_convert_rgb",
-            "return_tensors",
-            "data_format",
-            "input_data_format",
-            "do_pad",
-            "do_split_into_crops",
-            "padding_mode",
-            "padding_value",
-            "size",
-        ]
 
-        # TODO move these to configuration once processing is done.
         self.tokens_per_image = tokens_per_image_height * tokens_per_image_width
         self.patches_per_image_width = size["width"] // image_patch_size
         self.patches_per_image_height = size["height"] // image_patch_size
-        self.total_margin_pixels = image_patch_size * (overlap_margins[1] + overlap_margins[0])
-        self.crop_patches = self.size["width"] // self.image_patch_size  # patches per crop dim
-        self.crop_window_patches = self.crop_patches - (
-            self.overlap_margins[1] + self.overlap_margins[0]
-        )  # usable patches
+        self.total_margin_pixels = image_patch_size * (self.overlap_margins[1] + self.overlap_margins[0])
+        self.crop_patches = self.size["width"] // self.image_patch_size
+        self.crop_window_patches = self.crop_patches - (self.overlap_margins[1] + self.overlap_margins[0])
         self.crop_window_size = self.crop_window_patches * self.image_patch_size
         self.crop_size = size["width"]
 
@@ -214,7 +165,7 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
         output_size = (size["height"], size["width"])
         if input_data_format == ChannelDimension.LAST:
             image = image.permute(2, 0, 1)
-        resized_image = F.resize(image, size=output_size)
+        resized_image = F.resize(image, size=output_size, interpolation=F.InterpolationMode.BILINEAR)
         if input_data_format == ChannelDimension.LAST:
             resized_image = resized_image.permute(1, 2, 0)
         return resized_image
@@ -227,44 +178,46 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
         constant_values: float = 1.0,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> torch.Tensor:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         if "height" not in size or "width" not in size:
             raise ValueError("Size must contain 'height' and 'width'.")
+
         current_height, current_width = get_image_size(image, input_data_format)
 
-        padding_height = size["height"] - current_height
-        padding_width = size["width"] - current_width
+        new_size = get_resize_output_image_size(image, size)
+        padding_height = size["height"] - new_size["height"]
+        padding_width = size["width"] - new_size["width"]
         padding_top = padding_height // 2
         padding_bottom = padding_height - padding_top
         padding_left = padding_width // 2
         padding_right = padding_width - padding_left
+
+        if input_data_format == ChannelDimension.LAST:
+            image = image.permute(2, 0, 1)
+
         padding = [padding_left, padding_top, padding_right, padding_bottom]
         padded_image = F.pad(image, padding=padding, fill=constant_values, padding_mode=mode)
 
         if input_data_format == ChannelDimension.FIRST:
             image_to_pad = image[0, :, :]
-        elif input_data_format == ChannelDimension.LAST:
-            image_to_pad = image[:, :, 0]
         else:
-            raise ValueError(f"Invalid channel dimension format: {input_data_format}")
+            image_to_pad = image[:, :, 0]
 
         image_mask = torch.ones_like(image_to_pad, dtype=torch.bool, device=image.device)
         image_mask = F.pad(image_mask.unsqueeze(0), padding=padding, fill=0).squeeze(0)
 
+        if input_data_format == ChannelDimension.LAST:
+            padded_image = padded_image.permute(1, 2, 0)
+
         return padded_image, image_mask
 
     def find_best_crop_grid_for_image_size(self, image: torch.Tensor):
-        """
-        Decide how best to divide an image of size {"width": width, "height": height}]
-        in up to max_num_crops of size crop_size
-        """
         original_size = torch.tensor(
             [image.shape[-2] - self.total_margin_pixels, image.shape[-1] - self.total_margin_pixels],
             dtype=torch.float32,
             device=image.device,
         )
         crop_grid = [(i, j) for i in range(1, self.max_num_crops + 1) for j in range(1, (self.max_num_crops // i) + 1)]
-        # sort so argmin and argmax favour smaller crop_grid in the event of a tie
         crop_grid.sort(key=lambda x: (x[0] * x[1], x[0]))
         candidate_crop_grid = torch.tensor(crop_grid, dtype=torch.int32, device=image.device)
         candidate_resolutions = candidate_crop_grid.float() * self.crop_window_size
@@ -302,22 +255,6 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
         crop_grid: tuple[int, int],
         input_data_format,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Split the image into crops (patches), while keeping track of the patch ordering and generating masks for each crop.
-
-        Args:
-            image: The resized and padded image as a NumPy array.
-            image_mask: The mask corresponding to the image, indicating valid pixels.
-            crop_grid: Tuple (num_rows, num_cols) representing how the image is divided into crops (crop grid).
-            crop_stride: The step size or stride used to move between crops.
-            patch_grid_height: The number of patches along the height of the image grid.
-            patch_grid_width: The number of patches along the width of the image grid.
-
-        Returns:
-            crops: Array of image patches/crops.
-            patch_ordering: Array representing the ordering of patches within the original image.
-            cropped_masks: Array of masks corresponding to the image crops.
-        """
         if input_data_format == ChannelDimension.FIRST:
             image = image.permute(1, 2, 0)
         crops = []
@@ -345,9 +282,7 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
 
                 pooled_width = (current_crop_width + 1) // 2
 
-                # Correct padding based on margins and offsets
                 crop_x_offset = self.overlap_margins[0] // 2 if column > 0 else 0
-                # Track patch ordering: generate an array representing the order of patches (overlaps (on crops))
                 reshaped_image = torch.arange(
                     patch_index,
                     patch_index + pooled_height * pooled_width,
@@ -490,8 +425,8 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = OPENAI_CLIP_MEAN,
-        image_std: Optional[Union[float, list[float]]] = OPENAI_CLIP_STD,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_convert_rgb: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
@@ -512,27 +447,33 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
-        # Removing validation here - not a good design pattern as it is increasingly constraining for VLMs
-        # TODO @molbap a nicer validation using TypedDictionaries (:eyes:) would be better
-        # validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
+
         images = make_batched_images(images)
-        image_type = get_image_type(images[0])
+
         if do_convert_rgb:
+            from ...image_transforms import convert_to_rgb
+
             images = [convert_to_rgb(image) for image in images]
 
-        if image_type == ImageType.PIL:
-            images = [F.pil_to_tensor(image) for image in images]
-        elif image_type == ImageType.NUMPY:
-            images = [torch.from_numpy(image).contiguous() for image in images]
+        images_tensor = self._prepare_image_like_inputs(
+            images=images,
+            do_convert_rgb=False,
+            input_data_format=input_data_format,
+            device=None,
+        )
 
         all_images = []
         all_crop_grids = []
         all_cropped_masks = []
         all_patch_orderings = []
 
-        for image in images:
+        for image in images_tensor:
             if input_data_format is None:
+                from ...image_utils import infer_channel_dimension_format
+
                 input_data_format = infer_channel_dimension_format(image)
+
+            crop_grid = self.find_best_crop_grid_for_image_size(image)
 
             if do_resize:
                 global_image_size = get_resize_output_image_size(image, size)
@@ -540,15 +481,10 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
                     image=image, size=global_image_size, resample=resample, input_data_format=input_data_format
                 )
 
-                crop_grid = self.find_best_crop_grid_for_image_size(image)
-
                 new_crop_size = {}
                 new_crop_size["height"] = crop_grid[0] * self.crop_window_size + self.total_margin_pixels
                 new_crop_size["width"] = crop_grid[1] * self.crop_window_size + self.total_margin_pixels
-                crop_output_size = get_resize_output_image_size(
-                    image,
-                    size=new_crop_size,
-                )
+                crop_output_size = get_resize_output_image_size(image, size=new_crop_size)
                 image = self.resize(
                     image=image, size=crop_output_size, resample=resample, input_data_format=input_data_format
                 )
@@ -564,14 +500,21 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
             if do_rescale and do_normalize:
                 new_mean = torch.tensor(image_mean, device=global_image.device) * (1.0 / rescale_factor)
                 new_std = torch.tensor(image_std, device=global_image.device) * (1.0 / rescale_factor)
+                if input_data_format == ChannelDimension.LAST:
+                    image = image.permute(2, 0, 1)
+                    global_image = global_image.permute(2, 0, 1)
                 image = F.normalize(image.to(dtype=torch.float32), new_mean, new_std)
                 global_image = F.normalize(global_image.to(dtype=torch.float32), new_mean, new_std)
+                if input_data_format == ChannelDimension.LAST:
+                    image = image.permute(1, 2, 0)
+                    global_image = global_image.permute(1, 2, 0)
 
             if do_split_into_crops:
                 crops, patch_orderings, cropped_masks = self.split_image_into_crops(
                     image=image, image_mask=image_mask, crop_grid=crop_grid, input_data_format=input_data_format
                 )
                 patch_orderings = self.transpose_patch_orderings(crop_grid, patch_orderings)
+
             global_image = self.reshape_into_patches(global_image, input_data_format=input_data_format)
             new_crops = torch.empty(
                 (crops.shape[0] + 1, crops.shape[1], crops.shape[2]), device=crops.device, dtype=crops.dtype
@@ -579,7 +522,7 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
             new_crops[0] = global_image
             new_crops[1:] = crops
             crops = new_crops
-            # slightly more efficient way
+
             patch_orderings = torch.where(patch_orderings >= 0, patch_orderings + self.tokens_per_image, -1)
             prefix = torch.arange(0, self.tokens_per_image, device=global_image.device)
             new_patch_orderings = torch.empty(
@@ -590,10 +533,12 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
             new_patch_orderings[: prefix.shape[0]] = prefix
             new_patch_orderings[prefix.shape[0] :] = patch_orderings
             patch_orderings = new_patch_orderings
+
             all_images.append(crops)
             all_crop_grids.append(crop_grid)
             all_cropped_masks.append(cropped_masks)
             all_patch_orderings.append(patch_orderings)
+
         data = {
             "pixel_values": all_images,
             "crop_grids": all_crop_grids,
