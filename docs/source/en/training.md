@@ -111,6 +111,8 @@ training_args = TrainingArguments(
 Create a [`Trainer`] instance and pass it the model, training arguments, training and test datasets, and evaluation function. Call [`~Trainer.train`] to start training.
 
 ```py
+from transformers import Trainer
+
 trainer = Trainer(
     model=model,
     args=training_args,
