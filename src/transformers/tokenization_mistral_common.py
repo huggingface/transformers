@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import os
+import re
 import shutil
 import warnings
 from collections.abc import Callable, Mapping, Sized
@@ -474,9 +475,8 @@ class MistralCommonTokenizer(PushToHubMixin):
         # in the specific case of Voxtral, the added f"lang:xx" (always a two char language code since it follows ISO 639-1 alpha-2 format)
         # is not considered as a special token by mistral-common and is encoded/ decoded as normal text.
         # Nevertheless we should remove it to ease users life.
-        lang_prefix = "lang:xx"
-        if skip_special_tokens and decoded_string.startswith("lang:"):
-            decoded_string = decoded_string[len(lang_prefix) :]
+        if skip_special_tokens:
+            decoded_string = re.sub(r"^lang:[a-z]{2}", "", decoded_string)
 
         return decoded_string
 
