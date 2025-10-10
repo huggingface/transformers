@@ -156,7 +156,7 @@ def images_to_torch_tensor(
     Args:
         images (`List[PIL.Image.Image | np.ndarray | torch.Tensor]`):
             Input images.
-        data_format (`str`, optional, default "channels_first"):
+        data_format (`ChannelDimension`, optional, default ChannelDimension.LAST):
             If "channels_first", output tensors will be (C,H,W). If "channels_last", (H,W,C).
         input_data_format (ChannelDimension or None)
             references the input images channel dimension.
