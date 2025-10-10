@@ -996,7 +996,12 @@ class TrainingArguments:
             )
         },
     )
-    local_rank: int = field(default=-1, metadata={"help": "When using torchrun, it will pass `local_rank` in the script, so we need this for the parser. To get the local rank, prefer using the property`local_process_index`"})
+    local_rank: int = field(
+        default=-1,
+        metadata={
+            "help": "When using torchrun, it will pass `local_rank` in the script, so we need this for the parser. To get the local rank, prefer using the property `local_process_index`"
+        },
+    )
     ddp_backend: Optional[str] = field(
         default=None,
         metadata={
