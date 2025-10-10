@@ -711,18 +711,11 @@ class SmolVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
         image_hidden_states = torch.randn(1, 8, hidden_size, dtype=torch.float32)
 
         # Test that inputs_merger handles dtype conversion correctly
-        # This should not raise a RuntimeError about dtype mismatch
-        try:
-            merged_embeds = model.inputs_merger(
-                input_ids=None,
-                inputs_embeds=inputs_embeds,
-                image_hidden_states=image_hidden_states
-            )
-            # Verify the result has the correct dtype
-            self.assertEqual(merged_embeds.dtype, torch.bfloat16)
-            self.assertEqual(merged_embeds.shape, inputs_embeds.shape)
-        except RuntimeError as e:
-            if "Index put requires the source and destination dtypes match" in str(e):
-                self.fail("Dtype mismatch error still occurs - fix not working properly")
-            else:
-                raise e
+        merged_embeds = model.inputs_merger(
+            input_ids=None,
+            inputs_embeds=inputs_embeds,
+            image_hidden_states=image_hidden_states,
+        )
+        # Verify the result has the correct dtype and shape
+        self.assertEqual(merged_embeds.dtype, torch.bfloat16)
+        self.assertEqual(merged_embeds.shape, inputs_embeds.shape)
