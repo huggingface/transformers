@@ -149,8 +149,6 @@ class PvtV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
 
-    test_head_masking = False
-    test_pruning = False
     test_resize_embeddings = False
     test_torchscript = False
     has_attentions = False
@@ -188,17 +186,6 @@ class PvtV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         # Scenario - 2 with `use_reentrant=True` - this is the default value that is used in pytorch's
         # torch.utils.checkpoint.checkpoint
         self.check_training_gradient_checkpointing(gradient_checkpointing_kwargs={"use_reentrant": True})
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config=config)
-            for name, param in model.named_parameters():
-                self.assertTrue(
-                    -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                    msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                )
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):

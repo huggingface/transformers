@@ -90,7 +90,6 @@ Usage of OWLv2 is identical to [OWL-ViT](owlvit) with a new, updated image proce
 ## Owlv2Config
 
 [[autodoc]] Owlv2Config
-    - from_text_vision_configs
 
 ## Owlv2TextConfig
 

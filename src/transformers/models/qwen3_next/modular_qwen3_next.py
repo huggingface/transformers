@@ -14,7 +14,8 @@
 # limitations under the License.
 """PyTorch Qwen3-Next model."""
 
-from typing import Any, Callable, Optional, Union
+from collections.abc import Callable
+from typing import Any, Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -122,9 +123,6 @@ class Qwen3NextDynamicCache:
 
     def __len__(self):
         return len(self.layer_types)
-
-    def __getitem__(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
-        return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
     def update(
         self,
@@ -727,7 +725,7 @@ class Qwen3NextModel(Qwen3NextPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,

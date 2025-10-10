@@ -22,7 +22,7 @@ from pathlib import Path
 import pytest
 
 import transformers
-from transformers import BertConfig, GPT2Model, is_safetensors_available, is_torch_available
+from transformers import BertConfig, GPT2Model, is_torch_available
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING
 from transformers.testing_utils import (
     DUMMY_UNKNOWN_IDENTIFIER,
@@ -107,7 +107,7 @@ class AutoModelTest(unittest.TestCase):
         self.assertEqual(len(loading_info["missing_keys"]), 0)
         # When using PyTorch checkpoint, the expected value is `8`. With `safetensors` checkpoint (if it is
         # installed), the expected value becomes `7`.
-        EXPECTED_NUM_OF_UNEXPECTED_KEYS = 7 if is_safetensors_available() else 8
+        EXPECTED_NUM_OF_UNEXPECTED_KEYS = 7
         self.assertEqual(len(loading_info["unexpected_keys"]), EXPECTED_NUM_OF_UNEXPECTED_KEYS)
         self.assertEqual(len(loading_info["mismatched_keys"]), 0)
         self.assertEqual(len(loading_info["error_msgs"]), 0)
@@ -579,9 +579,10 @@ class AutoModelTest(unittest.TestCase):
         Test for issue #40496: AutoModel.from_pretrained() doesn't work for models with '.' in their name
         when there's a relative import.
 
-        Without the fix, this raises: ModuleNotFoundError: No module named 'transformers_modules.test-model_v1'
+        Without the fix, this raises: ModuleNotFoundError:
+        No module named 'transformers_modules.hf-internal-testing.remote_code_model_with_dots_v1'
         """
-        model_id = "hf-internal-testing/remote_code_model_with_dots"
+        model_id = "hf-internal-testing/remote_code_model_with_dots_v1.0"
 
         model = AutoModel.from_pretrained(model_id, trust_remote_code=True)
         self.assertIsNotNone(model)

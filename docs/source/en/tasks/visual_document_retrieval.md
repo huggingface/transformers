@@ -52,9 +52,10 @@ Let's load the model and the tokenizer.
 
 ```python
 import torch
-from transformers import ColPaliForRetrieval, ColPaliProcessor, infer_device
+from transformers import ColPaliForRetrieval, ColPaliProcessor
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 
 model_name = "vidore/colpali-v1.2-hf"
 

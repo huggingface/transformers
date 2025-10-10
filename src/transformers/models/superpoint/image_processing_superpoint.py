@@ -30,6 +30,7 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, logging, requires_backends
 
 
@@ -43,6 +44,15 @@ if is_vision_available():
     import PIL
 
 logger = logging.get_logger(__name__)
+
+
+class SuperPointImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    do_grayscale (`bool`, *optional*, defaults to `True`):
+        Whether to convert the image to grayscale. Can be overridden by `do_grayscale` in the `preprocess` method.
+    """
+
+    do_grayscale: bool
 
 
 def is_grayscale(
@@ -120,6 +130,7 @@ class SuperPointImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
+    valid_kwargs = SuperPointImageProcessorKwargs
 
     def __init__(
         self,

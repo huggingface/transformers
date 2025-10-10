@@ -19,7 +19,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 import torch
 import torch.distributions
@@ -37,7 +38,6 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import OutputRecorder, check_model_inputs
 from .configuration_blt import (
     BltConfig,
@@ -134,7 +134,6 @@ class BltTransformerLayer(GradientCheckpointingLayer):
 
         self.layer_idx = layer_idx
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -288,7 +287,6 @@ class BltSelfAttention(nn.Module):
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
         self.is_causal = True
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -362,7 +360,6 @@ class BltCrossAttention(nn.Module):
         self.k_norm = BltRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.is_causal = False
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -426,8 +423,8 @@ class BltPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["BltTransformerLayer"]
     _can_compile_fullgraph = False  # static cache cannot have different shapes for each layer
     _supports_sdpa = True
-    _supports_flash_attn = True
-    _supports_flex_attn = True
+    _supports_flash_attn = False
+    _supports_flex_attn = False
     _supports_attention_backend = False
     _can_record_outputs = {
         "hidden_states": OutputRecorder(BltTransformerLayer, index=0, layer_name="local_decoder"),
@@ -577,7 +574,7 @@ class BltLocalDecoder(BltPreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs()
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1047,7 +1044,7 @@ class BltModel(BltPreTrainedModel):
             self.patcher = None
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs()
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1116,7 +1113,12 @@ class BltModel(BltPreTrainedModel):
         )
 
         cross_attn_mask_enc = _prepare_patch_cross_attention_mask(
-            patch_ids, patch_lengths.shape[1], sequence_length, True, self.config.cross_attn_k, encoder_embeds.dtype
+            patch_ids=patch_ids,
+            num_patches=patch_lengths.shape[1],
+            sequence_length=sequence_length,
+            patches_as_queries=True,
+            cross_attn_k=self.config.cross_attn_k,
+            dtype=encoder_embeds.dtype,
         )
         encoder_hidden_states, encoder_cross_states = self.local_encoder(
             input_ids=input_ids,
@@ -1148,12 +1150,12 @@ class BltModel(BltPreTrainedModel):
         )
         decoder_patch_ids = self._patch_ids_from_lengths(patch_lengths[:, 1:], sequence_length)
         cross_attn_mask_dec = _prepare_patch_cross_attention_mask(
-            decoder_patch_ids,
-            patch_lengths.shape[1],
-            sequence_length,
-            False,
-            self.config.cross_attn_k,
-            encoder_embeds.dtype,
+            patch_ids=decoder_patch_ids,
+            num_patches=patch_lengths.shape[1],
+            sequence_length=sequence_length,
+            patches_as_queries=False,
+            cross_attn_k=self.config.cross_attn_k,
+            dtype=encoder_embeds.dtype,
         )
         output = self.local_decoder(
             input_ids=input_ids,
@@ -1220,7 +1222,7 @@ class BltForCausalLM(BltPreTrainedModel, GenerationMixin):
         cross_attention_states: Optional[torch.LongTensor] = None,  # Keep for compatibility
         cross_attention_mask: Optional[torch.LongTensor] = None,
         full_text_row_masked_out_mask: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
