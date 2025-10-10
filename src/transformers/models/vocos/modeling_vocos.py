@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Transformers vocos model."""
 
 from dataclasses import dataclass
 from typing import Optional, Union
@@ -22,7 +21,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring
+from ...processing_utils import Unpack
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from .configuration_vocos import VocosConfig
 
 
@@ -158,8 +158,6 @@ class VocosISTFT(nn.Module):
         Returns:
             Tensor: Reconstructed time-domain signal of shape (B, L), where L is the length of the output signal.
         """
-        if spec.dim() != 3:
-            raise ValueError("Expected a 3D tensor as input")
 
         if self.padding == "center":
             # Fallback to pytorch native implementation
@@ -283,6 +281,7 @@ class VocosModel(VocosPreTrainedModel):
         self._bandwidth_to_id = {bandwidth: id for id, bandwidth in enumerate(config.bandwidths)}
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -290,7 +289,7 @@ class VocosModel(VocosPreTrainedModel):
         input_features: Optional[torch.FloatTensor] = None,
         bandwidth: Optional[float] = None,
         padding_mask: Optional[torch.Tensor] = None,
-        return_dict: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[VocosOutput, tuple[torch.FloatTensor]]:
         r"""
         audio_spectrogram (`torch.FloatTensor` of shape `(batch_size, feature_dim, time_dim)`):
@@ -304,8 +303,6 @@ class VocosModel(VocosPreTrainedModel):
             `input_features`is not None.
         padding_mask (`torch.BoolTensor` of shape `(batch_size, time_dim)`, *optional*):
             Mask that indicates padded entries of audio used to prepare the model inputs (see `VocosProcessor`).
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`]
 
         Returns:
             `VocosOutput` or tuple `(audio,)`:
@@ -346,8 +343,6 @@ class VocosModel(VocosPreTrainedModel):
 
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         if input_features is None and audio_spectrogram is None:
             raise ValueError("One of `input_features` or `audio_spectrogram` should be provided.")
 
@@ -359,9 +354,6 @@ class VocosModel(VocosPreTrainedModel):
         else:
             hidden_states = self.backbone(audio_spectrogram)
         audio = self.head(hidden_states)
-
-        if not return_dict:
-            return (audio,)
         return VocosOutput(audio=audio)
 
 
