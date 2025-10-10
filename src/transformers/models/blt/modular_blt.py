@@ -14,7 +14,8 @@
 # limitations under the License.
 """Blt modular model, inheriting from Mllama where appropriate."""
 
-from typing import Callable, Optional, Union
+from collections.abc import Callable
+from typing import Optional, Union
 
 import torch
 import torch.distributions

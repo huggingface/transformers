@@ -38,24 +38,3 @@ pred = onnx_qa(question, context)
 
 > [!TIP]
 > Optimum includes an [Intel](https://hf.co/docs/optimum/intel/index) extension that provides additional optimizations such as quantization, pruning, and knowledge distillation for Intel CPUs. This extension also includes tools to convert models to [OpenVINO](https://hf.co/docs/optimum/intel/inference), a toolkit for optimizing and deploying models, for even faster inference.
-
-## TorchScript
-
-[TorchScript](https://pytorch.org/docs/stable/jit.html) is an intermediate PyTorch model format that can be run in non-Python environments, like C++, where performance is critical. Train a PyTorch model and convert it to a TorchScript function or module with [torch.jit.trace](https://pytorch.org/docs/stable/generated/torch.jit.trace.html). This function optimizes the model with just-in-time (JIT) compilation, and compared to the default eager mode, JIT-compiled models offer better inference performance.
-
-> [!TIP]
-> Refer to the [Introduction to PyTorch TorchScript](https://pytorch.org/tutorials/beginner/Intro_to_TorchScript_tutorial.html) tutorial for a gentle introduction to TorchScript.
-
-On a CPU, enable `torch.jit.trace` with the `--jit_mode_eval` flag in [`Trainer`].
-
-```bash
-python examples/pytorch/question-answering/run_qa.py \
---model_name_or_path csarron/bert-base-uncased-squad-v1 \
---dataset_name squad \
---do_eval \
---max_seq_length 384 \
---doc_stride 128 \
---output_dir /tmp/ \
---no_cuda \
---jit_mode_eval
-```

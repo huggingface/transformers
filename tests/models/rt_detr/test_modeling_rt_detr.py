@@ -180,7 +180,7 @@ class RTDetrModelTester:
             out_features=["stage2", "stage3", "stage4"],
             out_indices=[2, 3, 4],
         )
-        return RTDetrConfig.from_backbone_configs(
+        return RTDetrConfig(
             backbone_config=backbone_config,
             encoder_hidden_dim=self.encoder_hidden_dim,
             encoder_in_channels=hidden_sizes[1:],

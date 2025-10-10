@@ -275,7 +275,7 @@ class BlipConfig(PreTrainedConfig):
     >>> config_text = BlipTextConfig()
     >>> config_vision = BlipVisionConfig()
 
-    >>> config = BlipConfig.from_text_vision_configs(config_text, config_vision)
+    >>> config = BlipConfig(text_config=config_text, vision_config=config_vision)
     ```"""
 
     model_type = "blip"
@@ -291,18 +291,20 @@ class BlipConfig(PreTrainedConfig):
         label_smoothing=0.0,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         if text_config is None:
-            text_config = {}
+            text_config = BlipTextConfig()
             logger.info("`text_config` is `None`. Initializing the `BlipTextConfig` with default values.")
+        elif isinstance(text_config, dict):
+            text_config = BlipTextConfig(**text_config)
 
         if vision_config is None:
-            vision_config = {}
-            logger.info("`vision_config` is `None`. Initializing the `BlipVisionConfig` with default values.")
+            vision_config = BlipVisionConfig()
+            logger.info("`vision_config` is `None`. initializing the `BlipVisionConfig` with default values.")
+        elif isinstance(vision_config, dict):
+            vision_config = BlipVisionConfig(**vision_config)
 
-        self.text_config = BlipTextConfig(**text_config)
-        self.vision_config = BlipVisionConfig(**vision_config)
+        self.text_config = text_config
+        self.vision_config = vision_config
 
         self.text_config.encoder_hidden_size = self.vision_config.hidden_size
 
@@ -312,6 +314,7 @@ class BlipConfig(PreTrainedConfig):
         self.initializer_range = 0.02
         self.image_text_hidden_size = image_text_hidden_size
         self.label_smoothing = label_smoothing
+        super().__init__(**kwargs)
 
 
 __all__ = ["BlipConfig", "BlipTextConfig", "BlipVisionConfig"]
