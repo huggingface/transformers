@@ -1024,7 +1024,6 @@ class T5EncoderOnlyModelTester:
 
 
 class T5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-
     all_model_classes = (T5EncoderModel, T5ForTokenClassification, T5EncoderForSequenceClassification) if is_torch_available() else ()
 
     test_resize_embeddings = False
