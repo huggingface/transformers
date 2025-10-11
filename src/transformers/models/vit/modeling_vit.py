@@ -353,6 +353,7 @@ class ViTPreTrainedModel(PreTrainedModel):
     config: ViTConfig
     base_model_prefix = "vit"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     supports_gradient_checkpointing = True
     _no_split_modules = ["ViTEmbeddings", "ViTLayer"]
     _supports_sdpa = True

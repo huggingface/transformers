@@ -105,6 +105,7 @@ class LlavaOnevisionCausalLMOutputWithPast(ModelOutput):
 class LlavaOnevisionPreTrainedModel(PreTrainedModel):
     config: LlavaOnevisionConfig
     base_model_prefix = ""
+    input_modalities = ["image", "video", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlamaDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"

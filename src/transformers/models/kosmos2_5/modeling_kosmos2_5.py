@@ -1219,6 +1219,7 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
     """
 
     config_class = Kosmos2_5Config
+    input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
     _no_split_modules = ["Kosmos2_5VisionLayer", "Kosmos2_5TextBlock"]
     _supports_flash_attn_2 = True
@@ -1253,6 +1254,7 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
 
 class Kosmos2_5VisionModel(Kosmos2_5PreTrainedModel):
     config_class = Kosmos2_5VisionConfig
+    input_modalities = "text"
 
     # Copied from transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionModel.__init__ with Pix2Struct->Kosmos2_5
     def __init__(self, config: Kosmos2_5VisionConfig):
@@ -1314,6 +1316,7 @@ class Kosmos2_5VisionModel(Kosmos2_5PreTrainedModel):
 # Adapted from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextModel with KOSMOS2->KOSMOS2_5
 class Kosmos2_5TextModel(Kosmos2_5PreTrainedModel):
     config_class = Kosmos2_5TextConfig
+    input_modalities = "text"
 
     def __init__(self, config: Kosmos2_5TextConfig):
         super().__init__(config)
@@ -1499,6 +1502,7 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
 )
 class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel):
     config_class = Kosmos2_5TextConfig
+    input_modalities = "text"
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: Kosmos2_5TextConfig):

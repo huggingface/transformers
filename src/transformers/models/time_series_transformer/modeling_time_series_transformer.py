@@ -607,6 +607,7 @@ class TimeSeriesTransformerPreTrainedModel(PreTrainedModel):
     config: TimeSeriesTransformerConfig
     base_model_prefix = "model"
     main_input_name = "past_values"
+    input_modalities = "time"
     supports_gradient_checkpointing = True
     # TODO: tests would need a rewrite to check for correct implementation
     # Current tests always assume certain inputs to be passed

@@ -132,6 +132,7 @@ class DeepseekVLAligner(nn.Module):
 
 
 class DeepseekVLPreTrainedModel(JanusPreTrainedModel):
+    output_modalities = "text"
     _no_split_modules = ["LlamaDecoderLayer"]
 
     def _init_weights(self, module):

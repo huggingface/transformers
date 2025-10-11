@@ -63,6 +63,7 @@ class VitPosePreTrainedModel(PreTrainedModel):
     config: VitPoseConfig
     base_model_prefix = "vit"
     main_input_name = "pixel_values"
+    input_modalities = "image"
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]):
