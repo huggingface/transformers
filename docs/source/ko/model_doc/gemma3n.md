@@ -27,7 +27,7 @@ rendered properly in your Markdown viewer.
 
 ## 개요[[overview]]
 
-[Gemma3n](https://developers.googleblog.com/en/introducing-gemma-3n/)은 사전 훈련된 버전과 명령어 기반 미세조정 버전이 제공되는 멀티모달 모델이며, 모델 크기는 E4B와 E2B 두 가지로 출시되었습니다. 언어 모델 아키텍처는 이전 Gemma 버전과 많은 부분을 공유하지만 이번 버전에는 여러 가지 새로운 기법이 추가되었습니다. 대표적으로 [교차 업데이트(AltUp)](https://proceedings.neurips.cc/paper_files/paper/2023/hash/f2059277ac6ce66e7e5543001afa8bb5-Abstract-Conference.html), [학습된 증강 잔여 레이어(LAuReL)](https://huggingface.co/papers/2411.07501), [MatFormer](https://huggingface.co/papers/2310.07707), 레이어별 임베딩, [통계적 Top-k를 이용한 활성화 희소성(SPARk-Transformer)](https://huggingface.co/papers/2506.06644), KV 캐시 공유 등이 있습니다. Gemma 3n은 [Gemma 3](./gemma3)와 유사한 어텐션 패턴을 사용합니다. 글로벌 셀프 어텐션 레이어 1개마다 로컬 슬라이딩 윈도우 셀프 어텐션 레이어 4개를 교차로 배치하며, 최대 컨텍스트 길이는 32k 토큰까지 지원합니다. 비전 모달리티에서는 [MobileNet v5][mobilenetv5]를 비전 인코더로 도입하여 기본 해상도를 768x768 픽셀로 처리합니다. 또한 오디오 모달리티에서는 [Universal Speech Model(USM)](https://huggingface.co/papers/2303.01037) 아키텍처를 기반으로 새롭게 학습된 오디오 인코더가 추가되었습니다.
+[Gemma3n](https://developers.googleblog.com/en/introducing-gemma-3n/)은 사전 훈련된 버전과 명령어 기반 미세조정 버전이 제공되는 멀티모달 모델이며, 모델 크기는 E4B와 E2B 두 가지로 출시되었습니다. 언어 모델 아키텍처는 이전 Gemma 버전과 많은 부분을 공유하지만 이번 버전에는 여러 가지 새로운 기법이 추가되었습니다. 대표적으로 [교차 업데이트(AltUp)](https://proceedings.neurips.cc/paper_files/paper/2023/hash/f2059277ac6ce66e7e5543001afa8bb5-Abstract-Conference.html), [학습된 증강 잔여 레이어(LAuReL)](https://huggingface.co/papers/2411.07501), [MatFormer](https://huggingface.co/papers/2310.07707), 레이어별 임베딩, [통계적 Top-k를 이용한 활성화 희소성(SPARk-Transformer)](https://huggingface.co/papers/2506.06644), KV 캐시 공유 등이 있습니다. Gemma 3n은 [Gemma 3](./gemma3)와 유사한 어텐션 패턴을 사용합니다. 글로벌 셀프 어텐션 레이어 1개마다 로컬 슬라이딩 윈도우 셀프 어텐션 레이어 4개를 교차로 배치하며, 최대 컨텍스트 길이는 32k 토큰까지 지원합니다. 비전 모달리티에서는 MobileNet v5를 비전 인코더로 도입하여 기본 해상도를 768x768 픽셀로 처리합니다. 또한 오디오 모달리티에서는 [Universal Speech Model(USM)](https://huggingface.co/papers/2303.01037) 아키텍처를 기반으로 새롭게 학습된 오디오 인코더가 추가되었습니다.
 
 명령어 기반 미세조정 버전은 지식 증류와 강화 학습을 통해 후처리 학습 되었습니다.
 
@@ -187,4 +187,3 @@ echo -e "식물은 특정 과정을 통해 에너지를 생성합니다." | tran
 [[autodoc]] Gemma3nForConditionalGeneration
     - forward
 
-[attention-mask-viz]: https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139
