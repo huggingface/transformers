@@ -594,13 +594,48 @@ class ModelBenchmark(AbstractModelBenchmark):
             },
         ]
 
-    def _is_kernelization_available(self) -> bool:
-        """Check if kernelization is available. Override in subclasses."""
+    def _is_kernelization_available(self, model_id: Optional[str] = None) -> bool:
+        """Check if kernelization is available for the specific model. Override in subclasses."""
         try:
             from kernels import Mode, kernelize  # noqa: F401
-
-            return True
         except ImportError:
+            return False
+
+        # If no model_id provided, just check if kernels module is available
+        if model_id is None:
+            return True
+
+        # Check if the model has kernelized layers by looking for use_kernel_forward_from_hub decorator
+        try:
+            from transformers import AutoConfig
+
+            # Load the model config to see if it mentions kernel support
+            config = AutoConfig.from_pretrained(model_id, trust_remote_code=True)
+
+            # Check if the model has kernel support indicators in config
+            # This is a heuristic - models with kernel support often have specific configurations
+            if hasattr(config, "use_kernel_from_hub") and config.use_kernel_from_hub:
+                return True
+
+            # For now, we'll check specific model types that we know support kernelization
+            # This can be expanded as more models get kernel support
+            kernel_supported_models = [
+                "llama4",  # Llama4 has kernelized MoE layers
+                "deformable-detr",  # Has kernelized deformable attention
+            ]
+
+            # Check if the model type or model_id matches known kernel-supported models
+            model_type = getattr(config, "model_type", "").lower()
+            model_id_lower = model_id.lower()
+
+            for supported_model in kernel_supported_models:
+                if supported_model in model_type or supported_model in model_id_lower:
+                    return True
+
+            return False
+
+        except Exception as e:
+            self.logger.debug(f"Could not determine kernel support for {model_id}: {e}")
             return False
 
     def get_default_generation_config(self) -> dict[str, Any]:
@@ -618,6 +653,43 @@ class ModelBenchmark(AbstractModelBenchmark):
     def get_default_device(self) -> str:
         """Get default device. Override in subclasses."""
         return "cuda"
+
+    @classmethod
+    def get_common_benchmark_defaults(cls) -> dict[str, Any]:
+        """Get common benchmark parameter defaults used across all benchmarks."""
+        return {
+            "warmup_iterations": 3,
+            "measurement_iterations": 5,
+            "num_tokens_to_generate": 100,
+            "include_sdpa_variants": True,
+            "device": "cuda",
+            "torch_dtype": "float16",
+            "batch_size": 1,
+        }
+
+    @classmethod
+    def extract_benchmark_kwargs(cls, model_id_default: str, **kwargs) -> dict[str, Any]:
+        """
+        Extract and validate benchmark parameters with common defaults.
+        Args:
+            model_id_default: Default model ID for this specific benchmark
+            **kwargs: Keyword arguments passed to the benchmark
+        Returns:
+            Dictionary with all benchmark parameters including defaults
+        """
+        defaults = cls.get_common_benchmark_defaults()
+
+        return {
+            "model_id": kwargs.get("model_id", model_id_default),
+            "warmup_iterations": kwargs.get("warmup_iterations", defaults["warmup_iterations"]),
+            "measurement_iterations": kwargs.get("measurement_iterations", defaults["measurement_iterations"]),
+            "num_tokens_to_generate": kwargs.get("num_tokens_to_generate", defaults["num_tokens_to_generate"]),
+            "include_sdpa_variants": kwargs.get("include_sdpa_variants", defaults["include_sdpa_variants"]),
+            "device": kwargs.get("device", defaults["device"]),
+            "torch_dtype": kwargs.get("torch_dtype", defaults["torch_dtype"]),
+            "batch_size": kwargs.get("batch_size", defaults["batch_size"]),
+            "commit_id": kwargs.get("commit_id"),
+        }
 
     def create_scenarios(self, **kwargs) -> dict[str, "BenchmarkScenario"]:
         """Create benchmark scenarios for HuggingFace models."""
@@ -645,8 +717,8 @@ class ModelBenchmark(AbstractModelBenchmark):
 
             for scenario_config in scenario_configs:
                 for sdpa_backend in sdpa_backends:
-                    # Skip kernelized if not available
-                    if scenario_config["variant"] == "kernelized" and not self._is_kernelization_available():
+                    # Skip kernelized if not available for this specific model
+                    if scenario_config["variant"] == "kernelized" and not self._is_kernelization_available(model_id):
                         continue
 
                     # Create unique config for this scenario
