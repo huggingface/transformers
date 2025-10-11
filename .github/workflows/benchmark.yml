@@ -24,7 +24,7 @@ jobs:
       group: ${{ matrix.group }}
     if: |
       (github.event_name == 'pull_request' && contains( github.event.pull_request.labels.*.name, 'run-benchmark') )||
-      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') && github.repository_owner == 'huggingface'
     container:
       image: huggingface/transformers-pytorch-gpu
       options: --gpus all --privileged --ipc host

@@ -21,7 +21,7 @@ jobs:
   collated_reports:
     name: Collated reports
     runs-on: ubuntu-22.04
-    if: always()
+    if: always() && github.repository_owner == 'huggingface'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4

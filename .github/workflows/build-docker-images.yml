@@ -21,6 +21,7 @@ concurrency:
 jobs:
   latest-docker:
     name: "Latest PyTorch [dev]"
+    if: github.repository_owner == 'huggingface'
     runs-on:
       group: aws-general-8-plus
     steps:
@@ -70,6 +71,7 @@ jobs:
 
   latest-torch-deepspeed-docker:
     name: "Latest PyTorch + DeepSpeed"
+    if: github.repository_owner == 'huggingface'
     runs-on:
       group: aws-g4dn-2xlarge-cache
     steps:
@@ -107,6 +109,7 @@ jobs:
   # Can't build 2 images in a single job `latest-torch-deepspeed-docker` (for `nvcr.io/nvidia`)
   latest-torch-deepspeed-docker-for-push-ci-daily-build:
     name: "Latest PyTorch + DeepSpeed (Push CI - Daily Build)"
+    if: github.repository_owner == 'huggingface'
     runs-on:
       group: aws-general-8-plus
     steps:
@@ -148,7 +151,7 @@ jobs:
   doc-builder:
     name: "Doc builder"
     # Push CI doesn't need this image
-    if: inputs.image_postfix != '-push-ci'
+    if: inputs.image_postfix != '-push-ci' && github.repository_owner == 'huggingface'
     runs-on:
       group: aws-general-8-plus
     steps:
@@ -184,7 +187,7 @@ jobs:
   latest-pytorch:
     name: "Latest PyTorch [dev]"
     # Push CI doesn't need this image
-    if: inputs.image_postfix != '-push-ci'
+    if: inputs.image_postfix != '-push-ci' && github.repository_owner == 'huggingface'
     runs-on:
       group: aws-general-8-plus
     steps:
@@ -221,6 +224,7 @@ jobs:
 
   latest-pytorch-amd:
     name: "Latest PyTorch (AMD) [dev]"
+    if: github.repository_owner == 'huggingface'
     runs-on:
       group: aws-highcpu-32-priv
     steps:
@@ -270,6 +274,7 @@ jobs:
 
   latest-pytorch-deepspeed-amd:
     name: "PyTorch + DeepSpeed (AMD) [dev]"
+    if: github.repository_owner == 'huggingface'
     runs-on:
       group: aws-general-8-plus
     steps:
@@ -320,7 +325,7 @@ jobs:
   latest-quantization-torch-docker:
     name: "Latest Pytorch + Quantization [dev]"
      # Push CI doesn't need this image
-    if: inputs.image_postfix != '-push-ci'
+    if: inputs.image_postfix != '-push-ci' && github.repository_owner == 'huggingface'
     runs-on:
       group: aws-general-8-plus
     steps:

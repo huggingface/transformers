@@ -9,6 +9,7 @@ on:
 jobs:
   build:
     uses: huggingface/doc-builder/.github/workflows/upload_pr_documentation.yml@main
+    if: github.repository_owner == 'huggingface'
     with:
       package_name: transformers
     secrets:

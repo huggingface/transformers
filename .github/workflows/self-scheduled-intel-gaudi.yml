@@ -30,7 +30,7 @@ env:
 
 jobs:
   setup:
-    if: contains(fromJSON('["run_models_gpu", "run_trainer_and_fsdp_gpu"]'), inputs.job)
+    if: contains(fromJSON('["run_models_gpu", "run_trainer_and_fsdp_gpu"]'), inputs.job) && github.repository_owner == 'huggingface'
     name: Setup
     runs-on: ubuntu-latest
     outputs:
@@ -104,7 +104,7 @@ jobs:
     secrets: inherit
 
   run_pipelines_torch_gpu:
-    if: ${{ inputs.job == 'run_pipelines_torch_gpu' }}
+    if: ${{ inputs.job == 'run_pipelines_torch_gpu' && github.repository_owner == 'huggingface' }}
     name: Pipelines
     strategy:
       fail-fast: false
@@ -173,7 +173,7 @@ jobs:
           path: reports/${{ env.machine_type }}_run_pipelines_torch_gpu_test_reports
 
   run_examples_gpu:
-    if: ${{ inputs.job == 'run_examples_gpu' }}
+    if: ${{ inputs.job == 'run_examples_gpu' && github.repository_owner == 'huggingface' }}
     name: Examples directory
     strategy:
       fail-fast: false
@@ -245,7 +245,7 @@ jobs:
           path: reports/${{ env.machine_type }}_run_examples_gpu_test_reports
 
   run_torch_cuda_extensions_gpu:
-    if: ${{ inputs.job == 'run_torch_cuda_extensions_gpu' }}
+    if: ${{ inputs.job == 'run_torch_cuda_extensions_gpu' && github.repository_owner == 'huggingface' }}
     name: Intel Gaudi deepspeed tests
     strategy:
       fail-fast: false

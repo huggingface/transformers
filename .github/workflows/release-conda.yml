@@ -12,6 +12,7 @@ env:
 
 jobs:
   build_and_package:
+    if: github.repository_owner == 'huggingface'
     runs-on: ubuntu-22.04
     defaults:
       run:

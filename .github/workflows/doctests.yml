@@ -16,6 +16,7 @@ jobs:
     name: Setup
     runs-on: 
       group: aws-g5-4xlarge-cache
+    if: github.repository_owner == 'huggingface'
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -66,7 +67,7 @@ jobs:
   send_results:
     name: Send results to webhook
     runs-on: ubuntu-22.04
-    if: always()
+    if: always() && github.repository_owner == 'huggingface'
     needs: [call_doctest_job]
     steps:
       - uses: actions/checkout@v4

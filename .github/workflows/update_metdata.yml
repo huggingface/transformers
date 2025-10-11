@@ -9,6 +9,7 @@ on:
 jobs:
   build_and_package:
     runs-on: ubuntu-22.04
+    if: github.repository_owner == 'huggingface'
     defaults:
       run:
         shell: bash -l {0}
