@@ -57,6 +57,10 @@ try:
                     layer_name="LigerRMSNorm",
                 )
             },
+            "npu": LayerRepository(
+                repo_id="kernels-ext-npu/RMSNorm",
+                layer_name="RMSNorm",
+            ),
         },
         "MLP": {
             "cuda": LayerRepository(
