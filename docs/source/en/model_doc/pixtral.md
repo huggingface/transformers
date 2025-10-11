@@ -13,84 +13,148 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-09-17 and added to Hugging Face Transformers on 2024-09-14.*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # Pixtral
 
-## Overview
+[Pixtral](https://huggingface.co/papers/2410.07073) is a multimodal model trained to understand natural images and documents. It accepts images in their natural resolution and aspect ratio without resizing or padding due to it's 2D RoPE embeddings. In addition, Pixtral has a long 128K token context window for processing a large number of images. Pixtral couples a 400M vision encoder with a 12B Mistral Nemo decoder.
 
-The Pixtral model was released by the Mistral AI team on [Vllm](https://github.com/vllm-project/vllm/pull/8377), where a version of the code can be found!
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/pixtral_architecture.webp"
+alt="drawing" width="600"/>
 
+<small> Pixtral architecture. Taken from the <a href="https://mistral.ai/news/pixtral-12b/">blog post.</a> </small>
 
-Tips:
+You can find all the original Pixtral checkpoints under the [Mistral AI](https://huggingface.co/mistralai/models?search=pixtral) organization.
 
-- Pixtral is a multimodal model, the main contribution is the 2d ROPE on the images, and support for arbitrary image size (the images are not padded together nor are they resized)
-- This model follows the `Llava` familiy, meaning image embeddings are placed instead of the `[IMG]` token placeholders. 
-- The format for one or mulitple prompts is the following:
-```
-"<s>[INST][IMG]\nWhat are the things I should be cautious about when I visit this place?[/INST]"
-```
-Then, the processor will replace each `[IMG]` token with  a number of `[IMG]` token that depends on the height and the width of the image. Each *row* of the image is separated by a `[IMG_BREAK]` token, and each image is separated by a  `[IMG_END]` token.
+> [!TIP]
+> This model was contributed by [amyeroberts](https://huggingface.co/amyeroberts) and [ArthurZ](https://huggingface.co/ArthurZ).
+> Click on the Pixtral models in the right sidebar for more examples of how to apply Pixtral to different vision and language tasks.
 
-This model was contributed by [amyeroberts](https://huggingface.co/amyeroberts) and [ArthurZ](https://huggingface.co/ArthurZ)
+<hfoptions id="usage">
 
-Here is an example of how to run it:
+<hfoption id="AutoModel">
 
-```python 
-from transformers import LlavaForConditionalGeneration, AutoProcessor
-from PIL import Image
+```python
+import torch
+from transformers import AutoProcessor, LlavaForConditionalGeneration
 
-model_id = "hf-internal-testing/pixtral-12b"
-model = LlavaForConditionalGeneration.from_pretrained(model_id).to("cuda")
+model_id = "mistral-community/pixtral-12b"
+model = LlavaForConditionalGeneration.from_pretrained(model_id, dtype="auto", device_map="auto")
 processor = AutoProcessor.from_pretrained(model_id)
 
-IMG_URLS = [
-    "https://picsum.photos/id/237/400/300",
-    "https://picsum.photos/id/231/200/300",
-    "https://picsum.photos/id/27/500/500",
-    "https://picsum.photos/id/17/150/600",
+url_dog = "https://picsum.photos/id/237/200/300"
+url_mountain = "https://picsum.photos/seed/picsum/200/300"
+
+chat = [
+    {
+      "role": "user", "content": [
+        {"type": "text", "content": "Can this animal"}, 
+        {"type": "image", "url": url_dog}, 
+        {"type": "text", "content": "live here?"}, 
+        {"type": "image", "url" : url_mountain}
+      ]
+    }
 ]
-PROMPT = "<s>[INST]Describe the images.\n[IMG][IMG][IMG][IMG][/INST]"
 
-inputs = processor(text=PROMPT, images=IMG_URLS, return_tensors="pt").to("cuda")
+inputs = processor.apply_chat_template(chat, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors"pt").to(model.device)
 generate_ids = model.generate(**inputs, max_new_tokens=500)
-ouptut = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-
-EXPECTED_GENERATION = """
-Describe the images.
-Sure, let's break down each image description:
-
-1. **Image 1:**
-   - **Description:** A black dog with a glossy coat is sitting on a wooden floor. The dog has a focused expression and is looking directly at the camera.
-   - **Details:** The wooden floor has a rustic appearance with visible wood grain patterns. The dog's eyes are a striking color, possibly brown or amber, which contrasts with its black fur.
-
-2. **Image 2:**
-   - **Description:** A scenic view of a mountainous landscape with a winding road cutting through it. The road is surrounded by lush green vegetation and leads to a distant valley.
-   - **Details:** The mountains are rugged with steep slopes, and the sky is clear, indicating good weather. The winding road adds a sense of depth and perspective to the image.
-
-3. **Image 3:**
-   - **Description:** A beach scene with waves crashing against the shore. There are several people in the water and on the beach, enjoying the waves and the sunset.
-   - **Details:** The waves are powerful, creating a dynamic and lively atmosphere. The sky is painted with hues of orange and pink from the setting sun, adding a warm glow to the scene.
-
-4. **Image 4:**
-   - **Description:** A garden path leading to a large tree with a bench underneath it. The path is bordered by well-maintained grass and flowers.
-   - **Details:** The path is made of small stones or gravel, and the tree provides a shaded area with the bench invitingly placed beneath it. The surrounding area is lush and green, suggesting a well-kept garden.
-
-Each image captures a different scene, from a close-up of a dog to expansive natural landscapes, showcasing various elements of nature and human interaction with it.
-"""
-
+output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
 ```
+
+</hfoption>
+
+</hfoptions>
+
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+
+The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize the model to 4-bits.
+
+```python
+import torch
+import requests
+from PIL import Image
+from transformers import AutoProcessor, LlavaForConditionalGeneration, BitsAndBytesConfig
+
+model_id = "mistral-community/pixtral-12b"
+
+quantization_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_quant_type="nf4",
+    bnb_4bit_compute_dtype=torch.bfloat16
+)
+
+model = LlavaForConditionalGeneration.from_pretrained(
+    model_id,
+    quantization_config=quantization_config,
+    device_map="auto"
+)
+processor = AutoProcessor.from_pretrained(model_id)
+
+dog_url = "https://picsum.photos/id/237/200/300"
+mountain_url = "https://picsum.photos/seed/picsum/200/300"
+dog_image = Image.open(requests.get(dog_url, stream=True).raw)
+mountain_image = Image.open(requests.get(mountain_url, stream=True).raw)
+
+chat = [
+    {
+      "role": "user", "content": [
+        {"type": "text", "text": "Can this animal"},
+        {"type": "image"},
+        {"type": "text", "text": "live here?"},
+        {"type": "image"}
+      ]
+    }
+]
+
+prompt = processor.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
+inputs = processor(text=prompt, images=[dog_image, mountain_image], return_tensors="pt")
+
+inputs["pixel_values"] = inputs["pixel_values"].to(model.dtype)
+inputs = {k: v.to(model.device) for k, v in inputs.items()}
+
+generate_ids = model.generate(**inputs, max_new_tokens=100)
+output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+print(output)
+```
+
+## Notes
+
+- Pixtral uses [`PixtralVisionModel`] as the vision encoder and [`MistralForCausalLM`]  for its language decoder.
+- The model internally replaces `[IMG]` token placeholders with image embeddings.
+
+    ```py
+    "<s>[INST][IMG]\nWhat are the things I should be cautious about when I visit this place?[/INST]"
+    ```
+
+    The `[IMG]` tokens are replaced with a number of `[IMG]` tokens that depend on the height and width of each image. Each row of the image is separated by a `[IMG_BREAK]` token and each image is separated by a `[IMG_END]` token. Use the [`~Processor.apply_chat_template`] method to handle these tokens for you.
+
 ## PixtralVisionConfig
 
 [[autodoc]] PixtralVisionConfig
 
-## PixtralModel
+## MistralCommonTokenizer
 
-[[autodoc]] PixtralModel
+[[autodoc]] MistralCommonTokenizer
+
+## PixtralVisionModel
+
+[[autodoc]] PixtralVisionModel
     - forward
 
 ## PixtralImageProcessor
 
 [[autodoc]] PixtralImageProcessor
+    - preprocess
+
+## PixtralImageProcessorFast
+
+[[autodoc]] PixtralImageProcessorFast
     - preprocess
 
 ## PixtralProcessor

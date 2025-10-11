@@ -1,16 +1,20 @@
-import importlib.metadata
 import inspect
-import warnings
 from copy import deepcopy
 from inspect import signature
 
-from packaging import version
-
-from ..utils import is_accelerate_available, is_bitsandbytes_available, logging
+from ..utils import (
+    get_available_devices,
+    is_accelerate_available,
+    is_bitsandbytes_available,
+    is_torch_available,
+    logging,
+)
 
 
 if is_bitsandbytes_available():
     import bitsandbytes as bnb
+
+if is_torch_available():
     import torch
     import torch.nn as nn
 
@@ -25,121 +29,6 @@ if is_accelerate_available():
 logger = logging.get_logger(__name__)
 
 
-def set_module_quantized_tensor_to_device(module, tensor_name, device, value=None, quantized_stats=None):
-    """
-    A helper function to set a given tensor (parameter of buffer) of a module on a specific device (note that doing
-    `param.to(device)` creates a new tensor not linked to the parameter, which is why we need this function). The
-    function is adapted from `set_module_tensor_to_device` function from accelerate that is adapted to support the
-    class `Int8Params` from `bitsandbytes`.
-
-    Args:
-        module (`torch.nn.Module`):
-            The module in which the tensor we want to move lives.
-        tensor_name (`str`):
-            The full name of the parameter/buffer.
-        device (`int`, `str` or `torch.device`):
-            The device on which to set the tensor.
-        value (`torch.Tensor`, *optional*):
-            The value of the tensor (useful when going from the meta device to any other device).
-        quantized_stats (`dict[str, Any]`, *optional*):
-            Dict with items for either 4-bit or 8-bit serialization
-    """
-    # Recurse if needed
-    if "." in tensor_name:
-        splits = tensor_name.split(".")
-        for split in splits[:-1]:
-            new_module = getattr(module, split)
-            if new_module is None:
-                raise ValueError(f"{module} has no attribute {split}.")
-            module = new_module
-        tensor_name = splits[-1]
-
-    if tensor_name not in module._parameters and tensor_name not in module._buffers:
-        raise ValueError(f"{module} does not have a parameter or a buffer named {tensor_name}.")
-    is_buffer = tensor_name in module._buffers
-    old_value = getattr(module, tensor_name)
-
-    if old_value.device == torch.device("meta") and device not in ["meta", torch.device("meta")] and value is None:
-        raise ValueError(f"{tensor_name} is on the meta device, we need a `value` to put in on {device}.")
-
-    prequantized_loading = quantized_stats is not None
-    if is_buffer or not is_bitsandbytes_available():
-        is_8bit = False
-        is_4bit = False
-    else:
-        is_4bit = hasattr(bnb.nn, "Params4bit") and isinstance(module._parameters[tensor_name], bnb.nn.Params4bit)
-        is_8bit = isinstance(module._parameters[tensor_name], bnb.nn.Int8Params)
-
-    if is_8bit or is_4bit:
-        param = module._parameters[tensor_name]
-        if param.device.type != "cuda":
-            if value is None:
-                new_value = old_value.to(device)
-            elif isinstance(value, torch.Tensor):
-                new_value = value.to("cpu")
-            else:
-                new_value = torch.tensor(value, device="cpu")
-
-            # Support models using `Conv1D` in place of `nn.Linear` (e.g. openai-community/gpt2) by transposing the weight matrix prior to quantization.
-            # Since weights are saved in the correct "orientation", we skip transposing when loading.
-            if issubclass(module.source_cls, Conv1D) and not prequantized_loading:
-                new_value = new_value.T
-
-            kwargs = old_value.__dict__
-
-            if prequantized_loading != (new_value.dtype in (torch.int8, torch.uint8)):
-                raise ValueError(
-                    f"Value dtype `{new_value.dtype}` is not compatible with parameter quantization status."
-                )
-
-            if is_8bit:
-                is_8bit_serializable = version.parse(importlib.metadata.version("bitsandbytes")) > version.parse(
-                    "0.37.2"
-                )
-                if new_value.dtype in (torch.int8, torch.uint8) and not is_8bit_serializable:
-                    raise ValueError(
-                        "Detected int8 weights but the version of bitsandbytes is not compatible with int8 serialization. "
-                        "Make sure to download the latest `bitsandbytes` version. `pip install --upgrade bitsandbytes`."
-                    )
-                new_value = bnb.nn.Int8Params(new_value, requires_grad=False, **kwargs).to(device)
-                if prequantized_loading:
-                    setattr(new_value, "SCB", quantized_stats["SCB"].to(device))
-            elif is_4bit:
-                if prequantized_loading:
-                    is_4bit_serializable = version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse(
-                        "0.41.3"
-                    )
-                    if new_value.dtype in (torch.int8, torch.uint8) and not is_4bit_serializable:
-                        raise ValueError(
-                            "Detected 4-bit weights but the version of bitsandbytes is not compatible with 4-bit serialization. "
-                            "Make sure to download the latest `bitsandbytes` version. `pip install --upgrade bitsandbytes`."
-                        )
-                    new_value = bnb.nn.Params4bit.from_prequantized(
-                        data=new_value,
-                        quantized_stats=quantized_stats,
-                        requires_grad=False,
-                        device=device,
-                        **kwargs,
-                    )
-                else:
-                    new_value = bnb.nn.Params4bit(new_value, requires_grad=False, **kwargs).to(device)
-            module._parameters[tensor_name] = new_value
-
-    else:
-        if value is None:
-            new_value = old_value.to(device)
-        elif isinstance(value, torch.Tensor):
-            new_value = value.to(device)
-        else:
-            new_value = torch.tensor(value, device=device)
-
-        if is_buffer:
-            module._buffers[tensor_name] = new_value
-        else:
-            new_value = nn.Parameter(new_value, requires_grad=old_value.requires_grad)
-            module._parameters[tensor_name] = new_value
-
-
 def _replace_with_bnb_linear(
     model,
     modules_to_not_convert=None,
@@ -150,14 +39,14 @@ def _replace_with_bnb_linear(
     """
     Private method that wraps the recursion for module replacement.
 
-    Returns the converted model and a boolean that indicates if the conversion has been successfull or not.
+    Returns the converted model and a boolean that indicates if the conversion has been successful or not.
     """
     for name, module in model.named_children():
         if current_key_name is None:
             current_key_name = []
         current_key_name.append(name)
 
-        if (isinstance(module, nn.Linear) or isinstance(module, Conv1D)) and name not in modules_to_not_convert:
+        if (isinstance(module, (nn.Linear, Conv1D))) and name not in modules_to_not_convert:
             # Check if the current key is not in the `modules_to_not_convert`
             current_key_name_str = ".".join(current_key_name)
             if not any(
@@ -236,10 +125,10 @@ def replace_with_bnb_linear(model, modules_to_not_convert=None, current_key_name
     Parameters:
         model (`torch.nn.Module`):
             Input model or `torch.nn.Module` as the function is run recursively.
-        modules_to_not_convert (`List[`str`]`, *optional*, defaults to `["lm_head"]`):
+        modules_to_not_convert (`list[`str`]`, *optional*, defaults to `["lm_head"]`):
             Names of the modules to not convert in `Linear8bitLt`. In practice we keep the `lm_head` in full precision
             for numerical stability reasons.
-        current_key_name (`List[`str`]`, *optional*):
+        current_key_name (`list[`str`]`, *optional*):
             An array to track the current key of the recursion. This is used to check whether the current key (part of
             it) is not in the list of modules to not convert (for instances modules that are offloaded to `cpu` or
             `disk`).
@@ -259,26 +148,7 @@ def replace_with_bnb_linear(model, modules_to_not_convert=None, current_key_name
             " Please double check your model architecture, or submit an issue on github if you think this is"
             " a bug."
         )
-
     return model
-
-
-# For backward compatibility
-def replace_8bit_linear(*args, **kwargs):
-    warnings.warn(
-        "`replace_8bit_linear` will be deprecated in a future version, please use `replace_with_bnb_linear` instead",
-        FutureWarning,
-    )
-    return replace_with_bnb_linear(*args, **kwargs)
-
-
-# For backward compatiblity
-def set_module_8bit_tensor_to_device(*args, **kwargs):
-    warnings.warn(
-        "`set_module_8bit_tensor_to_device` will be deprecated in a future version, please use `set_module_quantized_tensor_to_device` instead",
-        FutureWarning,
-    )
-    return set_module_quantized_tensor_to_device(*args, **kwargs)
 
 
 def get_keys_to_not_convert(model):
@@ -298,11 +168,7 @@ def get_keys_to_not_convert(model):
     tied_model.tie_weights()
 
     tied_params = find_tied_parameters(tied_model)
-    # For compatibility with Accelerate < 0.18
-    if isinstance(tied_params, dict):
-        tied_keys = sum(list(tied_params.values()), []) + list(tied_params.keys())
-    else:
-        tied_keys = sum(tied_params, [])
+    tied_keys = sum(tied_params, [])
     has_tied_params = len(tied_keys) > 0
 
     # If there is not tied weights, we want to keep the lm_head（output_embedding) in full precision
@@ -332,7 +198,7 @@ def get_keys_to_not_convert(model):
 
 
 # Copied from PEFT: https://github.com/huggingface/peft/blob/47b3712898539569c02ec5b3ed4a6c36811331a1/src/peft/utils/integrations.py#L41
-def dequantize_bnb_weight(weight: "torch.nn.Parameter", state=None):
+def dequantize_bnb_weight(weight: "torch.nn.Parameter", dtype: "torch.dtype", state=None):
     """
     Helper function to dequantize 4bit or 8bit bnb weights.
 
@@ -350,18 +216,19 @@ def dequantize_bnb_weight(weight: "torch.nn.Parameter", state=None):
         logger.warning_once(
             f"The model is going to be dequantized in {output_tensor.dtype} - if you want to upcast it to another dtype, make sure to pass the desired dtype when quantizing the model through `bnb_4bit_quant_type` argument of `BitsAndBytesConfig`"
         )
-        return output_tensor
+        return output_tensor.to(dtype)
 
     if state.SCB is None:
         state.SCB = weight.SCB
 
-    im = torch.eye(weight.data.shape[-1]).contiguous().half().to(weight.device)
-    im, imt, SCim, SCimt, coo_tensorim = bnb.functional.double_quant(im)
-    im, Sim = bnb.functional.transform(im, "col32")
-    if state.CxB is None:
-        state.CxB, state.SB = bnb.functional.transform(weight.data, to_order=state.formatB)
-    out32, Sout32 = bnb.functional.igemmlt(im, state.CxB, Sim, state.SB)
-    return bnb.functional.mm_dequant(out32, Sout32, SCim, state.SCB, bias=None).t()
+    if hasattr(bnb.functional, "int8_vectorwise_dequant"):
+        # Use bitsandbytes API if available (requires v0.45.0+)
+        dequantized = bnb.functional.int8_vectorwise_dequant(weight.data, state.SCB)
+    else:
+        # Multiply by (scale/127) to dequantize.
+        dequantized = weight.data * state.SCB.view(-1, 1) * 7.874015718698502e-3
+
+    return dequantized.to(dtype)
 
 
 def _create_accelerate_new_hook(old_hook):
@@ -374,7 +241,7 @@ def _create_accelerate_new_hook(old_hook):
     old_hook_attr = old_hook.__dict__
     filtered_old_hook_attr = {}
     old_hook_init_signature = inspect.signature(old_hook_cls.__init__)
-    for k in old_hook_attr.keys():
+    for k in old_hook_attr:
         if k in old_hook_init_signature.parameters:
             filtered_old_hook_attr[k] = old_hook_attr[k]
     new_hook = old_hook_cls(**filtered_old_hook_attr)
@@ -383,6 +250,7 @@ def _create_accelerate_new_hook(old_hook):
 
 def _dequantize_and_replace(
     model,
+    dtype,
     modules_to_not_convert=None,
     current_key_name=None,
     quantization_config=None,
@@ -393,7 +261,7 @@ def _dequantize_and_replace(
     some performance drop compared to the original model before quantization - use it only for specific usecases
     such as QLoRA adapters merging.
 
-    Returns the converted model and a boolean that indicates if the conversion has been successfull or not.
+    Returns the converted model and a boolean that indicates if the conversion has been successful or not.
     """
     quant_method = quantization_config.quantization_method()
 
@@ -422,7 +290,7 @@ def _dequantize_and_replace(
                 else:
                     state = None
 
-                new_module.weight = torch.nn.Parameter(dequantize_bnb_weight(module.weight, state))
+                new_module.weight = torch.nn.Parameter(dequantize_bnb_weight(module.weight, dtype, state))
 
                 if bias is not None:
                     new_module.bias = bias
@@ -437,9 +305,11 @@ def _dequantize_and_replace(
 
                 new_module.to(device)
                 model._modules[name] = new_module
+                has_been_replaced = True
         if len(list(module.children())) > 0:
             _, has_been_replaced = _dequantize_and_replace(
                 module,
+                dtype,
                 modules_to_not_convert,
                 current_key_name,
                 quantization_config,
@@ -457,6 +327,7 @@ def dequantize_and_replace(
 ):
     model, has_been_replaced = _dequantize_and_replace(
         model,
+        model.dtype,
         modules_to_not_convert=modules_to_not_convert,
         quantization_config=quantization_config,
     )
@@ -467,3 +338,25 @@ def dequantize_and_replace(
         )
 
     return model
+
+
+def validate_bnb_backend_availability(raise_exception=False):
+    """
+    Validates if the available devices are supported by bitsandbytes, optionally raising an exception if not.
+    """
+    import bitsandbytes as bnb
+
+    bnb_supported_devices = getattr(bnb, "supported_torch_devices", set())
+    available_devices = set(get_available_devices())
+
+    if not available_devices.intersection(bnb_supported_devices):
+        if raise_exception:
+            err_msg = (
+                f"None of the available devices `available_devices = {available_devices or None}` are supported by the bitsandbytes version you have installed: `bnb_supported_devices = {bnb_supported_devices}`. "
+                "Please check the docs to see if the backend you intend to use is available and how to install it: https://huggingface.co/docs/bitsandbytes/main/en/installation"
+            )
+            raise RuntimeError(err_msg)
+
+        logger.warning("No supported devices found for bitsandbytes")
+        return False
+    return True

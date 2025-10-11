@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,17 +13,17 @@
 # limitations under the License.
 """Testing suite for the PyTorch SwiftFormer model."""
 
-import copy
 import unittest
+from functools import cached_property
 
-from transformers import PretrainedConfig, SwiftFormerConfig
+from transformers import SwiftFormerConfig
 from transformers.testing_utils import (
     require_torch,
     require_vision,
     slow,
     torch_device,
 )
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -143,10 +142,10 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     )
 
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_head_masking = False
     has_attentions = False
+    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = SwiftFormerModelTester(self)
@@ -233,30 +232,6 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    def test_initialization(self):
-        def _config_zero_init(config):
-            configs_no_init = copy.deepcopy(config)
-            for key in configs_no_init.__dict__.keys():
-                if "_range" in key or "_std" in key or "initializer_factor" in key or "layer_scale" in key:
-                    setattr(configs_no_init, key, 1e-10)
-                if isinstance(getattr(configs_no_init, key, None), PretrainedConfig):
-                    no_init_subconfig = _config_zero_init(getattr(configs_no_init, key))
-                    setattr(configs_no_init, key, no_init_subconfig)
-            return configs_no_init
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9) / 1e9).round().item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
-
 
 # We will verify our results on an image of cute cats
 def prepare_img():
@@ -288,4 +263,4 @@ class SwiftFormerModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
 
         expected_slice = torch.tensor([[-2.1703e00, 2.1107e00, -2.0811e00]]).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)

@@ -11,12 +11,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+import json
 import shutil
 import tempfile
 import unittest
 
+import torch
+
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_vision_available
+from transformers.utils import is_torchvision_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
@@ -26,25 +30,33 @@ if is_vision_available():
         AutoProcessor,
         LlavaOnevisionImageProcessor,
         LlavaOnevisionProcessor,
-        LlavaOnevisionVideoProcessor,
         Qwen2TokenizerFast,
     )
 
+    if is_torchvision_available():
+        from transformers import LlavaOnevisionVideoProcessor
+
 
 @require_vision
+@require_torch
 class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = LlavaOnevisionProcessor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
         image_processor = LlavaOnevisionImageProcessor()
         video_processor = LlavaOnevisionVideoProcessor()
         tokenizer = Qwen2TokenizerFast.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
+        tokenizer.add_special_tokens({"additional_special_tokens": ["<image>", "<video>"]})
+        processor_kwargs = cls.prepare_processor_dict()
 
         processor = LlavaOnevisionProcessor(
-            video_processor=video_processor, image_processor=image_processor, tokenizer=tokenizer
+            video_processor=video_processor, image_processor=image_processor, tokenizer=tokenizer, **processor_kwargs
         )
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
+        cls.image_token = processor.image_token
+        cls.video_token = processor.video_token
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
@@ -52,15 +64,58 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_image_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
 
-    def get_Video_processor(self, **kwargs):
+    def get_video_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).video_processor
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
-    def test_chat_template(self):
-        processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf")
-        expected_prompt = "<|im_start|>user <image>\nWhat is shown in this image?<|im_end|><|im_start|>assistant\n"
+    @staticmethod
+    def prepare_processor_dict():
+        return {
+            "chat_template": "{% for message in messages %}{{'<|im_start|>' + message['role'] + ' '}}{# Render all images first #}{% for content in message['content'] | selectattr('type', 'equalto', 'image') %}{{ '<image>' }}{% endfor %}{# Render all video then #}{% for content in message['content'] | selectattr('type', 'equalto', 'video') %}{{ '<video>' }}{% endfor %}{# Render all text next #}{% if message['role'] != 'assistant' %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{{ '\n' + content['text'] }}{% endfor %}{% else %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{% generation %}{{ '\n' + content['text'] }}{% endgeneration %}{% endfor %}{% endif %}{{'<|im_end|>'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}",
+            "num_image_tokens": 6,
+            "vision_feature_select_strategy": "default"
+        }  # fmt: skip
+
+    # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
+    def test_get_num_vision_tokens(self):
+        "Tests general functionality of the helper used internally in vLLM"
+
+        processor = self.get_processor()
+
+        output = processor._get_num_multimodal_tokens(image_sizes=[(100, 100), (300, 100), (500, 30)])
+        self.assertTrue("num_image_tokens" in output)
+        self.assertEqual(len(output["num_image_tokens"]), 3)
+
+        self.assertTrue("num_image_patches" in output)
+        self.assertEqual(len(output["num_image_patches"]), 3)
+
+    # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_chat_template_is_saved
+    def test_chat_template_is_saved(self):
+        processor_loaded = self.processor_class.from_pretrained(self.tmpdirname)
+        processor_dict_loaded = json.loads(processor_loaded.to_json_string())
+        # chat templates aren't serialized to json in processors
+        self.assertFalse("chat_template" in processor_dict_loaded)
+
+        # they have to be saved as separate file and loaded back from that file
+        # so we check if the same template is loaded
+        processor_dict = self.prepare_processor_dict()
+        self.assertTrue(processor_loaded.chat_template == processor_dict.get("chat_template", None))
+
+    def test_image_token_filling(self):
+        processor = self.processor_class.from_pretrained(self.tmpdirname)
+        processor.patch_size = 14
+        processor.vision_feature_select_strategy = "default"
+        processor.image_processor.crop_size = {"height": 336, "width": 336}
+        processor.image_processor.size = {"shortest_edge": 336}
+        processor.image_processor.image_grid_pinpoints = [[672, 336]]
+        processor.num_image_tokens = (processor.image_processor.size["shortest_edge"] // processor.patch_size) ** 2
+        # Important to check with non square image
+        image = torch.randint(0, 2, (3, 503, 316))
+        expected_image_tokens = 1525
+        image_token_index = processor.image_token_id
 
         messages = [
             {
@@ -71,207 +126,10 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 ],
             },
         ]
-
-        formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
-        self.assertEqual(expected_prompt, formatted_prompt)
-
-    @require_torch
-    @require_vision
-    def test_image_processor_defaults_preserved_by_image_kwargs(self):
-        # Rewrite as llava-next image processor return pixel values with an added dimesion for image patches
-        if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor", size=(234, 234))
-        video_processor = self.get_component("video_processor", size=(234, 234))
-        tokenizer = self.get_component("tokenizer", max_length=117)
-
-        processor = self.processor_class(
-            tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
-        )
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(text=input_str, images=image_input)
-        # added dimension for image patches
-        self.assertEqual(len(inputs["pixel_values"][0][0][0]), 234)
-
-    @require_torch
-    @require_vision
-    def test_kwargs_overrides_default_image_processor_kwargs(self):
-        if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor", crop_size=(234, 234))
-        video_processor = self.get_component("video_processor", size=(234, 234))
-        tokenizer = self.get_component("tokenizer", max_length=117)
-
-        processor = self.processor_class(
-            tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
-        )
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(text=input_str, images=image_input, size=[224, 224])
-        # added dimension for image patches
-        self.assertEqual(len(inputs["pixel_values"][0][0][0]), 224)
-
-    @require_torch
-    @require_vision
-    def test_unstructured_kwargs(self):
-        image_processor = self.get_component("image_processor")
-        video_processor = self.get_component("video_processor")
-        tokenizer = self.get_component("tokenizer")
-        processor = self.processor_class(
-            tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
-        )
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
         inputs = processor(
-            text=input_str,
-            images=image_input,
+            text=[processor.apply_chat_template(messages)],
+            images=[image],
             return_tensors="pt",
-            size={"height": 214, "width": 214},
-            padding="max_length",
-            max_length=76,
         )
-
-        # added dimension for image patches
-        self.assertEqual(inputs["pixel_values"].shape[3], 214)
-        self.assertEqual(len(inputs["input_ids"][0]), 76)
-
-    @require_torch
-    @require_vision
-    def test_unstructured_kwargs_batched(self):
-        image_processor = self.get_component("image_processor")
-        video_processor = self.get_component("video_processor")
-        tokenizer = self.get_component("tokenizer")
-        processor = self.processor_class(
-            tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
-        )
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = ["lower newer", "upper older longer string"]
-        image_input = self.prepare_image_inputs() * 2
-        inputs = processor(
-            text=input_str,
-            images=image_input,
-            return_tensors="pt",
-            size={"height": 214, "width": 214},
-            padding="longest",
-            max_length=76,
-        )
-        self.assertEqual(inputs["pixel_values"].shape[3], 214)
-        self.assertEqual(len(inputs["input_ids"][0]), 5)
-
-    @require_torch
-    @require_vision
-    def test_structured_kwargs_nested(self):
-        image_processor = self.get_component("image_processor")
-        video_processor = self.get_component("video_processor")
-        tokenizer = self.get_component("tokenizer")
-        processor = self.processor_class(
-            tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
-        )
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-
-        # Define the kwargs for each modality
-        all_kwargs = {
-            "common_kwargs": {"return_tensors": "pt"},
-            "images_kwargs": {"size": {"height": 214, "width": 214}},
-            "text_kwargs": {"padding": "max_length", "max_length": 76},
-        }
-
-        inputs = processor(text=input_str, images=image_input, **all_kwargs)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        self.assertEqual(inputs["pixel_values"].shape[3], 214)
-        self.assertEqual(len(inputs["input_ids"][0]), 76)
-
-    @require_torch
-    @require_vision
-    def test_structured_kwargs_nested_from_dict(self):
-        image_processor = self.get_component("image_processor")
-        video_processor = self.get_component("video_processor")
-        tokenizer = self.get_component("tokenizer")
-
-        processor = self.processor_class(
-            tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
-        )
-        self.skip_processor_without_typed_kwargs(processor)
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-
-        # Define the kwargs for each modality
-        all_kwargs = {
-            "common_kwargs": {"return_tensors": "pt"},
-            "images_kwargs": {"size": {"height": 214, "width": 214}},
-            "text_kwargs": {"padding": "max_length", "max_length": 76},
-        }
-
-        inputs = processor(text=input_str, images=image_input, **all_kwargs)
-        self.assertEqual(inputs["pixel_values"].shape[3], 214)
-        self.assertEqual(len(inputs["input_ids"][0]), 76)
-
-    @require_torch
-    @require_vision
-    def test_doubly_passed_kwargs(self):
-        image_processor = self.get_component("image_processor")
-        video_processor = self.get_component("video_processor")
-        tokenizer = self.get_component("tokenizer")
-
-        processor = self.processor_class(
-            tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
-        )
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = ["lower newer"]
-        image_input = self.prepare_image_inputs()
-        with self.assertRaises(ValueError):
-            _ = processor(
-                text=input_str,
-                images=image_input,
-                images_kwargs={"size": {"height": 222, "width": 222}},
-                size={"height": 214, "width": 214},
-            )
-
-    @require_vision
-    @require_torch
-    def test_kwargs_overrides_default_tokenizer_kwargs(self):
-        image_processor = self.get_component("image_processor")
-        video_processor = self.get_component("video_processor")
-        tokenizer = self.get_component("tokenizer", max_length=117)
-
-        processor = self.processor_class(
-            tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
-        )
-        self.skip_processor_without_typed_kwargs(processor)
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(text=input_str, images=image_input, return_tensors="pt", max_length=112)
-        self.assertEqual(len(inputs["input_ids"][0]), 112)
-
-    @require_vision
-    @require_torch
-    def test_tokenizer_defaults_preserved_by_kwargs(self):
-        image_processor = self.get_component("image_processor")
-        video_processor = self.get_component("video_processor")
-        tokenizer = self.get_component("tokenizer", max_length=117)
-
-        processor = self.processor_class(
-            tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
-        )
-        self.skip_processor_without_typed_kwargs(processor)
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(text=input_str, images=image_input, return_tensors="pt")
-        self.assertEqual(len(inputs["input_ids"][0]), 117)
+        image_tokens = (inputs["input_ids"] == image_token_index).sum().item()
+        self.assertEqual(expected_image_tokens, image_tokens)

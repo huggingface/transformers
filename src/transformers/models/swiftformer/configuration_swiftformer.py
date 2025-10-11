@@ -15,11 +15,11 @@
 """SwiftFormer model configuration"""
 
 from collections import OrderedDict
-from typing import Mapping
+from collections.abc import Mapping
 
 from packaging import version
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
 
@@ -27,15 +27,15 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class SwiftFormerConfig(PretrainedConfig):
+class SwiftFormerConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SwiftFormerModel`]. It is used to instantiate an
     SwiftFormer model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the SwiftFormer
     [MBZUAI/swiftformer-xs](https://huggingface.co/MBZUAI/swiftformer-xs) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -43,13 +43,13 @@ class SwiftFormerConfig(PretrainedConfig):
             The size (resolution) of each image
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels
-        depths (`List[int]`, *optional*, defaults to `[3, 3, 6, 4]`):
+        depths (`list[int]`, *optional*, defaults to `[3, 3, 6, 4]`):
             Depth of each stage
-        embed_dims (`List[int]`, *optional*, defaults to `[48, 56, 112, 220]`):
+        embed_dims (`list[int]`, *optional*, defaults to `[48, 56, 112, 220]`):
             The embedding dimension at each stage
         mlp_ratio (`int`, *optional*, defaults to 4):
             Ratio of size of the hidden dimensionality of an MLP to the dimensionality of its input.
-        downsamples (`List[bool]`, *optional*, defaults to `[True, True, True, True]`):
+        downsamples (`list[bool]`, *optional*, defaults to `[True, True, True, True]`):
             Whether or not to downsample inputs between two stages.
         hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (string). `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
@@ -143,3 +143,6 @@ class SwiftFormerOnnxConfig(OnnxConfig):
     @property
     def atol_for_validation(self) -> float:
         return 1e-4
+
+
+__all__ = ["SwiftFormerConfig", "SwiftFormerOnnxConfig"]

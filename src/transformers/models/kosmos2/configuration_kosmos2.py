@@ -14,25 +14,22 @@
 # limitations under the License.
 """KOSMOS-2 model configuration"""
 
-import os
-from typing import Union
-
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class Kosmos2TextConfig(PretrainedConfig):
+class Kosmos2TextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Kosmos2TextModel`]. It is used to instantiate a
     KOSMOS-2 text decoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the text decoder of the KOSMOS-2
     [microsoft/kosmos-2-patch14-224](https://huggingface.co/microsoft/kosmos-2-patch14-224) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 65037):
@@ -59,9 +56,9 @@ class Kosmos2TextConfig(PretrainedConfig):
         activation_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for activations inside the fully connected layer.
         layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
             for more details.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -69,9 +66,16 @@ class Kosmos2TextConfig(PretrainedConfig):
             Scale embeddings by diving by sqrt(embed_dim).
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
+        pad_token_id (`int`, *optional*, defaults to 1):
+            Token id used for padding.
+        bos_token_id (`int`, *optional*, defaults to 0):
+            Token id used for beginning of string.
+        eos_token_id (`int`, *optional*, defaults to 2):
+            Token id used for end of string.
     ```"""
 
     model_type = "kosmos_2_text_model"
+    base_config_key = "text_config"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_attention_heads": "attention_heads",
@@ -124,34 +128,16 @@ class Kosmos2TextConfig(PretrainedConfig):
         self.scale_embedding = scale_embedding
         self.use_cache = use_cache
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
 
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the text config dict if we are loading from Kosmos2Config
-        if config_dict.get("model_type") == "kosmos-2":
-            config_dict = config_dict["text_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
-
-
-class Kosmos2VisionConfig(PretrainedConfig):
+class Kosmos2VisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Kosmos2VisionModel`]. It is used to instantiate a
     KOSMOS-2 vision encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the vision encoder of the KOSMOS-2
     [microsoft/kosmos-2-patch14-224](https://huggingface.co/microsoft/kosmos-2-patch14-224) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 1024):
@@ -171,18 +157,19 @@ class Kosmos2VisionConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float`, *optional*, defaults to 1):
+        initializer_factor (`float`, *optional*, defaults to 1.0):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
     ```"""
 
     model_type = "kosmos_2_vision_model"
+    base_config_key = "vision_config"
 
     def __init__(
         self,
@@ -215,26 +202,8 @@ class Kosmos2VisionConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
 
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the vision config dict if we are loading from Kosmos2Config
-        if config_dict.get("model_type") == "kosmos-2":
-            config_dict = config_dict["vision_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
-
-
-class Kosmos2Config(PretrainedConfig):
+class Kosmos2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Kosmos2Model`]. It is used to instantiate a
     KOSMOS-2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -267,7 +236,7 @@ class Kosmos2Config(PretrainedConfig):
     ```"""
 
     model_type = "kosmos-2"
-    is_composition = True
+    sub_configs = {"text_config": Kosmos2TextConfig, "vision_config": Kosmos2VisionConfig}
 
     def __init__(
         self,
@@ -276,17 +245,22 @@ class Kosmos2Config(PretrainedConfig):
         latent_query_num=64,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         if text_config is None:
-            text_config = {}
-            logger.info("`text_config` is `None`. Initializing the `Kosmos2TextConfig` with default values.")
+            text_config = Kosmos2TextConfig()
+            logger.info("`text_config` is `None`. initializing the `Kosmos2TextConfig` with default values.")
+        elif isinstance(text_config, dict):
+            text_config = Kosmos2TextConfig(**text_config)
 
         if vision_config is None:
-            vision_config = {}
-            logger.info("`vision_config` is `None`. Initializing the `Kosmos2VisionConfig` with default values.")
+            vision_config = Kosmos2VisionConfig()
+            logger.info("`vision_config` is `None`. initializing the `Kosmos2VisionConfig` with default values.")
+        elif isinstance(vision_config, dict):
+            vision_config = Kosmos2VisionConfig(**vision_config)
 
-        self.text_config = Kosmos2TextConfig(**text_config)
-        self.vision_config = Kosmos2VisionConfig(**vision_config)
-
+        self.text_config = text_config
+        self.vision_config = vision_config
         self.latent_query_num = latent_query_num
+        super().__init__(**kwargs)
+
+
+__all__ = ["Kosmos2Config"]

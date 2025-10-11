@@ -15,35 +15,35 @@
 """Conditional DETR model configuration"""
 
 from collections import OrderedDict
-from typing import Mapping
+from collections.abc import Mapping
 
 from packaging import version
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class ConditionalDetrConfig(PretrainedConfig):
+class ConditionalDetrConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ConditionalDetrModel`]. It is used to instantiate
     a Conditional DETR model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Conditional DETR
     [microsoft/conditional-detr-resnet-50](https://huggingface.co/microsoft/conditional-detr-resnet-50) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         use_timm_backbone (`bool`, *optional*, defaults to `True`):
             Whether or not to use the `timm` library for the backbone. If set to `False`, will use the [`AutoBackbone`]
             API.
-        backbone_config (`PretrainedConfig` or `dict`, *optional*):
+        backbone_config (`PreTrainedConfig` or `dict`, *optional*):
             The configuration of the backbone model. Only used in case `use_timm_backbone` is set to `False` in which
             case it will default to `ResNetConfig()`.
         num_channels (`int`, *optional*, defaults to 3):
@@ -52,7 +52,7 @@ class ConditionalDetrConfig(PretrainedConfig):
             Number of object queries, i.e. detection slots. This is the maximal number of objects
             [`ConditionalDetrModel`] can detect in a single image. For COCO, we recommend 100 queries.
         d_model (`int`, *optional*, defaults to 256):
-            Dimension of the layers.
+            This parameter is a general dimension parameter, defining dimensions for components such as the encoder layer and projection parameters in the decoder layer, among others.
         encoder_layers (`int`, *optional*, defaults to 6):
             Number of encoder layers.
         decoder_layers (`int`, *optional*, defaults to 6):
@@ -79,10 +79,10 @@ class ConditionalDetrConfig(PretrainedConfig):
         init_xavier_std (`float`, *optional*, defaults to 1):
             The scaling factor used for the Xavier initialization gain in the HM Attention map module.
         encoder_layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
             for more details.
         decoder_layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
             for more details.
         auxiliary_loss (`bool`, *optional*, defaults to `False`):
             Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
@@ -135,6 +135,7 @@ class ConditionalDetrConfig(PretrainedConfig):
     ```"""
 
     model_type = "conditional_detr"
+    sub_configs = {"backbone_config": AutoConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "hidden_size": "d_model",
@@ -245,14 +246,6 @@ class ConditionalDetrConfig(PretrainedConfig):
         self.focal_alpha = focal_alpha
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
-    @property
-    def num_attention_heads(self) -> int:
-        return self.encoder_attention_heads
-
-    @property
-    def hidden_size(self) -> int:
-        return self.d_model
-
 
 class ConditionalDetrOnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")
@@ -273,3 +266,6 @@ class ConditionalDetrOnnxConfig(OnnxConfig):
     @property
     def default_onnx_opset(self) -> int:
         return 12
+
+
+__all__ = ["ConditionalDetrConfig", "ConditionalDetrOnnxConfig"]

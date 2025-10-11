@@ -14,22 +14,22 @@
 # limitations under the License.
 """Bros model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class BrosConfig(PretrainedConfig):
+class BrosConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BrosModel`] or a [`TFBrosModel`]. It is used to
     instantiate a Bros model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Bros
     [jinho8345/bros-base-uncased](https://huggingface.co/jinho8345/bros-base-uncased) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
@@ -133,3 +133,6 @@ class BrosConfig(PretrainedConfig):
         self.dim_bbox_sinusoid_emb_1d = self.dim_bbox_sinusoid_emb_2d // self.dim_bbox
         self.dim_bbox_projection = self.hidden_size // self.num_attention_heads
         self.classifier_dropout_prob = classifier_dropout_prob
+
+
+__all__ = ["BrosConfig"]

@@ -207,7 +207,7 @@ def convert_wav2vec2_checkpoint(
         hf_wav2vec = Data2VecAudioModel(config)
         data2vec_checkpoint_dir = os.path.dirname(checkpoint_path)
 
-        state_dict = torch.load(checkpoint_path)
+        state_dict = torch.load(checkpoint_path, weights_only=True)
         state_dict["model"]["final_proj.weight"] = state_dict["model"].pop("final_proj.0.weight")
         state_dict["model"]["final_proj.bias"] = state_dict["model"].pop("final_proj.0.bias")
         converted_ckpt = os.path.join(data2vec_checkpoint_dir, "converted.pt")
@@ -226,7 +226,7 @@ def convert_wav2vec2_checkpoint(
 
     processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-large-lv60")
 
-    ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
+    ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
     input_audio = [x["array"] for x in ds[:4]["audio"]]
 
     inputs = processor(input_audio, return_tensors="pt", padding=True)

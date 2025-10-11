@@ -128,7 +128,7 @@ DatasetDict({
 >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base")
 ```
 
-MinDS-14 데이터 세트의 샘플링 속도는 8000khz이므로(이 정보는 [데이터세트 카드](https://huggingface.co/datasets/PolyAI/minds14)에서 확인할 수 있습니다), 사전 훈련된 Wav2Vec2 모델을 사용하려면 데이터 세트를 16000kHz로 리샘플링해야 합니다:
+MinDS-14 데이터 세트의 샘플링 속도는 8khz이므로(이 정보는 [데이터세트 카드](https://huggingface.co/datasets/PolyAI/minds14)에서 확인할 수 있습니다), 사전 훈련된 Wav2Vec2 모델을 사용하려면 데이터 세트를 16kHz로 리샘플링해야 합니다:
 
 ```py
 >>> minds = minds.cast_column("audio", Audio(sampling_rate=16_000))
@@ -187,8 +187,6 @@ MinDS-14 데이터 세트의 샘플링 속도는 8000khz이므로(이 정보는 
 
 ## 훈련[[train]]
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 [`Trainer`]로 모델을 미세 조정하는 데 익숙하지 않다면 기본 튜토리얼 [여기](../training#train-with-pytorch-trainer)을 살펴보세요!
@@ -235,7 +233,7 @@ MinDS-14 데이터 세트의 샘플링 속도는 8000khz이므로(이 정보는 
 ...     args=training_args,
 ...     train_dataset=encoded_minds["train"],
 ...     eval_dataset=encoded_minds["test"],
-...     tokenizer=feature_extractor,
+...     processing_class=feature_extractor,
 ...     compute_metrics=compute_metrics,
 ... )
 
@@ -247,8 +245,6 @@ MinDS-14 데이터 세트의 샘플링 속도는 8000khz이므로(이 정보는 
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -289,8 +285,6 @@ For a more in-depth example of how to finetune a model for audio classification,
 
 원하는 경우 `pipeline`의 결과를 수동으로 복제할 수도 있습니다:
 
-<frameworkcontent>
-<pt>
 특징 추출기를 가져와서 오디오 파일을 전처리하고 `입력`을 PyTorch 텐서로 반환합니다:
 
 ```py
@@ -320,5 +314,3 @@ For a more in-depth example of how to finetune a model for audio classification,
 >>> predicted_label
 'cash_deposit'
 ```
-</pt>
-</frameworkcontent>

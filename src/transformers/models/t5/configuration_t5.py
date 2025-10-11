@@ -14,9 +14,9 @@
 # limitations under the License.
 """T5 model configuration"""
 
-from typing import Mapping
+from collections.abc import Mapping
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...onnx import OnnxSeq2SeqConfigWithPast
 from ...utils import logging
 
@@ -24,15 +24,15 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class T5Config(PretrainedConfig):
+class T5Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`T5Model`] or a [`TFT5Model`]. It is used to
     instantiate a T5 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the T5
     [google-t5/t5-small](https://huggingface.co/google-t5/t5-small) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Arguments:
         vocab_size (`int`, *optional*, defaults to 32128):
@@ -73,7 +73,12 @@ class T5Config(PretrainedConfig):
 
     model_type = "t5"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"hidden_size": "d_model", "num_attention_heads": "num_heads", "num_hidden_layers": "num_layers"}
+    attribute_map = {
+        "hidden_size": "d_model",
+        "num_attention_heads": "num_heads",
+        "num_hidden_layers": "num_layers",
+        "head_dim": "d_kv",
+    }
 
     def __init__(
         self,
@@ -161,3 +166,6 @@ class T5OnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def default_onnx_opset(self) -> int:
         return 13
+
+
+__all__ = ["T5Config", "T5OnnxConfig"]

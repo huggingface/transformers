@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -41,8 +40,9 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     space_between_special_tokens = True
     from_pretrained_filter = filter_non_english
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]", "你", "好", "是", "谁", "a", "b", "c", "d"]
         word_shape = {}
@@ -50,14 +50,14 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         for i, value in enumerate(vocab_tokens):
             word_shape[value] = i
             word_pronunciation[value] = i
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        self.word_shape_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["word_shape_file"])
-        self.word_pronunciation_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["word_pronunciation_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
+        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        cls.word_shape_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["word_shape_file"])
+        cls.word_pronunciation_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["word_pronunciation_file"])
+        with open(cls.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
-        with open(self.word_shape_file, "w", encoding="utf-8") as word_shape_writer:
+        with open(cls.word_shape_file, "w", encoding="utf-8") as word_shape_writer:
             json.dump(word_shape, word_shape_writer, ensure_ascii=False)
-        with open(self.word_pronunciation_file, "w", encoding="utf-8") as word_pronunciation_writer:
+        with open(cls.word_pronunciation_file, "w", encoding="utf-8") as word_pronunciation_writer:
             json.dump(word_pronunciation, word_pronunciation_writer, ensure_ascii=False)
 
     def test_full_tokenizer(self):
@@ -204,7 +204,7 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_offsets_with_special_characters(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
 
                 sentence = f"A, naïve {tokenizer_r.mask_token} AllenNLP sentence."
                 tokens = tokenizer_r.encode_plus(
@@ -255,13 +255,13 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     # Copied from tests.models.bert.test_tokenization_bert.BertTokenizationTest.test_change_tokenize_chinese_chars
     def test_change_tokenize_chinese_chars(self):
-        list_of_commun_chinese_char = ["的", "人", "有"]
-        text_with_chinese_char = "".join(list_of_commun_chinese_char)
+        list_of_common_chinese_char = ["的", "人", "有"]
+        text_with_chinese_char = "".join(list_of_common_chinese_char)
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 kwargs["tokenize_chinese_chars"] = True
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
 
                 ids_without_spe_char_p = tokenizer_p.encode(text_with_chinese_char, add_special_tokens=False)
                 ids_without_spe_char_r = tokenizer_r.encode(text_with_chinese_char, add_special_tokens=False)
@@ -270,12 +270,12 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 tokens_without_spe_char_p = tokenizer_p.convert_ids_to_tokens(ids_without_spe_char_p)
 
                 # it is expected that each Chinese character is not preceded by "##"
-                self.assertListEqual(tokens_without_spe_char_p, list_of_commun_chinese_char)
-                self.assertListEqual(tokens_without_spe_char_r, list_of_commun_chinese_char)
+                self.assertListEqual(tokens_without_spe_char_p, list_of_common_chinese_char)
+                self.assertListEqual(tokens_without_spe_char_r, list_of_common_chinese_char)
 
                 kwargs["tokenize_chinese_chars"] = False
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
 
                 ids_without_spe_char_r = tokenizer_r.encode(text_with_chinese_char, add_special_tokens=False)
                 ids_without_spe_char_p = tokenizer_p.encode(text_with_chinese_char, add_special_tokens=False)
@@ -285,7 +285,7 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # it is expected that only the first Chinese character is not preceded by "##".
                 expected_tokens = [
-                    f"##{token}" if idx != 0 else token for idx, token in enumerate(list_of_commun_chinese_char)
+                    f"##{token}" if idx != 0 else token for idx, token in enumerate(list_of_common_chinese_char)
                 ]
                 self.assertListEqual(tokens_without_spe_char_p, expected_tokens)
                 self.assertListEqual(tokens_without_spe_char_r, expected_tokens)
