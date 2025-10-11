@@ -151,7 +151,7 @@ def list_repo_templates(
     local_files_only: bool,
     revision: Optional[str] = None,
     cache_dir: Optional[str] = None,
-    token: Union[bool, str, None] = None,
+    token: Optional[Union[str, bool]] = None,
 ) -> list[str]:
     """List template files from a repo.
 
@@ -162,7 +162,7 @@ def list_repo_templates(
     if not local_files_only:
         try:
             return [
-                entry.path.removeprefix(f"{CHAT_TEMPLATE_DIR}/")
+                entry.path.removeprefix(f"{CHAT_TEMPLATE_DIR}/").removesuffix(".jinja")
                 for entry in list_repo_tree(
                     repo_id=repo_id,
                     revision=revision,

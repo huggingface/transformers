@@ -131,6 +131,32 @@ class TokenizerPushToHubTester(unittest.TestCase):
             new_tokenizer = BertTokenizer.from_pretrained(tmp_repo.repo_id)
             self.assertDictEqual(new_tokenizer.vocab, tokenizer.vocab)
 
+    def test_push_to_hub_chat_templates(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            vocab_file = os.path.join(tmp_dir, "vocab.txt")
+            with open(vocab_file, "w", encoding="utf-8") as vocab_writer:
+                vocab_writer.write("".join([x + "\n" for x in self.vocab_tokens]))
+            tokenizer = BertTokenizer(vocab_file)
+            tokenizer.chat_template = "test template"
+
+            with TemporaryHubRepo(token=self._token) as tmp_repo:
+                tokenizer.save_pretrained(
+                    tmp_repo.repo_id, token=self._token, push_to_hub=True, save_jinja_files=False
+                )
+                reloaded_tokenizer = BertTokenizer.from_pretrained(tmp_repo.repo_id)
+                self.assertEqual(tokenizer.chat_template, reloaded_tokenizer.chat_template)
+
+            with TemporaryHubRepo(token=self._token) as tmp_repo:
+                tokenizer.save_pretrained(tmp_repo.repo_id, token=self._token, push_to_hub=True)
+                reloaded_tokenizer = BertTokenizer.from_pretrained(tmp_repo.repo_id)
+                self.assertEqual(tokenizer.chat_template, reloaded_tokenizer.chat_template)
+
+            with TemporaryHubRepo(token=self._token) as tmp_repo:
+                tokenizer.chat_template = {"default": "a", "secondary": "b"}
+                tokenizer.save_pretrained(tmp_repo.repo_id, token=self._token, push_to_hub=True)
+                reloaded_tokenizer = BertTokenizer.from_pretrained(tmp_repo.repo_id)
+                self.assertEqual(tokenizer.chat_template, reloaded_tokenizer.chat_template)
+
     def test_push_to_hub_via_save_pretrained(self):
         with TemporaryHubRepo(token=self._token) as tmp_repo:
             with tempfile.TemporaryDirectory() as tmp_dir:
