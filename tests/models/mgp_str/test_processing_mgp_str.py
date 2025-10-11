@@ -25,7 +25,7 @@ import pytest
 from transformers import MgpstrTokenizer
 from transformers.models.mgp_str.tokenization_mgp_str import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import IMAGE_PROCESSOR_NAME, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 
 if is_torch_available():
@@ -65,9 +65,9 @@ class MgpstrProcessorTest(unittest.TestCase):
             "resample": 3,
             "size": {"height": 32, "width": 128},
         }
-        self.image_processor_file = os.path.join(self.tmpdirname, IMAGE_PROCESSOR_NAME)
-        with open(self.image_processor_file, "w", encoding="utf-8") as fp:
-            json.dump(image_processor_map, fp)
+        image_processor = ViTImageProcessor(**image_processor_map)
+        processor = MgpstrProcessor(tokenizer=self.get_tokenizer(), image_processor=image_processor)
+        processor.save_pretrained(self.tmpdirname)
 
     # We copy here rather than use the ProcessorTesterMixin as this processor has a `char_tokenizer` instead of a
     # tokenizer attribute, which means all the tests would need to be overridden.
