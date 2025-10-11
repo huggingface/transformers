@@ -1407,6 +1407,7 @@ class EvollaForProteinText2Text(EvollaPreTrainedModel, GenerationMixin):
         protein_input_ids: Optional[torch.LongTensor] = None,
         protein_attention_mask: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
     ):
         r"""
@@ -1437,8 +1438,7 @@ class EvollaForProteinText2Text(EvollaPreTrainedModel, GenerationMixin):
 
         >>> print(processor.batch_decode(outputs, skip_special_tokens=True))
         ```"""
-
-        outputs = self.model(
+        outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
@@ -1447,8 +1447,11 @@ class EvollaForProteinText2Text(EvollaPreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             **kwargs,
         )
-        hidden_states = outputs[0]
-        logits = self.lm_head(hidden_states)
+
+        hidden_states = outputs.last_hidden_state
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:

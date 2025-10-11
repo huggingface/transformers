@@ -887,6 +887,7 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,  # for now we need this for generation
     ) -> Union[tuple, FalconMambaCausalLMOutput]:
         r"""
@@ -912,9 +913,11 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
             cache_position=cache_position,
             attention_mask=attention_mask,
         )
-        hidden_states = falcon_mamba_outputs[0]
 
-        logits = self.lm_head(hidden_states.to(self.lm_head.weight.dtype)).float()
+        hidden_states = falcon_mamba_outputs[0]
+        # Only compute necessary logits
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :].to(self.lm_head.weight.dtype)).float()
 
         loss = None
         if labels is not None:
