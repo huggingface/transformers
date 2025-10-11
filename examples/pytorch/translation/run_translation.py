@@ -67,12 +67,21 @@ from transformers.utils.versions import require_version
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.57.0.dev0")
 
-require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/translation/requirements.txt")
+require_version(
+    "datasets>=1.8.0",
+    "To fix: pip install -r examples/pytorch/translation/requirements.txt",
+)
 
 logger = logging.getLogger(__name__)
 
 # A list of all multilingual tokenizer which require src_lang and tgt_lang attributes.
-MULTILINGUAL_TOKENIZERS = [MBartTokenizer, MBartTokenizerFast, MBart50Tokenizer, MBart50TokenizerFast, M2M100Tokenizer]
+MULTILINGUAL_TOKENIZERS = [
+    MBartTokenizer,
+    MBartTokenizerFast,
+    MBart50Tokenizer,
+    MBart50TokenizerFast,
+    M2M100Tokenizer,
+]
 
 
 @dataclass
@@ -85,10 +94,12 @@ class ModelArguments:
         metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
     )
     config_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
+        default=None,
+        metadata={"help": "Pretrained config name or path if not the same as model_name"},
     )
     tokenizer_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
+        default=None,
+        metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"},
     )
     cache_dir: Optional[str] = field(
         default=None,
@@ -133,10 +144,12 @@ class DataTrainingArguments:
     target_lang: str = field(default=None, metadata={"help": "Target language id for translation."})
 
     dataset_name: Optional[str] = field(
-        default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
+        default=None,
+        metadata={"help": "The name of the dataset to use (via the datasets library)."},
     )
     dataset_config_name: Optional[str] = field(
-        default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
+        default=None,
+        metadata={"help": "The configuration name of the dataset to use (via the datasets library)."},
     )
     train_file: Optional[str] = field(default=None, metadata={"help": "The input training data file (a jsonlines)."})
     validation_file: Optional[str] = field(
@@ -150,7 +163,8 @@ class DataTrainingArguments:
         metadata={"help": "An optional input test data file to evaluate the metrics (sacrebleu) on a jsonlines file."},
     )
     overwrite_cache: bool = field(
-        default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
+        default=False,
+        metadata={"help": "Overwrite the cached training and evaluation sets"},
     )
     preprocessing_num_workers: Optional[int] = field(
         default=None,
@@ -238,7 +252,8 @@ class DataTrainingArguments:
         },
     )
     source_prefix: Optional[str] = field(
-        default=None, metadata={"help": "A prefix to add before every source text (useful for T5 models)."}
+        default=None,
+        metadata={"help": "A prefix to add before every source text (useful for T5 models)."},
     )
     forced_bos_token: Optional[str] = field(
         default=None,
@@ -372,14 +387,14 @@ def main():
     # The .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
     config = AutoConfig.from_pretrained(
-        model_args.config_name if model_args.config_name else model_args.model_name_or_path,
+        (model_args.config_name if model_args.config_name else model_args.model_name_or_path),
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
         token=model_args.token,
         trust_remote_code=model_args.trust_remote_code,
     )
     tokenizer = AutoTokenizer.from_pretrained(
-        model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
+        (model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path),
         cache_dir=model_args.cache_dir,
         use_fast=model_args.use_fast_tokenizer,
         revision=model_args.model_revision,
@@ -403,7 +418,7 @@ def main():
         model.resize_token_embeddings(len(tokenizer))
 
     # Set decoder_start_token_id
-    if model.config.decoder_start_token_id is None and isinstance(tokenizer, (MBartTokenizer, MBartTokenizerFast)):
+    if model.config.decoder_start_token_id is None and isinstance(tokenizer, MBartTokenizer | MBartTokenizerFast):
         if isinstance(tokenizer, MBartTokenizer):
             model.config.decoder_start_token_id = tokenizer.lang_code_to_id[data_args.target_lang]
         else:
@@ -444,6 +459,9 @@ def main():
         )
         model.config.forced_bos_token_id = forced_bos_token_id
 
+        if hasattr(model, "generation_config") and model.generation_config is not None:
+            model.generation_config.forced_bos_token_id = forced_bos_token_id
+
     # Get the language codes for input/target.
     source_lang = data_args.source_lang.split("_")[0]
     target_lang = data_args.target_lang.split("_")[0]
@@ -475,10 +493,20 @@ def main():
         inputs = [ex[source_lang] for ex in examples["translation"]]
         targets = [ex[target_lang] for ex in examples["translation"]]
         inputs = [prefix + inp for inp in inputs]
-        model_inputs = tokenizer(inputs, max_length=data_args.max_source_length, padding=padding, truncation=True)
+        model_inputs = tokenizer(
+            inputs,
+            max_length=data_args.max_source_length,
+            padding=padding,
+            truncation=True,
+        )
 
         # Tokenize targets with the `text_target` keyword argument
-        labels = tokenizer(text_target=targets, max_length=max_target_length, padding=padding, truncation=True)
+        labels = tokenizer(
+            text_target=targets,
+            max_length=max_target_length,
+            padding=padding,
+            truncation=True,
+        )
 
         # If we are padding here, replace all tokenizer.pad_token_id in the labels by -100 when we want to ignore
         # padding in the loss.
@@ -593,7 +621,7 @@ def main():
         eval_dataset=eval_dataset if training_args.do_eval else None,
         processing_class=tokenizer,
         data_collator=data_collator,
-        compute_metrics=compute_metrics if training_args.predict_with_generate else None,
+        compute_metrics=(compute_metrics if training_args.predict_with_generate else None),
     )
 
     # Training
@@ -636,7 +664,10 @@ def main():
         logger.info("*** Predict ***")
 
         predict_results = trainer.predict(
-            predict_dataset, metric_key_prefix="predict", max_length=max_length, num_beams=num_beams
+            predict_dataset,
+            metric_key_prefix="predict",
+            max_length=max_length,
+            num_beams=num_beams,
         )
         metrics = predict_results.metrics
         max_predict_samples = (
@@ -652,7 +683,9 @@ def main():
                 predictions = predict_results.predictions
                 predictions = np.where(predictions != -100, predictions, tokenizer.pad_token_id)
                 predictions = tokenizer.batch_decode(
-                    predictions, skip_special_tokens=True, clean_up_tokenization_spaces=True
+                    predictions,
+                    skip_special_tokens=True,
+                    clean_up_tokenization_spaces=True,
                 )
                 predictions = [pred.strip() for pred in predictions]
                 output_prediction_file = os.path.join(training_args.output_dir, "generated_predictions.txt")
