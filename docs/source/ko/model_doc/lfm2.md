@@ -79,7 +79,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=False))
 [[autodoc]] Lfm2Model
     - forward
 
-## Lfm2ForCausalLM
+## Lfm2ForCausalLM [[transformers.Lfm2ForCausalLM]]
 
 [[autodoc]] Lfm2ForCausalLM
     - forward
