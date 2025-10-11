@@ -61,10 +61,10 @@ pipeline(image=image, question="What time is the coffee break?")
 # pip install datasets
 import torch
 from datasets import load_dataset
-from transformers import AutoProcessor, AutoModelForVision2Seq
+from transformers import AutoProcessor, AutoModelForImageTextToText
 
 processor = AutoProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-docvqa")
-model = AutoModelForVision2Seq.from_pretrained("naver-clova-ix/donut-base-finetuned-docvqa")
+model = AutoModelForImageTextToText.from_pretrained("naver-clova-ix/donut-base-finetuned-docvqa")
 
 dataset = load_dataset("hf-internal-testing/example-documents", split="test")
 image = dataset[0]["image"]
@@ -92,11 +92,11 @@ The example below uses [torchao](../quantization/torchao) to only quantize the w
 # pip install datasets torchao
 import torch
 from datasets import load_dataset
-from transformers import TorchAoConfig, AutoProcessor, AutoModelForVision2Seq
+from transformers import TorchAoConfig, AutoProcessor, AutoModelForImageTextToText
 
 quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 processor = AutoProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-docvqa")
-model = AutoModelForVision2Seq.from_pretrained("naver-clova-ix/donut-base-finetuned-docvqa", quantization_config=quantization_config)
+model = AutoModelForImageTextToText.from_pretrained("naver-clova-ix/donut-base-finetuned-docvqa", quantization_config=quantization_config)
 
 dataset = load_dataset("hf-internal-testing/example-documents", split="test")
 image = dataset[0]["image"]
