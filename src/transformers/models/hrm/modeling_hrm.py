@@ -18,45 +18,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""
-PyTorch HRM (Hierarchical Reasoning Model) implementation.
-
-The Hierarchical Reasoning Model (HRM) was proposed in "Hierarchical Reasoning Model" by Guan Wang, Jin Li,
-Yuhao Sun, Xing Chen, Changling Liu, Yue Wu, Meng Lu, Sen Song, and Yasin Abbasi Yadkori.
-
-HRM is a novel recurrent neural network architecture designed for sequential reasoning tasks. It employs
-hierarchical and multi-timescale processing with Adaptive Computation Time (ACT), achieving strong performance
-on tasks like Sudoku solving, maze navigation, and abstract reasoning with minimal training data.
-
-This implementation follows the architecture described in the paper: https://arxiv.org/abs/2506.21734
-
-## Modular Design Notes
-
-HRM follows the modular transformers pattern by inheriting reusable components from Llama where appropriate:
-- `apply_rotary_pos_emb`, `rotate_half`: Inherited from Llama (identical implementations)
-- `LlamaRotaryEmbedding`: Available for import but not used (see HrmRotaryEmbedding below)
-
-However, HRM has several unique architectural components that cannot inherit from existing models:
-
-### Custom Components (cannot inherit):
-
-1. **HrmLinear, HrmEmbedding**: Use custom truncated normal initialization specific to HRM's training dynamics.
-   Cannot inherit from standard nn.Linear/nn.Embedding due to initialization requirements.
-
-2. **HrmRotaryEmbedding**: Precomputes cos/sin for all positions (simpler than LlamaRotaryEmbedding which
-   supports dynamic rope scaling). HRM doesn't need rope_scaling or position_ids in forward().
-
-3. **HrmAttention**: Uses fused QKV projection and custom initialization. While similar to standard attention,
-   the projection layout and initialization make inheritance from LlamaAttention impractical.
-
-4. **HrmCarry, HrmInner, HrmReasoningModule, HrmBlock**: Core hierarchical reasoning architecture unique to HRM.
-   These implement the two-level (H/L) hierarchical processing and carry state mechanism.
-
-5. **HrmModel, HrmForCausalLM**: Use carry state instead of KV cache, implement ACT halting mechanism,
-   and have unique forward passes that cannot inherit from standard transformer models.
-
-This design balances code reuse (via inherited functions) with the need to preserve HRM's novel architecture.
-"""
 
 import math
 from dataclasses import dataclass
@@ -66,169 +27,12 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import _flash_attention_forward
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
-from ..falcon_mamba.modeling_falcon_mamba import rms_forward
-from ..llama.modeling_llama import apply_rotary_pos_emb
-
-
-logger = logging.get_logger(__name__)
-
-
-class HrmConfig(PretrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`HrmModel`]. It is used to instantiate a HRM
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the HRM base model.
-
-    The Hierarchical Reasoning Model (HRM) is a novel recurrent neural network architecture for sequential reasoning
-    tasks featuring:
-    - Two-level hierarchical processing inspired by human cognition
-    - High-level (H) module: Slow, abstract planning and reasoning
-    - Low-level (L) module: Fast, detailed computations
-    - Adaptive Computation Time (ACT) mechanism with Q-learning based halting
-
-    This model was introduced in the paper "Hierarchical Reasoning Model" by Guan Wang, Jin Li, Yuhao Sun,
-    Xing Chen, Changling Liu, Yue Wu, Meng Lu, Sen Song, and Yasin Abbasi Yadkori.
-    For more details, see: https://arxiv.org/abs/2506.21734
-
-    This model was contributed by [zbloss](https://huggingface.co/zbloss). The original code can be found
-    [zbloss/HRM-sudoku-extreme](https://huggingface.co/zbloss/HRM-sudoku-extreme). Checkpoints for this model can be found
-    on the Hugging Face Hub at [zbloss/HRM-sudoku-extreme](https://huggingface.co/zbloss/HRM-sudoku-extreme).
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-            vocab_size (`int`, *optional*, defaults to 11):
-                Vocabulary size of the HRM model. Defines the number of different tokens that can be represented by the
-                `inputs_ids` passed when calling [`HrmModel`]. For reasoning tasks like Sudoku, this is typically 11
-                (digits 0-9 plus a padding token).
-            hidden_size (`int`, *optional*, defaults to 512):
-                Dimension of the hidden representations and embeddings.
-            num_hidden_layers (`int`, *optional*, defaults to 4):
-                Number of transformer layers in both high-level (H) and low-level (L) modules.
-                Use `h_layers` and `l_layers` to set them independently.
-            h_layers (`int`, *optional*):
-                Number of transformer layers in the high-level (H) module for abstract planning.
-                If not specified, defaults to `num_hidden_layers`.
-            l_layers (`int`, *optional*):
-                Number of transformer layers in the low-level (L) module for detailed computations.
-                If not specified, defaults to `num_hidden_layers`.
-            num_attention_heads (`int`, *optional*, defaults to 8):
-                Number of attention heads for each attention layer in the transformer blocks.
-            intermediate_size (`int`, *optional*):
-                Dimension of the MLP representations. If not specified, defaults to `hidden_size * expansion`.
-            expansion (`float`, *optional*, defaults to 4.0):
-                MLP expansion ratio for SwiGLU feed-forward layers. Used to calculate `intermediate_size`
-                if not explicitly provided.
-            max_position_embeddings (`int`, *optional*, defaults to 81):
-                The maximum sequence length that this model might ever be used with. For Sudoku, this is 81 (9x9 grid).
-                For ARC tasks, this can be up to 900 (30x30 grid).
-            h_cycles (`int`, *optional*, defaults to 2):
-                Number of high-level reasoning cycles per forward pass. Controls the depth of abstract planning.
-            l_cycles (`int`, *optional*, defaults to 2):
-                Number of low-level computation cycles per high-level cycle. Controls granularity of detailed processing.
-            pos_encodings (`str`, *optional*, defaults to `"rope"`):
-                Type of positional encoding to use. Options are "rope" (Rotary Position Embeddings) or "learned".
-            rope_theta (`float`, *optional*, defaults to 10000.0):
-                The base period of the RoPE embeddings. Only used when `pos_encodings="rope"`.
-            rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-                The epsilon used by the RMS normalization layers for numerical stability.
-            puzzle_emb_ndim (`int`, *optional*, defaults to 0):
-                Dimension of per-puzzle sparse embeddings. Set to 0 to disable puzzle-specific embeddings.
-                When > 0, each unique puzzle gets a learned embedding of this dimension.
-            num_puzzle_identifiers (`int`, *optional*, defaults to 1):
-                Total number of unique puzzle types/IDs for which to learn separate embeddings.
-                Only used when `puzzle_emb_ndim > 0`.
-            halt_max_steps (`int`, *optional*, defaults to 16):
-                Maximum number of computation steps before forcing the ACT mechanism to halt.
-                Controls the computational budget per sequence.
-            halt_exploration_prob (`float`, *optional*, defaults to 0.1):
-                Probability of exploration during ACT training. Used for Q-learning based adaptive halting.
-            dtype (`str` or `torch.dtype`, *optional*, defaults to `"bfloat16"`):
-                The dtype of the model's forward pass computations. Can be "bfloat16", "float32", or "float16".
-            initializer_range (`float`, *optional*, defaults to 0.02):
-                The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-            use_cache (`bool`, *optional*, defaults to `False`):
-                Whether or not the model should return the state for recurrent computation.
-                HRM uses a unique state system for hierarchical processing.
-
-    Example:
-    ```python
-    >>> from transformers import HrmConfig, HrmModel
-
-    >>> # Initializing a HRM configuration for Sudoku solving
-    >>> configuration = HrmConfig(
-    ...     vocab_size=11,  # 0-9 digits + padding
-    ...     hidden_size=512,
-    ...     num_hidden_layers=4,
-    ...     max_position_embeddings=81,  # 9x9 grid
-    ...     h_cycles=2,
-    ...     l_cycles=2,
-    ... )
-
-    >>> # Initializing a model from the configuration
-    >>> model = HrmModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```
-    """
-
-    model_type = "hrm"
-
-    def __init__(
-        self,
-        vocab_size=11,
-        hidden_size=512,
-        num_hidden_layers=4,
-        h_layers=None,
-        l_layers=None,
-        num_attention_heads=8,
-        intermediate_size=None,
-        expansion=4.0,
-        max_position_embeddings=81,
-        h_cycles=2,
-        l_cycles=2,
-        pos_encodings="rope",
-        rope_theta=10000.0,
-        rms_norm_eps=1e-5,
-        puzzle_emb_ndim=0,
-        num_puzzle_identifiers=1,
-        halt_max_steps=16,
-        halt_exploration_prob=0.1,
-        dtype="bfloat16",
-        initializer_range=0.02,
-        use_cache=False,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.h_layers = h_layers if h_layers is not None else num_hidden_layers
-        self.l_layers = l_layers if l_layers is not None else num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.expansion = expansion
-        self.intermediate_size = intermediate_size if intermediate_size is not None else int(hidden_size * expansion)
-        self.max_position_embeddings = max_position_embeddings
-        self.h_cycles = h_cycles
-        self.l_cycles = l_cycles
-        self.pos_encodings = pos_encodings
-        self.rope_theta = rope_theta
-        self.rms_norm_eps = rms_norm_eps
-        self.puzzle_emb_ndim = puzzle_emb_ndim
-        self.num_puzzle_identifiers = num_puzzle_identifiers
-        self.halt_max_steps = halt_max_steps
-        self.halt_exploration_prob = halt_exploration_prob
-        self.initializer_range = initializer_range
-        self.use_cache = use_cache
-
-        super().__init__(dtype=dtype, **kwargs)
+from ...utils import auto_docstring
+from .configuration_hrm import HrmConfig
 
 
 @dataclass
@@ -245,10 +49,12 @@ class HrmModelOutput(ModelOutput):
             Q-values for continuing in the Adaptive Computation Time mechanism.
         carry (`HrmState`, *optional*):
             Model state for recurrent computation, containing hidden states and halting information.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or
+            when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or
+            when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape
             `(batch_size, num_heads, sequence_length, sequence_length)`.
     """
@@ -277,10 +83,12 @@ class HrmCausalLMOutput(ModelOutput):
             Q-values for continuing in the Adaptive Computation Time mechanism.
         carry (`HrmState`, *optional*):
             Model state for recurrent computation, containing hidden states and halting information.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or
+            when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or
+            when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape
             `(batch_size, num_heads, sequence_length, sequence_length)`.
     """
@@ -315,8 +123,6 @@ def truncated_normal_init_(
             tensor.mul_(sqrt2 * comp_std)
             tensor.clip_(lower * comp_std, upper * comp_std)
     return tensor
-
-
 
 
 class HrmLinear(nn.Module):
@@ -395,6 +201,40 @@ class HrmRotaryEmbedding(nn.Module):
     def forward(self, position_ids=None) -> tuple[torch.Tensor, torch.Tensor]:
         """Forward pass - position_ids parameter is accepted for compatibility but not used."""
         return self.cos_cached, self.sin_cached
+
+
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        position_ids (`torch.Tensor`, *optional*):
+            Deprecated and unused.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
 
 
 class HrmAttention(nn.Module):
@@ -503,6 +343,25 @@ class HrmSwiGLU(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         gate, up = self.gate_up_proj(x).chunk(2, dim=-1)
         return self.down_proj(F.silu(gate) * up)
+
+
+def rms_forward(hidden_states, variance_epsilon=1e-6):
+    """
+    Calculates simple RMSNorm with no learnable weights. `MambaRMSNorm` will
+    leverage this in order to multiply the final result with the RMSNorm weight
+
+    Args:
+        hidden_states (`torch.Tensor`):
+            Hidden states to normalize
+        variance_epsilon (`float`):
+            The eps value to add in the square root scaling factor
+    """
+    input_dtype = hidden_states.dtype
+    hidden_states = hidden_states.to(torch.float32)
+
+    variance = hidden_states.pow(2).mean(-1, keepdim=True)
+    hidden_states = hidden_states * torch.rsqrt(variance + variance_epsilon)
+    return hidden_states.to(input_dtype)
 
 
 class HrmBlock(nn.Module):
@@ -719,7 +578,10 @@ class HrmInner(nn.Module):
             for high_cycle_idx in range(self.config.h_cycles):
                 for low_cycle_idx in range(self.config.l_cycles):
                     # Skip the last L-level update (will be done with gradients)
-                    if not ((high_cycle_idx == self.config.h_cycles - 1) and (low_cycle_idx == self.config.l_cycles - 1)):
+                    is_last_cycle = (high_cycle_idx == self.config.h_cycles - 1) and (
+                        low_cycle_idx == self.config.l_cycles - 1
+                    )
+                    if not is_last_cycle:
                         low = self.low_level_module(low, high + input_embeddings, cos_sin=cos_sin)
                 # Skip the last H-level update (will be done with gradients)
                 if high_cycle_idx != self.config.h_cycles - 1:
@@ -1018,4 +880,4 @@ class HrmForCausalLM(HrmPreTrainedModel, GenerationMixin):
         )
 
 
-__all__ = ["HrmConfig", "HrmModel", "HrmForCausalLM", "HrmPreTrainedModel"]
+__all__ = ["HrmModel", "HrmForCausalLM", "HrmPreTrainedModel"]

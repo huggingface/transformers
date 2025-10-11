@@ -91,8 +91,9 @@ class HrmConfig(PretrainedConfig):
     For more details, see: https://arxiv.org/abs/2506.21734
 
     This model was contributed by [zbloss](https://huggingface.co/zbloss). The original code can be found
-    [zbloss/HRM-sudoku-extreme](https://huggingface.co/zbloss/HRM-sudoku-extreme). Checkpoints for this model can be found
-    on the Hugging Face Hub at [zbloss/HRM-sudoku-extreme](https://huggingface.co/zbloss/HRM-sudoku-extreme).
+    at [zbloss/HRM-sudoku-extreme](https://huggingface.co/zbloss/HRM-sudoku-extreme). Checkpoints for this model
+    can be found on the Hugging Face Hub at
+    [zbloss/HRM-sudoku-extreme](https://huggingface.co/zbloss/HRM-sudoku-extreme).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -126,7 +127,8 @@ class HrmConfig(PretrainedConfig):
             h_cycles (`int`, *optional*, defaults to 2):
                 Number of high-level reasoning cycles per forward pass. Controls the depth of abstract planning.
             l_cycles (`int`, *optional*, defaults to 2):
-                Number of low-level computation cycles per high-level cycle. Controls granularity of detailed processing.
+                Number of low-level computation cycles per high-level cycle. Controls granularity of detailed
+                processing.
             pos_encodings (`str`, *optional*, defaults to `"rope"`):
                 Type of positional encoding to use. Options are "rope" (Rotary Position Embeddings) or "learned".
             rope_theta (`float`, *optional*, defaults to 10000.0):
@@ -239,10 +241,12 @@ class HrmModelOutput(ModelOutput):
             Q-values for continuing in the Adaptive Computation Time mechanism.
         carry (`HrmState`, *optional*):
             Model state for recurrent computation, containing hidden states and halting information.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or
+            when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or
+            when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape
             `(batch_size, num_heads, sequence_length, sequence_length)`.
     """
@@ -271,10 +275,12 @@ class HrmCausalLMOutput(ModelOutput):
             Q-values for continuing in the Adaptive Computation Time mechanism.
         carry (`HrmState`, *optional*):
             Model state for recurrent computation, containing hidden states and halting information.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or
+            when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or
+            when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape
             `(batch_size, num_heads, sequence_length, sequence_length)`.
     """
@@ -309,8 +315,6 @@ def truncated_normal_init_(
             tensor.mul_(sqrt2 * comp_std)
             tensor.clip_(lower * comp_std, upper * comp_std)
     return tensor
-
-
 
 
 class HrmLinear(nn.Module):
@@ -713,7 +717,10 @@ class HrmInner(nn.Module):
             for high_cycle_idx in range(self.config.h_cycles):
                 for low_cycle_idx in range(self.config.l_cycles):
                     # Skip the last L-level update (will be done with gradients)
-                    if not ((high_cycle_idx == self.config.h_cycles - 1) and (low_cycle_idx == self.config.l_cycles - 1)):
+                    is_last_cycle = (high_cycle_idx == self.config.h_cycles - 1) and (
+                        low_cycle_idx == self.config.l_cycles - 1
+                    )
+                    if not is_last_cycle:
                         low = self.low_level_module(low, high + input_embeddings, cos_sin=cos_sin)
                 # Skip the last H-level update (will be done with gradients)
                 if high_cycle_idx != self.config.h_cycles - 1:

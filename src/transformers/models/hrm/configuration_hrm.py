@@ -40,8 +40,9 @@ class HrmConfig(PretrainedConfig):
     For more details, see: https://arxiv.org/abs/2506.21734
 
     This model was contributed by [zbloss](https://huggingface.co/zbloss). The original code can be found
-    [zbloss/HRM-sudoku-extreme](https://huggingface.co/zbloss/HRM-sudoku-extreme). Checkpoints for this model can be found
-    on the Hugging Face Hub at [zbloss/HRM-sudoku-extreme](https://huggingface.co/zbloss/HRM-sudoku-extreme).
+    at [zbloss/HRM-sudoku-extreme](https://huggingface.co/zbloss/HRM-sudoku-extreme). Checkpoints for this model
+    can be found on the Hugging Face Hub at
+    [zbloss/HRM-sudoku-extreme](https://huggingface.co/zbloss/HRM-sudoku-extreme).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -75,7 +76,8 @@ class HrmConfig(PretrainedConfig):
             h_cycles (`int`, *optional*, defaults to 2):
                 Number of high-level reasoning cycles per forward pass. Controls the depth of abstract planning.
             l_cycles (`int`, *optional*, defaults to 2):
-                Number of low-level computation cycles per high-level cycle. Controls granularity of detailed processing.
+                Number of low-level computation cycles per high-level cycle. Controls granularity of detailed
+                processing.
             pos_encodings (`str`, *optional*, defaults to `"rope"`):
                 Type of positional encoding to use. Options are "rope" (Rotary Position Embeddings) or "learned".
             rope_theta (`float`, *optional*, defaults to 10000.0):
@@ -98,8 +100,8 @@ class HrmConfig(PretrainedConfig):
             initializer_range (`float`, *optional*, defaults to 0.02):
                 The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
             use_cache (`bool`, *optional*, defaults to `False`):
-                Whether or not the model should return the carry state for recurrent computation.
-                HRM uses a unique carry state system for hierarchical processing.
+                Whether or not the model should return the state for recurrent computation.
+                HRM uses a unique state system for hierarchical processing.
 
     Example:
     ```python
