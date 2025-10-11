@@ -221,19 +221,19 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
     def pad(
         self,
-        images: "torch.Tensor",
+        images: list["torch.Tensor"],
         pad_size: SizeDict = None,
         fill_value: Optional[int] = 0,
         padding_mode: Optional[str] = "constant",
         return_mask: bool = False,
         disable_grouping: Optional[bool] = False,
         **kwargs,
-    ) -> "torch.Tensor":
+    ) -> Union[tuple["torch.Tensor", "torch.Tensor"], "torch.Tensor"]:
         """
         Pads images to `(pad_size["height"], pad_size["width"])` or to the largest size in the batch.
 
         Args:
-            images (`torch.Tensor`):
+            images (`list[torch.Tensor]`):
                 Images to pad.
             pad_size (`SizeDict`, *optional*):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
@@ -248,7 +248,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
                 Whether to disable grouping of images by size.
 
         Returns:
-            `torch.Tensor`: The resized image.
+            `Union[tuple[torch.Tensor, torch.Tensor], torch.Tensor]`: The padded images and pixel masks if `return_mask` is `True`.
         """
         if pad_size is not None:
             if not (pad_size.height and pad_size.width):
