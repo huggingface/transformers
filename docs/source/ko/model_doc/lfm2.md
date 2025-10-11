@@ -70,7 +70,7 @@ output = model.generate(
 print(tokenizer.decode(output[0], skip_special_tokens=False))
 ```
 
-## Lfm2Config
+## Lfm2Config [[transformers.Lfm2Config]]
 
 [[autodoc]] Lfm2Config
 
