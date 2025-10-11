@@ -38,7 +38,8 @@ logger = logging.get_logger(__name__)
 
 MAPPING = {
     "post_extract_proj": "feature_projection.projection",
-    "encoder.pos_conv.0": "encoder.pos_conv_embed.conv",
+    "encoder.pos_conv.0": "encoder.pos_conv_embed.batch_norm",
+    "encoder.pos_conv.1": "encoder.pos_conv_embed.conv",
     "self_attn.k_proj": "encoder.layers.*.attention.k_proj",
     "self_attn.v_proj": "encoder.layers.*.attention.v_proj",
     "self_attn.q_proj": "encoder.layers.*.attention.q_proj",
@@ -76,6 +77,12 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
         hf_pointer.weight_v.data = value
     elif weight_type == "bias":
         hf_pointer.bias.data = value
+    elif weight_type == "running_mean":
+        hf_pointer.running_mean.data = value
+    elif weight_type == "running_var":
+        hf_pointer.running_var.data = value
+    elif weight_type == "num_batches_tracked":
+        hf_pointer.num_batches_tracked.data = value
     else:
         hf_pointer.data = value
 
@@ -116,6 +123,12 @@ def recursively_load_weights(fairseq_model, hf_model, is_finetuned):
                         weight_type = "weight"
                     elif "bias" in name:
                         weight_type = "bias"
+                    elif "running_mean" in name:
+                        weight_type = "running_mean"
+                    elif "running_var" in name:
+                        weight_type = "running_var"
+                    elif "num_batches_tracked" in name:
+                        weight_type = "num_batches_tracked"
                     else:
                         weight_type = None
                     set_recursively(hf_model, mapped_key, value, name, weight_type)
@@ -190,7 +203,7 @@ def convert_hubert_checkpoint(
             config.vocab_size = len(target_dict.symbols)
             vocab_path = os.path.join(pytorch_dump_folder_path, "vocab.json")
             if not os.path.isdir(pytorch_dump_folder_path):
-                logger.error("--pytorch_dump_folder_path ({}) should be a directory".format(pytorch_dump_folder_path))
+                logger.error(f"--pytorch_dump_folder_path ({pytorch_dump_folder_path}) should be a directory")
                 return
             os.makedirs(pytorch_dump_folder_path, exist_ok=True)
             with open(vocab_path, "w", encoding="utf-8") as vocab_handle:
@@ -204,7 +217,7 @@ def convert_hubert_checkpoint(
                 word_delimiter_token="|",
                 do_lower_case=False,
             )
-            return_attention_mask = True if config.feat_extract_norm == "layer" else False
+            return_attention_mask = config.feat_extract_norm == "layer"
             feature_extractor = Wav2Vec2FeatureExtractor(
                 feature_size=1,
                 sampling_rate=16000,

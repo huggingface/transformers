@@ -22,7 +22,6 @@ from transformers.testing_utils import (
     is_pipeline_test,
     is_torch_available,
     nested_simplify,
-    require_tf,
     require_torch,
     require_torch_accelerator,
     require_vision,
@@ -55,9 +54,19 @@ else:
 class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
+    def get_test_pipeline(
+        self,
+        model,
+        tokenizer=None,
+        image_processor=None,
+        feature_extractor=None,
+        processor=None,
+        dtype="float32",
+    ):
         vqa_pipeline = pipeline(
-            "visual-question-answering", model="hf-internal-testing/tiny-vilt-random-vqa", torch_dtype=torch_dtype
+            "visual-question-answering",
+            model="hf-internal-testing/tiny-vilt-random-vqa",
+            dtype=dtype,
         )
         examples = [
             {
@@ -118,10 +127,10 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
         vqa_pipeline = pipeline(
             "visual-question-answering",
             model="hf-internal-testing/tiny-random-Blip2ForConditionalGeneration",
-            model_kwargs={"torch_dtype": torch.float16},
+            model_kwargs={"dtype": torch.float16},
             device=torch_device,
         )
-        self.assertEqual(vqa_pipeline.model.device, torch.device("{}:0".format(torch_device)))
+        self.assertEqual(vqa_pipeline.model.device, torch.device(f"{torch_device}:0"))
         self.assertEqual(vqa_pipeline.model.language_model.dtype, torch.float16)
         self.assertEqual(vqa_pipeline.model.vision_model.dtype, torch.float16)
 
@@ -160,10 +169,10 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
         vqa_pipeline = pipeline(
             "visual-question-answering",
             model="Salesforce/blip2-opt-2.7b",
-            model_kwargs={"torch_dtype": torch.float16},
+            model_kwargs={"dtype": torch.float16},
             device=torch_device,
         )
-        self.assertEqual(vqa_pipeline.model.device, torch.device("{}:0".format(torch_device)))
+        self.assertEqual(vqa_pipeline.model.device, torch.device(f"{torch_device}:0"))
         self.assertEqual(vqa_pipeline.model.language_model.dtype, torch.float16)
 
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
@@ -236,8 +245,3 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
                 [{"score": ANY(float), "answer": ANY(str)}],
             ],
         )
-
-    @require_tf
-    @unittest.skip(reason="Visual question answering not implemented in TF")
-    def test_small_model_tf(self):
-        pass

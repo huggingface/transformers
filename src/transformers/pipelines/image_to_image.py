@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import List, Union
+from typing import Any, Union, overload
 
 import numpy as np
 
@@ -46,12 +46,13 @@ class ImageToImagePipeline(Pipeline):
 
     ```python
     >>> from PIL import Image
-    >>> import requests
+    >>> import httpx
+    >>> import io
 
     >>> from transformers import pipeline
 
     >>> upscaler = pipeline("image-to-image", model="caidas/swin2SR-classical-sr-x2-64")
-    >>> img = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+    >>> img = Image.open(io.BytesIO(httpx.get("http://images.cocodataset.org/val2017/000000039769.jpg").content))
     >>> img = img.resize((64, 64))
     >>> upscaled_img = upscaler(img)
     >>> img.size
@@ -67,6 +68,11 @@ class ImageToImagePipeline(Pipeline):
     See the list of available models on [huggingface.co/models](https://huggingface.co/models?filter=image-to-image).
     """
 
+    _load_processor = False
+    _load_image_processor = True
+    _load_feature_extractor = False
+    _load_tokenizer = False
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         requires_backends(self, "vision")
@@ -79,19 +85,23 @@ class ImageToImagePipeline(Pipeline):
 
         if "timeout" in kwargs:
             preprocess_params["timeout"] = kwargs["timeout"]
-        if "head_mask" in kwargs:
-            forward_params["head_mask"] = kwargs["head_mask"]
 
         return preprocess_params, forward_params, postprocess_params
 
+    @overload
+    def __call__(self, images: Union[str, "Image.Image"], **kwargs: Any) -> "Image.Image": ...
+
+    @overload
+    def __call__(self, images: Union[list[str], list["Image.Image"]], **kwargs: Any) -> list["Image.Image"]: ...
+
     def __call__(
-        self, images: Union[str, List[str], "Image.Image", List["Image.Image"]], **kwargs
-    ) -> Union["Image.Image", List["Image.Image"]]:
+        self, images: Union[str, list[str], "Image.Image", list["Image.Image"]], **kwargs: Any
+    ) -> Union["Image.Image", list["Image.Image"]]:
         """
         Transform the image(s) passed as inputs.
 
         Args:
-            images (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
+            images (`str`, `list[str]`, `PIL.Image` or `list[PIL.Image]`):
                 The pipeline handles three types of images:
 
                 - A string containing a http link pointing to an image
@@ -106,7 +116,7 @@ class ImageToImagePipeline(Pipeline):
                 the call may block forever.
 
         Return:
-            An image (Image.Image) or a list of images (List["Image.Image"]) containing result(s). If the input is a
+            An image (Image.Image) or a list of images (list["Image.Image"]) containing result(s). If the input is a
             single image, the return will be also a single image, if the input is a list of several images, it will
             return a list of transformed images.
         """
@@ -119,13 +129,12 @@ class ImageToImagePipeline(Pipeline):
     def preprocess(self, image, timeout=None):
         image = load_image(image, timeout=timeout)
         inputs = self.image_processor(images=[image], return_tensors="pt")
-        if self.framework == "pt":
-            inputs = inputs.to(self.torch_dtype)
+        inputs = inputs.to(self.dtype)
         return inputs
 
     def postprocess(self, model_outputs):
         images = []
-        if "reconstruction" in model_outputs.keys():
+        if "reconstruction" in model_outputs:
             outputs = model_outputs.reconstruction
         for output in outputs:
             output = output.data.squeeze().float().cpu().clamp_(0, 1).numpy()

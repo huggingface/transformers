@@ -14,22 +14,22 @@
 # limitations under the License.
 """Donut Swin Transformer model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class DonutSwinConfig(PretrainedConfig):
+class DonutSwinConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DonutSwinModel`]. It is used to instantiate a
     Donut model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Donut
     [naver-clova-ix/donut-base](https://huggingface.co/naver-clova-ix/donut-base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         image_size (`int`, *optional*, defaults to 224):
@@ -130,3 +130,6 @@ class DonutSwinConfig(PretrainedConfig):
         # we set the hidden_size attribute in order to make Swin work with VisionEncoderDecoderModel
         # this indicates the channel dimension after the last stage of the model
         self.hidden_size = int(embed_dim * 2 ** (len(depths) - 1))
+
+
+__all__ = ["DonutSwinConfig"]

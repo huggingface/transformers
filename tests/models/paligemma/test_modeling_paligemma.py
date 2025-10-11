@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,23 +13,24 @@
 # limitations under the License.
 """Testing suite for the PyTorch PaliGemma model."""
 
-import gc
+import copy
 import unittest
 
 import requests
-from parameterized import parameterized
 
 from transformers import (
     PaliGemmaConfig,
     PaliGemmaForConditionalGeneration,
+    PaliGemmaModel,
     PaliGemmaProcessor,
     is_torch_available,
     is_vision_available,
 )
 from transformers.testing_utils import (
+    Expectations,
+    cleanup,
     require_read_token,
     require_torch,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -42,8 +42,7 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 if is_torch_available():
     import torch
-else:
-    is_torch_greater_or_equal_than_2_0 = False
+
 
 if is_vision_available():
     from PIL import Image
@@ -159,7 +158,8 @@ class PaliGemmaVisionText2TextModelTester:
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
-        attention_mask = input_ids.ne(1).to(torch_device)
+        attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
+
         # set the 16 first tokens to be image, and ensure that no other tokens are image tokens
         # do not change this unless you modified image size or patch size
         input_ids[input_ids == config.image_token_index] = self.pad_token_id
@@ -180,74 +180,71 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     Model tester for `PaliGemmaForConditionalGeneration`.
     """
 
-    all_model_classes = (PaliGemmaForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = (PaliGemmaForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            PaliGemmaModel,
+            PaliGemmaForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
+    pipeline_model_mapping = {"image-text-to-text": PaliGemmaForConditionalGeneration}
+    additional_model_inputs = ["token_type_ids"]
     fx_compatible = False
-    test_pruning = False
+
     test_torchscript = False
-    test_head_masking = False
+    _is_composite = True
 
     def setUp(self):
         self.model_tester = PaliGemmaVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=PaliGemmaConfig, has_text_modality=False)
 
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
+    # Copied from tests.models.llava.test_modeling_llava.LlavaForConditionalGenerationModelTest.test_mismatching_num_image_tokens
+    def test_mismatching_num_image_tokens(self):
+        """
+        Tests that VLMs through an error with explicit message saying what is wrong
+        when number of images doesn't match number of image tokens in the text.
+        Also we need to test multi-image cases when one prompr has multiple image tokens.
+        """
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
+            model = model_class(config).to(torch_device)
             model.eval()
+            curr_input_dict = copy.deepcopy(input_dict)  # in=place modifications further
+            _ = model(**curr_input_dict)  # successful forward with no modifications
 
-            inputs = self._prepare_for_class(inputs_dict, model_class)
+            # remove one image but leave the image token in text
+            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-1:, ...]
+            with self.assertRaises(ValueError):
+                _ = model(**curr_input_dict)
 
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
+            # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
+            input_ids = curr_input_dict["input_ids"][:1]
+            pixel_values = curr_input_dict["pixel_values"][:1]
+            input_ids = torch.cat([input_ids, input_ids], dim=0)
 
-            wte = model.get_input_embeddings()
-            inputs["inputs_embeds"] = wte(input_ids)
+            # one image and two image tokens raise an error
+            with self.assertRaises(ValueError):
+                _ = model(input_ids=input_ids, pixel_values=pixel_values)
 
-            with torch.no_grad():
-                model(**inputs)
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    # while some other models require pixel_values to be present
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-
-            with torch.no_grad():
-                out_ids = model(input_ids=input_ids, **inputs)[0]
-                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            self.assertTrue(torch.allclose(out_embeds, out_ids))
+            # two images and two image tokens don't raise an error
+            pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
+            _ = model(input_ids=input_ids, pixel_values=pixel_values)
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -268,20 +265,6 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     def test_model_parallelism(self):
         pass
 
-    @require_torch_sdpa
-    @slow
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
-        self.skipTest(
-            "Due to custom causal mask, there is a slightly too big difference between eager and sdpa in bfloat16."
-        )
-
-    @unittest.skip(
-        reason="PaliGemmma's SigLip encoder uses the same initialization scheme as the Flax original implementation"
-    )
-    def test_initialization(self):
-        pass
-
     # TODO extend valid outputs to include this test @Molbap
     @unittest.skip(reason="PaliGemma has currently one output format.")
     def test_model_outputs_equivalence(self):
@@ -296,23 +279,61 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip(reason="PaliGemma does not support low_cpu_mem_usage.")
-    def test_save_load_low_cpu_mem_usage(self):
-        pass
-
-    @unittest.skip(reason="PaliGemma does not support low_cpu_mem_usage.")
-    def test_save_load_low_cpu_mem_usage_checkpoints(self):
-        pass
-
-    @unittest.skip(reason="PaliGemma does not support low_cpu_mem_usage.")
-    def test_save_load_low_cpu_mem_usage_no_safetensors(self):
-        pass
-
     @unittest.skip(
-        reason="VLMs doen't accept inputs embeds and pixel values at the same time. So if the test passed for bacbone LM, it passes for VLM also"
+        "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
     )
-    def test_generate_from_inputs_embeds_with_static_cache(self):
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass
+
+    @unittest.skip("Paligemma position ids are 1 indexed")
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Paloigemma position ids are 1 indexed")
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    def test_attention_mask_with_token_types(self):
+        """Test that attention masking works correctly both with and without token type IDs."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
+            model.to(torch_device)
+            model.eval()
+
+            # Case 1: With token_type_ids
+            outputs_with_types = model(
+                **inputs_dict,
+                output_attentions=True,
+            )
+
+            # Case 2: Without token_type_ids
+            inputs_no_types = {k: v for k, v in inputs_dict.items() if k != "token_type_ids"}
+            outputs_no_types = model(
+                **inputs_no_types,
+                output_attentions=True,
+            )
+
+            attention_outputs_with_types = outputs_with_types.attentions
+            attention_outputs_no_types = outputs_no_types.attentions
+
+            # Verify pad tokens remain masked in both cases
+            attention_mask = inputs_dict["attention_mask"]
+            pad_positions = attention_mask == 0
+
+            for layer_attentions in [attention_outputs_with_types, attention_outputs_no_types]:
+                for layer_attn in layer_attentions:
+                    # Check if pad tokens are properly masked
+                    for batch_idx in range(layer_attn.shape[0]):
+                        for seq_idx in range(layer_attn.shape[-1]):
+                            if pad_positions[batch_idx, seq_idx]:
+                                # Verify attention weights for pad tokens are zero
+                                self.assertTrue(
+                                    torch.all(layer_attn[batch_idx, :, :, seq_idx] == 0),
+                                    f"Found non-zero attention weights for padding token at batch {batch_idx}, sequence position {seq_idx}",
+                                )
 
 
 @slow
@@ -323,8 +344,7 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.processor = PaliGemmaProcessor.from_pretrained("google/paligemma-3b-pt-224")
 
     def tearDown(self):
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     def test_small_model_integration_test(self):
         # Let' s make sure we test the preprocessing to replace what is used
@@ -353,7 +373,10 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor = PaliGemmaProcessor.from_pretrained(model_id)
         prompt = "answer en There is no snowman in any of the images. Is this true or false?"
         stop_sign_image = Image.open(
-            requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw
+            requests.get(
+                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                stream=True,
+            ).raw
         )
         snow_image = Image.open(
             requests.get(
@@ -450,7 +473,7 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Let' s make sure we test the preprocessing to replace what is used
         model_id = "google/paligemma-3b-pt-224"
         model = PaliGemmaForConditionalGeneration.from_pretrained(
-            model_id, revision="bfloat16", torch_dtype=torch.bfloat16
+            model_id, revision="bfloat16", dtype=torch.bfloat16
         ).to(torch_device)
         # The first batch is longer in terms of text, the second will be padded.
         prompts = [
@@ -479,7 +502,7 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Let' s make sure we test the preprocessing to replace what is used
         model_id = "google/paligemma-3b-pt-224"
         model = PaliGemmaForConditionalGeneration.from_pretrained(
-            model_id, revision="float16", torch_dtype=torch.float16
+            model_id, revision="float16", dtype=torch.float16
         ).to(torch_device)
         # The first batch is longer in terms of text, the second will be padded.
         prompts = [
@@ -510,7 +533,7 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # impacted negatively segmentation generations.
         model_id = "google/paligemma-3b-pt-224"
         model = PaliGemmaForConditionalGeneration.from_pretrained(
-            model_id, revision="bfloat16", torch_dtype=torch.bfloat16
+            model_id, revision="bfloat16", dtype=torch.bfloat16
         ).to(torch_device)
         prompt = ("detect shoe",)
 
@@ -525,7 +548,14 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=20)
 
-        EXPECTED_DECODED_TEXT = "detect shoe\n<loc0051><loc0309><loc0708><loc0646> shoe"  # fmt: skip
+        expected_decoded_texts = Expectations(
+            {
+                ("rocm", (9, 5)): "detect shoe\n<loc0051><loc0309><loc0708><loc0644> shoe",
+                (None, None): "detect shoe\n<loc0051><loc0309><loc0708><loc0646> shoe",
+                ("cuda", 8): "detect shoe\n<loc0051><loc0309><loc0708><loc0646> shoe",
+            }
+        )  # fmt: skip
+        EXPECTED_DECODED_TEXT = expected_decoded_texts.get_expectation()
         self.assertEqual(self.processor.decode(output[0], skip_special_tokens=True), EXPECTED_DECODED_TEXT)
 
     def test_paligemma_index_error_bug(self):
@@ -555,7 +585,7 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # this is a supplementary test to ensure paligemma fine-tuning that relies on token_type_ids is robust to future changes
         model_id = "google/paligemma-3b-pt-224"
         model = PaliGemmaForConditionalGeneration.from_pretrained(
-            model_id, revision="bfloat16", torch_dtype=torch.bfloat16
+            model_id, revision="bfloat16", dtype=torch.bfloat16
         ).to(torch_device)
         # The first batch is longer in terms of text, the second will be padded.
         prompts = [

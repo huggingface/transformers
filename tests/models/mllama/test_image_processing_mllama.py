@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -34,7 +33,7 @@ if is_torch_available():
     import torch
 
 
-class MllamaImageProcessingTester(unittest.TestCase):
+class MllamaImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -55,7 +54,6 @@ class MllamaImageProcessingTester(unittest.TestCase):
         do_pad=True,
         max_image_tiles=4,
     ):
-        super().__init__()
         size = size if size is not None else {"height": 224, "width": 224}
         self.parent = parent
         self.batch_size = batch_size
@@ -224,6 +222,36 @@ class MllamaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual(
             tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
         )
+
+    def test_call_channels_last(self):
+        # Initialize image_processing
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+
+        # a white 1x1 pixel RGB image
+        image_inputs = [[np.full(shape=(1, 1, 3), fill_value=1.0, dtype=float)]]
+        encoded_images = image_processing(
+            image_inputs, return_tensors="pt", input_data_format="channels_last"
+        ).pixel_values
+        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+        self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
+
+    def test_ambiguous_channel_pil_image(self):
+        # Initialize image_processing
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+
+        image_inputs = [[Image.new("RGB", (1, 1))], [Image.new("RGB", (100, 1))]]
+        encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
+        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+        self.assertEqual(tuple(encoded_images.shape), (2, *expected_output_image_shape))
+
+    def test_resize_impractical_aspect_ratio(self):
+        # Initialize image_processing
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        # Ensure that no error is raised even if the aspect ratio is impractical
+        image_inputs = [[Image.new("RGB", (9999999, 1))]]
+        encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
+        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+        self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
     def test_call_pytorch(self):
         # Initialize image_processing

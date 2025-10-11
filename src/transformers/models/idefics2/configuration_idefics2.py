@@ -13,18 +13,15 @@
 # limitations under the License.
 """Idefics2 model configuration"""
 
-import os
-from typing import Union
-
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class Idefics2VisionConfig(PretrainedConfig):
+class Idefics2VisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Idefics2VisionModel`]. It is used to instantiate a
     Idefics2 vision encoder according to the specified arguments, defining the model architecture. Instantiating a
@@ -32,8 +29,8 @@ class Idefics2VisionConfig(PretrainedConfig):
     [google/siglip-base-patch16-224](https://huggingface.co/google/siglip-base-patch16-224) used in the Idefics2 model
     [HuggingFaceM4/idefics2-8b](https://huggingface.co/HuggingFaceM4/idefics2-8b).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -57,7 +54,7 @@ class Idefics2VisionConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        intializer_range (`float`, *optional*, defaults to 0.02):
+        initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation for initializing all weight matrices in the model.
 
     Example:
@@ -76,7 +73,8 @@ class Idefics2VisionConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "idefics2"
+    model_type = "idefics2_vision"
+    base_config_key = "vision_config"
 
     def __init__(
         self,
@@ -107,33 +105,19 @@ class Idefics2VisionConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
 
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the vision config dict if we are loading from Idefics2Config
-        if config_dict.get("model_type") == "idefics2":
-            config_dict = config_dict["vision_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
-
-
-class Idefics2PerceiverConfig(PretrainedConfig):
+class Idefics2PerceiverConfig(PreTrainedConfig):
     r"""
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the perceiver block.
+        hidden_size (`int`, *optional*, defaults to 4096):
+            Dimension of the hidden representations.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon used by the rms normalization layers.
         resampler_n_latents (`int`, *optional*, defaults to 64):
             Number of latent embeddings to resample ("compress") the input sequence to (usually < 128).
         resampler_depth (`int`, *optional*, defaults to 3):
@@ -146,28 +130,36 @@ class Idefics2PerceiverConfig(PretrainedConfig):
             Number of key-value heads in the perceiver attention block.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation for initializing all weight matrices in the model.
     """
 
-    model_type = "idefics2"
+    model_type = "idefics2_perceiver"
 
     def __init__(
         self,
         hidden_act="silu",
+        hidden_size=4096,
+        rms_norm_eps=1e-06,
         resampler_n_latents=64,
         resampler_depth=3,
         resampler_n_heads=16,
         resampler_head_dim=96,
         num_key_value_heads=4,
         attention_dropout=0.0,
+        initializer_range=0.02,
         **kwargs,
     ):
         self.hidden_act = hidden_act
+        self.hidden_size = hidden_size
+        self.rms_norm_eps = rms_norm_eps
         self.resampler_n_latents = resampler_n_latents
         self.resampler_depth = resampler_depth
         self.resampler_n_heads = resampler_n_heads
         self.num_key_value_heads = num_key_value_heads
         self.resampler_head_dim = resampler_head_dim
         self.attention_dropout = attention_dropout
+        self.initializer_range = initializer_range
         if self.num_key_value_heads > self.resampler_n_heads:
             raise ValueError(
                 f"num_key_value_heads={self.num_key_value_heads} must be less than or equal to"
@@ -176,15 +168,15 @@ class Idefics2PerceiverConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
 
-class Idefics2Config(PretrainedConfig):
+class Idefics2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Idefics2Model`]. It is used to instantiate a
     Idefics2 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the model of the Idefics2
     [HuggingFaceM4/idefics2-8b](https://huggingface.co/HuggingFaceM4/idefics2-8b) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -212,7 +204,11 @@ class Idefics2Config(PretrainedConfig):
     ```"""
 
     model_type = "idefics2"
-    is_composition = True
+    sub_configs = {
+        "text_config": AutoConfig,
+        "perceiver_config": Idefics2PerceiverConfig,
+        "vision_config": Idefics2VisionConfig,
+    }
 
     def __init__(
         self,
@@ -245,7 +241,7 @@ class Idefics2Config(PretrainedConfig):
             self.vision_config = vision_config
 
         if isinstance(text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "mistral"
+            text_config["model_type"] = text_config.get("model_type", "mistral")
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             logger.info("text_config is None, using default text config")
@@ -258,5 +254,15 @@ class Idefics2Config(PretrainedConfig):
             )
 
         self.text_config = text_config
+        if self.text_config.hidden_size != self.perceiver_config.hidden_size:
+            self.perceiver_config.hidden_size = self.text_config.hidden_size
+            self.perceiver_config.rms_norm_eps = self.text_config.rms_norm_eps
+            logger.warning_once(
+                "Perceiver config has a different `hidden_size` than text config, which means default values were used. "
+                "In your model's config on the hub, add `hidden_size` and `rms_norm_eps` keys under the `perceiver_config` dict. "
+            )
 
         super().__init__(**kwargs, tie_word_embeddings=tie_word_embeddings)
+
+
+__all__ = ["Idefics2Config"]

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,10 +13,10 @@
 # limitations under the License.
 
 import unittest
+from functools import cached_property
 
 from transformers import BigBirdTokenizer, BigBirdTokenizerFast
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, require_torch, slow
-from transformers.utils import cached_property
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -36,11 +35,12 @@ class BigBirdTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     test_rust_tokenizer = True
     test_sentencepiece = True
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
-        tokenizer = self.tokenizer_class(SAMPLE_VOCAB, keep_accents=True)
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer = cls.tokenizer_class(SAMPLE_VOCAB, keep_accents=True)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
     def test_convert_token_and_id(self):
         """Test ``_convert_token_to_id`` and ``_convert_id_to_token``."""
@@ -170,7 +170,7 @@ class BigBirdTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_tokenization_base_hard_symbols(self):
         symbols = (
             'This is a very long text with a lot of weird characters, such as: . , ~ ? ( ) " [ ] ! : - . Also we will'
-            " add words that should not exsist and be tokenized to <unk>, such as saoneuhaoesuth"
+            " add words that should not exist and be tokenized to <unk>, such as saoneuhaoesuth"
         )
         original_tokenizer_encodings = [65, 871, 419, 358, 946, 991, 2521, 452, 358, 1357, 387, 7751, 3536, 112, 985, 456, 126, 865, 938, 5400, 5734, 458, 1368, 467, 786, 2462, 5246, 1159, 633, 865, 4519, 457, 582, 852, 2557, 427, 916, 508, 405, 34324, 497, 391, 408, 11342, 1244, 385, 100, 938, 985, 456, 574, 362, 12597, 3200, 3129, 1172, 66]  # fmt: skip
         self.assertListEqual(original_tokenizer_encodings, self.big_tokenizer.encode(symbols))
@@ -201,22 +201,6 @@ class BigBirdTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @slow
     def test_special_tokens(self):
-        """
-        To reproduce:
-
-        $ wget https://github.com/google-research/bigbird/blob/master/bigbird/vocab/gpt2.model?raw=true
-        $ mv gpt2.model?raw=true gpt2.model
-
-        ```
-        import tensorflow_text as tft
-        import tensorflow as tf
-
-        vocab_model_file = "./gpt2.model"
-        tokenizer = tft.SentencepieceTokenizer(model=tf.io.gfile.GFile(vocab_model_file, "rb").read()))
-        ids = tokenizer.tokenize("Paris is the [MASK].")
-        ids = tf.concat([tf.constant([65]), ids, tf.constant([66])], axis=0)
-        detokenized = tokenizer.detokenize(ids)  # should give [CLS] Paris is the [MASK].[SEP]
-        """
         tokenizer = BigBirdTokenizer.from_pretrained("google/bigbird-roberta-base")
         decoded_text = tokenizer.decode(tokenizer("Paris is the [MASK].").input_ids)
 

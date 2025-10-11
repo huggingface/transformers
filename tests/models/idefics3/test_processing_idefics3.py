@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,21 +15,15 @@
 import shutil
 import tempfile
 import unittest
-from io import BytesIO
 
 import numpy as np
-import requests
 
 from transformers import Idefics3Processor
+from transformers.image_utils import load_image
 from transformers.models.auto.processing_auto import AutoProcessor
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_vision_available
 
-from ...test_processing_common import ProcessorTesterMixin
-
-
-if is_vision_available():
-    from PIL import Image
+from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 @require_torch
@@ -43,26 +36,22 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.tmpdirname = tempfile.mkdtemp()
         processor = Idefics3Processor.from_pretrained("HuggingFaceM4/Idefics3-8B-Llama3", image_seq_len=2)
         processor.save_pretrained(cls.tmpdirname)
-        cls.image1 = Image.open(
-            BytesIO(
-                requests.get(
-                    "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
-                ).content
+        cls.image1 = load_image(
+            url_to_local_path(
+                "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
             )
         )
-        cls.image2 = Image.open(
-            BytesIO(requests.get("https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg").content)
+        cls.image2 = load_image(
+            url_to_local_path("https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg")
         )
-        cls.image3 = Image.open(
-            BytesIO(
-                requests.get(
-                    "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"
-                ).content
+        cls.image3 = load_image(
+            url_to_local_path(
+                "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"
             )
         )
         cls.bos_token = processor.tokenizer.bos_token
-        cls.image_token = processor.image_token.content
-        cls.fake_image_token = processor.fake_image_token.content
+        cls.image_token = processor.image_token
+        cls.fake_image_token = processor.fake_image_token
         cls.global_img_token = processor.global_image_tag
 
         cls.bos_token_id = processor.tokenizer.convert_tokens_to_ids(cls.bos_token)
@@ -80,6 +69,23 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def get_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
+
+    @staticmethod
+    def prepare_processor_dict():
+        return {"image_seq_len": 2}
+
+    # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
+    def test_get_num_vision_tokens(self):
+        "Tests general functionality of the helper used internally in vLLM"
+
+        processor = self.get_processor()
+
+        output = processor._get_num_multimodal_tokens(image_sizes=[(100, 100), (300, 100), (500, 30)])
+        self.assertTrue("num_image_tokens" in output)
+        self.assertEqual(len(output["num_image_tokens"]), 3)
+
+        self.assertTrue("num_image_patches" in output)
+        self.assertEqual(len(output["num_image_patches"]), 3)
 
     def get_split_image_expected_tokens(self, processor, image_rows, image_cols):
         text_split_images = []
@@ -104,7 +110,10 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname)
+        cls.image1.close()
+        cls.image2.close()
+        cls.image3.close()
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def test_process_interleaved_images_prompts_no_image_splitting(self):
         processor = self.get_processor()
@@ -249,6 +258,68 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs["input_ids"], expected_input_ids)
         # fmt: on
 
+    def test_non_nested_images_with_batched_text(self):
+        processor = self.get_processor()
+        processor.image_processor.do_image_splitting = False
+
+        image_str = "<image>"
+        text_str_1 = "In this image, we see"
+        text_str_2 = "In this image, we see"
+
+        text = [
+            image_str + text_str_1,
+            image_str + image_str + text_str_2,
+        ]
+        images = [self.image1, self.image2, self.image3]
+
+        inputs = processor(text=text, images=images, padding=True)
+
+        self.assertEqual(np.array(inputs["pixel_values"]).shape, (2, 2, 3, 364, 364))
+        self.assertEqual(np.array(inputs["pixel_attention_mask"]).shape, (2, 2, 364, 364))
+
+    # Copied from tests.models.idefics2.test_processing_idefics2.Idefics2ProcessorTest.test_process_interleaved_images_prompts_image_error
+    def test_process_interleaved_images_prompts_image_error(self):
+        processor = self.get_processor()
+
+        text = [
+            "This is a test sentence.",
+            "In this other sentence we try some good things",
+        ]
+        images = [[self.image1], [self.image2]]
+        with self.assertRaises(ValueError):
+            processor(text=text, images=images, padding=True)
+        images = [[self.image1], []]
+        with self.assertRaises(ValueError):
+            processor(text=text, images=images, padding=True)
+
+        text = [
+            "This is a test sentence.<image>",
+            "In this other sentence we try some good things<image>",
+        ]
+        images = [[self.image1], [self.image2, self.image3]]
+        with self.assertRaises(ValueError):
+            processor(text=text, images=images, padding=True)
+        images = [[], [self.image2]]
+        with self.assertRaises(ValueError):
+            processor(text=text, images=images, padding=True)
+        images = [self.image1, self.image2, self.image3]
+        with self.assertRaises(ValueError):
+            processor(text=text, images=images, padding=True)
+        images = [self.image1]
+        with self.assertRaises(ValueError):
+            processor(text=text, images=images, padding=True)
+
+        text = [
+            "This is a test sentence.",
+            "In this other sentence we try some good things<image>",
+        ]
+        images = [[self.image1], []]
+        with self.assertRaises(ValueError):
+            processor(text=text, images=images, padding=True)
+        images = [self.image1, self.image2]
+        with self.assertRaises(ValueError):
+            processor(text=text, images=images, padding=True)
+
     def test_apply_chat_template(self):
         # Message contains content which a mix of lists with images and image urls and string
         messages = [
@@ -286,177 +357,71 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     @require_vision
-    def test_image_processor_defaults_preserved_by_image_kwargs(self):
-        if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer", max_length=117)
+    def test_text_only_inference(self):
+        """Test that the processor works correctly with text-only input."""
+        processor = self.get_processor()
 
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
+        text = "This is a simple text without images."
+        inputs = processor(text=text)
 
-        input_str = "lower newer <image>"
-        image_input = self.prepare_image_inputs()
+        tokenized_sentence = processor.tokenizer(text, add_special_tokens=False)
+        expected_input_ids = [[self.bos_token_id] + tokenized_sentence["input_ids"]]
 
-        inputs = processor(text=input_str, images=image_input)
-        self.assertEqual(len(inputs["pixel_values"][0][0]), 3)
-        self.assertEqual(len(inputs["pixel_values"][0][0][0]), 364)  # crop size doesn't affect our image processor
+        self.assertEqual(inputs["input_ids"], expected_input_ids)
+        self.assertEqual(inputs["attention_mask"], [[1] * len(expected_input_ids[0])])
+        self.assertTrue("pixel_values" not in inputs)
+        self.assertTrue("pixel_attention_mask" not in inputs)
 
-    @require_torch
-    @require_vision
-    def test_kwargs_overrides_default_image_processor_kwargs(self):
-        if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component(
-            "image_processor", max_image_size={"longest_edge": 32}, size={"longest_edge": 32}
-        )
-        tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
+        # Test batch of texts without image tokens
+        texts = ["First text.", "Second piece of text."]
+        batch_inputs = processor(text=texts, padding=True)
 
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor, image_seq_len=2)
-        self.skip_processor_without_typed_kwargs(processor)
+        tokenized_1 = processor.tokenizer(texts[0], add_special_tokens=False)
+        tokenized_2 = processor.tokenizer(texts[1], add_special_tokens=False)
 
-        input_str = "lower newer <image>"
-        image_input = self.prepare_image_inputs()
+        expected_1 = [self.bos_token_id] + tokenized_1["input_ids"]
+        expected_2 = [self.bos_token_id] + tokenized_2["input_ids"]
 
-        inputs = processor(text=input_str, images=image_input)
-        self.assertEqual(len(inputs["pixel_values"][0][0]), 3)
-        self.assertEqual(len(inputs["pixel_values"][0][0][0]), 32)
-        self.assertEqual(len(inputs["input_ids"][0]), 117)
-
-    @require_vision
-    @require_torch
-    def test_kwargs_overrides_default_tokenizer_kwargs(self):
-        if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer", max_length=30)
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-        input_str = "lower newer<image>"
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(text=input_str, images=image_input, return_tensors="pt", max_length=30)
-        self.assertEqual(len(inputs["input_ids"][0]), 30)
+        # Pad the shorter sequence
+        pad_len = len(expected_2) - len(expected_1)
+        if pad_len > 0:
+            padded_expected_1 = [self.padding_token_id] * pad_len + expected_1
+            expected_attention_1 = [0] * pad_len + [1] * len(expected_1)
+            self.assertEqual(batch_inputs["input_ids"], [padded_expected_1, expected_2])
+            self.assertEqual(batch_inputs["attention_mask"], [expected_attention_1, [1] * len(expected_2)])
+        else:
+            pad_len = -pad_len
+            padded_expected_2 = [self.padding_token_id] * pad_len + expected_2
+            expected_attention_2 = [0] * pad_len + [1] * len(expected_2)
+            self.assertEqual(batch_inputs["input_ids"], [expected_1, padded_expected_2])
+            self.assertEqual(batch_inputs["attention_mask"], [[1] * len(expected_1), expected_attention_2])
 
     @require_torch
     @require_vision
-    def test_structured_kwargs_nested(self):
-        if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer")
+    def test_missing_images_error(self):
+        """Test that appropriate error is raised when images are referenced but not provided."""
+        processor = self.get_processor()
 
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
+        # Test single text with image token but no image
+        text = "Let me show you this image: <image> What do you think?"
+        with self.assertRaises(ValueError) as context:
+            processor(text=text)
+        self.assertTrue("tokens in the text but no images were passed" in str(context.exception))
 
-        input_str = "lower newer<image>"
-        image_input = self.prepare_image_inputs()
+        # Test batch with image tokens but no images
+        texts = [
+            "First text with <image> token.",
+            "Second text <image> with token.",
+        ]
+        with self.assertRaises(ValueError) as context:
+            processor(text=texts)
+        self.assertTrue("tokens in the text but no images were passed" in str(context.exception))
 
-        # Define the kwargs for each modality
-        inputs = processor(
-            text=input_str,
-            images=image_input,
-            common_kwargs={"return_tensors": "pt"},
-            images_kwargs={"max_image_size": {"longest_edge": 32}},
-            text_kwargs={"padding": "max_length", "max_length": 120, "truncation": "longest_first"},
-        )
-        self.skip_processor_without_typed_kwargs(processor)
+        # Test with None as Images
+        with self.assertRaises(ValueError) as context:
+            processor(text=text, images=None)
+        self.assertTrue("tokens in the text but no images were passed" in str(context.exception))
 
-        self.assertEqual(inputs["pixel_values"].shape[3], 32)
-
-        self.assertEqual(len(inputs["input_ids"][0]), 120)
-
-    @require_torch
-    @require_vision
-    def test_structured_kwargs_nested_from_dict(self):
-        if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer")
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-        input_str = "lower newer<image>"
-        image_input = self.prepare_image_inputs()
-
-        # Define the kwargs for each modality
-        all_kwargs = {
-            "common_kwargs": {"return_tensors": "pt"},
-            "images_kwargs": {"max_image_size": {"longest_edge": 32}},
-            "text_kwargs": {"padding": "max_length", "max_length": 120, "truncation": "longest_first"},
-        }
-
-        inputs = processor(text=input_str, images=image_input, **all_kwargs)
-        self.assertEqual(inputs["pixel_values"].shape[3], 32)
-        self.assertEqual(len(inputs["input_ids"][0]), 120)
-
-    @require_vision
-    @require_torch
-    def test_tokenizer_defaults_preserved_by_kwargs(self):
-        if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer", max_length=30)
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-        input_str = "lower newer<image>"
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(text=input_str, images=image_input, return_tensors="pt")
-        self.assertEqual(len(inputs["input_ids"][0]), 30)
-
-    @require_torch
-    @require_vision
-    def test_unstructured_kwargs_batched(self):
-        if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer")
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = ["<image>lower newer", "<image>upper older longer string"]
-        image_input = self.prepare_image_inputs()
-        inputs = processor(
-            text=input_str,
-            images=[image_input, image_input],
-            return_tensors="pt",
-            padding="longest",
-            max_length=76,
-            truncation=True,
-            max_image_size={"longest_edge": 30},
-        )
-
-        self.assertEqual(inputs["pixel_values"].shape[2], 3)
-        self.assertEqual(inputs["pixel_values"].shape[3], 30)
-        self.assertEqual(len(inputs["input_ids"][0]), 76)
-
-    @require_torch
-    @require_vision
-    def test_unstructured_kwargs(self):
-        if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer")
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = "lower newer<image>"
-        image_input = self.prepare_image_inputs()
-        inputs = processor(
-            text=input_str,
-            images=image_input,
-            return_tensors="pt",
-            max_image_size={"longest_edge": 32},
-            padding="max_length",
-            max_length=120,
-            truncation="longest_first",
-        )
-
-        self.assertEqual(inputs["pixel_values"].shape[3], 32)
-        self.assertEqual(len(inputs["input_ids"][0]), 120)
+        with self.assertRaises(ValueError) as context:
+            processor(text=texts, images=None)
+        self.assertTrue("tokens in the text but no images were passed" in str(context.exception))

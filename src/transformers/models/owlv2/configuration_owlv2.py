@@ -14,14 +14,7 @@
 # limitations under the License.
 """OWLv2 model configuration"""
 
-import os
-from typing import TYPE_CHECKING, Dict, Union
-
-
-if TYPE_CHECKING:
-    pass
-
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
@@ -29,15 +22,15 @@ logger = logging.get_logger(__name__)
 
 
 # Copied from transformers.models.owlvit.configuration_owlvit.OwlViTTextConfig with OwlViT->Owlv2, owlvit-base-patch32->owlv2-base-patch16, owlvit->owlv2, OWL-ViT->OWLv2
-class Owlv2TextConfig(PretrainedConfig):
+class Owlv2TextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`Owlv2TextModel`]. It is used to instantiate an
     Owlv2 text encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Owlv2
     [google/owlv2-base-patch16](https://huggingface.co/google/owlv2-base-patch16) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -90,6 +83,7 @@ class Owlv2TextConfig(PretrainedConfig):
     ```"""
 
     model_type = "owlv2_text_model"
+    base_config_key = "text_config"
 
     def __init__(
         self,
@@ -123,35 +117,17 @@ class Owlv2TextConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the text config dict if we are loading from Owlv2Config
-        if config_dict.get("model_type") == "owlv2":
-            config_dict = config_dict["text_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
-
 
 # Copied from transformers.models.owlvit.configuration_owlvit.OwlViTVisionConfig with OwlViT->Owlv2, owlvit-base-patch32->owlv2-base-patch16, owlvit->owlv2, OWL-ViT->OWLv2, 32->16
-class Owlv2VisionConfig(PretrainedConfig):
+class Owlv2VisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`Owlv2VisionModel`]. It is used to instantiate
     an OWLv2 image encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the OWLv2
     [google/owlv2-base-patch16](https://huggingface.co/google/owlv2-base-patch16) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -197,6 +173,7 @@ class Owlv2VisionConfig(PretrainedConfig):
     ```"""
 
     model_type = "owlv2_vision_model"
+    base_config_key = "vision_config"
 
     def __init__(
         self,
@@ -229,35 +206,17 @@ class Owlv2VisionConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the vision config dict if we are loading from Owlv2Config
-        if config_dict.get("model_type") == "owlv2":
-            config_dict = config_dict["vision_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
-
 
 # Copied from transformers.models.owlvit.configuration_owlvit.OwlViTConfig with OwlViT->Owlv2, owlvit-base-patch32->owlv2-base-patch16, owlvit->owlv2, OWL-ViT->OWLv2
-class Owlv2Config(PretrainedConfig):
+class Owlv2Config(PreTrainedConfig):
     r"""
     [`Owlv2Config`] is the configuration class to store the configuration of an [`Owlv2Model`]. It is used to
     instantiate an OWLv2 model according to the specified arguments, defining the text model and vision model
     configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the OWLv2
     [google/owlv2-base-patch16](https://huggingface.co/google/owlv2-base-patch16) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`dict`, *optional*):
@@ -276,6 +235,7 @@ class Owlv2Config(PretrainedConfig):
     """
 
     model_type = "owlv2"
+    sub_configs = {"text_config": Owlv2TextConfig, "vision_config": Owlv2VisionConfig}
 
     def __init__(
         self,
@@ -286,49 +246,26 @@ class Owlv2Config(PretrainedConfig):
         return_dict=True,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         if text_config is None:
-            text_config = {}
-            logger.info("text_config is None. Initializing the Owlv2TextConfig with default values.")
+            text_config = Owlv2TextConfig()
+            logger.info("`text_config` is `None`. initializing the `Owlv2TextConfig` with default values.")
+        elif isinstance(text_config, dict):
+            text_config = Owlv2TextConfig(**text_config)
 
         if vision_config is None:
-            vision_config = {}
-            logger.info("vision_config is None. initializing the Owlv2VisionConfig with default values.")
+            vision_config = Owlv2VisionConfig()
+            logger.info("`vision_config` is `None`. initializing the `Owlv2VisionConfig` with default values.")
+        elif isinstance(vision_config, dict):
+            vision_config = Owlv2VisionConfig(**vision_config)
 
-        self.text_config = Owlv2TextConfig(**text_config)
-        self.vision_config = Owlv2VisionConfig(**vision_config)
+        self.text_config = text_config
+        self.vision_config = vision_config
 
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
         self.return_dict = return_dict
         self.initializer_factor = 1.0
+        super().__init__(**kwargs)
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
 
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
-
-    @classmethod
-    def from_text_vision_configs(cls, text_config: Dict, vision_config: Dict, **kwargs):
-        r"""
-        Instantiate a [`Owlv2Config`] (or a derived class) from owlv2 text model configuration and owlv2 vision
-        model configuration.
-
-        Returns:
-            [`Owlv2Config`]: An instance of a configuration object
-        """
-        config_dict = {}
-        config_dict["text_config"] = text_config
-        config_dict["vision_config"] = vision_config
-
-        return cls.from_dict(config_dict, **kwargs)
+__all__ = ["Owlv2Config", "Owlv2TextConfig", "Owlv2VisionConfig"]
