@@ -302,7 +302,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
             for more options
     """
     import ray
-    import ray.train
+    import ray.tune
 
     def _objective(trial: dict, local_trainer):
         try:
@@ -315,7 +315,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
 
         local_trainer.objective = None
 
-        checkpoint = ray.train.get_checkpoint()
+        checkpoint = ray.tune.get_checkpoint()
         if checkpoint:
             # Upon trial resume, the local_trainer's objective gets reset to None.
             # If `local_trainer.train` is a noop (training has already reached
@@ -339,8 +339,8 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
 
             with tempfile.TemporaryDirectory() as temp_checkpoint_dir:
                 local_trainer._tune_save_checkpoint(checkpoint_dir=temp_checkpoint_dir)
-                checkpoint = ray.train.Checkpoint.from_directory(temp_checkpoint_dir)
-                ray.train.report(metrics, checkpoint=checkpoint)
+                checkpoint = ray.tune.Checkpoint.from_directory(temp_checkpoint_dir)
+                ray.tune.report(metrics, checkpoint=checkpoint)
 
     if not trainer._memory_tracker.skip_memory_metrics:
         from ..trainer_utils import TrainerMemoryTracker
@@ -406,7 +406,9 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
 
         Assumes that `_objective`, defined above, is a function.
         """
-        if is_datasets_available():
+        if is_datasets_available() and packaging.version.parse(
+            importlib.metadata.version("datasets")
+        ) < packaging.version.parse("4.0.0"):
             import datasets.load
 
             dynamic_modules_path = os.path.join(datasets.load.init_dynamic_modules(), "__init__.py")
