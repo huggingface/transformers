@@ -37,7 +37,9 @@ def convert_roberta_prelayernorm_checkpoint_to_pytorch(checkpoint_repo: str, pyt
     )
 
     # convert state_dict
-    original_state_dict = torch.load(hf_hub_download(repo_id=checkpoint_repo, filename="pytorch_model.bin"))
+    original_state_dict = torch.load(
+        hf_hub_download(repo_id=checkpoint_repo, filename="pytorch_model.bin"), weights_only=True
+    )
     state_dict = {}
     for tensor_key, tensor_value in original_state_dict.items():
         # The transformer implementation gives the model a unique name, rather than overwiriting 'roberta'

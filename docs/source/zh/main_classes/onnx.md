@@ -43,8 +43,3 @@ rendered properly in your Markdown viewer.
 ## ONNX Features
 
 每个ONNX配置与一组 _特性_ 相关联，使您能够为不同类型的拓扑结构或任务导出模型。
-
-### FeaturesManager
-
-[[autodoc]] onnx.features.FeaturesManager
-

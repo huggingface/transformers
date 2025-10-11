@@ -13,43 +13,79 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-10-23 and added to Hugging Face Transformers on 2020-11-27.*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # BARThez
 
-## Overview
+[BARThez](https://huggingface.co/papers/2010.12321) is a [BART](./bart) model designed for French language tasks. Unlike existing French BERT models, BARThez includes a pretrained encoder-decoder, allowing it to generate text as well. This model is also available as a multilingual variant, mBARThez, by continuing pretraining multilingual BART on a French corpus.
 
-The BARThez model was proposed in [BARThez: a Skilled Pretrained French Sequence-to-Sequence Model](https://arxiv.org/abs/2010.12321) by Moussa Kamal Eddine, Antoine J.-P. Tixier, Michalis Vazirgiannis on 23 Oct,
-2020.
+You can find all of the original BARThez checkpoints under the [BARThez](https://huggingface.co/collections/dascim/barthez-670920b569a07aa53e3b6887) collection.
 
-The abstract of the paper:
+> [!TIP]
+> This model was contributed by [moussakam](https://huggingface.co/moussakam).
+> Refer to the [BART](./bart) docs for more usage examples.
 
+The example below demonstrates how to predict the `<mask>` token with [`Pipeline`], [`AutoModel`], and from the command line.
 
-*Inductive transfer learning, enabled by self-supervised learning, have taken the entire Natural Language Processing
-(NLP) field by storm, with models such as BERT and BART setting new state of the art on countless natural language
-understanding tasks. While there are some notable exceptions, most of the available models and research have been
-conducted for the English language. In this work, we introduce BARThez, the first BART model for the French language
-(to the best of our knowledge). BARThez was pretrained on a very large monolingual French corpus from past research
-that we adapted to suit BART's perturbation schemes. Unlike already existing BERT-based French language models such as
-CamemBERT and FlauBERT, BARThez is particularly well-suited for generative tasks, since not only its encoder but also
-its decoder is pretrained. In addition to discriminative tasks from the FLUE benchmark, we evaluate BARThez on a novel
-summarization dataset, OrangeSum, that we release with this paper. We also continue the pretraining of an already
-pretrained multilingual BART on BARThez's corpus, and we show that the resulting model, which we call mBARTHez,
-provides a significant boost over vanilla BARThez, and is on par with or outperforms CamemBERT and FlauBERT.*
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-This model was contributed by [moussakam](https://huggingface.co/moussakam). The Authors' code can be found [here](https://github.com/moussaKam/BARThez).
+```py
+import torch
+from transformers import pipeline
 
-<Tip> 
+pipeline = pipeline(
+    task="fill-mask",
+    model="moussaKam/barthez",
+    dtype=torch.float16,
+    device=0
+)
+pipeline("Les plantes produisent <mask> grâce à un processus appelé photosynthèse.")
+```
 
-BARThez implementation is the same as BART, except for tokenization. Refer to [BART documentation](bart) for information on 
-configuration classes and their parameters. BARThez-specific tokenizers are documented below.  
+</hfoption>
+<hfoption id="AutoModel">
 
-</Tip>
+```py
+import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-## Resources
+tokenizer = AutoTokenizer.from_pretrained(
+    "moussaKam/barthez",
+)
+model = AutoModelForMaskedLM.from_pretrained(
+    "moussaKam/barthez",
+    dtype=torch.float16,
+    device_map="auto",
+)
+inputs = tokenizer("Les plantes produisent <mask> grâce à un processus appelé photosynthèse.", return_tensors="pt").to(model.device)
 
-- BARThez can be fine-tuned on sequence-to-sequence tasks in a similar way as BART, check:
-  [examples/pytorch/summarization/](https://github.com/huggingface/transformers/tree/main/examples/pytorch/summarization/README.md).
+with torch.no_grad():
+    outputs = model(**inputs)
+    predictions = outputs.logits
 
+masked_index = torch.where(inputs['input_ids'] == tokenizer.mask_token_id)[1]
+predicted_token_id = predictions[0, masked_index].argmax(dim=-1)
+predicted_token = tokenizer.decode(predicted_token_id)
+
+print(f"The predicted token is: {predicted_token}")
+```
+
+</hfoption>
+<hfoption id="transformers CLI">
+
+```bash
+echo -e "Les plantes produisent <mask> grâce à un processus appelé photosynthèse." | transformers run --task fill-mask --model moussaKam/barthez --device 0
+```
+
+</hfoption>
+</hfoptions>
 
 ## BarthezTokenizer
 

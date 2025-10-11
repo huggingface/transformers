@@ -9,12 +9,17 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
+*This model was released on 2023-03-09 and added to Hugging Face Transformers on 2023-11-22.*
 
 # TVP
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
-The text-visual prompting (TVP) framework was proposed in the paper [Text-Visual Prompting for Efficient 2D Temporal Video Grounding](https://arxiv.org/abs/2303.04995) by Yimeng Zhang, Xin Chen, Jinghan Jia, Sijia Liu, Ke Ding.
+The text-visual prompting (TVP) framework was proposed in the paper [Text-Visual Prompting for Efficient 2D Temporal Video Grounding](https://huggingface.co/papers/2303.04995) by Yimeng Zhang, Xin Chen, Jinghan Jia, Sijia Liu, Ke Ding.
 
 The abstract from the paper is the following:
 
@@ -25,7 +30,7 @@ This research addresses temporal video grounding (TVG), which is the process of 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/tvp_architecture.png"
 alt="drawing" width="600"/>
 
-<small> TVP architecture. Taken from the <a href="https://arxiv.org/abs/2303.04995">original paper.</a> </small>
+<small> TVP architecture. Taken from the <a href="https://huggingface.co/papers/2303.04995">original paper.</a> </small>
 
 This model was contributed by [Jiqing Feng](https://huggingface.co/Jiqing). The original code can be found [here](https://github.com/intel/TVP).
 
@@ -42,6 +47,7 @@ The [`TvpProcessor`] wraps [`BertTokenizer`] and [`TvpImageProcessor`] into a si
 encode the text and prepare the images respectively.
 
 The following example shows how to run temporal video grounding using [`TvpProcessor`] and [`TvpForVideoGrounding`].
+
 ```python
 import av
 import cv2
@@ -107,7 +113,7 @@ def decode(container, sampling_rate, num_frames, clip_idx, num_clips, target_fps
     Returns:
         frames (tensor): decoded frames from the video.
     '''
-    assert clip_idx >= -2, "Not a valied clip_idx {}".format(clip_idx)
+    assert clip_idx >= -2, "Not a valid clip_idx {}".format(clip_idx)
     frames, fps = pyav_decode(container, sampling_rate, num_frames, clip_idx, num_clips, target_fps)
     clip_size = sampling_rate * num_frames / target_fps * fps
     index = np.linspace(0, clip_size - 1, num_frames)
@@ -158,8 +164,7 @@ Tips:
 
 - This implementation of TVP uses [`BertTokenizer`] to generate text embeddings and Resnet-50 model to compute visual embeddings.
 - Checkpoints for pre-trained [tvp-base](https://huggingface.co/Intel/tvp-base) is released.
-- Please refer to [Table 2](https://arxiv.org/pdf/2303.04995.pdf) for TVP's performance on Temporal Video Grounding task.
-
+- Please refer to [Table 2](https://huggingface.co/papers/2303.04995) for TVP's performance on Temporal Video Grounding task.
 
 ## TvpConfig
 
@@ -168,6 +173,11 @@ Tips:
 ## TvpImageProcessor
 
 [[autodoc]] TvpImageProcessor
+    - preprocess
+
+## TvpImageProcessorFast
+
+[[autodoc]] TvpImageProcessorFast
     - preprocess
 
 ## TvpProcessor

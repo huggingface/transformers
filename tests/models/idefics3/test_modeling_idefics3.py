@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,10 +14,10 @@
 """Testing suite for the PyTorch Idefics3 model."""
 
 import copy
-import gc
 import unittest
 from io import BytesIO
 
+import pytest
 import requests
 
 from transformers import (
@@ -26,7 +25,13 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import require_bitsandbytes, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    cleanup,
+    require_bitsandbytes,
+    require_torch,
+    slow,
+    torch_device,
+)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -37,12 +42,11 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        BitsAndBytesConfig,
         Idefics3Config,
         Idefics3ForConditionalGeneration,
         Idefics3Model,
     )
-else:
-    is_torch_greater_or_equal_than_2_0 = False
 
 if is_vision_available():
     from PIL import Image
@@ -71,7 +75,7 @@ class Idefics3VisionText2TextModelTester:
             "vocab_size": 100,
             "hidden_size": 64,
             "intermediate_size": 56,
-            "num_hidden_layers": 3,
+            "num_hidden_layers": 2,
             "num_attention_heads": 2,
             "num_key_value_heads": 2,
             "hidden_act": "silu",
@@ -92,6 +96,7 @@ class Idefics3VisionText2TextModelTester:
         image_token_id=57,
     ):
         self.parent = parent
+        self.pad_token_id = text_config["pad_token_id"]
         self.is_training = is_training
         self.batch_size = batch_size
         self.num_images = num_images
@@ -144,6 +149,7 @@ class Idefics3VisionText2TextModelTester:
 
         # For simplicity just set the last n tokens to the image token
         n_image_tokens_per_batch = self.seq_length
+        input_ids[input_ids == self.image_token_id] = self.pad_token_id
         input_ids[:, -n_image_tokens_per_batch:] = self.image_token_id
         attention_mask = input_ids.ne(1).to(torch_device)
         inputs_dict = {
@@ -163,13 +169,17 @@ class Idefics3ModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Idefics3Model,) if is_torch_available() else ()
     fx_compatible = False
     test_torchscript = False
-    test_pruning = False
+
     test_resize_embeddings = True
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = Idefics3VisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Idefics3Config, has_text_modality=False)
+        self.config_tester = ConfigTester(
+            self, config_class=Idefics3Config, has_text_modality=False, common_properties=["image_token_id"]
+        )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="input_embeds cannot be passed in without input_ids")
     def test_inputs_embeds():
@@ -180,11 +190,12 @@ class Idefics3ModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="Model does not support padding right")
-    def test_flash_attn_2_generate_padding_right(self):
+    def test_flash_attn_2_inference_padding_right(self):
         pass
 
-    @unittest.skip(reason="Model does not support padding right")
-    def test_flash_attn_2_inference_padding_right(self):
+    @unittest.skip(reason="Compile not yet supported in idefics3 models")
+    @pytest.mark.torch_compile_test
+    def test_sdpa_can_compile_dynamic(self):
         pass
 
     # We need to override as we need to prepare such that the image token is the last token
@@ -276,6 +287,7 @@ class Idefics3ModelTest(ModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
             model = model_class(config).to(torch_device)
+            model.eval()
 
             # if no output embeddings -> leave test
             if model.get_output_embeddings() is None:
@@ -321,10 +333,10 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
     """
 
     all_model_classes = (Idefics3ForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = {"image-text-to-text": Idefics3ForConditionalGeneration} if is_torch_available() else ()
     fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = True
-    test_head_masking = False
     test_torchscript = False
 
     def setUp(self):
@@ -336,11 +348,20 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
         pass
 
     @unittest.skip(reason="Model does not support padding right")
-    def test_flash_attn_2_generate_padding_right(self):
+    def test_flash_attn_2_inference_padding_right(self):
         pass
 
-    @unittest.skip(reason="Model does not support padding right")
-    def test_flash_attn_2_inference_padding_right(self):
+    @pytest.mark.generate
+    @slow
+    @unittest.skip(
+        reason="Idefics3 doesn't support SDPA for all backbones, vision backbones has only eager/FA2 attention"
+    )
+    def test_eager_matches_sdpa_generate(self):
+        pass
+
+    @unittest.skip(reason="Compile not yet supported in Idefics3 models end-to-end")
+    @pytest.mark.torch_compile_test
+    def test_sdpa_can_compile_dynamic(self):
         pass
 
     # We need to override as we need to prepare such that the image token is the last token
@@ -425,6 +446,7 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
             model = model_class(config).to(torch_device)
+            model.eval()
 
             # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
             model_vocab_size = config.text_config.vocab_size
@@ -482,15 +504,14 @@ class Idefics3ForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     def tearDown(self):
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     @unittest.skip("multi-gpu tests are disabled for now")
     def test_integration_test(self):
         model = Idefics3ForConditionalGeneration.from_pretrained(
             "HuggingFaceM4/Idefics3-8B-Llama3",
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             device_map="auto",
         )
 
@@ -513,7 +534,7 @@ class Idefics3ForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Let' s make sure we test the preprocessing to replace what is used
         model = Idefics3ForConditionalGeneration.from_pretrained(
             "HuggingFaceM4/Idefics3-8B-Llama3",
-            load_in_4bit=True,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
             device_map="auto",
         )
 

@@ -6,12 +6,12 @@ models which were pre-trained on the same training data (BooksCorpus and English
 training, but with different relative position embeddings. 
 
 * `zhiheng-huang/bert-base-uncased-embedding-relative-key`, trained from scratch with relative embedding proposed by 
-Shaw et al., [Self-Attention with Relative Position Representations](https://arxiv.org/abs/1803.02155)
+Shaw et al., [Self-Attention with Relative Position Representations](https://huggingface.co/papers/1803.02155)
 * `zhiheng-huang/bert-base-uncased-embedding-relative-key-query`, trained from scratch with relative embedding method 4 
-in Huang et al. [Improve Transformer Models with Better Relative Position Embeddings](https://arxiv.org/abs/2009.13658)
+in Huang et al. [Improve Transformer Models with Better Relative Position Embeddings](https://huggingface.co/papers/2009.13658)
 * `zhiheng-huang/bert-large-uncased-whole-word-masking-embedding-relative-key-query`, fine-tuned from model 
 `google-bert/bert-large-uncased-whole-word-masking` with 3 additional epochs with relative embedding method 4 in Huang et al. 
-[Improve Transformer Models with Better Relative Position Embeddings](https://arxiv.org/abs/2009.13658)
+[Improve Transformer Models with Better Relative Position Embeddings](https://huggingface.co/papers/2009.13658)
 
 
 ##### Base models fine-tuning

@@ -14,14 +14,14 @@
 # limitations under the License.
 """JetMoe model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class JetMoeConfig(PretrainedConfig):
+class JetMoeConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`JetMoeModel`]. It is used to instantiate a
     JetMoe model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -29,8 +29,8 @@ class JetMoeConfig(PretrainedConfig):
 
     [jetmoe/jetmoe-8b](https://huggingface.co/jetmoe/jetmoe-8b)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -57,7 +57,7 @@ class JetMoeConfig(PretrainedConfig):
         num_experts_per_tok (`int, *optional*, defaults to 2):
             The number of experts to route per-token and for MoE and MoA.
         output_router_logits (`bool`, *optional*, defaults to `False`):
-            Whether or not the router logits should be returned by the model. Enabeling this will also
+            Whether or not the router logits should be returned by the model. Enabling this will also
             allow the model to output the auxiliary loss.
         aux_loss_coef (`float`, *optional*, defaults to 0.01):
             The coefficient for the auxiliary loss.
@@ -94,6 +94,7 @@ class JetMoeConfig(PretrainedConfig):
 
     model_type = "jetmoe"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {"head_dim": "kv_channels"}
 
     def __init__(
         self,
@@ -147,3 +148,6 @@ class JetMoeConfig(PretrainedConfig):
         super().__init__(
             bos_token_id=bos_token_id, eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
         )
+
+
+__all__ = ["JetMoeConfig"]

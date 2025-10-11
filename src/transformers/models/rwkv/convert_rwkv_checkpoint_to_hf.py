@@ -21,10 +21,10 @@ import os
 import re
 
 import torch
-from huggingface_hub import hf_hub_download
+from huggingface_hub import hf_hub_download, split_torch_state_dict_into_shards
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedTokenizerFast, RwkvConfig
-from transformers.modeling_utils import WEIGHTS_INDEX_NAME, shard_checkpoint
+from transformers.modeling_utils import WEIGHTS_INDEX_NAME
 
 
 NUM_HIDDEN_LAYERS_MAPPING = {
@@ -36,7 +36,7 @@ NUM_HIDDEN_LAYERS_MAPPING = {
     "14B": 40,
 }
 
-HIDEN_SIZE_MAPPING = {
+HIDDEN_SIZE_MAPPING = {
     "169M": 768,
     "430M": 1024,
     "1B5": 2048,
@@ -106,17 +106,26 @@ def convert_rmkv_checkpoint_to_hf_format(
     config = RwkvConfig(
         vocab_size=vocab_size,
         num_hidden_layers=NUM_HIDDEN_LAYERS_MAPPING[size],
-        hidden_size=HIDEN_SIZE_MAPPING[size],
+        hidden_size=HIDDEN_SIZE_MAPPING[size],
     )
     config.save_pretrained(output_dir)
 
     # 3. Download model file then convert state_dict
     model_file = hf_hub_download(repo_id, checkpoint_file)
-    state_dict = torch.load(model_file, map_location="cpu")
+    state_dict = torch.load(model_file, map_location="cpu", weights_only=True)
     state_dict = convert_state_dict(state_dict)
 
     # 4. Split in shards and save
-    shards, index = shard_checkpoint(state_dict)
+    state_dict_split = split_torch_state_dict_into_shards(state_dict)
+    shards = index = None
+    for tensors in state_dict_split.filename_to_tensors.values():
+        shards = {tensor: state_dict[tensor] for tensor in tensors}
+    if state_dict_split.is_sharded:
+        index = {
+            "metadata": state_dict_split.metadata,
+            "weight_map": state_dict_split.tensor_to_filename,
+        }
+
     for shard_file, shard in shards.items():
         torch.save(shard, os.path.join(output_dir, shard_file))
 
@@ -138,7 +147,7 @@ def convert_rmkv_checkpoint_to_hf_format(
         gc.collect()
 
         for shard_file in shard_files:
-            state_dict = torch.load(os.path.join(output_dir, shard_file))
+            state_dict = torch.load(os.path.join(output_dir, shard_file), weights_only=True)
             torch.save({k: v.cpu().clone() for k, v in state_dict.items()}, os.path.join(output_dir, shard_file))
 
     del state_dict

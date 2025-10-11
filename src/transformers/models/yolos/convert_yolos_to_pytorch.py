@@ -123,7 +123,7 @@ def rename_key(name: str) -> str:
 
 
 def convert_state_dict(orig_state_dict: dict, model: YolosForObjectDetection) -> dict:
-    for key in orig_state_dict.copy().keys():
+    for key in orig_state_dict.copy():
         val = orig_state_dict.pop(key)
 
         if "qkv" in key:
@@ -163,7 +163,7 @@ def convert_yolos_checkpoint(
     config = get_yolos_config(yolos_name)
 
     # load original state_dict
-    state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
+    state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)["model"]
 
     # load 🤗 model
     model = YolosForObjectDetection(config)

@@ -66,7 +66,7 @@ python run_instance_segmentation.py \
     --dataloader_persistent_workers \
     --dataloader_prefetch_factor 4 \
     --do_eval \
-    --evaluation_strategy epoch \
+    --eval_strategy epoch \
     --logging_strategy epoch \
     --save_strategy epoch \
     --save_total_limit 2 \
@@ -148,7 +148,7 @@ with torch.no_grad():
     outputs = model(**inputs)
 
 # Post-process outputs
-outputs = image_processor.post_process_instance_segmentation(outputs, target_sizes=[image.size[::-1]])
+outputs = image_processor.post_process_instance_segmentation(outputs, target_sizes=[(image.height, image.width)])
 
 print("Mask shape: ", outputs[0]["segmentation"].shape)
 print("Mask values: ", outputs[0]["segmentation"].unique())

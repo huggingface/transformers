@@ -16,10 +16,11 @@
 """OpenAI GPT-2 configuration"""
 
 from collections import OrderedDict
-from typing import Any, List, Mapping, Optional
+from collections.abc import Mapping
+from typing import Any, Optional
 
-from ... import PreTrainedTokenizer, TensorType, is_torch_available
-from ...configuration_utils import PretrainedConfig
+from ... import PreTrainedTokenizer, is_torch_available
+from ...configuration_utils import PreTrainedConfig
 from ...onnx import OnnxConfigWithPast, PatchingSpec
 from ...utils import logging
 
@@ -27,15 +28,15 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class GPT2Config(PretrainedConfig):
+class GPT2Config(PreTrainedConfig):
     """
     This is the configuration class to store the configuration of a [`GPT2Model`] or a [`TFGPT2Model`]. It is used to
     instantiate a GPT-2 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the GPT-2
     [openai-community/gpt2](https://huggingface.co/openai-community/gpt2) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -192,9 +193,9 @@ class GPT2Config(PretrainedConfig):
 class GPT2OnnxConfig(OnnxConfigWithPast):
     def __init__(
         self,
-        config: PretrainedConfig,
+        config: PreTrainedConfig,
         task: str = "default",
-        patching_specs: List[PatchingSpec] = None,
+        patching_specs: Optional[list[PatchingSpec]] = None,
         use_past: bool = False,
     ):
         super().__init__(config, task=task, patching_specs=patching_specs, use_past=use_past)
@@ -227,10 +228,9 @@ class GPT2OnnxConfig(OnnxConfigWithPast):
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
-        framework: Optional[TensorType] = None,
     ) -> Mapping[str, Any]:
         common_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
-            tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
+            tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair
         )
 
         # We need to order the input in the way they appears in the forward()
@@ -268,3 +268,6 @@ class GPT2OnnxConfig(OnnxConfigWithPast):
     @property
     def default_onnx_opset(self) -> int:
         return 13
+
+
+__all__ = ["GPT2Config", "GPT2OnnxConfig"]

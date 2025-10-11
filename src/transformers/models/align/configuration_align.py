@@ -14,21 +14,14 @@
 # limitations under the License.
 """ALIGN model configuration"""
 
-import os
-from typing import TYPE_CHECKING, List, Union
-
-
-if TYPE_CHECKING:
-    pass
-
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class AlignTextConfig(PretrainedConfig):
+class AlignTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`AlignTextModel`]. It is used to instantiate a
     ALIGN text encoder according to the specified arguments, defining the model architecture. Instantiating a
@@ -36,8 +29,8 @@ class AlignTextConfig(PretrainedConfig):
     [kakaobrain/align-base](https://huggingface.co/kakaobrain/align-base) architecture. The default values here are
     copied from BERT.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
@@ -69,12 +62,6 @@ class AlignTextConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         pad_token_id (`int`, *optional*, defaults to 0):
             Padding token id.
-        position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
-            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
-            positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
-            [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
-            For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
-            with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
@@ -95,6 +82,7 @@ class AlignTextConfig(PretrainedConfig):
     ```"""
 
     model_type = "align_text_model"
+    base_config_key = "text_config"
 
     def __init__(
         self,
@@ -111,7 +99,6 @@ class AlignTextConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         pad_token_id=0,
-        position_embedding_type="absolute",
         use_cache=True,
         **kwargs,
     ):
@@ -129,30 +116,11 @@ class AlignTextConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-        self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
         self.pad_token_id = pad_token_id
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
 
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the text config dict if we are loading from AlignConfig
-        if config_dict.get("model_type") == "align":
-            config_dict = config_dict["text_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
-
-
-class AlignVisionConfig(PretrainedConfig):
+class AlignVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`AlignVisionModel`]. It is used to instantiate a
     ALIGN vision encoder according to the specified arguments, defining the model architecture. Instantiating a
@@ -160,8 +128,8 @@ class AlignVisionConfig(PretrainedConfig):
     [kakaobrain/align-base](https://huggingface.co/kakaobrain/align-base) architecture. The default values are copied
     from EfficientNet (efficientnet-b7)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         num_channels (`int`, *optional*, defaults to 3):
@@ -174,19 +142,19 @@ class AlignVisionConfig(PretrainedConfig):
             Scaling coefficient for network depth at each stage.
         depth_divisor `int`, *optional*, defaults to 8):
             A unit of network width.
-        kernel_sizes (`List[int]`, *optional*, defaults to `[3, 3, 5, 3, 5, 5, 3]`):
+        kernel_sizes (`list[int]`, *optional*, defaults to `[3, 3, 5, 3, 5, 5, 3]`):
             List of kernel sizes to be used in each block.
-        in_channels (`List[int]`, *optional*, defaults to `[32, 16, 24, 40, 80, 112, 192]`):
+        in_channels (`list[int]`, *optional*, defaults to `[32, 16, 24, 40, 80, 112, 192]`):
             List of input channel sizes to be used in each block for convolutional layers.
-        out_channels (`List[int]`, *optional*, defaults to `[16, 24, 40, 80, 112, 192, 320]`):
+        out_channels (`list[int]`, *optional*, defaults to `[16, 24, 40, 80, 112, 192, 320]`):
             List of output channel sizes to be used in each block for convolutional layers.
-        depthwise_padding (`List[int]`, *optional*, defaults to `[]`):
+        depthwise_padding (`list[int]`, *optional*, defaults to `[]`):
             List of block indices with square padding.
-        strides (`List[int]`, *optional*, defaults to `[1, 2, 2, 2, 1, 2, 1]`):
+        strides (`list[int]`, *optional*, defaults to `[1, 2, 2, 2, 1, 2, 1]`):
             List of stride sizes to be used in each block for convolutional layers.
-        num_block_repeats (`List[int]`, *optional*, defaults to `[1, 2, 2, 3, 3, 4, 1]`):
+        num_block_repeats (`list[int]`, *optional*, defaults to `[1, 2, 2, 3, 3, 4, 1]`):
             List of the number of times each block is to repeated.
-        expand_ratios (`List[int]`, *optional*, defaults to `[1, 6, 6, 6, 6, 6, 6]`):
+        expand_ratios (`list[int]`, *optional*, defaults to `[1, 6, 6, 6, 6, 6, 6]`):
             List of scaling coefficient of each block.
         squeeze_expansion_ratio (`float`, *optional*, defaults to 0.25):
             Squeeze expansion ratio.
@@ -223,6 +191,7 @@ class AlignVisionConfig(PretrainedConfig):
     ```"""
 
     model_type = "align_vision_model"
+    base_config_key = "vision_config"
 
     def __init__(
         self,
@@ -231,13 +200,13 @@ class AlignVisionConfig(PretrainedConfig):
         width_coefficient: float = 2.0,
         depth_coefficient: float = 3.1,
         depth_divisor: int = 8,
-        kernel_sizes: List[int] = [3, 3, 5, 3, 5, 5, 3],
-        in_channels: List[int] = [32, 16, 24, 40, 80, 112, 192],
-        out_channels: List[int] = [16, 24, 40, 80, 112, 192, 320],
-        depthwise_padding: List[int] = [],
-        strides: List[int] = [1, 2, 2, 2, 1, 2, 1],
-        num_block_repeats: List[int] = [1, 2, 2, 3, 3, 4, 1],
-        expand_ratios: List[int] = [1, 6, 6, 6, 6, 6, 6],
+        kernel_sizes: list[int] = [3, 3, 5, 3, 5, 5, 3],
+        in_channels: list[int] = [32, 16, 24, 40, 80, 112, 192],
+        out_channels: list[int] = [16, 24, 40, 80, 112, 192, 320],
+        depthwise_padding: list[int] = [],
+        strides: list[int] = [1, 2, 2, 2, 1, 2, 1],
+        num_block_repeats: list[int] = [1, 2, 2, 3, 3, 4, 1],
+        expand_ratios: list[int] = [1, 6, 6, 6, 6, 6, 6],
         squeeze_expansion_ratio: float = 0.25,
         hidden_act: str = "swish",
         hidden_dim: int = 2560,
@@ -272,34 +241,16 @@ class AlignVisionConfig(PretrainedConfig):
         self.drop_connect_rate = drop_connect_rate
         self.num_hidden_layers = sum(num_block_repeats) * 4
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
 
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the vision config dict if we are loading from AlignConfig
-        if config_dict.get("model_type") == "align":
-            config_dict = config_dict["vision_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
-
-
-class AlignConfig(PretrainedConfig):
+class AlignConfig(PreTrainedConfig):
     r"""
     [`AlignConfig`] is the configuration class to store the configuration of a [`AlignModel`]. It is used to
     instantiate a ALIGN model according to the specified arguments, defining the text model and vision model configs.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the ALIGN
     [kakaobrain/align-base](https://huggingface.co/kakaobrain/align-base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`dict`, *optional*):
@@ -336,10 +287,11 @@ class AlignConfig(PretrainedConfig):
     >>> config_text = AlignTextConfig()
     >>> config_vision = AlignVisionConfig()
 
-    >>> config = AlignConfig.from_text_vision_configs(config_text, config_vision)
+    >>> config = AlignConfig(text_config=config_text, vision_config=config_vision)
     ```"""
 
     model_type = "align"
+    sub_configs = {"text_config": AlignTextConfig, "vision_config": AlignVisionConfig}
 
     def __init__(
         self,
@@ -350,34 +302,25 @@ class AlignConfig(PretrainedConfig):
         initializer_range=0.02,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         if text_config is None:
-            text_config = {}
-            logger.info("text_config is None. Initializing the AlignTextConfig with default values.")
+            text_config = AlignTextConfig()
+            logger.info("`text_config` is `None`. Initializing the `AlignTextConfig` with default values.")
+        elif isinstance(text_config, dict):
+            text_config = AlignTextConfig(**text_config)
 
         if vision_config is None:
-            vision_config = {}
-            logger.info("vision_config is None. Initializing the AlignVisionConfig with default values.")
+            vision_config = AlignVisionConfig()
+            logger.info("`vision_config` is `None`. initializing the `AlignVisionConfig` with default values.")
+        elif isinstance(vision_config, dict):
+            vision_config = AlignVisionConfig(**vision_config)
 
-        self.text_config = AlignTextConfig(**text_config)
-        self.vision_config = AlignVisionConfig(**vision_config)
+        self.text_config = text_config
+        self.vision_config = vision_config
 
         self.projection_dim = projection_dim
         self.temperature_init_value = temperature_init_value
         self.initializer_range = initializer_range
-
-    @classmethod
-    def from_text_vision_configs(cls, text_config: AlignTextConfig, vision_config: AlignVisionConfig, **kwargs):
-        r"""
-        Instantiate a [`AlignConfig`] (or a derived class) from align text model configuration and align vision model
-        configuration.
-
-        Returns:
-            [`AlignConfig`]: An instance of a configuration object
-        """
-
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+        super().__init__(**kwargs)
 
 
 __all__ = ["AlignTextConfig", "AlignVisionConfig", "AlignConfig"]

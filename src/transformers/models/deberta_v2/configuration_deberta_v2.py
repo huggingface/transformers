@@ -15,29 +15,30 @@
 """DeBERTa-v2 model configuration"""
 
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any, Union
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
 
 
 if TYPE_CHECKING:
-    from ... import FeatureExtractionMixin, PreTrainedTokenizerBase, TensorType
+    from ... import FeatureExtractionMixin, PreTrainedTokenizerBase
 
 
 logger = logging.get_logger(__name__)
 
 
-class DebertaV2Config(PretrainedConfig):
+class DebertaV2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DebertaV2Model`]. It is used to instantiate a
     DeBERTa-v2 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the DeBERTa
     [microsoft/deberta-v2-xlarge](https://huggingface.co/microsoft/deberta-v2-xlarge) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Arguments:
         vocab_size (`int`, *optional*, defaults to 128100):
@@ -77,11 +78,14 @@ class DebertaV2Config(PretrainedConfig):
             The value used to pad input_ids.
         position_biased_input (`bool`, *optional*, defaults to `True`):
             Whether add absolute position embedding to content embedding.
-        pos_att_type (`List[str]`, *optional*):
+        pos_att_type (`list[str]`, *optional*):
             The type of relative position attention, it can be a combination of `["p2c", "c2p"]`, e.g. `["p2c"]`,
             `["p2c", "c2p"]`, `["p2c", "c2p"]`.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
+        legacy (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should use the legacy `LegacyDebertaOnlyMLMHead`, which does not work properly
+            for mask infilling tasks.
 
     Example:
 
@@ -121,6 +125,7 @@ class DebertaV2Config(PretrainedConfig):
         pos_att_type=None,
         pooler_dropout=0,
         pooler_hidden_act="gelu",
+        legacy=True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -151,6 +156,7 @@ class DebertaV2Config(PretrainedConfig):
         self.pooler_hidden_size = kwargs.get("pooler_hidden_size", hidden_size)
         self.pooler_dropout = pooler_dropout
         self.pooler_hidden_act = pooler_hidden_act
+        self.legacy = legacy
 
 
 class DebertaV2OnnxConfig(OnnxConfig):
@@ -178,13 +184,15 @@ class DebertaV2OnnxConfig(OnnxConfig):
         seq_length: int = -1,
         num_choices: int = -1,
         is_pair: bool = False,
-        framework: Optional["TensorType"] = None,
         num_channels: int = 3,
         image_width: int = 40,
         image_height: int = 40,
         tokenizer: "PreTrainedTokenizerBase" = None,
     ) -> Mapping[str, Any]:
-        dummy_inputs = super().generate_dummy_inputs(preprocessor=preprocessor, framework=framework)
+        dummy_inputs = super().generate_dummy_inputs(preprocessor=preprocessor)
         if self._config.type_vocab_size == 0 and "token_type_ids" in dummy_inputs:
             del dummy_inputs["token_type_ids"]
         return dummy_inputs
+
+
+__all__ = ["DebertaV2Config", "DebertaV2OnnxConfig"]

@@ -9,7 +9,7 @@ class BaseImageProcessorFast(metaclass=DummyObject):
         requires_backends(self, ["torchvision"])
 
 
-class ViTImageProcessorFast(metaclass=DummyObject):
+class BaseVideoProcessor(metaclass=DummyObject):
     _backends = ["torchvision"]
 
     def __init__(self, *args, **kwargs):

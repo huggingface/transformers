@@ -201,9 +201,9 @@ def convert_clvp_weights(checkpoint_path, pytorch_dump_folder_path):
             _download(url=each_model_url, root=each_model_path)
 
         if each_model_name == "clvp":
-            clvp_checkpoint = torch.load(each_model_path, map_location="cpu")
+            clvp_checkpoint = torch.load(each_model_path, map_location="cpu", weights_only=True)
         else:
-            decoder_checkpoint = torch.load(each_model_path, map_location="cpu")
+            decoder_checkpoint = torch.load(each_model_path, map_location="cpu", weights_only=True)
 
     # Converting the weights
     converted_checkpoint.update(**convert_encoder_weights(clvp_checkpoint))

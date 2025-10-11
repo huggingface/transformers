@@ -46,7 +46,7 @@ Hugging Face 팀은 항상 도움을 줄 준비가 되어 있으므로 혼자가
 
 ### 모델 개요 [[overview-of-models]]
 
-모델을 성공적으로 추가하려면 모델과 해당 구성인 [`PreTrainedModel`] 및 [`PretrainedConfig`] 간의 상호작용을 이해하는 것이 중요합니다. 예를 들어, 🤗 Transformers에 추가하려는 모델을 `BrandNewBert`라고 부르겠습니다.
+모델을 성공적으로 추가하려면 모델과 해당 구성인 [`PreTrainedModel`] 및 [`PreTrainedConfig`] 간의 상호작용을 이해하는 것이 중요합니다. 예를 들어, 🤗 Transformers에 추가하려는 모델을 `BrandNewBert`라고 부르겠습니다.
 
 다음을 살펴보겠습니다:
 
@@ -59,7 +59,7 @@ model = BrandNewBertModel.from_pretrained("brandy/brand_new_bert")
 model.config  # model has access to its config
 ```
 
-모델과 마찬가지로 구성은 [`PretrainedConfig`]에서 기본 직렬화 및 역직렬화 기능을 상속받습니다. 구성과 모델은 항상 *pytorch_model.bin* 파일과 *config.json* 파일로 각각 별도로 직렬화됩니다. [`~PreTrainedModel.save_pretrained`]를 호출하면 자동으로 [`~PretrainedConfig.save_pretrained`]도 호출되므로 모델과 구성이 모두 저장됩니다.
+모델과 마찬가지로 구성은 [`PreTrainedConfig`]에서 기본 직렬화 및 역직렬화 기능을 상속받습니다. 구성과 모델은 항상 *pytorch_model.bin* 파일과 *config.json* 파일로 각각 별도로 직렬화됩니다. [`~PreTrainedModel.save_pretrained`]를 호출하면 자동으로 [`~PreTrainedConfig.save_pretrained`]도 호출되므로 모델과 구성이 모두 저장됩니다.
 
 
 ### 코드 스타일 [[code-style]]
@@ -73,7 +73,7 @@ model.config  # model has access to its config
 5. 함수 시그니처에는 타입 주석을 사용해야 합니다. 그 외에는 타입 주석보다 변수 이름이 훨씬 읽기 쉽고 이해하기 쉽습니다.
 
 ### 토크나이저 개요 [[overview-of-tokenizers]]
- 
+
 아직 준비되지 않았습니다 :-( 이 섹션은 곧 추가될 예정입니다!
 
 ## 🤗 Transformers에 모델 추가하는 단계별 방법  [[stepbystep-recipe-to-add-a-model-to-transformers]]
@@ -272,7 +272,7 @@ cd transformers
 기존 모델:
 
 ```bash
-transformers-cli add-new-model-like
+transformers add-new-model-like
 ```
 
 모델의 기본 정보를 입력하는 설문지가 표시됩니다.

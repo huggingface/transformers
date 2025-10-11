@@ -35,12 +35,10 @@ class WhisperProcessor(ProcessorMixin):
     """
 
     feature_extractor_class = "WhisperFeatureExtractor"
-    tokenizer_class = "WhisperTokenizer"
+    tokenizer_class = ("WhisperTokenizer", "WhisperTokenizerFast")
 
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
-        self.current_processor = self.feature_extractor
-        self._in_target_context_manager = False
 
     def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):
         return self.tokenizer.get_decoder_prompt_ids(task=task, language=language, no_timestamps=no_timestamps)
@@ -48,13 +46,9 @@ class WhisperProcessor(ProcessorMixin):
     def __call__(self, *args, **kwargs):
         """
         Forwards the `audio` argument to WhisperFeatureExtractor's [`~WhisperFeatureExtractor.__call__`] and the `text`
-        argument to [`~WhisperTokenizer.__call__`]. Please refer to the doctsring of the above two methods for more
+        argument to [`~WhisperTokenizer.__call__`]. Please refer to the docstring of the above two methods for more
         information.
         """
-        # For backward compatibility
-        if self._in_target_context_manager:
-            return self.current_processor(*args, **kwargs)
-
         audio = kwargs.pop("audio", None)
         sampling_rate = kwargs.pop("sampling_rate", None)
         text = kwargs.pop("text", None)
@@ -79,19 +73,8 @@ class WhisperProcessor(ProcessorMixin):
             inputs["labels"] = encodings["input_ids"]
             return inputs
 
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to WhisperTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to WhisperTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
     def get_prompt_ids(self, text: str, return_tensors="np"):
         return self.tokenizer.get_prompt_ids(text, return_tensors=return_tensors)
+
+
+__all__ = ["WhisperProcessor"]

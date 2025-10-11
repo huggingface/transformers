@@ -13,12 +13,17 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-10-11 and added to Hugging Face Transformers on 2021-03-10.*
 
 # Speech2Text
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
-The Speech2Text model was proposed in [fairseq S2T: Fast Speech-to-Text Modeling with fairseq](https://arxiv.org/abs/2010.05171) by Changhan Wang, Yun Tang, Xutai Ma, Anne Wu, Dmytro Okhonko, Juan Pino. It's a
+The Speech2Text model was proposed in [fairseq S2T: Fast Speech-to-Text Modeling with fairseq](https://huggingface.co/papers/2010.05171) by Changhan Wang, Yun Tang, Xutai Ma, Anne Wu, Dmytro Okhonko, Juan Pino. It's a
 transformer-based seq2seq (encoder-decoder) model designed for end-to-end Automatic Speech Recognition (ASR) and Speech
 Translation (ST). It uses a convolutional downsampler to reduce the length of speech inputs by 3/4th before they are
 fed into the encoder. The model is trained with standard autoregressive cross-entropy loss and generates the
@@ -69,7 +74,7 @@ be installed as follows: `apt install libsndfile1-dev`
   For multilingual speech translation models, `eos_token_id` is used as the `decoder_start_token_id` and
   the target language id is forced as the first generated token. To force the target language id as the first
   generated token, pass the `forced_bos_token_id` parameter to the `generate()` method. The following
-  example shows how to transate English speech to French text using the *facebook/s2t-medium-mustc-multilingual-st*
+  example shows how to translate English speech to French text using the *facebook/s2t-medium-mustc-multilingual-st*
   checkpoint.
 
 ```python
@@ -122,9 +127,6 @@ See the [model hub](https://huggingface.co/models?filter=speech_to_text) to look
     - batch_decode
     - decode
 
-<frameworkcontent>
-<pt>
-
 ## Speech2TextModel
 
 [[autodoc]] Speech2TextModel
@@ -134,19 +136,3 @@ See the [model hub](https://huggingface.co/models?filter=speech_to_text) to look
 
 [[autodoc]] Speech2TextForConditionalGeneration
     - forward
-
-</pt>
-<tf>
-
-## TFSpeech2TextModel
-
-[[autodoc]] TFSpeech2TextModel
-    - call
-
-## TFSpeech2TextForConditionalGeneration
-
-[[autodoc]] TFSpeech2TextForConditionalGeneration
-    - call
-
-</tf>
-</frameworkcontent>

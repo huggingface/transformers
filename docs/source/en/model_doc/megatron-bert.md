@@ -13,13 +13,18 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2019-09-17 and added to Hugging Face Transformers on 2021-04-08.*
 
 # MegatronBERT
+
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
 
 ## Overview
 
 The MegatronBERT model was proposed in [Megatron-LM: Training Multi-Billion Parameter Language Models Using Model
-Parallelism](https://arxiv.org/abs/1909.08053) by Mohammad Shoeybi, Mostofa Patwary, Raul Puri, Patrick LeGresley,
+Parallelism](https://huggingface.co/papers/1909.08053) by Mohammad Shoeybi, Mostofa Patwary, Raul Puri, Patrick LeGresley,
 Jared Casper and Bryan Catanzaro.
 
 The abstract from the paper is the following:
@@ -40,8 +45,8 @@ achieve SOTA results on the WikiText103 (10.8 compared to SOTA perplexity of 15.
 accuracy of 63.2%) datasets. Our BERT model achieves SOTA results on the RACE dataset (90.9% compared to SOTA accuracy
 of 89.4%).*
 
-This model was contributed by [jdemouth](https://huggingface.co/jdemouth). The original code can be found [here](https://github.com/NVIDIA/Megatron-LM). 
-That repository contains a multi-GPU and multi-node implementation of the Megatron Language models. In particular, 
+This model was contributed by [jdemouth](https://huggingface.co/jdemouth). The original code can be found [here](https://github.com/NVIDIA/Megatron-LM).
+That repository contains a multi-GPU and multi-node implementation of the Megatron Language models. In particular,
 it contains a hybrid model parallel approach using "tensor parallel" and "pipeline parallel" techniques.
 
 ## Usage tips

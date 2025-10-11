@@ -27,7 +27,7 @@ In this guide, you will:
 
 ## Image Similarity using `image-feature-extraction` Pipeline
 
-We have two images of cats sitting on top of fish nets, one of them is generated. 
+We have two images of cats sitting on top of fish nets, one of them is generated.
 
 ```python
 from PIL import Image
@@ -43,8 +43,9 @@ Let's see the pipeline in action. First, initialize the pipeline. If you don't p
 ```python
 import torch
 from transformers import pipeline
-
-DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+from accelerate import Accelerator
+# automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
+device = Accelerator().device
 pipe = pipeline(task="image-feature-extraction", model_name="google/vit-base-patch16-384", device=DEVICE, pool=True)
 ```
 
@@ -66,7 +67,7 @@ print(outputs)
 # [[[-0.03909236937761307, 0.43381670117378235, -0.06913255900144577,
 ```
 
-To get the similarity score, we need to pass them to a similarity function. 
+To get the similarity score, we need to pass them to a similarity function.
 
 ```python
 from torch.nn.functional import cosine_similarity
@@ -83,7 +84,7 @@ If you want to get the last hidden states before pooling, avoid passing any valu
 
 ```python
 pipe = pipeline(task="image-feature-extraction", model_name="google/vit-base-patch16-224", device=DEVICE)
-output = pipe(image_real)
+outputs = pipe(image_real)
 ```
 
 Since the outputs are unpooled, we get the last hidden states where the first dimension is the batch size, and the last two are the embedding shape.
@@ -131,4 +132,3 @@ print(similarity_score)
 
 # tensor([0.6061], device='cuda:0', grad_fn=<SumBackward1>)
 ```
-

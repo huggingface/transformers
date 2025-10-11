@@ -43,7 +43,7 @@ Como resultado, puedes cargar una versión específica del modelo con el paráme
 
 ```py
 >>> model = AutoModel.from_pretrained(
-...     "julien-c/EsperBERTo-small", revision="v2.0.1"  # tag name, or branch name, or commit hash
+...     "julien-c/EsperBERTo-small", revision="4c77982"  # tag name, or branch name, or commit hash
 ... )
 ```
 
@@ -56,7 +56,7 @@ Los archivos son editados fácilmente dentro de un repositorio. Incluso puedes o
 Antes de compartir un modelo al Hub necesitarás tus credenciales de Hugging Face. Si tienes acceso a una terminal ejecuta el siguiente comando en el entorno virtual donde 🤗 Transformers esté instalado. Esto guardará tu token de acceso dentro de tu carpeta cache de Hugging Face (~/.cache/ by default):
 
 ```bash
-huggingface-cli login
+hf auth login
 ```
 
 Si usas un notebook como Jupyter o Colaboratory, asegúrate de tener instalada la biblioteca [`huggingface_hub`](https://huggingface.co/docs/hub/adding-a-library). Esta biblioteca te permitirá interactuar por código con el Hub.

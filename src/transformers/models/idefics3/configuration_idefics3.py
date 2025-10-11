@@ -13,18 +13,15 @@
 # limitations under the License.
 """Idefics3 model configuration"""
 
-import os
-from typing import Union
-
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class Idefics3VisionConfig(PretrainedConfig):
+class Idefics3VisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Idefics3VisionModel`]. It is used to instantiate a
     Idefics3 vision encoder according to the specified arguments, defining the model architecture. Instantiating a
@@ -32,8 +29,8 @@ class Idefics3VisionConfig(PretrainedConfig):
     [google/siglip-base-patch16-224](https://huggingface.co/google/siglip-base-patch16-224) used in the Idefics3 model
     [HuggingFaceM4/Idefics3-8B-Llama3](https://huggingface.co/HuggingFaceM4/Idefics3-8B-Llama3).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 1152):
@@ -57,8 +54,8 @@ class Idefics3VisionConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        intializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation for initializing all weight matrices in the model.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
     Example:
 
@@ -76,7 +73,8 @@ class Idefics3VisionConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "idefics3"
+    model_type = "idefics3_vision"
+    base_config_key = "vision_config"
 
     def __init__(
         self,
@@ -107,34 +105,16 @@ class Idefics3VisionConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
 
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the vision config dict if we are loading from Idefics3Config
-        if config_dict.get("model_type") == "idefics3":
-            config_dict = config_dict["vision_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
-
-
-class Idefics3Config(PretrainedConfig):
+class Idefics3Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Idefics3Model`]. It is used to instantiate a
     Idefics3 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the model of the Idefics3
     [HuggingFaceM4/Idefics3-8B-Llama3](https://huggingface.co/HuggingFaceM4/Idefics3-8B-Llama3) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -146,7 +126,7 @@ class Idefics3Config(PretrainedConfig):
             Whether or not to tie the word embeddings with the token embeddings.
         vision_config (`IdeficsVisionConfig` or `dict`, *optional*, defaults to `IdeficsVisionConfig`):
             Custom vision config or dict for the vision tower
-        text_config (`PretrainedConfig` or `dict`, *optional*, defaults to `LlamaConfig`):
+        text_config (`PreTrainedConfig` or `dict`, *optional*, defaults to `LlamaConfig`):
             Custom text config or dict for the text model
         scale_factor (`int`, *optional*, defaults to 2):
             The scale factor for the image encoder.
@@ -165,7 +145,7 @@ class Idefics3Config(PretrainedConfig):
     ```"""
 
     model_type = "idefics3"
-    is_composition = True
+    sub_configs = {"text_config": AutoConfig, "vision_config": Idefics3VisionConfig}
 
     def __init__(
         self,
@@ -191,7 +171,7 @@ class Idefics3Config(PretrainedConfig):
             self.vision_config = vision_config
 
         if isinstance(text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "llama"
+            text_config["model_type"] = text_config.get("model_type", "llama")
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             logger.info("text_config is None, using default text config")
@@ -204,4 +184,7 @@ class Idefics3Config(PretrainedConfig):
         self.text_config = text_config
         self.scale_factor = scale_factor
 
-        super().__init__(**kwargs, tie_word_embeddings=tie_word_embeddings)
+        super().__init__(**kwargs, pad_token_id=pad_token_id, tie_word_embeddings=tie_word_embeddings)
+
+
+__all__ = ["Idefics3Config", "Idefics3VisionConfig"]
