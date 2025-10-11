@@ -301,25 +301,45 @@ class Qwen2_5_VLPreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
+
     def _init_weights(self, module):
         """
-        Initialize the weights safely. Skip quantized tensors (like int8) that cannot be initialized normally.
+        Safely initialize weights. Skips non-floating tensors (e.g., int8 quantized weights)
+        to prevent RuntimeError from normal_() on integer dtypes.
         """
-        if isinstance(module, nn.Linear):
-            # Skip int8 tensors or tensors without float dtype
-            if hasattr(module.weight, "dtype") and not torch.is_floating_point(module.weight):
-                return
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            if hasattr(module.weight, "dtype") and not torch.is_floating_point(module.weight):
-                return
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-    
+        try:
+            # ✅ Skip quantized or non-floating modules immediately
+            if hasattr(module, "weight") and module.weight is not None:
+                if not torch.is_floating_point(module.weight):
+                    import logging
+                    logging.getLogger(__name__).debug(
+                        f"Skipping weight init for {module.__class__.__name__} (dtype={module.weight.dtype})"
+                    )
+                    return
 
+            # === Safe initialization for floating-point modules ===
+            if isinstance(module, nn.Linear):
+                module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+                if module.bias is not None:
+                    module.bias.data.zero_()
+
+            elif isinstance(module, nn.Embedding):
+                module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+                if getattr(module, "padding_idx", None) is not None:
+                    module.weight.data[module.padding_idx].zero_()
+
+            elif isinstance(module, (nn.LayerNorm, nn.modules.normalization.LayerNorm)):
+                if module.bias is not None:
+                    module.bias.data.zero_()
+                if hasattr(module, "weight") and torch.is_floating_point(module.weight):
+                    module.weight.data.fill_(1.0)
+
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).debug(
+                f"Skipping initialization for {module.__class__.__name__}: {e}"
+            )
+            return
 
 class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
     config: Qwen2_5_VLVisionConfig
