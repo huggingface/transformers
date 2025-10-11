@@ -19,6 +19,7 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_modeling_common import _config_zero_init
 
 
 if is_torch_available():
@@ -153,6 +154,45 @@ class HrmModelTest(CausalLMModelTest, unittest.TestCase):
         super().setUp()
         # Override config_tester to skip standard config tests that don't apply to HRM
         self.config_tester = None
+
+    def test_initialization(self):
+        """Override initialization test to handle Q head special initialization.
+
+        The Q head for Adaptive Computation Time uses special initialization:
+        - Weights: all zeros
+        - Bias: -5.0 (strong negative bias for ACT exploration)
+        This is outside the normal [0.0, 1.0] range checked by the base test.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                if param.requires_grad:
+                    # Q head bias is intentionally initialized to -5.0 for ACT
+                    if "q_head.bias" in name:
+                        self.assertAlmostEqual(
+                            param.data.mean().item(),
+                            -5.0,
+                            places=5,
+                            msg=f"Parameter {name} should be initialized to -5.0 for ACT",
+                        )
+                    # Q head weight is intentionally initialized to 0.0 for ACT
+                    elif "q_head.weight" in name:
+                        self.assertAlmostEqual(
+                            param.data.mean().item(),
+                            0.0,
+                            places=5,
+                            msg=f"Parameter {name} should be initialized to 0.0 for ACT",
+                        )
+                    else:
+                        # All other parameters follow standard initialization
+                        self.assertIn(
+                            ((param.data.mean() * 1e9).round() / 1e9).item(),
+                            [0.0, 1.0],
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
 
     def test_config(self):
         """Skip standard config tests for HRM."""
