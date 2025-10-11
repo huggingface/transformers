@@ -183,6 +183,9 @@ _deps = [
     "libcst",
     "rich",
     "opentelemetry-api",
+    "opentelemetry-exporter-otlp",
+    "opentelemetry-instrumentation-fastapi",
+    "opentelemetry-sdk",
     "mistral-common[opencv]>=1.6.3",
 ]
 
@@ -393,8 +396,13 @@ extras["torchhub"] = deps_list(
 
 extras["benchmark"] = deps_list("optimum-benchmark")
 
-# OpenTelemetry dependencies for metrics collection in continuous batching
-extras["open-telemetry"] = deps_list("opentelemetry-api") + ["opentelemetry-exporter-otlp", "opentelemetry-sdk"]
+# OpenTelemetry dependencies for metrics collection
+# "open-telemetry-api" is necessary is you want to get metrics from Continuous Batching
+extras["open-telemetry-api"] = deps_list("opentelemetry-api")
+# "open-telemetry" is necessary if you want to export the collected metrics to a backend, needed for the CB example code
+extras["open-telemetry"] = deps_list("opentelemetry-exporter-otlp", "opentelemetry-sdk") + extras["open-telemetry-api"]
+# "open-telemetry-serving" is necessary if you want to run `transformers serve` instrumented with OpenTelemetry
+extras["open-telemetry-serving"] = deps_list("opentelemetry-instrumentation-fastapi") + extras["open-telemetry"]
 
 # when modifying the following list, make sure to update src/transformers/dependency_versions_check.py
 install_requires = [
