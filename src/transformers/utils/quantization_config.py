@@ -1128,11 +1128,11 @@ class VptqLayerConfig(QuantizationConfigMixin):
         in_features: int = -1,
         indices_as_float: bool = False,
         is_indice_packed: bool = True,
-        num_centroids: tuple = [-1, -1],
-        num_res_centroids: tuple = [-1, -1],
+        num_centroids: list = [-1, -1],
+        num_res_centroids: list = [-1, -1],
         out_features: int = -1,
         outlier_size: int = 0,
-        vector_lens: tuple = [-1, -1],
+        vector_lens: list = [-1, -1],
         **kwargs,
     ):
         self.enable_norm = enable_norm

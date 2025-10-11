@@ -1228,7 +1228,7 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
         target_features: torch.FloatTensor,
         negative_features: torch.FloatTensor,
         predicted_features: torch.FloatTensor,
-        temperature: int = 0.1,
+        temperature: float = 0.1,
     ):
         """
         Compute logits for contrastive loss based using cosine similarity as the distance measure between

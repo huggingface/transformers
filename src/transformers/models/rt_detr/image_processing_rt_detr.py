@@ -978,7 +978,7 @@ class RTDetrImageProcessor(BaseImageProcessor):
         self,
         outputs,
         threshold: float = 0.5,
-        target_sizes: Union[TensorType, list[tuple]] = None,
+        target_sizes: Optional[Union[TensorType, list[tuple]]] = None,
         use_focal_loss: bool = True,
     ):
         """
