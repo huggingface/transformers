@@ -622,16 +622,6 @@ class HrmInner(nn.Module):
             persistent=True,
         )
 
-    def _init_q_head_weights(self):
-        """Apply special initialization to Q head for ACT halting mechanism.
-
-        The Q head needs zero weights and strong negative bias (-5) to encourage
-        initial exploration during Adaptive Computation Time learning.
-        This is called after standard weight initialization.
-        """
-        self.q_head.weight.data.zero_()
-        self.q_head.bias.data.fill_(-5.0)
-
     def _get_rotary_embeddings(self) -> Optional[tuple[torch.Tensor, torch.Tensor]]:
         """Get rotary embeddings if using RoPE, otherwise return None."""
         if self.pos_encodings == "rope":
@@ -754,10 +744,17 @@ class HrmPreTrainedModel(PreTrainedModel):
         """Initialize the weights using truncated normal initialization."""
         std = self.config.initializer_range
         if isinstance(module, HrmLinear):
-            # Reinitialize HrmLinear weights
-            truncated_normal_init_(module.weight, std=std / (module.weight.shape[1] ** 0.5))
-            if module.bias is not None:
-                module.bias.data.zero_()
+            # Special initialization for Q head (ACT halting mechanism)
+            if hasattr(module, "weight") and module.weight.shape == (2, self.config.hidden_size):
+                # This is the q_head: zero weights and strong negative bias for ACT
+                module.weight.data.zero_()
+                if module.bias is not None:
+                    module.bias.data.fill_(-5.0)
+            else:
+                # Standard HrmLinear initialization
+                truncated_normal_init_(module.weight, std=std / (module.weight.shape[1] ** 0.5))
+                if module.bias is not None:
+                    module.bias.data.zero_()
         elif isinstance(module, HrmEmbedding):
             # Reinitialize HrmEmbedding weights
             truncated_normal_init_(module.weight, std=std)
@@ -779,8 +776,6 @@ class HrmModel(HrmPreTrainedModel):
         self.config = config
         self.inner = HrmInner(config)
         self.post_init()
-        # Apply special Q head initialization after standard weight init
-        self.inner._init_q_head_weights()
 
     def get_input_embeddings(self):
         return self.inner.embed_tokens
