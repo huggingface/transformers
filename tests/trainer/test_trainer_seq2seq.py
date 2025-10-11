@@ -77,7 +77,7 @@ class Seq2seqTrainerTester(TestCasePlus):
             pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
             label_str = tokenizer.batch_decode(labels_ids, skip_special_tokens=True)
 
-            accuracy = sum([int(pred_str[i] == label_str[i]) for i in range(len(pred_str))]) / len(pred_str)
+            accuracy = sum(int(pred_str[i] == label_str[i]) for i in range(len(pred_str))) / len(pred_str)
 
             return {"accuracy": accuracy}
 

@@ -18,7 +18,7 @@ import unittest
 
 import pytest
 
-from transformers import EsmConfig, is_torch_available
+from transformers import BitsAndBytesConfig, EsmConfig, is_torch_available
 from transformers.testing_utils import (
     TestCasePlus,
     is_flaky,
@@ -234,12 +234,6 @@ class EsmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
-
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
@@ -327,11 +321,11 @@ class EsmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.float16, attn_implementation="flash_attention_2"
+                    tmpdirname, dtype=torch.float16, attn_implementation="flash_attention_2"
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, attn_implementation="eager")
+                model = model_class.from_pretrained(tmpdirname, dtype=torch.float16, attn_implementation="eager")
                 model.to(torch_device)
 
                 dummy_input = inputs_dict[model_class.main_input_name]
@@ -380,14 +374,18 @@ class EsmModelIntegrationTest(TestCasePlus):
 
     @require_bitsandbytes
     def test_inference_bitsandbytes(self):
-        model = EsmForMaskedLM.from_pretrained("facebook/esm2_t36_3B_UR50D", load_in_8bit=True)
+        model = EsmForMaskedLM.from_pretrained(
+            "facebook/esm2_t36_3B_UR50D", quantization_config=BitsAndBytesConfig(load_in_8bit=True)
+        )
 
         input_ids = torch.tensor([[0, 6, 4, 13, 5, 4, 16, 12, 11, 7, 2]]).to(model.device)
         # Just test if inference works
         with torch.no_grad():
             _ = model(input_ids)[0]
 
-        model = EsmForMaskedLM.from_pretrained("facebook/esm2_t36_3B_UR50D", load_in_4bit=True)
+        model = EsmForMaskedLM.from_pretrained(
+            "facebook/esm2_t36_3B_UR50D", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
 
         input_ids = torch.tensor([[0, 6, 4, 13, 5, 4, 16, 12, 11, 7, 2]]).to(model.device)
         # Just test if inference works

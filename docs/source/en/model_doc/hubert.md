@@ -18,7 +18,6 @@ rendered properly in your Markdown viewer.
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-        <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
@@ -47,7 +46,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="automatic-speech-recognition",
     model="facebook/hubert-large-ls960-ft",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 
@@ -66,7 +65,7 @@ dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", spli
 sampling_rate = dataset.features["audio"].sampling_rate
 
 processor = AutoProcessor.from_pretrained("facebook/hubert-base-ls960")
-model = AutoModelForCTC.from_pretrained("facebook/hubert-base-ls960", torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
+model = AutoModelForCTC.from_pretrained("facebook/hubert-base-ls960", dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
 
 inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
 with torch.no_grad():
@@ -101,7 +100,7 @@ dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", spli
 sampling_rate = dataset.features["audio"].sampling_rate
 
 processor = AutoProcessor.from_pretrained("facebook/hubert-base-ls960")
-model = AutoModelForCTC.from_pretrained("facebook/hubert-base-ls960", quantization_config=bnb_config, torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
+model = AutoModelForCTC.from_pretrained("facebook/hubert-base-ls960", quantization_config=bnb_config, dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
 
 inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
 with torch.no_grad():
@@ -115,18 +114,11 @@ print(transcription[0])
 ## Notes
 
 - HuBERT models expect raw audio input as a 1D float array sampled at 16kHz.
-- If you want to use a `head_mask`, use the model with `attn_implementation="eager"`.
-  ```python
-  model = HubertModel.from_pretrained("facebook/hubert-base-ls960", attn_implementation="eager")
-  ```
 
 ## HubertConfig
 
 [[autodoc]] HubertConfig
     - all
-
-<frameworkcontent>
-<pt>
 
 ## HubertModel
 
@@ -142,19 +134,3 @@ print(transcription[0])
 
 [[autodoc]] HubertForSequenceClassification
     - forward
-
-</pt>
-<tf>
-
-## TFHubertModel
-
-[[autodoc]] TFHubertModel
-    - call
-
-## TFHubertForCTC
-
-[[autodoc]] TFHubertForCTC
-    - call
-
-</tf>
-</frameworkcontent>

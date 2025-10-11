@@ -17,10 +17,10 @@ import copy
 import inspect
 import tempfile
 import unittest
+from functools import cached_property
 
 from transformers import SpeechT5Config, SpeechT5HifiGanConfig
 from transformers.testing_utils import (
-    is_flaky,
     is_torch_available,
     require_deterministic_for_xpu,
     require_sentencepiece,
@@ -30,13 +30,11 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.trainer_utils import set_seed
-from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
-    _config_zero_init,
     floats_tensor,
     ids_tensor,
     random_attention_mask,
@@ -65,9 +63,6 @@ def prepare_inputs_dict(
     decoder_input_values=None,
     attention_mask=None,
     decoder_attention_mask=None,
-    head_mask=None,
-    decoder_head_mask=None,
-    cross_attn_head_mask=None,
 ):
     if input_ids is not None:
         encoder_dict = {"input_ids": input_ids}
@@ -79,21 +74,11 @@ def prepare_inputs_dict(
     else:
         decoder_dict = {"decoder_input_values": decoder_input_values}
 
-    if head_mask is None:
-        head_mask = torch.ones(config.encoder_layers, config.encoder_attention_heads, device=torch_device)
-    if decoder_head_mask is None:
-        decoder_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
-    if cross_attn_head_mask is None:
-        cross_attn_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
-
     return {
         **encoder_dict,
         **decoder_dict,
         "attention_mask": attention_mask,
         "decoder_attention_mask": decoder_attention_mask,
-        "head_mask": head_mask,
-        "decoder_head_mask": decoder_head_mask,
-        "cross_attn_head_mask": cross_attn_head_mask,
     }
 
 
@@ -174,8 +159,7 @@ class SpeechT5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         else {}
     )
     is_encoder_decoder = True
-    test_pruning = False
-    test_headmasking = False
+
     test_resize_embeddings = False
 
     def setUp(self):
@@ -204,11 +188,7 @@ class SpeechT5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 "decoder_input_values",
                 "decoder_attention_mask",
             ]
-            expected_arg_names.extend(
-                ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
-                if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
-                else ["encoder_outputs"]
-            )
+            expected_arg_names.extend(["encoder_outputs"])
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     @unittest.skip(reason="Model has no input_embeds")
@@ -373,8 +353,6 @@ class SpeechT5ForSpeechToTextTester:
 class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase, GenerationTesterMixin):
     all_model_classes = (SpeechT5ForSpeechToText,) if is_torch_available() else ()
     is_encoder_decoder = True
-    test_pruning = False
-    test_headmasking = False
 
     def setUp(self):
         self.model_tester = SpeechT5ForSpeechToTextTester(self)
@@ -520,11 +498,7 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase, Generatio
                 "decoder_input_ids",
                 "decoder_attention_mask",
             ]
-            expected_arg_names.extend(
-                ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
-                if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
-                else ["encoder_outputs"]
-            )
+            expected_arg_names.extend(["encoder_outputs"])
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     def test_hidden_states_output(self):
@@ -580,33 +554,6 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase, Generatio
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                uniform_init_parms = [
-                    "conv.weight",
-                    "conv.parametrizations.weight",
-                    "masked_spec_embed",
-                    "feature_projection.projection.weight",
-                    "feature_projection.projection.bias",
-                ]
-                if param.requires_grad:
-                    if any(x in name for x in uniform_init_parms):
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-
     # this model has no inputs_embeds
     @unittest.skip(reason="Model has no input_embeds")
     def test_inputs_embeds(self):
@@ -626,6 +573,7 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase, Generatio
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
             model = model_class(config).to(torch_device)
+            model.eval()
 
             # if no output embeddings -> leave test
             if model.get_output_embeddings() is None:
@@ -727,10 +675,6 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase, Generatio
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
-
-    @is_flaky(max_attempts=5, description="Flaky for some input configurations.")
-    def test_past_key_values_format(self):
-        super().test_past_key_values_format()
 
     # overwrite from test_modeling_common
     def _mock_init_weights(self, module):
@@ -908,8 +852,6 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SpeechT5ForTextToSpeech,) if is_torch_available() else ()
     all_generative_model_classes = ()
     is_encoder_decoder = True
-    test_pruning = False
-    test_headmasking = False
 
     def setUp(self):
         self.model_tester = SpeechT5ForTextToSpeechTester(self)
@@ -982,35 +924,8 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
                 "decoder_input_values",
                 "decoder_attention_mask",
             ]
-            expected_arg_names.extend(
-                ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
-                if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
-                else ["encoder_outputs"]
-            )
+            expected_arg_names.extend(["encoder_outputs"])
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                uniform_init_parms = [
-                    "conv.weight",
-                ]
-                if param.requires_grad:
-                    if any(x in name for x in uniform_init_parms):
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
 
     @unittest.skip(reason="Model has no inputs_embeds")
     def test_inputs_embeds(self):
@@ -1457,8 +1372,7 @@ class SpeechT5ForSpeechToSpeechTester:
 class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SpeechT5ForSpeechToSpeech,) if is_torch_available() else ()
     is_encoder_decoder = True
-    test_pruning = False
-    test_headmasking = False
+
     test_resize_embeddings = False
 
     def setUp(self):
@@ -1626,11 +1540,7 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
                 "decoder_input_values",
                 "decoder_attention_mask",
             ]
-            expected_arg_names.extend(
-                ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
-                if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
-                else ["encoder_outputs"]
-            )
+            expected_arg_names.extend(["encoder_outputs"])
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     def test_hidden_states_output(self):
@@ -1685,33 +1595,6 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                uniform_init_parms = [
-                    "conv.weight",
-                    "conv.parametrizations.weight",
-                    "masked_spec_embed",
-                    "feature_projection.projection.weight",
-                    "feature_projection.projection.bias",
-                ]
-                if param.requires_grad:
-                    if any(x in name for x in uniform_init_parms):
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
 
     @unittest.skip(reason="Model has no input_embeds")
     def test_inputs_embeds(self):
@@ -1857,13 +1740,11 @@ class SpeechT5HifiGanTester:
 class SpeechT5HifiGanTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SpeechT5HifiGan,) if is_torch_available() else ()
     test_torchscript = False
-    test_pruning = False
+
     test_resize_embeddings = False
     test_resize_position_embeddings = False
-    test_head_masking = False
     test_mismatched_shapes = False
     test_missing_keys = False
-    test_model_parallel = False
     is_encoder_decoder = False
     has_attentions = False
 
@@ -1900,10 +1781,6 @@ class SpeechT5HifiGanTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Model does not output hidden states")
     def test_hidden_states_output(self):
-        pass
-
-    @unittest.skip
-    def test_initialization(self):
         pass
 
     @unittest.skip(reason="Model has no input_embeds")

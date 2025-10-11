@@ -20,15 +20,12 @@ import math
 from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import auto_docstring, logging
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_pvt_v2 import PvtV2Config
@@ -42,11 +39,6 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
-    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
-    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
-    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
-    argument.
     """
     if drop_prob == 0.0 or not training:
         return input
@@ -127,7 +119,7 @@ class PvtV2SelfAttention(nn.Module):
     def __init__(self, config: PvtV2Config, hidden_size: int, num_attention_heads: int, spatial_reduction_ratio: int):
         super().__init__()
         self.linear_attention = config.linear_attention
-        self.pruned_heads = set()
+
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
 
@@ -208,24 +200,6 @@ class PvtV2SelfAttention(nn.Module):
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
         return outputs
-
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.num_attention_heads, self.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.query = prune_linear_layer(self.query, index)
-        self.key = prune_linear_layer(self.key, index)
-        self.value = prune_linear_layer(self.value, index)
-        self.proj = prune_linear_layer(self.proj, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.num_attention_heads = self.num_attention_heads - len(heads)
-        self.all_head_size = self.attention_head_size * self.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
 
 class PvtV2ConvFeedForwardNetwork(nn.Module):
@@ -424,14 +398,6 @@ class PvtV2Model(PvtV2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
-
     @auto_docstring
     def forward(
         self,
@@ -524,26 +490,7 @@ class PvtV2ForImageClassification(PvtV2PreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
+            loss = self.loss_function(labels, logits, self.config)
 
         if not return_dict:
             output = (logits,) + outputs[1:]

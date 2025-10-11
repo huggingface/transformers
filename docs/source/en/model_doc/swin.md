@@ -18,7 +18,6 @@ rendered properly in your Markdown viewer.
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-        <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
     </div>
 </div>
 
@@ -43,11 +42,12 @@ from transformers import pipeline
 pipeline = pipeline(
     task="image-classification",
     model="microsoft/swin-tiny-patch4-window7-224",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0
 )
 pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
 ```
+
 </hfoption>
 
 <hfoption id="AutoModel">
@@ -67,7 +67,7 @@ model = AutoModelForImageClassification.from_pretrained(
     device_map="auto"
 )
 
-device = infer_device()
+device = Accelerator().device
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
 inputs = image_processor(image, return_tensors="pt").to(model.device)
@@ -80,6 +80,7 @@ class_labels = model.config.id2label
 predicted_class_label = class_labels[predicted_class_id]
 print(f"The predicted class label is: {predicted_class_label}")
 ```
+
 </hfoption>
 </hfoptions>
 
@@ -91,9 +92,6 @@ print(f"The predicted class label is: {predicted_class_label}")
 ## SwinConfig
 
 [[autodoc]] SwinConfig
-
-<frameworkcontent>
-<pt>
 
 ## SwinModel
 
@@ -109,24 +107,3 @@ print(f"The predicted class label is: {predicted_class_label}")
 
 [[autodoc]] transformers.SwinForImageClassification
     - forward
-
-</pt>
-<tf>
-
-## TFSwinModel
-
-[[autodoc]] TFSwinModel
-    - call
-
-## TFSwinForMaskedImageModeling
-
-[[autodoc]] TFSwinForMaskedImageModeling
-    - call
-
-## TFSwinForImageClassification
-
-[[autodoc]] transformers.TFSwinForImageClassification
-    - call
-
-</tf>
-</frameworkcontent>

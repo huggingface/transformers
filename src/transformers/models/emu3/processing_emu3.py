@@ -20,7 +20,7 @@ import numpy as np
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_vision_available
 
@@ -33,14 +33,8 @@ class Emu3TextKwargs(TextKwargs, total=False):
     return_for_image_generation: bool
 
 
-class Emu3ImagesKwargs(ImagesKwargs, total=False):
-    ratio: str
-    image_area: int
-
-
 class Emu3ProcessorKwargs(ProcessingKwargs, total=False):
     text_kwargs: Emu3TextKwargs
-    images_kwargs: Emu3ImagesKwargs
     _defaults = {
         "text_kwargs": {
             "return_for_image_generation": False,
@@ -95,14 +89,12 @@ class Emu3Processor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[Emu3ProcessorKwargs],
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to Emu3TokenizerFast's [`~Emu3TokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
+        the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
         CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
@@ -117,10 +109,8 @@ class Emu3Processor(ProcessorMixin):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -243,26 +233,6 @@ class Emu3Processor(ProcessorMixin):
 
     def postprocess(self, images: ImageInput, **kwargs):
         return self.image_processor.postprocess(images, **kwargs)
-
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to Emu3TokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to Emu3TokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
-    @property
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
 
 __all__ = ["Emu3Processor"]

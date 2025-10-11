@@ -14,7 +14,7 @@
 # limitations under the License.
 """StableLM model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 
@@ -22,15 +22,15 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class StableLmConfig(PretrainedConfig):
+class StableLmConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`~StableLmModel`].
     It is used to instantiate an StableLM model according to the specified arguments, defining the model
     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
     the StableLM [stabilityai/stablelm-3b-4e1t](https://huggingface.co/stabilityai/stablelm-3b-4e1t) architecture.
 
-    Configuration objects inherit from  [`PretrainedConfig`] and can be used
-    to control the model outputs. Read the documentation from  [`PretrainedConfig`]
+    Configuration objects inherit from  [`PreTrainedConfig`] and can be used
+    to control the model outputs. Read the documentation from  [`PreTrainedConfig`]
     for more information.
 
 

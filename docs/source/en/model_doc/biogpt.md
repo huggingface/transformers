@@ -44,7 +44,7 @@ from transformers import pipeline
 generator = pipeline(
     task="text-generation",
     model="microsoft/biogpt",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device=0,
 )
 result = generator("Ibuprofen is best used for", truncation=True, max_length=50, do_sample=True)[0]["generated_text"]
@@ -61,7 +61,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 tokenizer = AutoTokenizer.from_pretrained("microsoft/biogpt")
 model = AutoModelForCausalLM.from_pretrained(
     "microsoft/biogpt",
-    torch_dtype=torch.float16,
+    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -71,7 +71,7 @@ inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     generated_ids = model.generate(**inputs, max_length=50)
-    
+
 output = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
 print(output)
 ```
@@ -80,7 +80,7 @@ print(output)
 <hfoption id="transformers CLI">
 
 ```bash
-echo -e "Ibuprofen is best used for" | transformers-cli run --task text-generation --model microsoft/biogpt --device 0
+echo -e "Ibuprofen is best used for" | transformers run --task text-generation --model microsoft/biogpt --device 0
 ```
 
 </hfoption>
@@ -103,16 +103,16 @@ bnb_config = BitsAndBytesConfig(
 
 tokenizer = AutoTokenizer.from_pretrained("microsoft/BioGPT-Large")
 model = AutoModelForCausalLM.from_pretrained(
-    "microsoft/BioGPT-Large", 
+    "microsoft/BioGPT-Large",
     quantization_config=bnb_config,
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto"
 )
 
 input_text = "Ibuprofen is best used for"
 inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
 with torch.no_grad():
-    generated_ids = model.generate(**inputs, max_length=50)    
+    generated_ids = model.generate(**inputs, max_length=50)
 output = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
 print(output)
 ```
@@ -121,11 +121,10 @@ print(output)
 
 - Pad inputs on the right because BioGPT uses absolute position embeddings.
 - BioGPT can reuse previously computed key-value attention pairs. Access this feature with the [past_key_values](https://huggingface.co/docs/transformers/main/en/model_doc/biogpt#transformers.BioGptModel.forward.past_key_values) parameter in [`BioGPTModel.forward`].
-- The `head_mask` argument is ignored when using an attention implementation other than "eager". If you want to use `head_mask`, make sure `attn_implementation="eager"`).
 
    ```py
    from transformers import AutoModelForCausalLM
-   
+
    model = AutoModelForCausalLM.from_pretrained(
       "microsoft/biogpt",
       attn_implementation="eager"
@@ -135,30 +134,25 @@ print(output)
 
 [[autodoc]] BioGptConfig
 
-
 ## BioGptTokenizer
 
 [[autodoc]] BioGptTokenizer
     - save_vocabulary
-
 
 ## BioGptModel
 
 [[autodoc]] BioGptModel
     - forward
 
-
 ## BioGptForCausalLM
 
 [[autodoc]] BioGptForCausalLM
     - forward
 
-
 ## BioGptForTokenClassification
 
 [[autodoc]] BioGptForTokenClassification
     - forward
-
 
 ## BioGptForSequenceClassification
 

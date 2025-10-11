@@ -76,7 +76,7 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        torch_dtype="float32",
+        dtype="float32",
     ):
         dqa_pipeline = DocumentQuestionAnsweringPipeline(
             model=model,
@@ -84,7 +84,7 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             processor=processor,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
             max_new_tokens=20,
         )
 
@@ -162,7 +162,7 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
         dqa_pipeline = pipeline(
             "document-question-answering",
             model="hf-internal-testing/tiny-random-layoutlmv2-for-dqa-test",
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
         )
         image = INVOICE_URL
         question = "How many cats are there?"

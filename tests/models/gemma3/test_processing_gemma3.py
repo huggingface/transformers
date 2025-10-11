@@ -123,7 +123,7 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor_kwargs = self.prepare_processor_dict()
         processor = self.processor_class(**processor_components, **processor_kwargs)
 
-        input_str = self.prepare_text_inputs(modality="image")
+        input_str = self.prepare_text_inputs(modalities="image")
         image_input = self.prepare_image_inputs()
         inputs = processor(
             text=input_str,
@@ -143,7 +143,7 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = self.get_processor()
 
-        input_str = self.prepare_text_inputs(batch_size=2, modality="image")
+        input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
         image_input = self.prepare_image_inputs(batch_size=2)
         _ = processor(
             text=input_str,

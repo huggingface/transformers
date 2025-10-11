@@ -16,16 +16,15 @@
 import copy
 import tempfile
 import unittest
+from functools import cached_property
 
 from transformers import SeamlessM4TConfig, is_speech_available, is_torch_available
 from transformers.testing_utils import require_speech, require_torch, slow, torch_device
 from transformers.trainer_utils import set_seed
-from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
-    _config_zero_init,
     floats_tensor,
     ids_tensor,
     random_attention_mask,
@@ -255,8 +254,6 @@ class SeamlessM4TModelTester:
         self.parent.assertEqual(decoder_output.size(), (self.batch_size, decoder_input_ids.shape[1], self.vocab_size))
         # There should be `num_layers` key value embeddings stored in decoder_past
         self.parent.assertEqual(len(decoder_past), config.decoder_layers)
-        # There should be a self attn key, a self attn value, a cross attn key and a cross attn value stored in each decoder_past tuple
-        self.parent.assertEqual(len(decoder_past[0]), 4)
 
     def create_and_check_decoder_model_past_large_inputs(
         self,
@@ -341,10 +338,8 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     fx_compatible = False
     test_missing_keys = False
-    test_pruning = False
-    test_model_parallel = False
+
     test_resize_embeddings = False
-    test_headmasking = False
     test_torchscript = False
 
     all_model_classes = (
@@ -375,44 +370,6 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
         model_name = "facebook/hf-seamless-m4t-medium"
         model = SeamlessM4TModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                uniform_init_parms = [
-                    "conv.weight",
-                    "masked_spec_embed",
-                    "codevectors",
-                    "quantizer.weight_proj.weight",
-                    "project_hid.weight",
-                    "project_hid.bias",
-                    "project_q.weight",
-                    "project_q.bias",
-                    "pos_bias_v",
-                    "pos_bias_u",
-                    "pointwise_conv1",
-                    "pointwise_conv2",
-                    "feature_projection.projection.weight",
-                    "feature_projection.projection.bias",
-                    "objective.weight",
-                    "adapter",
-                ]
-                if param.requires_grad:
-                    if any(x in name for x in uniform_init_parms):
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
 
     @unittest.skip(reason="SeamlessM4TSpeechEncoder doesn't have an embedding layer")
     def test_inputs_embeds(self):
@@ -575,10 +532,8 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, PipelineTesterMixin, u
     is_encoder_decoder = True
     fx_compatible = False
     test_missing_keys = False
-    test_pruning = False
-    test_model_parallel = False
+
     test_resize_embeddings = True
-    test_headmasking = False
     test_torchscript = False
 
     all_model_classes = (
@@ -621,44 +576,6 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, PipelineTesterMixin, u
         model_name = "facebook/hf-seamless-m4t-medium"
         model = SeamlessM4TModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                uniform_init_parms = [
-                    "conv.weight",
-                    "masked_spec_embed",
-                    "codevectors",
-                    "quantizer.weight_proj.weight",
-                    "project_hid.weight",
-                    "project_hid.bias",
-                    "project_q.weight",
-                    "project_q.bias",
-                    "pos_bias_v",
-                    "pos_bias_u",
-                    "pointwise_conv1",
-                    "pointwise_conv2",
-                    "feature_projection.projection.weight",
-                    "feature_projection.projection.bias",
-                    "objective.weight",
-                    "adapter",
-                ]
-                if param.requires_grad:
-                    if any(x in name for x in uniform_init_parms):
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
 
     @unittest.skip(
         reason="Expected missing keys serve when using SeamlessM4TForXXX.from_pretrained from a checkpoint saved by SeamlessM4TModel.save_pretrained."

@@ -190,16 +190,3 @@ class OmDetTurboProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         decoded_tok = tokenizer.batch_decode(predicted_ids)
 
         self.assertListEqual(decoded_tok, decoded_processor)
-
-    def test_model_input_names(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-
-        processor = OmDetTurboProcessor(tokenizer=tokenizer, image_processor=image_processor)
-
-        input_tasks = "task"
-        input_classes = ["class1", "class2"]
-        image_input = self.prepare_image_inputs()
-        inputs = processor(images=image_input, text=input_classes, task=input_tasks, return_tensors="pt")
-
-        self.assertListEqual(list(inputs.keys()), self.input_keys)

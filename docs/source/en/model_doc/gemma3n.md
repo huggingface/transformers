@@ -57,7 +57,7 @@ pipeline = pipeline(
     task="image-text-to-text",
     model="google/gemma-3n-e4b",
     device=0,
-    torch_dtype=torch.bfloat16
+    dtype=torch.bfloat16
 )
 pipeline(
     "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
@@ -74,7 +74,7 @@ from transformers import AutoProcessor, Gemma3nForConditionalGeneration
 
 model = Gemma3nForConditionalGeneration.from_pretrained(
     "google/gemma-3n-e4b-it",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -103,7 +103,7 @@ inputs = processor.apply_chat_template(
     return_dict=True,
     return_tensors="pt",
     add_generation_prompt=True,
-).to("cuda")
+).to(model.device)
 
 output = model.generate(**inputs, max_new_tokens=50, cache_implementation="static")
 print(processor.decode(output[0], skip_special_tokens=True))
@@ -121,9 +121,9 @@ echo -e "Plants create energy through a process known as" | transformers run --t
 
 ## Notes
 
--   Use [`Gemma3nForConditionalGeneration`] for image-audio-and-text, image-and-text, image-and-audio, audio-and-text,
+- Use [`Gemma3nForConditionalGeneration`] for image-audio-and-text, image-and-text, image-and-audio, audio-and-text,
     image-only and audio-only inputs.
--   Gemma 3n supports multiple images per input, but make sure the images are correctly batched before passing them to
+- Gemma 3n supports multiple images per input, but make sure the images are correctly batched before passing them to
     the processor. Each batch should be a list of one or more images.
 
     ```py
@@ -147,11 +147,12 @@ echo -e "Plants create energy through a process known as" | transformers run --t
         },
     ]
     ```
--   Text passed to the processor should have a `<image_soft_token>` token wherever an image should be inserted.
--   Gemma 3n accept at most one target audio clip per input, though multiple audio clips can be provided in few-shot
+
+- Text passed to the processor should have a `<image_soft_token>` token wherever an image should be inserted.
+- Gemma 3n accept at most one target audio clip per input, though multiple audio clips can be provided in few-shot
     prompts, for example.
--   Text passed to the processor should have a `<audio_soft_token>` token wherever an audio clip should be inserted.
--   The processor has its own [`~ProcessorMixin.apply_chat_template`] method to convert chat messages to model inputs.
+- Text passed to the processor should have a `<audio_soft_token>` token wherever an audio clip should be inserted.
+- The processor has its own [`~ProcessorMixin.apply_chat_template`] method to convert chat messages to model inputs.
 
 ## Gemma3nAudioFeatureExtractor
 
@@ -202,5 +203,5 @@ echo -e "Plants create energy through a process known as" | transformers run --t
 [gemma3n-collection]: https://huggingface.co/collections/google/gemma-3n
 [laurel]: https://huggingface.co/papers/2411.07501
 [matformer]: https://huggingface.co/papers/2310.07707
-[spark-transformer]: https://arxiv.org/abs/2506.06644
+[spark-transformer]: https://huggingface.co/papers/2506.06644
 [usm]: https://huggingface.co/papers/2303.01037

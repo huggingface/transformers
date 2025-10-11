@@ -44,7 +44,7 @@ pipeline = pipeline(
     task="zero-shot-image-classification",
     model="kakaobrain/align-base",
     device=0,
-    torch_dtype=torch.bfloat16
+    dtype=torch.bfloat16
 )
 
 candidate_labels = [
@@ -148,12 +148,12 @@ for label, score in zip(candidate_labels, probs):
   ```
 
 ## Resources
+
 - Refer to the [Kakao Brain’s Open Source ViT, ALIGN, and the New COYO Text-Image Dataset](https://huggingface.co/blog/vit-align) blog post for more details.
 
 ## AlignConfig
 
 [[autodoc]] AlignConfig
-    - from_text_vision_configs
 
 ## AlignTextConfig
 

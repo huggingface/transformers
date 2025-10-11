@@ -24,7 +24,6 @@ rendered properly in your Markdown viewer.
 
 # Qwen2MoE
 
-
 [Qwen2MoE](https://huggingface.co/papers/2407.10671) is a Mixture-of-Experts (MoE) variant of [Qwen2](./qwen2), available as a base model and an aligned chat model. It uses SwiGLU activation, group query attention and a mixture of sliding window attention and full attention. The tokenizer can also be adapted to multiple languages and codes.
 
 The MoE architecture uses upcyled models from the dense language models. For example, Qwen1.5-MoE-A2.7B is upcycled from Qwen-1.8B. It has 14.3B parameters but only 2.7B parameters are activated during runtime.
@@ -46,7 +45,7 @@ from transformers import pipeline
 pipe = pipeline(
     task="text-generation",
     model="Qwen/Qwen1.5-MoE-A2.7B",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map=0
 )
 
@@ -57,6 +56,7 @@ messages = [
 outputs = pipe(messages, max_new_tokens=256, do_sample=True, temperature=0.7, top_k=50, top_p=0.95)
 print(outputs[0]["generated_text"][-1]['content'])
 ```
+
 </hfoption>
 <hfoption id="AutoModel">
 
@@ -66,7 +66,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen1.5-MoE-A2.7B-Chat",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -82,7 +82,7 @@ text = tokenizer.apply_chat_template(
     tokenize=False,
     add_generation_prompt=True
 )
-model_inputs = tokenizer([text], return_tensors="pt").to("cuda")
+model_inputs = tokenizer([text], return_tensors="pt").to(model.device)
 
 generated_ids = model.generate(
     model_inputs.input_ids,
@@ -100,14 +100,14 @@ generated_ids = [
 response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 print(response)
 ```
-</hfoption> 
+
+</hfoption>
 <hfoption id="transformers CLI">
 ```bash
-transformers chat Qwen/Qwen1.5-MoE-A2.7B-Chat --torch_dtype auto --attn_implementation flash_attention_2
+transformers chat Qwen/Qwen1.5-MoE-A2.7B-Chat --dtype auto --attn_implementation flash_attention_2
 ```
 </hfoption>
- </hfoptions> 
-
+ </hfoptions>
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
@@ -125,13 +125,13 @@ quantization_config = BitsAndBytesConfig(
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B-Chat")
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen1.5-MoE-A2.7B-Chat",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config,
     attn_implementation="flash_attention_2"
 )
 
-inputs = tokenizer("The Qwen2 model family is", return_tensors="pt").to("cuda")
+inputs = tokenizer("The Qwen2 model family is", return_tensors="pt").to(model.device)
 outputs = model.generate(**inputs, max_new_tokens=100)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```

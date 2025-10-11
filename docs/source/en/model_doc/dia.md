@@ -43,8 +43,9 @@ tokens and decodes them back into audio.
 
 ```python
 from transformers import AutoProcessor, DiaForConditionalGeneration
+from accelerate import Accelerator
 
-torch_device = "cuda"
+torch_device = Accelerator().device
 model_checkpoint = "nari-labs/Dia-1.6B-0626"
 
 text = ["[S1] Dia is an open weights text to dialogue model."]
@@ -65,8 +66,9 @@ processor.save_audio(outputs, "example.wav")
 ```python
 from datasets import load_dataset, Audio
 from transformers import AutoProcessor, DiaForConditionalGeneration
+from accelerate import Accelerator
 
-torch_device = "cuda"
+torch_device = Accelerator().device
 model_checkpoint = "nari-labs/Dia-1.6B-0626"
 
 ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
@@ -92,8 +94,9 @@ processor.save_audio(outputs, "example_with_audio.wav")
 ```python
 from datasets import load_dataset, Audio
 from transformers import AutoProcessor, DiaForConditionalGeneration
+from accelerate import Accelerator
 
-torch_device = "cuda"
+torch_device = Accelerator().device
 model_checkpoint = "nari-labs/Dia-1.6B-0626"
 
 ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
@@ -117,10 +120,8 @@ out = model(**inputs)
 out.loss.backward()
 ```
 
-
 This model was contributed by [Jaeyong Sung](https://huggingface.co/buttercrab), [Arthur Zucker](https://huggingface.co/ArthurZ),
 and [Anton Vlasjuk](https://huggingface.co/AntonV). The original code can be found [here](https://github.com/nari-labs/dia/).
-
 
 ## DiaConfig
 

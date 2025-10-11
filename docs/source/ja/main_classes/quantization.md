@@ -176,19 +176,19 @@ GPTQ を使用してモデルを量子化する方法と、peft を使用して�
 モデルが 🤗 Accelerate による読み込みをサポートし、`torch.nn.Linear` レイヤーが含まれている限り、 [`~PreTrainedModel.from_pretrained`] メソッドを呼び出すときに `load_in_8bit` または `load_in_4bit` 引数を使用してモデルを量子化できます。これはどのようなモダリティでも同様に機能するはずです。
 
 ```python
-from transformers import AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
-model_8bit = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", load_in_8bit=True)
-model_4bit = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", load_in_4bit=True)
+model_8bit = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", quantization_config=BitsAndBytesConfig(load_in_8bit=True))
+model_4bit = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", quantization_config=BitsAndBytesConfig(load_in_4bit=True))
 ```
 
-デフォルトでは、他のすべてのモジュール (例: `torch.nn.LayerNorm`) は `torch.float16` に変換されますが、その `dtype` を変更したい場合は、`torch_dtype` 引数を上書きできます。
+デフォルトでは、他のすべてのモジュール (例: `torch.nn.LayerNorm`) は `torch.float16` に変換されますが、その `dtype` を変更したい場合は、`dtype` 引数を上書きできます。
 
 ```python
 >>> import torch
 >>> from transformers import AutoModelForCausalLM
 
->>> model_8bit = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", load_in_8bit=True, torch_dtype=torch.float32)
+>>> model_8bit = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", quantization_config=BitsAndBytesConfig(load_in_8bit=True), dtype=torch.float32)
 >>> model_8bit.model.decoder.layers[-1].final_layer_norm.weight.dtype
 torch.float32
 ```
@@ -216,7 +216,7 @@ torch.float32
 
 - **トレーニング:** [QLoRA 論文](https://huggingface.co/papers/2305.14314) によると、4 ビット基本モデルをトレーニングする場合 (例: LoRA アダプターを使用)、`bnb_4bit_quant_type='nf4'` を使用する必要があります。 。
 
-- **推論:** 推論の場合、`bnb_4bit_quant_type` はパフォーマンスに大きな影響を与えません。ただし、モデルの重みとの一貫性を保つために、必ず同じ `bnb_4bit_compute_dtype` および `torch_dtype` 引数を使用してください。
+- **推論:** 推論の場合、`bnb_4bit_quant_type` はパフォーマンスに大きな影響を与えません。ただし、モデルの重みとの一貫性を保つために、必ず同じ `bnb_4bit_compute_dtype` および `dtype` 引数を使用してください。
 
 
 #### Load a large model in 4bit
@@ -230,7 +230,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 model_id = "bigscience/bloom-1b7"
 
 tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", load_in_4bit=True)
+model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", quantization_config=BitsAndBytesConfig(load_in_4bit=True))
 ```
 
 <Tip warning={true}>

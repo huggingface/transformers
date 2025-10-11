@@ -42,5 +42,3 @@ generate 메소드는 [`~generation.GenerationConfig`] 클래스 인스턴스로
 [[autodoc]] generation.GenerationMixin
 	- generate
 	- compute_transition_scores
-
-

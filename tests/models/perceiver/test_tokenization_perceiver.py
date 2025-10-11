@@ -18,20 +18,11 @@ import re
 import shutil
 import tempfile
 import unittest
-from functools import lru_cache
+from functools import cached_property
 
 from transformers import AddedToken, BatchEncoding, PerceiverTokenizer
-from transformers.utils import cached_property, is_tf_available, is_torch_available
 
-from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
-
-
-if is_torch_available():
-    FRAMEWORK = "pt"
-elif is_tf_available():
-    FRAMEWORK = "tf"
-else:
-    FRAMEWORK = "jax"
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
@@ -50,8 +41,6 @@ class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         return PerceiverTokenizer.from_pretrained("deepmind/language-perceiver")
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_tokenizer(cls, pretrained_name=None, **kwargs) -> PerceiverTokenizer:
         pretrained_name = pretrained_name or cls.tmpdirname
         return cls.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
@@ -119,13 +108,10 @@ class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.perceiver_tokenizer
         src_text = ["A long paragraph for summarization.", "Another paragraph for summarization."]
         expected_src_tokens = [4, 71, 38, 114, 117, 116, 109, 38, 118, 103, 120, 103, 109, 120, 103, 118, 110, 38, 108, 117, 120, 38, 121, 123, 115, 115, 103, 120, 111, 128, 103, 122, 111, 117, 116, 52, 5, 0]  # fmt: skip
-        batch = tokenizer(src_text, padding=True, return_tensors=FRAMEWORK)
+        batch = tokenizer(src_text, padding=True, return_tensors="pt")
         self.assertIsInstance(batch, BatchEncoding)
 
-        if FRAMEWORK != "jax":
-            result = list(batch.input_ids.numpy()[0])
-        else:
-            result = list(batch.input_ids.tolist()[0])
+        result = list(batch.input_ids.numpy()[0])
 
         self.assertListEqual(expected_src_tokens, result)
 
@@ -135,7 +121,7 @@ class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_empty_target_text(self):
         tokenizer = self.perceiver_tokenizer
         src_text = ["A long paragraph for summarization.", "Another paragraph for summarization."]
-        batch = tokenizer(src_text, padding=True, return_tensors=FRAMEWORK)
+        batch = tokenizer(src_text, padding=True, return_tensors="pt")
         # check if input_ids are returned and no decoder_input_ids
         self.assertIn("input_ids", batch)
         self.assertIn("attention_mask", batch)
@@ -149,7 +135,7 @@ class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "Another summary.",
         ]
         targets = tokenizer(
-            text_target=tgt_text, max_length=32, padding="max_length", truncation=True, return_tensors=FRAMEWORK
+            text_target=tgt_text, max_length=32, padding="max_length", truncation=True, return_tensors="pt"
         )
         self.assertEqual(32, targets["input_ids"].shape[1])
 

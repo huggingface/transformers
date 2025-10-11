@@ -17,16 +17,14 @@ import unittest
 
 import pytest
 
-from transformers import AutoTokenizer, Qwen3MoeConfig, is_torch_available, set_seed
+from transformers import AutoTokenizer, BitsAndBytesConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
     cleanup,
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
     require_torch_large_accelerator,
     require_torch_multi_accelerator,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -36,53 +34,19 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        Qwen3ForQuestionAnswering,
         Qwen3MoeForCausalLM,
-        Qwen3MoeForQuestionAnswering,
-        Qwen3MoeForSequenceClassification,
-        Qwen3MoeForTokenClassification,
         Qwen3MoeModel,
     )
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 class Qwen3MoeModelTester(CausalLMModelTester):
-    config_class = Qwen3MoeConfig
     if is_torch_available():
         base_model_class = Qwen3MoeModel
-        causal_lm_class = Qwen3MoeForCausalLM
-        sequence_class = Qwen3MoeForSequenceClassification
-        token_class = Qwen3MoeForTokenClassification
-        question_answering_class = Qwen3MoeForQuestionAnswering
 
 
 @require_torch
 class Qwen3MoeModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            Qwen3MoeModel,
-            Qwen3MoeForCausalLM,
-            Qwen3MoeForSequenceClassification,
-            Qwen3MoeForTokenClassification,
-            Qwen3MoeForQuestionAnswering,
-        )
-        if is_torch_available()
-        else ()
-    )
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": Qwen3MoeModel,
-            "text-classification": Qwen3MoeForSequenceClassification,
-            "token-classification": Qwen3MoeForTokenClassification,
-            "text-generation": Qwen3MoeForCausalLM,
-            "question-answering": Qwen3ForQuestionAnswering,
-        }
-        if is_torch_available()
-        else {}
-    )
-
-    test_headmasking = False
-    test_pruning = False
     test_all_params_have_gradient = False
     model_tester_class = Qwen3MoeModelTester
 
@@ -98,13 +62,6 @@ class Qwen3MoeModelTest(CausalLMModelTest, unittest.TestCase):
         processor_name,
     ):
         return True
-
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest(reason="Qwen3Moe flash attention does not support right padding")
 
     # Ignore copy
     def test_load_balancing_loss(self):
@@ -165,7 +122,7 @@ class Qwen3MoeIntegrationTest(unittest.TestCase):
     def get_model(cls):
         if cls.model is None:
             cls.model = Qwen3MoeForCausalLM.from_pretrained(
-                "Qwen/Qwen3-30B-A3B-Base", device_map="auto", load_in_4bit=True
+                "Qwen/Qwen3-30B-A3B-Base", device_map="auto", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
             )
 
         return cls.model
@@ -210,7 +167,7 @@ class Qwen3MoeIntegrationTest(unittest.TestCase):
         model = Qwen3MoeForCausalLM.from_pretrained(
             "Qwen/Qwen3-30B-A3B-Base",
             device_map="auto",
-            load_in_4bit=True,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
             attn_implementation="flash_attention_2",
         )
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
@@ -218,7 +175,6 @@ class Qwen3MoeIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
 
     @slow
-    @require_torch_sdpa
     def test_model_15b_a2b_long_prompt_sdpa(self):
         EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
         # An input with 4097 tokens that is above the size of the sliding window
@@ -242,7 +198,7 @@ class Qwen3MoeIntegrationTest(unittest.TestCase):
     @slow
     def test_speculative_generation(self):
         EXPECTED_TEXT_COMPLETION = (
-            "To be or not to be: the role of the liver in the pathogenesis of obesity and type 2 diabetes.\nThe"
+            "To be or not to be: a question of life and death\n\nThe question of life and death is a question that has"
         )
         prompt = "To be or not to"
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-30B-A3B-Base", use_fast=False)

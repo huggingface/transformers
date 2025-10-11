@@ -17,11 +17,9 @@
 
 import math
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...generation import GenerationMixin
@@ -31,6 +29,7 @@ from ...utils import (
     ModelOutput,
     auto_docstring,
     is_bitsandbytes_available,
+    is_kernels_available,
     is_ninja_available,
     is_torch_cuda_available,
     logging,
@@ -45,34 +44,13 @@ rwkv_cuda_kernel = None
 
 
 def load_wkv_cuda_kernel(context_length):
-    from torch.utils.cpp_extension import load as load_kernel
-
     global rwkv_cuda_kernel
+    if not is_kernels_available():
+        raise ImportError("kernels is not installed, please install it with `pip install kernels`")
 
-    kernel_folder = Path(__file__).resolve().parent.parent.parent / "kernels" / "rwkv"
-    cuda_kernel_files = [kernel_folder / f for f in ["wkv_op.cpp", "wkv_cuda.cu", "wkv_cuda_bf16.cu"]]
+    from kernels import get_kernel
 
-    # Only load the kernel if it's not been loaded yet or if we changed the context length
-    if rwkv_cuda_kernel is not None and rwkv_cuda_kernel.max_seq_length == context_length:
-        return
-
-    logger.info(f"Loading CUDA kernel for RWKV at context length of {context_length}.")
-
-    flags = [
-        "-res-usage",
-        "--maxrregcount 60",
-        "--use_fast_math",
-        "-O3",
-        "-Xptxas -O3",
-        "--extra-device-vectorization",
-        f"-DTmax={context_length}",
-    ]
-    rwkv_cuda_kernel = load_kernel(
-        name=f"wkv_{context_length}",
-        sources=cuda_kernel_files,
-        verbose=(logging.get_verbosity() == logging.DEBUG),
-        extra_cuda_cflags=flags,
-    )
+    rwkv_cuda_kernel = get_kernel("kernels-community/rwkv")
     rwkv_cuda_kernel.max_seq_length = context_length
 
 
@@ -533,7 +511,7 @@ class RwkvModel(RwkvPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,  # noqa
+        attention_mask: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         state: Optional[list[torch.FloatTensor]] = None,
         use_cache: Optional[bool] = None,
@@ -719,13 +697,19 @@ class RwkvForCausalLM(RwkvPreTrainedModel, GenerationMixin):
 
         model_inputs["state"] = state
         model_inputs["use_cache"] = use_cache
+
+        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
+        for key, value in kwargs.items():
+            if key not in model_inputs:
+                model_inputs[key] = value
+
         return model_inputs
 
     @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,  # noqa
+        attention_mask: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         state: Optional[list[torch.FloatTensor]] = None,
         labels: Optional[torch.LongTensor] = None,
