@@ -703,7 +703,7 @@ class UdopTokenizer(PreTrainedTokenizer):
         word_labels: Optional[list[list[int]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-    truncation: Optional[Union[bool, str, TruncationStrategy]] = None,
+        truncation: Optional[Union[bool, str, TruncationStrategy]] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         is_split_into_words: bool = False,
