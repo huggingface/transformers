@@ -74,7 +74,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=False))
 
 [[autodoc]] Lfm2Config
 
-## Lfm2Model
+## Lfm2Model [[transformers.Lfm2Model]]
 
 [[autodoc]] Lfm2Model
     - forward
