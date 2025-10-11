@@ -16,21 +16,21 @@
 
 from typing import Any, Optional
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class DbrxAttentionConfig(PretrainedConfig):
+class DbrxAttentionConfig(PreTrainedConfig):
     """Configuration class for Dbrx Attention.
 
     [`DbrxAttention`] class. It is used to instantiate attention layers
     according to the specified arguments, defining the layers architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         attn_pdrop (`float`, *optional*, defaults to 0.0):
@@ -41,52 +41,29 @@ class DbrxAttentionConfig(PretrainedConfig):
         rope_theta (`float`, *optional*, defaults to 10000.0): The base frequency for rope.
     """
 
+    base_config_key = "attn_config"
+
     def __init__(
         self,
         attn_pdrop: float = 0.0,
         clip_qkv: Optional[float] = None,
         kv_n_heads: int = 1,
-        rope_theta: float = 10000.0,
         **kwargs: Any,
     ):
         super().__init__(**kwargs)
         self.attn_pdrop = attn_pdrop
         self.clip_qkv = clip_qkv
         self.kv_n_heads = kv_n_heads
-        self.rope_theta = rope_theta
-
-        for k in ["model_type"]:
-            if k in kwargs:
-                kwargs.pop(k)
-        if len(kwargs) != 0:
-            raise ValueError(f"Found unknown {kwargs=}")
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: str, **kwargs: Any) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        if config_dict.get("model_type") == "dbrx":
-            config_dict = config_dict["attn_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                + f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
 
 
-class DbrxFFNConfig(PretrainedConfig):
+class DbrxFFNConfig(PreTrainedConfig):
     """Configuration class for Dbrx FFN.
 
     [`DbrxFFN`] class. It is used to instantiate feedforward layers according to
     the specified arguments, defining the layers architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         ffn_act_fn (`dict`, *optional*, defaults to `None`): A dict specifying activation function for the FFN.
@@ -100,9 +77,12 @@ class DbrxFFNConfig(PretrainedConfig):
         moe_normalize_expert_weights (`float`, *optional*, defaults to 1.0): The normalization factor for the expert weights.
     """
 
+    base_config_key = "ffn_config"
+
     def __init__(
         self,
-        ffn_act_fn: dict = None,
+        hidden_size=6144,
+        ffn_act_fn: Optional[dict] = None,
         ffn_hidden_size: int = 3584,
         moe_num_experts: int = 4,
         moe_top_k: int = 1,
@@ -114,6 +94,7 @@ class DbrxFFNConfig(PretrainedConfig):
         super().__init__()
         if ffn_act_fn is None:
             ffn_act_fn = {"name": "silu"}
+        self.hidden_size = hidden_size
         self.ffn_act_fn = ffn_act_fn
         self.ffn_hidden_size = ffn_hidden_size
         self.moe_num_experts = moe_num_experts
@@ -122,39 +103,22 @@ class DbrxFFNConfig(PretrainedConfig):
         self.moe_loss_weight = moe_loss_weight
         self.moe_normalize_expert_weights = moe_normalize_expert_weights
 
-        for k in ["model_type"]:
+        for k in ["model_type", "attn_implementation", "transformers_version", "_commit_hash", "torch_dtype", "dtype"]:
             if k in kwargs:
                 kwargs.pop(k)
         if len(kwargs) != 0:
             raise ValueError(f"Found unknown {kwargs=}")
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: str, **kwargs: Any) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
 
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        if config_dict.get("model_type") == "dbrx":
-            config_dict = config_dict["ffn_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                + f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
-
-
-class DbrxConfig(PretrainedConfig):
+class DbrxConfig(PreTrainedConfig):
     r"""
 
     This is the configuration class to store the configuration of a [`DbrxModel`]. It is used to instantiate a Dbrx model according to the
     specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a different configuration to that of the [databricks/dbrx-instruct](https://huggingface.co/databricks/dbrx-instruct) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -202,6 +166,7 @@ class DbrxConfig(PretrainedConfig):
     """
 
     model_type = "dbrx"
+    sub_configs = {"attn_config": DbrxAttentionConfig, "ffn_config": DbrxFFNConfig}
     attribute_map = {
         "num_attention_heads": "n_heads",
         "hidden_size": "d_model",
@@ -250,9 +215,12 @@ class DbrxConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.output_router_logits = output_router_logits
         self.num_key_value_heads = self.attn_config.kv_n_heads
-
+        self.rope_theta: float = 10000.0
         tie_word_embeddings = kwargs.pop("tie_word_embeddings", False)
         if tie_word_embeddings:
             raise ValueError("tie_word_embeddings is not supported for DBRX models.")
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+
+
+__all__ = ["DbrxConfig"]

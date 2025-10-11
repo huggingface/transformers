@@ -13,23 +13,18 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-06-05 and added to Hugging Face Transformers on 2020-11-16.*
 
 # Funnel Transformer
 
 <div class="flex flex-wrap space-x-1">
-<a href="https://huggingface.co/models?filter=funnel">
-<img alt="Models" src="https://img.shields.io/badge/All_model_pages-funnel-blueviolet">
-</a>
-<a href="https://huggingface.co/spaces/docs-demos/funnel-transformer-small">
-<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
-</a>
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
-
 
 ## Overview
 
 The Funnel Transformer model was proposed in the paper [Funnel-Transformer: Filtering out Sequential Redundancy for
-Efficient Language Processing](https://arxiv.org/abs/2006.03236). It is a bidirectional transformer model, like
+Efficient Language Processing](https://huggingface.co/papers/2006.03236). It is a bidirectional transformer model, like
 BERT, but with a pooling operation after each block of layers, a bit like in traditional convolutional neural networks
 (CNN) in computer vision.
 
@@ -72,7 +67,6 @@ This model was contributed by [sgugger](https://huggingface.co/sgugger). The ori
 - [Masked language modeling task guide](../tasks/masked_language_modeling)
 - [Multiple choice task guide](../tasks/multiple_choice)
 
-
 ## FunnelConfig
 
 [[autodoc]] FunnelConfig
@@ -92,11 +86,6 @@ This model was contributed by [sgugger](https://huggingface.co/sgugger). The ori
 ## Funnel specific outputs
 
 [[autodoc]] models.funnel.modeling_funnel.FunnelForPreTrainingOutput
-
-[[autodoc]] models.funnel.modeling_tf_funnel.TFFunnelForPreTrainingOutput
-
-<frameworkcontent>
-<pt>
 
 ## FunnelBaseModel
 
@@ -137,49 +126,3 @@ This model was contributed by [sgugger](https://huggingface.co/sgugger). The ori
 
 [[autodoc]] FunnelForQuestionAnswering
     - forward
-
-</pt>
-<tf>
-
-## TFFunnelBaseModel
-
-[[autodoc]] TFFunnelBaseModel
-    - call
-
-## TFFunnelModel
-
-[[autodoc]] TFFunnelModel
-    - call
-
-## TFFunnelModelForPreTraining
-
-[[autodoc]] TFFunnelForPreTraining
-    - call
-
-## TFFunnelForMaskedLM
-
-[[autodoc]] TFFunnelForMaskedLM
-    - call
-
-## TFFunnelForSequenceClassification
-
-[[autodoc]] TFFunnelForSequenceClassification
-    - call
-
-## TFFunnelForMultipleChoice
-
-[[autodoc]] TFFunnelForMultipleChoice
-    - call
-
-## TFFunnelForTokenClassification
-
-[[autodoc]] TFFunnelForTokenClassification
-    - call
-
-## TFFunnelForQuestionAnswering
-
-[[autodoc]] TFFunnelForQuestionAnswering
-    - call
-
-</tf>
-</frameworkcontent>

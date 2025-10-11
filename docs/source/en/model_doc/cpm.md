@@ -13,12 +13,17 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2020-12-01 and added to Hugging Face Transformers on 2021-04-10.*
 
 # CPM
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
-The CPM model was proposed in [CPM: A Large-scale Generative Chinese Pre-trained Language Model](https://arxiv.org/abs/2012.00413) by Zhengyan Zhang, Xu Han, Hao Zhou, Pei Ke, Yuxian Gu, Deming Ye, Yujia Qin,
+The CPM model was proposed in [CPM: A Large-scale Generative Chinese Pre-trained Language Model](https://huggingface.co/papers/2012.00413) by Zhengyan Zhang, Xu Han, Hao Zhou, Pei Ke, Yuxian Gu, Deming Ye, Yujia Qin,
 Yusheng Su, Haozhe Ji, Jian Guan, Fanchao Qi, Xiaozhi Wang, Yanan Zheng, Guoyang Zeng, Huanqi Cao, Shengqi Chen,
 Daixuan Li, Zhenbo Sun, Zhiyuan Liu, Minlie Huang, Wentao Han, Jie Tang, Juanzi Li, Xiaoyan Zhu, Maosong Sun.
 
@@ -37,14 +42,12 @@ NLP tasks in the settings of few-shot (even zero-shot) learning.*
 This model was contributed by [canwenxu](https://huggingface.co/canwenxu). The original implementation can be found
 here: https://github.com/TsinghuaAI/CPM-Generate
 
-
 <Tip>
 
-CPM's architecture is the same as GPT-2, except for tokenization method. Refer to [GPT-2 documentation](gpt2) for 
-API reference information.  
+CPM's architecture is the same as GPT-2, except for tokenization method. Refer to [GPT-2 documentation](gpt2) for
+API reference information.
 
 </Tip>
-
 
 ## CpmTokenizer
 

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2019 Hugging Face inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,12 +32,13 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     test_sentencepiece = True
     test_sentencepiece_ignore_case = True
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         # We have a SentencePiece fixture for testing
         tokenizer = DebertaV2Tokenizer(SAMPLE_VOCAB, unk_token="<unk>")
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
     def get_input_output_texts(self, tokenizer):
         input_text = "this is a test"

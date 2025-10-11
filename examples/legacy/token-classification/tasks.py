@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import List, TextIO, Union
+from typing import TextIO, Union
 
 from conllu import parse_incr
 from utils_ner import InputExample, Split, TokenClassificationTask
@@ -14,7 +14,7 @@ class NER(TokenClassificationTask):
         # in NER datasets, the last column is usually reserved for NER label
         self.label_idx = label_idx
 
-    def read_examples_from_file(self, data_dir, mode: Union[Split, str]) -> List[InputExample]:
+    def read_examples_from_file(self, data_dir, mode: Union[Split, str]) -> list[InputExample]:
         if isinstance(mode, Split):
             mode = mode.value
         file_path = os.path.join(data_dir, f"{mode}.txt")
@@ -42,7 +42,7 @@ class NER(TokenClassificationTask):
                 examples.append(InputExample(guid=f"{mode}-{guid_index}", words=words, labels=labels))
         return examples
 
-    def write_predictions_to_file(self, writer: TextIO, test_input_reader: TextIO, preds_list: List):
+    def write_predictions_to_file(self, writer: TextIO, test_input_reader: TextIO, preds_list: list):
         example_id = 0
         for line in test_input_reader:
             if line.startswith("-DOCSTART-") or line == "" or line == "\n":
@@ -55,9 +55,9 @@ class NER(TokenClassificationTask):
             else:
                 logger.warning("Maximum sequence length exceeded: No prediction for '%s'.", line.split()[0])
 
-    def get_labels(self, path: str) -> List[str]:
+    def get_labels(self, path: str) -> list[str]:
         if path:
-            with open(path, "r") as f:
+            with open(path) as f:
                 labels = f.read().splitlines()
             if "O" not in labels:
                 labels = ["O"] + labels
@@ -71,9 +71,9 @@ class Chunk(NER):
         # in CONLL2003 dataset chunk column is second-to-last
         super().__init__(label_idx=-2)
 
-    def get_labels(self, path: str) -> List[str]:
+    def get_labels(self, path: str) -> list[str]:
         if path:
-            with open(path, "r") as f:
+            with open(path) as f:
                 labels = f.read().splitlines()
             if "O" not in labels:
                 labels = ["O"] + labels
@@ -105,7 +105,7 @@ class Chunk(NER):
 
 
 class POS(TokenClassificationTask):
-    def read_examples_from_file(self, data_dir, mode: Union[Split, str]) -> List[InputExample]:
+    def read_examples_from_file(self, data_dir, mode: Union[Split, str]) -> list[InputExample]:
         if isinstance(mode, Split):
             mode = mode.value
         file_path = os.path.join(data_dir, f"{mode}.txt")
@@ -125,20 +125,20 @@ class POS(TokenClassificationTask):
                     guid_index += 1
         return examples
 
-    def write_predictions_to_file(self, writer: TextIO, test_input_reader: TextIO, preds_list: List):
+    def write_predictions_to_file(self, writer: TextIO, test_input_reader: TextIO, preds_list: list):
         example_id = 0
         for sentence in parse_incr(test_input_reader):
             s_p = preds_list[example_id]
             out = ""
             for token in sentence:
-                out += f'{token["form"]} ({token["upos"]}|{s_p.pop(0)}) '
+                out += f"{token['form']} ({token['upos']}|{s_p.pop(0)}) "
             out += "\n"
             writer.write(out)
             example_id += 1
 
-    def get_labels(self, path: str) -> List[str]:
+    def get_labels(self, path: str) -> list[str]:
         if path:
-            with open(path, "r") as f:
+            with open(path) as f:
                 return f.read().splitlines()
         else:
             return [

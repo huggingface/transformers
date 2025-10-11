@@ -14,25 +14,22 @@
 # limitations under the License.
 """Pix2Struct model configuration"""
 
-import os
-from typing import Union
-
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class Pix2StructTextConfig(PretrainedConfig):
+class Pix2StructTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Pix2StructTextModel`]. It is used to instantiate
     a Pix2Struct text model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Pix2Struct text decoder used by
     the [google/pix2struct-base](https://huggingface.co/google/pix2struct-base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 50244):
@@ -91,6 +88,10 @@ class Pix2StructTextConfig(PretrainedConfig):
         "hidden_size": "hidden_size",
         "num_attention_heads": "num_heads",
         "num_hidden_layers": "num_layers",
+        "decoder_attention_heads": "num_heads",
+        "encoder_attention_heads": "num_heads",
+        "encoder_layers": "num_layers",
+        "decoder_layers": "num_layers",
     }
 
     def __init__(
@@ -143,36 +144,16 @@ class Pix2StructTextConfig(PretrainedConfig):
             **kwargs,
         )
 
-    @classmethod
-    def from_pretrained(
-        cls, pretrainehidden_size_name_or_path: Union[str, os.PathLike], **kwargs
-    ) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
 
-        config_dict, kwargs = cls.get_config_dict(pretrainehidden_size_name_or_path, **kwargs)
-
-        # get the text config dict if we are loading from Pix2StructConfig
-        if config_dict.get("model_type") == "pix2struct":
-            config_dict = config_dict["text_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
-
-
-class Pix2StructVisionConfig(PretrainedConfig):
+class Pix2StructVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Pix2StructVisionModel`]. It is used to
     instantiate a Pix2Struct vision model according to the specified arguments, defining the model architecture.
     Instantiating a configuration defaults will yield a similar configuration to that of the Pix2Struct-base
     [google/pix2struct-base](https://huggingface.co/google/pix2struct-base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -262,28 +243,8 @@ class Pix2StructVisionConfig(PretrainedConfig):
         self.relative_attention_max_distance = relative_attention_max_distance
         self.d_kv = d_kv
 
-    @classmethod
-    def from_pretrained(
-        cls, pretrainehidden_size_name_or_path: Union[str, os.PathLike], **kwargs
-    ) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
 
-        config_dict, kwargs = cls.get_config_dict(pretrainehidden_size_name_or_path, **kwargs)
-
-        # get the vision config dict if we are loading from Pix2StructConfig
-        if config_dict.get("model_type") == "pix2struct":
-            config_dict = config_dict["vision_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
-
-
-class Pix2StructConfig(PretrainedConfig):
+class Pix2StructConfig(PreTrainedConfig):
     r"""
     [`Pix2StructConfig`] is the configuration class to store the configuration of a
     [`Pix2StructForConditionalGeneration`]. It is used to instantiate a Pix2Struct model according to the specified
@@ -291,8 +252,8 @@ class Pix2StructConfig(PretrainedConfig):
     yield a similar configuration to that of the Pix2Struct-base
     [google/pix2struct-base](https://huggingface.co/google/pix2struct-base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`dict`, *optional*):
@@ -328,10 +289,11 @@ class Pix2StructConfig(PretrainedConfig):
     >>> config_text = Pix2StructTextConfig()
     >>> config_vision = Pix2StructVisionConfig()
 
-    >>> config = Pix2StructConfig.from_text_vision_configs(config_text, config_vision)
+    >>> config = Pix2StructConfig(text_config=config_text, vision_config=config_vision)
     ```"""
 
     model_type = "pix2struct"
+    sub_configs = {"text_config": Pix2StructTextConfig, "vision_config": Pix2StructVisionConfig}
 
     def __init__(
         self,
@@ -344,18 +306,24 @@ class Pix2StructConfig(PretrainedConfig):
         is_encoder_decoder=True,
         **kwargs,
     ):
-        super().__init__(tie_word_embeddings=tie_word_embeddings, is_encoder_decoder=is_encoder_decoder, **kwargs)
-
         if text_config is None:
-            text_config = {}
-            logger.info("text_config is None. Initializing the Pix2StructTextConfig with default values.")
+            text_config = Pix2StructTextConfig(
+                {"is_encoder_decoder": is_encoder_decoder, "tie_word_embeddings": tie_word_embeddings}
+            )
+            logger.info("`text_config` is `None`. initializing the `Pix2StructTextConfig` with default values.")
+        elif isinstance(text_config, dict):
+            text_config["is_encoder_decoder"] = is_encoder_decoder
+            text_config["tie_word_embeddings"] = tie_word_embeddings
+            text_config = Pix2StructTextConfig(**text_config)
 
         if vision_config is None:
-            vision_config = {}
-            logger.info("vision_config is None. Initializing the Pix2StructVisionConfig with default values.")
+            vision_config = Pix2StructVisionConfig()
+            logger.info("`vision_config` is `None`. initializing the `Pix2StructVisionConfig` with default values.")
+        elif isinstance(vision_config, dict):
+            vision_config = Pix2StructVisionConfig(**vision_config)
 
-        self.text_config = Pix2StructTextConfig(**text_config)
-        self.vision_config = Pix2StructVisionConfig(**vision_config)
+        self.text_config = text_config
+        self.vision_config = vision_config
 
         self.decoder_start_token_id = self.text_config.decoder_start_token_id
         self.pad_token_id = self.text_config.pad_token_id
@@ -368,17 +336,7 @@ class Pix2StructConfig(PretrainedConfig):
         self.vision_config.initializer_range = self.initializer_range
 
         self.is_vqa = is_vqa
+        super().__init__(tie_word_embeddings=tie_word_embeddings, is_encoder_decoder=is_encoder_decoder, **kwargs)
 
-    @classmethod
-    def from_text_vision_configs(
-        cls, text_config: Pix2StructTextConfig, vision_config: Pix2StructVisionConfig, **kwargs
-    ):
-        r"""
-        Instantiate a [`Pix2StructConfig`] (or a derived class) from pix2struct text model configuration and pix2struct
-        vision model configuration.
 
-        Returns:
-            [`Pix2StructConfig`]: An instance of a configuration object
-        """
-
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+__all__ = ["Pix2StructConfig", "Pix2StructTextConfig", "Pix2StructVisionConfig"]

@@ -13,25 +13,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-from typing import Union
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class GitVisionConfig(PretrainedConfig):
+class GitVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GitVisionModel`]. It is used to instantiate a GIT
     vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the vision encoder of the GIT
     [microsoft/git-base](https://huggingface.co/microsoft/git-base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -72,6 +70,7 @@ class GitVisionConfig(PretrainedConfig):
     ```"""
 
     model_type = "git_vision_model"
+    base_config_key = "vision_config"
 
     def __init__(
         self,
@@ -102,34 +101,16 @@ class GitVisionConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
 
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the vision config dict if we are loading from GITConfig
-        if config_dict.get("model_type") == "git":
-            config_dict = config_dict["vision_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
-
-
-class GitConfig(PretrainedConfig):
+class GitConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GitModel`]. It is used to instantiate a GIT model
     according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the GIT
     [microsoft/git-base](https://huggingface.co/microsoft/git-base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vision_config (`dict`, *optional*):
@@ -159,12 +140,6 @@ class GitConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
-            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
-            positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
-            [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
-            For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
-            with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
         num_image_with_embedding (`int`, *optional*):
@@ -186,6 +161,7 @@ class GitConfig(PretrainedConfig):
     ```"""
 
     model_type = "git"
+    sub_configs = {"vision_config": GitVisionConfig}
 
     def __init__(
         self,
@@ -202,7 +178,6 @@ class GitConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         pad_token_id=0,
-        position_embedding_type="absolute",
         use_cache=True,
         tie_word_embeddings=False,
         bos_token_id=101,
@@ -210,8 +185,6 @@ class GitConfig(PretrainedConfig):
         num_image_with_embedding=None,
         **kwargs,
     ):
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, pad_token_id=pad_token_id, **kwargs)
-
         if vision_config is None:
             vision_config = {}
             logger.info("vision_config is None. initializing the GitVisionConfig with default values.")
@@ -228,10 +201,16 @@ class GitConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-        self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
-        self.tie_word_embeddings = tie_word_embeddings
         self.num_image_with_embedding = num_image_with_embedding
 
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
+        super().__init__(
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            pad_token_id=pad_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
+
+
+__all__ = ["GitConfig", "GitVisionConfig"]

@@ -13,12 +13,17 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-04-02 and added to Hugging Face Transformers on 2022-06-01.*
 
 # LeViT
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
-The LeViT model was proposed in [LeViT: Introducing Convolutions to Vision Transformers](https://arxiv.org/abs/2104.01136) by Ben Graham, Alaaeldin El-Nouby, Hugo Touvron, Pierre Stock, Armand Joulin, Hervé Jégou, Matthijs Douze. LeViT improves the [Vision Transformer (ViT)](vit) in performance and efficiency by a few architectural differences such as activation maps with decreasing resolutions in Transformers and the introduction of an attention bias to integrate positional information.
+The LeViT model was proposed in [LeViT: Introducing Convolutions to Vision Transformers](https://huggingface.co/papers/2104.01136) by Ben Graham, Alaaeldin El-Nouby, Hugo Touvron, Pierre Stock, Armand Joulin, Hervé Jégou, Matthijs Douze. LeViT improves the [Vision Transformer (ViT)](vit) in performance and efficiency by a few architectural differences such as activation maps with decreasing resolutions in Transformers and the introduction of an attention bias to integrate positional information.
 
 The abstract from the paper is the following:
 
@@ -36,7 +41,7 @@ to the speed/accuracy tradeoff. For example, at 80% ImageNet top-1 accuracy, LeV
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/levit_architecture.png"
 alt="drawing" width="600"/>
 
-<small> LeViT Architecture. Taken from the <a href="https://arxiv.org/abs/2104.01136">original paper</a>.</small>
+<small> LeViT Architecture. Taken from the <a href="https://huggingface.co/papers/2104.01136">original paper</a>.</small>
 
 This model was contributed by [anugunj](https://huggingface.co/anugunj). The original code can be found [here](https://github.com/facebookresearch/LeViT).
 
@@ -63,7 +68,7 @@ This model was contributed by [anugunj](https://huggingface.co/anugunj). The ori
   prepare images for the model.
 - [`LevitForImageClassificationWithTeacher`] currently supports only inference and not training or fine-tuning.
 - You can check out demo notebooks regarding inference as well as fine-tuning on custom data [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/VisionTransformer)
-  (you can just replace [`ViTFeatureExtractor`] by [`LevitImageProcessor`] and [`ViTForImageClassification`] by [`LevitForImageClassification`] or [`LevitForImageClassificationWithTeacher`]).
+  (you can just replace [`ViTImageProcessor`] by [`LevitImageProcessor`] and [`ViTForImageClassification`] by [`LevitForImageClassification`] or [`LevitForImageClassificationWithTeacher`]).
 
 ## Resources
 
@@ -80,14 +85,14 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] LevitConfig
 
-## LevitFeatureExtractor
-
-[[autodoc]] LevitFeatureExtractor
-    - __call__
-
 ## LevitImageProcessor
 
   [[autodoc]] LevitImageProcessor
+    - preprocess
+
+## LevitImageProcessorFast
+
+  [[autodoc]] LevitImageProcessorFast
     - preprocess
 
 ## LevitModel

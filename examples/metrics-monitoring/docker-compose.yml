@@ -1,0 +1,55 @@
+services:
+  memcached:
+    image: memcached:1.6.29
+    container_name: memcached
+    ports:
+      - "11211:11211"
+    environment:
+      - MEMCACHED_MAX_MEMORY=64m # Set the maximum memory usage
+      - MEMCACHED_THREADS=4 # Number of threads to use
+
+  prometheus:
+    image: prom/prometheus:latest
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - --web.enable-otlp-receiver # Enable OTLP receiver
+      - --web.enable-remote-write-receiver
+      - --enable-feature=exemplar-storage
+      - --enable-feature=native-histograms
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+
+  tempo:
+    image: grafana/tempo:latest
+    command: [ "-config.file=/etc/tempo.yaml" ]
+    volumes:
+      - ./tempo.yaml:/etc/tempo.yaml
+    ports:
+      - "14268:14268" # jaeger ingest
+      - "3200:3200" # tempo
+      - "9095:9095" # tempo grpc
+      - "4317:4317" # otlp grpc
+      - "4318:4318" # otlp http
+      - "9411:9411" # zipkin
+    depends_on:
+      - memcached
+
+  grafana:
+    image: grafana/grafana:latest
+    volumes:
+      - ./continuous-batching-dashboard.json:/etc/grafana/provisioning/dashboards/continuous-batching-dashboard.json
+      - ./grafana-dashboard.yaml:/etc/grafana/provisioning/dashboards/grafana-dashboard.yaml
+      - ./grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+      - GF_FEATURE_TOGGLES_ENABLE=traceqlEditor metricsSummary
+      - GF_INSTALL_PLUGINS=https://storage.googleapis.com/integration-artifacts/grafana-exploretraces-app/grafana-exploretraces-app-latest.zip;grafana-traces-app
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+      - tempo

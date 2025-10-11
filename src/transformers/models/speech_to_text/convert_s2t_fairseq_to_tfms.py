@@ -52,7 +52,7 @@ def make_linear_from_emb(emb):
 
 
 def convert_fairseq_s2t_checkpoint_to_tfms(checkpoint_path, pytorch_dump_folder_path):
-    m2m_100 = torch.load(checkpoint_path, map_location="cpu")
+    m2m_100 = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
     args = m2m_100["args"]
     state_dict = m2m_100["model"]
     lm_head_weights = state_dict["decoder.output_projection.weight"]

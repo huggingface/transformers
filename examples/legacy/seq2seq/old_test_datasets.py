@@ -184,7 +184,7 @@ class TestAll(TestCasePlus):
         assert len(sortish_dl) == len(naive_dl)
 
     def _get_dataset(self, n_obs=1000, max_len=128):
-        if os.getenv("USE_REAL_DATA", False):
+        if os.getenv("USE_REAL_DATA", None):
             data_dir = "examples/seq2seq/wmt_en_ro"
             max_tokens = max_len * 2 * 64
             if not Path(data_dir).joinpath("train.len").exists():

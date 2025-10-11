@@ -142,12 +142,6 @@ MMBT_INPUTS_DOCSTRING = r"""
             Selected in the range `[0, config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, embedding_dim)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
@@ -197,7 +191,6 @@ class MMBTModel(nn.Module, ModuleUtilsMixin):
         modal_token_type_ids=None,
         position_ids=None,
         modal_position_ids=None,
-        head_mask=None,
         inputs_embeds=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
@@ -269,12 +262,10 @@ class MMBTModel(nn.Module, ModuleUtilsMixin):
 
         extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
         encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         encoder_outputs = self.transformer.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
-            head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_extended_attention_mask,
             output_attentions=output_attentions,
@@ -358,7 +349,6 @@ class MMBTForClassification(nn.Module):
         modal_token_type_ids=None,
         position_ids=None,
         modal_position_ids=None,
-        head_mask=None,
         inputs_embeds=None,
         labels=None,
         return_dict=None,
@@ -375,7 +365,6 @@ class MMBTForClassification(nn.Module):
             modal_token_type_ids=modal_token_type_ids,
             position_ids=position_ids,
             modal_position_ids=modal_position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             return_dict=return_dict,
         )
@@ -405,3 +394,6 @@ class MMBTForClassification(nn.Module):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = ["MMBTForClassification", "MMBTModel", "ModalEmbeddings"]

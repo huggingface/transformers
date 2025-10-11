@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2019 Hugging Face inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,8 +30,9 @@ class DebertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     test_rust_tokenizer = True
     rust_tokenizer_class = DebertaTokenizerFast
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         # Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt
         vocab = [
@@ -59,18 +59,20 @@ class DebertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         ]
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         merges = ["#version: 0.2", "\u0120 l", "\u0120l o", "\u0120lo w", "e r", ""]
-        self.special_tokens_map = {"unk_token": "[UNK]"}
+        cls.special_tokens_map = {"unk_token": "[UNK]"}
 
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as fp:
+        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        cls.merges_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
+        with open(cls.vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens) + "\n")
-        with open(self.merges_file, "w", encoding="utf-8") as fp:
+        with open(cls.merges_file, "w", encoding="utf-8") as fp:
             fp.write("\n".join(merges))
 
-    def get_tokenizer(self, **kwargs):
-        kwargs.update(self.special_tokens_map)
-        return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    def get_tokenizer(cls, pretrained_name=None, **kwargs):
+        kwargs.update(cls.special_tokens_map)
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return cls.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
     def get_input_output_texts(self, tokenizer):
         input_text = "lower newer"

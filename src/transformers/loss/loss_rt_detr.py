@@ -18,7 +18,6 @@ import torch.nn.functional as F
 
 from ..utils import is_scipy_available, is_vision_available, requires_backends
 from .loss_for_object_detection import (
-    _set_aux_loss,
     box_iou,
     dice_loss,
     generalized_box_iou,
@@ -33,6 +32,15 @@ if is_scipy_available():
 
 if is_vision_available():
     from transformers.image_transforms import center_to_corners_format
+
+
+# different for RT-DETR: not slicing the last element like in DETR one
+@torch.jit.unused
+def _set_aux_loss(outputs_class, outputs_coord):
+    # this is a workaround to make torchscript happy, as torchscript
+    # doesn't support dictionary with non-homogeneous values, such
+    # as a dict having both a Tensor and a list.
+    return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class, outputs_coord)]
 
 
 class RTDetrHungarianMatcher(nn.Module):
@@ -91,7 +99,7 @@ class RTDetrHungarianMatcher(nn.Module):
         target_bbox = torch.cat([v["boxes"] for v in targets])
         # Compute the classification cost. Contrary to the loss, we don't use the NLL,
         # but approximate it in 1 - proba[target class].
-        # The 1 is a constant that doesn't change the matching, it can be ommitted.
+        # The 1 is a constant that doesn't change the matching, it can be omitted.
         if self.use_focal_loss:
             out_prob = F.sigmoid(outputs["logits"].flatten(0, 1))
             out_prob = out_prob[:, target_ids]
@@ -104,7 +112,7 @@ class RTDetrHungarianMatcher(nn.Module):
 
         # Compute the L1 cost between boxes
         bbox_cost = torch.cdist(out_bbox, target_bbox, p=1)
-        # Compute the giou cost betwen boxes
+        # Compute the giou cost between boxes
         giou_cost = -generalized_box_iou(center_to_corners_format(out_bbox), center_to_corners_format(target_bbox))
         # Compute the final cost matrix
         cost_matrix = self.bbox_cost * bbox_cost + self.class_cost * class_cost + self.giou_cost * giou_cost
@@ -128,7 +136,7 @@ class RTDetrLoss(nn.Module):
         weight_dict (`Dict`):
             Dictionary relating each loss with its weights. These losses are configured in RTDetrConf as
             `weight_loss_vfl`, `weight_loss_bbox`, `weight_loss_giou`
-        losses (`List[str]`):
+        losses (`list[str]`):
             List of all the losses to be applied. See `get_loss` for a list of all available losses.
         alpha (`float`):
             Parameter alpha used to compute the focal loss.
@@ -167,8 +175,8 @@ class RTDetrLoss(nn.Module):
 
         src_boxes = outputs["pred_boxes"][idx]
         target_boxes = torch.cat([_target["boxes"][i] for _target, (_, i) in zip(targets, indices)], dim=0)
-        ious, _ = box_iou(center_to_corners_format(src_boxes), center_to_corners_format(target_boxes))
-        ious = torch.diag(ious).detach()
+        ious, _ = box_iou(center_to_corners_format(src_boxes.detach()), center_to_corners_format(target_boxes))
+        ious = torch.diag(ious)
 
         src_logits = outputs["logits"]
         target_classes_original = torch.cat([_target["class_labels"][i] for _target, (_, i) in zip(targets, indices)])
@@ -182,7 +190,7 @@ class RTDetrLoss(nn.Module):
         target_score_original[idx] = ious.to(target_score_original.dtype)
         target_score = target_score_original.unsqueeze(-1) * target
 
-        pred_score = F.sigmoid(src_logits).detach()
+        pred_score = F.sigmoid(src_logits.detach())
         weight = self.alpha * pred_score.pow(self.gamma) * (1 - target) + target_score
 
         loss = F.binary_cross_entropy_with_logits(src_logits, target_score, weight=weight, reduction="none")
@@ -366,7 +374,7 @@ class RTDetrLoss(nn.Module):
         Args:
              outputs (`dict`, *optional*):
                 Dictionary of tensors, see the output specification of the model for the format.
-             targets (`List[dict]`, *optional*):
+             targets (`list[dict]`, *optional*):
                 List of dicts, such that `len(targets) == batch_size`. The expected keys in each dict depends on the
                 losses applied, see each loss' doc.
         """

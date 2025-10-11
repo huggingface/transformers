@@ -13,14 +13,14 @@
 # limitations under the License.
 """Pixtral model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class PixtralVisionConfig(PretrainedConfig):
+class PixtralVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PixtralVisionModel`]. It is used to instantiate an
     Pixtral vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -28,8 +28,8 @@ class PixtralVisionConfig(PretrainedConfig):
 
     e.g. [pixtral-hf/pixtral-9b](https://huggingface.co/pixtral-hf/pixtral-9b)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 1024):
@@ -52,6 +52,8 @@ class PixtralVisionConfig(PretrainedConfig):
             Dropout probability for the attention layers.
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
     Example:
 
@@ -82,6 +84,7 @@ class PixtralVisionConfig(PretrainedConfig):
         hidden_act="gelu",
         attention_dropout=0.0,
         rope_theta=10000.0,
+        initializer_range=0.02,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -97,3 +100,7 @@ class PixtralVisionConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.rope_theta = rope_theta
         self.head_dim = hidden_size // num_attention_heads
+        self.initializer_range = initializer_range
+
+
+__all__ = ["PixtralVisionConfig"]

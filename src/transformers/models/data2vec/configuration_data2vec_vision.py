@@ -15,11 +15,11 @@
 """Data2VecVision model configuration"""
 
 from collections import OrderedDict
-from typing import Mapping
+from collections.abc import Mapping
 
 from packaging import version
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
 
@@ -27,7 +27,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class Data2VecVisionConfig(PretrainedConfig):
+class Data2VecVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Data2VecVisionModel`]. It is used to instantiate
     an Data2VecVision model according to the specified arguments, defining the model architecture. Instantiating a
@@ -75,9 +75,9 @@ class Data2VecVisionConfig(PretrainedConfig):
         use_mean_pooling (`bool`, *optional*, defaults to `True`):
             Whether to mean pool the final hidden states of the patches instead of using the final hidden state of the
             CLS token, before applying the classification head.
-        out_indices (`List[int]`, *optional*, defaults to `[3, 5, 7, 11]`):
+        out_indices (`list[int]`, *optional*, defaults to `[3, 5, 7, 11]`):
             Indices of the feature maps to use for semantic segmentation.
-        pool_scales (`Tuple[int]`, *optional*, defaults to `[1, 2, 3, 6]`):
+        pool_scales (`tuple[int]`, *optional*, defaults to `[1, 2, 3, 6]`):
             Pooling scales used in Pooling Pyramid Module applied on the last feature map.
         use_auxiliary_head (`bool`, *optional*, defaults to `True`):
             Whether to use an auxiliary head during training.
@@ -189,3 +189,6 @@ class Data2VecVisionOnnxConfig(OnnxConfig):
     @property
     def atol_for_validation(self) -> float:
         return 1e-4
+
+
+__all__ = ["Data2VecVisionConfig", "Data2VecVisionOnnxConfig"]

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,7 +32,7 @@ if is_vision_available():
     from transformers import VideoMAEImageProcessor
 
 
-class VideoMAEImageProcessingTester(unittest.TestCase):
+class VideoMAEImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -50,7 +49,6 @@ class VideoMAEImageProcessingTester(unittest.TestCase):
         image_std=[0.5, 0.5, 0.5],
         crop_size=None,
     ):
-        super().__init__()
         size = size if size is not None else {"shortest_edge": 18}
         crop_size = crop_size if crop_size is not None else {"height": 18, "width": 18}
 
@@ -179,14 +177,22 @@ class VideoMAEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         # Test not batched input
         encoded_videos = image_processing(
-            video_inputs[0], return_tensors="pt", image_mean=0, image_std=1, input_data_format="channels_first"
+            video_inputs[0],
+            return_tensors="pt",
+            image_mean=(0.0, 0.0, 0.0, 0.0),
+            image_std=(1.0, 1.0, 1.0, 1.0),
+            input_data_format="channels_first",
         ).pixel_values
         expected_output_video_shape = self.image_processor_tester.expected_output_image_shape([encoded_videos[0]])
         self.assertEqual(tuple(encoded_videos.shape), (1, *expected_output_video_shape))
 
         # Test batched
         encoded_videos = image_processing(
-            video_inputs, return_tensors="pt", image_mean=0, image_std=1, input_data_format="channels_first"
+            video_inputs,
+            return_tensors="pt",
+            image_mean=(0.0, 0.0, 0.0, 0.0),
+            image_std=(1.0, 1.0, 1.0, 1.0),
+            input_data_format="channels_first",
         ).pixel_values
         expected_output_video_shape = self.image_processor_tester.expected_output_image_shape(encoded_videos)
         self.assertEqual(

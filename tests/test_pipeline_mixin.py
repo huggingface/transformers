@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -34,6 +33,7 @@ from huggingface_hub import (
     ImageToTextInput,
     ObjectDetectionInput,
     QuestionAnsweringInput,
+    VideoClassificationInput,
     ZeroShotImageClassificationInput,
 )
 
@@ -47,6 +47,7 @@ from transformers.pipelines import (
     ImageToTextPipeline,
     ObjectDetectionPipeline,
     QuestionAnsweringPipeline,
+    VideoClassificationPipeline,
     ZeroShotImageClassificationPipeline,
 )
 from transformers.testing_utils import (
@@ -55,7 +56,6 @@ from transformers.testing_utils import (
     require_pytesseract,
     require_timm,
     require_torch,
-    require_torch_or_tf,
     require_vision,
 )
 from transformers.utils import direct_transformers_import, logging
@@ -69,6 +69,7 @@ from .pipelines.test_pipelines_fill_mask import FillMaskPipelineTests
 from .pipelines.test_pipelines_image_classification import ImageClassificationPipelineTests
 from .pipelines.test_pipelines_image_feature_extraction import ImageFeatureExtractionPipelineTests
 from .pipelines.test_pipelines_image_segmentation import ImageSegmentationPipelineTests
+from .pipelines.test_pipelines_image_text_to_text import ImageTextToTextPipelineTests
 from .pipelines.test_pipelines_image_to_image import ImageToImagePipelineTests
 from .pipelines.test_pipelines_image_to_text import ImageToTextPipelineTests
 from .pipelines.test_pipelines_mask_generation import MaskGenerationPipelineTests
@@ -100,6 +101,7 @@ pipeline_test_mapping = {
     "image-classification": {"test": ImageClassificationPipelineTests},
     "image-feature-extraction": {"test": ImageFeatureExtractionPipelineTests},
     "image-segmentation": {"test": ImageSegmentationPipelineTests},
+    "image-text-to-text": {"test": ImageTextToTextPipelineTests},
     "image-to-image": {"test": ImageToImagePipelineTests},
     "image-to-text": {"test": ImageToTextPipelineTests},
     "mask-generation": {"test": MaskGenerationPipelineTests},
@@ -132,14 +134,14 @@ task_to_pipeline_and_spec_mapping = {
     "image-to-text": (ImageToTextPipeline, ImageToTextInput),
     "object-detection": (ObjectDetectionPipeline, ObjectDetectionInput),
     "question-answering": (QuestionAnsweringPipeline, QuestionAnsweringInput),
+    "video-classification": (VideoClassificationPipeline, VideoClassificationInput),
     "zero-shot-image-classification": (ZeroShotImageClassificationPipeline, ZeroShotImageClassificationInput),
 }
 
-for task, task_info in pipeline_test_mapping.items():
+for task_info in pipeline_test_mapping.values():
     test = task_info["test"]
     task_info["mapping"] = {
         "pt": getattr(test, "model_mapping", None),
-        "tf": getattr(test, "tf_model_mapping", None),
     }
 
 
@@ -167,20 +169,19 @@ logger = logging.get_logger(__name__)
 class PipelineTesterMixin:
     model_tester = None
     pipeline_model_mapping = None
-    supported_frameworks = ["pt", "tf"]
 
-    def run_task_tests(self, task, torch_dtype="float32"):
+    def run_task_tests(self, task, dtype="float32"):
         """Run pipeline tests for a specific `task`
 
         Args:
             task (`str`):
                 A task name. This should be a key in the mapping `pipeline_test_mapping`.
-            torch_dtype (`str`, `optional`, defaults to `'float32'`):
+            dtype (`str`, `optional`, defaults to `'float32'`):
                 The torch dtype to use for the model. Can be used for FP16/other precision inference.
         """
         if task not in self.pipeline_model_mapping:
             self.skipTest(
-                f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{torch_dtype} is skipped: `{task}` is not in "
+                f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{dtype} is skipped: `{task}` is not in "
                 f"`self.pipeline_model_mapping` for `{self.__class__.__name__}`."
             )
 
@@ -195,12 +196,6 @@ class PipelineTesterMixin:
         for model_architecture in model_architectures:
             model_arch_name = model_architecture.__name__
             model_type = model_architecture.config_class.model_type
-
-            # Get the canonical name
-            for _prefix in ["Flax", "TF"]:
-                if model_arch_name.startswith(_prefix):
-                    model_arch_name = model_arch_name[len(_prefix) :]
-                    break
 
             if model_arch_name not in tiny_model_summary:
                 continue
@@ -241,7 +236,7 @@ class PipelineTesterMixin:
                 feature_extractor_names=feature_extractor_names,
                 processor_names=processor_names,
                 commit=commit,
-                torch_dtype=torch_dtype,
+                dtype=dtype,
             )
             at_least_one_model_is_tested = True
 
@@ -251,7 +246,7 @@ class PipelineTesterMixin:
 
         if not at_least_one_model_is_tested:
             self.skipTest(
-                f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{torch_dtype} is skipped: Could not find any "
+                f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{dtype} is skipped: Could not find any "
                 f"model architecture in the tiny models JSON file for `{task}`."
             )
 
@@ -265,7 +260,7 @@ class PipelineTesterMixin:
         feature_extractor_names,
         processor_names,
         commit,
-        torch_dtype="float32",
+        dtype="float32",
     ):
         """Run pipeline tests for a specific `task` with the give model class and tokenizer/processor class names
 
@@ -276,17 +271,17 @@ class PipelineTesterMixin:
                 A model repository id on the Hub.
             model_architecture (`type`):
                 A subclass of `PretrainedModel` or `PretrainedModel`.
-            tokenizer_names (`List[str]`):
+            tokenizer_names (`list[str]`):
                 A list of names of a subclasses of `PreTrainedTokenizerFast` or `PreTrainedTokenizer`.
-            image_processor_names (`List[str]`):
+            image_processor_names (`list[str]`):
                 A list of names of subclasses of `BaseImageProcessor`.
-            feature_extractor_names (`List[str]`):
+            feature_extractor_names (`list[str]`):
                 A list of names of subclasses of `FeatureExtractionMixin`.
-            processor_names (`List[str]`):
+            processor_names (`list[str]`):
                 A list of names of subclasses of `ProcessorMixin`.
             commit (`str`):
                 The commit hash of the model repository on the Hub.
-            torch_dtype (`str`, `optional`, defaults to `'float32'`):
+            dtype (`str`, `optional`, defaults to `'float32'`):
                 The torch dtype to use for the model. Can be used for FP16/other precision inference.
         """
         # Get an instance of the corresponding class `XXXPipelineTests` in order to use `get_test_pipeline` and
@@ -331,7 +326,7 @@ class PipelineTesterMixin:
 
             if do_skip_test_case:
                 logger.warning(
-                    f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{torch_dtype} is skipped: test is "
+                    f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{dtype} is skipped: test is "
                     f"currently known to fail for: model `{model_architecture.__name__}` | tokenizer "
                     f"`{tokenizer_name}` | image processor `{image_processor_name}` | feature extractor {feature_extractor_name}."
                 )
@@ -346,7 +341,7 @@ class PipelineTesterMixin:
                 feature_extractor_name=feature_extractor_name,
                 processor_name=processor_name,
                 commit=commit,
-                torch_dtype=torch_dtype,
+                dtype=dtype,
             )
 
     def run_pipeline_test(
@@ -359,7 +354,7 @@ class PipelineTesterMixin:
         feature_extractor_name,
         processor_name,
         commit,
-        torch_dtype="float32",
+        dtype="float32",
     ):
         """Run pipeline tests for a specific `task` with the give model class and tokenizer/processor class name
 
@@ -382,7 +377,7 @@ class PipelineTesterMixin:
                 The name of a subclass of `ProcessorMixin`.
             commit (`str`):
                 The commit hash of the model repository on the Hub.
-            torch_dtype (`str`, `optional`, defaults to `'float32'`):
+            dtype (`str`, `optional`, defaults to `'float32'`):
                 The torch dtype to use for the model. Can be used for FP16/other precision inference.
         """
         repo_id = f"{TRANSFORMERS_TINY_MODEL_PATH}/{repo_name}"
@@ -398,7 +393,7 @@ class PipelineTesterMixin:
             model = model_architecture.from_pretrained(repo_id, revision=commit)
         except Exception:
             logger.warning(
-                f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{torch_dtype} is skipped: Could not find or load "
+                f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{dtype} is skipped: Could not find or load "
                 f"the model from `{repo_id}` with `{model_architecture}`."
             )
             self.skipTest(f"Could not find or load the model from {repo_id} with {model_architecture}.")
@@ -425,7 +420,7 @@ class PipelineTesterMixin:
                     processors[key] = processor
                 except Exception:
                     logger.warning(
-                        f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{torch_dtype} is skipped: "
+                        f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{dtype} is skipped: "
                         f"Could not load the {key} from `{repo_id}` with `{name}`."
                     )
                     self.skipTest(f"Could not load the {key} from {repo_id} with {name}.")
@@ -435,7 +430,7 @@ class PipelineTesterMixin:
         # TODO: Maybe not upload such problematic tiny models to Hub.
         if tokenizer is None and "image_processor" not in processors and "feature_extractor" not in processors:
             logger.warning(
-                f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{torch_dtype} is skipped: Could not find or load "
+                f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{dtype} is skipped: Could not find or load "
                 f"any tokenizer / image processor / feature extractor from `{repo_id}`."
             )
             self.skipTest(f"Could not find or load any tokenizer / processor from {repo_id}.")
@@ -443,7 +438,7 @@ class PipelineTesterMixin:
         pipeline_test_class_name = pipeline_test_mapping[task]["test"].__name__
         if self.is_pipeline_test_to_skip_more(pipeline_test_class_name, model.config, model, tokenizer, **processors):
             logger.warning(
-                f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{torch_dtype} is skipped: test is "
+                f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{dtype} is skipped: test is "
                 f"currently known to fail for: model `{model_architecture.__name__}` | tokenizer "
                 f"`{tokenizer_name}` | image processor `{image_processor_name}` | feature extractor `{feature_extractor_name}`."
             )
@@ -462,12 +457,12 @@ class PipelineTesterMixin:
         # `run_pipeline_test`.
         task_test = pipeline_test_mapping[task]["test"]()
 
-        pipeline, examples = task_test.get_test_pipeline(model, tokenizer, **processors, torch_dtype=torch_dtype)
+        pipeline, examples = task_test.get_test_pipeline(model, tokenizer, **processors, dtype=dtype)
         if pipeline is None:
             # The test can disable itself, but it should be very marginal
             # Concerns: Wav2Vec2ForCTC without tokenizer test (FastTokenizer don't exist)
             logger.warning(
-                f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{torch_dtype} is skipped: Could not get the "
+                f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{dtype} is skipped: Could not get the "
                 "pipeline for testing."
             )
             self.skipTest(reason="Could not get the pipeline for testing.")
@@ -500,7 +495,7 @@ class PipelineTesterMixin:
     @is_pipeline_test
     @require_torch
     def test_pipeline_audio_classification_fp16(self):
-        self.run_task_tests(task="audio-classification", torch_dtype="float16")
+        self.run_task_tests(task="audio-classification", dtype="float16")
 
     @is_pipeline_test
     def test_pipeline_automatic_speech_recognition(self):
@@ -509,7 +504,7 @@ class PipelineTesterMixin:
     @is_pipeline_test
     @require_torch
     def test_pipeline_automatic_speech_recognition_fp16(self):
-        self.run_task_tests(task="automatic-speech-recognition", torch_dtype="float16")
+        self.run_task_tests(task="automatic-speech-recognition", dtype="float16")
 
     @is_pipeline_test
     @require_vision
@@ -523,7 +518,7 @@ class PipelineTesterMixin:
     @require_timm
     @require_torch
     def test_pipeline_depth_estimation_fp16(self):
-        self.run_task_tests(task="depth-estimation", torch_dtype="float16")
+        self.run_task_tests(task="depth-estimation", dtype="float16")
 
     @is_pipeline_test
     @require_pytesseract
@@ -537,7 +532,7 @@ class PipelineTesterMixin:
     @require_torch
     @require_vision
     def test_pipeline_document_question_answering_fp16(self):
-        self.run_task_tests(task="document-question-answering", torch_dtype="float16")
+        self.run_task_tests(task="document-question-answering", dtype="float16")
 
     @is_pipeline_test
     def test_pipeline_feature_extraction(self):
@@ -546,7 +541,7 @@ class PipelineTesterMixin:
     @is_pipeline_test
     @require_torch
     def test_pipeline_feature_extraction_fp16(self):
-        self.run_task_tests(task="feature-extraction", torch_dtype="float16")
+        self.run_task_tests(task="feature-extraction", dtype="float16")
 
     @is_pipeline_test
     def test_pipeline_fill_mask(self):
@@ -555,10 +550,10 @@ class PipelineTesterMixin:
     @is_pipeline_test
     @require_torch
     def test_pipeline_fill_mask_fp16(self):
-        self.run_task_tests(task="fill-mask", torch_dtype="float16")
+        self.run_task_tests(task="fill-mask", dtype="float16")
 
     @is_pipeline_test
-    @require_torch_or_tf
+    @require_torch
     @require_vision
     def test_pipeline_image_classification(self):
         self.run_task_tests(task="image-classification")
@@ -567,7 +562,7 @@ class PipelineTesterMixin:
     @require_vision
     @require_torch
     def test_pipeline_image_classification_fp16(self):
-        self.run_task_tests(task="image-classification", torch_dtype="float16")
+        self.run_task_tests(task="image-classification", dtype="float16")
 
     @is_pipeline_test
     @require_vision
@@ -581,7 +576,19 @@ class PipelineTesterMixin:
     @require_timm
     @require_torch
     def test_pipeline_image_segmentation_fp16(self):
-        self.run_task_tests(task="image-segmentation", torch_dtype="float16")
+        self.run_task_tests(task="image-segmentation", dtype="float16")
+
+    @is_pipeline_test
+    @require_vision
+    @require_torch
+    def test_pipeline_image_text_to_text(self):
+        self.run_task_tests(task="image-text-to-text")
+
+    @is_pipeline_test
+    @require_vision
+    @require_torch
+    def test_pipeline_image_text_to_text_fp16(self):
+        self.run_task_tests(task="image-text-to-text", dtype="float16")
 
     @is_pipeline_test
     @require_vision
@@ -592,7 +599,7 @@ class PipelineTesterMixin:
     @require_vision
     @require_torch
     def test_pipeline_image_to_text_fp16(self):
-        self.run_task_tests(task="image-to-text", torch_dtype="float16")
+        self.run_task_tests(task="image-to-text", dtype="float16")
 
     @is_pipeline_test
     @require_timm
@@ -606,7 +613,7 @@ class PipelineTesterMixin:
     @require_vision
     @require_torch
     def test_pipeline_image_feature_extraction_fp16(self):
-        self.run_task_tests(task="image-feature-extraction", torch_dtype="float16")
+        self.run_task_tests(task="image-feature-extraction", dtype="float16")
 
     @unittest.skip(reason="`run_pipeline_test` is currently not implemented.")
     @is_pipeline_test
@@ -620,7 +627,7 @@ class PipelineTesterMixin:
     @require_vision
     @require_torch
     def test_pipeline_mask_generation_fp16(self):
-        self.run_task_tests(task="mask-generation", torch_dtype="float16")
+        self.run_task_tests(task="mask-generation", dtype="float16")
 
     @is_pipeline_test
     @require_vision
@@ -634,7 +641,7 @@ class PipelineTesterMixin:
     @require_timm
     @require_torch
     def test_pipeline_object_detection_fp16(self):
-        self.run_task_tests(task="object-detection", torch_dtype="float16")
+        self.run_task_tests(task="object-detection", dtype="float16")
 
     @is_pipeline_test
     def test_pipeline_question_answering(self):
@@ -643,7 +650,7 @@ class PipelineTesterMixin:
     @is_pipeline_test
     @require_torch
     def test_pipeline_question_answering_fp16(self):
-        self.run_task_tests(task="question-answering", torch_dtype="float16")
+        self.run_task_tests(task="question-answering", dtype="float16")
 
     @is_pipeline_test
     def test_pipeline_summarization(self):
@@ -652,7 +659,7 @@ class PipelineTesterMixin:
     @is_pipeline_test
     @require_torch
     def test_pipeline_summarization_fp16(self):
-        self.run_task_tests(task="summarization", torch_dtype="float16")
+        self.run_task_tests(task="summarization", dtype="float16")
 
     @is_pipeline_test
     def test_pipeline_table_question_answering(self):
@@ -661,7 +668,7 @@ class PipelineTesterMixin:
     @is_pipeline_test
     @require_torch
     def test_pipeline_table_question_answering_fp16(self):
-        self.run_task_tests(task="table-question-answering", torch_dtype="float16")
+        self.run_task_tests(task="table-question-answering", dtype="float16")
 
     @is_pipeline_test
     def test_pipeline_text2text_generation(self):
@@ -670,7 +677,7 @@ class PipelineTesterMixin:
     @is_pipeline_test
     @require_torch
     def test_pipeline_text2text_generation_fp16(self):
-        self.run_task_tests(task="text2text-generation", torch_dtype="float16")
+        self.run_task_tests(task="text2text-generation", dtype="float16")
 
     @is_pipeline_test
     def test_pipeline_text_classification(self):
@@ -679,17 +686,17 @@ class PipelineTesterMixin:
     @is_pipeline_test
     @require_torch
     def test_pipeline_text_classification_fp16(self):
-        self.run_task_tests(task="text-classification", torch_dtype="float16")
+        self.run_task_tests(task="text-classification", dtype="float16")
 
     @is_pipeline_test
-    @require_torch_or_tf
+    @require_torch
     def test_pipeline_text_generation(self):
         self.run_task_tests(task="text-generation")
 
     @is_pipeline_test
     @require_torch
     def test_pipeline_text_generation_fp16(self):
-        self.run_task_tests(task="text-generation", torch_dtype="float16")
+        self.run_task_tests(task="text-generation", dtype="float16")
 
     @is_pipeline_test
     @require_torch
@@ -699,7 +706,7 @@ class PipelineTesterMixin:
     @is_pipeline_test
     @require_torch
     def test_pipeline_text_to_audio_fp16(self):
-        self.run_task_tests(task="text-to-audio", torch_dtype="float16")
+        self.run_task_tests(task="text-to-audio", dtype="float16")
 
     @is_pipeline_test
     def test_pipeline_token_classification(self):
@@ -708,7 +715,7 @@ class PipelineTesterMixin:
     @is_pipeline_test
     @require_torch
     def test_pipeline_token_classification_fp16(self):
-        self.run_task_tests(task="token-classification", torch_dtype="float16")
+        self.run_task_tests(task="token-classification", dtype="float16")
 
     @is_pipeline_test
     def test_pipeline_translation(self):
@@ -717,10 +724,10 @@ class PipelineTesterMixin:
     @is_pipeline_test
     @require_torch
     def test_pipeline_translation_fp16(self):
-        self.run_task_tests(task="translation", torch_dtype="float16")
+        self.run_task_tests(task="translation", dtype="float16")
 
     @is_pipeline_test
-    @require_torch_or_tf
+    @require_torch
     @require_vision
     @require_av
     def test_pipeline_video_classification(self):
@@ -731,7 +738,7 @@ class PipelineTesterMixin:
     @require_torch
     @require_av
     def test_pipeline_video_classification_fp16(self):
-        self.run_task_tests(task="video-classification", torch_dtype="float16")
+        self.run_task_tests(task="video-classification", dtype="float16")
 
     @is_pipeline_test
     @require_torch
@@ -743,7 +750,7 @@ class PipelineTesterMixin:
     @require_torch
     @require_vision
     def test_pipeline_visual_question_answering_fp16(self):
-        self.run_task_tests(task="visual-question-answering", torch_dtype="float16")
+        self.run_task_tests(task="visual-question-answering", dtype="float16")
 
     @is_pipeline_test
     def test_pipeline_zero_shot(self):
@@ -752,7 +759,7 @@ class PipelineTesterMixin:
     @is_pipeline_test
     @require_torch
     def test_pipeline_zero_shot_fp16(self):
-        self.run_task_tests(task="zero-shot", torch_dtype="float16")
+        self.run_task_tests(task="zero-shot", dtype="float16")
 
     @is_pipeline_test
     @require_torch
@@ -762,7 +769,7 @@ class PipelineTesterMixin:
     @is_pipeline_test
     @require_torch
     def test_pipeline_zero_shot_audio_classification_fp16(self):
-        self.run_task_tests(task="zero-shot-audio-classification", torch_dtype="float16")
+        self.run_task_tests(task="zero-shot-audio-classification", dtype="float16")
 
     @is_pipeline_test
     @require_vision
@@ -773,7 +780,7 @@ class PipelineTesterMixin:
     @require_vision
     @require_torch
     def test_pipeline_zero_shot_image_classification_fp16(self):
-        self.run_task_tests(task="zero-shot-image-classification", torch_dtype="float16")
+        self.run_task_tests(task="zero-shot-image-classification", dtype="float16")
 
     @is_pipeline_test
     @require_vision
@@ -785,7 +792,7 @@ class PipelineTesterMixin:
     @require_vision
     @require_torch
     def test_pipeline_zero_shot_object_detection_fp16(self):
-        self.run_task_tests(task="zero-shot-object-detection", torch_dtype="float16")
+        self.run_task_tests(task="zero-shot-object-detection", dtype="float16")
 
     # This contains the test cases to be skipped without model architecture being involved.
     def is_pipeline_test_to_skip(
@@ -913,22 +920,38 @@ def parse_args_from_docstring_by_indentation(docstring):
 
 
 def compare_pipeline_args_to_hub_spec(pipeline_class, hub_spec):
+    """
+    Compares the docstring of a pipeline class to the fields of the matching Hub input signature class to ensure that
+    they match. This guarantees that Transformers pipelines can be used in inference without needing to manually
+    refactor or rename inputs.
+    """
+    ALLOWED_TRANSFORMERS_ONLY_ARGS = ["timeout"]
+
     docstring = inspect.getdoc(pipeline_class.__call__).strip()
     docstring_args = set(parse_args_from_docstring_by_indentation(docstring))
     hub_args = set(get_arg_names_from_hub_spec(hub_spec))
 
     # Special casing: We allow the name of this arg to differ
-    js_generate_args = [js_arg for js_arg in hub_args if js_arg.startswith("generate")]
+    hub_generate_args = [
+        hub_arg for hub_arg in hub_args if hub_arg.startswith("generate") or hub_arg.startswith("generation")
+    ]
     docstring_generate_args = [
-        docstring_arg for docstring_arg in docstring_args if docstring_arg.startswith("generate")
+        docstring_arg
+        for docstring_arg in docstring_args
+        if docstring_arg.startswith("generate") or docstring_arg.startswith("generation")
     ]
     if (
-        len(js_generate_args) == 1
+        len(hub_generate_args) == 1
         and len(docstring_generate_args) == 1
-        and js_generate_args != docstring_generate_args
+        and hub_generate_args != docstring_generate_args
     ):
-        hub_args.remove(js_generate_args[0])
+        hub_args.remove(hub_generate_args[0])
         docstring_args.remove(docstring_generate_args[0])
+
+    # Special casing 2: We permit some transformers-only arguments that don't affect pipeline output
+    for arg in ALLOWED_TRANSFORMERS_ONLY_ARGS:
+        if arg in docstring_args and arg not in hub_args:
+            docstring_args.remove(arg)
 
     if hub_args != docstring_args:
         error = [f"{pipeline_class.__name__} differs from JS spec {hub_spec.__name__}"]

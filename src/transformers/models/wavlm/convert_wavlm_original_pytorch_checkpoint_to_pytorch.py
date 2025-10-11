@@ -179,7 +179,7 @@ def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_gro
 @torch.no_grad()
 def convert_wavlm_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=None):
     # load the pre-trained checkpoints
-    checkpoint = torch.load(checkpoint_path)
+    checkpoint = torch.load(checkpoint_path, weights_only=True)
     cfg = WavLMConfigOrig(checkpoint["cfg"])
     model = WavLMOrig(cfg)
     model.load_state_dict(checkpoint["model"])

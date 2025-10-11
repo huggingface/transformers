@@ -114,7 +114,7 @@ def convert_seggpt_checkpoint(args):
     verify_logits = args.verify_logits
     push_to_hub = args.push_to_hub
 
-    # Define default GroundingDINO configuation
+    # Define default GroundingDINO configuration
     config = SegGptConfig()
 
     # Load original checkpoint
