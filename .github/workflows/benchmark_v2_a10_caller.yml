@@ -11,6 +11,7 @@ jobs:
   benchmark-v2-default:
     name: Benchmark v2 - Default Models
     uses: ./.github/workflows/benchmark_v2.yml
+    if: github.repository_owner == 'huggingface'
     with:
       runner: aws-g5-4xlarge-cache-use1-public-80
       container_image: huggingface/transformers-pytorch-gpu

@@ -11,6 +11,7 @@ on:
 jobs:
   notify_new_model:
     name: Notify new model
+    if: github.repository_owner == 'huggingface'
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4

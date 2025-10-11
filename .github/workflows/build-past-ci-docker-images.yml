@@ -16,6 +16,7 @@ jobs:
       fail-fast: false
       matrix:
         version: ["1.13", "1.12", "1.11"]
+    if: github.repository_owner == 'huggingface'
     runs-on:
       group: aws-general-8-plus
     steps:
@@ -61,6 +62,7 @@ jobs:
       fail-fast: false
       matrix:
         version: ["2.11", "2.10", "2.9", "2.8", "2.7", "2.6", "2.5"]
+    if: github.repository_owner == 'huggingface'
     runs-on:
       group: aws-general-8-plus
     steps:

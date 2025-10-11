@@ -32,6 +32,7 @@ jobs:
     strategy:
       matrix:
         machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
+    if: github.repository_owner == 'huggingface'
     runs-on:
       group: '${{ matrix.machine_type }}'
     container:
@@ -126,7 +127,7 @@ jobs:
     name: Model tests
     needs: setup
     # `dummy` means there is no test to run
-    if: contains(fromJson(needs.setup.outputs.matrix), 'dummy') != true
+    if: contains(fromJson(needs.setup.outputs.matrix), 'dummy') != true && github.repository_owner == 'huggingface'
     strategy:
       fail-fast: false
       matrix:
@@ -239,7 +240,7 @@ jobs:
     name: Model tests
     needs: setup
     # `dummy` means there is no test to run
-    if: contains(fromJson(needs.setup.outputs.matrix), 'dummy') != true
+    if: contains(fromJson(needs.setup.outputs.matrix), 'dummy') != true && github.repository_owner == 'huggingface'
     strategy:
       fail-fast: false
       matrix:
@@ -353,7 +354,7 @@ jobs:
   run_tests_torch_cuda_extensions_single_gpu:
     name: Torch CUDA extension tests
     needs: setup
-    if: contains(fromJson(needs.setup.outputs.matrix), 'deepspeed') || contains(fromJson(needs.setup.outputs.matrix), 'extended')
+    if: (contains(fromJson(needs.setup.outputs.matrix), 'deepspeed') || contains(fromJson(needs.setup.outputs.matrix), 'extended')) && github.repository_owner == 'huggingface'
     strategy:
       fail-fast: false
       matrix:
@@ -463,7 +464,7 @@ jobs:
   run_tests_torch_cuda_extensions_multi_gpu:
     name: Torch CUDA extension tests
     needs: setup
-    if: contains(fromJson(needs.setup.outputs.matrix), 'deepspeed') || contains(fromJson(needs.setup.outputs.matrix), 'extended')
+    if: (contains(fromJson(needs.setup.outputs.matrix), 'deepspeed') || contains(fromJson(needs.setup.outputs.matrix), 'extended')) && github.repository_owner == 'huggingface'
     strategy:
       fail-fast: false
       matrix:
@@ -573,7 +574,7 @@ jobs:
   send_results:
     name: Send results to webhook
     runs-on: ubuntu-22.04
-    if: always()
+    if: always() && github.repository_owner == 'huggingface'
     needs: [
         setup,
         run_tests_single_gpu,

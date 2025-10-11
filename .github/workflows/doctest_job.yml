@@ -26,6 +26,7 @@ jobs:
       fail-fast: false
       matrix:
         split_keys: ${{ fromJson(inputs.split_keys) }}
+    if: github.repository_owner == 'huggingface'
     runs-on: 
       group: aws-g5-4xlarge-cache
     container:

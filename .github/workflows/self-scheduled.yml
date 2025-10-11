@@ -55,7 +55,7 @@ env:
 jobs:
   setup:
     name: Setup
-    if: contains(fromJSON('["run_models_gpu", "run_trainer_and_fsdp_gpu", "run_quantization_torch_gpu"]'), inputs.job)
+    if: contains(fromJSON('["run_models_gpu", "run_trainer_and_fsdp_gpu", "run_quantization_torch_gpu"]'), inputs.job) && github.repository_owner == 'huggingface'
     strategy:
       matrix:
         machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
@@ -110,7 +110,7 @@ jobs:
           nvidia-smi
 
   run_models_gpu:
-    if: ${{ inputs.job == 'run_models_gpu' }}
+    if: ${{ inputs.job == 'run_models_gpu' && github.repository_owner == 'huggingface' }}
     name: " "
     needs: setup
     strategy:
@@ -130,7 +130,7 @@ jobs:
     secrets: inherit
 
   run_trainer_and_fsdp_gpu:
-    if: ${{ inputs.job == 'run_trainer_and_fsdp_gpu' }}
+    if: ${{ inputs.job == 'run_trainer_and_fsdp_gpu' && github.repository_owner == 'huggingface' }}
     name: " "
     needs: setup
     strategy:
@@ -151,7 +151,7 @@ jobs:
     secrets: inherit
 
   run_pipelines_torch_gpu:
-    if: ${{ inputs.job == 'run_pipelines_torch_gpu' }}
+    if: ${{ inputs.job == 'run_pipelines_torch_gpu' && github.repository_owner == 'huggingface' }}
     name: PyTorch pipelines
     strategy:
       fail-fast: false
@@ -219,7 +219,7 @@ jobs:
           path: /transformers/reports/${{ env.machine_type }}_run_pipelines_torch_gpu_test_reports
 
   run_examples_gpu:
-    if: ${{ inputs.job == 'run_examples_gpu' }}
+    if: ${{ inputs.job == 'run_examples_gpu' && github.repository_owner == 'huggingface' }}
     name: Examples directory
     strategy:
       fail-fast: false
@@ -288,7 +288,7 @@ jobs:
           path: /transformers/reports/${{ env.machine_type }}_run_examples_gpu_test_reports
 
   run_torch_cuda_extensions_gpu:
-    if: ${{ inputs.job == 'run_torch_cuda_extensions_gpu' }}
+    if: ${{ inputs.job == 'run_torch_cuda_extensions_gpu' && github.repository_owner == 'huggingface' }}
     name: Torch CUDA extension tests
     strategy:
       fail-fast: false
@@ -384,7 +384,7 @@ jobs:
           path: ${{ inputs.working-directory-prefix }}/transformers/reports/${{ env.machine_type }}_run_torch_cuda_extensions_gpu_test_reports
 
   run_quantization_torch_gpu:
-    if: ${{ inputs.job == 'run_quantization_torch_gpu' }}
+    if: ${{ inputs.job == 'run_quantization_torch_gpu' && github.repository_owner == 'huggingface' }}
     name: " "
     needs: setup
     strategy:
@@ -465,7 +465,7 @@ jobs:
 
   run_extract_warnings:
     # Let's only do this for the job `run_models_gpu` to simplify the (already complex) logic.
-    if: ${{ always() && inputs.job == 'run_models_gpu' }}
+    if: ${{ always() && inputs.job == 'run_models_gpu' && github.repository_owner == 'huggingface' }}
     name: Extract warnings in CI artifacts
     runs-on: ubuntu-22.04
     needs: [setup, run_models_gpu]

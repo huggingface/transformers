@@ -44,6 +44,7 @@ jobs:
     name: " "
     runs-on:
       group: aws-g5-4xlarge-cache
+    if: github.repository_owner == 'huggingface'
     container:
       image: ${{ inputs.docker }}
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/

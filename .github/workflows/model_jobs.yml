@@ -49,6 +49,7 @@ jobs:
       fail-fast: false
       matrix:
         folders: ${{ fromJson(inputs.folder_slices)[inputs.slice_id] }}
+    if: github.repository_owner == 'huggingface'
     runs-on:
       group: '${{ inputs.machine_type }}'
     container:

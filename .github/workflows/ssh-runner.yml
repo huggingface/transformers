@@ -26,6 +26,7 @@ env:
 jobs:
   get_runner:
     name: "Get runner to use"
+    if: github.repository_owner == 'huggingface'
     runs-on: ubuntu-22.04
     outputs:
       RUNNER: ${{ steps.set_runner.outputs.RUNNER }}

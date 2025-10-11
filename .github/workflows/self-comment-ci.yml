@@ -178,7 +178,7 @@ jobs:
 
   run_models_gpu:
     name: Run all tests for the model
-    if: ${{ needs.get-tests.outputs.models != '[]' }}
+    if: ${{ needs.get-tests.outputs.models != '[]' && github.repository_owner == 'huggingface' }}
     needs: [get-pr-number, get-sha, get-tests, create_run]
     strategy:
       fail-fast: false
@@ -285,7 +285,7 @@ jobs:
 
   run_quantization_torch_gpu:
     name: Run all tests for a quantization
-    if: ${{ needs.get-tests.outputs.quantizations != '[]' }}
+    if: ${{ needs.get-tests.outputs.quantizations != '[]' && github.repository_owner == 'huggingface'}}
     needs: [get-pr-number, get-sha, get-tests, create_run]
     strategy:
       fail-fast: false

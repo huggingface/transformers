@@ -11,6 +11,7 @@ jobs:
   get_number:
     name: Get number
     runs-on: ubuntu-22.04
+    if: github.repository_owner == 'huggingface'
     outputs:
       run_number: ${{ steps.get_number.outputs.run_number }}
     steps:

@@ -16,6 +16,7 @@ jobs:
   check-for-setup:
       runs-on: ubuntu-22.04
       name: Check if setup was changed
+      if: github.repository_owner == 'huggingface'
       outputs:
         changed: ${{ steps.was_changed.outputs.changed }}
       steps:
