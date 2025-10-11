@@ -14,15 +14,19 @@
 """Testing suite for the PyTorch VideoLLaMA3 model."""
 
 import copy
+import gc
 import inspect
 import tempfile
 import unittest
 
 import numpy as np
+import requests
 import torch.nn as nn
 from parameterized import parameterized
+from PIL import Image
 
 from transformers import (
+    AutoProcessor,
     VideoLlama3Config,
     VideoLlama3ForConditionalGeneration,
     VideoLlama3Model,
@@ -31,9 +35,13 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
+    backend_empty_cache,
+    require_flash_attn,
     require_torch,
+    require_torch_gpu,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
+    slow,
     torch_device,
 )
 from transformers.utils import (
@@ -775,3 +783,213 @@ class VideoLlama3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
                 # acceptable numerical instability
                 tol = torch.finfo(torch.bfloat16).eps
                 torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=tol)
+
+
+@require_torch
+class VideoLlama3IntegrationTest(unittest.TestCase):
+    def setUp(self):
+        self.processor = AutoProcessor.from_pretrained("lkhl/VideoLLaMA3-2B-Image-HF")
+        self.messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image"},
+                    {"type": "text", "text": "Describe the image."},
+                ],
+            }
+        ]
+        url = "https://github.com/DAMO-NLP-SG/VideoLLaMA3/raw/refs/heads/main/assets/sora.png"
+        self.image = Image.open(requests.get(url, stream=True).raw)
+
+    def tearDown(self):
+        gc.collect()
+        backend_empty_cache(torch_device)
+
+    @slow
+    def test_small_model_integration_test(self):
+        model = VideoLlama3ForConditionalGeneration.from_pretrained(
+            "lkhl/VideoLLaMA3-2B-Image-HF", dtype="auto", device_map="auto"
+        )
+
+        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
+        inputs = self.processor(text=[text], images=[self.image], return_tensors="pt")
+
+        expected_input_ids = [151644, 872, 198] + [151655] * 10549 + [198, 74785, 279, 2168, 13, 151645, 198, 151644, 77091, 198]  # fmt: skip
+        assert expected_input_ids == inputs.input_ids[0].tolist()
+
+        expected_pixel_slice = torch.tensor(
+            [
+                [-0.8588, -0.9216, -0.9608],
+                [-0.9922, -0.9922, -0.9922],
+                [-0.9686, -0.9686, -0.9294],
+                [-0.9294, -0.9765, -0.9765],
+                [-0.9922, -0.9922, -0.9843],
+                [-0.6000, -0.4118, -0.3647],
+            ],
+            dtype=torch.float32,
+            device="cpu",
+        )
+        assert torch.allclose(expected_pixel_slice, inputs.pixel_values[:6, :3], atol=3e-3)
+
+        # verify generation
+        inputs = inputs.to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False, repetition_penalty=None)
+        EXPECTED_DECODED_TEXT = "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress"
+
+        self.assertEqual(
+            self.processor.decode(output[0], skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
+        )
+
+    @slow
+    def test_small_model_integration_test_batch(self):
+        model = VideoLlama3ForConditionalGeneration.from_pretrained(
+            "lkhl/VideoLLaMA3-2B-Image-HF", dtype="auto", device_map="auto"
+        )
+        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
+        inputs = self.processor(text=[text, text], images=[self.image, self.image], return_tensors="pt").to(
+            torch_device
+        )
+
+        # it should not matter whether two images are the same size or not
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False, repetition_penalty=None)
+
+        EXPECTED_DECODED_TEXT = [
+            "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress",
+            "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress",
+        ]  # fmt: skip
+        self.assertEqual(
+            self.processor.batch_decode(output, skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
+        )
+
+    @slow
+    def test_small_model_integration_test_expand(self):
+        model = VideoLlama3ForConditionalGeneration.from_pretrained(
+            "lkhl/VideoLLaMA3-2B-Image-HF", dtype="auto", device_map="auto"
+        )
+        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
+        inputs = self.processor(text=[text], images=[self.image], return_tensors="pt").to(torch_device)
+
+        output = model.generate(
+            **inputs, max_new_tokens=20, num_return_sequences=3, temperature=1e-5, repetition_penalty=None
+        )
+
+        EXPECTED_DECODED_TEXT = [
+            "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress",
+            "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress",
+            "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress",
+        ]  # fmt: skip
+        self.assertEqual(
+            self.processor.batch_decode(output, skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
+        )
+
+    @slow
+    def test_small_model_integration_test_batch_wo_image(self):
+        model = VideoLlama3ForConditionalGeneration.from_pretrained(
+            "lkhl/VideoLLaMA3-2B-Image-HF", dtype="auto", device_map="auto"
+        )
+        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
+        messages2 = [
+            {"role": "user", "content": [{"type": "text", "text": "What is relativity?"}]},
+        ]
+        text2 = self.processor.apply_chat_template(messages2, tokenize=False, add_generation_prompt=True)
+        inputs = self.processor(
+            text=[text, text2], images=[self.image], padding=True, padding_side="left", return_tensors="pt"
+        ).to(torch_device)
+
+        # it should not matter whether two images are the same size or not
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False, repetition_penalty=None)
+
+        EXPECTED_DECODED_TEXT = [
+            "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress",
+            "user\nWhat is relativity?\nassistant\nRelativity is a scientific theory that describes the relationship between space and time. It was first proposed by",
+        ]  # fmt: skip
+        self.assertEqual(
+            self.processor.batch_decode(output, skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
+        )
+
+    @slow
+    def test_small_model_integration_test_batch_different_resolutions(self):
+        model = VideoLlama3ForConditionalGeneration.from_pretrained(
+            "lkhl/VideoLLaMA3-2B-Image-HF", dtype="auto", device_map="auto"
+        )
+        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
+        text2 = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
+        image2 = self.image.resize((224, 224))
+        inputs = self.processor(
+            text=[text, text2], images=[self.image, image2], padding=True, padding_side="left", return_tensors="pt"
+        ).to(torch_device)
+
+        # it should not matter whether two images are the same size or not
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False, repetition_penalty=None)
+        DECODED_TEXT = self.processor.batch_decode(output, skip_special_tokens=True)
+
+        EXPECTED_DECODED_TEXT = [
+            "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress",
+            "user\n\nDescribe the image.\nassistant\nThe image depicts a striking urban scene at night. A person is standing in the center of a wet",
+        ]  # fmt: skip
+
+        self.assertEqual(DECODED_TEXT, EXPECTED_DECODED_TEXT)
+
+    @slow
+    @require_flash_attn
+    @require_torch_gpu
+    def test_small_model_integration_test_batch_flashatt2(self):
+        model = VideoLlama3ForConditionalGeneration.from_pretrained(
+            "lkhl/VideoLLaMA3-2B-Image-HF",
+            dtype=torch.bfloat16,
+            attn_implementation="flash_attention_2",
+            device_map="auto",
+        )
+        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
+        inputs = self.processor(text=[text, text], images=[self.image, self.image], return_tensors="pt").to(
+            torch_device
+        )
+
+        # it should not matter whether two images are the same size or not
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False, repetition_penalty=None)
+
+        EXPECTED_DECODED_TEXT = [
+            "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant night scene in a bustling Japanese city. A woman in a striking red dress",
+            "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant night scene in a bustling Japanese city. A woman in a striking red dress",
+        ]
+        self.assertEqual(
+            self.processor.batch_decode(output, skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
+        )
+
+    @slow
+    @require_flash_attn
+    @require_torch_gpu
+    def test_small_model_integration_test_batch_wo_image_flashatt2(self):
+        model = VideoLlama3ForConditionalGeneration.from_pretrained(
+            "lkhl/VideoLLaMA3-2B-Image-HF",
+            dtype=torch.bfloat16,
+            attn_implementation="flash_attention_2",
+            device_map="auto",
+        )
+        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
+        messages2 = [
+            {"role": "user", "content": [{"type": "text", "text": "What is relativity?"}]},
+        ]
+        text2 = self.processor.apply_chat_template(messages2, tokenize=False, add_generation_prompt=True)
+        inputs = self.processor(
+            text=[text, text2], images=[self.image], padding=True, padding_side="left", return_tensors="pt"
+        ).to(torch_device)
+
+        # it should not matter whether two images are the same size or not
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False, repetition_penalty=None)
+
+        EXPECTED_DECODED_TEXT = [
+            "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant night scene in a bustling Japanese city. A woman in a striking red dress",
+            "user\nWhat is relativity?\nassistant\nRelativity is a scientific theory that describes the relationship between space and time. It was first proposed by",
+        ]  # fmt: skip
+
+        self.assertEqual(
+            self.processor.batch_decode(output, skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
+        )
