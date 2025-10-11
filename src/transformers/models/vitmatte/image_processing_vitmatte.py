@@ -33,11 +33,16 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, filter_out_non_signature_kwargs, logging
 from ...utils.deprecation import deprecate_kwarg
 
 
 logger = logging.get_logger(__name__)
+
+
+class VitMatteImageProcessorKwargs(ImagesKwargs, total=False):
+    size_divisor: int
 
 
 class VitMatteImageProcessor(BaseImageProcessor):
@@ -68,6 +73,7 @@ class VitMatteImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
+    valid_kwargs = VitMatteImageProcessorKwargs
 
     def __init__(
         self,
@@ -107,7 +113,7 @@ class VitMatteImageProcessor(BaseImageProcessor):
     def pad_image(
         self,
         image: np.ndarray,
-        size_divisibility: int = 32,
+        size_divisor: int = 32,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.ndarray:
@@ -115,7 +121,7 @@ class VitMatteImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to pad.
-            size_divisibility (`int`, *optional*, defaults to 32):
+            size_divisor (`int`, *optional*, defaults to 32):
                 The width and height of the image will be padded to be divisible by this number.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
@@ -134,8 +140,8 @@ class VitMatteImageProcessor(BaseImageProcessor):
 
         height, width = get_image_size(image, input_data_format)
 
-        pad_height = 0 if height % size_divisibility == 0 else size_divisibility - height % size_divisibility
-        pad_width = 0 if width % size_divisibility == 0 else size_divisibility - width % size_divisibility
+        pad_height = 0 if height % size_divisor == 0 else size_divisor - height % size_divisor
+        pad_width = 0 if width % size_divisor == 0 else size_divisor - width % size_divisor
         if pad_width + pad_height > 0:
             padding = ((0, pad_height), (0, pad_width))
             image = pad(image, padding=padding, data_format=data_format, input_data_format=input_data_format)
@@ -265,7 +271,7 @@ class VitMatteImageProcessor(BaseImageProcessor):
 
         if do_pad:
             images = [
-                self.pad_image(image, size_divisibility=size_divisor, input_data_format=input_data_format)
+                self.pad_image(image, size_divisor=size_divisor, input_data_format=input_data_format)
                 for image in images
             ]
 

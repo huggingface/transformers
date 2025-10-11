@@ -28,7 +28,7 @@ from torch.nn import functional as F
 from ...activations import ACT2FN
 from ...audio_utils import AudioInput
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...generation import GenerationMixin
 from ...image_utils import ImageInput
@@ -75,6 +75,7 @@ from ..qwen3_moe.configuration_qwen3_moe import Qwen3MoeConfig
 from ..qwen3_moe.modeling_qwen3_moe import (
     Qwen3MoeAttention,
     Qwen3MoeDecoderLayer,
+    Qwen3MoeExperts,
     Qwen3MoeForCausalLM,
     Qwen3MoeMLP,
     Qwen3MoePreTrainedModel,
@@ -224,8 +225,8 @@ class Qwen3OmniMoeThinkerConfig(Qwen2_5OmniThinkerConfig):
 
     e.g. [Qwen/Qwen3-Omni-7B](https://huggingface.co/Qwen/Qwen3-Omni-7B)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         audio_config (`dict`, *optional*):
@@ -263,6 +264,10 @@ class Qwen3OmniMoeThinkerConfig(Qwen2_5OmniThinkerConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
+    model_type = "qwen3_omni_moe_thinker"
+    # Override parent's attribute_map as we use audio_token_id directly, not audio_token_index
+    attribute_map = {}
 
     def __init__(
         self,
@@ -421,7 +426,7 @@ class Qwen3OmniMoeTalkerTextConfig(Qwen3MoeConfig):
         self.sliding_window = sliding_window
 
 
-class Qwen3OmniMoeTalkerConfig(PretrainedConfig):
+class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3OmniMoeTalker`]. It is used to instantiate a
     Qwen3-Omni multi-modal talker model capable of handling text, audio, and vision modalities in a unified architecture.
@@ -431,8 +436,8 @@ class Qwen3OmniMoeTalkerConfig(PretrainedConfig):
 
     e.g. [Qwen/Qwen3-Omni-7B](https://huggingface.co/Qwen/Qwen3-Omni-7B)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         code_predictor_config (`dict`, *optional*):
@@ -521,7 +526,6 @@ class Qwen3OmniMoeTalkerConfig(PretrainedConfig):
         speaker_id=None,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         if code_predictor_config is None:
             code_predictor_config = {}
             self.code_predictor_config = Qwen3OmniMoeTalkerCodePredictorConfig()
@@ -555,9 +559,10 @@ class Qwen3OmniMoeTalkerConfig(PretrainedConfig):
         self.audio_start_token_id = audio_start_token_id
         self.vision_start_token_id = vision_start_token_id
         self.speaker_id = speaker_id
+        super().__init__(**kwargs)
 
 
-class Qwen3OmniMoeCode2WavConfig(PretrainedConfig):
+class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3OmniMoeCode2WavConfig`]. It is used to instantiate a
     Qwen3-Omni code-to-waveform decoder, responsible for converting discrete audio codes into high-fidelity waveforms.
@@ -566,8 +571,8 @@ class Qwen3OmniMoeCode2WavConfig(PretrainedConfig):
 
     e.g. [Qwen/Qwen3-Omni-7B](https://huggingface.co/Qwen/Qwen3-Omni-7B)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         codebook_size (`int`, *optional*, defaults to 2048):
@@ -672,7 +677,7 @@ class Qwen3OmniMoeCode2WavConfig(PretrainedConfig):
         return ["sliding_attention"] * self.num_hidden_layers
 
 
-class Qwen3OmniMoeConfig(PretrainedConfig):
+class Qwen3OmniMoeConfig(PreTrainedConfig):
     """
     This is the configuration class to store the configuration of a [`Qwen3OmniMoeForConditionalGeneration`]. It is used to instantiate a Qwen3Omni
     model according to the specified sub-models configurations, defining the model architecture.
@@ -680,8 +685,8 @@ class Qwen3OmniMoeConfig(PretrainedConfig):
     Instantiating a configuration with the defaults will yield a similar configuration to that of the
     [Qwen/Qwen2.5-Omni-7B](https://huggingface.co/Qwen/Qwen2.5-Omni-7B) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         thinker_config (`dict`, *optional*): Configuration of the underlying thinker sub-model.
@@ -733,7 +738,6 @@ class Qwen3OmniMoeConfig(PretrainedConfig):
         assistant_token_id=77091,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         if thinker_config is None:
             thinker_config = {}
             logger.info("thinker_config is None. Initializing thinker model with default values")
@@ -758,8 +762,9 @@ class Qwen3OmniMoeConfig(PretrainedConfig):
         self.system_token_id = system_token_id
         self.user_token_id = user_token_id
         self.assistant_token_id = assistant_token_id
+        super().__init__(**kwargs)
 
-    def get_text_config(self, decoder=False) -> "PretrainedConfig":
+    def get_text_config(self, decoder=False) -> "PreTrainedConfig":
         """
         Returns the config that is meant to be used with text IO. On most models, it is the original config instance
         itself. On specific composite models, it is under a set of valid names.
@@ -1192,8 +1197,18 @@ class Qwen3OmniMoeThinkerTextRotaryEmbedding(Qwen3VLMoeTextRotaryEmbedding):
     pass
 
 
+class Qwen3OmniMoeThinkerTextExperts(Qwen3MoeExperts):
+    """
+    ModuleList of experts.
+    """
+
+    def __init__(self, config: Qwen3OmniMoeThinkerConfig):
+        super().__init__(config)
+
+
 class Qwen3OmniMoeThinkerTextSparseMoeBlock(Qwen3MoeSparseMoeBlock):
-    pass
+    def __init__(self, config: Qwen3OmniMoeThinkerConfig):
+        super().__init__(config)
 
 
 class Qwen3OmniMoeThinkerTextAttention(Qwen3MoeAttention):
@@ -1503,7 +1518,7 @@ class Qwen3OmniMoeTalkerCodePredictorModel(Qwen3Model):
     def get_input_embeddings(self):
         return self.codec_embedding
 
-    @check_model_inputs
+    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
@@ -1603,9 +1618,8 @@ class Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration(Qwen3ForCausa
         **kwargs,
     ):
         r"""
-        Args:
-            generation_steps (`int`):
-                generation step of code predictor, 0..num_code_groups-1
+        generation_steps (`int`):
+            generation step of code predictor, 0..num_code_groups-1
         """
 
         # Prefill stage
@@ -1792,27 +1806,26 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
         **kwargs,
     ):
         r"""
-        Args:
-            use_audio_in_video (`bool`, *optional*):
-                If set to `True`, use the audio in video.
-            audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
-                The length of feature shape of each audio in LLM.
-            video_second_per_grid (`torch.LongTensor` of shape `(num_videos)`, *optional*):
-                Number of seconds per grid for each video, used for temporal feature mapping.
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image in LLM.
-            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-                The temporal, height and width of feature shape of each video in LLM.
-            residual_codes (`torch.Tensor`):
-                The predicted residual codes of previous step.
-            trailing_text_hidden (`torch.Tensor`):
-                Text hidden states from thinker after the first token.
-            tts_pad_embed (`torch.Tensor`):
-                Embedding tensor of `tts_pad_token_id`.
-            generation_step (`int`):
-                Generation step since prefill, used to sync with `trailing_text_hidden`.
-            talker_input_ids (`torch.Tensor`):
-                Input ids from thinker, used to compute 3d RoPE.
+        use_audio_in_video (`bool`, *optional*):
+            If set to `True`, use the audio in video.
+        audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
+            The length of feature shape of each audio in LLM.
+        video_second_per_grid (`torch.LongTensor` of shape `(num_videos)`, *optional*):
+            Number of seconds per grid for each video, used for temporal feature mapping.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+        residual_codes (`torch.Tensor`):
+            The predicted residual codes of previous step.
+        trailing_text_hidden (`torch.Tensor`):
+            Text hidden states from thinker after the first token.
+        tts_pad_embed (`torch.Tensor`):
+            Embedding tensor of `tts_pad_token_id`.
+        generation_step (`int`):
+            Generation step since prefill, used to sync with `trailing_text_hidden`.
+        talker_input_ids (`torch.Tensor`):
+            Input ids from thinker, used to compute 3d RoPE.
         """
         # Prefill
         if inputs_embeds is not None and inputs_embeds.shape[1] > 1:
@@ -2412,7 +2425,7 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
                     self.config.talker_config.text_config.vocab_size - 1024,
                     self.config.talker_config.text_config.vocab_size,
                 )
-                if i not in (self.config.talker_config.codec_eos_token_id,)
+                if i != self.config.talker_config.codec_eos_token_id
             ]  # Suppress additional special tokens, should not be predicted
             talker_kwargs = {
                 "max_new_tokens": talker_max_new_tokens,
@@ -2572,6 +2585,7 @@ class Qwen3OmniMoeProcessorKwargs(Qwen2_5OmniProcessorKwargs):
         "audio_kwargs": {
             "sampling_rate": 16000,
             "padding": True,
+            "truncation": False,
             "return_attention_mask": True,
         },
     }
@@ -2703,7 +2717,6 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor, ProcessorMixin):
         fps = output_kwargs["videos_kwargs"].get("fps", 1.0)
 
         if audio is not None:
-            output_kwargs["audio_kwargs"]["padding"] = True  # Setting to True to avoid default truncation
             audio_inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
             audio_inputs["feature_attention_mask"] = audio_inputs.pop(
                 "attention_mask"

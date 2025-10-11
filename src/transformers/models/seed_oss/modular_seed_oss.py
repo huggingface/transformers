@@ -13,7 +13,8 @@
 # limitations under the License.
 """PyTorch SeedOss model."""
 
-from typing import Callable, Optional
+from collections.abc import Callable
+from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -24,7 +25,6 @@ from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
-from ...utils.deprecation import deprecate_kwarg
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaForCausalLM,
@@ -95,7 +95,6 @@ class SeedOssAttention(nn.Module):
 
         self.residual_dropout = config.residual_dropout
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
