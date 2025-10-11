@@ -509,7 +509,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("owlv2", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
         ("owlvit", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
         ("paligemma", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
-        ("parakeet", ("ParakeetCTCTokenizer", None)),
+        ("parakeet", (None, "ParakeetTokenizerFast" if is_tokenizers_available() else None)),
         (
             "pegasus",
             (

@@ -67,10 +67,7 @@ def main():
     sys.argv += ["--output_dir", "./examples"]
     training_args = parser.parse_args_into_dataclasses()[0]
 
-    logger.warning(
-        f"Process rank: {training_args.local_process_index}, device: {training_args.device}, "
-        f"tpu_num_cores: {training_args.tpu_num_cores}",
-    )
+    logger.warning(f"Process rank: {training_args.local_process_index}, device: {training_args.device}, ")
 
     # Essentially, what we want to verify in the distributed case is
     # that we get all samples back, in the right order.
